@@ -16,7 +16,8 @@ const {
     confirmLoginByCode,
     passwordResetRequest,
     confirmPasswordResetByCode,
-    updateResume
+    updateResume,
+    healthCheck
 } = require("../controllers/auth.controller");
 const { requireAuth } = require("../middlewares/requireAuth");
 const {
@@ -53,6 +54,5 @@ router.post("/leaveFeedback", requireAuth(false), leaveFeedback)
 router.post("/stripePay", requireAuth(false), stripePay)
 router.post("/createStripePaymentIntent", requireAuth(false), createStripePaymentIntent)
 router.post("/getStripeMode", requireAuth(false), getStripeMode)
-
-
+router.get("/healthCheck", healthCheck)
 module.exports = router;

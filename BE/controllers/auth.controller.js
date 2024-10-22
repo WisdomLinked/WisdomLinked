@@ -161,6 +161,16 @@ const register = async (req, res) => {
     }
 };
 
+const healthCheck = async (req, res) => {
+    try {
+        console.log("health check")
+        res.status(200).send("OK Ready")
+    } catch(err){
+        console.log(err)
+        return res.status(500).send(err.message)
+    }
+}
+
 const resendConfirmEmail = async (req, res) => {
     try {
         const { email } = req.body
@@ -684,5 +694,6 @@ module.exports = {
     confirmLoginByCode,
     passwordResetRequest,
     confirmPasswordResetByCode,
-    updateResume
+    updateResume,
+    healthCheck
 }
