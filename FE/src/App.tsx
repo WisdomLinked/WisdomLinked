@@ -28,7 +28,6 @@ import AdminDashboard from './pages/Dashboard/_AdminDashboard';
 import VerifyEmail from './pages/VerifyEmail';
 import ForgotPassword from './pages/ForgotPassword';
 
-
 const UnauthenticatedRoutes = () => {
   return (
     <React.Fragment>
