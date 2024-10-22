@@ -1,0 +1,155 @@
+import React, { useEffect, useState } from 'react';
+import { loadStripe } from '@stripe/stripe-js';
+import {
+    PaymentElement,
+    Elements,
+    useStripe,
+    useElements,
+} from '@stripe/react-stripe-js';
+import { createStripePaymentIntent, getStripeMode } from '../../../api/api';
+import ShowFieldError from '../../../components/ShowFieldError';
+import { SetLoadingStatus } from '../../../actions/appActions';
+
+const CheckoutForm = ({
+    pendingDetails,
+    stripeMode,
+    price
+}: any) => {
+    const stripe: any = useStripe();
+    const elements = useElements();
+
+    const [errorMessage, set_errorMessage] = useState<any>(null);
+
+    const handleSubmit = async (event: any) => {
+        try {
+            event.preventDefault();
+            if (elements == null) {
+                return;
+            }
+
+            // Trigger form validation and wallet collection
+            const { error: submitError }: any = await elements.submit();
+            if (submitError) {
+                // Show error to your customer
+                set_errorMessage(submitError.message);
+                SetLoadingStatus(false)
+                return;
+            }
+
+            SetLoadingStatus(true)
+            // Create the PaymentIntent and obtain clientSecret from your server endpoint
+            const response = await createStripePaymentIntent({
+                stripeMode,
+                amount: price,
+            })
+            const { client_secret: clientSecret } = response;
+
+            window.localStorage.setItem('pendingDetails', JSON.stringify(pendingDetails))
+            const { paymentIntent } = await stripe.confirmPayment({
+                //`Elements` instance that was used to create the Payment Element
+                elements,
+                clientSecret,
+                confirmParams: {
+                    return_url: `${window.location.href}`,
+                },
+                redirect: "if_required"
+            });
+            SetLoadingStatus(false)
+
+            if (paymentIntent.status === 'succeeded') {
+                window.location.replace(`${window.location.href.split('?')[0]}?redirect_status=succeeded&payment_intent=${paymentIntent.id}`)
+            } else {
+                window.localStorage.removeItem('pendingDetails')
+                set_errorMessage('Payment failed, try again');
+            }
+
+        } catch (error: any) {
+            set_errorMessage(error.message);
+            SetLoadingStatus(false)
+        }
+    };
+
+    useEffect(() => {
+        let timeout = setTimeout(() => {
+            set_errorMessage('')
+        }, 3000)
+        return () => {
+            clearTimeout(timeout)
+        }
+    }, [errorMessage])
+
+    return (
+        <form onSubmit={handleSubmit}>
+            <PaymentElement />
+            <ShowFieldError
+                show={errorMessage}
+                label={errorMessage}
+            />
+            <button
+                type="submit"
+                disabled={!stripe || !elements}
+                className='w-[100px] h-[40px] bg-green rounded-md text-white text-lg mt-4 disabled:hidden mx-auto flex items-center justify-center'
+            >
+                Pay
+            </button>
+
+        </form>
+    );
+};
+
+const Payment = ({
+    type,
+    price,
+    pendingDetails
+}: any) => {
+
+    const options: any = {
+        mode: 'payment',
+        amount: price * 1000,
+        currency: 'usd',
+        // Fully customizable with appearance API.
+        appearance: {
+            theme: 'night',
+        },
+    };
+
+    const [stripeMode, set_stripeMode] = useState('')
+    const [stripePromise, set_stripePromise] = useState<any>()
+
+    const setStripeMode = async () => {
+        const response = await getStripeMode()
+        if (response) {
+            set_stripeMode(response.stripeMode || 'test')
+            set_stripePromise(loadStripe((response.stripeMode === 'test' ? process.env.REACT_APP_STRIPE_PUBLISHABLE_KEY_TEST : process.env.REACT_APP_STRIPE_PUBLISHABLE_KEY_LIVE) || ''))
+        }
+    }
+
+    useEffect(() => {
+        setStripeMode()
+    }, [])
+
+    useEffect(() => {
+        if (stripeMode && stripePromise) {
+            SetLoadingStatus(false)
+        } else {
+            SetLoadingStatus(true)
+        }
+    }, [stripeMode, stripePromise])
+
+    return (
+        stripeMode && stripePromise ?
+            <Elements stripe={stripePromise} options={options}>
+                <div className='text-xl text-white text-center mb-6'>
+                    Please pay ${price} for the {type} ({stripeMode})
+                </div>
+                <CheckoutForm
+                    pendingDetails={pendingDetails}
+                    stripeMode={stripeMode}
+                    price={price}
+                />
+            </Elements> :
+            null
+    )
+}
+
+export default Payment;

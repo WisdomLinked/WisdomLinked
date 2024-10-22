@@ -1,0 +1,24 @@
+export const siteMap: any = {
+    '/login': 'login',
+    '/expertregister': 'expertregister',
+    '/customerregister': 'customerregister',
+    '/user/customerdashboard': 'customerdashboard',
+    '/user/customerdashboard/chat': 'customerchat',
+    '/user/customerdashboard/search': 'customersearch',
+    '/user/customerdashboard/seminar': 'customerseminar',
+    '/user/customerdashboard/calendar': 'customercalendar',
+    '/user/customerdashboard/profile': 'customerprofile',
+
+    '/user/expertdashboard': 'expertdashboard',
+    '/user/expertdashboard/chat': 'expertchat',
+    '/user/expertdashboard/calendar': 'expertcalendar',
+    '/user/expertdashboard/timeslots': 'experttimeslots',
+    '/user/expertdashboard/profile': 'expertprofile',
+    '/user/expertdashboard/seminar': 'expertseminar',
+    '/user/expertdashboard/search': 'expertsearch',
+
+    '/user/admindashboard': 'admindashboard',
+    '/user/admindashboard/usermgmt': 'adminusermgmt',
+    '/user/admindashboard/payment': 'adminpayment',
+    '/user/admindashboard/chat': 'adminchat',
+}
