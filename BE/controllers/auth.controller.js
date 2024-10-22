@@ -146,7 +146,8 @@ const register = async (req, res) => {
         // SEND EMAIL TO CUSTOMER 
         let confirmLink = `<div>Verify your registration to TOE by the confirmation Link <br/>${process.env.FE_URL}/verification/${email}/${confirmCode}</div>`
         utils.sendOTP(
-            process.env.NODE_ENV === 'development' ? 'varunsahni10134@gmail.com' : email,
+            // process.env.NODE_ENV === 'development' ? 'varunsahni10134@gmail.com' : email,
+            email,
             utils.getCurrentDateString(),
             confirmLink
         );
@@ -173,7 +174,8 @@ const resendConfirmEmail = async (req, res) => {
         // SEND EMAIL TO CUSTOMER 
         let confirmLink = `<div>Verify your registration to TOE by the confirmation Link <br/>${process.env.FE_URL}/verification/${email}/${pendingUser.confirmCode}</div>`
         utils.sendOTP(
-            process.env.NODE_ENV === 'development' ? 'varunsahni10134@gmail.com' : email,
+            // process.env.NODE_ENV === 'development' ? 'varunsahni10134@gmail.com' : email,
+            email,
             utils.getCurrentDateString(),
             confirmLink
         );
@@ -269,7 +271,8 @@ const login = async (req, res) => {
 
         let text = `<div>Verify your login to TOE by the code <br/><b>${code}</b></div>`
         utils.sendOTP(
-            process.env.NODE_ENV === 'development' ? 'varunsahni10134@gmail.com' : email,
+            // process.env.NODE_ENV === 'development' ? 'varunsahni10134@gmail.com' : email,
+            email,
             utils.getCurrentDateString(),
             text
         );
@@ -364,7 +367,8 @@ const passwordResetRequest = async (req, res) => {
 
         let text = `<div>Verify your reset password request to TOE by the code <br/><b>${code}</b></div>`
         utils.sendOTP(
-            process.env.NODE_ENV === 'development' ? 'varunsahni10134@gmail.com' : email,
+            // process.env.NODE_ENV === 'development' ? 'varunsahni10134@gmail.com' : email,
+            email,
             utils.getCurrentDateString(),
             text
         );
