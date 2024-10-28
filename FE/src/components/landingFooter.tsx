@@ -36,7 +36,7 @@ const LandingFooter = () => {
                         </div>
                         <div className="w-full sm:w-auto flex flex-col space-y-3 lg:space-y-8">
                             <div className="font-bold text-white text-[20px] leading-[30px]">Company</div>
-                            <div className="text-lightgrey text-[16px] leading-[24px]">About Finlab</div>
+                            <div className="text-lightgrey text-[16px] leading-[24px]">About TOE</div>
                             <div className="text-lightgrey text-[16px] leading-[24px]">Careers</div>
                             <div className="text-lightgrey text-[16px] leading-[24px]">Contact</div>
                             <div className="text-lightgrey text-[16px] leading-[24px]">Press</div>

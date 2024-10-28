@@ -15,13 +15,13 @@ const LandingSolution = () => {
                 </div>
                 <div className="w-full mt-10 lg:mt-16 flex flex-col lg:flex-row rounded-[30px] bg-white overflow-clip">
                     <div className="w-full lg:w-[40%] p-5 lg:p-10 text-darkgrey">
-                        <div className="font-bold text-[24px] leading-[36px] lg:text-[40px] lg:leading-[60px]">TOE for Customer</div>
+                        <div className="font-bold text-[24px] leading-[36px] lg:text-[40px] lg:leading-[60px]">TOE for Customers</div>
                         <div className="text-midgrey mt-6 text-[14px] lg:text-[18px] leading-[27px]">
                             <b>Example topics for consulting:</b>
                             <ul className="list-disc pl-6">
-                                <li>Graduate studies in the U.S.: how to apply and what universities to apply for</li>
-                                <li>Assess my scientific research on a specific topic: what shall I focus my efforts on and how?</li>
-                                <li>Look for a job after graduated: how and what to pay attention to?</li>
+                                <li>Graduate studies in the U.S.: how to apply and what universities/programs to apply for; have a top professor assess your application materials.</li>
+                                <li>Assess my scientific research on a specific topic: what shall I focus my efforts on and how - directions and advice for improvements</li>
+                                <li>Look for a job after graduated: how and what to pay attention to? how to plan for the future job early?</li>
                             </ul>
                         </div>
                         <Link
@@ -39,13 +39,13 @@ const LandingSolution = () => {
                 </div>
                 <div className="w-full mt-6 flex flex-col lg:flex-row rounded-[30px] bg-darkgrey overflow-clip">
                     <div className="w-full lg:w-[40%] p-5 pb-[60px] lg:p-10 text-white">
-                        <div className="text-white font-bold text-[24px] leading-[36px] lg:text-[40px] lg:leading-[60px]">TOE for Expert</div>
+                        <div className="text-white font-bold text-[24px] leading-[36px] lg:text-[40px] lg:leading-[60px]">TOE for Experts</div>
                         <div className="text-lightgrey mt-6 text-[14px] lg:text-[18px] leading-[27px]">
                             <b>Benefits for experts:</b>
                             <ul className="list-disc pl-6">
-                                <li>Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor</li>
-                                <li>Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor</li>
-                                <li>Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor</li>
+                                <li>Realize value of knowledge for greater societal benefits and get paid.</li>
+                                <li>Talk directly for recruitment of top graduate students</li>
+                                <li>Gain broader view of relevant issues globally</li>
                             </ul>
                         </div>
                         <Link

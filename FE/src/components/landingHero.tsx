@@ -9,10 +9,10 @@ const LandingHero = () => {
                     <div className="text-white text-[12px] leading-[15px] lg:text-[14px] lg:leading-[21px]">Update New features for active users ✨</div>
                 </div>
                 <h1 className="mt-3 text-white font-bold text-[32px] leading-[48px] lg:text-[72px] lg:leading-[94px] textShadow">
-                    Thoughts of Expert (TOE) Consulting
+                    Thoughts of Experts (TOE) Consulting
                 </h1>
                 <div className="text-[14px] leading-[21px] lg:text-[18px] lg:leading-[27px] mt-6 lg:mt-8 text-lightgrey textShadow">
-                    Talk directly with experts about study, work and life across countries. Experts are top university professors, scientists, researchers, senior engineers, and mainstream corporative managers, mostly with a Ph.D. degree. They have decades of  experiences advising graduate students, conducting top quality scientific research, supervising professionals, and successfully settling their lives in a new world.
+                    Talk directly with experts about topics in study, research, work and life across countries. Experts are top university professors, scientists, researchers, senior engineers, and mainstream corporative managers, mostly with a Ph.D. degree. They have decades of  experiences advising graduate students, conducting top quality scientific research, supervising professionals, and successfully settling their lives in a new world. They are generally considered elites of the elite.
                 </div>
                 <div className="flex space-x-4 mt-10">
                     <button 

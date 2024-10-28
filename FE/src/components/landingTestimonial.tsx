@@ -44,7 +44,7 @@ const LandingTestimonial = () => {
                             Eren Yaeger
                         </div>
                         <div className="mt-2 text-[16px] leading-[150%] text-lightgrey">
-                            Lorem ipsum dolor sit amet consectetur. Risus morbi ultrices sit hac condimentum adipiscing. Risus auctor.
+                            Experts made me find the best match to my interests and strengths.
                         </div>
                         <div className="mt-8 flex items-center space-x-[5px] text-[20px] leading-[150%] font-bold text-white">
                             <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -59,10 +59,10 @@ const LandingTestimonial = () => {
                         </svg>
                         <img src={avatar} className="w-[53px] h-[53px] rounded-[8px]" />
                         <div className="mt-6 text-[24px] leading-[150%] text-white font-bold">
-                            Eren Yaeger
+                            Yifei Zhang
                         </div>
                         <div className="mt-2 text-[16px] leading-[150%] text-lightgrey">
-                            Lorem ipsum dolor sit amet consectetur. Risus morbi ultrices sit hac condimentum adipiscing. Risus auctor.
+                            Dream University Professor highlighted flaws in my application statement.
                         </div>
                         <div className="mt-8 flex items-center space-x-[5px] text-[20px] leading-[150%] font-bold text-white">
                             <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -77,10 +77,10 @@ const LandingTestimonial = () => {
                         </svg>
                         <img src={avatar} className="w-[53px] h-[53px] rounded-[8px]" />
                         <div className="mt-6 text-[24px] leading-[150%] text-white font-bold">
-                            Eren Yaeger
+                            Kumar Gupta
                         </div>
                         <div className="mt-2 text-[16px] leading-[150%] text-lightgrey">
-                            Lorem ipsum dolor sit amet consectetur. Risus morbi ultrices sit hac condimentum adipiscing. Risus auctor.
+                            The world's top professors advised me to apply directly to PhD. programs all by myself, saving much from using third parties.
                         </div>
                         <div className="mt-8 flex items-center space-x-[5px] text-[20px] leading-[150%] font-bold text-white">
                             <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -124,8 +124,8 @@ const LandingTestimonial = () => {
             <div className="w-full xl:w-[50%] main_container pt-[40px] xl:pt-[100px] pb-[66px] xl:pb-[89px]">
                 <div className="w-full xl:max-w-[600px]">
                     <div className="w-fit px-[25px] py-[5px] rounded-[80px] bg-darkgrey text-white text-[12px] leading-[15px] xl:text-[14px] xl:leading-[21px]">Testimonials from user 🤩</div>
-                    <div className="font-bold text-white mt-3 text-[32px] leading-[48px] xl:text-[56px] xl:leading-[78px]">What our user say about us</div>
-                    <div className="text-lightgrey mt-3 text-[14px] xl:text-[18px] leading-[27px">You will get many benefits from our features. Finding a parking space becomes easier</div>
+                    <div className="font-bold text-white mt-3 text-[32px] leading-[48px] xl:text-[56px] xl:leading-[78px]">What our users said about us</div>
+                    <div className="text-lightgrey mt-3 text-[14px] xl:text-[18px] leading-[27px">You'll save years of effort for setting the first step right after talking with the right experts.</div>
                     <button
                         className="border border-white mt-[40px] xl:mt-[24px] rounded-[14px] text-[16px] leading-[24px] px-[27.5px] py-[11px] xl:px-[42px] xl:py-[15px] text-white"
                         onClick={() => {}}
