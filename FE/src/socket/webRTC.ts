@@ -210,6 +210,7 @@ const addNewRemoteStream = (remoteStream: MediaStream | Boolean) => {
 
 export const closeAllConnections = () => {
     Object.entries(peers).forEach((mappedObject) => {
+        console.log('Closing the connection',mappedObject);
         const connUserSocketId = mappedObject[0];
         if (peers[connUserSocketId]) {
             peers[connUserSocketId].destroy();

@@ -53,6 +53,8 @@ export default function LeaveFeedback() {
         }
     }, [description, rating])
 
+    return null
+
     return (
         <React.Fragment>
             {

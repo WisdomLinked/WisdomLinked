@@ -242,7 +242,7 @@ const MessagesHeader = ({ scrollPosition, events, openCalendarModal, openSeminar
                         <IconButton
                             style={{ color: "white" }}
                             className="disabled:opacity-50"
-                            disabled={!isOnline(chosenChatDetails.userId) || !enabledEvent}
+                            //disabled={!isOnline(chosenChatDetails.userId) || !enabledEvent}
                             onClick={() => {
                                 callRequest({
                                     audioOnly: false,

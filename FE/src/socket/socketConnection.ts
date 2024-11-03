@@ -338,9 +338,17 @@ const callRequest = (data: {
             store.dispatch(setCallStatus(status) as any);
 
             if (data.accepted && data.signal) {
-                console.log("ACCEPTED", data.signal);
-                store.dispatch(setOtherUserId(data.otherUserId) as any);
-                peer.signal(data.signal);
+                try {
+                    console.log("ACCEPTED", data.signal);
+                    store.dispatch(setOtherUserId(data.otherUserId) as any);
+                    peer.signal(data.signal);
+                }
+                catch (e){
+                    console.log("error",e);
+                }
+                finally{
+                    console.log("FInallY");
+                }
             }
         });
     };

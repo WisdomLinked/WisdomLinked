@@ -39,9 +39,9 @@ const CloseRoom = ({ type } : { type: CallType }) => {
 
             if(otherUserId) {
                 // OPENING FEEDBACK POPUP -----------
-                if (remoteStream) {
-                    openFeedbackModal(otherUserId);
-                }
+                // if (remoteStream) {
+                //     openFeedbackModal(otherUserId);
+                // }
 
                 notifyChatLeft(otherUserId, remoteStream ? true : false);
             }
@@ -49,10 +49,10 @@ const CloseRoom = ({ type } : { type: CallType }) => {
         }
 
         if(type === "ROOM") {
-            if (userDetails.role !== "expert" && isExpertInRoom) {
-                // OPENING FEEDBACK POPUP -----------
-                openFeedbackModal(expert)
-            }
+            // if (userDetails.role !== "expert" && isExpertInRoom) {
+            //     // OPENING FEEDBACK POPUP -----------
+            //     openFeedbackModal(expert)
+            // }
             leaveRoom();
         }
         cancelCallRequest({otherUserId: otherUserId || ''})
