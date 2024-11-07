@@ -7,7 +7,7 @@ const Services = () => {
             <img src={subhero_bg} className="w-full h-full object-cover object-center blur-sm" />
             <div className="absolute top-0 left-0 w-full h-full main_container flex justify-center items-center">
               <h1 className='w-full max-w-[1500px] mx-auto text-center text-white font-bold text-[32px] leading-[48px] lg:text-[72px] lg:leading-[94px] textShadow '>
-                Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor
+                Services for Quality, but not for Free
               </h1>
             </div>
         </div>

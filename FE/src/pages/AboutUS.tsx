@@ -6,13 +6,15 @@ const AboutUS = () => {
         <div className="w-full h-[500px] relative">
             <img src={subhero_bg} className="w-full h-full object-cover object-center blur-sm" />
             <div className="absolute top-0 left-0 w-full h-full main_container flex justify-center items-center">
-              <h1 className='w-full max-w-[1500px] mx-auto text-center text-white font-bold text-[32px] leading-[48px] lg:text-[72px] lg:leading-[94px] textShadow '>
-                Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor
-              </h1>
+                <h1 className='w-full max-w-[1500px] mx-auto text-center text-white font-bold text-[32px] leading-[48px] lg:text-[72px] lg:leading-[94px] textShadow '>
+                    Connected to Knowledge and Wisdom<br/>
+                    Across the Globe, Starting From<br/>
+                    Study and Work Abroad
+                </h1>
             </div>
         </div>
         <div className="main_container text-lightgrey text-xl pt-14">
-            <p> &nbsp;This is a global consulting service company backed by professors in top universities in the U.S. The business draws on the talents of elite professionals, mostly top notch professors, scientists, researchers and other successful professionals. These elite professionals all have their graduate degrees, mostly Ph.D. with decades of successful experiences. They are generally considered leaders in their respective field: admitting and advising graduate students, conducting cutting edge research in frontier areas, or advancing practices in industries, etc. </p>
+            <p> &nbsp;This is a global consulting service company backed by professors in top universities in the U.S. and other countries. The business draws on the talents of elite professionals, mostly top notch professors, scientists, researchers and other successful professionals. These elite professionals all have their graduate degrees, mostly Ph.D. with decades of successful experiences. They are generally considered leaders in their respective field: admitting and advising graduate students, conducting cutting edge research in frontier areas, or advancing practices in industries, etc. </p>
             <br/>
             <p> &nbsp;Clients are people planning to go abroad for graduate studies, people who are looking for a job in the western world, and researchers who are seeking insightful advice with their research efforts. A 30-min conversation with an authoritative expert through this platform could save clients years or months effort or countless dollars that could otherwise be wasted in darkness.</p>
             <br/>

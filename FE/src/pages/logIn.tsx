@@ -25,12 +25,16 @@ const LogIn = () => {
     const handleLogin = async () => {
         SetLoadingStatus(true)
         const response: any = await login({ email: email, password: pwd });
-        console.log(response)
+        console.log('login response from server: ',response);
+        console.log('Full login response:', JSON.stringify(response, null, 2));
         if (response.status === 'SUCCESS') {
             console.log(response.code, '////')
+            console.log('Login successful, code:', response.code);
             set_codeSent(true)
         } else {
+            console.error('Login failed:', response.error);
             dispatch(showAlert(response.error))
+
         }
         SetLoadingStatus(false)
     }

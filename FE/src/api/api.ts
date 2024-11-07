@@ -72,6 +72,7 @@ export const login = async ({ email, password }: LoginArgs) => {
 
         return res.data;
     } catch (err: any) {
+        console.error('Login error:', err);
         return checkForAuthorization(err);
     }
 };

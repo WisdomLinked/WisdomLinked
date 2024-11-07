@@ -32,8 +32,11 @@ const validateRegisterSchema = async (req, res, next) => {
 const validateLoginSchema = async (req, res, next) => {
     try {
         const { email, password } = req.body
+        console.log('Login attempt:', { email, passwordLength: password?.length });
         let isEmailValid = validateEmail(email)
         let isPasswordValid = password?.length >= 6
+        console.log('Validation results:', { isEmailValid, isPasswordValid });
+
         if (!isEmailValid || !isPasswordValid) {
             let errorMsg = 'Error validating request body. '
             if (!isEmailValid)
@@ -44,6 +47,7 @@ const validateLoginSchema = async (req, res, next) => {
         }
         next();
     } catch (err) {
+        console.error('Login validation error:', err.message);
         console.log(err.message)
         res.status(400).send(err.message);
     }

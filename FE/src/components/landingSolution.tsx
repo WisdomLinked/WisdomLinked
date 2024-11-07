@@ -8,20 +8,33 @@ const LandingSolution = () => {
         <div className="flex bg-black">
             <div className="main_container pt-[40px] lg:pt-[100px] pb-[81px] lg:pb-[101px]">
                 <div className="w-full flex justify-center">
-                    <div className="w-fit px-[25px] py-[10px] bg-darkgrey rounded-[80px] text-[12px] leading-[15px] text-white">Our best solution for you ✨</div>
+                    <div
+                        className="w-fit px-[25px] py-[10px] bg-darkgrey rounded-[80px] text-[12px] leading-[15px] text-white">Our
+                        best solution for you ✨
+                    </div>
                 </div>
-                <div className="text-center text-white font-bold mt-3 text-[32px] leading-[48px] lg:text-[56px] lg:leading-[78px]">
+                <div
+                    className="text-center text-white font-bold mt-3 text-[32px] leading-[48px] lg:text-[56px] lg:leading-[78px]">
                     We have solutions that work for you.
                 </div>
-                <div className="w-full mt-10 lg:mt-16 flex flex-col lg:flex-row rounded-[30px] bg-white overflow-clip">
-                    <div className="w-full lg:w-[40%] p-5 lg:p-10 text-darkgrey">
-                        <div className="font-bold text-[24px] leading-[36px] lg:text-[40px] lg:leading-[60px]">TOE for Customers</div>
-                        <div className="text-midgrey mt-6 text-[14px] lg:text-[18px] leading-[27px]">
+                {/*<div className="w-full mt-10 lg:mt-16 flex flex-col lg:flex-row rounded-[30px] bg-white overflow-clip">*/}
+                <div className="w-full mt-10 lg:mt-16 flex flex-col lg:flex-row rounded-[30px] bg-darkgrey overflow-clip">
+                    <div className="w-full lg:w-[40%] p-5 lg:p-10 text-white">
+                        <div className="text-white font-bold text-[24px] leading-[36px] lg:text-[40px] lg:leading-[60px]">TOE for
+                            Customers
+                        </div>
+                        <div className="text-lightgrey mt-6 text-[14px] lg:text-[18px] leading-[27px]">
                             <b>Example topics for consulting:</b>
                             <ul className="list-disc pl-6">
-                                <li>Graduate studies in the U.S.: how to apply and what universities/programs to apply for; have a top professor assess your application materials.</li>
-                                <li>Assess my scientific research on a specific topic: what shall I focus my efforts on and how - directions and advice for improvements</li>
-                                <li>Look for a job after graduated: how and what to pay attention to? how to plan for the future job early?</li>
+                                <li>Graduate studies in the U.S.: how to apply and what universities/programs to apply
+                                    for; have a top professor assess your application materials.
+                                </li>
+                                <li>Assess my scientific research on a specific topic: what shall I focus my efforts on
+                                    and how - directions and advice for improvements
+                                </li>
+                                <li>Look for a job after graduated: how and what to pay attention to? how to plan for
+                                    the future job early?
+                                </li>
                             </ul>
                         </div>
                         <Link
@@ -39,7 +52,10 @@ const LandingSolution = () => {
                 </div>
                 <div className="w-full mt-6 flex flex-col lg:flex-row rounded-[30px] bg-darkgrey overflow-clip">
                     <div className="w-full lg:w-[40%] p-5 pb-[60px] lg:p-10 text-white">
-                        <div className="text-white font-bold text-[24px] leading-[36px] lg:text-[40px] lg:leading-[60px]">TOE for Experts</div>
+                        <div
+                            className="text-white font-bold text-[24px] leading-[36px] lg:text-[40px] lg:leading-[60px]">TOE
+                            for Experts
+                        </div>
                         <div className="text-lightgrey mt-6 text-[14px] lg:text-[18px] leading-[27px]">
                             <b>Benefits for experts:</b>
                             <ul className="list-disc pl-6">
