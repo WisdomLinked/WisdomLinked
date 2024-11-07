@@ -39,7 +39,7 @@ const LandingSolution = () => {
                         </div>
                         <Link
                             to='/customerregister'
-                            className="block w-fit border border-black mt-[47px] rounded-[14px] text-[16px] leading-[24px] px-[27.5px] py-[11px] lg:px-[42px] lg:py-[15px]"
+                            className="block w-fit border border-white mt-[47px] rounded-[14px] text-[16px] leading-[24px] px-[27.5px] py-[11px] lg:px-[42px] lg:py-[15px]"
                         >
                             Register
                         </Link>
