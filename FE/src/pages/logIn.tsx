@@ -58,7 +58,7 @@ const LogIn = () => {
     return (
         codeSent ?
             <ConfirmCode email={email} password={pwd} /> :
-            <div className="w-full lg:h-screen flex flex-col lg:flex-row">
+            <div className="w-full h-screen overflow-y-auto flex flex-col lg:flex-row">
                 <div className="flex flex-col w-full pt-12 px-8 pb-[118px] lg:w-[50%] lg:h-full lg:px-[60px] lg:py-0 lg:justify-center bg-black ">
                     <Link to='/' className="w-fit flex items-center space-x-[2px] text-white font-black text-4xl">
                         <img src={logo} className="w-10 h-10" />
