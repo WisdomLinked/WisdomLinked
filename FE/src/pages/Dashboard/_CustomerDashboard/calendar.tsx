@@ -13,6 +13,7 @@ import { updateMe } from "../../../actions/authActions";
 import { showAlert } from "../../../actions/alertActions";
 import { useAppSelector } from "../../../store";
 
+
 const CustomerCalendar = () => {
 
     const dispatch = useDispatch()
@@ -48,6 +49,7 @@ const CustomerCalendar = () => {
     const [seminarModalShow, set_seminarModalShow] = useState<boolean>(false)
 
     const handleSelectEvent = async (event: any) => {
+        console.log("Event Details",event);
         if (event.type === 'event') {
             SetLoadingStatus(true)
             const response = await doFilterExperts({ _id: event.expert._id });
@@ -174,6 +176,11 @@ const CustomerCalendar = () => {
         SetLoadingStatus(false)
     }
 
+    const setToChat = (param: boolean)=>{
+        if(param)
+            return navigate(`${process.env.REACT_APP_AUTH_URL}customerdashboard/chat`)
+    }
+
     useEffect(() => {
         getEvents()
     }, [])
@@ -274,6 +281,13 @@ const CustomerCalendar = () => {
                                             >
                                                 Edit
                                             </button>
+                                            <button
+                                                className="w-[calc(50%-8px)] rounded-lg border border-green bg-green flex items-center justify-center disabled:opacity-50"
+                                                disabled={userDetails.status === 'review'}
+                                                onClick={() =>setToChat(true)}
+                                            >
+                                                ChatRoom
+                                            </button>
                                         </>
                                 }
                             </div>
@@ -283,7 +297,8 @@ const CustomerCalendar = () => {
             }
             {
                 editModalShow ?
-                    <div className={`absolute top-0 left-0 w-full h-full bg-white bg-opacity-10 backdrop-blur-sm z-10 p-8`}>
+                    <div
+                        className={`absolute top-0 left-0 w-full h-full bg-white bg-opacity-10 backdrop-blur-sm z-10 p-8`}>
                         <div
                             className="absolute top-0 left-0 w-full h-full cursor-pointer"
                             onClick={() => {

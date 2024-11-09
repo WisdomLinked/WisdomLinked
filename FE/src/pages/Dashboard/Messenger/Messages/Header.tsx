@@ -161,6 +161,7 @@ const MessagesHeader = ({ scrollPosition, events, openCalendarModal, openSeminar
     }, [chosenGroupChatDetails])
 
     useEffect(() => {
+        console.log("User Details:",userDetails);
         if (activeRooms?.length && enabledEvent) {
             // console.log(activeRooms)
             const room = activeRooms.find(x => x.groupId === enabledEvent?._id)
@@ -224,7 +225,7 @@ const MessagesHeader = ({ scrollPosition, events, openCalendarModal, openSeminar
                         <IconButton
                             style={{ color: "white" }}
                             className="disabled:opacity-50"
-                            disabled={!isOnline(chosenChatDetails.userId) || !enabledEvent}
+                            disabled={(!isOnline(chosenChatDetails.userId) || !enabledEvent) && userDetails.role==="customer"}
                             onClick={() => {
                                 callRequest({
                                     audioOnly: true,
@@ -242,7 +243,7 @@ const MessagesHeader = ({ scrollPosition, events, openCalendarModal, openSeminar
                         <IconButton
                             style={{ color: "white" }}
                             className="disabled:opacity-50"
-                            //disabled={!isOnline(chosenChatDetails.userId) || !enabledEvent}
+                            disabled={(!isOnline(chosenChatDetails.userId) || !enabledEvent) && userDetails.role==="customer"}
                             onClick={() => {
                                 callRequest({
                                     audioOnly: false,

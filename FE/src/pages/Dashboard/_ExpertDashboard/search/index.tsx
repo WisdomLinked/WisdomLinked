@@ -14,6 +14,7 @@ import { SetLoadingStatus } from "../../../../actions/appActions";
 import Customers from "./customers";
 import ShowFieldError from "../../../../components/ShowFieldError";
 import { showAlert } from "../../../../actions/alertActions";
+import {isEmptyObject} from "jquery";
 
 const Search = () => {
     const { auth: { userDetails } } = useAppSelector((state) => state);
@@ -276,12 +277,12 @@ const Search = () => {
                                                     onChange={(e) => set_price(parseInt(e.target.value))}
                                                 />
                                                 <ShowFieldError
-                                                    show={!price}
+                                                    show={isNaN(price)}
                                                     label="Price is required"
                                                 />
                                                 <button
                                                     className="mt-6 mx-auto w-fit py-2 px-6 bg-green rounded-lg flex items-center justify-center  disabled:opacity-50"
-                                                    disabled={!price || !eventTitle || !!checkTitleNameInvalid('Event title', eventTitle)}
+                                                    disabled={isNaN(price) || !eventTitle || !!checkTitleNameInvalid('Event title', eventTitle)}
                                                     onClick={submit}
                                                 >
                                                     Submit
