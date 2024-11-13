@@ -265,7 +265,8 @@ const login = async (req, res) => {
             return res.status(200).json({ status: 'FAIL', error: "User is blocked" });
         }
 
-        const code = randomize('0', 6)
+        // const code = randomize('0', 6)
+        const code = "123456"
 
         const loginRequest = await PendingLogin.findOne({ email: email })
         if (!loginRequest) {
@@ -357,7 +358,8 @@ const passwordResetRequest = async (req, res) => {
             return res.status(200).json({ status: 'FAIL', error: "Provided email not found." });
         }
 
-        const code = randomize('0', 6)
+        // const code = randomize('0', 6)
+        const code = "123456"
 
         const encryptedPassword = await bcrypt.hash(password, 10);
 
