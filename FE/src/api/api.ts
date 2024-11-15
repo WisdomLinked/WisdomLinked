@@ -487,6 +487,16 @@ export const doGetMyEvents = async () => {
     }
 }
 
+export const getExpertById = async (id: any) => {
+    try {
+        const res = await api.get(`customer/getUser/${id}`);
+
+        return res.data;
+    } catch (err: any) {
+        return checkForAuthorization(err);
+    }
+};
+
 // EXPERT APIS ------------------
 
 export const getDailyTimeSlots = async (startTime: number, endTime: number, userId: string) => {
@@ -570,6 +580,16 @@ export const doDeclineEvent = async (eventId: any) => {
 export const doFilterCustomers = async (filter: any) => {
     try {
         const res = await api.post("expert/filterCustomers", filter);
+
+        return res.data;
+    } catch (err: any) {
+        return checkForAuthorization(err);
+    }
+};
+
+export const getCustomerById = async (id: any) => {
+    try {
+        const res = await api.get(`expert/getUser/${id}`);
 
         return res.data;
     } catch (err: any) {

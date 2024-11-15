@@ -4,6 +4,7 @@ const { customerAuth } = require("../middlewares/requireAuth");
 const {
     filterExperts,
     filterSeminars,
+    getExpertById,
 } = require('../controllers/customer.controller')
 const {
     appendEvent,
@@ -16,6 +17,7 @@ const {
 } = require('../controllers/groupChat.controller')
 
 router.post("/filterExperts", customerAuth(false), filterExperts);
+router.get("/getUser/:id",customerAuth(false),getExpertById)
 router.post("/filterSeminars", customerAuth(false), filterSeminars);
 router.post("/appendEvent", customerAuth(true), appendEvent);
 router.post("/updateEvent", customerAuth(true), updateEvent);

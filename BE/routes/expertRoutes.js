@@ -6,6 +6,7 @@ const {
     getDailyTimeSlots,
     updateDailyTimeSlots,
     filterCustomers,
+    getCustomerById,
 } = require('../controllers/expert.controller')
 const {
     acceptEvent,
@@ -55,6 +56,8 @@ router.post(
     expertAuth(false),
     filterCustomers
 );
+
+router.get("/getUser/:id",expertAuth(false),getCustomerById)
 
 router.post("/createEvent", expertAuth(true), createEventByExpert);
 

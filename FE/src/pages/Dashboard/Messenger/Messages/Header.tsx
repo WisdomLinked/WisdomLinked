@@ -22,11 +22,12 @@ import CastForEducationIcon from '@mui/icons-material/CastForEducation';
 import { createNewRoom, joinRoom } from "../../../../socket/roomHandler";
 import CloseIcon from '@mui/icons-material/Close';
 import EditIcon from '@mui/icons-material/Edit';
-import { doLeftSeminar, doUpdateProfile } from "../../../../api/api";
+import { doLeftSeminar, doUpdateProfile, getCustomerById, getExpertById } from "../../../../api/api";
 import { SetLoadingStatus } from "../../../../actions/appActions";
 import { updateMe } from "../../../../actions/authActions";
 import { showAlert } from "../../../../actions/alertActions";
 import { resetChatAction, setChosenGroupChatDetails } from "../../../../actions/chatActions";
+import ProfileModal from "./ProfileModal";
 
 const MessagesHeader = ({ scrollPosition, events, openCalendarModal, openSeminarModal, openEditSeminarModal }: any) => {
 
@@ -49,6 +50,8 @@ const MessagesHeader = ({ scrollPosition, events, openCalendarModal, openSeminar
     const [futureEvents, set_futureEvents] = useState<Array<any>>([])
     const [enabledEvent, set_enabledEvent] = useState<any>(null)
     const [buttonsModalShow, set_buttonsModalShow] = useState(false)
+    const [profileModalShow, set_profileModalShow] = useState(false)
+    const [chosenProfileData, set_chosenProfileData] = useState<any>({})
     const [joinPopupBlocked, set_joinPopupBlocked] = useState(userDetails.joinPopupBlocked)
     const [joinPopupShow, set_joinPopupShow] = useState(false)
     const [kickedFromSeminar, set_kickedFromSeminar] = useState(false)
@@ -182,6 +185,22 @@ const MessagesHeader = ({ scrollPosition, events, openCalendarModal, openSeminar
         // )
     }, [enabledEvent, isUserInRoom, userDetails, chosenGroupChatDetails, activeRooms])
 
+    const fetchProfileData=async ()=>{
+
+    }
+
+    const handleProfileModalOpen= async (chosenChatDetails:any) =>{
+        const response = userDetails.role=="expert"? await getCustomerById(chosenChatDetails.userId): await getExpertById(chosenChatDetails.userId)
+        set_chosenProfileData(response.result)
+        set_profileModalShow(true)
+    }
+
+    const handleProfileModalClose= async () =>{
+        set_chosenProfileData({})
+        set_profileModalShow(false)
+    }
+
+
     return (
         <div className="w-full flex items-center justify-between sticky top-0 right-0 px-5 py-3 rounded-b-[30px] z-20 transition-all" style={navActiveStyle} ref={navRef}>
             {
@@ -195,11 +214,19 @@ const MessagesHeader = ({ scrollPosition, events, openCalendarModal, openSeminar
                                     <div className="text-[12px]">( {formatDateYYYY_MM_DD_h_m(enabledEvent.start)?.split(' ')[1]} ~ {formatDateYYYY_MM_DD_h_m(enabledEvent.end)?.split(' ')[1]} )</div>
                                 </div>
                             </div> :
-                            <div className="w-[calc(100%-120px)] flex items-center justify-start space-x-3" title={chosenChatDetails?.username}>
+                            <div className="w-[calc(100%-120px)] flex items-center justify-start space-x-3 cursor-pointer" title={chosenChatDetails?.username}
+                                 onClick={()=>{
+                                     handleProfileModalOpen(chosenChatDetails)
+                                 }}>
                                 <Avatar username={chosenChatDetails.username!} image={chosenChatDetails.image} />
                                 <div className="w-[calc(100%-48px)] text-[20px] text-white mr-2 truncate">
                                     {chosenChatDetails?.username}
                                 </div>
+                                <ProfileModal
+                                    isOpen={profileModalShow}
+                                    onClose={handleProfileModalClose}
+                                    userDetails={chosenProfileData}
+                                />
                             </div>
                     ) :
                     chosenGroupChatDetails ?

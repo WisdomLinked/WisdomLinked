@@ -160,7 +160,25 @@ const filterSeminars = async (req, res) => {
     }
 }
 
+
+const  getExpertById =async (req,res) =>{
+    try{
+        console.log("inside getExpertById")
+        const {id} = req.params
+        let query = await User.findById(id)
+        console.log("inside getExpertById",query)
+        return res.status(200).json({
+            result: query
+        })
+    }
+    catch(err){
+        console.log(err)
+        return res.status(500).send(err.message);
+    }
+}
+
 module.exports = {
     filterExperts,
-    filterSeminars
+    filterSeminars,
+    getExpertById
 }

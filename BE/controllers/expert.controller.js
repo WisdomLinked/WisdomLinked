@@ -66,6 +66,21 @@ const updateDailyTimeSlots = async (req, res) => {
     }
 }
 
+const  getCustomerById =async (req,res) =>{
+    try{
+        console.log("inside getCustomerByid")
+        const {id} = req.params
+        let query = await User.findById(id)
+        console.log("inside getCustomerByid",query)
+        return res.status(200).json({
+            result: query
+        })
+    }
+    catch(err){
+        console.log(err)
+        return res.status(500).send(err.message);
+    }
+}
 const filterCustomers = async (req, res) => {
     try {
         const { email } = req.user
@@ -141,5 +156,6 @@ module.exports = {
     updateTimeSlots,
     getDailyTimeSlots,
     updateDailyTimeSlots,
-    filterCustomers
+    filterCustomers,
+    getCustomerById
 }
