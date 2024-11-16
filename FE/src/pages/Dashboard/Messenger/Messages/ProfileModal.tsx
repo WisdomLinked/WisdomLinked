@@ -1,9 +1,10 @@
 import React, { useEffect, useRef, useState } from "react";
-import { fetchTimeZone } from "../../../../api/timezone";
+import { getTimezone } from "../../../../api/api";
 
 interface Country {
     latitude: number;
     longitude: number;
+    name: string
 }
 
 interface UserDetails {
@@ -34,11 +35,11 @@ const ProfileModal: React.FC<ProfileModalProps> = ({ isOpen, onClose, userDetail
         const fetchTimezoneData = async () => {
             try {
                 const { latitude, longitude } = userDetails.country;
-                const res = await fetchTimeZone(latitude, longitude);
-                console.log("timezone", res);
+                const {response} = await getTimezone({ lat: latitude, lng: longitude });
+                console.log("timezone", response);
 
-                if (res?.formatted) {
-                    setTimezoneData(res.formatted);
+                if (response?.formatted) {
+                    setTimezoneData(response.formatted);
                 } else {
                     console.error("Formatted field is missing in the response");
                 }
@@ -78,6 +79,9 @@ const ProfileModal: React.FC<ProfileModalProps> = ({ isOpen, onClose, userDetail
                 </p>
                 <p className="text-gray-700">
                     <strong>Email:</strong> {userDetails.email}
+                </p>
+                <p className="text-gray-700">
+                    <strong>Country:</strong> {userDetails?.country?.name || "Loading"}
                 </p>
                 <p className="text-gray-700">
                     <strong>Timezone:</strong> {timezone || "Loading..."}

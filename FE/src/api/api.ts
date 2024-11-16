@@ -138,6 +138,17 @@ export const passwordResetRequest = async ({ email, password }: any) => {
     }
 };
 
+export const getTimezone = async ({ lat, lng }: { lat: number; lng: number }) => {
+    try {
+        const res = await api.get(`auth/getTimezone/`, {
+            params: { lat, lng }
+        });
+        return res.data;
+    } catch (err: any) {
+        return checkForAuthorization(err);
+    }
+};
+
 // protected routes
 
 export const getMe = async () => {

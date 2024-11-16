@@ -143,7 +143,7 @@ const register = async (req, res) => {
         // user.password = null
         // res.cookie('accessToken', token, { maxAge: process.env.COOKIE_EXPIRED_TIME, httpOnly: true })
 
-        // SEND EMAIL TO CUSTOMER 
+        // SEND EMAIL TO CUSTOMER
         let confirmLink = `<div>Verify your registration to TOE by the confirmation Link <br/>${process.env.FE_URL}/verification/${email}/${confirmCode}</div>`
         await utils.sendOTP(
             // process.env.NODE_ENV === 'development' ? 'varunsahni10134@gmail.com' : email,
@@ -181,7 +181,7 @@ const resendConfirmEmail = async (req, res) => {
             throw new Error('Pending registration request not found')
         }
 
-        // SEND EMAIL TO CUSTOMER 
+        // SEND EMAIL TO CUSTOMER
         let confirmLink = `<div>Verify your registration to TOE by the confirmation Link <br/>${process.env.FE_URL}/verification/${email}/${pendingUser.confirmCode}</div>`
         await utils.sendOTP(
             // process.env.NODE_ENV === 'development' ? 'varunsahni10134@gmail.com' : email,
@@ -682,6 +682,41 @@ const leaveFeedback = async (req, res) => {
     }
 }
 
+
+const getTimeZone = async (req,res) => {
+    const { lat, lng } = req.query
+    const apiKey = process.env.TIMEZONE_API_KEY;
+    console.log("inside gettimezone",req.body)
+    try {
+        const response = await fetch(`https://api.timezonedb.com/v2.1/get-time-zone?key=${apiKey}&format=json&by=position&lat=${lat}&lng=${lng}`, {
+            method: "GET",
+            headers: {
+                "Content-Type": "application/json",
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Credentials": "true",
+            },
+        });
+
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const data = await response.json();
+        if (data.status === 'OK') {
+            console.log('Time Zone:', data.zoneName);
+            console.log('Local Time:', data.formatted);
+        } else {
+            console.error('Error:', data.message);
+        }
+        res.status(200).send({response:data})
+    } catch (error) {
+        console.error('Fetch error:', error);
+        return res.status(500).send(error.message);
+    }
+};
+
+
+
 module.exports = {
     login,
     register,
@@ -697,5 +732,6 @@ module.exports = {
     passwordResetRequest,
     confirmPasswordResetByCode,
     updateResume,
-    healthCheck
+    healthCheck,
+    getTimeZone
 }

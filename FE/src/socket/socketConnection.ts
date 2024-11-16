@@ -317,7 +317,7 @@ const callRequest = (data: {
 
         currentPeerConnection = peer;
         peer.on("signal", (signal) => {
-            console.log('HERERE')
+            console.log('SIGNAL EMITTED');
             console.log("SIGNAL", signal);
             // TODO send data to server
             socket.emit("call-request", {
@@ -333,22 +333,28 @@ const callRequest = (data: {
         });
 
         socket.on("call-response", (data: any) => {
-            console.log('Call-response ---------------', data)
+            console.log('Call-response received:', data);
+
             const status = data.accepted ? "accepted" : "rejected";
             store.dispatch(setCallStatus(status) as any);
 
             if (data.accepted && data.signal) {
                 try {
-                    console.log("ACCEPTED", data.signal);
+                    console.log("ACCEPTED - Signal", data.signal);
                     store.dispatch(setOtherUserId(data.otherUserId) as any);
-                    peer.signal(data.signal);
+                    // Ensure the signal is valid before attempting to use it
+                    if (data.signal) {
+                        peer.signal(data.signal);
+                    } else {
+                        console.error("Signal is not available or invalid.");
+                    }
+                } catch (e) {
+                    console.log("Error during signal:", e);
+                } finally {
+                    console.log("Execution reached the finally block");
                 }
-                catch (e){
-                    console.log("error",e);
-                }
-                finally{
-                    console.log("FInallY");
-                }
+            } else {
+                console.log("Call not accepted or signal is missing");
             }
         });
     };
