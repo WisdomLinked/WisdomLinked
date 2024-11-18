@@ -30,6 +30,12 @@ const ProfileModal: React.FC<ProfileModalProps> = ({ isOpen, onClose, userDetail
         }
     };
 
+    // Handle close button click
+    const handleCloseClick = (e: React.MouseEvent) => {
+        e.stopPropagation();
+        onClose();
+    };
+
     // Fetch timezone data whenever userDetails change
     useEffect(() => {
         const fetchTimezoneData = async () => {
@@ -71,29 +77,34 @@ const ProfileModal: React.FC<ProfileModalProps> = ({ isOpen, onClose, userDetail
     if (!isOpen) return null;
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
-            <div ref={modalRef} className="w-96 p-6 bg-white rounded-lg shadow-lg">
-                <h2 className="text-xl font-semibold mb-4">Profile Information</h2>
-                <p className="text-gray-700 mb-2">
-                    <strong>Name:</strong> {userDetails.username}
-                </p>
-                <p className="text-gray-700">
-                    <strong>Email:</strong> {userDetails.email}
-                </p>
-                <p className="text-gray-700">
-                    <strong>Country:</strong> {userDetails?.country?.name || "Loading"}
-                </p>
-                <p className="text-gray-700">
-                    <strong>Timezone:</strong> {timezone || "Loading..."}
-                </p>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80">
+            <div ref={modalRef} className="w-96 p-6 bg-[#1a1a24] rounded-lg shadow-2xl border border-gray-800">
+                <h2 className="text-xl font-semibold mb-4 text-gray-100 border-b border-gray-800 pb-3">Profile
+                    Information</h2>
+                <div className="space-y-4 bg-[#20202c] p-4 rounded-md">
+                    <p className="text-gray-300">
+                        <strong className="text-gray-200">Name:</strong> {userDetails.username}
+                    </p>
+                    <p className="text-gray-300">
+                        <strong className="text-gray-200">Email:</strong> {userDetails.email}
+                    </p>
+                    <p className="text-gray-300">
+                        <strong className="text-gray-200">Country:</strong> {userDetails?.country?.name}
+                    </p>
+                    <p className="text-gray-300">
+                        <strong className="text-gray-200">Timezone:</strong> {timezone}
+                    </p>
+                </div>
                 <button
-                    onClick={onClose}
-                    className="mt-4 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
+                    onClick={handleCloseClick}
+                    className="mt-6 w-full px-4 py-2.5 bg-[#2d2d3d] text-gray-200 rounded-lg hover:bg-[#363649] transition-all duration-200"
                 >
                     Close
                 </button>
             </div>
         </div>
+
+
     );
 };
 
