@@ -51,7 +51,8 @@
     "build": "react-scripts build",
     "build-stg": "env-cmd -f .env.stg react-scripts build",
     "test": "react-scripts test",
-    "eject": "react-scripts eject"
+    "eject": "react-scripts eject",
+    "start-stg": "env-cmd -f .env.stg react-scripts start"
   },
   "eslintConfig": {
     "extends": "react-app"
