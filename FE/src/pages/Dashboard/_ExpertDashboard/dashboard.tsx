@@ -1,16 +1,20 @@
 import React, { useEffect, useState } from "react";
 import { useAppSelector } from "../../../store";
+import { useNavigate } from "react-router-dom";
 import Avatar from "../../../components/Avatar";
 import { formatDateYYYY_MM_DD_h_m } from "../../../actions/common";
 import { addMemberToGroup, doAcceptEvent, doCancelInvitation } from "../../../api/api";
 import { updateMe } from "../../../actions/authActions";
 import { useDispatch } from "react-redux";
 import { SetLoadingStatus } from "../../../actions/appActions";
+import { setChosenChatDetails } from "../../../actions/chatActions";
+
 
 const Dashboard = () => {
 
     const { auth: { userDetails: { pendingGroupChats, events, status } } } = useAppSelector(state => state)
     const dispatch = useDispatch()
+    const navigate = useNavigate()
 
     const [groupChats, set_groupChats] = useState<any>([])
     const [sessions, set_sessions] = useState<any>([])
@@ -29,6 +33,7 @@ const Dashboard = () => {
     }
 
     const acceptEvent = async (event: any) => {
+        console.log("accept events", event)
         SetLoadingStatus(true)
         const response = await doAcceptEvent(event._id)
         if (response) {
@@ -36,6 +41,13 @@ const Dashboard = () => {
         }
         SetLoadingStatus(false)
     }
+
+    const navigateCustomer = (item: any) => {
+        console.log("navigate events", item); // Use item here instead of event
+        navigate(`${process.env.REACT_APP_AUTH_URL}expertdashboard/chat`);
+        // Assuming item contains customer details, you can use item directly
+        dispatch(setChosenChatDetails({ userId: item._id, username: item.username, image: item.image }));
+    };
 
     const cancelInvitation = async (event: any) => {
         SetLoadingStatus(true)
@@ -48,10 +60,10 @@ const Dashboard = () => {
 
     useEffect(() => {
         const now = new Date().getTime()
-        let temp: any = events.filter((item: any) => (new Date(item.end).getTime() >= now) && (item.status === 'pending') && (item.paidBy !== 'none'))
+        let temp: any = events.filter((item: any) => (new Date(item.end).getTime() >= now) && (item.status === 'accepted'))
         set_sessions([...temp])
 
-        temp = events.filter((item: any) => (new Date(item.end).getTime() >= now || !item.duration) && (item.status === 'pending') && (item.paidBy === 'none'))
+        temp = events.filter((item: any) => (new Date(item.end).getTime() >= now || !item.duration) && (item.status === 'pending'))
         set_pendingInvitations([...temp])
 
         temp = pendingGroupChats.filter((item: any) => new Date(item.groupChatId.end).getTime() >= now)
@@ -123,12 +135,19 @@ const Dashboard = () => {
                                     <div><span className="font-bold">Duration  : </span> {item.duration} min</div>
                                     <div><span className="font-bold">Price  : </span> ${item.price}</div>
                                     <hr className="my-3" />
-                                    <button
+                                    {/* <button
                                         className="py-1 w-full bg-green rounded-lg flex items-center justify-center disabled:opacity-50"
                                         disabled={status === 'review'}
                                         onClick={() => acceptEvent(item)}
                                     >
                                         Accept
+                                    </button> */}
+                                    <button
+                                        className="py-1 w-full bg-green rounded-lg flex items-center justify-center disabled:opacity-50"
+                                        disabled={status === 'review'}
+                                        onClick={() => navigateCustomer(item.customer)}
+                                    >
+                                        Go to chat
                                     </button>
                                 </div>
                             ))
@@ -159,12 +178,20 @@ const Dashboard = () => {
                                     <div><span className="font-bold">Duration  : </span> {item.duration ? `${item.duration} min` : 'undefined'}</div>
                                     <div><span className="font-bold">Price  : </span> ${item.price}</div>
                                     <hr className="my-3" />
-                                    <button
-                                        className="py-1 w-full bg-green rounded-lg flex items-center justify-center disabled:opacity-50"
-                                        onClick={() => cancelInvitation(item)}
-                                    >
-                                        Cancel
-                                    </button>
+                                    {item.paidBy==='none'?
+                                        <button
+                                            className="py-1 w-full bg-green rounded-lg flex items-center justify-center disabled:opacity-50"
+                                            onClick={() => cancelInvitation(item)}
+                                        >
+                                            Cancel
+                                        </button>
+                                        :<button
+                                            className="py-1 w-full bg-green rounded-lg flex items-center justify-center disabled:opacity-50"
+                                            onClick={() => acceptEvent(item)}
+                                        >
+                                            Accept
+                                        </button>
+                                    }
                                 </div>
                             ))
                         }

@@ -78,7 +78,7 @@ const Dashboard = () => {
 
     useEffect(() => {
         const now = new Date().getTime()
-        let temp: any = events.filter((item: any) => (new Date(item.end).getTime() >= now) || (!item.end) && (item.status === 'pending'))
+        let temp: any = events.filter((item: any) => (new Date(item.end).getTime() >= now) || (!item.end) && (item.status === 'accepted'))
         set_sessions([...temp])
 
         temp = pendingGroupChats.filter((item: any) => new Date(item.groupChatId.end).getTime() >= now)
