@@ -16,6 +16,7 @@ Integration with third-party APIs such as SendGrid for email and Stripe for paym
 Real-time communication with WebSockets
 
 
+
 Installation Guide
 
 Prerequisites
@@ -24,7 +25,8 @@ Node.js and npm installed on your system
 
 MongoDB server setup and running
 
-Optional: Configure environment variables by creating a .env file in the backend directory
+Configure environment variables by creating a .env file in the backend and frontend directory (separate for development and production environments)
+
 
 Steps to Install
 
@@ -32,6 +34,7 @@ Clone the repository:
 
 git clone <repository-url>
 cd <repository-directory>
+
 
 Install dependencies for both frontend and backend:
 
@@ -44,6 +47,7 @@ Frontend:
 
 cd FE
 npm install
+
 
 Install Python dependencies (if required):
 
@@ -100,6 +104,8 @@ util.js: Utility functions like OTP email sending and date formatting.
 routes/: Contains various route files for handling specific API endpoints (e.g., authentication, chat, admin).
 
 socket/: WebSocket server logic for real-time communication.
+
+
 
 Frontend
 
