@@ -55,6 +55,7 @@ let socket: Socket<any, any>;
 const SERVER_URL: any = process.env.REACT_APP_SERVER_URL;
 
 const connectWithSocketServer = (userDetails: UserDetails) => {
+    console.log("Attempting to connect with socket.io server...");
     socket = io(SERVER_URL, {
         auth: {
             email: userDetails.email,
@@ -67,9 +68,14 @@ const connectWithSocketServer = (userDetails: UserDetails) => {
         );
     });
 
+    socket.on("connect_error", (error) => {
+        console.error("Socket connection error:", error);
+    });
+
     socket.emit("helloFomClient");
 
     socket.on("friend-invitations", (data: any) => {
+        console.log("Received friend invitations:", data);
         store.dispatch(setPendingInvitations(data) as any);
     });
 
@@ -81,6 +87,7 @@ const connectWithSocketServer = (userDetails: UserDetails) => {
             };
         });
 
+        console.log("Received friends list:", data);
         store.dispatch(setInitialTypingStatus(typingStatusOfFriends));
         store.dispatch(setFriends(data) as any);
 
@@ -195,6 +202,7 @@ const connectWithSocketServer = (userDetails: UserDetails) => {
     });
 
     socket.on("call-request", (data: any) => {
+        console.log("Incoming call request:", data);
         store.dispatch(setCallRequest(data) as any);
     });
 
@@ -311,14 +319,14 @@ const callRequest = (data: {
     audioOnly: boolean;
     eventId: string;
 }) => {
+    console.log("Placing a call request with data:", data);
     const peerConnection = () => {
         store.dispatch(setOtherUserId(data.receiverUserId) as any);
         const peer = newPeerConnection(true);
 
         currentPeerConnection = peer;
         peer.on("signal", (signal) => {
-            console.log('SIGNAL EMITTED');
-            console.log("SIGNAL", signal);
+            console.log("Signal emitted:", signal);
             // TODO send data to server
             socket.emit("call-request", {
                 ...data,
@@ -327,7 +335,7 @@ const callRequest = (data: {
         });
 
         peer.on("stream", (stream) => {
-            console.log("REMOTE STREAM", stream);
+            console.log("Remote stream received:", stream);
             // TODO set remote stream
             store.dispatch(setRemoteStream(stream) as any);
         });
@@ -362,15 +370,20 @@ const callRequest = (data: {
     getLocalStreamPreview(
         data.audioOnly,
         () => {
+            console.log("Successfully fetched local stream. Initializing peer connection...");
             peerConnection();
             store.dispatch(setCallStatus("ringing") as any);
             store.dispatch(setAudioOnly(data.audioOnly) as any);
         },
         false,
-        () => {
-            peerConnection();
-            store.dispatch(setCallStatus("ringing") as any);
-            store.dispatch(setAudioOnly(data.audioOnly) as any);
+        // () => {
+        //     peerConnection();
+        //     store.dispatch(setCallStatus("ringing") as any);
+        //     store.dispatch(setAudioOnly(data.audioOnly) as any);
+        // }
+        (error) => {
+            console.error("Failed to fetch local stream:", error);
+            store.dispatch(showAlert("Unable to access your media devices. Please check permissions."));
         }
     );
 };

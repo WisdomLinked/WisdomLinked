@@ -10,4 +10,9 @@ var server = new Turn({
   }
 });
 
-server.start()
+console.log("TURN server is starting...");
+server.on('error', (error) => {
+  console.error("TURN server encountered an error:", error);
+});
+server.start();
+console.log("TURN server started on port 3478.");

@@ -41,11 +41,11 @@ const createSocketServer = (server) => {
 
     io.on("connection", (socket) => {
         // console.log(socket.user)
-        console.log(`New socket connection connected: ${socket.id}`);
+        console.log(`[SOCKET SERVER] New connection established: ${socket.id}`);
         newConnectionHandler(socket, io);
 
-
         socket.on("direct-message", (data) => {
+            console.log("[SOCKET SERVER] Received direct message event", data);
             directMessageHandler(socket, data);
         })
         
@@ -81,10 +81,12 @@ const createSocketServer = (server) => {
         });
 
         socket.on("call-request", (data) => {
+            console.log("[SOCKET SERVER] Received call request", data);
             callRequestHandler(socket, data);
         })
 
         socket.on("call-response", (data) => {
+            console.log("[SOCKET SERVER] Received call response", data);
             callResponseHandler(socket, data);
         })
 
@@ -137,7 +139,7 @@ const createSocketServer = (server) => {
         });
 
         socket.on("disconnect", () => {
-            console.log(`Connected socket DISCONNECTED: ${socket.id}`);
+            console.log(`[SOCKET SERVER] Socket disconnected: ${socket.id}`);
             disconnectHandler(socket, io);
         });
     });

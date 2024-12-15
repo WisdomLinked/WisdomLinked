@@ -7,20 +7,42 @@ import { actionTypes } from "../actions/types";
 import { showAlert } from "../actions/alertActions";
 
 const getLocalStream = async () => {
+    console.log("[WEBRTC] Fetching local video and audio streams");
+
+    // Check available devices
+    navigator.mediaDevices.enumerateDevices().then((devices) => {
+        const videoDevices = devices.filter((device) => device.kind === "videoinput");
+        const audioDevices = devices.filter((device) => device.kind === "audioinput");
+
+        console.log("[WEBRTC] Available video devices:", videoDevices);
+        console.log("[WEBRTC] Available audio devices:", audioDevices);
+
+        if (videoDevices.length === 0) {
+            console.warn("[WEBRTC] No video devices found. Video may not work.");
+        }
+        if (audioDevices.length === 0) {
+            console.warn("[WEBRTC] No audio devices found. Audio may not work.");
+        }
+    });
+
     let videoStream, audioStream;
+
     try {
         videoStream = await navigator.mediaDevices.getUserMedia({ audio: false, video: true });
+        console.log("[WEBRTC] Video stream acquired:", videoStream);
     } catch (error) {
+        console.error("[WEBRTC] Error acquiring video stream", error);
     }
+
     try {
-        audioStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false })
+        audioStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+        console.log("[WEBRTC] Audio stream acquired:", audioStream);
     } catch (error) {
+        console.error("[WEBRTC] Error acquiring audio stream", error);
     }
-    return {
-        videoStream,
-        audioStream
-    }
-}
+
+    return { videoStream, audioStream };
+};
 
 export const checkLocalAudioVideoStreams = async () => {
     const {videoStream, audioStream} = await getLocalStream()
@@ -119,28 +141,96 @@ const peerConfiguration = () => {
 
 
 export const newPeerConnection = (initiator: boolean) => {
+    console.log("[WEBRTC] Creating a new Peer connection, initiator:", initiator);
 
-    const stream = store.getState().videoChat.localStream
-
+    const stream = store.getState().videoChat.localStream;
     if (!stream) {
+        console.error("[WEBRTC] No local stream found. Cannot create peer connection.");
         throw new Error("No local stream");
-
     }
 
-    console.log("from web ", stream);
+    console.log("[WEBRTC] Local stream retrieved from store:", stream);
 
+    // Fetch the ICE server configuration
     const configuration = peerConfiguration();
+    console.log("[WEBRTC] Using ICE server configuration:", configuration);
+
+    // Create a new Peer connection
     const peer = new Peer({
-        initiator: initiator,
+        initiator,
         trickle: false,
         config: configuration,
-        stream: stream,
+        stream,
     });
 
+    console.log("[WEBRTC] New Peer connection instance created");
 
+    // Log events for better debugging
+    peer.on("signal", (signal) => {
+        console.log("[WEBRTC] Peer emitted signal:", signal);
+    });
 
+    peer.on("connect", () => {
+        console.log("[WEBRTC] Peer connection established successfully.");
+    });
+
+    peer.on("connect", () => {
+        console.log("[WEBRTC] Peer connection established successfully.");
+    });
+
+    peer.on("error", (error) => {
+        console.error("[WEBRTC] Peer connection error:", error);
+    });
+
+    peer.on("close", () => {
+        console.log("[WEBRTC] Peer connection closed.");
+    });
+
+    // Handle remote stream
+    peer.on("stream", (remoteStream) => {
+        console.log("[WEBRTC] Remote stream received:", remoteStream);
+
+        // Ensure the stream is set correctly on the UI
+        if (remoteStream && remoteStream.getVideoTracks().length > 0) {
+            const videoElement = document.querySelector("#remote-video") as HTMLVideoElement;
+            if (videoElement) {
+                videoElement.srcObject = remoteStream;
+                console.log("[WEBRTC] Remote video stream set on video element.");
+            } else {
+                console.error("[WEBRTC] Remote video element not found.");
+            }
+        } else {
+            console.warn("[WEBRTC] No video tracks in the received stream. Possible audio-only connection.");
+        }
+    });
+
+    // Check video visibility periodically
+    const checkVideoVisibility = () => {
+        const videoElement = document.querySelector("#remote-video") as HTMLVideoElement;
+        if (videoElement && videoElement.srcObject) {
+            console.log("[DEBUG] Remote video element has a stream:", videoElement.srcObject);
+        } else {
+            console.warn("[DEBUG] Remote video element does not have a stream.");
+        }
+    };
+
+    const visibilityCheckInterval = setInterval(checkVideoVisibility, 5000);
+
+    // Handle connection closure
+    peer.on("close", () => {
+        console.log("[WEBRTC] Peer connection closed.");
+        clearInterval(visibilityCheckInterval);
+        console.log("[WEBRTC] Stopped periodic video visibility check.");
+    });
+
+    // Handle errors
+    peer.on("error", (error) => {
+        console.error("[WEBRTC] Peer connection encountered an error:", error);
+    });
+
+    console.log("[WEBRTC] Peer connection created successfully.");
     return peer;
-}
+};
 
 
 let peers: any = {};
