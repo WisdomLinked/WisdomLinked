@@ -10,6 +10,7 @@ import { useNavigate } from "react-router-dom";
 import CloseIcon from '@mui/icons-material/Close';
 import SelectDateTime from "../selectDateTime";
 import { showAlert } from "../../../actions/alertActions";
+import {setChosenChatDetails} from "../../../actions/chatActions";
 
 const Dashboard = () => {
 
@@ -76,10 +77,20 @@ const Dashboard = () => {
         }
     }
 
+    const navigateExpert = (item: any) => {
+        console.log("navigate events", item); // Use item here instead of event
+        navigate(`${process.env.REACT_APP_AUTH_URL}customerdashboard/chat`);
+        // Assuming item contains customer details, you can use item directly
+        dispatch(setChosenChatDetails({ userId: item._id, username: item.username, image: item.image }));
+    };
     useEffect(() => {
         const now = new Date().getTime()
-        let temp: any = events.filter((item: any) => (new Date(item.end).getTime() >= now) || (!item.end) && (item.status === 'accepted'))
+        let temp: any = events.filter((item: any) => (new Date(item.end).getTime() >= now))
         set_sessions([...temp])
+        console.log('temp: ', temp);
+
+        // temp = events.filter((item: any) => (new Date(item.end).getTime() >= now || !item.duration) && (item.status === 'pending'))
+        // set_selectedEvent([...temp])
 
         temp = pendingGroupChats.filter((item: any) => new Date(item.groupChatId.end).getTime() >= now)
         set_groupChats([...temp])
@@ -91,7 +102,7 @@ const Dashboard = () => {
 
     return (
         <div className="w-full h-full mx-auto p-6 text-white overflow-y-auto relative">
-            <div className="text-center text-2xl mb-6">Pending seminar appointments </div>
+            <div className="text-center text-2xl mb-6">Seminar Appointments </div>
             {
                 groupChats.length ?
                     <div className="flex flex-wrap justify-center gap-6">
@@ -126,13 +137,13 @@ const Dashboard = () => {
                     </div> :
                     <div className="text-center text-lightgrey my-10">No appointments found</div>
             }
-            <div className="text-center text-2xl my-6">Pending session appointments </div>
+            <div className="text-center text-2xl my-6">Session Appointments </div>
             {
                 sessions.length ?
                     <div className="flex flex-wrap justify-center gap-6">
                         {
                             sessions.map((item: any, index: number) => (
-                                item.paidBy !== 'none' && item.status === 'pending' ?
+                                item.status === 'accepted' ?
                                     <div key={index} className="w-fit p-4 bg-darkgrey">
                                         <div className="flex space-x-3 items-center">
                                             <Avatar
@@ -164,6 +175,12 @@ const Dashboard = () => {
                                             >
                                                 Edit
                                             </button>
+                                            <button
+                                                className="py-1 w-full bg-green rounded-lg flex items-center justify-center disabled:opacity-50"
+                                                onClick={() => navigateExpert(item.expert)}
+                                            >
+                                                Chat
+                                            </button>
                                         </div>
                                     </div> :
                                     null
@@ -172,14 +189,13 @@ const Dashboard = () => {
                     </div> :
                     <div className="text-center text-lightgrey my-10">No appointments found</div>
             }
-            <div className="text-center text-2xl my-6">Incoming session invitations </div>
+            <div className="text-center text-2xl my-6">Pending Invitations</div>
             {
                 sessions.length ?
                     <div className="flex flex-wrap justify-center gap-6">
                         {
                             sessions.map((item: any, index: number) => (
-                                item.paidBy === 'none' ?
-                                    <div key={index} className="w-fit p-4 bg-darkgrey">
+                                sessions.status === 'pending' ? <div key={index} className="w-fit p-4 bg-darkgrey">
                                         <div className="flex space-x-3 items-center">
                                             <Avatar
                                                 username={item.expert.username}
@@ -190,12 +206,16 @@ const Dashboard = () => {
                                                 <div className="text-sm">{item.expert.email}</div>
                                             </div>
                                         </div>
-                                        <hr className="my-2" />
+                                        <hr className="my-2"/>
                                         <div><span className="font-bold">Title  : </span> {item.title}</div>
-                                        <div><span className="font-bold">Starts at : </span> {item.start ? formatDateYYYY_MM_DD_h_m(item.start) : 'undefined'}</div>
-                                        <div><span className="font-bold">Duration  : </span> {item.start ? `${item.duration} min` : 'undefined'}</div>
+                                        <div><span
+                                            className="font-bold">Starts at : </span> {item.start ? formatDateYYYY_MM_DD_h_m(item.start) : 'undefined'}
+                                        </div>
+                                        <div><span
+                                            className="font-bold">Duration  : </span> {item.start ? `${item.duration} min` : 'undefined'}
+                                        </div>
                                         <div><span className="font-bold">Price  : </span> ${item.price}</div>
-                                        <hr className="my-3" />
+                                        <hr className="my-3"/>
                                         <button
                                             className="py-1 w-full bg-green rounded-lg flex items-center justify-center disabled:opacity-50"
                                             onClick={() => acceptInvitation(item)}
@@ -203,7 +223,7 @@ const Dashboard = () => {
                                             Accept
                                         </button>
                                     </div> :
-                                    null
+                                    <div className="text-center text-lightgrey">No pending invitations found</div>
                             ))
                         }
                     </div> :

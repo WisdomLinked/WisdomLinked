@@ -144,7 +144,6 @@ const Dashboard = () => {
                                     </button> */}
                                     <button
                                         className="py-1 w-full bg-green rounded-lg flex items-center justify-center disabled:opacity-50"
-                                        disabled={status === 'review'}
                                         onClick={() => navigateCustomer(item.customer)}
                                     >
                                         Go to chat

@@ -12,6 +12,7 @@ import { useNavigate } from "react-router-dom";
 import { updateMe } from "../../../actions/authActions";
 import { showAlert } from "../../../actions/alertActions";
 import { useAppSelector } from "../../../store";
+import {setChosenChatDetails} from "../../../actions/chatActions";
 
 
 const CustomerCalendar = () => {
@@ -176,10 +177,12 @@ const CustomerCalendar = () => {
         SetLoadingStatus(false)
     }
 
-    const setToChat = (param: boolean)=>{
-        if(param)
-            return navigate(`${process.env.REACT_APP_AUTH_URL}customerdashboard/chat`)
-    }
+    const setToChat = (item: any) => {
+        console.log("navigate events", item); // Use item here instead of event
+        navigate(`${process.env.REACT_APP_AUTH_URL}customerdashboard/chat`);
+        // Assuming item contains customer details, you can use item directly
+        dispatch(setChosenChatDetails({ userId: item._id, username: item.username, image: item.image }));
+    };
 
     useEffect(() => {
         getEvents()
@@ -283,10 +286,9 @@ const CustomerCalendar = () => {
                                             </button>
                                             <button
                                                 className="w-[calc(50%-8px)] rounded-lg border border-green bg-green flex items-center justify-center disabled:opacity-50"
-                                                disabled={userDetails.status === 'review'}
-                                                onClick={() =>setToChat(true)}
+                                                onClick={() => setToChat(selectedEvent.expert)}
                                             >
-                                                ChatRoom
+                                                Go To Chat
                                             </button>
                                         </>
                                 }

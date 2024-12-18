@@ -9,11 +9,14 @@ import SeminarDetails from "../seminarDetails";
 import { SetLoadingStatus } from "../../../actions/appActions";
 import { localizer } from "../../../actions/common"
 import { updateMe } from "../../../actions/authActions";
+import {setChosenChatDetails} from "../../../actions/chatActions";
+import { useNavigate } from "react-router-dom";
 
 const ExpertCalendar = () => {
 
     const { auth: { userDetails: { status } } } = useAppSelector(state => state)
     const dispatch = useDispatch()
+    const navigate = useNavigate()
     const [events, set_events] = useState<Array<any>>([])
     const [selectedEvent, set_selectedEvent] = useState<any>(null)
     const [eventModalShow, set_eventModalShow] = useState<boolean>(false)
@@ -88,6 +91,13 @@ const ExpertCalendar = () => {
             }
         }
     }
+
+    const navigateCustomer = (item: any) => {
+        console.log("navigate events", item); // Use item here instead of event
+        navigate(`${process.env.REACT_APP_AUTH_URL}expertdashboard/chat`);
+        // Assuming item contains customer details, you can use item directly
+        dispatch(setChosenChatDetails({ userId: item._id, username: item.username, image: item.image }));
+    };
 
     const getEvents = async () => {
         SetLoadingStatus(true)
@@ -229,6 +239,7 @@ const ExpertCalendar = () => {
                                             >
                                                 Accept
                                             </button>
+
                                         </div> :
                                         selectedEvent?.status === 'accepted' ?
                                             <div className="w-full h-10 flex justify-center space-x-6 n mt-6">
@@ -237,6 +248,12 @@ const ExpertCalendar = () => {
                                                     onClick={declineEvent}
                                                 >
                                                     Decline
+                                                </button>
+                                                <button
+                                                    className="w-[calc(50%-8px)] bg-green rounded-lg flex items-center justify-center disabled:opacity-50"
+                                                    onClick={() => navigateCustomer(selectedEvent?.customer)}
+                                                >
+                                                    Go To Chat
                                                 </button>
                                             </div> :
                                             null
@@ -247,7 +264,8 @@ const ExpertCalendar = () => {
             }
             {
                 seminarModalShow ?
-                    <div className={`absolute top-0 left-0 w-full h-full bg-white bg-opacity-10 backdrop-blur-sm z-10 flex items-center justify-center p-8`}>
+                    <div
+                        className={`absolute top-0 left-0 w-full h-full bg-white bg-opacity-10 backdrop-blur-sm z-10 flex items-center justify-center p-8`}>
                         <div
                             className="absolute top-0 left-0 w-full h-full cursor-pointer"
                             onClick={() => {
