@@ -58,6 +58,10 @@ const checkForAuthorization = (error: any) => {
         type: actionTypes.authError,
         payload: error.message
     })
+    if(responseCode == 413){
+        store.dispatch(showAlert('payload size too large'));
+    }
+    else
     store.dispatch(showAlert(error.response?.data || error.message));
     SetLoadingStatus(false)
     return false
