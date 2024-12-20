@@ -76,7 +76,7 @@ const Dashboard = () => {
 
     return (
         <div className="w-full h-full mx-auto p-6 text-white overflow-y-auto">
-            <div className="text-center text-2xl mb-6">Seminar appointments </div>
+            <div className="text-center text-2xl mb-6">Seminar Appointments </div>
             {
                 groupChats.length ?
                     <div className="flex flex-wrap justify-center gap-6">
@@ -112,7 +112,7 @@ const Dashboard = () => {
                     </div> :
                     <div className="text-center text-lightgrey my-10">No appointments found</div>
             }
-            <div className="text-center text-2xl my-6">Session appointments </div>
+            <div className="text-center text-2xl my-6">Session Appointments </div>
             {
                 sessions.length ?
                     <div className="flex flex-wrap justify-center gap-6">
@@ -154,7 +154,7 @@ const Dashboard = () => {
                     </div> :
                     <div className="text-center text-lightgrey my-10">No appointments found</div>
             }
-            <div className="text-center text-2xl my-6">Pending invitations </div>
+            <div className="text-center text-2xl my-6">Pending Invitations </div>
             {
                 pendingInvitations.length ?
                     <div className="flex flex-wrap justify-center gap-6">
