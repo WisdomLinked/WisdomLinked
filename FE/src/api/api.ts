@@ -447,9 +447,9 @@ export const doFilterSeminars = async (filter: any) => {
     }
 };
 
-export const doAppendEvent = async ({ title, start, end, duration, price, paidBy, expert, customer, payment_intent, eventId }: any) => {
+export const doAppendEvent = async ({ title, start, end, duration, price, paidBy, expert, customer, payment_intent, eventId ,createdBy }: any) => {
     try {
-        const res = await api.post("customer/appendEvent", { title, start, end, duration, price, paidBy, expert, customer, payment_intent, eventId });
+        const res = await api.post("customer/appendEvent", { title, start, end, duration, price, paidBy, expert, customer, payment_intent, eventId,createdBy });
         return res.data;
     } catch (err: any) {
         return checkForAuthorization(err);
@@ -548,9 +548,9 @@ export const doUpdateTimeSlots = async (timeSlots: any) => {
     }
 };
 
-export const createEvent = async ({ title, start, end, duration, price, expert, customer }: any) => {
+export const createEvent = async ({ title, start, end, duration, price, expert, customer, createdBy }: any) => {
     try {
-        const res = await api.post("expert/createEvent", { title, start, end, duration, price, expert, customer });
+        const res = await api.post("expert/createEvent", { title, start, end, duration, price, expert, customer ,createdBy });
         return res.data;
     } catch (err: any) {
         return checkForAuthorization(err);

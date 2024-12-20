@@ -10,7 +10,7 @@ const { checkTitleNameInvalid } = require('../services/global')
 
 const createEventByExpert = async (req, res) => {
     try {
-        const { title, start, end, duration, price, expert, customer } = req.body
+        const { title, start, end, duration, price, expert, customer ,createdBy} = req.body
 
         if (checkTitleNameInvalid('Title', title)) {
             throw new Error(checkTitleNameInvalid('Title', title))
@@ -36,7 +36,8 @@ const createEventByExpert = async (req, res) => {
             paidBy: 'none',
             expert: expertUser._id,
             customer: customerUser._id,
-            status: 'pending'
+            status: 'pending',
+            createdBy:createdBy
         })
 
         const event = await newEvent.save()
@@ -101,8 +102,10 @@ const createEventByExpert = async (req, res) => {
 
 const appendEvent = async (req, res) => {
     try {
-        const { title, start, end, duration, price, paidBy, expert, customer, payment_intent, eventId } = req.body
+        const { title, start, end, duration, price, paidBy, expert, customer, payment_intent, eventId ,createdBy } = req.body
 
+
+        console.log("append event ",createdBy)
         if (checkTitleNameInvalid('Title', title)) {
             throw new Error(checkTitleNameInvalid('Title', title))
         }
@@ -187,6 +190,7 @@ const appendEvent = async (req, res) => {
                 newEvent: eventExists
             });
         } else {
+            
             const newEvent = new Event({
                 title: title,
                 start: start,
@@ -196,8 +200,10 @@ const appendEvent = async (req, res) => {
                 paidBy: paymentIntentSucceeded_test ? 'test' : 'live',
                 expert: expertUser._id,
                 customer: customerUser._id,
-                status: 'pending'
+                status: 'pending',
+                createdBy:createdBy
             })
+            console.log("append event inside else",newEvent,createdBy)
 
             const event = await newEvent.save()
 

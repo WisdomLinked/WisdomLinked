@@ -85,7 +85,8 @@ const Search = () => {
             duration: duration,
             price: price,
             customer: selectedCustomer.email,
-            expert: userDetails.email
+            expert: userDetails.email,
+            createdBy: userDetails._id
         })
         if (response) {
             dispatch({

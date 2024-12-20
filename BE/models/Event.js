@@ -11,6 +11,7 @@ const eventSchema = new mongoose.Schema(
         status: { type: String, default: 'pending' },
         paidBy: { type: String },
         price: { type: Number },
+        createdBy:{type: mongoose.Schema.Types.ObjectId, ref: "User" }
     },
     { timestamps: true }
 );

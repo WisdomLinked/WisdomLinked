@@ -179,7 +179,7 @@ const Dashboard = () => {
                                     <hr className="my-3" />
                                     {item.paidBy==='none'?
                                         <button
-                                            className="py-1 w-full bg-green rounded-lg flex items-center justify-center disabled:opacity-50"
+                                            className="py-1 w-full border border-lightgrey rounded-lg flex items-center justify-center disabled:opacity-50"
                                             onClick={() => cancelInvitation(item)}
                                         >
                                             Cancel

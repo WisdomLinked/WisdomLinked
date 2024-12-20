@@ -14,7 +14,7 @@ import {setChosenChatDetails} from "../../../actions/chatActions";
 
 const Dashboard = () => {
 
-    const { auth: { userDetails: { pendingGroupChats, events, status } } } = useAppSelector(state => state)
+    const { auth: { userDetails: { pendingGroupChats, events, status,_id:userId } } } = useAppSelector(state => state)
     const dispatch = useDispatch()
     const navigate = useNavigate()
 
@@ -195,7 +195,7 @@ const Dashboard = () => {
                     <div className="flex flex-wrap justify-center gap-6">
                         {
                             sessions.map((item: any, index: number) => (
-                                sessions.status === 'pending' ? <div key={index} className="w-fit p-4 bg-darkgrey">
+                                item.status === 'pending' ? <div key={index} className="w-fit p-4 bg-darkgrey">
                                         <div className="flex space-x-3 items-center">
                                             <Avatar
                                                 username={item.expert.username}
@@ -216,14 +216,21 @@ const Dashboard = () => {
                                         </div>
                                         <div><span className="font-bold">Price  : </span> ${item.price}</div>
                                         <hr className="my-3"/>
+                                        {item.createdBy === userId ?
                                         <button
+                                                className="py-1 w-full border border-lightgrey rounded-lg flex items-center justify-center disabled:opacity-50"
+                                                onClick={() => cancelEvent(item)}
+                                            >
+                                                Cancel
+                                            </button>:
+                                            <button
                                             className="py-1 w-full bg-green rounded-lg flex items-center justify-center disabled:opacity-50"
                                             onClick={() => acceptInvitation(item)}
                                         >
                                             Accept
-                                        </button>
+                                        </button>}
                                     </div> :
-                                    <div className="text-center text-lightgrey">No pending invitations found</div>
+                                   null
                             ))
                         }
                     </div> :

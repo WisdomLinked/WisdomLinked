@@ -88,6 +88,7 @@ const Search = () => {
     }
 
     const submit = async (details: any) => {
+        console.log("submit details",details)
         set_paidBy('stripe')
         SetLoadingStatus(true)
         const response = await doAppendEvent(details)
@@ -96,7 +97,8 @@ const Search = () => {
                 type: 'updateUserDetails',
                 payload: response.userDetails
             })
-            set_newEvent(response.newEvent)
+            console.log("response new event",response , response.newEventId)
+            set_newEvent(response.newEventId)
             if (details.eventId) {
                 goToStep(4)
             } else {
@@ -108,7 +110,8 @@ const Search = () => {
 
     const updateEventTitle = async () => {
         SetLoadingStatus(true)
-        const response = await doUpdateEvent(newEvent?._id, { title: eventTitle })
+        console.log("new evet data", newEvent)
+        const response = await doUpdateEvent(newEvent, { title: eventTitle })
         SetLoadingStatus(false)
         if (response) {
             dispatch({
@@ -124,6 +127,7 @@ const Search = () => {
         if (selectedExpert && qDuration && qStart && qEnd) {
             setStartEndTime(qStart, qEnd, qDuration)
         }
+        console.log("userdetails",userDetails)
     }, [selectedExpert, qDuration, qStart, qEnd])
 
     useEffect(() => {
@@ -196,7 +200,8 @@ const Search = () => {
                         expert: details.expert.email,
                         customer: details.customer.email,
                         payment_intent: payment_intent,
-                        eventId: details.eventId
+                        eventId: details.eventId,
+                        createdBy:userDetails._id
                     })
                 }
             } else {
