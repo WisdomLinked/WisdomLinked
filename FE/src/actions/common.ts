@@ -136,19 +136,42 @@ export const checkTitleNameInvalid = (title: string, str: string) => {
     }
 }
 
+// export const getBase64FromImageURL = async (url: string) => {
+//     try {
+//         const response = await fetch(url);
+//         const blob = await response.blob();
+//         const base64Data = await new Promise((resolve) => {
+//             const reader = new FileReader();
+//             reader.onloadend = () => resolve(reader.result);
+//
+//             reader.readAsDataURL(blob);
+//         });
+//         return base64Data
+//     } catch (error) {
+//         console.error("Error converting image:", error);
+//         return false;
+//     }
+// };
+
 export const getBase64FromImageURL = async (url: string) => {
     try {
+        console.log("Attempting to fetch image from URL:", url);
         const response = await fetch(url);
+        if (!response.ok) {
+            console.error(`Failed to fetch image. Status: ${response.status}, URL: ${url}`);
+            return false;
+        }
         const blob = await response.blob();
+        console.log("Image blob fetched successfully");
         const base64Data = await new Promise((resolve) => {
             const reader = new FileReader();
             reader.onloadend = () => resolve(reader.result);
-
             reader.readAsDataURL(blob);
         });
-        return base64Data
+        console.log("Image converted to Base64 successfully");
+        return base64Data;
     } catch (error) {
-        console.error("Error converting image:", error);
+        console.error("Error converting image to Base64:", error);
         return false;
     }
 };

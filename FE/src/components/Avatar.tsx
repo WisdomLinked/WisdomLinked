@@ -8,6 +8,7 @@ const Avatar = ({ username, isOnline, image, size = 'small', borderClass = '' }:
     size?: string,
     borderClass?: any
 }) => {
+    console.log("Avatar component props:", { username, isOnline, image, size, borderClass });
     return (
         <div className={`${size === 'small' ? 'w-10 h-10' : 'w-14 h-14'} rounded-full !flex justify-center items-center border-2 ${borderClass ? borderClass : 'border-lightgrey'} text-lightgrey relative text-lg font-bold`}>
             {
