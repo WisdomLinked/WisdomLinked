@@ -43,18 +43,18 @@ const CustomerProfile = ({
         // }
         if (userDetails.image) {
             try {
-                console.log("Fetching image from URL:", `${process.env.REACT_APP_SERVER_URL}/${userDetails.image}`);
+                //console.log("Fetching image from URL:", `${process.env.REACT_APP_SERVER_URL}/${userDetails.image}`);
                 const image: any = await getBase64FromImageURL(`${process.env.REACT_APP_SERVER_URL}/${userDetails.image}`);
                 //const image: any = axios.get(`https://b7xoehtvlk.execute-api.ap-south-1.amazonaws.com/getImage?file=${userDetails.userId}&size=originals`);
                 if (image) {
-                    console.log("Base64 image data successfully fetched");
+                    //console.log("Base64 image data successfully fetched");
                     set_imageSrc(image);
                     set_oldImageSrc(image);
                 } else {
-                    console.error("Failed to fetch Base64 image data");
+                    //console.error("Failed to fetch Base64 image data");
                 }
             } catch (error) {
-                console.error("Error in reset function:", error);
+                //console.error("Error in reset function:", error);
             }
         }
         set_name(userDetails.username)
