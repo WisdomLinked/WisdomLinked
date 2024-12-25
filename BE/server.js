@@ -15,6 +15,7 @@ const cors = require("cors");
 const mongoose = require("mongoose");
 const cookieParser = require("cookie-parser");
 const path = require("path");
+const imageUploadRoutes = require("./routes/imageUploadRoutes");
 
 const authRoutes = require("./routes/authRoutes");
 const friendInvitationRoutes = require("./routes/friendInvitationRoutes");
@@ -62,6 +63,7 @@ app.use("/api/group-chat", groupChatRoutes);
 app.use("/api/expert", expertRoutes);
 app.use("/api/customer", customerRoutes);
 app.use("/api/admin", adminRoutes);
+app.use("/api/image", imageUploadRoutes);
 
 
 app.use(express.static('./uploads'));
