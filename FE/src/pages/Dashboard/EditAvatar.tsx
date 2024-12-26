@@ -3,33 +3,10 @@ import ReactImagePickerEditor from 'react-image-picker-editor';
 import 'react-image-picker-editor/dist/index.css'
 
 const EditAvatar = ({ imageSrc, set_imageSrc, userId }: any) => {
-    // const handleImageChange = async (newDataUri: any) => {
-    //     // Convert base64 to file
-    //     const base64Response = await fetch(newDataUri);
-    //     const blob = await base64Response.blob();
-    //     const file = new File([blob], `${userId}.png`, { type: 'image/png' });
-    //
-    //     // Create form data
-    //     const formData = new FormData();
-    //     formData.append('image', file);
-    //
-    //     try {
-    //         const response = await fetch('http://localhost:5000/api/image/upload', {
-    //             method: 'POST',
-    //             body: formData
-    //         });
-    //
-    //         const data = await response.json();
-    //         set_imageSrc(data.data.url); // Assuming the API returns the image URL
-    //     } catch (error) {
-    //         console.error('Error uploading image:', error);
-    //     }
-    // };
     const handleImageChange = async (newDataUri: any) => {
         // Extract file extension from the data URI
         const fileExtension = newDataUri.split(';')[0].split('/')[1];
         console.log(newDataUri.split(';')[0].split(':')[1]);
-
 
         // Convert base64 to file
         const base64Response = await fetch(newDataUri);
