@@ -16,7 +16,7 @@ const EditAvatar = ({ imageSrc, set_imageSrc, userId }: any) => {
         // Create form data
         const formData = new FormData();
         formData.append('image', file);
-        console.log("formData", formData);
+        //console.log("formData", formData);
 
         try {
             const response = await fetch('http://localhost:5000/api/image/upload', {

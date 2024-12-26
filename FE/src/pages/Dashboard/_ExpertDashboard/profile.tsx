@@ -182,6 +182,7 @@ const ExpertProfile = ({
                     <EditAvatar
                         imageSrc={imageSrc}
                         set_imageSrc={set_imageSrc}
+                        userId={userDetails.userId}
                     />
                     <div className="text-white text-xs">Profile Image should not be more than 500 kb</div>
                     <div className="w-full max-w-[400px] mt-6 text-white">
