@@ -34,29 +34,14 @@ const CustomerProfile = ({
     const [enableToUpdate, set_enableToUpdate] = useState(false)
 
     const reset = async () => {
-        // if (userDetails.image) {
-        //     const image: any = await getBase64FromImageURL(`${process.env.REACT_APP_SERVER_URL}/${userDetails.image}`);
-        //     if (image) {
-        //         set_imageSrc(image)
-        //         set_oldImageSrc(image)
-        //     }
-        // }
         if (userDetails.image) {
-            try {
-                //console.log("Fetching image from URL:", `${process.env.REACT_APP_SERVER_URL}/${userDetails.image}`);
-                const image: any = await getBase64FromImageURL(`${process.env.REACT_APP_SERVER_URL}/${userDetails.image}`);
-                //const image: any = axios.get(`https://b7xoehtvlk.execute-api.ap-south-1.amazonaws.com/getImage?file=${userDetails.userId}&size=originals`);
-                if (image) {
-                    //console.log("Base64 image data successfully fetched");
-                    set_imageSrc(image);
-                    set_oldImageSrc(image);
-                } else {
-                    //console.error("Failed to fetch Base64 image data");
-                }
-            } catch (error) {
-                //console.error("Error in reset function:", error);
+            const image: any = await getBase64FromImageURL(`${process.env.REACT_APP_SERVER_URL}/${userDetails.image}`);
+            if (image) {
+                set_imageSrc(image)
+                set_oldImageSrc(image)
             }
         }
+
         set_name(userDetails.username)
         set_selectedKeywords(userDetails.keywords)
         set_selectedServices(userDetails.services)
@@ -157,9 +142,11 @@ const CustomerProfile = ({
                         null
                 }
                 <div className="w-full text-white flex flex-col justify-center items-center mt-8">
+
                     <EditAvatar
                         imageSrc={imageSrc}
                         set_imageSrc={set_imageSrc}
+                        userId={userDetails.userId}
                     />
                     <div className="w-full max-w-[400px] mt-6">
                         {

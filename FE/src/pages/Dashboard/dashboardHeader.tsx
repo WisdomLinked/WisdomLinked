@@ -14,7 +14,7 @@ const DashboardHeader = ({ userDetails }: any) => {
     const dispatch = useDispatch()
     const [modalShow, set_modalShow] = useState(false)
 
-    console.log("DashboardHeader userDetails:", userDetails);
+    //console.log("DashboardHeader userDetails:", userDetails);
 
     const logOut = () => {
         dispatch(logoutUser());
