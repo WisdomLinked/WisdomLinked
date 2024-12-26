@@ -10,7 +10,7 @@ exports.uploadImageToStorage = async (file) => {
         });
 
         const response = await axios.post(
-            "https://b7xoehtvlk.execute-api.ap-south-1.amazonaws.com/upload",
+            `${process.env.AWS_URL}/upload`,
             formData,
             {
                 headers: {

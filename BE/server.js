@@ -55,7 +55,7 @@ app.use("/api/group-chat", groupChatRoutes);
 app.use("/api/expert", expertRoutes);
 app.use("/api/customer", customerRoutes);
 app.use("/api/admin", adminRoutes);
-app.use("/api/image", imageUploadRoutes);
+app.use("/api/image-upload", imageUploadRoutes);
 app.use("/api/image-fetch", fetchImageRoute);
 
 

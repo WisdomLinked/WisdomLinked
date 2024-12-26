@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { doFilterExperts, doGetKeywordsAndServices, joinGeneralChat } from "../../../../api/api";
+import {doFilterExperts, doGetKeywordsAndServices, joinGeneralChat, profileImageFetch} from "../../../../api/api";
 import { getAvatarTitle } from "../../../../actions/common";
 import { Rating } from "@mui/material";
 import FilterListIcon from '@mui/icons-material/FilterList';
@@ -49,6 +49,7 @@ const Experts = ({
     const [experts, set_experts] = useState<Array<any>>([])
     const [filterModalShow, set_filterModalShow] = useState(false)
     const [mobileView, set_mobileView] = useState(window.innerWidth <= 768)
+    const [expertsImage,set_experts_image]= useState<Array<any>>([])
 
     const getKeywordsAndServices = async () => {
         const response: any = await doGetKeywordsAndServices();
@@ -71,11 +72,31 @@ const Experts = ({
         if (response) {
             console.log(response.result, '========')
             set_experts([...response.result])
+            const imagePromises = response.result.map((expert: any) =>
+                fetchExpertProfile(expert.image)
+            );
+
+            const expertImages = await Promise.all(imagePromises);
+            set_experts_image(expertImages);
+
             if (qExpertId) {
                 selectExpert(response.result?.[0])
             }
         }
         SetLoadingStatus(false)
+    }
+
+    const fetchExpertProfile=async(expertId: string) =>
+    {
+        try{
+            const res= await profileImageFetch(expertId,"medium")
+           return res
+        }
+        catch(err)
+        {
+            console.log("error while fetching experts",err)
+             return
+        }
     }
 
     const joinGeneralChatOfExpert = async (otherUserId: string) => {
@@ -161,7 +182,7 @@ const Experts = ({
             </div>
             <div className="w-full flex flex-wrap justify-center mt-6 gap-6 pb-6">
                 {
-                    experts.map((expert) => (
+                    experts.map((expert,i) => (
                         <div
                             key={`expert_${expert._id}`}
                             className={`w-[250px] rounded-md bg-darkgrey overflow-clip hoverBox relative ${selectedExpert?._id === expert._id ? 'border-[2px] border-green' : ''}`}
@@ -191,7 +212,9 @@ const Experts = ({
                             <div className="w-full h-[250px] bg-midgrey !flex items-center justify-center">
                                 {
                                     expert.image ?
-                                        <img src={`${process.env.REACT_APP_SERVER_URL}/${expert.image}`} className="w-full h-full object-cover object-center" /> :
+
+                                        // <img src={`${process.env.REACT_APP_SERVER_URL}/${expert.image}`} className="w-full h-full object-cover object-center" /> :
+                                        <img src={expertsImage[i]} className="w-full h-full object-cover object-center" /> :
                                         <div className="w-[100px] h-[100px] rounded-full border-2 border-lightgrey text-4xl text-white font-bold !flex items-center justify-center">
                                             {getAvatarTitle(expert.username)}
                                         </div>

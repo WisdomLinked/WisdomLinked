@@ -495,29 +495,7 @@ const updateProfile = async (req, res) => {
             updates.description = description
         }
         if (image) {
-
-            const match = image.match(/^data:image\/(\w+);base64,/);
-            const extension = match[1];
-            const directory = path.join(__dirname, '../uploads/images');
-
-            // Check if the directory exists
-            if (!fs.existsSync(directory)) {
-                // If the directory doesn't exist, create it
-                fs.mkdirSync(directory, { recursive: true });
-            }
-            const fileName = Date.now() + `.${extension}`; // Or any other naming strategy
-            const buffer = Buffer.from(image.replace(`data:image/${extension};base64,`, ''), 'base64');
-            fs.writeFileSync(path.join(__dirname, '../uploads/images', fileName), buffer);
-            updates.image = `uploads/images/${fileName}`
-
-            if (req.user.image) {
-                try {
-                    // delete old image file
-                    fs.unlinkSync(path.join(__dirname, `../uploads/resumes/${req.user.image}`))
-                } catch (err) {
-                    console.log(err.message)
-                }
-            }
+            updates.image = image
         }
         if (services) {
             updates.services = services

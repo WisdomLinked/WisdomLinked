@@ -3,7 +3,7 @@ const axios = require("axios");
 
 const getImage = async (file, folder) => {
     try {
-        const apiUrl = `https://b7xoehtvlk.execute-api.ap-south-1.amazonaws.com/getImage?file=${file}&size=${folder}`;
+        const apiUrl = `${process.env.AWS_URL}/getImage?file=${file}&size=${folder}`;
         const response = await axios.get(apiUrl, {
             responseType: "arraybuffer",
             headers: {

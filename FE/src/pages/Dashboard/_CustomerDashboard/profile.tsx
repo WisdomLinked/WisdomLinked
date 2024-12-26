@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from "react";
 import EditAvatar from "../EditAvatar";
-import { doGetKeywordsAndServices, doUpdateProfile, doUpdateProfileByAdmin } from "../../../api/api";
+import {doGetKeywordsAndServices, doUpdateProfile, doUpdateProfileByAdmin, profileImageFetch} from "../../../api/api";
 import ShowFieldError from "../../../components/ShowFieldError";
 import MultiSelectionWithInputTag from "../../../components/MultiSelectionWithInputTag";
 import SelectionWithCheckBox from "../../../components/SelectionWithCheckBox";
-import { arraysEqual, checkTitleNameInvalid, getBase64FromImageURL } from "../../../actions/common";
+import { arraysEqual, checkTitleNameInvalid } from "../../../actions/common";
 import { useNavigate } from "react-router-dom";
 import { SetLoadingStatus } from "../../../actions/appActions";
 import CountrySelect from "../../../components/CountrySelection";
@@ -18,6 +18,7 @@ const CustomerProfile = ({
 
     const navigate = useNavigate()
     const [imageSrc, set_imageSrc] = useState<any>(null)
+    const [image, set_image] = useState<any>(null)
     const [oldImageSrc, set_oldImageSrc] = useState<any>(null)
     const [name, set_name] = useState(userDetails.username)
     const [keywords, set_keywords] = useState([])
@@ -35,10 +36,13 @@ const CustomerProfile = ({
 
     const reset = async () => {
         if (userDetails.image) {
-            const image: any = await getBase64FromImageURL(`${process.env.REACT_APP_SERVER_URL}/${userDetails.image}`);
+            const image: any = await profileImageFetch(userDetails.image,"medium");
+
+            console.log("image",image)
             if (image) {
-                set_imageSrc(image)
-                set_oldImageSrc(image)
+                set_imageSrc(userDetails.image)
+                set_oldImageSrc(userDetails.image)
+                set_image(image)
             }
         }
 
@@ -144,6 +148,7 @@ const CustomerProfile = ({
                 <div className="w-full text-white flex flex-col justify-center items-center mt-8">
 
                     <EditAvatar
+                        image={image}
                         imageSrc={imageSrc}
                         set_imageSrc={set_imageSrc}
                         userId={userDetails.userId}

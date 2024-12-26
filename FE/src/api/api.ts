@@ -427,6 +427,47 @@ export const setStripeMode = async ({ stripeMode }: any) => {
 
 // CUSTOMER APIS ------------------
 
+
+export async function profileImageUpload(formData: FormData): Promise<any> {
+    try {
+        const response = await api.post("image-upload/upload",
+            formData,
+            {
+                headers: {
+                    'Content-Type': 'multipart/form-data',
+                },
+            }
+        );
+        return response.data;
+    } catch (error) {
+        console.error('Error uploading image:', error);
+        throw error;
+    }
+}
+
+
+export const profileImageFetch = async (url: string, size: string) => {
+    try {
+        const res = await api.get(`image-fetch?file=${url}&folder=${size}`, {
+            responseType: 'arraybuffer'
+        });
+
+        const blob = new Blob([res.data], { type: res.headers['content-type'] });
+
+        const base64Data = await new Promise((resolve) => {
+            const reader = new FileReader();
+            reader.onloadend = () => resolve(reader.result);
+            reader.readAsDataURL(blob);
+        });
+
+        return base64Data;
+    } catch (err) {
+        return err;
+    }
+};
+
+
+
 export const doFilterExperts = async (filter: any) => {
     try {
         const res = await api.post("customer/filterExperts", filter);

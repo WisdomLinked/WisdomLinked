@@ -1,6 +1,7 @@
-import React from "react";
+import React, {useEffect, useState} from "react";
 import { formatDateYYYY_MM_DD_h_m } from "../../../actions/common";
 import { getAvatarTitle } from "../../../actions/common";
+import {profileImageFetch} from "../../../api/api";
 
 const EventDetail = ({
     image,
@@ -12,12 +13,28 @@ const EventDetail = ({
     price,
     paidBy
 }: any) => {
+    const [imageSrc, setImageSrc] = useState<any | null>(null);
+
+    useEffect(() => {
+        const fetchImage = async () => {
+            if (image) {
+                try {
+                    const src = await profileImageFetch(image,"medium");
+                    setImageSrc(src);
+                } catch (error) {
+                    console.error("Error fetching image:", error);
+                }
+            }
+        };
+
+        fetchImage();
+    }, [image]);
     return (
         <div className="w-full flex flex-col space-y-6 sm:space-y-0 sm:flex-row sm:space-x-6 sm:justify-center sm:items-center">
             <div className="w-[200px] h-[200px] mx-auto bg-darkgrey rounded-md flex items-center justify-center overflow-clip">
                 {
                     image ?
-                        <img src={`${process.env.REACT_APP_SERVER_URL}/${image}`} className="w-full h-full object-cover object-center" /> :
+                        <img src={imageSrc} className="w-full h-full object-cover object-center" /> :
                         <div className="w-[100px] h-[100px] rounded-full border-2 border-lightgrey text-5xl text-white font-bold !flex items-center justify-center">
                             {getAvatarTitle(name)}
                         </div>

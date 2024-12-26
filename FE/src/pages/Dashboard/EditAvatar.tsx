@@ -1,17 +1,18 @@
 import React from "react";
+import {profileImageUpload} from "../../api/api";
 import ReactImagePickerEditor from 'react-image-picker-editor';
 import 'react-image-picker-editor/dist/index.css'
 
-const EditAvatar = ({ imageSrc, set_imageSrc, userId }: any) => {
+const EditAvatar = ({image, imageSrc, set_imageSrc,userId }: any) => {
     const handleImageChange = async (newDataUri: any) => {
         // Extract file extension from the data URI
         const fileExtension = newDataUri.split(';')[0].split('/')[1];
         console.log(newDataUri.split(';')[0].split(':')[1]);
 
-        // Convert base64 to file
+        // Convert base64 to files
         const base64Response = await fetch(newDataUri);
         const blob = await base64Response.blob();
-        const file = new File([blob], `${userId}.${fileExtension}`, { type: blob.type });
+        const file = new File([blob], `${userId}_${Date.now()}.${fileExtension}`, { type: blob.type });
 
         // Create form data
         const formData = new FormData();
@@ -19,13 +20,11 @@ const EditAvatar = ({ imageSrc, set_imageSrc, userId }: any) => {
         //console.log("formData", formData);
 
         try {
-            const response = await fetch('http://localhost:5000/api/image/upload', {
-                method: 'POST',
-                body: formData
-            });
-            const data = await response.json();
-            set_imageSrc(data.data.url);
+            const res = await profileImageUpload(formData)
+            console.log("image data",res)
+            set_imageSrc(res.data.details[0].filename);
         } catch (error) {
+            set_imageSrc(imageSrc)
             console.error('Error uploading image:', error);
         }
     };
@@ -41,8 +40,8 @@ const EditAvatar = ({ imageSrc, set_imageSrc, userId }: any) => {
                 compressInitial: null,
                 aspectRatio: 1
             }}
-            imageSrcProp={imageSrc}
-            imageChanged={handleImageChange}
+            imageSrcProp={image}
+            imageChanged={(newUri:any)=>{handleImageChange(newUri)}}
         />
     );
 };

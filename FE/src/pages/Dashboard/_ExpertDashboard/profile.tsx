@@ -1,11 +1,17 @@
 import React, { useState, useEffect } from "react";
 import EditAvatar from "../EditAvatar";
-import { callApi, doGetKeywordsAndServices, doUpdateProfile, doUpdateProfileByAdmin } from "../../../api/api";
+import {
+    callApi,
+    doGetKeywordsAndServices,
+    doUpdateProfile,
+    doUpdateProfileByAdmin,
+    profileImageFetch
+} from "../../../api/api";
 import ShowFieldError from "../../../components/ShowFieldError";
 import MultiSelectionWithInputTag from "../../../components/MultiSelectionWithInputTag";
 import SelectionWithCheckBox from "../../../components/SelectionWithCheckBox";
 import PhoneInput from "react-phone-input-2";
-import { arraysEqual, checkTitleNameInvalid, getBase64FromImageURL } from "../../../actions/common";
+import { arraysEqual, checkTitleNameInvalid } from "../../../actions/common";
 import { useNavigate } from "react-router-dom";
 import { SetLoadingStatus } from "../../../actions/appActions";
 import CountrySelect from "../../../components/CountrySelection";
@@ -45,7 +51,7 @@ const ExpertProfile = ({
     const reset = async () => {
 
         if (userDetails.image) {
-            const image: any = await getBase64FromImageURL(`${process.env.REACT_APP_SERVER_URL}/${userDetails.image}`);
+            const image: any = await profileImageFetch(userDetails.image,"medium");
             if (image) {
                 set_imageSrc(image)
                 set_oldImageSrc(image)

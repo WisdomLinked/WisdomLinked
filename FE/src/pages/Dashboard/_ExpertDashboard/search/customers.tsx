@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { doFilterCustomers, doGetKeywordsAndServices, joinGeneralChat } from "../../../../api/api";
+import {doFilterCustomers, doGetKeywordsAndServices, joinGeneralChat, profileImageFetch} from "../../../../api/api";
 import { getAvatarTitle } from "../../../../actions/common";
 import { Rating } from "@mui/material";
 import FilterListIcon from '@mui/icons-material/FilterList';
@@ -24,6 +24,7 @@ const Customers = ({
     const { auth: { userDetails } } = useAppSelector((state) => state);
     const [keywords, set_keywords] = useState([])
     const [services, set_services] = useState([])
+    const [customersImage,set_customers_image]= useState<Array<any>>([])
     const sorts = [
         {
             value: "Name in ASC",
@@ -62,11 +63,30 @@ const Customers = ({
 
         if (response) {
             set_customers([...response.result])
+            const imagePromises = response.result.map((customer: any) =>
+                fetchCustomerProfile(customer.image)
+            );
+
+            const customersImages = await Promise.all(imagePromises);
+            set_customers_image(customersImage);
             if (qCustomerId) {
                 selectCustomer(response.result?.[0])
             }
         }
         SetLoadingStatus(false)
+    }
+
+    const fetchCustomerProfile=async(customerId: string) =>
+    {
+        try{
+            const res= await profileImageFetch(customerId,"medium")
+            return res
+        }
+        catch(err)
+        {
+            console.log("error while fetching customers",err)
+            return
+        }
     }
 
     const joinGeneralChatOfCustomer = async (otherUserId: string) => {
@@ -152,7 +172,7 @@ const Customers = ({
             </div>
             <div className="w-full flex flex-wrap justify-center mt-6 gap-6 pb-6">
                 {
-                    customers.map((customer) => (
+                    customers.map((customer,i) => (
                         <div
                             key={`customer_${customer._id}`}
                             className={`w-[250px] rounded-md bg-darkgrey overflow-clip hoverBox relative ${selectedCustomer?._id === customer._id ? 'border-[2px] border-green' : ''}`}
@@ -182,7 +202,7 @@ const Customers = ({
                             <div className="w-full h-[250px] bg-midgrey !flex items-center justify-center">
                                 {
                                     customer.image ?
-                                        <img src={`${process.env.REACT_APP_SERVER_URL}/${customer.image}`} className="w-full h-full object-cover object-center" /> :
+                                        <img src={customersImage[i]} className="w-full h-full object-cover object-center" /> :
                                         <div className="w-[100px] h-[100px] rounded-full border-2 border-lightgrey text-4xl text-white font-bold !flex items-center justify-center">
                                             {getAvatarTitle(customer.username)}
                                         </div>

@@ -136,19 +136,21 @@ export const checkTitleNameInvalid = (title: string, str: string) => {
     }
 }
 
-export const getBase64FromImageURL = async (url: string) => {
-    try {
-        const response = await fetch(url);
-        const blob = await response.blob();
-        const base64Data = await new Promise((resolve) => {
-            const reader = new FileReader();
-            reader.onloadend = () => resolve(reader.result);
+// export const getBase64FromImageURL = async (url: string) => {
+//     try {
+//         const response = await fetch(url);
+//         const blob = await response.blob();
+//         const base64Data = await new Promise((resolve) => {
+//             const reader = new FileReader();
+//             reader.onloadend = () => resolve(reader.result);
+//
+//             reader.readAsDataURL(blob);
+//         });
+//         return base64Data
+//     } catch (error) {
+//         console.error("Error converting image:", error);
+//         return false;
+//     }
+// };
 
-            reader.readAsDataURL(blob);
-        });
-        return base64Data
-    } catch (error) {
-        console.error("Error converting image:", error);
-        return false;
-    }
-};
+
