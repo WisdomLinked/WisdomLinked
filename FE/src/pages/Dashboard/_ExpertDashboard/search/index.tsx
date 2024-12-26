@@ -6,7 +6,7 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import EventDetail from "../eventDetail";
 import { useAppSelector } from "../../../../store";
 import { getAvatarTitle } from "../../../../actions/common";
-import { createEvent } from "../../../../api/api";
+import {createEvent, profileImageFetch} from "../../../../api/api";
 import { useDispatch } from "react-redux";
 import { Swiper, SwiperSlide } from "swiper/react";
 import { Pagination, Navigation } from "swiper";
@@ -47,6 +47,7 @@ const Search = () => {
     const [price, set_price] = useState(0)
     const [myEvents, set_myEvents] = useState<Array<any>>([])
     const [qCustomerId, set_qCustomerId] = useState<any>('')
+    const [customerImage, set_customer_image] = useState<any>(null)
 
     const goToStep = (index: number) => {
         set_step(index)
@@ -55,17 +56,32 @@ const Search = () => {
         }
     }
 
-    const selectCustomer = (customer: any) => {
+    const selectCustomer = async (customer: any) => {
         if (customer) {
             set_eventTitle(`${userDetails?.username}, ${customer.username}`)
             set_selectedCustomer(customer)
             set_startTime(null)
             set_endTime(null)
             set_duration(0)
+
+            // Fetch customer image
+            const image = await fetchCustomerProfile(customer.image)
+            set_customer_image(image)
+
             goToStep(1)
         } else {
             dispatch(showAlert("Customer isn't available"))
             navigate(-1)
+        }
+    }
+
+    const fetchCustomerProfile = async (customerId: string) => {
+        try {
+            const res = await profileImageFetch(customerId, "small")
+            return res
+        } catch (err) {
+            console.log("error while fetching customer image", err)
+            return null
         }
     }
 
@@ -208,7 +224,8 @@ const Search = () => {
                                                             <div className="w-10 h-10 rounded-full overflow-clip">
                                                                 {
                                                                     selectedCustomer.image ?
-                                                                        <img src={`${process.env.REACT_APP_SERVER_URL}/${selectedCustomer.image}`} className="w-full h-full object-cover object-center" /> :
+                                                                        //<img src={`${process.env.REACT_APP_SERVER_URL}/${selectedCustomer.image}`} className="w-full h-full object-cover object-center" /> :
+                                                                        <img src={customerImage} className="w-full h-full object-cover object-center" /> :
                                                                         <div className="w-full h-full rounded-full border-2 border-lightgrey text-xl text-white font-bold !flex items-center justify-center">
                                                                             {getAvatarTitle(selectedCustomer.username)}
                                                                         </div>

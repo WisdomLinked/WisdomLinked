@@ -8,7 +8,7 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import EventDetail from "../eventDetail";
 import { useAppSelector } from "../../../../store";
 import { getAvatarTitle } from "../../../../actions/common";
-import { doAppendEvent, doUpdateEvent } from "../../../../api/api";
+import {doAppendEvent, doUpdateEvent, profileImageFetch} from "../../../../api/api";
 import { useDispatch } from "react-redux";
 import { Swiper, SwiperSlide } from "swiper/react";
 import { Pagination, Navigation } from "swiper";
@@ -49,6 +49,7 @@ const Search = () => {
     const [newEvent, set_newEvent] = useState<any>()
     const [myEvents, set_myEvents] = useState<Array<any>>([])
     const [paymentFailed, set_paymentFailed] = useState(false)
+    const [expertImage, set_expert_image] = useState<any>(null)
 
     // Query params variables -----
     const [qExpertId, set_qExpertId] = useState<any>('')
@@ -64,7 +65,7 @@ const Search = () => {
         }
     }
 
-    const selectExpert = (expert: any) => {
+    const selectExpert = async (expert: any) => {
         if (expert) {
             set_eventTitle(`${userDetails?.username}, ${expert.username}`)
             set_startTime(null)
@@ -72,12 +73,28 @@ const Search = () => {
             set_duration(0)
             set_price(0)
             set_selectedExpert(expert)
+
+            // Fetch expert image
+            const image = await fetchExpertProfile(expert.image)
+            set_expert_image(image)
+
             goToStep(1)
         } else {
             dispatch(showAlert("Expert isn't available"))
             navigate(-1)
         }
     }
+
+    const fetchExpertProfile = async (expertId: string) => {
+        try {
+            const res = await profileImageFetch(expertId, "small")
+            return res
+        } catch (err) {
+            console.log("error while fetching expert image", err)
+            return null
+        }
+    }
+
 
     const setStartEndTime = (start: any, end: any, duration: any) => {
         set_startTime(start)
@@ -308,7 +325,8 @@ const Search = () => {
                                                                     <div className="w-10 h-10 rounded-full overflow-clip">
                                                                         {
                                                                             selectedExpert.image ?
-                                                                                <img src={`${process.env.REACT_APP_SERVER_URL}/${selectedExpert.image}`} className="w-full h-full object-cover object-center" /> :
+                                                                                //<img src={`${process.env.REACT_APP_SERVER_URL}/${selectedExpert.image}`} className="w-full h-full object-cover object-center" /> :
+                                                                                <img src={expertImage} className="w-full h-full object-cover object-center" /> :
                                                                                 <div className="w-full h-full rounded-full border-2 border-lightgrey text-xl text-white font-bold !flex items-center justify-center">
                                                                                     {getAvatarTitle(selectedExpert.username)}
                                                                                 </div>
