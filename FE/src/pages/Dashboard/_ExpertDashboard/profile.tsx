@@ -28,6 +28,7 @@ const ExpertProfile = ({
     const dispatch = useDispatch()
     const navigate = useNavigate()
     const [imageSrc, set_imageSrc] = useState<any>('')
+    const [image, set_image] = useState<any>(null)
     const [oldImageSrc, set_oldImageSrc] = useState<any>(null)
     const [name, set_name] = useState('')
     const [title, set_title] = useState('')
@@ -53,8 +54,9 @@ const ExpertProfile = ({
         if (userDetails.image) {
             const image: any = await profileImageFetch(userDetails.image,"medium");
             if (image) {
-                set_imageSrc(image)
-                set_oldImageSrc(image)
+                set_imageSrc(userDetails.image)
+                set_oldImageSrc(userDetails.image)
+                set_image(image)
             }
         }
         set_name(userDetails.username)
@@ -186,6 +188,7 @@ const ExpertProfile = ({
                 }
                 <div className="w-full flex flex-col justify-center items-center mt-8">
                     <EditAvatar
+                        image={image}
                         imageSrc={imageSrc}
                         set_imageSrc={set_imageSrc}
                         userId={userDetails.userId}
