@@ -24,7 +24,6 @@ const Customers = ({
     const { auth: { userDetails } } = useAppSelector((state) => state);
     const [keywords, set_keywords] = useState([])
     const [services, set_services] = useState([])
-    const [customersImage,set_customers_image]= useState<Array<any>>([])
     const sorts = [
         {
             value: "Name in ASC",
@@ -42,6 +41,7 @@ const Customers = ({
     const [customers, set_customers] = useState<Array<any>>([])
     const [filterModalShow, set_filterModalShow] = useState(false)
     const [mobileView, set_mobileView] = useState(window.innerWidth <= 768)
+    const [customersImage,set_customers_image]= useState<Array<any>>([])
 
     const getKeywordsAndServices = async () => {
         const response: any = await doGetKeywordsAndServices();
@@ -62,13 +62,14 @@ const Customers = ({
         });
 
         if (response) {
+            console.log(response.result, '========')
             set_customers([...response.result])
             const imagePromises = response.result.map((customer: any) =>
                 fetchCustomerProfile(customer.image)
             );
 
-            const customersImages = await Promise.all(imagePromises);
-            set_customers_image(customersImage);
+            const customerImages = await Promise.all(imagePromises);
+            set_customers_image(customerImages);
             if (qCustomerId) {
                 selectCustomer(response.result?.[0])
             }
@@ -103,7 +104,7 @@ const Customers = ({
                 groupId: currentGeneralChat._id,
                 groupName: currentGeneralChat.name,
             }))
-            navigate(`${process.env.REACT_APP_AUTH_URL}customerdashboard/chat`)
+            navigate(`${process.env.REACT_APP_AUTH_URL}expertdashboard/chat`)
         }
         SetLoadingStatus(false)
     }
