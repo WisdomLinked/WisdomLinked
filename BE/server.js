@@ -1,14 +1,5 @@
 require("dotenv").config();
 
-console.log('--- Backend Environment Variables ---');
-console.log('NODE_ENV:', process.env.NODE_ENV);
-console.log('FE_URL:', process.env.FE_URL);
-console.log('MONGO_URI:', process.env.MONGO_URI);
-console.log('STRIPE_SECRET_KEY_TEST:', process.env.STRIPE_SECRET_KEY_TEST);
-console.log('SENDGRID_APIKEY:', process.env.SENDGRID_APIKEY);
-console.log('PORT:', process.env.PORT);
-console.log('-------------------------------------');
-
 const express = require("express");
 const http = require("http");
 const cors = require("cors");
@@ -16,6 +7,7 @@ const mongoose = require("mongoose");
 const cookieParser = require("cookie-parser");
 const path = require("path");
 const imageUploadRoutes = require("./routes/imageUploadRoutes");
+const fetchImageRoute = require("./routes/fetchImageRoute");
 
 const authRoutes = require("./routes/authRoutes");
 const friendInvitationRoutes = require("./routes/friendInvitationRoutes");
@@ -64,6 +56,7 @@ app.use("/api/expert", expertRoutes);
 app.use("/api/customer", customerRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/image", imageUploadRoutes);
+app.use("/api/image-fetch", fetchImageRoute);
 
 
 app.use(express.static('./uploads'));
