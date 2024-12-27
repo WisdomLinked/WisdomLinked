@@ -174,10 +174,6 @@ export const newPeerConnection = (initiator: boolean) => {
         console.log("[WEBRTC] Peer connection established successfully.");
     });
 
-    peer.on("connect", () => {
-        console.log("[WEBRTC] Peer connection established successfully.");
-    });
-
     peer.on("error", (error) => {
         console.error("[WEBRTC] Peer connection error:", error);
     });
