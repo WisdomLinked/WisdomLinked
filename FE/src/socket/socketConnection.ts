@@ -55,7 +55,7 @@ let socket: Socket<any, any>;
 const SERVER_URL: any = process.env.REACT_APP_SERVER_URL;
 
 const connectWithSocketServer = (userDetails: UserDetails) => {
-    console.log("Attempting to connect with socket.io server...");
+    //console.log("Attempting to connect with socket.io server...");
     socket = io(SERVER_URL, {
         auth: {
             email: userDetails.email,
@@ -63,9 +63,9 @@ const connectWithSocketServer = (userDetails: UserDetails) => {
     });
 
     socket.on("connect", () => {
-        console.log(
-            `Successfully connected to socket.io server. Connected socket.id: ${socket.id}`
-        );
+        //console.log(
+           // `Successfully connected to socket.io server. Connected socket.id: ${socket.id}`
+        //);
     });
 
     socket.on("connect_error", (error) => {
@@ -75,7 +75,7 @@ const connectWithSocketServer = (userDetails: UserDetails) => {
     socket.emit("helloFomClient");
 
     socket.on("friend-invitations", (data: any) => {
-        console.log("Received friend invitations:", data);
+        //console.log("Received friend invitations:", data);
         store.dispatch(setPendingInvitations(data) as any);
     });
 
@@ -87,7 +87,7 @@ const connectWithSocketServer = (userDetails: UserDetails) => {
             };
         });
 
-        console.log("Received friends list:", data);
+        //console.log("Received friends list:", data);
         store.dispatch(setInitialTypingStatus(typingStatusOfFriends));
         store.dispatch(setFriends(data) as any);
 

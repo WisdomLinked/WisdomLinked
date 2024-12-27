@@ -87,7 +87,7 @@ const Dashboard = () => {
         const now = new Date().getTime()
         let temp: any = events.filter((item: any) => (new Date(item.end).getTime() >= now))
         set_sessions([...temp])
-        console.log('temp: ', temp);
+        //console.log('temp: ', temp);
 
         // temp = events.filter((item: any) => (new Date(item.end).getTime() >= now || !item.duration) && (item.status === 'pending'))
         // set_selectedEvent([...temp])
