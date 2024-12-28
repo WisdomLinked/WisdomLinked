@@ -300,6 +300,8 @@ export const newPeerConnection = (initiator: boolean) => {
 
         // Ensure the stream is set correctly on the UI
         if (remoteStream && remoteStream.getVideoTracks().length > 0) {
+            console.log("document:", document);
+            console.log("remote stream:", remoteStream);
             const videoElement = document.querySelector("#remote-video") as HTMLVideoElement;
             if (videoElement) {
                 videoElement.srcObject = remoteStream;
