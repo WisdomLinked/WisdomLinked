@@ -40,8 +40,6 @@ const MessagesHeader = ({ scrollPosition, events, openCalendarModal, openSeminar
         room: { isUserInRoom, activeRooms, roomDetails }
     } = useAppSelector((state) => state);
 
-    //console.log("chosenChatDetails:", chosenChatDetails);
-    //console.log("Full chosenChatDetails object:", JSON.stringify(chosenChatDetails, null, 2));
     const navActiveStyle = scrollPosition >= navPosition! ? { backgroundColor: "#141414" } : { backgroundColor: "transparent" };
 
     const dispatch = useDispatch()
