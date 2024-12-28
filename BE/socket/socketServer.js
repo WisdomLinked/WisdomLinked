@@ -40,7 +40,7 @@ const createSocketServer = (server) => {
     });
 
     io.on("connection", (socket) => {
-        // console.log(socket.user)
+        console.log(socket.user)
         console.log(`[SOCKET SERVER] New connection established: ${socket.id}`);
         newConnectionHandler(socket, io);
 
