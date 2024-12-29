@@ -158,7 +158,6 @@ export const newPeerConnection = (initiator: boolean) => {
 
     if (!stream) {
         throw new Error("No local stream");
-
     }
 
     console.log("from web ", stream);

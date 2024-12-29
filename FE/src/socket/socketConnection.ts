@@ -311,14 +311,24 @@ const callRequest = (data: {
     audioOnly: boolean;
     eventId: string;
 }) => {
+    console.log("call request made");
     const peerConnection = () => {
         store.dispatch(setOtherUserId(data.receiverUserId) as any);
         const peer = newPeerConnection(true);
 
         currentPeerConnection = peer;
+        console.log("peer", peer);
+
+        if(!peer){
+            console.log("peer empty 0");
+        }
+
         peer.on("signal", (signal) => {
             console.log("SIGNAL", signal);
             // TODO send data to server
+            if(!peer){
+                console.log("peer empty 1");
+            }
             socket.emit("call-request", {
                 ...data,
                 signal,
@@ -327,17 +337,26 @@ const callRequest = (data: {
 
         peer.on("stream", (stream) => {
             console.log("REMOTE STREAM", stream);
+            if(!peer){
+                console.log("peer empty 2");
+            }
             // TODO set remote stream
             store.dispatch(setRemoteStream(stream) as any);
         });
 
         socket.on("call-response", (data: any) => {
             console.log('Call-response', data)
+            if(!peer){
+                console.log("peer empty 3");
+            }
             const status = data.accepted ? "accepted" : "rejected";
             store.dispatch(setCallStatus(status) as any);
 
             if (data.accepted && data.signal) {
                 console.log("ACCEPTED", data.signal);
+                if(!peer){
+                    console.log("peer empty 4");
+                }
                 store.dispatch(setOtherUserId(data.otherUserId) as any);
                 peer.signal(data.signal);
             }
