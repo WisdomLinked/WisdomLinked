@@ -12,6 +12,23 @@ import { actionTypes } from "../actions/types";
 import { signalPeerData } from "./socketConnection";
 
 /**
+ * Extend simple-peer's `Instance` type to expose the `.streams` array,
+ * which isn't officially in the type definition but is present at runtime.
+ */
+interface ExtendedPeer extends Peer.Instance {
+    streams: MediaStream[];
+}
+
+/**
+ * Extend MediaStream if you want to store a custom property like `connUserSocketId`.
+ * (Currently you're doing `(remoteStream as any).connUserSocketId = connUserSocketId`,
+ * which is also okay for a quick fix.)
+ */
+// interface ExtendedMediaStream extends MediaStream {
+//   connUserSocketId?: string;
+// }
+
+/**
  * Attempt to get local camera/mic stream(s).
  * This function tries to get them separately (video-only, audio-only),
  * which you then combine or pick constraints from.
@@ -36,7 +53,6 @@ const getLocalStream = async () => {
 
 /**
  * Just a helper to check if you have any local devices available.
- * (Not used often, but you can keep it if needed.)
  */
 export const checkLocalAudioVideoStreams = async () => {
     const { videoStream, audioStream } = await getLocalStream();
@@ -51,10 +67,6 @@ export const checkLocalAudioVideoStreams = async () => {
 
 /**
  * The main function used in your call flow.
- * - If audioOnly=false, we want to request {audio:true,video:true}.
- * - If audioOnly=true, we request {audio:true,video:false}.
- * - If room=true, we're in a "room seminar" scenario, so we store the result in roomActions.
- * - If room=false, store in videoChatActions (setLocalStream).
  */
 export const getLocalStreamPreview = async (
     audioOnly: boolean,
@@ -62,14 +74,12 @@ export const getLocalStreamPreview = async (
     room?: boolean,
     onErrorCallback?: (err: any) => any
 ) => {
-    // Decide constraints based on audioOnly
     const constraints = audioOnly
         ? { audio: true, video: false }
         : { audio: true, video: true };
 
     console.log("[getLocalStreamPreview] constraints:", constraints);
 
-    // Actually request the combined stream
     navigator.mediaDevices
         .getUserMedia(constraints)
         .then((stream) => {
@@ -103,8 +113,6 @@ export const getLocalStreamPreview = async (
 
 /**
  * Configure STUN/TURN servers.
- * If you have a TURN server, set REACT_APP_TURN_URL in .env
- * and it will add it below.
  */
 const peerConfiguration = () => {
     const iceServers: RTCIceServer[] = [
@@ -126,10 +134,9 @@ const peerConfiguration = () => {
         { urls: "stun:numb.viagenie.ca:3478" },
         { urls: "stun:s1.taraba.net:3478" },
         { urls: "stun:s2.taraba.net:3478" },
-        // (plus all the other STUNs you listed) ...
+        // etc.
     ];
 
-    // Add TURN server if available
     if (process.env.REACT_APP_TURN_URL) {
         console.log("[peerConfiguration] Using both STUN and TURN servers");
         iceServers.push({
@@ -154,7 +161,9 @@ const peerConfiguration = () => {
 export const newPeerConnection = (initiator: boolean) => {
     const stream = store.getState().videoChat.localStream;
     if (!stream) {
-        throw new Error("No local stream in store.videoChat.localStream. Did you call getLocalStreamPreview()?");
+        throw new Error(
+            "No local stream in store.videoChat.localStream. Did you call getLocalStreamPreview()?"
+        );
     }
     console.log("[newPeerConnection] localStream for call is:", stream);
 
@@ -169,16 +178,10 @@ export const newPeerConnection = (initiator: boolean) => {
     return peer;
 };
 
-/**
- * For "room" scenarios. We store multiple peers in 'peers' obj.
- * key: connUserSocketId
- * value: the Peer instance
- */
 let peers: Record<string, Peer.Instance> = {};
 
 /**
- * Called when someone joins a room, to set up a new peer connection for them.
- * If isInitiator=true, you create the Peer with {initiator:true}, else false.
+ * Called when someone joins a room
  */
 export const prepareNewPeerConnection = (connUserSocketId: string, isInitiator: boolean) => {
     console.log("[prepareNewPeerConnection] socketId:", connUserSocketId, "isInitiator:", isInitiator);
@@ -206,7 +209,8 @@ export const prepareNewPeerConnection = (connUserSocketId: string, isInitiator: 
             `[prepareNewPeerConnection -> on.stream] remote stream from ${connUserSocketId}`,
             remoteStream
         );
-        remoteStream.connUserSocketId = connUserSocketId as any;
+        // If you need to store 'connUserSocketId' on the stream:
+        (remoteStream as any).connUserSocketId = connUserSocketId;
         addNewRemoteStream(remoteStream);
     });
 
@@ -216,7 +220,7 @@ export const prepareNewPeerConnection = (connUserSocketId: string, isInitiator: 
 };
 
 /**
- * When we get 'conn-signal' from the server, we pass it to the correct peer
+ * When we get 'conn-signal' from the server
  */
 export const handleSignalingData = (data: { connUserSocketId: string; signal: Peer.SignalData }) => {
     const { connUserSocketId, signal } = data;
@@ -232,7 +236,7 @@ export const handleSignalingData = (data: { connUserSocketId: string; signal: Pe
 };
 
 /**
- * Add the new remote stream into the Redux store under room.remoteStreams
+ * Store the new remote stream in Redux so your UI can display it
  */
 const addNewRemoteStream = (remoteStream: MediaStream) => {
     console.log("[addNewRemoteStream] Called with:", remoteStream);
@@ -240,12 +244,12 @@ const addNewRemoteStream = (remoteStream: MediaStream) => {
     const newRemoteStreams = [...remoteStreams, remoteStream];
     store.dispatch(setRemoteStreams(newRemoteStreams) as any);
 
-    // NOTE: This means your React UI must subscribe to room.remoteStreams
-    // and attach each new stream to a <video> element to display it.
+    // Then in your React component, map over remoteStreams and attach each
+    // to a <video> element's srcObject.
 };
 
 /**
- * Close out all existing Peer connections in the 'peers' object
+ * Closes out all existing Peer connections
  */
 export const closeAllConnections = () => {
     console.log("[closeAllConnections] Closing all peer connections");
@@ -258,7 +262,7 @@ export const closeAllConnections = () => {
 };
 
 /**
- * Called by 'room-participant-left' event if the server tells us the user left
+ * Called by 'room-participant-left'
  */
 export const handleParticipantLeftRoom = (data: { connUserSocketId: string }) => {
     const { connUserSocketId } = data;
@@ -281,38 +285,35 @@ export const handleParticipantLeftRoom = (data: { connUserSocketId: string }) =>
 };
 
 /**
- * Switch tracks if, e.g., user toggles camera or changes mic.
- * This replaces the outgoing track in every peer with the new track(s).
+ * Switch tracks if the user toggles camera or changes mic, etc.
  */
 export const switchOutgoingTracks = (stream: MediaStream) => {
     console.log("[switchOutgoingTracks] Replacing tracks for all existing peers.");
-    for (const socketId in peers) {
-        const peer = peers[socketId];
-        if (!peer || !peer.streams[0]) continue;
 
-        const oldTracks = peer.streams[0].getTracks();
+    for (const socketId in peers) {
+        /**
+         * Cast to `ExtendedPeer` so TS knows we have `.streams`
+         */
+        const extendedPeer = peers[socketId] as ExtendedPeer;
+
+        // Make sure extendedPeer.streams is defined and has at least 1 item
+        if (!extendedPeer.streams?.[0]) {
+            console.log(`[switchOutgoingTracks] No streams found for peer ${socketId}`);
+            continue;
+        }
+
+        const oldTracks = extendedPeer.streams[0].getTracks();
         const newTracks = stream.getTracks();
 
         for (let oldTrack of oldTracks) {
             // find matching kind from newTracks
             const matchingNewTrack = newTracks.find((t) => t.kind === oldTrack.kind);
             if (matchingNewTrack) {
-                console.log(`[switchOutgoingTracks] Replacing track ${oldTrack.kind} in peer for ${socketId}`);
-                peer.replaceTrack(oldTrack, matchingNewTrack, peer.streams[0]);
+                console.log(
+                    `[switchOutgoingTracks] Replacing track ${oldTrack.kind} in peer for ${socketId}`
+                );
+                extendedPeer.replaceTrack(oldTrack, matchingNewTrack, extendedPeer.streams[0]);
             }
         }
     }
 };
-
-/**
- * ===========================================
- * If you get "process is not defined" error:
- * 1) Make sure "simple-peer" is an up-to-date version,
- *    or:
- * 2) Add a polyfill for process:
- *    npm install process
- *    import process from "process";
- *    (window as any).process = process;
- * Or adjust your bundler config for Node polyfills.
- * ===========================================
- */
