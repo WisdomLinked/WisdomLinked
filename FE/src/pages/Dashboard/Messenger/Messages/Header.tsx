@@ -135,7 +135,7 @@ const MessagesHeader = ({ scrollPosition, events, openCalendarModal, openSeminar
             if ((isTheEventGoingOn(events[i].start, events[i].end) || isFutureEvent(events[i].start))) {
                 if (events[i].status === 'accepted')
                     temp.push(events[i])
-                temp1.push(events[1])
+                temp1.push(events[i])
             }
         }
         set_acceptedfutureEvents([...temp])
