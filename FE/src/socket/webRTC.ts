@@ -88,63 +88,6 @@ export const getLocalStreamPreview = async (audioOnly: boolean, callback?: () =>
     })
 }
 
-
-// const peerConfiguration = () => {
-//
-//     if (process.env.REACT_APP_TURN_URL) {
-//         console.log("Using only TURN server");
-//         return {
-//             iceServers: [
-//                 {
-//                     urls: [
-//                         `turn:${process.env.REACT_APP_TURN_URL}:3478?transport=udp`,
-//                         `turn:${process.env.REACT_APP_TURN_URL}:80?transport=tcp`
-//                     ],
-//                     username: "efA389S6BJFSNKYQP2",
-//                     credential: "dkvSztjG5Rs60Er0"
-//                 }
-//             ]
-//         }
-//     } else {
-//         console.log("Using only STUN server");
-//         return {
-//             iceServers: [
-//                 {
-//                     urls: "stun:stun.l.google.com:19302",
-//                 },
-//             ],
-//         };
-//     }
-// };
-
-// const peerConfiguration = () => {
-//     const iceServers = [];
-//
-//     // Add STUN server first
-//     iceServers.push({
-//         urls: "stun:stun.l.google.com:19302",
-//     });
-//
-//     // If TURN server is available, add it after STUN
-//     if (process.env.REACT_APP_TURN_URL) {
-//         console.log("Using both STUN and TURN servers");
-//         iceServers.push({
-//             urls: [
-//                 `turn:${process.env.REACT_APP_TURN_URL}:3478?transport=udp`,
-//                 `turn:${process.env.REACT_APP_TURN_URL}:80?transport=tcp`,
-//             ],
-//             username: "efA389S6BJFSNKYQP2",
-//             credential: "dkvSztjG5Rs60Er0",
-//         });
-//     } else {
-//         console.log("Using only STUN server");
-//     }
-//
-//     return {
-//         iceServers,
-//     };
-// };
-
 const peerConfiguration = () => {
     const iceServers: { urls: string | string[]; username?: string; credential?: string }[] = [
         // Google STUN servers
@@ -247,13 +190,7 @@ export const prepareNewPeerConnection = (connUserSocketId: string, isInitiator: 
         console.log("preparing new peer connection as not initiator");
     }
 
-    // if(!localStream) {
-    //     return
-    // }
-
     console.log("localStream", localStream)
-
-    console.log("hello")
 
     peers[connUserSocketId] = new Peer({
         initiator: isInitiator,
@@ -300,21 +237,27 @@ const addNewRemoteStream = (remoteStream: MediaStream | Boolean) => {
 };
 
 export const closeAllConnections = () => {
+    console.log(`Closing all peer connections`);
     Object.entries(peers).forEach((mappedObject) => {
         const connUserSocketId = mappedObject[0];
         if (peers[connUserSocketId]) {
+            console.log(`Destroying peer connection with connUserSocketId: ${connUserSocketId}`);
             peers[connUserSocketId].destroy();
             delete peers[connUserSocketId];
         }
     });
+    console.log(`All peer connections closed`)
 };
 
 export const handleParticipantLeftRoom = (data: { connUserSocketId: string }) => {
     const { connUserSocketId } = data;
 
     if (peers[connUserSocketId]) {
+        console.log(`Participant with connUserSocketId: ${connUserSocketId} left the room. Destroying peer connection.`);
         peers[connUserSocketId].destroy();
         delete peers[connUserSocketId];
+    } else {
+        console.log(`Participant with connUserSocketId: ${connUserSocketId} left the room but no peer connection was found.`);
     }
 
     const remoteStreams = store.getState().room.remoteStreams;
@@ -325,6 +268,8 @@ export const handleParticipantLeftRoom = (data: { connUserSocketId: string }) =>
     );
 
     store.dispatch(setRemoteStreams(newRemoteStreams) as any);
+
+    console.log(`Updated remote streams after participant left`);
 };
 
 export const switchOutgoingTracks = (stream: MediaStream) => {

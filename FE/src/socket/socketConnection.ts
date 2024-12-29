@@ -317,7 +317,6 @@ const callRequest = (data: {
 
         currentPeerConnection = peer;
         peer.on("signal", (signal) => {
-            console.log('HERERE')
             console.log("SIGNAL", signal);
             // TODO send data to server
             socket.emit("call-request", {
@@ -333,7 +332,7 @@ const callRequest = (data: {
         });
 
         socket.on("call-response", (data: any) => {
-            console.log('Call-response ---------------', data)
+            console.log('Call-response', data)
             const status = data.accepted ? "accepted" : "rejected";
             store.dispatch(setCallStatus(status) as any);
 
@@ -353,10 +352,10 @@ const callRequest = (data: {
             store.dispatch(setAudioOnly(data.audioOnly) as any);
         },
         false,
-        () => {
-            peerConnection();
-            store.dispatch(setCallStatus("ringing") as any);
-            store.dispatch(setAudioOnly(data.audioOnly) as any);
+        (error) => {
+            console.error("Failed to get local stream preview:", error);
+            // store.dispatch(setCallStatus("ringing") as any);
+            // store.dispatch(setAudioOnly(data.audioOnly) as any);
         }
     );
 };
