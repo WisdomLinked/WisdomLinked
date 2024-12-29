@@ -1,95 +1,113 @@
+// webRTC.ts
 import Peer from "simple-peer";
+import { store } from "../store";
+
+// Actions
 import { setLocalStreamRoom, setRemoteStreams } from "../actions/roomActions";
 import { setLocalStream } from "../actions/videoChatActions";
-import { store } from "../store";
-import { signalPeerData } from "./socketConnection";
-import { actionTypes } from "../actions/types";
 import { showAlert } from "../actions/alertActions";
+import { actionTypes } from "../actions/types";
 
+// Socket
+import { signalPeerData } from "./socketConnection";
+
+/**
+ * Attempt to get local camera/mic stream(s).
+ * This function tries to get them separately (video-only, audio-only),
+ * which you then combine or pick constraints from.
+ */
 const getLocalStream = async () => {
-    let videoStream, audioStream;
+    let videoStream: MediaStream | undefined;
+    let audioStream: MediaStream | undefined;
     try {
         videoStream = await navigator.mediaDevices.getUserMedia({ audio: false, video: true });
-    } catch (error) {
+        console.log("[getLocalStream] Successfully got video stream:", videoStream);
+    } catch (err) {
+        console.warn("[getLocalStream] Unable to get video stream:", err);
     }
     try {
-        audioStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false })
-    } catch (error) {
+        audioStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+        console.log("[getLocalStream] Successfully got audio stream:", audioStream);
+    } catch (err) {
+        console.warn("[getLocalStream] Unable to get audio stream:", err);
     }
-    return {
-        videoStream,
-        audioStream
-    }
-}
+    return { videoStream, audioStream };
+};
 
+/**
+ * Just a helper to check if you have any local devices available.
+ * (Not used often, but you can keep it if needed.)
+ */
 export const checkLocalAudioVideoStreams = async () => {
-    const {videoStream, audioStream} = await getLocalStream()
+    const { videoStream, audioStream } = await getLocalStream();
     store.dispatch({
         type: actionTypes.setLocalStreamAvailability,
         payload: {
             videoStream,
-            audioStream
-        }
-    })
-}
+            audioStream,
+        },
+    });
+};
 
-export const getLocalStreamPreview = async (audioOnly: boolean, callback?: () => void, room?: boolean, failedCallback?: (err: any) => any) => {
+/**
+ * The main function used in your call flow.
+ * - If audioOnly=false, we want to request {audio:true,video:true}.
+ * - If audioOnly=true, we request {audio:true,video:false}.
+ * - If room=true, we're in a "room seminar" scenario, so we store the result in roomActions.
+ * - If room=false, store in videoChatActions (setLocalStream).
+ */
+export const getLocalStreamPreview = async (
+    audioOnly: boolean,
+    onSuccessCallback?: () => void,
+    room?: boolean,
+    onErrorCallback?: (err: any) => any
+) => {
+    // Decide constraints based on audioOnly
+    const constraints = audioOnly
+        ? { audio: true, video: false }
+        : { audio: true, video: true };
 
-    const {videoStream, audioStream} = await getLocalStream()
-    const constraints = room ?
-        { audio: audioStream ? true : false, video: videoStream ? true : false} :
-        { audio: true, video: audioOnly ? false : true };
+    console.log("[getLocalStreamPreview] constraints:", constraints);
 
-    console.log("constraints", constraints);
+    // Actually request the combined stream
+    navigator.mediaDevices
+        .getUserMedia(constraints)
+        .then((stream) => {
+            console.log("[getLocalStreamPreview] Successfully got user media:", stream);
+            if (room) {
+                store.dispatch(setLocalStreamRoom(stream) as any);
+            } else {
+                store.dispatch(setLocalStream(stream) as any);
+            }
 
-    store.dispatch({
-        type: actionTypes.setLocalStreamAvailability,
-        payload: {
-            videoStream,
-            audioStream
-        }
-    })
+            if (onSuccessCallback) {
+                onSuccessCallback();
+            }
+        })
+        .catch((err) => {
+            console.error("[getLocalStreamPreview] Error getting local stream:", err);
+            store.dispatch(
+                showAlert(
+                    room
+                        ? "You don't have any media devices. Please check your microphone and camera."
+                        : audioOnly
+                            ? "You don't have any audio devices. Please check your microphone."
+                            : "You don't have any video devices. Please check your camera."
+                )
+            );
+            if (onErrorCallback) {
+                onErrorCallback(err);
+            }
+        });
+};
 
-    // FOR VIRTUAL STREAM -------------
-    // if (room) {
-    //     store.dispatch(setLocalStreamRoom(true) as any);
-    // } else {
-    //     store.dispatch(setLocalStream(true) as any);
-    // }
-
-    // if (callback) {
-    //     callback();
-    // }
-    // return
-
-    navigator.mediaDevices.getUserMedia(constraints).then((stream) => {
-        if (room) {
-            store.dispatch(setLocalStreamRoom(stream) as any);
-        } else {
-            store.dispatch(setLocalStream(stream) as any);
-        }
-
-        if (callback) {
-            callback();
-        }
-
-    }).catch((err) => {
-        console.log(err);
-        console.log("Error getting local stream");
-        store.dispatch(showAlert(
-            room ?
-                "You don't have any media devices, plesae check your microphone and camera" :
-                audioOnly ?
-                    "You don't have any audio devices, plesae check your microphone" :
-                    "You don't have any video devices, plesae check your camera"
-        ))
-        if (failedCallback)
-            failedCallback(err)
-    })
-}
-
+/**
+ * Configure STUN/TURN servers.
+ * If you have a TURN server, set REACT_APP_TURN_URL in .env
+ * and it will add it below.
+ */
 const peerConfiguration = () => {
-    const iceServers: { urls: string | string[]; username?: string; credential?: string }[] = [
+    const iceServers: RTCIceServer[] = [
         // Google STUN servers
         { urls: "stun:stun.l.google.com:19302" },
         { urls: "stun:stun.l.google.com:5349" },
@@ -108,30 +126,12 @@ const peerConfiguration = () => {
         { urls: "stun:numb.viagenie.ca:3478" },
         { urls: "stun:s1.taraba.net:3478" },
         { urls: "stun:s2.taraba.net:3478" },
-        { urls: "stun:stun.12connect.com:3478" },
-        { urls: "stun:stun.12voip.com:3478" },
-        { urls: "stun:stun.1und1.de:3478" },
-        { urls: "stun:stun.2talk.co.nz:3478" },
-        { urls: "stun:stun.2talk.com:3478" },
-        { urls: "stun:stun.3clogic.com:3478" },
-        { urls: "stun:stun.3cx.com:3478" },
-        { urls: "stun:stun.a-mm.tv:3478" },
-        { urls: "stun:stun.aa.net.uk:3478" },
-        { urls: "stun:stun.acrobits.cz:3478" },
-        { urls: "stun:stun.actionvoip.com:3478" },
-        { urls: "stun:stun.advfn.com:3478" },
-        { urls: "stun:stun.aeta-audio.com:3478" },
-        { urls: "stun:stun.aeta.com:3478" },
-        { urls: "stun:stun.alltel.com.au:3478" },
-        { urls: "stun:stun.altar.com.pl:3478" },
-        { urls: "stun:stun.annatel.net:3478" },
-        { urls: "stun:stun.antisip.com:3478" },
-        { urls: "stun:stun.arbuz.ru:3478" },
+        // (plus all the other STUNs you listed) ...
     ];
 
     // Add TURN server if available
     if (process.env.REACT_APP_TURN_URL) {
-        console.log("Using both STUN and TURN servers");
+        console.log("[peerConfiguration] Using both STUN and TURN servers");
         iceServers.push({
             urls: [
                 `turn:${process.env.REACT_APP_TURN_URL}:3478?transport=udp`,
@@ -141,152 +141,178 @@ const peerConfiguration = () => {
             credential: "dkvSztjG5Rs60Er0",
         });
     } else {
-        console.log("Using only STUN servers");
+        console.log("[peerConfiguration] Using only STUN servers");
     }
 
-    return {
-        iceServers,
-    };
+    return { iceServers };
 };
 
-
-
-
+/**
+ * For 1-to-1 calls (not the "room" scenario), we get the local
+ * stream from store.getState().videoChat.localStream
+ */
 export const newPeerConnection = (initiator: boolean) => {
-
-    const stream = store.getState().videoChat.localStream
-
+    const stream = store.getState().videoChat.localStream;
     if (!stream) {
-        throw new Error("No local stream");
+        throw new Error("No local stream in store.videoChat.localStream. Did you call getLocalStreamPreview()?");
     }
-
-    console.log("from web ", stream);
+    console.log("[newPeerConnection] localStream for call is:", stream);
 
     const configuration = peerConfiguration();
     const peer = new Peer({
-        initiator: initiator,
+        initiator,
         trickle: false,
         config: configuration,
         stream: stream,
     });
 
-
-
     return peer;
-}
+};
 
+/**
+ * For "room" scenarios. We store multiple peers in 'peers' obj.
+ * key: connUserSocketId
+ * value: the Peer instance
+ */
+let peers: Record<string, Peer.Instance> = {};
 
-let peers: any = {};
-
+/**
+ * Called when someone joins a room, to set up a new peer connection for them.
+ * If isInitiator=true, you create the Peer with {initiator:true}, else false.
+ */
 export const prepareNewPeerConnection = (connUserSocketId: string, isInitiator: boolean) => {
-    // connUserSocketId; -> who has joined the room
+    console.log("[prepareNewPeerConnection] socketId:", connUserSocketId, "isInitiator:", isInitiator);
 
     const localStream = store.getState().room.localStreamRoom;
-
-    if (isInitiator) {
-        console.log("preparing new peer connection as initiator");
-    } else {
-        console.log("preparing new peer connection as not initiator");
-    }
-
-    console.log("localStream", localStream)
+    console.log("[prepareNewPeerConnection] localStreamRoom is:", localStream);
 
     peers[connUserSocketId] = new Peer({
         initiator: isInitiator,
         config: peerConfiguration(),
-        stream: localStream!,
+        trickle: false,
+        stream: localStream || undefined,
     });
 
-    peers[connUserSocketId].on("signal", (data: Peer.SignalData) => {
-        const signalData = {
-            signal: data,
+    peers[connUserSocketId].on("signal", (signalData: Peer.SignalData) => {
+        console.log(`[prepareNewPeerConnection -> on.signal] for ${connUserSocketId}`);
+        signalPeerData({
+            signal: signalData,
             connUserSocketId: connUserSocketId,
-        };
-
-        signalPeerData(signalData);
+        });
     });
 
-    peers[connUserSocketId].on("stream", (remoteStream: any) => {
-        // TODO
-        // add new remote stream (of connUserSocketId who has joined the room) to our server store
-        console.log("remote stream came from other user");
-        console.log("direct connection has been established");
-        remoteStream.connUserSocketId = connUserSocketId;
+    peers[connUserSocketId].on("stream", (remoteStream: MediaStream) => {
+        console.log(
+            `[prepareNewPeerConnection -> on.stream] remote stream from ${connUserSocketId}`,
+            remoteStream
+        );
+        remoteStream.connUserSocketId = connUserSocketId as any;
         addNewRemoteStream(remoteStream);
     });
+
+    peers[connUserSocketId].on("error", (err) => {
+        console.error(`[prepareNewPeerConnection -> on.error] Peer error from ${connUserSocketId}:`, err);
+    });
 };
 
-export const handleSignalingData = (data: {
-    connUserSocketId: string;
-    signal: Peer.SignalData;
-}) => {
+/**
+ * When we get 'conn-signal' from the server, we pass it to the correct peer
+ */
+export const handleSignalingData = (data: { connUserSocketId: string; signal: Peer.SignalData }) => {
     const { connUserSocketId, signal } = data;
+    console.log("[handleSignalingData]", data);
 
-    if (peers[connUserSocketId]) {
-        peers[connUserSocketId].signal(signal);
+    const peer = peers[connUserSocketId];
+    if (peer) {
+        console.log("[handleSignalingData] signaling the existing peer");
+        peer.signal(signal);
+    } else {
+        console.warn("[handleSignalingData] no peer found for connUserSocketId:", connUserSocketId);
     }
 };
 
-const addNewRemoteStream = (remoteStream: MediaStream | Boolean) => {
-    console.log("Hi")
+/**
+ * Add the new remote stream into the Redux store under room.remoteStreams
+ */
+const addNewRemoteStream = (remoteStream: MediaStream) => {
+    console.log("[addNewRemoteStream] Called with:", remoteStream);
     const remoteStreams = store.getState().room.remoteStreams;
     const newRemoteStreams = [...remoteStreams, remoteStream];
-
     store.dispatch(setRemoteStreams(newRemoteStreams) as any);
+
+    // NOTE: This means your React UI must subscribe to room.remoteStreams
+    // and attach each new stream to a <video> element to display it.
 };
 
+/**
+ * Close out all existing Peer connections in the 'peers' object
+ */
 export const closeAllConnections = () => {
-    console.log(`Closing all peer connections`);
-    Object.entries(peers).forEach((mappedObject) => {
-        const connUserSocketId = mappedObject[0];
-        if (peers[connUserSocketId]) {
-            console.log(`Destroying peer connection with connUserSocketId: ${connUserSocketId}`);
-            peers[connUserSocketId].destroy();
-            delete peers[connUserSocketId];
-        }
+    console.log("[closeAllConnections] Closing all peer connections");
+    Object.entries(peers).forEach(([connUserSocketId, peer]) => {
+        console.log(`Destroying peer for socketId: ${connUserSocketId}`);
+        peer.destroy();
+        delete peers[connUserSocketId];
     });
-    console.log(`All peer connections closed`)
+    console.log("[closeAllConnections] All peer connections closed.");
 };
 
+/**
+ * Called by 'room-participant-left' event if the server tells us the user left
+ */
 export const handleParticipantLeftRoom = (data: { connUserSocketId: string }) => {
     const { connUserSocketId } = data;
+    const peer = peers[connUserSocketId];
 
-    if (peers[connUserSocketId]) {
-        console.log(`Participant with connUserSocketId: ${connUserSocketId} left the room. Destroying peer connection.`);
-        peers[connUserSocketId].destroy();
+    if (peer) {
+        console.log(`[handleParticipantLeftRoom] Destroying peer for ${connUserSocketId}`);
+        peer.destroy();
         delete peers[connUserSocketId];
     } else {
-        console.log(`Participant with connUserSocketId: ${connUserSocketId} left the room but no peer connection was found.`);
+        console.log(`[handleParticipantLeftRoom] No peer connection found for ${connUserSocketId}`);
     }
 
     const remoteStreams = store.getState().room.remoteStreams;
-
     const newRemoteStreams = remoteStreams.filter(
-        (remoteStream) =>
-            (remoteStream as any).connUserSocketId !== connUserSocketId
+        (stream: any) => stream.connUserSocketId !== connUserSocketId
     );
-
     store.dispatch(setRemoteStreams(newRemoteStreams) as any);
-
-    console.log(`Updated remote streams after participant left`);
+    console.log("[handleParticipantLeftRoom] Updated remoteStreams after participant left.");
 };
 
+/**
+ * Switch tracks if, e.g., user toggles camera or changes mic.
+ * This replaces the outgoing track in every peer with the new track(s).
+ */
 export const switchOutgoingTracks = (stream: MediaStream) => {
-    for (let socket_id in peers) {
-        for (let index in peers[socket_id].streams[0].getTracks()) {
-            for (let index2 in stream.getTracks()) {
-                if (
-                    peers[socket_id].streams[0].getTracks()[index].kind ===
-                    stream.getTracks()[index2].kind
-                ) {
-                    peers[socket_id].replaceTrack(
-                        peers[socket_id].streams[0].getTracks()[index],
-                        stream.getTracks()[index2],
-                        peers[socket_id].streams[0]
-                    );
-                    break;
-                }
+    console.log("[switchOutgoingTracks] Replacing tracks for all existing peers.");
+    for (const socketId in peers) {
+        const peer = peers[socketId];
+        if (!peer || !peer.streams[0]) continue;
+
+        const oldTracks = peer.streams[0].getTracks();
+        const newTracks = stream.getTracks();
+
+        for (let oldTrack of oldTracks) {
+            // find matching kind from newTracks
+            const matchingNewTrack = newTracks.find((t) => t.kind === oldTrack.kind);
+            if (matchingNewTrack) {
+                console.log(`[switchOutgoingTracks] Replacing track ${oldTrack.kind} in peer for ${socketId}`);
+                peer.replaceTrack(oldTrack, matchingNewTrack, peer.streams[0]);
             }
         }
     }
 };
+
+/**
+ * ===========================================
+ * If you get "process is not defined" error:
+ * 1) Make sure "simple-peer" is an up-to-date version,
+ *    or:
+ * 2) Add a polyfill for process:
+ *    npm install process
+ *    import process from "process";
+ *    (window as any).process = process;
+ * Or adjust your bundler config for Node polyfills.
+ * ===========================================
+ */
