@@ -77,7 +77,7 @@ const NewMessageInput: React.FC = () => {
     };
 
     useEffect(() => {
-        console.log('OKOKOKOK')
+        //console.log('OKOKOKOK')
         if (chosenChatDetails?.userId && _message) {
             console.log('00000')
             notifyTyping({

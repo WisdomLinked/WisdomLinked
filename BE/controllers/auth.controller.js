@@ -30,7 +30,7 @@ const getUniqueConfirmCode = async () => {
 
 const getKeywordsAndServices = async (req, res) => {
     try {
-        console.log('OKOKOKOK')
+        //console.log('OKOKOKOK')
         const keywords = await Keyword.find()
         const services = await Service.find()
         return res.status(200).json({
