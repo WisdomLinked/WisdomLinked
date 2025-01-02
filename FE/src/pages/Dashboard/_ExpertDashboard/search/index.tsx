@@ -224,7 +224,6 @@ const Search = () => {
                                                             <div className="w-10 h-10 rounded-full overflow-clip">
                                                                 {
                                                                     selectedCustomer.image ?
-                                                                        //<img src={`${process.env.REACT_APP_SERVER_URL}/${selectedCustomer.image}`} className="w-full h-full object-cover object-center" /> :
                                                                         <img src={customerImage} className="w-full h-full object-cover object-center" /> :
                                                                         <div className="w-full h-full rounded-full border-2 border-lightgrey text-xl text-white font-bold !flex items-center justify-center">
                                                                             {getAvatarTitle(selectedCustomer.username)}

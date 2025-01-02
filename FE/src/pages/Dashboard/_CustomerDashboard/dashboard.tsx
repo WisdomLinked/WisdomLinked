@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, {useEffect, useRef, useState} from "react";
 import { useAppSelector } from "../../../store";
 import Avatar from "../../../components/Avatar";
 import { formatDateYYYY_MM_DD_h_m } from "../../../actions/common";
@@ -23,6 +23,7 @@ const Dashboard = () => {
     const [editModalShow, set_editModalShow] = useState<boolean>(false)
     const [selectedEvent, set_selectedEvent] = useState<any>(null)
     const [base64Images, setBase64Images] = useState<Map<string, string>>(new Map());
+    const fetchImagesRef = useRef(false); // Ref to track image fetch calls
 
     const cancelSeminarAppointment = async (data: any) => {
         SetLoadingStatus(true)
@@ -84,61 +85,54 @@ const Dashboard = () => {
         // Assuming item contains customer details, you can use item directly
         dispatch(setChosenChatDetails({ userId: item._id, username: item.username, image: item.image }));
     };
-    useEffect(() => {
-        const now = new Date().getTime()
-        let temp: any = events.filter((item: any) => (new Date(item.end).getTime() >= now))
-        set_sessions([...temp])
 
-        temp = pendingGroupChats.filter((item: any) => new Date(item.groupChatId.end).getTime() >= now)
-        set_groupChats([...temp])
-    }, [events, pendingGroupChats])
-
+    // Batch state updates for sessions and groupChats
     useEffect(() => {
-        dispatch(updateMe())
-    }, [])
+        const now = new Date().getTime();
 
-    useEffect(() => {
-        const fetchImages = async () => {
-            const imagePromises = sessions.map(async (item: { expert: { _id: string; image: string } }) => {
-                if (item.expert.image) {
-                    try {
-                        const base64 = await profileImageFetch(item.expert.image, "small");
-                        console.log(`Fetched image for expert ${item.expert._id}:`, base64);
-                        return { id: item.expert._id, base64 };
-                    } catch (error) {
-                        console.error(`Error fetching image for expert ${item.expert._id}:`, error);
-                        console.error(`Error fetching image for expert ${item.expert._id}:`, error);
-                        return null; // Return null if fetching fails
-                    }
+        const updatedSessions = events.filter((item: any) => new Date(item.end).getTime() >= now);
+        const updatedGroupChats = pendingGroupChats.filter((item: any) => new Date(item.groupChatId.end).getTime() >= now);
+
+        set_sessions(updatedSessions);
+        set_groupChats(updatedGroupChats);
+
+        // Trigger image fetch only once
+        if (!fetchImagesRef.current) {
+            fetchImagesRef.current = true;
+            fetchImages(updatedSessions);
+        }
+    }, [events, pendingGroupChats]);
+
+    // Fetch base64 images for sessions
+    const fetchImages = async (sessionList: any[]) => {
+        const imagePromises = sessionList.map(async (item: { expert: { _id: string; image: string } }) => {
+            if (item.expert.image) {
+                try {
+                    const base64 = await profileImageFetch(item.expert.image, "small");
+                    return { id: item.expert._id, base64 };
+                } catch (error) {
+                    console.error(`Error fetching image for expert ${item.expert._id}:`, error);
+                    return null;
                 }
-                console.warn(`No image found for expert ${item.expert._id}`);
-                return null;
+            }
+            return null;
+        });
+
+        const images = await Promise.all(imagePromises);
+
+        const imageMap = new Map(base64Images);
+
+        images.forEach(image => {
+            if (image) imageMap.set(image.id, image.base64);
             });
 
-            console.log("imagePromises", imagePromises);
-            const images = await Promise.all(imagePromises);
-            console.log("Fetched images:", images);
-
-            // Create a new Map and populate it with valid image results
-            const imageMap = new Map<string, string>();
-            images.forEach((image:any) => {
-                console.log("image", image);
-                if (image !== null && image !== undefined) {
-                    // Add type assertion to ensure TypeScript knows the structure
-                    console.log("image", image);
-                    imageMap.set(image.id, image.base64);
-                }
-            });
-
-            console.log("Final imageMap:", imageMap);
-
-            // Update the state with the new Map
             setBase64Images(imageMap);
         };
 
-        fetchImages();
-    }, []);
-
+        // Dispatch `updateMe` only once when the component mounts
+        useEffect(() => {
+            dispatch(updateMe());
+        }, [dispatch]);
 
     return (
         <div className="w-full h-full mx-auto p-6 text-white overflow-y-auto relative">
@@ -239,7 +233,7 @@ const Dashboard = () => {
                                         <div className="flex space-x-3 items-center">
                                             <Avatar
                                                 username={item.expert.username}
-                                                image={item.expert.image}
+                                                image={base64Images.get(item.expert._id)}
                                             />
                                             <div>
                                                 <div className="text-lg">{item.expert.username}</div>
