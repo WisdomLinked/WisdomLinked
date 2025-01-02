@@ -1,4 +1,4 @@
-import React from "react";
+import React, {useEffect, useState} from "react";
 import Avatar from "../../../../components/Avatar";
 import parse from 'html-react-parser';
 import { formatDate } from "../../../../actions/common";
@@ -6,7 +6,7 @@ import { useDispatch } from "react-redux";
 import { setChosenChatDetails, setChosenGroupChatDetails } from "../../../../actions/chatActions";
 import { useNavigate } from "react-router-dom";
 import { SetLoadingStatus } from "../../../../actions/appActions";
-import { joinGeneralChat } from "../../../../api/api";
+import {joinGeneralChat, profileImageFetch} from "../../../../api/api";
 
 const parseHtml = (html: any) => {
     return parse(html ? html : '')
@@ -65,6 +65,7 @@ const Message = ({ content, sameAuthor, hiddenDropDown, disableBookButton, hideD
             </div>
         );
     }
+
 
     return (
         <div className="flex mt-1 chat_value_container">

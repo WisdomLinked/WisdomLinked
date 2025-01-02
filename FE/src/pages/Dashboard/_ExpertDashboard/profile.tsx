@@ -5,7 +5,7 @@ import {
     doGetKeywordsAndServices,
     doUpdateProfile,
     doUpdateProfileByAdmin,
-    profileImageFetch
+    profileImageFetch, profileImageUpload
 } from "../../../api/api";
 import ShowFieldError from "../../../components/ShowFieldError";
 import MultiSelectionWithInputTag from "../../../components/MultiSelectionWithInputTag";
@@ -18,6 +18,8 @@ import CountrySelect from "../../../components/CountrySelection";
 import FileBrowser from "../../../components/fileBrowser";
 import { useDispatch } from "react-redux";
 import { showAlert } from "../../../actions/alertActions";
+import ReactImagePickerEditor from 'react-image-picker-editor';
+import 'react-image-picker-editor/dist/index.css'
 
 const ExpertProfile = ({
     userDetails,
@@ -25,10 +27,12 @@ const ExpertProfile = ({
     updateOneUser
 }: any) => {
 
+    let curr_filename=""  // Need to implement this with the state instead of a new variable
+
     const dispatch = useDispatch()
     const navigate = useNavigate()
-    const [imageSrc, set_imageSrc] = useState<any>('')
-    const [image, set_image] = useState<any>(null)
+    const [imageSrc, set_imageSrc] = useState<any>(null)
+    const [image, set_image] = useState<any>('')
     const [oldImageSrc, set_oldImageSrc] = useState<any>(null)
     const [name, set_name] = useState('')
     const [title, set_title] = useState('')
@@ -50,13 +54,31 @@ const ExpertProfile = ({
     const [fileError, set_fileError] = useState('')
 
     const reset = async () => {
-
+        console.log("inside reset outside if");
         if (userDetails.image) {
-            const image: any = await profileImageFetch(userDetails.image,"medium");
+            set_imageSrc(oldImageSrc)
+        }
+        set_name(userDetails.username)
+        set_title(userDetails.title)
+        set_description(userDetails.description)
+        set_selectedKeywords(userDetails.keywords)
+        set_selectedServices(userDetails.services)
+        set_country(userDetails.country)
+        set_state(userDetails.state)
+        set_city(userDetails.city)
+        set_phoneNumber(userDetails.phoneNumber)
+        set_resume(userDetails.resume)
+    }
+
+    const loadData = async () => {
+        console.log("inside load outside if");
+        if (userDetails.image) {
+            const image: any = imageSrc? imageSrc:await profileImageFetch(userDetails.image,"small");
             if (image) {
-                set_imageSrc(userDetails.image)
-                set_oldImageSrc(userDetails.image)
-                set_image(image)
+                console.log("inside load inside if");
+                set_imageSrc(image)
+                set_oldImageSrc(image)
+                set_image(userDetails.image)
             }
         }
         set_name(userDetails.username)
@@ -71,11 +93,40 @@ const ExpertProfile = ({
         set_resume(userDetails.resume)
     }
 
+    const uploadProfileImage = async (newDataUri: any) => {
+        try {
+            const fileExtension = newDataUri.split(';')[0].split('/')[1];
+            const base64Response = await fetch(newDataUri);
+            const blob = await base64Response.blob();
+            const file = new File(
+                [blob],
+                `${userDetails.userId}_${Date.now()}.${fileExtension}`,
+                { type: blob.type }
+            );
+
+            const formData = new FormData();
+            formData.append('image', file);
+
+            const res = await profileImageUpload(formData);
+           curr_filename=res.data.details[0].filename
+
+            return res.data.details[0].filename;
+        } catch (error) {
+            console.error('Error uploading image:', error);
+        }
+    };
+
     const updateProfile = async () => {
         SetLoadingStatus(true)
+        if(oldImageSrc!=imageSrc)
+        {
+            console.log("inside upload ",oldImageSrc,imageSrc,image)
+            await uploadProfileImage(imageSrc)
+            console.log("after upload ",image)
+        }
         const updates = {
             email: userDetails.email,
-            image: imageSrc,
+            image: curr_filename?curr_filename:image,
             username: name,
             title: title,
             description: description,
@@ -156,12 +207,7 @@ const ExpertProfile = ({
     }, [file, fileError])
 
     useEffect(() => {
-        if (userDetails?.email) {
-            reset()
-        }
-    }, [userDetails])
-
-    useEffect(() => {
+        loadData()
         getKeywordsAndServices()
     }, [])
 
@@ -187,11 +233,18 @@ const ExpertProfile = ({
                         null
                 }
                 <div className="w-full flex flex-col justify-center items-center mt-8">
-                    <EditAvatar
-                        image={image}
-                        imageSrc={imageSrc}
-                        set_imageSrc={set_imageSrc}
-                        userId={userDetails.userId}
+                    <ReactImagePickerEditor
+                        config={{
+                            borderRadius: '100%',
+                            language: 'en',
+                            width: '195px',
+                            height: '195px',
+                            objectFit: 'cover',
+                            compressInitial: 50,
+                            aspectRatio: 1
+                        }}
+                        imageSrcProp={imageSrc}
+                        imageChanged={(newDataUri:any)=>set_imageSrc(newDataUri)}
                     />
                     <div className="text-white text-xs">Profile Image should not be more than 500 kb</div>
                     <div className="w-full max-w-[400px] mt-6 text-white">
@@ -314,7 +367,9 @@ const ExpertProfile = ({
                     <button
                         className="w-[calc(50%-8px)] bg-green rounded-lg flex items-center justify-center  disabled:opacity-50"
                         disabled={!enableToUpdate}
-                        onClick={updateProfile}
+                        onClick={async ()=>{
+                            await updateProfile()
+                            await loadData()}}
                     >
                         Save
                     </button>

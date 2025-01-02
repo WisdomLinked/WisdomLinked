@@ -1,6 +1,13 @@
 import React, { useState, useEffect } from "react";
 import EditAvatar from "../EditAvatar";
-import {doGetKeywordsAndServices, doUpdateProfile, doUpdateProfileByAdmin, profileImageFetch} from "../../../api/api";
+import {
+    callApi,
+    doGetKeywordsAndServices,
+    doUpdateProfile,
+    doUpdateProfileByAdmin,
+    profileImageFetch,
+    profileImageUpload
+} from "../../../api/api";
 import ShowFieldError from "../../../components/ShowFieldError";
 import MultiSelectionWithInputTag from "../../../components/MultiSelectionWithInputTag";
 import SelectionWithCheckBox from "../../../components/SelectionWithCheckBox";
@@ -9,6 +16,8 @@ import { useNavigate } from "react-router-dom";
 import { SetLoadingStatus } from "../../../actions/appActions";
 import CountrySelect from "../../../components/CountrySelection";
 import PhoneInput from "react-phone-input-2";
+import {useDispatch} from "react-redux";
+import ReactImagePickerEditor from "react-image-picker-editor";
 
 const CustomerProfile = ({
     userDetails,
@@ -16,6 +25,9 @@ const CustomerProfile = ({
     updateOneUser
 }: any) => {
 
+    let curr_filename=""  // Need to implement this with the state instead of a new variable
+
+    const dispatch = useDispatch()
     const navigate = useNavigate()
     const [imageSrc, set_imageSrc] = useState<any>(null)
     const [image, set_image] = useState<any>(null)
@@ -33,19 +45,14 @@ const CustomerProfile = ({
     const [phoneNumber, set_phoneNumber] = useState<any>('')
     const [showError, set_showError] = useState(false)
     const [enableToUpdate, set_enableToUpdate] = useState(false)
+    const [file, set_file] = useState('')
+    const [fileError, set_fileError] = useState('')
 
     const reset = async () => {
+        console.log("inside reset outside if");
         if (userDetails.image) {
-            const image: any = await profileImageFetch(userDetails.image,"medium");
-
-            console.log("image",image)
-            if (image) {
-                set_imageSrc(userDetails.image)
-                set_oldImageSrc(userDetails.image)
-                set_image(image)
-            }
+            set_imageSrc(oldImageSrc)
         }
-
         set_name(userDetails.username)
         set_selectedKeywords(userDetails.keywords)
         set_selectedServices(userDetails.services)
@@ -55,18 +62,67 @@ const CustomerProfile = ({
         set_phoneNumber(userDetails.phoneNumber)
     }
 
+    const loadData = async () => {
+        console.log("inside load outside if");
+        if (userDetails.image) {
+            const image: any = imageSrc? imageSrc:await profileImageFetch(userDetails.image,"small");
+            if (image) {
+                console.log("inside load inside if");
+                set_imageSrc(image)
+                set_oldImageSrc(image)
+                set_image(userDetails.image)
+            }
+        }
+        set_name(userDetails.username)
+        set_selectedKeywords(userDetails.keywords)
+        set_selectedServices(userDetails.services)
+        set_country(userDetails.country)
+        set_state(userDetails.state)
+        set_city(userDetails.city)
+        set_phoneNumber(userDetails.phoneNumber)
+    }
+
+    const uploadProfileImage = async (newDataUri: any) => {
+        try {
+            const fileExtension = newDataUri.split(';')[0].split('/')[1];
+            const base64Response = await fetch(newDataUri);
+            const blob = await base64Response.blob();
+            const file = new File(
+                [blob],
+                `${userDetails.userId}_${Date.now()}.${fileExtension}`,
+                { type: blob.type }
+            );
+
+            const formData = new FormData();
+            formData.append('image', file);
+
+            const res = await profileImageUpload(formData);
+            curr_filename=res.data.details[0].filename
+
+            return res.data.details[0].filename;
+        } catch (error) {
+            console.error('Error uploading image:', error);
+        }
+    };
+
     const updateProfile = async () => {
         SetLoadingStatus(true)
+        if(oldImageSrc!=imageSrc)
+        {
+            console.log("inside upload ",oldImageSrc,imageSrc,image)
+            await uploadProfileImage(imageSrc)
+            console.log("after upload ",image)
+        }
         const updates = {
             email: userDetails.email,
-            image: imageSrc,
+            image: curr_filename?curr_filename:image,
             username: name,
             keywords: selectedKeywords,
             services: selectedServices.map((x: any) => x._id),
             country,
             state,
             city,
-            phoneNumber
+            phoneNumber: phoneNumber
         }
         if (!isFromAdminPanel) {
             await doUpdateProfile(updates)
@@ -115,12 +171,7 @@ const CustomerProfile = ({
     }, [imageSrc, name, selectedKeywords, selectedServices, country, state, stateAvailable, city, cityAvailable, phoneNumber])
 
     useEffect(() => {
-        if (userDetails?.email) {
-            reset()
-        }
-    }, [userDetails])
-
-    useEffect(() => {
+        loadData()
         getKeywordsAndServices()
     }, [])
 
@@ -147,11 +198,18 @@ const CustomerProfile = ({
                 }
                 <div className="w-full text-white flex flex-col justify-center items-center mt-8">
 
-                    <EditAvatar
-                        image={image}
-                        imageSrc={imageSrc}
-                        set_imageSrc={set_imageSrc}
-                        userId={userDetails.userId}
+                    <ReactImagePickerEditor
+                        config={{
+                            borderRadius: '100%',
+                            language: 'en',
+                            width: '195px',
+                            height: '195px',
+                            objectFit: 'cover',
+                            compressInitial: 50,
+                            aspectRatio: 1
+                        }}
+                        imageSrcProp={imageSrc}
+                        imageChanged={(newDataUri:any)=>set_imageSrc(newDataUri)}
                     />
                     <div className="w-full max-w-[400px] mt-6">
                         {

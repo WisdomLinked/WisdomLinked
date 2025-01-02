@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { useAppSelector } from "../../../store";
 import Avatar from "../../../components/Avatar";
 import { formatDateYYYY_MM_DD_h_m } from "../../../actions/common";
-import { doCancelEvent, doCancelPendingSeminar, doUpdateEvent } from "../../../api/api";
+import {doCancelEvent, doCancelPendingSeminar, doUpdateEvent, profileImageFetch} from "../../../api/api";
 import { updateMe } from "../../../actions/authActions";
 import { useDispatch } from "react-redux";
 import { SetLoadingStatus } from "../../../actions/appActions";
@@ -22,6 +22,7 @@ const Dashboard = () => {
     const [sessions, set_sessions] = useState<any>([])
     const [editModalShow, set_editModalShow] = useState<boolean>(false)
     const [selectedEvent, set_selectedEvent] = useState<any>(null)
+    const [base64Images, setBase64Images] = useState<Map<string, string>>(new Map());
 
     const cancelSeminarAppointment = async (data: any) => {
         SetLoadingStatus(true)
@@ -87,10 +88,6 @@ const Dashboard = () => {
         const now = new Date().getTime()
         let temp: any = events.filter((item: any) => (new Date(item.end).getTime() >= now))
         set_sessions([...temp])
-        //console.log('temp: ', temp);
-
-        // temp = events.filter((item: any) => (new Date(item.end).getTime() >= now || !item.duration) && (item.status === 'pending'))
-        // set_selectedEvent([...temp])
 
         temp = pendingGroupChats.filter((item: any) => new Date(item.groupChatId.end).getTime() >= now)
         set_groupChats([...temp])
@@ -99,6 +96,49 @@ const Dashboard = () => {
     useEffect(() => {
         dispatch(updateMe())
     }, [])
+
+    useEffect(() => {
+        const fetchImages = async () => {
+            const imagePromises = sessions.map(async (item: { expert: { _id: string; image: string } }) => {
+                if (item.expert.image) {
+                    try {
+                        const base64 = await profileImageFetch(item.expert.image, "small");
+                        console.log(`Fetched image for expert ${item.expert._id}:`, base64);
+                        return { id: item.expert._id, base64 };
+                    } catch (error) {
+                        console.error(`Error fetching image for expert ${item.expert._id}:`, error);
+                        console.error(`Error fetching image for expert ${item.expert._id}:`, error);
+                        return null; // Return null if fetching fails
+                    }
+                }
+                console.warn(`No image found for expert ${item.expert._id}`);
+                return null;
+            });
+
+            console.log("imagePromises", imagePromises);
+            const images = await Promise.all(imagePromises);
+            console.log("Fetched images:", images);
+
+            // Create a new Map and populate it with valid image results
+            const imageMap = new Map<string, string>();
+            images.forEach((image:any) => {
+                console.log("image", image);
+                if (image !== null && image !== undefined) {
+                    // Add type assertion to ensure TypeScript knows the structure
+                    console.log("image", image);
+                    imageMap.set(image.id, image.base64);
+                }
+            });
+
+            console.log("Final imageMap:", imageMap);
+
+            // Update the state with the new Map
+            setBase64Images(imageMap);
+        };
+
+        fetchImages();
+    }, []);
+
 
     return (
         <div className="w-full h-full mx-auto p-6 text-white overflow-y-auto relative">
@@ -148,7 +188,7 @@ const Dashboard = () => {
                                         <div className="flex space-x-3 items-center">
                                             <Avatar
                                                 username={item.expert.username}
-                                                image={item.expert.image}
+                                                image={base64Images.get(item.expert._id)}
                                             />
                                             <div>
                                                 <div className="text-lg">{item.expert.username}</div>

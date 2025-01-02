@@ -5,7 +5,7 @@ import { useAppSelector } from "../../../../store";
 import { fetchDirectChatHistory, fetchGroupChatHistory, notifyChatLeft } from "../../../../socket/socketConnection";
 import { Message as MessageType } from "../../../../actions/types";
 import DateSeparator from "./DateSeparator";
-import { doGetEventsBetweenCustomerAndExpert } from "../../../../api/api";
+import {doGetEventsBetweenCustomerAndExpert, profileImageFetch} from "../../../../api/api";
 import { useDispatch } from "react-redux";
 import { formatDateHH_MM_AMPM, isTheEventGoingOn } from "../../../../actions/common";
 import MessageCalendar from "./calendar";
@@ -28,6 +28,42 @@ const Messages = () => {
     const [eventsModalShow, set_eventsModalShow] = useState(false)
     const [seminarDetailsModalShow, set_seminarDetailsModalShow] = useState(false)
     const [editSeminarModalShow, set_editSeminarModalShow] = useState(false)
+    const [profiles, setProfiles] = useState(new Map<string, any>()); // Map to store unique user profiles
+    const [profileImages, setProfileImages] = useState(new Map<string, string>()); // Map to store profile images in Base64
+
+    useEffect(() => {
+        const processMessages = async () => {
+            const tempProfiles = new Map<string, any>();
+            const tempImages = new Map<string, string>();
+            console.log("inside processMessages");
+
+            for (const message of messages) {
+                const { author, author:{_id} } = message;
+
+                // Check if userId is already processed
+                if (!tempProfiles.has(_id)) {
+                    tempProfiles.set(_id, author); // Save the profile in the map
+
+                    // Fetch the image if it exists
+                    if (author.image) {
+                        try {
+                            const base64Image = await profileImageFetch(author.image, 'small');
+                            tempImages.set(_id, base64Image); // Save the Base64 image
+                        } catch (error) {
+                            console.error(`Error fetching Base64 image for userId ${_id}:`, error);
+                        }
+                    }
+                }
+            }
+
+            // Update states with the unique profiles and images
+            setProfiles(tempProfiles);
+            setProfileImages(tempImages);
+        };
+
+        processMessages();
+    }, []);
+
 
     const sameAuthor = (message: MessageType, index: number) => {
 
@@ -158,7 +194,7 @@ const Messages = () => {
                             content={message.content}
                             userId={message.author._id}
                             username={message.author.username}
-                            image={message.author.image}
+                            image={chosenChatDetails.image}
                             role={message.author.role}
                             status={message.author.status}
                             sameAuthor={sameAuthor(message, index)}

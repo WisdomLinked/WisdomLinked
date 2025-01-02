@@ -44,6 +44,8 @@ const FriendsListItem = ({
 
     const isChatActive = clickHandler ? isActive : chosenChatDetails?.userId === id;
 
+
+
     return (
         <Tooltip title={email}>
             <div
