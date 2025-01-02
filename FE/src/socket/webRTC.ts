@@ -76,32 +76,62 @@ export const getLocalStreamPreview = async (audioOnly: boolean, callback?: () =>
     })
 }
 
-const peerConfiguration = () => {
+// const peerConfiguration = () => {
+//
+//     if (process.env.REACT_APP_TURN_URL) {
+//         console.log("Using only TURN server");
+//         return {
+//             iceServers: [
+//                 {
+//                     urls: [
+//                         `turn:${process.env.REACT_APP_TURN_URL}:3478?transport=udp`,
+//                         `turn:${process.env.REACT_APP_TURN_URL}:80?transport=tcp`
+//                     ],
+//                     username: "efA389S6BJFSNKYQP2",
+//                     credential: "dkvSztjG5Rs60Er0"
+//                 }
+//             ]
+//         }
+//     } else {
+//         console.log("Using only STUN server");
+//         return {
+//             iceServers: [
+//                 {
+//                     urls: "stun:stun.l.google.com:19302",
+//                 },
+//             ],
+//         };
+//     }
+// };
 
-    if (process.env.REACT_APP_TURN_URL) {
-        console.log("Using only TURN server");
-        return {
-            iceServers: [
-                {
-                    urls: [
-                        `turn:${process.env.REACT_APP_TURN_URL}:3478?transport=udp`,
-                        `turn:${process.env.REACT_APP_TURN_URL}:80?transport=tcp`
-                    ],
-                    username: "efA389S6BJFSNKYQP2",
-                    credential: "dkvSztjG5Rs60Er0"
-                }
-            ]
-        }
-    } else {
-        console.log("Using only STUN server");
-        return {
-            iceServers: [
-                {
-                    urls: "stun:stun.l.google.com:19302",
-                },
-            ],
-        };
-    }
+const peerConfiguration = () => {
+    console.log("Configuring ICE servers");
+
+    const stunServers = [
+        { urls: "stun:stun.l.google.com:19302" },
+        { urls: "stun:stun.l.google.com:5349" },
+        { urls: "stun:stun1.l.google.com:3478" },
+        { urls: "stun:23.21.150.121:3478" },
+        { urls: "stun:iphone-stun.strato-iphone.de:3478" },
+        { urls: "stun:numb.viagenie.ca:3478" }
+    ];
+
+    const turnServers = process.env.REACT_APP_TURN_URL
+        ? [
+            {
+                urls: [
+                    `turn:${process.env.REACT_APP_TURN_URL}:3478?transport=udp`,
+                    `turn:${process.env.REACT_APP_TURN_URL}:80?transport=tcp`
+                ],
+                username: "efA389S6BJFSNKYQP2",
+                credential: "dkvSztjG5Rs60Er0"
+            }
+        ]
+        : [];
+
+    return {
+        iceServers: [...stunServers, ...turnServers],
+    };
 };
 
 
