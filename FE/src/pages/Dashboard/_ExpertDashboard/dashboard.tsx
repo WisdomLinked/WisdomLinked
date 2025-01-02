@@ -1,9 +1,9 @@
-import React, { useEffect, useState } from "react";
+import React, {useEffect, useRef, useState} from "react";
 import { useAppSelector } from "../../../store";
 import { useNavigate } from "react-router-dom";
 import Avatar from "../../../components/Avatar";
 import { formatDateYYYY_MM_DD_h_m } from "../../../actions/common";
-import { addMemberToGroup, doAcceptEvent, doCancelInvitation } from "../../../api/api";
+import {addMemberToGroup, doAcceptEvent, doCancelInvitation, profileImageFetch} from "../../../api/api";
 import { updateMe } from "../../../actions/authActions";
 import { useDispatch } from "react-redux";
 import { SetLoadingStatus } from "../../../actions/appActions";
@@ -19,6 +19,8 @@ const Dashboard = () => {
     const [groupChats, set_groupChats] = useState<any>([])
     const [sessions, set_sessions] = useState<any>([])
     const [pendingInvitations, set_pendingInvitations] = useState<any>([])
+    const [base64Images, setBase64Images] = useState<Map<string, string>>(new Map());
+    const fetchImagesRef = useRef(false); // Ref to track image fetch calls
 
     const acceptSeminarAppointment = async (data: any) => {
         const response = await addMemberToGroup({
@@ -69,6 +71,55 @@ const Dashboard = () => {
         temp = pendingGroupChats.filter((item: any) => new Date(item.groupChatId.end).getTime() >= now)
         set_groupChats([...temp])
     }, [events, pendingGroupChats])
+
+    // Batch state updates for sessions and groupChats
+    useEffect(() => {
+        const now = new Date().getTime();
+
+        const updatedSessions = events.filter((item: any) => (new Date(item.end).getTime() >= now) && (item.status === 'accepted'));
+        const pendingInvitations = events.filter((item: any) => (new Date(item.end).getTime() >= now || !item.duration) && (item.status === 'pending'));
+        const updatedGroupChats = pendingGroupChats.filter((item: any) => new Date(item.groupChatId.end).getTime() >= now);
+
+        set_sessions(updatedSessions);
+        set_pendingInvitations(pendingInvitations);
+        set_groupChats(updatedGroupChats);
+
+        // Trigger image fetch only once
+        if (!fetchImagesRef.current) {
+            fetchImagesRef.current = true;
+            fetchImages(updatedSessions);
+        }
+    }, [events, pendingGroupChats]);
+
+    const fetchImages = async (sessionList: any[]) => {
+        const uniqueCustomers = new Map<string, string>();
+        sessionList.forEach((item) => {
+            if (item.customer && item.customer._id && item.customer.image) {
+                uniqueCustomers.set(item.customer._id, item.customer.image);
+            }
+        });
+
+        const imagePromises = Array.from(uniqueCustomers.entries()).map(
+            async ([customerId, imageUrl]) => {
+                try {
+                    const base64 = await profileImageFetch(imageUrl, "small");
+                    return { id: customerId, base64 };
+                } catch (error) {
+                    console.error(`Error fetching image for customer ${customerId}:`, error);
+                    return null;
+                }
+            }
+        );
+
+        const images = await Promise.all(imagePromises);
+        const newImageMap = new Map(base64Images);
+
+        images.forEach((image) => {
+            if (image) newImageMap.set(image.id, image.base64);
+        });
+
+        setBase64Images(newImageMap);
+    };
 
     useEffect(() => {
         dispatch(updateMe())
@@ -122,7 +173,7 @@ const Dashboard = () => {
                                     <div className="flex space-x-3 items-center">
                                         <Avatar
                                             username={item.customer.username}
-                                            image={item.customer.image}
+                                            image={base64Images.get(item.customer._id)}
                                         />
                                         <div>
                                             <div className="text-lg">{item.customer.username}</div>
@@ -164,7 +215,7 @@ const Dashboard = () => {
                                     <div className="flex space-x-3 items-center">
                                         <Avatar
                                             username={item.customer.username}
-                                            image={item.customer.image}
+                                            image={base64Images.get(item.customer._id)}
                                         />
                                         <div>
                                             <div className="text-lg">{item.customer.username}</div>

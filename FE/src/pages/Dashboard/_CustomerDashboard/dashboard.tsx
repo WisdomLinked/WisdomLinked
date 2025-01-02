@@ -134,8 +134,8 @@ const Dashboard = () => {
     };
 
     // Dispatch `updateMe` only once when the component mounts
-        useEffect(() => {
-            dispatch(updateMe());
+    useEffect(() => {
+        dispatch(updateMe());
         }, [dispatch]);
 
     return (
