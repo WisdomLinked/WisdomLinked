@@ -344,7 +344,8 @@ const Search = () => {
                                                                     <div className="w-10 h-10 rounded-full overflow-clip">
                                                                         {
                                                                             selectedExpert.image ?
-                                                                                <img src={`${process.env.REACT_APP_SERVER_URL}/${selectedExpert.image}`} className="w-full h-full object-cover object-center" /> :
+                                                                                // <img src={`${process.env.REACT_APP_SERVER_URL}/${selectedExpert.image}`} className="w-full h-full object-cover object-center" /> :
+                                                                                <img src={expertImage} className="w-full h-full object-cover object-center" /> :
                                                                                 <div className="w-full h-full rounded-full border-2 border-lightgrey text-xl text-white font-bold !flex items-center justify-center">
                                                                                     {getAvatarTitle(selectedExpert.username)}
                                                                                 </div>

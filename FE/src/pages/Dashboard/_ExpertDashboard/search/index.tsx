@@ -25,7 +25,7 @@ const Search = () => {
 
     const steps = [
         {
-            label: 'Select an customer',
+            label: 'Select a customer',
             optional: false
         },
         {
