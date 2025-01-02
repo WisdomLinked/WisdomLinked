@@ -103,33 +103,37 @@ const Dashboard = () => {
         }
     }, [events, pendingGroupChats]);
 
-    // Fetch base64 images for sessions
     const fetchImages = async (sessionList: any[]) => {
-        const imagePromises = sessionList.map(async (item: { expert: { _id: string; image: string } }) => {
-            if (item.expert.image) {
+        const uniqueExperts = new Map<string, string>();
+        sessionList.forEach((item) => {
+            if (item.expert && item.expert._id && item.expert.image) {
+                uniqueExperts.set(item.expert._id, item.expert.image);
+            }
+        });
+
+        const imagePromises = Array.from(uniqueExperts.entries()).map(
+            async ([expertId, imageUrl]) => {
                 try {
-                    const base64 = await profileImageFetch(item.expert.image, "small");
-                    return { id: item.expert._id, base64 };
+                    const base64 = await profileImageFetch(imageUrl, "small");
+                    return { id: expertId, base64 };
                 } catch (error) {
-                    console.error(`Error fetching image for expert ${item.expert._id}:`, error);
+                    console.error(`Error fetching image for expert ${expertId}:`, error);
                     return null;
                 }
             }
-            return null;
-        });
+        );
 
         const images = await Promise.all(imagePromises);
+        const newImageMap = new Map(base64Images);
 
-        const imageMap = new Map(base64Images);
+        images.forEach((image) => {
+            if (image) newImageMap.set(image.id, image.base64);
+        });
 
-        images.forEach(image => {
-            if (image) imageMap.set(image.id, image.base64);
-            });
+        setBase64Images(newImageMap);
+    };
 
-            setBase64Images(imageMap);
-        };
-
-        // Dispatch `updateMe` only once when the component mounts
+    // Dispatch `updateMe` only once when the component mounts
         useEffect(() => {
             dispatch(updateMe());
         }, [dispatch]);
