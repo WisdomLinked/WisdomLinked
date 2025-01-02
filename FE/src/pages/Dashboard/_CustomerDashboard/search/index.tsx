@@ -1,3 +1,4 @@
+//
 // import React, { useState, useRef, useEffect } from "react";
 // import queryString from "query-string";
 // import Experts from "./experts";
@@ -99,7 +100,6 @@
 //         console.log('Fetching profile for expertId:', expertId);
 //         try {
 //             const res = await profileImageFetch(expertId, "small")
-//             console.log('Profile image fetched:', res);
 //             return res
 //         } catch (err) {
 //             console.log("error while fetching expert image", err)
@@ -117,86 +117,43 @@
 //         goToStep(2)
 //     }
 //
-//     // const submit = async (details: any) => {
-//     //     console.log('Submitting event details:', details);
-//     //     set_paidBy('stripe')
-//     //     SetLoadingStatus(true)
-//     //     const response = await doAppendEvent(details)
-//     //     if (response) {
-//     //         console.log('Event successfully appended:', response);
-//     //         dispatch({
-//     //             type: 'updateUserDetails',
-//     //             payload: response.userDetails
-//     //         })
-//     //         console.log("response new event",response , response.newEventId)
-//     //         set_newEvent(response.newEventId)
-//     //         if (details.eventId) {
-//     //             goToStep(4)
-//     //         } else {
-//     //             goToStep(3)
-//     //         }
-//     //     }
-//     //     SetLoadingStatus(false)
-//     // }
-//
 //     const submit = async (details: any) => {
 //         console.log('Submitting event details:', details);
-//         set_paidBy('stripe');
-//         SetLoadingStatus(true);
-//         try {
-//             const response = await doAppendEvent(details);
-//             if (response) {
-//                 console.log('Event successfully appended:', response);
-//                 dispatch({
-//                     type: 'updateUserDetails',
-//                     payload: response.userDetails
-//                 });
-//                 set_newEvent(response.newEventId);
-//                 goToStep(details.eventId ? 4 : 3);
+//         set_paidBy('stripe')
+//         SetLoadingStatus(true)
+//         const response = await doAppendEvent(details)
+//         if (response) {
+//             console.log('Event successfully appended:', response);
+//             dispatch({
+//                 type: 'updateUserDetails',
+//                 payload: response.userDetails
+//             })
+//             console.log("response new event",response , response.newEventId)
+//             set_newEvent(response.newEventId)
+//             if (details.eventId) {
+//                 goToStep(4)
 //             } else {
-//                 console.warn('No response from doAppendEvent');
+//                 goToStep(3)
 //             }
-//         } catch (error) {
-//             console.error('Error in submit function:', error);
-//         } finally {
-//             SetLoadingStatus(false);
 //         }
-//     };
+//         SetLoadingStatus(false)
+//     }
 //
-//     // const updateEventTitle = async () => {
-//     //     console.log('Updating event title:', eventTitle);
-//     //     SetLoadingStatus(true)
-//     //     const response = await doUpdateEvent(newEvent, { title: eventTitle })
-//     //     SetLoadingStatus(false)
-//     //     if (response) {
-//     //         dispatch({
-//     //             type: 'updateUserDetails',
-//     //             payload: response.userDetails
-//     //         })
-//     //         goToStep(4)
-//     //     }
-//     // }
 //     const updateEventTitle = async () => {
 //         console.log('Updating event title:', eventTitle);
-//         SetLoadingStatus(true);
-//         try {
-//             const response = await doUpdateEvent(newEvent, { title: eventTitle });
-//             if (response) {
-//                 console.log('Event title updated successfully:', response);
-//                 dispatch({
-//                     type: 'updateUserDetails',
-//                     payload: response.userDetails
-//                 });
-//                 goToStep(4);
-//             } else {
-//                 console.warn('No response from doUpdateEvent');
-//             }
-//         } catch (error) {
-//             console.error('Error updating event title:', error);
-//         } finally {
-//             SetLoadingStatus(false);
+//         SetLoadingStatus(true)
+//         console.log("new eventt data", newEvent)
+//         const response = await doUpdateEvent(newEvent, { title: eventTitle })
+//         SetLoadingStatus(false)
+//         if (response) {
+//             console.log('Event title updated successfully:', response);
+//             dispatch({
+//                 type: 'updateUserDetails',
+//                 payload: response.userDetails
+//             })
+//             goToStep(4)
 //         }
-//     };
+//     }
 //
 //     useEffect(() => {
 //         console.log('Query params updated:', { qExpertId, qDuration, qStart, qEnd });
@@ -204,16 +161,16 @@
 //         if (selectedExpert && qDuration && qStart && qEnd) {
 //             setStartEndTime(qStart, qEnd, qDuration)
 //         }
-//         console.log("userdetails",userDetails)
+//         console.log('User details:', userDetails);
 //     }, [selectedExpert, qDuration, qStart, qEnd])
 //
 //     useEffect(() => {
-//         console.log('User details updated:', userDetails);
+//         console.log('Effect triggered for userDetails:', userDetails);
 //         if (userDetails.status === 'review') {
 //             dispatch(showAlert("This feature isn't available under review"))
 //             navigate(-1)
 //         }
-//         const temp = userDetails.events.map((event: any) => {
+//         let temp = userDetails.events.map((event: any) => {
 //             return {
 //                 ...event,
 //                 id: event._id,
@@ -249,7 +206,7 @@
 //
 //     useEffect(() => {
 //         console.log('Location search updated:', location.search);
-//         const { redirect_status, payment_intent, _id, _duration, _start, _end, _eventId } = queryString.parse(location.search);
+//         let { redirect_status, payment_intent, _id, _duration, _start, _end, _eventId } = queryString.parse(location.search);
 //         if (_id) {
 //             console.log('Query parameter _id detected:', _id);
 //             set_qExpertId(_id)
@@ -478,7 +435,7 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import EventDetail from "../eventDetail";
 import { useAppSelector } from "../../../../store";
 import { getAvatarTitle } from "../../../../actions/common";
-import { doAppendEvent, doUpdateEvent } from "../../../../api/api";
+import { doAppendEvent, doUpdateEvent, profileImageFetch} from "../../../../api/api";
 import { useDispatch } from "react-redux";
 import { Swiper, SwiperSlide } from "swiper/react";
 import { Pagination, Navigation } from "swiper";
@@ -526,6 +483,7 @@ const Search = () => {
     const [qStart, set_qStart] = useState<any>('')
     const [qEnd, set_qEnd] = useState<any>('')
     const [qEventId, set_qEventId] = useState<any>('')
+    const [expertImage, set_expert_image] = useState<any>(null)
 
     const goToStep = (index: number) => {
         console.log(`Navigating to step: ${index}`);
@@ -536,21 +494,44 @@ const Search = () => {
         }
     }
 
-    const selectExpert = (expert: any) => {
-        console.log('Selecting expert:', expert);
-        if (expert) {
-            set_eventTitle(`${userDetails?.username}, ${expert.username}`)
-            set_startTime(null)
-            set_endTime(null)
-            set_duration(0)
-            set_price(0)
-            set_selectedExpert(expert)
-            goToStep(1)
-        } else {
-            dispatch(showAlert("Expert isn't available"))
-            navigate(-1)
+    const fetchExpertProfile = async (expertId: string) => {
+        console.log('Fetching profile for expertId:', expertId);
+        try {
+            const res = await profileImageFetch(expertId, "small")
+            return res
+        } catch (err) {
+            console.log("error while fetching expert image", err)
+            return null
         }
     }
+
+    const selectExpert = (expert: any) => {
+        console.log('Selected expert:', expert);
+        if (expert) {
+            set_eventTitle(`${userDetails?.username}, ${expert.username}`);
+            set_startTime(null);
+            set_endTime(null);
+            set_duration(0);
+            set_price(0);
+            set_selectedExpert(expert);
+
+            // Handle fetchExpertProfile asynchronously with .then()
+            fetchExpertProfile(expert.image)
+                .then((image) => {
+                    set_expert_image(image);
+                    console.log('Expert image fetched:', image);
+                })
+                .catch((error) => {
+                    console.error('Error fetching expert image:', error);
+                });
+
+            goToStep(1);
+        } else {
+            dispatch(showAlert("Expert isn't available"));
+            navigate(-1);
+        }
+    };
+
 
     const setStartEndTime = (start: any, end: any, duration: any) => {
         console.log('Setting start and end time:', { start, end, duration });
@@ -562,12 +543,12 @@ const Search = () => {
     }
 
     const submit = async (details: any) => {
-        console.log('Submitting details:', details);
+        console.log('Submitting event details:', details);
         set_paidBy('stripe')
         SetLoadingStatus(true)
         const response = await doAppendEvent(details)
         if (response) {
-            console.log('Append event response:', response);
+            console.log('Event successfully appended:', response);
             dispatch({
                 type: 'updateUserDetails',
                 payload: response.userDetails
@@ -586,11 +567,11 @@ const Search = () => {
     const updateEventTitle = async () => {
         console.log('Updating event title:', eventTitle);
         SetLoadingStatus(true)
-        console.log("new evet data", newEvent)
+        console.log("new eventt data", newEvent)
         const response = await doUpdateEvent(newEvent, { title: eventTitle })
         SetLoadingStatus(false)
         if (response) {
-            console.log('Update event title response:', response);
+            console.log('Event title updated successfully:', response);
             dispatch({
                 type: 'updateUserDetails',
                 payload: response.userDetails
@@ -600,7 +581,8 @@ const Search = () => {
     }
 
     useEffect(() => {
-        console.log('Effect triggered for selectedExpert or query params:', { selectedExpert, qDuration, qStart, qEnd });
+        console.log('Query params updated:', { qExpertId, qDuration, qStart, qEnd });
+        console.log(selectedExpert, qDuration, qStart, qEnd, '=====')
         if (selectedExpert && qDuration && qStart && qEnd) {
             setStartEndTime(qStart, qEnd, qDuration)
         }
@@ -621,6 +603,7 @@ const Search = () => {
                 end: new Date(event.end),
                 type: 'event'
             }
+            console.log('Mapped events:', temp);
         })
         userDetails.groupChats.map((seminar: any) => {
             temp.push({
@@ -646,13 +629,13 @@ const Search = () => {
     }, [userDetails])
 
     useEffect(() => {
-        console.log('Effect triggered for location.search:', location.search);
+        console.log('Location search updated:', location.search);
         let { redirect_status, payment_intent, _id, _duration, _start, _end, _eventId } = queryString.parse(location.search);
         if (_id) {
-            console.log('Detected query params for event:', { _id, _duration, _start, _end, _eventId });
-            set_qExpertId(_id)
+            console.log('Query parameter _id detected:', _id);set_qExpertId(_id)
             set_qEventId(_eventId)
             if (_duration && _start && _end) {
+                console.log('Setting query parameters for duration, start, end:', { _duration, _start, _end });
                 set_qDuration(Number(_duration))
                 set_qStart(new Date(Number(_start)))
                 set_qEnd(new Date(Number(_end)))
