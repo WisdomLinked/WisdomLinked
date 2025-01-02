@@ -77,35 +77,71 @@ const ProfileModal: React.FC<ProfileModalProps> = ({ isOpen, onClose, userDetail
     if (!isOpen) return null;
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80">
-            <div ref={modalRef} className="w-96 p-6 bg-[#1a1a24] rounded-lg shadow-2xl border border-gray-800">
-                <h2 className="text-xl font-semibold mb-4 text-gray-100 border-b border-gray-800 pb-3">Profile
-                    Information</h2>
-                <div className="space-y-4 bg-[#20202c] p-4 rounded-md">
-                    <p className="text-gray-300">
-                        <strong className="text-gray-200">Name:</strong> {userDetails.username}
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70">
+            <div
+                ref={modalRef}
+                className="w-96 p-6 bg-darkgrey rounded-lg shadow-lg border border-lightgrey"
+            >
+                <h2 className="text-xl font-semibold mb-4 text-white border-b border-lightgrey pb-3">
+                    Profile Information
+                </h2>
+                <div className="space-y-4 p-4 rounded-md">
+                    <p className="text-lightgrey">
+                        <strong className="text-white">Name:</strong> {userDetails.username}
                     </p>
-                    <p className="text-gray-300">
-                        <strong className="text-gray-200">Email:</strong> {userDetails.email}
+                    <p className="text-lightgrey">
+                        <strong className="text-white">Email:</strong> {userDetails.email}
                     </p>
-                    <p className="text-gray-300">
-                        <strong className="text-gray-200">Country:</strong> {userDetails?.country?.name}
+                    <p className="text-lightgrey">
+                        <strong className="text-white">Country:</strong> {userDetails?.country?.name}
                     </p>
-                    <p className="text-gray-300">
-                        <strong className="text-gray-200">Timezone:</strong> {timezone}
+                    <p className="text-lightgrey">
+                        <strong className="text-white">Timezone:</strong> {timezone}
                     </p>
                 </div>
                 <button
                     onClick={handleCloseClick}
-                    className="mt-6 w-full px-4 py-2.5 bg-[#2d2d3d] text-gray-200 rounded-lg hover:bg-[#363649] transition-all duration-200"
+                    className="mt-6 w-full px-4 py-2.5 bg-green text-white rounded-lg hover:bg-darkgreen transition-all duration-200"
                 >
                     Close
                 </button>
             </div>
         </div>
-
-
     );
 };
 
 export default ProfileModal;
+
+//     return (
+//         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80">
+//             <div ref={modalRef} className="w-96 p-6 bg-[#1a1a24] rounded-lg shadow-2xl border border-gray-800">
+//                 <h2 className="text-xl font-semibold mb-4 text-gray-100 border-b border-gray-800 pb-3">Profile
+//                     Information</h2>
+//                 <div className="space-y-4 bg-[#20202c] p-4 rounded-md">
+//                     <p className="text-gray-300">
+//                         <strong className="text-gray-200">Name:</strong> {userDetails.username}
+//                     </p>
+//                     <p className="text-gray-300">
+//                         <strong className="text-gray-200">Email:</strong> {userDetails.email}
+//                     </p>
+//                     <p className="text-gray-300">
+//                         <strong className="text-gray-200">Country:</strong> {userDetails?.country?.name}
+//                     </p>
+//                     <p className="text-gray-300">
+//                         <strong className="text-gray-200">Timezone:</strong> {timezone}
+//                     </p>
+//                 </div>
+//                 <button
+//                     onClick={handleCloseClick}
+//                     className="mt-6 w-full px-4 py-2.5 bg-[#2d2d3d] text-gray-200 rounded-lg hover:bg-[#363649] transition-all duration-200"
+//                 >
+//                     Close
+//                 </button>
+//             </div>
+//         </div>
+//
+//
+//     );
+// };
+//
+// export default ProfileModal;
