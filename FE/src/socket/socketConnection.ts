@@ -195,7 +195,7 @@ const connectWithSocketServer = (userDetails: UserDetails) => {
     });
 
     socket.on("call-request", (data: any) => {
-        console.log("Received call request:", data);
+        console.log("Incoming call request:", data);
         store.dispatch(setCallRequest(data) as any);
     });
 
@@ -312,22 +312,22 @@ const callRequest = (data: {
     audioOnly: boolean;
     eventId: string;
 }) => {
-    console.log("Initiating call request:", data);
+    console.log("Initiating call request with data:", data);
     const peerConnection = () => {
         store.dispatch(setOtherUserId(data.receiverUserId) as any);
-        console.log("Receiver ID dispatched:", data.receiverUserId);
+        console.log("Dispatched receiver ID to Redux:", data.receiverUserId);
 
         const peer = newPeerConnection(true);
         currentPeerConnection = peer;
 
         peer.on("signal", (signal) => {
-            console.log("Local peer signaling data generated:", signal);
+            console.log("Generated WebRTC signaling data:", signal);
             // TODO send data to server
             socket.emit("call-request", {...data, signal,});
         });
 
         peer.on("stream", (stream) => {
-            console.log("Received remote stream:", stream);
+            console.log("Received remote media stream:", stream);
             // TODO set remote stream
             store.dispatch(setRemoteStream(stream) as any);
         });
@@ -338,7 +338,7 @@ const callRequest = (data: {
             store.dispatch(setCallStatus(status) as any);
 
             if (data.accepted && data.signal) {
-                console.log("Call accepted, processing remote signal");
+                console.log("Call accepted with signaling data:", data.signal);
                 store.dispatch(setOtherUserId(data.otherUserId) as any);
                 peer.signal(data.signal);
             }
@@ -348,7 +348,7 @@ const callRequest = (data: {
     getLocalStreamPreview(
         data.audioOnly,
         () => {
-            console.log("Local stream preview obtained");
+            console.log("Local stream obtained successfully.");
             peerConnection();
             store.dispatch(setCallStatus("ringing") as any);
             store.dispatch(setAudioOnly(data.audioOnly) as any);
@@ -373,20 +373,22 @@ const callResponse = (data: {
     socket.emit("call-response", data);
 
     if (!data.accepted) {
+        console.log("Call rejected.");
         return store.dispatch(setCallRequest(null) as any);
     }
 
     const peerConnection = () => {
+        console.log("Setting up WebRTC connection for response.");
         const peer = newPeerConnection(false);
         currentPeerConnection = peer;
 
         peer.on("signal", (signal) => {
-            console.log("Receiver peer signaling data generated:", signal);
+            console.log("Generated signaling data for response:", signal);
             socket.emit("call-response", {...data, signal,});
         });
 
         peer.on("stream", (stream) => {
-            console.log("Received remote stream:", stream);
+            console.log("Received remote media stream (response):", stream);
             // TODO set remote stream
             store.dispatch(setRemoteStream(stream) as any);
             store.dispatch(setChosenChatDetails({ userId: data.callerId, username: data.callerName, image: '' }))
@@ -396,7 +398,7 @@ const callResponse = (data: {
     };
 
     getLocalStreamPreview(data.audioOnly, () => {
-        console.log("Local stream preview obtained for receiver");
+        console.log("Local stream obtained for response.");
         peerConnection();
         store.dispatch(setCallRequest(null) as any);
         store.dispatch(setAudioOnly(data.audioOnly) as any);

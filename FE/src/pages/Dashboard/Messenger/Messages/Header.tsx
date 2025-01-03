@@ -273,11 +273,15 @@ const MessagesHeader = ({ scrollPosition, events, openCalendarModal, openSeminar
                             className="disabled:opacity-50"
                             disabled={(!isOnline(chosenChatDetails.userId) || !enabledEvent) && userDetails.role==="customer"}
                             onClick={() => {
+                                console.log("Video call button clicked:", {
+                                    receiverUserId: chosenChatDetails?.userId,
+                                    audioOnly: false,
+                                    callerName: userDetails?.username,
+                                    eventId: enabledEvent?._id,
+                                });
                                 callRequest({
                                     audioOnly: false,
-                                    callerName: userDetails
-                                        ? userDetails.username
-                                        : "",
+                                    callerName: userDetails ? userDetails.username : "",
                                     receiverUserId: chosenChatDetails?.userId!,
                                     eventId: enabledEvent?._id
                                 });
