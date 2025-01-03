@@ -23,7 +23,7 @@ import {
     setRemoteStream,
     clearVideoChat,
     setAudioOnly,
-    setVideoAudioStatus,
+    setVideoAudioStatus, setLocalStream,
 } from "../actions/videoChatActions";
 import {
     getLocalStreamPreview,
@@ -313,6 +313,10 @@ const callRequest = (data: {
     eventId: string;
 }) => {
     console.log("Initiating call request with data:", data);
+
+    // Cleanup before initiating a new call
+    cleanupCall();
+
     const peerConnection = () => {
         store.dispatch(setOtherUserId(data.receiverUserId) as any);
         console.log("Dispatched receiver ID to Redux:", data.receiverUserId);
@@ -409,6 +413,7 @@ const cancelCallRequest = (data: {
     otherUserId: string
 }) => {
     store.dispatch(setOtherUserId('') as any);
+    cleanupCall(); // Ensure resources are cleaned up
     socket.emit("cancelCallRequest", data);
 }
 
@@ -471,6 +476,37 @@ const closeSocketConnection = () => {
     console.log('CLOSING SOCKET CONNECTION');
     socket?.disconnect();
 }
+
+const cleanupCall = () => {
+    console.log("Cleaning up after call...");
+
+    // Destroy current peer connection
+    if (currentPeerConnection) {
+        currentPeerConnection.destroy();
+        currentPeerConnection = null;
+        console.log("Peer connection destroyed.");
+    }
+
+    // Clear local and remote streams
+    const state = store.getState();
+    const localStream = state.videoChat.localStream;
+    if (localStream) {
+        localStream.getTracks().forEach((track : any) => track.stop());
+        store.dispatch(setLocalStream(null)); // Reset local stream in Redux
+        console.log("Local stream stopped and cleared.");
+    }
+
+    const remoteStream = state.videoChat.remoteStream;
+    if (remoteStream) {
+        remoteStream.getTracks().forEach((track: any) => track.stop());
+        store.dispatch(setRemoteStream(null)); // Reset remote stream in Redux
+        console.log("Remote stream stopped and cleared.");
+    }
+
+    // Remove WebSocket listeners for call-response
+    socket.off("call-response");
+    console.log("Removed WebSocket event listeners.");
+};
 
 export {
     connectWithSocketServer,
