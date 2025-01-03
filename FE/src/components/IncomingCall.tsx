@@ -26,7 +26,7 @@ const IncomingCall = () => {
     const callRequest = useAppSelector(state => state.videoChat.callRequest);
 
     const handleCall = (accepted: boolean, audioOnly: boolean) => {
-
+        console.log("Handling incoming call:", { accepted, audioOnly });
         callResponse({
             callerId: callRequest!.callerUserId,
             callerName: callRequest!.callerName,

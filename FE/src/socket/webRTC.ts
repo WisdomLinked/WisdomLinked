@@ -34,13 +34,14 @@ export const checkLocalAudioVideoStreams = async () => {
 }
 
 export const getLocalStreamPreview = async (audioOnly: boolean, callback?: () => void, room?: boolean, failedCallback?: (err: any) => any) => {
+    console.log("Getting local stream preview");
 
     const {videoStream, audioStream} = await getLocalStream()
     const constraints = room ?
         { audio: audioStream ? true : false, video: videoStream ? true : false} :
         { audio: true, video: audioOnly ? false : true };
 
-    console.log("constraints", constraints);
+    console.log("Media constraints:", constraints);
 
     store.dispatch({
         type: actionTypes.setLocalStreamAvailability,
@@ -52,6 +53,7 @@ export const getLocalStreamPreview = async (audioOnly: boolean, callback?: () =>
 
     navigator.mediaDevices.getUserMedia(constraints).then((stream) => {
         if (room) {
+            console.log("Local stream obtained:", stream);
             store.dispatch(setLocalStreamRoom(stream) as any);
         } else {
             store.dispatch(setLocalStream(stream) as any);
@@ -136,15 +138,13 @@ const peerConfiguration = () => {
 
 
 export const newPeerConnection = (initiator: boolean) => {
-
     const stream = store.getState().videoChat.localStream
 
     if (!stream) {
         throw new Error("No local stream");
-
     }
 
-    console.log("from web ", stream);
+    console.log("Creating new peer connection with local stream:", stream);
 
     const configuration = peerConfiguration();
     const peer = new Peer({
@@ -154,8 +154,6 @@ export const newPeerConnection = (initiator: boolean) => {
         stream: stream,
     });
 
-
-
     return peer;
 }
 
@@ -163,7 +161,6 @@ export const newPeerConnection = (initiator: boolean) => {
 let peers: any = {};
 
 export const prepareNewPeerConnection = (connUserSocketId: string, isInitiator: boolean) => {
-    // connUserSocketId; -> who has joined the room
 
     const localStream = store.getState().room.localStreamRoom;
 
@@ -172,10 +169,6 @@ export const prepareNewPeerConnection = (connUserSocketId: string, isInitiator: 
     } else {
         console.log("preparing new peer connection as not initiator");
     }
-
-    // if(!localStream) {
-    //     return
-    // }
 
     console.log("localStream", localStream)
 
@@ -244,7 +237,6 @@ export const handleParticipantLeftRoom = (data: { connUserSocketId: string }) =>
     }
 
     const remoteStreams = store.getState().room.remoteStreams;
-
     const newRemoteStreams = remoteStreams.filter(
         (remoteStream) =>
             (remoteStream as any).connUserSocketId !== connUserSocketId

@@ -195,6 +195,7 @@ const connectWithSocketServer = (userDetails: UserDetails) => {
     });
 
     socket.on("call-request", (data: any) => {
+        console.log("Received call request:", data);
         store.dispatch(setCallRequest(data) as any);
     });
 
@@ -311,34 +312,33 @@ const callRequest = (data: {
     audioOnly: boolean;
     eventId: string;
 }) => {
+    console.log("Initiating call request:", data);
     const peerConnection = () => {
         store.dispatch(setOtherUserId(data.receiverUserId) as any);
-        const peer = newPeerConnection(true);
+        console.log("Receiver ID dispatched:", data.receiverUserId);
 
+        const peer = newPeerConnection(true);
         currentPeerConnection = peer;
+
         peer.on("signal", (signal) => {
-            console.log('HERERE')
-            console.log("SIGNAL", signal);
+            console.log("Local peer signaling data generated:", signal);
             // TODO send data to server
-            socket.emit("call-request", {
-                ...data,
-                signal,
-            });
+            socket.emit("call-request", {...data, signal,});
         });
 
         peer.on("stream", (stream) => {
-            console.log("REMOTE STREAM", stream);
+            console.log("Received remote stream:", stream);
             // TODO set remote stream
             store.dispatch(setRemoteStream(stream) as any);
         });
 
         socket.on("call-response", (data: any) => {
-            console.log('Call-response ---------------', data)
+            console.log("Received call response:", data);
             const status = data.accepted ? "accepted" : "rejected";
             store.dispatch(setCallStatus(status) as any);
 
             if (data.accepted && data.signal) {
-                console.log("ACCEPTED", data.signal);
+                console.log("Call accepted, processing remote signal");
                 store.dispatch(setOtherUserId(data.otherUserId) as any);
                 peer.signal(data.signal);
             }
@@ -348,12 +348,14 @@ const callRequest = (data: {
     getLocalStreamPreview(
         data.audioOnly,
         () => {
+            console.log("Local stream preview obtained");
             peerConnection();
             store.dispatch(setCallStatus("ringing") as any);
             store.dispatch(setAudioOnly(data.audioOnly) as any);
         },
         false,
         () => {
+            console.log("Failed to get local stream, retrying with audio only");
             peerConnection();
             store.dispatch(setCallStatus("ringing") as any);
             store.dispatch(setAudioOnly(data.audioOnly) as any);
@@ -367,26 +369,24 @@ const callResponse = (data: {
     accepted: boolean;
     audioOnly: boolean;
 }) => {
+    console.log("Sending call response:", data);
     socket.emit("call-response", data);
+
     if (!data.accepted) {
         return store.dispatch(setCallRequest(null) as any);
     }
 
     const peerConnection = () => {
         const peer = newPeerConnection(false);
-
         currentPeerConnection = peer;
 
         peer.on("signal", (signal) => {
-            console.log("SIGNAL", signal);
-
-            socket.emit("call-response", {
-                ...data,
-                signal,
-            });
+            console.log("Receiver peer signaling data generated:", signal);
+            socket.emit("call-response", {...data, signal,});
         });
+
         peer.on("stream", (stream) => {
-            console.log("REMOTE STREAM 1", stream);
+            console.log("Received remote stream:", stream);
             // TODO set remote stream
             store.dispatch(setRemoteStream(stream) as any);
             store.dispatch(setChosenChatDetails({ userId: data.callerId, username: data.callerName, image: '' }))
@@ -396,6 +396,7 @@ const callResponse = (data: {
     };
 
     getLocalStreamPreview(data.audioOnly, () => {
+        console.log("Local stream preview obtained for receiver");
         peerConnection();
         store.dispatch(setCallRequest(null) as any);
         store.dispatch(setAudioOnly(data.audioOnly) as any);

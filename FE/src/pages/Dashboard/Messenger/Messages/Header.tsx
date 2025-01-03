@@ -273,7 +273,6 @@ const MessagesHeader = ({ scrollPosition, events, openCalendarModal, openSeminar
                             className="disabled:opacity-50"
                             disabled={(!isOnline(chosenChatDetails.userId) || !enabledEvent) && userDetails.role==="customer"}
                             onClick={() => {
-                                console.log("call request initiated");
                                 callRequest({
                                     audioOnly: false,
                                     callerName: userDetails
