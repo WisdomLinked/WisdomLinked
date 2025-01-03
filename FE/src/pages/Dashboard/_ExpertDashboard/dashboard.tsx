@@ -61,34 +61,19 @@ const Dashboard = () => {
     }
 
     useEffect(() => {
-        const now = new Date().getTime()
-        let temp: any = events.filter((item: any) => (new Date(item.end).getTime() >= now) && (item.status === 'accepted'))
-        set_sessions([...temp])
-
-        temp = events.filter((item: any) => (new Date(item.end).getTime() >= now || !item.duration) && (item.status === 'pending'))
-        set_pendingInvitations([...temp])
-
-        temp = pendingGroupChats.filter((item: any) => new Date(item.groupChatId.end).getTime() >= now)
-        set_groupChats([...temp])
-    }, [events, pendingGroupChats])
-
-    // Batch state updates for sessions and groupChats
-    useEffect(() => {
         const now = new Date().getTime();
 
         const updatedSessions = events.filter((item: any) => (new Date(item.end).getTime() >= now) && (item.status === 'accepted'));
-        const pendingInvitations = events.filter((item: any) => (new Date(item.end).getTime() >= now || !item.duration) && (item.status === 'pending'));
+        const updatedPendingInvitations = events.filter((item: any) => (new Date(item.end).getTime() >= now || !item.duration) && (item.status === 'pending'));
         const updatedGroupChats = pendingGroupChats.filter((item: any) => new Date(item.groupChatId.end).getTime() >= now);
 
         set_sessions(updatedSessions);
-        set_pendingInvitations(pendingInvitations);
+        set_pendingInvitations(updatedPendingInvitations);
         set_groupChats(updatedGroupChats);
 
-        // Trigger image fetch only once
-        if (!fetchImagesRef.current) {
-            fetchImagesRef.current = true;
-            fetchImages(updatedSessions);
-        }
+        // Combine sessions and pendingInvitations to fetch images
+        const allCustomers = [...updatedSessions, ...updatedPendingInvitations];
+        fetchImages(allCustomers);
     }, [events, pendingGroupChats]);
 
     const fetchImages = async (sessionList: any[]) => {
