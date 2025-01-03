@@ -6,6 +6,10 @@ import App from './App';
 import { store } from './store';
 import { Provider } from 'react-redux';
 import * as serviceWorker from './serviceWorker';
+import { Buffer } from 'buffer';
+
+// Polyfill for Buffer
+window.Buffer = Buffer;
 
 ReactDOM.render(
   <React.StrictMode>
