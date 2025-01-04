@@ -22,9 +22,8 @@ const ContactUS = () => {
             SetLoadingStatus(true);
 
             try {
-                // Ensure only relative path is passed
                 const emailResponse = await callApi("POST", "send-contact", {
-                    targetEmail: "varunsahni260897@gmail.com",
+                    targetEmail: "varunsahni286@gmail.com",
                     name,
                     email,
                     demand,

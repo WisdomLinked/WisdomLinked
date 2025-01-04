@@ -77,6 +77,7 @@ export const checkLocalAudioVideoStreams = async () => {
 //             failedCallback(err)
 //     })
 // }
+
 export const getLocalStreamPreview = async (
     audioOnly: boolean,
     callback?: () => void,
