@@ -163,7 +163,6 @@ const peerConfiguration = () => {
     };
 };
 
-
 export const newPeerConnection = (initiator: boolean) => {
     const stream = store.getState().videoChat.localStream
     console.log("Creating new peer connection. Initiator:", initiator, "Stream:", stream);
