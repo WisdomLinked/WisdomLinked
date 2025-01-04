@@ -33,77 +33,27 @@ export const checkLocalAudioVideoStreams = async () => {
     })
 }
 
-// export const getLocalStreamPreview = async (audioOnly: boolean, callback?: () => void, room?: boolean, failedCallback?: (err: any) => any) => {
-//     console.log("Getting local stream preview");
-//
-//     const {videoStream, audioStream} = await getLocalStream()
-//     const constraints = room ?
-//         { audio: audioStream ? true : false, video: videoStream ? true : false} :
-//         { audio: true, video: audioOnly ? false : true };
-//
-//     console.log("Media constraints:", constraints);
-//
-//     store.dispatch({
-//         type: actionTypes.setLocalStreamAvailability,
-//         payload: {
-//             videoStream,
-//             audioStream
-//         }
-//     })
-//
-//     navigator.mediaDevices.getUserMedia(constraints).then((stream) => {
-//         if (room) {
-//             console.log("Local stream obtained:", stream);
-//             store.dispatch(setLocalStreamRoom(stream) as any);
-//         } else {
-//             store.dispatch(setLocalStream(stream) as any);
-//         }
-//
-//         if (callback) {
-//             callback();
-//         }
-//
-//     }).catch((err) => {
-//         console.log(err);
-//         console.log("Error getting local stream");
-//         store.dispatch(showAlert(
-//             room ?
-//                 "You don't have any media devices, plesae check your microphone and camera" :
-//                 audioOnly ?
-//                     "You don't have any audio devices, plesae check your microphone" :
-//                     "You don't have any video devices, plesae check your camera"
-//         ))
-//         if (failedCallback)
-//             failedCallback(err)
-//     })
-// }
-export const getLocalStreamPreview = async (
-    audioOnly: boolean,
-    callback?: () => void,
-    room?: boolean,
-    failedCallback?: (err: any) => any
-) => {
+export const getLocalStreamPreview = async (audioOnly: boolean, callback?: () => void, room?: boolean, failedCallback?: (err: any) => any) => {
     console.log("Getting local stream preview");
 
-    // Stop and clear any existing local streams before fetching a new one
-    const currentLocalStream = store.getState().videoChat.localStream;
-    if (currentLocalStream) {
-        console.log("Stopping existing local stream...");
-        currentLocalStream.getTracks().forEach((track : any) => track.stop());
-        store.dispatch(setLocalStream(null)); // Clear the existing stream in Redux
-    }
-
-    const constraints = room
-        ? { audio: true, video: true } // Both audio and video for rooms
-        : { audio: true, video: !audioOnly }; // Audio-only if specified
+    const {videoStream, audioStream} = await getLocalStream()
+    const constraints = room ?
+        { audio: audioStream ? true : false, video: videoStream ? true : false} :
+        { audio: true, video: audioOnly ? false : true };
 
     console.log("Media constraints:", constraints);
 
-    try {
-        const stream = await navigator.mediaDevices.getUserMedia(constraints);
-        console.log("New local stream obtained:", stream);
+    store.dispatch({
+        type: actionTypes.setLocalStreamAvailability,
+        payload: {
+            videoStream,
+            audioStream
+        }
+    })
 
+    navigator.mediaDevices.getUserMedia(constraints).then((stream) => {
         if (room) {
+            console.log("Local stream obtained:", stream);
             store.dispatch(setLocalStreamRoom(stream) as any);
         } else {
             store.dispatch(setLocalStream(stream) as any);
@@ -112,25 +62,21 @@ export const getLocalStreamPreview = async (
         if (callback) {
             callback();
         }
-    } catch (err) {
-        console.error("Error getting local stream:", err);
 
-        // Show relevant alert message
-        store.dispatch(
-            showAlert(
-                room
-                    ? "You don't have any media devices, please check your microphone and camera."
-                    : audioOnly
-                        ? "You don't have any audio devices, please check your microphone."
-                        : "You don't have any video devices, please check your camera."
-            )
-        );
-
-        if (failedCallback) {
-            failedCallback(err);
-        }
-    }
-};
+    }).catch((err) => {
+        console.log(err);
+        console.log("Error getting local stream");
+        store.dispatch(showAlert(
+            room ?
+                "You don't have any media devices, plesae check your microphone and camera" :
+                audioOnly ?
+                    "You don't have any audio devices, plesae check your microphone" :
+                    "You don't have any video devices, plesae check your camera"
+        ))
+        if (failedCallback)
+            failedCallback(err)
+    })
+}
 
 const peerConfiguration = () => {
     console.log("Configuring ICE servers");
