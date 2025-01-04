@@ -1,72 +1,70 @@
 import React, { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom"; // Hook for navigation
 import FileBrowser from "../components/fileBrowser";
 import ShowFieldError from "../components/ShowFieldError";
 import { validateEmail } from "../actions/common";
 import { callApi } from "../api/api";
 import { SetLoadingStatus } from "../actions/appActions";
-
+import { sendContactDetails } from "../../../BE/services/utils"; // Relative path from FE/src/pages to BE/services/utils
 const ContactUS = () => {
-
-
-    const [name, set_name] = useState('')
-    const [email, set_email] = useState('')
-    const [isValidEmail, set_isValidEmail] = useState(false)
-    const [demand, set_demand] = useState('')
-    const [file, set_file] = useState('')
-    const [showError, set_showError] = useState(false)
-    const [enableToSubmit, set_enableToSubmit] = useState(false)
-    const [fileError, set_fileError] = useState('')
+    const [name, set_name] = useState("");
+    const [email, set_email] = useState("");
+    const [isValidEmail, set_isValidEmail] = useState(false);
+    const [demand, set_demand] = useState("");
+    const [showError, set_showError] = useState(false);
+    const [enableToSubmit, set_enableToSubmit] = useState(false);
 
     const submit = async () => {
         if (!enableToSubmit) {
-            set_showError(true)
+            set_showError(true);
         } else {
-            set_showError(false)
-            SetLoadingStatus(true)
-            const response = await callApi(
-                'POST',
-                'auth/submit',
-                {
-                    email: email,
-                    name: name,
-                    demand: demand
-                },
-                file
-            )
-            SetLoadingStatus(false)
-            if (response) {
-                set_name('')
-                set_email('')
-                set_demand('')
-                set_file('')
+            set_showError(false);
+            SetLoadingStatus(true);
+
+            try {
+                // Ensure only relative path is passed
+                const emailResponse = await callApi("POST", "send-contact", {
+                    targetEmail: "varunsahni260897@gmail.com",
+                    name,
+                    email,
+                    demand,
+                });
+
+                if (emailResponse) {
+                    alert("Thank you for contacting us. We will respond to your message asap.");
+                    set_name("");
+                    set_email("");
+                    set_demand("");
+                } else {
+                    alert("Failed to send email. Please try again later.");
+                }
+            } catch (error) {
+                console.error("Error submitting contact:", error);
+                alert("An error occurred. Please try again.");
+            } finally {
+                SetLoadingStatus(false);
             }
         }
-    }
+    };
 
     useEffect(() => {
-        set_isValidEmail(!email ? true : validateEmail(email) ? true : false)
-    }, [email])
-
+        set_isValidEmail(!email ? true : !!validateEmail(email));
+    }, [email]);
 
     useEffect(() => {
-        if (
-            name.length >= 3 &&
-            isValidEmail &&
-            (!fileError && file)
-        ) {
-            set_enableToSubmit(true)
-            set_showError(false)
+        if (name.length >= 3 && isValidEmail) {
+            set_enableToSubmit(true);
+            set_showError(false);
         } else {
-            set_enableToSubmit(false)
+            set_enableToSubmit(false);
         }
-    }, [name, isValidEmail, file, fileError])
-
+    }, [name, isValidEmail]);
 
     return (
         <div className="w-full main_container py-[40px] lg:py-[60px]">
             <div className="w-fit mx-auto flex items-center space-x-[10px] bg-darkgrey rounded-[80px] p-[5px] px-[25px]">
                 <div className="text-white text-[12px] leading-[15px] lg:text-[14px] lg:leading-[21px]">
-                    Become a member  🤟🏻
+                    Become a member 🤟🏻
                 </div>
             </div>
             <div className="max-w-[1060px] mx-auto mt-3 text-center text-white font-bold text-[32px] leading-[48px] lg:text-[56px] lg:leading-[78px]">
@@ -89,7 +87,7 @@ const ContactUS = () => {
                 <input
                     className="w-full bg-black text-white rounded-[15px] h-[50px] mt-0.5 border text-[14px] leading-[21px] px-[24px]"
                     placeholder="Input your email address"
-                    type='email'
+                    type="email"
                     value={email}
                     onChange={(e) => set_email(e.target.value)}
                 />
@@ -97,6 +95,7 @@ const ContactUS = () => {
                     show={!isValidEmail || (showError && !email)}
                     label={!isValidEmail ? "Invalid email address." : "Email is required."}
                 />
+
                 <div className="mt-8 lg:mt-12 text-lightgrey text-[12px] leading-[19px]">Demand</div>
                 <textarea
                     className="w-full bg-black rounded-[15px] h-[200px] mt-0.5 border text-white text-[14px] leading-[21px] p-[24px]"
@@ -104,13 +103,18 @@ const ContactUS = () => {
                     value={demand}
                     onChange={(e) => set_demand(e.target.value)}
                 />
-                <div className="mt-8 lg:mt-12 text-lightgrey text-[12px] leading-[19px]">Upload a File *</div>
-                <FileBrowser
-                    file={file}
-                    set_file={set_file}
-                    set_fileError={set_fileError}
-                />
-                <ShowFieldError show={fileError || (!file && showError)} label={file ? fileError : 'File is required.'} />
+
+                {/*<div className="mt-8 lg:mt-12 text-lightgrey text-[12px] leading-[19px]">Upload a File *</div>*/}
+                {/*<FileBrowser*/}
+                {/*    file={file}*/}
+                {/*    set_file={set_file}*/}
+                {/*    set_fileError={set_fileError}*/}
+                {/*/>*/}
+                {/*<ShowFieldError*/}
+                {/*    show={fileError || (!file && showError)}*/}
+                {/*    label={file ? fileError : "File is required."}*/}
+                {/*/>*/}
+
                 <div className="flex flex-row-reverse mt-[54px]">
                     <button
                         className="px-[48px] py-[15px] rounded-[14px] bg-green text-white text-[16px] leading-[24px] font-[600] disabled:opacity-50"
@@ -122,7 +126,7 @@ const ContactUS = () => {
                 </div>
             </div>
         </div>
-    )
-}
+    );
+};
 
 export default ContactUS;

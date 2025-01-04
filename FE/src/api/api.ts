@@ -351,17 +351,31 @@ export const callApi = async (method: string, url: string, data: any, file?: any
             formData.append("media", file, file.name);
         }
 
+        console.log("Making API Call:", {
+            method,
+            url: BASE_URL + url,
+            data,
+        });
+
+
         let options = {
             method: method,
             body: formData
         }
         return fetch(BASE_URL + url, options)
             .then((response: any) => {
+                console.log("API Response:", {
+                    status: response.status,
+                    statusText: response.statusText,
+                    headers: response.headers,
+                });
+
                 if (!response.ok) {
                     const error = Object.assign({}, response, {
                         status: response.status,
                         statusText: response.statusText,
                     });
+
                     return Promise.reject(error);
                 }
                 const contentType = response.headers.get('content-type');
