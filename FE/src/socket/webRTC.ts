@@ -77,7 +77,6 @@ export const checkLocalAudioVideoStreams = async () => {
 //             failedCallback(err)
 //     })
 // }
-
 export const getLocalStreamPreview = async (
     audioOnly: boolean,
     callback?: () => void,
@@ -133,29 +132,29 @@ export const getLocalStreamPreview = async (
     }
 };
 
-
 const peerConfiguration = () => {
     console.log("Configuring ICE servers");
 
     const stunServers = [
         { urls: "stun:stun.l.google.com:19302" },
-        { urls: "stun:stun.l.google.com:5349" },
         { urls: "stun:stun1.l.google.com:3478" },
-        { urls: "stun:23.21.150.121:3478" },
-        { urls: "stun:iphone-stun.strato-iphone.de:3478" },
-        { urls: "stun:numb.viagenie.ca:3478" }
+        { urls: "stun:stun2.l.google.com:3478" },
+        { urls: "stun:stun3.l.google.com:3478" },
+        { urls: "stun:stun4.l.google.com:3478" },
     ];
 
     const turnServers = process.env.REACT_APP_TURN_URL
         ? [
             {
-                urls: [
-                    `turn:${process.env.REACT_APP_TURN_URL}:3478?transport=udp`,
-                    `turn:${process.env.REACT_APP_TURN_URL}:80?transport=tcp`
-                ],
+                urls: `turn:${process.env.REACT_APP_TURN_URL}:3478`, // TURN over UDP
+                username: "efA389S6BJFSNKYQP2", // Your TURN username
+                credential: "dkvSztjG5Rs60Er0", // Your TURN password
+            },
+            {
+                urls: `turn:${process.env.REACT_APP_TURN_URL}:80?transport=tcp`, // TURN over TCP
                 username: "efA389S6BJFSNKYQP2",
-                credential: "dkvSztjG5Rs60Er0"
-            }
+                credential: "dkvSztjG5Rs60Er0",
+            },
         ]
         : [];
 

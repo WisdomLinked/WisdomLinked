@@ -477,36 +477,70 @@ const closeSocketConnection = () => {
     socket?.disconnect();
 }
 
+// const cleanupCall = () => {
+//     console.log("Cleaning up after call...");
+//
+//     // Destroy current peer connection
+//     if (currentPeerConnection) {
+//         currentPeerConnection.destroy();
+//         currentPeerConnection = null;
+//         console.log("Peer connection destroyed.");
+//     }
+    //
+    // // Clear local and remote streams
+    // const state = store.getState();
+    // const localStream = state.videoChat.localStream;
+    // if (localStream) {
+    //     localStream.getTracks().forEach((track : any) => track.stop());
+    //     store.dispatch(setLocalStream(null)); // Reset local stream in Redux
+    //     console.log("Local stream stopped and cleared.");
+    // }
+    //
+    // const remoteStream = state.videoChat.remoteStream;
+    // if (remoteStream) {
+    //     remoteStream.getTracks().forEach((track: any) => track.stop());
+    //     store.dispatch(setRemoteStream(null)); // Reset remote stream in Redux
+    //     console.log("Remote stream stopped and cleared.");
+    // }
+    //
+    // // Remove WebSocket listeners for call-response
+    // socket.off("call-response");
+    // console.log("Removed WebSocket event listeners.");
+// };
+
 const cleanupCall = () => {
     console.log("Cleaning up after call...");
 
     // Destroy current peer connection
     if (currentPeerConnection) {
-        currentPeerConnection.destroy();
+        if (currentPeerConnection.destroy) {
+            currentPeerConnection.destroy();
+            console.log("Peer connection destroyed.");
+        }
         currentPeerConnection = null;
-        console.log("Peer connection destroyed.");
     }
 
-    // Clear local and remote streams
-    const state = store.getState();
-    const localStream = state.videoChat.localStream;
+    // Clear local stream
+    const localStream = store.getState().videoChat.localStream;
     if (localStream) {
-        localStream.getTracks().forEach((track : any) => track.stop());
-        store.dispatch(setLocalStream(null)); // Reset local stream in Redux
+        localStream.getTracks().forEach((track: any) => track.stop());
+        store.dispatch(setLocalStream(null));
         console.log("Local stream stopped and cleared.");
     }
 
-    const remoteStream = state.videoChat.remoteStream;
+    // Clear remote stream
+    const remoteStream = store.getState().videoChat.remoteStream;
     if (remoteStream) {
-        remoteStream.getTracks().forEach((track: any) => track.stop());
-        store.dispatch(setRemoteStream(null)); // Reset remote stream in Redux
+        remoteStream.getTracks().forEach((track:any) => track.stop());
+        store.dispatch(setRemoteStream(null));
         console.log("Remote stream stopped and cleared.");
     }
 
-    // Remove WebSocket listeners for call-response
+    // Remove specific WebSocket listeners
     socket.off("call-response");
     console.log("Removed WebSocket event listeners.");
 };
+
 
 export {
     connectWithSocketServer,
