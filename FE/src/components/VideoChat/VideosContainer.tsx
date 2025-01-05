@@ -1,4 +1,3 @@
-//videocomponent
 import React, { useEffect, useState } from "react";
 import Video from "./Video";
 import { useDispatch } from "react-redux";

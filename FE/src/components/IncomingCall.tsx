@@ -26,55 +26,55 @@ const IncomingCall = () => {
     const callRequest = useAppSelector(state => state.videoChat.callRequest);
 
     const handleCall = (accepted: boolean, audioOnly: boolean) => {
-        console.log("Handling incoming call:", { accepted, audioOnly });
+
         callResponse({
             callerId: callRequest!.callerUserId,
             callerName: callRequest!.callerName,
             accepted,
             audioOnly
         });
-       
+
     };
-   
 
-  return (
-      <Backdrop
-          sx={{
-              color: "#fff",
-              zIndex: (theme) => theme.zIndex.drawer + 1,
-              display: "flex",
-              flexDirection: "column",
-              alignItems: "center",
-              justifyContent: "center",
-          }}
-          open={!!callRequest?.callerUserId}
-      >
-          <MainContainer>
-              <Typography
-                  sx={{
-                      color: "black",
-                      marginBottom: "3px",
-                      fontSize: "16px",
-                      fontWeight: "bold",
-                  }}
-              >
-                  Incoming {callRequest?.audioOnly ? "audio" : "video"} call from{" "}
-                  {callRequest?.callerName}
-              </Typography>
 
-              <div>
-                  {!callRequest?.audioOnly && (
-                      <IconButton
-                          color="success"
-                          onClick={() => {
-                              handleCall(true, false);
-                          }}
-                      >
-                          <VideocamIcon />
-                      </IconButton>
-                  )}
+    return (
+        <Backdrop
+            sx={{
+                color: "#fff",
+                zIndex: (theme) => theme.zIndex.drawer + 1,
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                justifyContent: "center",
+            }}
+            open={!!callRequest?.callerUserId}
+        >
+            <MainContainer>
+                <Typography
+                    sx={{
+                        color: "black",
+                        marginBottom: "3px",
+                        fontSize: "16px",
+                        fontWeight: "bold",
+                    }}
+                >
+                    Incoming {callRequest?.audioOnly ? "audio" : "video"} call from{" "}
+                    {callRequest?.callerName}
+                </Typography>
 
-                  {/* <IconButton
+                <div>
+                    {!callRequest?.audioOnly && (
+                        <IconButton
+                            color="success"
+                            onClick={() => {
+                                handleCall(true, false);
+                            }}
+                        >
+                            <VideocamIcon />
+                        </IconButton>
+                    )}
+
+                    {/* <IconButton
                       color="success"
                       onClick={() => {
                           handleCall(true, false);
@@ -83,27 +83,27 @@ const IncomingCall = () => {
                       <VideocamIcon />
                   </IconButton> */}
 
-                  <IconButton
-                      color="success"
-                      onClick={() => {
-                          handleCall(true, true);
-                      }}
-                  >
-                      <PhoneInTalkIcon />
-                  </IconButton>
+                    <IconButton
+                        color="success"
+                        onClick={() => {
+                            handleCall(true, true);
+                        }}
+                    >
+                        <PhoneInTalkIcon />
+                    </IconButton>
 
-                  <IconButton
-                      color="error"
-                      onClick={() => {
-                          handleCall(false, true);
-                      }}
-                  >
-                      <PhoneDisabledIcon />
-                  </IconButton>
-              </div>
-          </MainContainer>
-      </Backdrop>
-  );
+                    <IconButton
+                        color="error"
+                        onClick={() => {
+                            handleCall(false, true);
+                        }}
+                    >
+                        <PhoneDisabledIcon />
+                    </IconButton>
+                </div>
+            </MainContainer>
+        </Backdrop>
+    );
 }
 
 export default IncomingCall

@@ -89,59 +89,36 @@ export const getLocalStreamPreview = async (audioOnly: boolean, callback?: () =>
 }
 
 
-// const peerConfiguration = () => {
-//
-//     if (process.env.REACT_APP_TURN_URL) {
-//         console.log("Using only TURN server");
-//         return {
-//             iceServers: [
-//                 {
-//                     urls: [
-//                         `turn:${process.env.REACT_APP_TURN_URL}:3478?transport=udp`,
-//                         `turn:${process.env.REACT_APP_TURN_URL}:80?transport=tcp`
-//                     ],
-//                     username: "username1",
-//                     credential: "password1"
-//                 }
-//             ]
-//         }
-//     } else {
-//         console.log("Using only STUN server");
-//         return {
-//             iceServers: [
-//                 {
-//                     urls: "stun:stun.l.google.com:19302",
-//                 },
-//             ],
-//         };
-//     }
-// };
 
 const peerConfiguration = () => {
-    console.log("Configuring ICE servers");
 
-    const stunServers = [
-        { urls: "stun:stun.l.google.com:19302" },
-        { urls: "stun:stun.l.google.com:5349" },
-    ];
-
-    const turnServers = process.env.REACT_APP_TURN_URL
-        ? [
-            {
-                urls: [
-                    `turn:${process.env.REACT_APP_TURN_URL}:3478?transport=udp`,
-                    `turn:${process.env.REACT_APP_TURN_URL}:80?transport=tcp`
-                ],
-                username: "efA389S6BJFSNKYQP2",
-                credential: "dkvSztjG5Rs60Er0"
-            }
-        ]
-        : [];
-
-    return {
-        iceServers: [...stunServers, ...turnServers],
-    };
+    if (process.env.REACT_APP_TURN_URL) {
+        console.log("Using only TURN server");
+        return {
+            iceServers: [
+                {
+                    urls: [
+                        `turn:${process.env.REACT_APP_TURN_URL}:3478?transport=udp`,
+                        `turn:${process.env.REACT_APP_TURN_URL}:80?transport=tcp`
+                    ],
+                    username: "efA389S6BJFSNKYQP2",
+                    credential: "dkvSztjG5Rs60Er0"
+                }
+            ]
+        }
+    } else {
+        console.log("Using only STUN server");
+        return {
+            iceServers: [
+                {
+                    urls: "stun:stun.l.google.com:19302",
+                },
+            ],
+        };
+    }
 };
+
+
 
 export const newPeerConnection = (initiator: boolean) => {
 
@@ -280,6 +257,7 @@ export const switchOutgoingTracks = (stream: MediaStream) => {
         }
     }
 };
+
 
 
 // import Peer from "simple-peer";
