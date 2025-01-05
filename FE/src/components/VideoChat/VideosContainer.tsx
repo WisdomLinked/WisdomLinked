@@ -183,7 +183,7 @@ const VideosContainer = (props: any) => {
             {callStatus !== "accepted" && callStatus ? (
                 <div className="w-full h-full flex items-center justify-center text-white">
                     <div className="w-[120px] h-[120px] rounded-full flex justify-center items-center border-2 border-gray-500 text-gray-100 text-5xl font-bold animate-pulse">
-                        {getAvatarTitle(friends[friends.findIndex(x => x.id === otherUserId)]?.username || '')}
+                        {friends[friends.findIndex((x) => x.id === otherUserId)]?.username || ''}
                     </div>
                 </div>
             ) : (
@@ -193,24 +193,17 @@ const VideosContainer = (props: any) => {
                             <Video
                                 stream={remoteStream}
                                 isLocalStream={false}
-                                avatarTitle={getAvatarTitle(friends[friends.findIndex(x => x.id === otherUserId)]?.username || '')}
-                                style={{ objectFit: "fill", width: "100%", height: "100%" }}
+                                avatarTitle={friends[friends.findIndex((x) => x.id === otherUserId)]?.username || ''}
                             />
-                            <div className="absolute top-2 left-2 text-lightgrey">
-                                {friends[friends.findIndex(x => x.id === otherUserId)]?.username}
-                            </div>
                         </div>
                     )}
-                    {localStream && (
+                    {localStream && localStreamVisible && (
                         <div className="absolute bottom-4 right-4 w-[25%] h-[35%] bg-black border-2 border-white rounded-lg z-10 overflow-hidden">
                             <Video
                                 stream={localStream}
                                 isLocalStream={true}
-                                avatarTitle={getAvatarTitle(userDetails?.username)}
+                                avatarTitle={userDetails?.username}
                             />
-                            <div className="absolute bottom-2 left-2 text-lightgrey">
-                                {userDetails?.username}
-                            </div>
                         </div>
                     )}
                     {!remoteStream && !localStream && (
