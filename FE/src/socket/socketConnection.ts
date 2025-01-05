@@ -23,7 +23,7 @@ import {
     setRemoteStream,
     clearVideoChat,
     setAudioOnly,
-    setVideoAudioStatus,
+    setVideoAudioStatus, setLocalStream,
 } from "../actions/videoChatActions";
 import {
     getLocalStreamPreview,
@@ -413,6 +413,7 @@ const cancelCallRequest = (data: {
 }) => {
     store.dispatch(setOtherUserId('') as any);
     socket.emit("cancelCallRequest", data);
+    cleanupCall();
 }
 
 const notifyChatLeft = (receiverUserId: string, fromOngoing: boolean) => {
@@ -474,7 +475,6 @@ const closeSocketConnection = () => {
     console.log('CLOSING SOCKET CONNECTION');
     socket?.disconnect();
 }
-
 
 const cleanupCall = () => {
     console.log("Cleaning up after call...");
