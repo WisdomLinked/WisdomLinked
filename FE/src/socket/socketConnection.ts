@@ -311,34 +311,37 @@ const callRequest = (data: {
     audioOnly: boolean;
     eventId: string;
 }) => {
+    console.log("Initiating call request with data:", data);
+
+    // Cleanup before initiating a new call
+    cleanupCall();
+
     const peerConnection = () => {
         store.dispatch(setOtherUserId(data.receiverUserId) as any);
-        const peer = newPeerConnection(true);
+        console.log("Dispatched receiver ID to Redux:", data.receiverUserId);
 
+        const peer = newPeerConnection(true);
         currentPeerConnection = peer;
+
         peer.on("signal", (signal) => {
-            console.log('HERERE')
-            console.log("SIGNAL", signal);
+            console.log("Generated WebRTC signaling data:", signal);
             // TODO send data to server
-            socket.emit("call-request", {
-                ...data,
-                signal,
-            });
+            socket.emit("call-request", {...data, signal,});
         });
 
         peer.on("stream", (stream) => {
-            console.log("REMOTE STREAM", stream);
+            console.log("Received remote media stream:", stream);
             // TODO set remote stream
             store.dispatch(setRemoteStream(stream) as any);
         });
 
         socket.on("call-response", (data: any) => {
-            console.log('Call-response ---------------', data)
+            console.log("Received call response:", data);
             const status = data.accepted ? "accepted" : "rejected";
             store.dispatch(setCallStatus(status) as any);
 
             if (data.accepted && data.signal) {
-                console.log("ACCEPTED", data.signal);
+                console.log("Call accepted with signaling data:", data.signal);
                 store.dispatch(setOtherUserId(data.otherUserId) as any);
                 peer.signal(data.signal);
             }
@@ -348,12 +351,14 @@ const callRequest = (data: {
     getLocalStreamPreview(
         data.audioOnly,
         () => {
+            console.log("Local stream obtained successfully.");
             peerConnection();
             store.dispatch(setCallStatus("ringing") as any);
             store.dispatch(setAudioOnly(data.audioOnly) as any);
         },
         false,
         () => {
+            console.log("Failed to get local stream, retrying with audio only");
             peerConnection();
             store.dispatch(setCallStatus("ringing") as any);
             store.dispatch(setAudioOnly(data.audioOnly) as any);
@@ -367,26 +372,26 @@ const callResponse = (data: {
     accepted: boolean;
     audioOnly: boolean;
 }) => {
+    console.log("Sending call response:", data);
     socket.emit("call-response", data);
+
     if (!data.accepted) {
+        console.log("Call rejected.");
         return store.dispatch(setCallRequest(null) as any);
     }
 
     const peerConnection = () => {
+        console.log("Setting up WebRTC connection for response.");
         const peer = newPeerConnection(false);
-
         currentPeerConnection = peer;
 
         peer.on("signal", (signal) => {
-            console.log("SIGNAL", signal);
-
-            socket.emit("call-response", {
-                ...data,
-                signal,
-            });
+            console.log("Generated signaling data for response:", signal);
+            socket.emit("call-response", {...data, signal,});
         });
+
         peer.on("stream", (stream) => {
-            console.log("REMOTE STREAM 1", stream);
+            console.log("Received remote media stream (response):", stream);
             // TODO set remote stream
             store.dispatch(setRemoteStream(stream) as any);
             store.dispatch(setChosenChatDetails({ userId: data.callerId, username: data.callerName, image: '' }))
@@ -396,115 +401,12 @@ const callResponse = (data: {
     };
 
     getLocalStreamPreview(data.audioOnly, () => {
+        console.log("Local stream obtained for response.");
         peerConnection();
         store.dispatch(setCallRequest(null) as any);
         store.dispatch(setAudioOnly(data.audioOnly) as any);
     });
 };
-
-
-// const callRequest = (data: {
-//     receiverUserId: string;
-//     callerName: string;
-//     audioOnly: boolean;
-//     eventId: string;
-// }) => {
-//     console.log("Initiating call request with data:", data);
-//
-//     // Cleanup before initiating a new call
-//     cleanupCall();
-//
-//     const peerConnection = () => {
-//         store.dispatch(setOtherUserId(data.receiverUserId) as any);
-//         console.log("Dispatched receiver ID to Redux:", data.receiverUserId);
-//
-//         const peer = newPeerConnection(true);
-//         currentPeerConnection = peer;
-//
-//         peer.on("signal", (signal) => {
-//             console.log("Generated WebRTC signaling data:", signal);
-//             // TODO send data to server
-//             socket.emit("call-request", {...data, signal,});
-//         });
-//
-//         peer.on("stream", (stream) => {
-//             console.log("Received remote media stream:", stream);
-//             // TODO set remote stream
-//             store.dispatch(setRemoteStream(stream) as any);
-//         });
-//
-//         socket.on("call-response", (data: any) => {
-//             console.log("Received call response:", data);
-//             const status = data.accepted ? "accepted" : "rejected";
-//             store.dispatch(setCallStatus(status) as any);
-//
-//             if (data.accepted && data.signal) {
-//                 console.log("Call accepted with signaling data:", data.signal);
-//                 store.dispatch(setOtherUserId(data.otherUserId) as any);
-//                 peer.signal(data.signal);
-//             }
-//         });
-//     };
-//
-//     getLocalStreamPreview(
-//         data.audioOnly,
-//         () => {
-//             console.log("Local stream obtained successfully.");
-//             peerConnection();
-//             store.dispatch(setCallStatus("ringing") as any);
-//             store.dispatch(setAudioOnly(data.audioOnly) as any);
-//         },
-//         false,
-//         () => {
-//             console.log("Failed to get local stream, retrying with audio only");
-//             peerConnection();
-//             store.dispatch(setCallStatus("ringing") as any);
-//             store.dispatch(setAudioOnly(data.audioOnly) as any);
-//         }
-//     );
-// };
-//
-// const callResponse = (data: {
-//     callerId: string;
-//     callerName: string;
-//     accepted: boolean;
-//     audioOnly: boolean;
-// }) => {
-//     console.log("Sending call response:", data);
-//     socket.emit("call-response", data);
-//
-//     if (!data.accepted) {
-//         console.log("Call rejected.");
-//         return store.dispatch(setCallRequest(null) as any);
-//     }
-//
-//     const peerConnection = () => {
-//         console.log("Setting up WebRTC connection for response.");
-//         const peer = newPeerConnection(false);
-//         currentPeerConnection = peer;
-//
-//         peer.on("signal", (signal) => {
-//             console.log("Generated signaling data for response:", signal);
-//             socket.emit("call-response", {...data, signal,});
-//         });
-//
-//         peer.on("stream", (stream) => {
-//             console.log("Received remote media stream (response):", stream);
-//             // TODO set remote stream
-//             store.dispatch(setRemoteStream(stream) as any);
-//             store.dispatch(setChosenChatDetails({ userId: data.callerId, username: data.callerName, image: '' }))
-//         });
-//
-//         peer.signal(store.getState().videoChat.callRequest?.signal!);
-//     };
-//
-//     getLocalStreamPreview(data.audioOnly, () => {
-//         console.log("Local stream obtained for response.");
-//         peerConnection();
-//         store.dispatch(setCallRequest(null) as any);
-//         store.dispatch(setAudioOnly(data.audioOnly) as any);
-//     });
-// };
 
 const cancelCallRequest = (data: {
     otherUserId: string
@@ -574,39 +476,39 @@ const closeSocketConnection = () => {
 }
 
 
-// const cleanupCall = () => {
-//     console.log("Cleaning up after call...");
-//
-//     // Destroy current peer connection
-//     if (currentPeerConnection) {
-//         if (currentPeerConnection.destroy) {
-//             currentPeerConnection.destroy();
-//             console.log("Peer connection destroyed.");
-//         }
-//         currentPeerConnection = null;
-//     }
-//
-//     // Clear local stream
-//     const localStream = store.getState().videoChat.localStream;
-//     if (localStream) {
-//         localStream.getTracks().forEach((track: any) => track.stop());
-//         store.dispatch(setLocalStream(null));
-//         console.log("Local stream stopped and cleared.");
-//     }
-//
-//     // Clear remote stream
-//     const remoteStream = store.getState().videoChat.remoteStream;
-//     if (remoteStream) {
-//         remoteStream.getTracks().forEach((track:any) => track.stop());
-//         store.dispatch(setRemoteStream(null));
-//         console.log("Remote stream stopped and cleared.");
-//     }
-//
-//     // Remove specific WebSocket listeners
-//     socket.off("call-response");
-//     console.log("Removed WebSocket event listeners.");
-// };
-//
+const cleanupCall = () => {
+    console.log("Cleaning up after call...");
+
+    // Destroy current peer connection
+    if (currentPeerConnection) {
+        if (currentPeerConnection.destroy) {
+            currentPeerConnection.destroy();
+            console.log("Peer connection destroyed.");
+        }
+        currentPeerConnection = null;
+    }
+
+    // Clear local stream
+    const localStream = store.getState().videoChat.localStream;
+    if (localStream) {
+        localStream.getTracks().forEach((track: any) => track.stop());
+        store.dispatch(setLocalStream(null));
+        console.log("Local stream stopped and cleared.");
+    }
+
+    // Clear remote stream
+    const remoteStream = store.getState().videoChat.remoteStream;
+    if (remoteStream) {
+        remoteStream.getTracks().forEach((track:any) => track.stop());
+        store.dispatch(setRemoteStream(null));
+        console.log("Remote stream stopped and cleared.");
+    }
+
+    // Remove specific WebSocket listeners
+    socket.off("call-response");
+    console.log("Removed WebSocket event listeners.");
+};
+
 
 export {
     connectWithSocketServer,
