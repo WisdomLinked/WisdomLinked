@@ -33,7 +33,7 @@ const Search = () => {
             optional: false
         },
         {
-            label: 'Pay for the time',
+            label: 'Pay for the event',
             optional: false
         }
     ]

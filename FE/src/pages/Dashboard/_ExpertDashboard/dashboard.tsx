@@ -8,6 +8,7 @@ import { updateMe } from "../../../actions/authActions";
 import { useDispatch } from "react-redux";
 import { SetLoadingStatus } from "../../../actions/appActions";
 import { setChosenChatDetails } from "../../../actions/chatActions";
+import Chatbot from "../../../components/chatbot";
 
 
 const Dashboard = () => {
@@ -112,7 +113,7 @@ const Dashboard = () => {
 
     return (
         <div className="w-full h-full mx-auto p-6 text-white overflow-y-auto">
-            <div className="text-center text-2xl mb-6">Seminar Appointments </div>
+            <div className="text-center text-2xl mb-6">Seminar Appointments</div>
             {
                 groupChats.length ?
                     <div className="flex flex-wrap justify-center gap-6">
@@ -129,12 +130,15 @@ const Dashboard = () => {
                                             <div className="text-sm">{item.customerId.email}</div>
                                         </div>
                                     </div>
-                                    <hr className="my-2" />
+                                    <hr className="my-2"/>
                                     <div><span className="font-bold">Title  : </span> {item.groupChatId.name}</div>
-                                    <div><span className="font-bold">Starts at : </span> {formatDateYYYY_MM_DD_h_m(item.groupChatId.start)}</div>
-                                    <div><span className="font-bold">Duration  : </span> {item.groupChatId.duration} min</div>
+                                    <div><span
+                                        className="font-bold">Starts at : </span> {formatDateYYYY_MM_DD_h_m(item.groupChatId.start)}
+                                    </div>
+                                    <div><span className="font-bold">Duration  : </span> {item.groupChatId.duration} min
+                                    </div>
                                     <div><span className="font-bold">Price  : </span> ${item.groupChatId.price}</div>
-                                    <hr className="my-2" />
+                                    <hr className="my-2"/>
                                     <button
                                         className="py-1 w-full bg-green rounded-lg flex items-center justify-center disabled:opacity-50"
                                         disabled={status === 'review'}
@@ -148,7 +152,7 @@ const Dashboard = () => {
                     </div> :
                     <div className="text-center text-lightgrey my-10">No appointments found</div>
             }
-            <div className="text-center text-2xl my-6">Session Appointments </div>
+            <div className="text-center text-2xl my-6">Session Appointments</div>
             {
                 sessions.length ?
                     <div className="flex flex-wrap justify-center gap-6">
@@ -165,12 +169,14 @@ const Dashboard = () => {
                                             <div className="text-sm">{item.customer.email}</div>
                                         </div>
                                     </div>
-                                    <hr className="my-2" />
+                                    <hr className="my-2"/>
                                     <div><span className="font-bold">Title  : </span> {item.title}</div>
-                                    <div><span className="font-bold">Starts at : </span> {formatDateYYYY_MM_DD_h_m(item.start)}</div>
+                                    <div><span
+                                        className="font-bold">Starts at : </span> {formatDateYYYY_MM_DD_h_m(item.start)}
+                                    </div>
                                     <div><span className="font-bold">Duration  : </span> {item.duration} min</div>
                                     <div><span className="font-bold">Price  : </span> ${item.price}</div>
-                                    <hr className="my-3" />
+                                    <hr className="my-3"/>
                                     {/* <button
                                         className="py-1 w-full bg-green rounded-lg flex items-center justify-center disabled:opacity-50"
                                         disabled={status === 'review'}
@@ -190,7 +196,7 @@ const Dashboard = () => {
                     </div> :
                     <div className="text-center text-lightgrey my-10">No appointments found</div>
             }
-            <div className="text-center text-2xl my-6">Pending Invitations </div>
+            <div className="text-center text-2xl my-6">Pending Invitations</div>
             {
                 pendingInvitations.length ?
                     <div className="flex flex-wrap justify-center gap-6">
@@ -207,20 +213,24 @@ const Dashboard = () => {
                                             <div className="text-sm">{item.customer.email}</div>
                                         </div>
                                     </div>
-                                    <hr className="my-2" />
+                                    <hr className="my-2"/>
                                     <div><span className="font-bold">Title  : </span> {item.title}</div>
-                                    <div><span className="font-bold">Starts at : </span> {item.start ? formatDateYYYY_MM_DD_h_m(item.start) : 'undefined'}</div>
-                                    <div><span className="font-bold">Duration  : </span> {item.duration ? `${item.duration} min` : 'undefined'}</div>
+                                    <div><span
+                                        className="font-bold">Starts at : </span> {item.start ? formatDateYYYY_MM_DD_h_m(item.start) : 'undefined'}
+                                    </div>
+                                    <div><span
+                                        className="font-bold">Duration  : </span> {item.duration ? `${item.duration} min` : 'undefined'}
+                                    </div>
                                     <div><span className="font-bold">Price  : </span> ${item.price}</div>
-                                    <hr className="my-3" />
-                                    {item.paidBy==='none'?
+                                    <hr className="my-3"/>
+                                    {item.paidBy === 'none' ?
                                         <button
                                             className="py-1 w-full border border-lightgrey rounded-lg flex items-center justify-center disabled:opacity-50"
                                             onClick={() => cancelInvitation(item)}
                                         >
                                             Cancel
                                         </button>
-                                        :<button
+                                        : <button
                                             className="py-1 w-full bg-green rounded-lg flex items-center justify-center disabled:opacity-50"
                                             onClick={() => acceptEvent(item)}
                                         >
@@ -233,6 +243,16 @@ const Dashboard = () => {
                     </div> :
                     <div className="text-center text-lightgrey my-10">No appointments found</div>
             }
+            <div
+                style={{
+                    position: "fixed",
+                    bottom: "20px",
+                    right: "20px",
+                    zIndex: 1000,
+                }}
+            >
+                <Chatbot/>
+            </div>
         </div>
     );
 };

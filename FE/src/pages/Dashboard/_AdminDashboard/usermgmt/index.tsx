@@ -54,7 +54,9 @@ const UserMgmt = () => {
             email,
             username,
             role: role.value,
-            sortBy: sortBy.value,
+            // sortBy: sortBy.value,
+            sortBy: 'createdAt',
+            sortOrder: 'DESC',
             currentPage: pageNum,
             numPerPage: numPerPage
         });

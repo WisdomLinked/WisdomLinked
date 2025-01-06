@@ -63,6 +63,7 @@ const Video = ({
                 ref={videoRef}
                 className={`${isLocalStream ? 'w-full h-full object-cover object-center' : 'w-full h-full object-contain object-center'}`}
                 autoPlay
+                playsInline
                 muted={isLocalStream}
             />
             <div className={`w-full h-full flex justify-center items-center absolute top-0 left-0 bg-midgrey-1 ${((isLocalStream && !localVideoEnabled) || (!isLocalStream && !remoteVideoEnabled)) ? 'opacity-100' : 'opacity-0'} transition-all`}>
