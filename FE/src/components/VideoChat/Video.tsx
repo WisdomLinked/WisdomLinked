@@ -22,6 +22,7 @@ const Video = ({
     } = useAppSelector((state) => state);
 
     const videoRef = useRef<HTMLVideoElement>(null);
+
     const [forceMuted, set_forceMuted] = useState(false)
 
     useEffect(() => {
@@ -41,7 +42,6 @@ const Video = ({
 
             let videoEnabled = stream.getVideoTracks()?.[0]?.enabled
             let audioEnabled = stream.getAudioTracks()?.[0]?.enabled
-
             if (!remoteRoomStream) {
                 dispatch(setVideoAudioStatus(videoEnabled, audioEnabled, isLocalStream))
             }
@@ -64,8 +64,6 @@ const Video = ({
                 className={`${isLocalStream ? 'w-full h-full object-cover object-center' : 'w-full h-full object-contain object-center'}`}
                 autoPlay
                 muted={isLocalStream}
-                playsInline
-                disablePictureInPicture
             />
             <div className={`w-full h-full flex justify-center items-center absolute top-0 left-0 bg-midgrey-1 ${((isLocalStream && !localVideoEnabled) || (!isLocalStream && !remoteVideoEnabled)) ? 'opacity-100' : 'opacity-0'} transition-all`}>
                 {
