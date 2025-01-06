@@ -1,4 +1,6 @@
 import axios from "axios";
+import { Method } from "axios";
+
 import {
     LoginArgs,
     AuthResponse,
@@ -342,6 +344,7 @@ export const doGetKeywordsAndServices = async () => {
 
 export const callApi = async (method: string, url: string, data: any, file?: any) => {
     try {
+
         const formData = new FormData()
         for (const x in data) {
             formData.append(x, JSON.stringify(data[x]))
@@ -402,6 +405,20 @@ export const callApi = async (method: string, url: string, data: any, file?: any
         return checkForAuthorization(err);
     }
 }
+
+export const sendEmailContactUs = async (method: Method, endpoint: string, data: object) => {
+    try {
+        const response = await api.request({
+            method, // Now correctly typed as Method
+            url: endpoint, // Endpoint relative to BASE_URL
+            data, // Payload for the request
+        });
+        return response.data; // Return response data if successful
+    } catch (error: any) {
+        console.error("Error in sendEmailContactUs:", error);
+        return checkForAuthorization(error); // Use existing error handling logic
+    }
+};
 
 export const leaveFeedback = async (data: any) => {
     try {

@@ -3,14 +3,14 @@ import { useNavigate } from "react-router-dom"; // Hook for navigation
 import FileBrowser from "../components/fileBrowser";
 import ShowFieldError from "../components/ShowFieldError";
 import { validateEmail } from "../actions/common";
-import { callApi } from "../api/api";
+import {callApi, sendEmailContactUs} from "../api/api";
 import { SetLoadingStatus } from "../actions/appActions";
 import { sendContactDetails } from "../../../BE/services/utils"; // Relative path from FE/src/pages to BE/services/utils
 const ContactUS = () => {
     const [name, set_name] = useState("");
     const [email, set_email] = useState("");
     const [isValidEmail, set_isValidEmail] = useState(false);
-    const [demand, set_demand] = useState("");
+    const [issue, set_issue] = useState("");
     const [showError, set_showError] = useState(false);
     const [enableToSubmit, set_enableToSubmit] = useState(false);
 
@@ -22,18 +22,18 @@ const ContactUS = () => {
             SetLoadingStatus(true);
 
             try {
-                const emailResponse = await callApi("POST", "send-contact", {
+                const emailResponse = await sendEmailContactUs("POST", "send-contact", {
                     targetEmail: "varunsahni286@gmail.com",
                     name,
                     email,
-                    demand,
+                    issue,
                 });
 
                 if (emailResponse) {
                     alert("Thank you for contacting us. We will respond to your message asap.");
                     set_name("");
                     set_email("");
-                    set_demand("");
+                    set_issue("");
                 } else {
                     alert("Failed to send email. Please try again later.");
                 }
@@ -95,12 +95,12 @@ const ContactUS = () => {
                     label={!isValidEmail ? "Invalid email address." : "Email is required."}
                 />
 
-                <div className="mt-8 lg:mt-12 text-lightgrey text-[12px] leading-[19px]">Demand</div>
+                <div className="mt-8 lg:mt-12 text-lightgrey text-[12px] leading-[19px]">Reason</div>
                 <textarea
                     className="w-full bg-black rounded-[15px] h-[200px] mt-0.5 border text-white text-[14px] leading-[21px] p-[24px]"
-                    placeholder="Input your demand in detail"
-                    value={demand}
-                    onChange={(e) => set_demand(e.target.value)}
+                    placeholder="Input your reason in detail"
+                    value={issue}
+                    onChange={(e) => set_issue(e.target.value)}
                 />
 
                 {/*<div className="mt-8 lg:mt-12 text-lightgrey text-[12px] leading-[19px]">Upload a File *</div>*/}

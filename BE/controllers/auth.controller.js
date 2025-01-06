@@ -693,8 +693,6 @@ const getTimeZone = async (req,res) => {
     }
 };
 
-
-
 module.exports = {
     login,
     register,
