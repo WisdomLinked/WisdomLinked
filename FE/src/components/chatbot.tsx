@@ -96,7 +96,7 @@ const Chatbot = () => {
                             </div>
                         ))}
                         {chat.length === 0 && (
-                            <p className="text-gray-500 text-center">Select a quick action or type your question below!</p>
+                            <p className="text-gray-500 text-center">Select a frequently asked question or type your question below!</p>
                         )}
                     </div>
 
@@ -107,7 +107,7 @@ const Chatbot = () => {
                             maxHeight: "120px", // Adjusted for 2-3 quick actions
                         }}
                     >
-                        <h3 className="text-sm font-semibold text-green-400 mb-2">Quick Actions:</h3>
+                        <h3 className="text-sm font-semibold text-green-400 mb-2">Frequently asked questions:</h3>
                         <div className="flex flex-col gap-2">
                             {actions.slice(0, 3).map((action, index) => (
                                 <button
