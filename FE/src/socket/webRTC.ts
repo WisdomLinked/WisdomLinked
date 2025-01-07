@@ -9,8 +9,18 @@ import { showAlert } from "../actions/alertActions";
 const getLocalStream = async () => {
     let videoStream, audioStream;
     try {
-        videoStream = await navigator.mediaDevices.getUserMedia({ audio: false, video: true });
+       // videoStream = await navigator.mediaDevices.getUserMedia({ audio: false, video: true });
+        videoStream = await navigator.mediaDevices.getUserMedia({
+            video: {
+                width: { ideal: 1280 }, // Adjusted for compatibility
+                height: { ideal: 720 },
+                facingMode: "user",
+            },
+            audio: false,
+        });
+
     } catch (error) {
+        console.error("Error capturing video stream:", error);
     }
     try {
         audioStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false })

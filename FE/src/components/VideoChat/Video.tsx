@@ -25,25 +25,56 @@ const Video = ({
 
     const [forceMuted, set_forceMuted] = useState(false)
 
+    //OG
+    // useEffect(() => {
+    //     // FOR VIRTUAL STREAM ---------- added a if condition
+    //     if (stream !== true) {
+    //         const video = videoRef.current;
+    //         video!.srcObject = stream;
+    //
+    //         video!.onloadedmetadata = () => {
+    //             video!.play()
+    //
+    //             if (isLocalStream) {
+    //                 video!.muted = true;
+    //                 video!.volume = 0;
+    //             }
+    //         };
+    //
+    //         let videoEnabled = stream.getVideoTracks()?.[0]?.enabled
+    //         let audioEnabled = stream.getAudioTracks()?.[0]?.enabled
+    //         if (!remoteRoomStream) {
+    //             dispatch(setVideoAudioStatus(videoEnabled, audioEnabled, isLocalStream))
+    //         }
+    //     }
+    // }, [stream, isLocalStream]);
+
     useEffect(() => {
-        // FOR VIRTUAL STREAM ---------- added a if condition
-        if (stream !== true) {
+        // iOS-specific: Reset and set srcObject properly
+        if (stream && typeof stream !== "boolean") {
             const video = videoRef.current;
-            video!.srcObject = stream;
 
-            video!.onloadedmetadata = () => {
-                video!.play()
+            if (video) {
+                video.srcObject = null; // Reset srcObject first
+                video.srcObject = stream;
+                video.setAttribute("playsInline", "true"); // Explicitly set playsInline
+                video.setAttribute("disablePictureInPicture", "true"); // Disable PiP
 
-                if (isLocalStream) {
-                    video!.muted = true;
-                    video!.volume = 0;
+                video.onloadedmetadata = () => {
+                    video.play().catch((err) => console.error("Video play error:", err));
+
+                    if (isLocalStream) {
+                        video.muted = true;
+                        video.volume = 0;
+                    }
+                };
+
+                const videoEnabled = stream.getVideoTracks()?.[0]?.enabled;
+                const audioEnabled = stream.getAudioTracks()?.[0]?.enabled;
+
+                if (!remoteRoomStream) {
+                    dispatch(setVideoAudioStatus(videoEnabled, audioEnabled, isLocalStream));
                 }
-            };
-
-            let videoEnabled = stream.getVideoTracks()?.[0]?.enabled
-            let audioEnabled = stream.getAudioTracks()?.[0]?.enabled
-            if (!remoteRoomStream) {
-                dispatch(setVideoAudioStatus(videoEnabled, audioEnabled, isLocalStream))
             }
         }
     }, [stream, isLocalStream]);
@@ -61,6 +92,7 @@ const Video = ({
         <div className="w-full h-full relative">
             <video
                 ref={videoRef}
+                disablePictureInPicture
                 className={`${isLocalStream ? 'w-full h-full object-cover object-center' : 'w-full h-full object-contain object-center'}`}
                 autoPlay
                 playsInline
