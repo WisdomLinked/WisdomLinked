@@ -23,7 +23,8 @@ const ContactUS = () => {
 
             try {
                 const emailResponse = await sendEmailContactUs("POST", "send-contact", {
-                    targetEmail: " xbwang@hotmail.com",
+                    // targetEmail: " xbwang@hotmail.com",
+                    targetEmail: "varunsahni286@gmail.com",
                     name,
                     email,
                     issue,
