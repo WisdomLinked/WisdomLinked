@@ -366,6 +366,48 @@ const callRequest = (data: {
     );
 };
 
+//OG
+// const callResponse = (data: {
+//     callerId: string;
+//     callerName: string;
+//     accepted: boolean;
+//     audioOnly: boolean;
+// }) => {
+//     console.log("Sending call response:", data);
+//     socket.emit("call-response", data);
+//
+//     if (!data.accepted) {
+//         console.log("Call rejected.");
+//         return store.dispatch(setCallRequest(null) as any);
+//     }
+//
+//     const peerConnection = () => {
+//         console.log("Setting up WebRTC connection for response.");
+//         const peer = newPeerConnection(false);
+//         currentPeerConnection = peer;
+//
+//         peer.on("signal", (signal) => {
+//             console.log("Generated signaling data for response:", signal);
+//             socket.emit("call-response", {...data, signal,});
+//         });
+//
+//         peer.on("stream", (stream) => {
+//             console.log("Received remote media stream (response):", stream);
+//             // TODO set remote stream
+//             store.dispatch(setRemoteStream(stream) as any);
+//             store.dispatch(setChosenChatDetails({ userId: data.callerId, username: data.callerName, image: '' }))
+//         });
+//
+//         peer.signal(store.getState().videoChat.callRequest?.signal!);
+//     };
+//
+//     getLocalStreamPreview(data.audioOnly, () => {
+//         console.log("Local stream obtained for response.");
+//         peerConnection();
+//         store.dispatch(setCallRequest(null) as any);
+//         store.dispatch(setAudioOnly(data.audioOnly) as any);
+//     });
+// };
 const callResponse = (data: {
     callerId: string;
     callerName: string;
@@ -387,26 +429,44 @@ const callResponse = (data: {
 
         peer.on("signal", (signal) => {
             console.log("Generated signaling data for response:", signal);
-            socket.emit("call-response", {...data, signal,});
+            socket.emit("call-response", { ...data, signal });
         });
 
         peer.on("stream", (stream) => {
             console.log("Received remote media stream (response):", stream);
-            // TODO set remote stream
             store.dispatch(setRemoteStream(stream) as any);
-            store.dispatch(setChosenChatDetails({ userId: data.callerId, username: data.callerName, image: '' }))
+            store.dispatch(setChosenChatDetails({ userId: data.callerId, username: data.callerName, image: '' }));
         });
 
         peer.signal(store.getState().videoChat.callRequest?.signal!);
     };
 
-    getLocalStreamPreview(data.audioOnly, () => {
-        console.log("Local stream obtained for response.");
-        peerConnection();
-        store.dispatch(setCallRequest(null) as any);
-        store.dispatch(setAudioOnly(data.audioOnly) as any);
-    });
+    // Ensure the local stream initialization is consistent
+    getLocalStreamPreview(
+        data.audioOnly,
+        () => {
+            console.log("Local stream obtained for response.");
+            peerConnection();
+            store.dispatch(setCallRequest(null) as any);
+            store.dispatch(setAudioOnly(data.audioOnly) as any);
+
+            // Explicitly set playsInline attribute for iOS
+            const localStream = store.getState().videoChat.localStream;
+            if (localStream && localStream.getTracks().length > 0) {
+                const videoElement = document.querySelector("video");
+                if (videoElement) {
+                    videoElement.setAttribute("playsInline", "true");
+                    videoElement.muted = true;
+                }
+            }
+        },
+        false,
+        (err) => {
+            console.error("Error initializing local stream for response:", err);
+        }
+    );
 };
+
 
 const cancelCallRequest = (data: {
     otherUserId: string
