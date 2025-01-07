@@ -26,16 +26,13 @@ const IncomingCall = () => {
     const callRequest = useAppSelector(state => state.videoChat.callRequest);
 
     const handleCall = (accepted: boolean, audioOnly: boolean) => {
-
         callResponse({
             callerId: callRequest!.callerUserId,
             callerName: callRequest!.callerName,
             accepted,
             audioOnly
         });
-
     };
-
 
     return (
         <Backdrop
@@ -73,15 +70,6 @@ const IncomingCall = () => {
                             <VideocamIcon />
                         </IconButton>
                     )}
-
-                    {/* <IconButton
-                      color="success"
-                      onClick={() => {
-                          handleCall(true, false);
-                      }}
-                  >
-                      <VideocamIcon />
-                  </IconButton> */}
 
                     <IconButton
                         color="success"

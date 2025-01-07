@@ -40,7 +40,6 @@ import { showAlert } from "../actions/alertActions";
 
 export interface UserDetails {
     email: string;
-    // token: string;
     username: string;
 }
 

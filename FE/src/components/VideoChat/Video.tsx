@@ -25,40 +25,15 @@ const Video = ({
 
     const [forceMuted, set_forceMuted] = useState(false)
 
-    //OG
-    // useEffect(() => {
-    //     // FOR VIRTUAL STREAM ---------- added a if condition
-    //     if (stream !== true) {
-    //         const video = videoRef.current;
-    //         video!.srcObject = stream;
-    //
-    //         video!.onloadedmetadata = () => {
-    //             video!.play()
-    //
-    //             if (isLocalStream) {
-    //                 video!.muted = true;
-    //                 video!.volume = 0;
-    //             }
-    //         };
-    //
-    //         let videoEnabled = stream.getVideoTracks()?.[0]?.enabled
-    //         let audioEnabled = stream.getAudioTracks()?.[0]?.enabled
-    //         if (!remoteRoomStream) {
-    //             dispatch(setVideoAudioStatus(videoEnabled, audioEnabled, isLocalStream))
-    //         }
-    //     }
-    // }, [stream, isLocalStream]);
-
     useEffect(() => {
-        // iOS-specific: Reset and set srcObject properly
         if (stream && typeof stream !== "boolean") {
             const video = videoRef.current;
 
             if (video) {
-                video.srcObject = null; // Reset srcObject first
+                video.srcObject = null;
                 video.srcObject = stream;
-                video.setAttribute("playsInline", "true"); // Explicitly set playsInline
-                video.setAttribute("disablePictureInPicture", "true"); // Disable PiP
+                video.setAttribute("playsInline", "true");
+                video.setAttribute("disablePictureInPicture", "true");
 
                 video.onloadedmetadata = () => {
                     video.play().catch((err) => console.error("Video play error:", err));
