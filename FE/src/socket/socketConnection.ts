@@ -365,7 +365,7 @@ const callRequest = (data: {
     );
 };
 
-//OG
+//Original
 // const callResponse = (data: {
 //     callerId: string;
 //     callerName: string;
@@ -407,6 +407,7 @@ const callRequest = (data: {
 //         store.dispatch(setAudioOnly(data.audioOnly) as any);
 //     });
 // };
+
 const callResponse = (data: {
     callerId: string;
     callerName: string;
@@ -420,6 +421,9 @@ const callResponse = (data: {
         console.log("Call rejected.");
         return store.dispatch(setCallRequest(null) as any);
     }
+
+    // Set the call as accepted to trigger loading state
+    store.dispatch(setCallStatus("accepted") as any);
 
     const peerConnection = () => {
         console.log("Setting up WebRTC connection for response.");
