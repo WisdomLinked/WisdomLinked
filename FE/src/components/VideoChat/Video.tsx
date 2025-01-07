@@ -55,7 +55,7 @@ const Video = ({
             const video = videoRef.current;
 
             if (video) {
-                video.srcObject = null; // Reset srcObject first
+                //video.srcObject = null; // Reset srcObject first
                 video.srcObject = stream;
                 video.setAttribute("playsInline", "true"); // Explicitly set playsInline
                 video.setAttribute("disablePictureInPicture", "true"); // Disable PiP
