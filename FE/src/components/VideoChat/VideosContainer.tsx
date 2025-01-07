@@ -160,16 +160,9 @@ const VideosContainer = (props: any) => {
         }
     }, [roomDetails, groupChatList, remoteStreams])
 
-    // Manage loading state based on callStatus and remoteStream
-    useEffect(() => {
-        if (callStatus === "accepted") {
-            setLoading(true); // Show loader initially
-        }
-    }, [callStatus]);
-
     useEffect(() => {
         if (remoteStream) {
-            setLoading(false); // Hide loader once remoteStream is available
+            setLoading(false);
         }
     }, [remoteStream]);
 

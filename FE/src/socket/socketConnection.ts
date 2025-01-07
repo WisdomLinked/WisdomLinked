@@ -422,9 +422,6 @@ const callResponse = (data: {
         return store.dispatch(setCallRequest(null) as any);
     }
 
-    // Set the call as accepted to trigger loading state
-    store.dispatch(setCallStatus("accepted") as any);
-
     const peerConnection = () => {
         console.log("Setting up WebRTC connection for response.");
         const peer = newPeerConnection(false);
