@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, {useEffect, useRef, useState} from "react";
 import Video from "./Video";
 import { useDispatch } from "react-redux";
 import { useAppSelector } from "../../store"
@@ -102,7 +102,7 @@ const RoomVideo = ({
     )
 }
 
-//original
+//original without redux
 //
 // const VideosContainer = (props: any) => {
 //     const dispatch = useDispatch();
@@ -373,7 +373,7 @@ const VideosContainer = (props: any) => {
             remoteStream,
             screenSharingStream,
             otherUserId,
-            loading, // <-- the Redux-based loading flag
+            loading,
         },
         room: {
             roomDetails,
@@ -387,6 +387,10 @@ const VideosContainer = (props: any) => {
         any[]
     >([]);
     const [localStreamVisible, set_localStreamVisible] = useState(true);
+
+    const [isLoading, setIsLoading] = useState(true); // Local loading state
+    const dummyVideoRef = useRef<HTMLVideoElement | null>(null); // Ref for the dummy video element
+
 
     const handleLeaveRoom = () => {
         // notify other user that I left the call
@@ -406,6 +410,37 @@ const VideosContainer = (props: any) => {
             handleLeaveRoom();
         }
     }, [callStatus]);
+
+    useEffect(() => {
+        // Set up a dummy video element to detect when the stream is ready
+        if (remoteStream) {
+            const videoElement = document.createElement("video");
+            dummyVideoRef.current = videoElement;
+
+            videoElement.srcObject = remoteStream;
+            videoElement.onloadedmetadata = () => {
+                videoElement.play().catch((err) => console.error("Video play error:", err));
+            };
+
+            // Hide loader when video is ready to play
+            videoElement.oncanplay = () => {
+                setIsLoading(false);
+                videoElement.srcObject = null; // Cleanup
+            };
+
+            // Ensure we cleanup if the component unmounts or `remoteStream` changes
+            return () => {
+                if (videoElement) {
+                    videoElement.srcObject = null;
+                    dummyVideoRef.current = null;
+                }
+            };
+        } else {
+            // Show loader if there's no remote stream
+            setIsLoading(true);
+        }
+    }, [remoteStream]);
+
 
     useEffect(() => {
         if (roomDetails) {
@@ -438,13 +473,186 @@ const VideosContainer = (props: any) => {
         }
     }, [roomDetails, groupChatList, remoteStreams]);
 
+    //return with redux
+    //
+    // return (
+    //     <div className="w-full h-[calc(100%-50px)] overflow-clip relative">
+    //         {(callStatus !== "accepted" && callStatus) ? (
+    //             <div className="w-full h-full flex items-center justify-center text-white">
+    //                 {/* Not accepted or 'ringing' screen */}
+    //                 <div className="w-[120px] h-[120px] rounded-full flex justify-center items-center
+    //                       border-2 border-gray-500 text-gray-100 text-5xl font-bold animate-pulse">
+    //                     {getAvatarTitle(
+    //                         friends[friends.findIndex((x) => x.id === otherUserId)]?.username || ""
+    //                     )}
+    //                 </div>
+    //             </div>
+    //         ) : (
+    //             <div className="w-full h-full">
+    //                 <div className="w-full h-full flex justify-center items-center">
+    //                     {loading ? (
+    //                         // We are showing the loader if 'loading' is true in Redux
+    //                         <div className="w-full h-full flex justify-center items-center">
+    //                             <div className="w-[120px] h-[120px] rounded-full flex justify-center items-center
+    //                             border-2 border-gray-500 text-gray-100 text-5xl font-bold animate-pulse">
+    //                                 {getAvatarTitle(
+    //                                     friends[friends.findIndex((x) => x.id === otherUserId)]?.username || ""
+    //                                 )}
+    //                             </div>
+    //                         </div>
+    //                     ) : remoteStream ? (
+    //                         <div className="relative w-full h-full">
+    //                             <Video
+    //                                 stream={remoteStream}
+    //                                 isLocalStream={false}
+    //                                 avatarTitle={getAvatarTitle(
+    //                                     friends[friends.findIndex((x) => x.id === otherUserId)]?.username || ""
+    //                                 )}
+    //                             />
+    //                             <div className="absolute top-1 left-0 w-full flex justify-center text-lightgrey">
+    //                                 {
+    //                                     friends[friends.findIndex((x) => x.id === otherUserId)]
+    //                                         ?.username
+    //                                 }
+    //                             </div>
+    //                         </div>
+    //                     ) : remoteStreamsWithUserData.length ? (
+    //                         <div
+    //                             className={`w-full h-fit max-h-full overflow-y-auto flex flex-wrap justify-center p-1`}
+    //                         >
+    //                             {remoteStreamsWithUserData.map((stream, index) => (
+    //                                 <RoomVideo
+    //                                     key={index}
+    //                                     isRoomMinimized={props.isRoomMinimized}
+    //                                     stream={stream}
+    //                                     inExpert={userDetails.role === "expert"}
+    //                                 />
+    //                             ))}
+    //                         </div>
+    //                     ) : localStream ? (
+    //                         <div className="w-full h-full flex justify-center items-center overflow-clip">
+    //                             <div className="w-[120px] h-[120px] rounded-full flex justify-center items-center
+    //                             border-2 border-gray-500 text-gray-100 text-5xl font-bold">
+    //                                 {getAvatarTitle(
+    //                                     friends[friends.findIndex((x) => x.id === otherUserId)]?.username || ""
+    //                                 )}
+    //                             </div>
+    //                         </div>
+    //                     ) : (
+    //                         <div className="w-full h-full flex justify-center items-center overflow-clip text-white">
+    //                             Waiting for others to join
+    //                         </div>
+    //                     )}
+    //                 </div>
+    //
+    //                 {/* Local stream in corner */}
+    //                 <div
+    //                     title={localStreamVisible ? "Minimize the window" : "Maximize the window"}
+    //                     className={`absolute bottom-0 right-0 z-[201] bg-midgrey-1 rounded-tl-lg overflow-clip
+    //                     border-0 border-l-2 border-t-2 border-green ${
+    //                         localStreamVisible ? "" : "translate-x-[90%] hover:translate-x-[70%]"
+    //                     } ${
+    //                         props.isRoomMinimized ? "w-[100px] h-[100px]" : "w-[150px] h-[150px]"
+    //                     } cursor-pointer transition-all`}
+    //                     onClick={() => set_localStreamVisible(!localStreamVisible)}
+    //                 >
+    //                     {localStream ? (
+    //                         <Video
+    //                             stream={screenSharingStream ? screenSharingStream : localStream}
+    //                             isLocalStream={true}
+    //                             avatarTitle={getAvatarTitle(userDetails?.username)}
+    //                         />
+    //                     ) : localStreamRoom ? (
+    //                         <Video
+    //                             stream={
+    //                                 screenSharingStreamRoom
+    //                                     ? screenSharingStreamRoom
+    //                                     : localStreamRoom
+    //                             }
+    //                             isLocalStream={true}
+    //                             avatarTitle={getAvatarTitle(userDetails?.username)}
+    //                         />
+    //                     ) : (
+    //                         <div className="w-full h-full flex justify-center items-center">
+    //                             <div className="w-[70px] h-[70px] rounded-full flex justify-center items-center
+    //                             border-2 border-gray-500 text-gray-100 text-2xl font-bold">
+    //                                 {getAvatarTitle(userDetails?.username)}
+    //                             </div>
+    //                         </div>
+    //                     )}
+    //                 </div>
+    //             </div>
+    //         )}
+    //     </div>
+    // );
+
+    //return without localstream but loader working
+    // return (
+    //     <div className="w-full h-[calc(100%-50px)] overflow-clip relative">
+    //         {callStatus !== "accepted" && callStatus ? (
+    //             <div className="w-full h-full flex items-center justify-center text-white">
+    //                 <div
+    //                     className="w-[120px] h-[120px] rounded-full flex justify-center items-center
+    //                       border-2 border-gray-500 text-gray-100 text-5xl font-bold animate-pulse"
+    //                 >
+    //                     {getAvatarTitle(
+    //                         friends[friends.findIndex((x) => x.id === otherUserId)]?.username || ""
+    //                     )}
+    //                 </div>
+    //             </div>
+    //         ) : (
+    //             <div className="w-full h-full">
+    //                 <div className="w-full h-full flex justify-center items-center">
+    //                     {isLoading ? (
+    //                         <div className="w-full h-full flex justify-center items-center">
+    //                             <div
+    //                                 className="w-[120px] h-[120px] rounded-full flex justify-center items-center
+    //                                 border-2 border-gray-500 text-gray-100 text-5xl font-bold animate-pulse"
+    //                             >
+    //                                 {getAvatarTitle(
+    //                                     friends[
+    //                                         friends.findIndex((x) => x.id === otherUserId)
+    //                                         ]?.username || ""
+    //                                 )}
+    //                             </div>
+    //                         </div>
+    //                     ) : remoteStream ? (
+    //                         <div className="relative w-full h-full">
+    //                             <Video
+    //                                 stream={remoteStream}
+    //                                 isLocalStream={false}
+    //                                 avatarTitle={getAvatarTitle(
+    //                                     friends[
+    //                                         friends.findIndex((x) => x.id === otherUserId)
+    //                                         ]?.username || ""
+    //                                 )}
+    //                             />
+    //                             <div className="absolute top-1 left-0 w-full flex justify-center text-lightgrey">
+    //                                 {
+    //                                     friends[friends.findIndex((x) => x.id === otherUserId)]
+    //                                         ?.username
+    //                                 }
+    //                             </div>
+    //                         </div>
+    //                     ) : (
+    //                         <div className="w-full h-full flex justify-center items-center overflow-clip text-white">
+    //                             Waiting for others to join
+    //                         </div>
+    //                     )}
+    //                 </div>
+    //             </div>
+    //         )}
+    //     </div>
+    // );
+
     return (
         <div className="w-full h-[calc(100%-50px)] overflow-clip relative">
-            {(callStatus !== "accepted" && callStatus) ? (
+            {callStatus !== "accepted" && callStatus ? (
                 <div className="w-full h-full flex items-center justify-center text-white">
-                    {/* Not accepted or 'ringing' screen */}
-                    <div className="w-[120px] h-[120px] rounded-full flex justify-center items-center
-                          border-2 border-gray-500 text-gray-100 text-5xl font-bold animate-pulse">
+                    <div
+                        className="w-[120px] h-[120px] rounded-full flex justify-center items-center
+                      border-2 border-gray-500 text-gray-100 text-5xl font-bold animate-pulse"
+                    >
                         {getAvatarTitle(
                             friends[friends.findIndex((x) => x.id === otherUserId)]?.username || ""
                         )}
@@ -453,94 +661,75 @@ const VideosContainer = (props: any) => {
             ) : (
                 <div className="w-full h-full">
                     <div className="w-full h-full flex justify-center items-center">
-                        {loading ? (
-                            // We are showing the loader if 'loading' is true in Redux
+                        {isLoading ? (
                             <div className="w-full h-full flex justify-center items-center">
-                                <div className="w-[120px] h-[120px] rounded-full flex justify-center items-center
-                                border-2 border-gray-500 text-gray-100 text-5xl font-bold animate-pulse">
+                                <div
+                                    className="w-[120px] h-[120px] rounded-full flex justify-center items-center
+                                border-2 border-gray-500 text-gray-100 text-5xl font-bold animate-pulse"
+                                >
                                     {getAvatarTitle(
-                                        friends[friends.findIndex((x) => x.id === otherUserId)]?.username || ""
+                                        friends[
+                                            friends.findIndex((x) => x.id === otherUserId)
+                                            ]?.username || ""
                                     )}
                                 </div>
                             </div>
-                        ) : remoteStream ? (
+                        ) : (
                             <div className="relative w-full h-full">
-                                <Video
-                                    stream={remoteStream}
-                                    isLocalStream={false}
-                                    avatarTitle={getAvatarTitle(
-                                        friends[friends.findIndex((x) => x.id === otherUserId)]?.username || ""
-                                    )}
-                                />
-                                <div className="absolute top-1 left-0 w-full flex justify-center text-lightgrey">
-                                    {
-                                        friends[friends.findIndex((x) => x.id === otherUserId)]
-                                            ?.username
-                                    }
-                                </div>
-                            </div>
-                        ) : remoteStreamsWithUserData.length ? (
-                            <div
-                                className={`w-full h-fit max-h-full overflow-y-auto flex flex-wrap justify-center p-1`}
-                            >
-                                {remoteStreamsWithUserData.map((stream, index) => (
-                                    <RoomVideo
-                                        key={index}
-                                        isRoomMinimized={props.isRoomMinimized}
-                                        stream={stream}
-                                        inExpert={userDetails.role === "expert"}
-                                    />
-                                ))}
-                            </div>
-                        ) : localStream ? (
-                            <div className="w-full h-full flex justify-center items-center overflow-clip">
-                                <div className="w-[120px] h-[120px] rounded-full flex justify-center items-center
-                                border-2 border-gray-500 text-gray-100 text-5xl font-bold">
-                                    {getAvatarTitle(
-                                        friends[friends.findIndex((x) => x.id === otherUserId)]?.username || ""
-                                    )}
-                                </div>
-                            </div>
-                        ) : (
-                            <div className="w-full h-full flex justify-center items-center overflow-clip text-white">
-                                Waiting for others to join
-                            </div>
-                        )}
-                    </div>
+                                {remoteStream && (
+                                    <div className="absolute top-0 left-0 w-full h-full">
+                                        <Video
+                                            stream={remoteStream}
+                                            isLocalStream={false}
+                                            avatarTitle={getAvatarTitle(
+                                                friends[
+                                                    friends.findIndex((x) => x.id === otherUserId)
+                                                    ]?.username || ""
+                                            )}
+                                        />
+                                        <div className="absolute top-1 left-0 w-full flex justify-center text-lightgrey">
+                                            {
+                                                friends[
+                                                    friends.findIndex((x) => x.id === otherUserId)
+                                                    ]?.username
+                                            }
+                                        </div>
+                                    </div>
+                                )}
 
-                    {/* Local stream in corner */}
-                    <div
-                        title={localStreamVisible ? "Minimize the window" : "Maximize the window"}
-                        className={`absolute bottom-0 right-0 z-[201] bg-midgrey-1 rounded-tl-lg overflow-clip 
-                        border-0 border-l-2 border-t-2 border-green ${
-                            localStreamVisible ? "" : "translate-x-[90%] hover:translate-x-[70%]"
-                        } ${
-                            props.isRoomMinimized ? "w-[100px] h-[100px]" : "w-[150px] h-[150px]"
-                        } cursor-pointer transition-all`}
-                        onClick={() => set_localStreamVisible(!localStreamVisible)}
-                    >
-                        {localStream ? (
-                            <Video
-                                stream={screenSharingStream ? screenSharingStream : localStream}
-                                isLocalStream={true}
-                                avatarTitle={getAvatarTitle(userDetails?.username)}
-                            />
-                        ) : localStreamRoom ? (
-                            <Video
-                                stream={
-                                    screenSharingStreamRoom
-                                        ? screenSharingStreamRoom
-                                        : localStreamRoom
-                                }
-                                isLocalStream={true}
-                                avatarTitle={getAvatarTitle(userDetails?.username)}
-                            />
-                        ) : (
-                            <div className="w-full h-full flex justify-center items-center">
-                                <div className="w-[70px] h-[70px] rounded-full flex justify-center items-center
-                                border-2 border-gray-500 text-gray-100 text-2xl font-bold">
-                                    {getAvatarTitle(userDetails?.username)}
-                                </div>
+                                {/* Local stream in the corner */}
+                                {localStream && (
+                                    <div
+                                        title={
+                                            localStreamVisible
+                                                ? "Minimize the window"
+                                                : "Maximize the window"
+                                        }
+                                        className={`absolute bottom-0 right-0 z-[201] bg-midgrey-1 rounded-tl-lg overflow-clip
+                                    border-0 border-l-2 border-t-2 border-green ${
+                                            localStreamVisible
+                                                ? ""
+                                                : "translate-x-[90%] hover:translate-x-[70%]"
+                                        } ${
+                                            props.isRoomMinimized
+                                                ? "w-[100px] h-[100px]"
+                                                : "w-[150px] h-[150px]"
+                                        } cursor-pointer transition-all`}
+                                        onClick={() =>
+                                            set_localStreamVisible(!localStreamVisible)
+                                        }
+                                    >
+                                        <Video
+                                            stream={
+                                                screenSharingStream
+                                                    ? screenSharingStream
+                                                    : localStream
+                                            }
+                                            isLocalStream={true}
+                                            avatarTitle={getAvatarTitle(userDetails?.username)}
+                                        />
+                                    </div>
+                                )}
                             </div>
                         )}
                     </div>
@@ -548,6 +737,7 @@ const VideosContainer = (props: any) => {
             )}
         </div>
     );
+
 
 };
 
