@@ -166,7 +166,7 @@ const Messages = () => {
             {/* Audio element for notification sound */}
             <audio ref={audioRef} preload="auto">
                 <source
-                    src="https://www.soundjay.com/buttons/sounds/button-09a.mp3"
+                    src="https://www.soundjay.com/buttons/sounds/button-16a.mp3"
                     type="audio/mp3"
                 />
                 Your browser does not support the audio element.
