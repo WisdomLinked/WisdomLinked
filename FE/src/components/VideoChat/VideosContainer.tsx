@@ -169,7 +169,14 @@ const VideosContainer = (props: any) => {
         } else {
             // Show loader if there's no remote stream
             setIsLoading(true);
-            if (audioRef.current) audioRef.current.play().catch((err) => console.error("Audio play error:", err));
+            if (audioRef.current) {
+                console.log("Attempting to play loader sound...");
+                audioRef.current.volume = 0.3; // Set volume to 30% intensity
+                audioRef.current
+                    .play()
+                    .then(() => console.log("Loader sound started with reduced intensity."))
+                    .catch((err) => console.error("Audio play error:", err));
+            }
         }
     }, [remoteStream]);
 

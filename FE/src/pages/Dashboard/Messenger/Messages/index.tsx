@@ -151,6 +151,7 @@ const Messages = () => {
             //     });
             // }
             if (!isFirstLoad && audioRef.current) {
+                audioRef.current.volume = 0.3;
                 audioRef.current
                     .play()
                     .then(() => console.log("Audio played successfully"))
