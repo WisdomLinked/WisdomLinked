@@ -68,7 +68,7 @@ const ContactUS = () => {
                 </div>
             </div>
             <div className="max-w-[1060px] mx-auto mt-3 text-center text-white font-bold text-[32px] leading-[48px] lg:text-[56px] lg:leading-[78px]">
-                Please contact us
+                Plz contact us
             </div>
             <div className="w-full max-w-[734px] mx-auto mt-[55px] lg:mt-12">
                 <div className="text-lightgrey text-[12px] leading-[19px]">Full Name *</div>
