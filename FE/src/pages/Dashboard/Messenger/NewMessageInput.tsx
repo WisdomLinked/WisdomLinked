@@ -4,7 +4,6 @@ import { notifyTyping, sendDirectMessage, sendGroupMessage } from "../../../sock
 import ReactQuill from 'react-quill'
 import 'react-quill/dist/quill.snow.css'
 
-
 const NewMessageInput: React.FC = () => {
     const [_message, set_message] = useState("");
     const [typing, set_typing] = useState(0);
@@ -23,6 +22,53 @@ const NewMessageInput: React.FC = () => {
         }
         return temp2
     }
+
+    const sendMessage = () => {
+        if (_message.trim()) {
+            let arr = _message.split("<p>");
+            let temp = "";
+            for (let i = 0; i < arr.length; i++) {
+                let val = arr[i].slice(0, -4);
+                val = val.trim();
+                if ((val && val !== "<br>") || temp) {
+                    temp += `<p>${arr[i].slice(0, -4)}</p>`;
+                }
+            }
+            if (!temp) {
+                set_message("");
+                return;
+            }
+            let arr1 = temp.split("<p>");
+            let temp1 = "";
+            for (let i = arr1.length - 1; i > -1; i--) {
+                let val = arr1[i].slice(0, -4);
+                val = val.trim();
+                if ((val && val !== "<br>") || temp1) {
+                    temp1 = `<p>${arr1[i].slice(0, -4)}</p>` + temp1;
+                }
+            }
+            let message: any = correctStyling(temp1, "ol");
+            message = correctStyling(message, "ul");
+            message = correctStyling(message, "h1");
+            message = correctStyling(message, "h2");
+            message = correctStyling(message, "h3");
+
+            if (chosenChatDetails) {
+                sendDirectMessage({
+                    message,
+                    receiverUserId: chosenChatDetails.userId!,
+                });
+            }
+
+            if (chosenGroupChatDetails) {
+                sendGroupMessage({
+                    message,
+                    groupChatId: chosenGroupChatDetails.groupId,
+                });
+            }
+            set_message("");
+        }
+    };
 
     const handleSendMessage = (e: any) => {
         if (e.key === 'Enter' || e.keyCode === 13) {
@@ -122,8 +168,21 @@ const NewMessageInput: React.FC = () => {
         set_prevChosenGroupChatDetails(chosenGroupChatDetails)
     }, [chosenChatDetails, chosenGroupChatDetails])
 
+    // return (
+    //     <div className='w-full p-4 pt-0 pb-12 sm:pb-4'>
+    //         <ReactQuill
+    //             theme="snow"
+    //             className="w-full bg-black flex flex-col-reverse rounded-md"
+    //             value={_message}
+    //             onChange={set_message}
+    //             onKeyDown={handleSendMessage}
+    //             onBlur={onBlur}
+    //         />
+    //     </div>
+    // );
+
     return (
-        <div className='w-full p-4 pt-0 pb-12 sm:pb-4'>
+        <div className="w-full p-4 pt-0 pb-12 sm:pb-4 flex items-center">
             <ReactQuill
                 theme="snow"
                 className="w-full bg-black flex flex-col-reverse rounded-md"
@@ -132,6 +191,26 @@ const NewMessageInput: React.FC = () => {
                 onKeyDown={handleSendMessage}
                 onBlur={onBlur}
             />
+            <button
+                onClick={sendMessage}
+                className="ml-2 flex items-center justify-center"
+                style={{
+                    backgroundColor: "#31B099",
+                    borderRadius: "50%",
+                    width: "40px",
+                    height: "40px",
+                }}
+            >
+                <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    fill="white"
+                    viewBox="0 0 24 24"
+                    width="20px"
+                    height="20px"
+                >
+                    <path d="M2 21l21-9L2 3v7l15 2-15 2v7z" />
+                </svg>
+            </button>
         </div>
     );
 };
