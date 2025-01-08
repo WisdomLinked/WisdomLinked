@@ -104,25 +104,12 @@ const RoomVideo = ({
 
 const VideosContainer = (props: any) => {
     const dispatch = useDispatch();
-
     const {
         auth: { userDetails },
         friends: { friends, groupChatList },
         chat: { currentEvent },
-        videoChat: {
-            localStream,
-            callStatus,
-            remoteStream,
-            screenSharingStream,
-            otherUserId,
-            loading,
-        },
-        room: {
-            roomDetails,
-            localStreamRoom,
-            remoteStreams,
-            screenSharingStream: screenSharingStreamRoom,
-        },
+        videoChat: {localStream, callStatus, remoteStream, screenSharingStream, otherUserId, loading,},
+        room: {roomDetails, localStreamRoom, remoteStreams, screenSharingStream: screenSharingStreamRoom,},
     } = useAppSelector((state) => state);
 
     const [remoteStreamsWithUserData, set_remoteStreamsWithUserData] = useState<
@@ -131,11 +118,11 @@ const VideosContainer = (props: any) => {
     const [localStreamVisible, set_localStreamVisible] = useState(true);
 
     const [isLoading, setIsLoading] = useState(true); // Local loading state
+    const audioRef = useRef<HTMLAudioElement>(null);
     const dummyVideoRef = useRef<HTMLVideoElement | null>(null); // Ref for the dummy video element
 
 
     const handleLeaveRoom = () => {
-        // notify other user that I left the call
         if (localStream) {
             if (otherUserId) {
                 notifyChatLeft(otherUserId, false);
@@ -167,6 +154,8 @@ const VideosContainer = (props: any) => {
             // Hide loader when video is ready to play
             videoElement.oncanplay = () => {
                 setIsLoading(false);
+                if (audioRef.current) audioRef.current.pause();
+                console.log("Loader sound stopped.");
                 videoElement.srcObject = null; // Cleanup
             };
 
@@ -180,6 +169,7 @@ const VideosContainer = (props: any) => {
         } else {
             // Show loader if there's no remote stream
             setIsLoading(true);
+            if (audioRef.current) audioRef.current.play().catch((err) => console.error("Audio play error:", err));
         }
     }, [remoteStream]);
 
@@ -217,6 +207,11 @@ const VideosContainer = (props: any) => {
 
     return (
         <div className="w-full h-[calc(100%-50px)] overflow-clip relative">
+            {/* Audio element for loader sound */}
+            <audio ref={audioRef} preload="auto" loop>
+                <source src="https://www.soundjay.com/phone/sounds/cell-phone-vibrate-1.mp3" type="audio/mp3" />
+                Your browser does not support the audio element.
+            </audio>
             {callStatus !== "accepted" && callStatus ? (
                 <div className="w-full h-full flex items-center justify-center text-white">
                     <div
