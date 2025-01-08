@@ -23,7 +23,7 @@ import {
     setRemoteStream,
     clearVideoChat,
     setAudioOnly,
-    setVideoAudioStatus, setLocalStream,
+    setVideoAudioStatus, setLocalStream, setVideoChatLoading,
 } from "../actions/videoChatActions";
 import {
     getLocalStreamPreview,
@@ -422,6 +422,10 @@ const callResponse = (data: {
         return store.dispatch(setCallRequest(null) as any);
     }
 
+    // 1) The user accepted => set callStatus to "accepted" and set the loading flag to true
+    store.dispatch(setCallStatus("accepted"));
+    store.dispatch(setVideoChatLoading(true));
+
     const peerConnection = () => {
         console.log("Setting up WebRTC connection for response.");
         const peer = newPeerConnection(false);
@@ -436,6 +440,7 @@ const callResponse = (data: {
             console.log("Received remote media stream (response):", stream);
             store.dispatch(setRemoteStream(stream) as any);
             store.dispatch(setChosenChatDetails({ userId: data.callerId, username: data.callerName, image: '' }));
+            store.dispatch(setVideoChatLoading(false));
         });
 
         peer.signal(store.getState().videoChat.callRequest?.signal!);

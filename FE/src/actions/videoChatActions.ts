@@ -55,6 +55,14 @@ export const setCallRequest = (
     };
 };
 
+export const setVideoChatLoading = (loading: boolean) => {
+    return {
+        type: "VIDEO_CHAT_LOADING",
+        payload: loading,
+    };
+};
+
+
 export const clearVideoChat = (
     message: string
 ): ThunkAction<void, RootState, unknown, ClearVideChatState> => {

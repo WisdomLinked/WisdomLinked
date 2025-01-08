@@ -26,6 +26,8 @@ export interface VideoChatState {
         callerUserId: string;
         signal: SimplePeer.SignalData;
     } | null;
+
+    loading: boolean;
 }
 
 const initialState: any = {
@@ -42,6 +44,7 @@ const initialState: any = {
     remoteVideoEnabled: true,
     remoteAudioEnabled: true,
     forceMuted: false,
+    loading: false,
 };
 
 const videoChatReducer: Reducer = (
@@ -108,12 +111,18 @@ const videoChatReducer: Reducer = (
                 remoteAudioEnabled: action.payload.audioEnabled,
                 remoteVideoEnabled: action.payload.videoEnabled,
             }
-        
+
         case 'setForceMuted':
             return {
                 ... state,
                 forceMuted: action.payload
             }
+
+        case "VIDEO_CHAT_LOADING":
+            return {
+                ...state,
+                loading: action.payload,
+            };
         
         default:
             return state;
