@@ -22,7 +22,6 @@ const Video = ({
     } = useAppSelector((state) => state);
 
     const videoRef = useRef<HTMLVideoElement>(null);
-
     const [forceMuted, set_forceMuted] = useState(false)
 
     useEffect(() => {
@@ -37,12 +36,19 @@ const Video = ({
 
                 video.onloadedmetadata = () => {
                     video.play().catch((err) => console.error("Video play error:", err));
-
                     if (isLocalStream) {
                         video.muted = true;
                         video.volume = 0;
                     }
                 };
+
+                // Attempt to set the audio output to speaker if it's a remote stream & browser supports setSinkId
+                if (!isLocalStream && "setSinkId" in video) {
+                    (video as HTMLVideoElement & {setSinkId: (sinkId: string) => Promise<void>})
+                        .setSinkId("default")
+                        .then(() => console.log("Audio output set to default speaker"))
+                        .catch((err) => console.error("setSinkId error:", err));
+                }
 
                 const videoEnabled = stream.getVideoTracks()?.[0]?.enabled;
                 const audioEnabled = stream.getAudioTracks()?.[0]?.enabled;
