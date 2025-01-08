@@ -143,11 +143,18 @@ const Messages = () => {
 
     useEffect(() => {
         if (messages.length > prevMessagesLength.current) {
+            console.log("New message detected. Playing audio...");
             // Play notification sound only if not initial load
+            // if (!isFirstLoad && audioRef.current) {
+            //     audioRef.current.play().catch((err) => {
+            //         console.error("Error playing audio:", err);
+            //     });
+            // }
             if (!isFirstLoad && audioRef.current) {
-                audioRef.current.play().catch((err) => {
-                    console.error("Error playing audio:", err);
-                });
+                audioRef.current
+                    .play()
+                    .then(() => console.log("Audio played successfully"))
+                    .catch((err) => console.error("Error playing audio:", err));
             }
             scrollToBottom();
         }

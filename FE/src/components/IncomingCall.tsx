@@ -26,6 +26,7 @@
         const handleCall = (accepted: boolean, audioOnly: boolean) => {
             // Stop the ringing sound
             if (audioRef.current) {
+                console.log("Stopping audio playback...");
                 audioRef.current.pause();
                 audioRef.current.currentTime = 0; // Reset to the start
             }
@@ -40,13 +41,18 @@
         };
 
         useEffect(() => {
-            // Play the sound on repeat when a call request is detected
             if (callRequest?.callerUserId && audioRef.current) {
-                audioRef.current.play().catch((err) => {
-                    console.error("Error playing the audio:", err);
-                });
+                console.log("Incoming call detected. Attempting to play audio...");
+                audioRef.current
+                    .play()
+                    .then(() => {
+                        console.log("Audio playback started successfully.");
+                    })
+                    .catch((err) => {
+                        console.error("Error playing the audio:", err);
+                    });
             } else if (!callRequest?.callerUserId && audioRef.current) {
-                // Stop the sound if no call is active
+                console.log("No active call. Stopping audio playback...");
                 audioRef.current.pause();
                 audioRef.current.currentTime = 0;
             }
