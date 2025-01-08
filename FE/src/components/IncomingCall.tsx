@@ -43,7 +43,7 @@
         useEffect(() => {
             if (callRequest?.callerUserId && audioRef.current) {
                 console.log("Incoming call detected. Attempting to play audio...");
-                audioRef.current.volume = 0.3;
+                audioRef.current.volume = 0.005;
                 audioRef.current
                     .play()
                     .then(() => {
