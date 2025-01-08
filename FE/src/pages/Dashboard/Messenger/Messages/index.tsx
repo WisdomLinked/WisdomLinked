@@ -13,10 +13,11 @@ import CloseIcon from '@mui/icons-material/Close';
 import SeminarDetails from "../../seminarDetails";
 import ExpertSeminar from "../../_ExpertDashboard/seminar";
 
-
 const Messages = () => {
     const dispatch = useDispatch()
     const messagesEndRef = useRef<HTMLDivElement>(null);
+    const audioRef = useRef<HTMLAudioElement>(null);
+    const prevMessagesLength = useRef(0);
     const { chat, auth: { userDetails }, videoChat: { otherUserId }, friends: { friends } } = useAppSelector((state) => state);
     const { chosenChatDetails, messages, chosenGroupChatDetails, currentPage, gotAllChats, isNewMessage } = chat;
 
@@ -66,7 +67,6 @@ const Messages = () => {
 
 
     const sameAuthor = (message: MessageType, index: number) => {
-
         if (index === 0) {
             return false;
         }
@@ -142,12 +142,28 @@ const Messages = () => {
     }, [chosenChatDetails, chosenGroupChatDetails]);
 
     useEffect(() => {
-        if (messages.length && (isFirstLoad || isNewMessage))
+        if (messages.length > prevMessagesLength.current) {
+            // Play notification sound only if not initial load
+            if (!isFirstLoad && audioRef.current) {
+                audioRef.current.play().catch((err) => {
+                    console.error("Error playing audio:", err);
+                });
+            }
             scrollToBottom();
+        }
+        prevMessagesLength.current = messages.length; // Update the previous messages length
     }, [messages]);
 
     return (
         <div className="w-full flex flex-col items-center h-full overflow-auto pb-[10px]" onScroll={handleScroll}>
+            {/* Audio element for notification sound */}
+            <audio ref={audioRef} preload="auto">
+                <source
+                    src="https://www.soundjay.com/buttons/sounds/button-09a.mp3"
+                    type="audio/mp3"
+                />
+                Your browser does not support the audio element.
+            </audio>
             <MessagesHeader
                 events={events}
                 scrollPosition={scrollPosition}
