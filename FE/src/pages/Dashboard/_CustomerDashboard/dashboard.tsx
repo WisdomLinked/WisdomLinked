@@ -168,7 +168,8 @@ const Dashboard = () => {
                     <div className="flex flex-wrap justify-center gap-6">
                         {
                             acceptedSeminars.map((item: any, index: number) => (
-                                <div key={index} className="w-fit p-4 bg-darkgrey">
+                                // <div key={index} className="w-fit p-4 bg-darkgrey">
+                                    <div key={index} className="w-fit p-4 bg-darkgrey rounded-lg shadow-md transform transition-all duration-300 hover:scale-105 hover:shadow-lg overflow-hidden">
                                     <div className="flex space-x-3 items-center">
                                         <Avatar
                                             username={item.admin.username}
@@ -210,7 +211,8 @@ const Dashboard = () => {
                     <div className="flex flex-wrap justify-center gap-6">
                         {
                             groupChats.map((item: any, index: number) => (
-                                <div key={index} className="w-fit p-4 bg-darkgrey">
+                                // <div key={index} className="w-fit p-4 bg-darkgrey">
+                                <div key={index} className="w-fit p-4 bg-darkgrey rounded-lg shadow-md transform transition-all duration-300 hover:scale-105 hover:shadow-lg overflow-hidden">
                                     <div className="flex space-x-3 items-center">
                                         <Avatar
                                             username={item.groupChatId.admin.username}
@@ -253,7 +255,8 @@ const Dashboard = () => {
                         {
                             sessions.map((item: any, index: number) => (
                                 item.status === 'accepted' ?
-                                    <div key={index} className="w-fit p-4 bg-darkgrey">
+                                    // <div key={index} className="w-fit p-4 bg-darkgrey">
+                                    <div key={index} className="w-fit p-4 bg-darkgrey rounded-lg shadow-md transform transition-all duration-300 hover:scale-105 hover:shadow-lg overflow-hidden">
                                         <div className="flex space-x-3 items-center">
                                             <Avatar
                                                 username={item.expert.username}
@@ -304,7 +307,9 @@ const Dashboard = () => {
                     <div className="flex flex-wrap justify-center gap-6">
                         {
                             sessions.map((item: any, index: number) => (
-                                item.status === 'pending' ? <div key={index} className="w-fit p-4 bg-darkgrey">
+                                item.status === 'pending' ?
+                                    // <div key={index} className="w-fit p-4 bg-darkgrey">
+                                    <div key={index} className="w-fit p-4 bg-darkgrey rounded-lg shadow-md transform transition-all duration-300 hover:scale-105 hover:shadow-lg overflow-hidden">
                                         <div className="flex space-x-3 items-center">
                                             <Avatar
                                                 username={item.expert.username}
