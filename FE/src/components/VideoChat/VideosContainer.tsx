@@ -182,10 +182,15 @@ const VideosContainer = (props: any) => {
 
 
     useEffect(() => {
+        console.log("Room Details:", roomDetails);
+        console.log("Remote Streams:", remoteStreams);
+
         if (roomDetails) {
             const currentGroupChatonRoom = groupChatList.find(
                 (x: any) => x.groupId === roomDetails?.groupId
             );
+            console.log("Current Group Chat on Room:", currentGroupChatonRoom);
+
             const mapped = remoteStreams.map((stream: any) => {
                 const userId = roomDetails?.participants.find(
                     (x: any) => x.socketId === stream.connUserSocketId
@@ -193,6 +198,8 @@ const VideosContainer = (props: any) => {
                 const userInfo = currentGroupChatonRoom?.participants.find(
                     (x: any) => x._id === userId
                 );
+                console.log("Mapping Stream:", { stream, userInfo });
+
                 const isRoomCreator = userId === roomDetails?.roomCreator?.userId;
                 const forceMuted = roomDetails?.mutedParticipants?.find(
                     (x) => x === userId

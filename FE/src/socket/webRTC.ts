@@ -181,10 +181,9 @@ export const handleSignalingData = (data: {
 };
 
 const addNewRemoteStream = (remoteStream: MediaStream | Boolean) => {
-    console.log("Hi")
+    console.log("Adding new remote stream:", remoteStream);
     const remoteStreams = store.getState().room.remoteStreams;
     const newRemoteStreams = [...remoteStreams, remoteStream];
-
     store.dispatch(setRemoteStreams(newRemoteStreams) as any);
 };
 

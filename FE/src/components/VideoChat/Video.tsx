@@ -26,6 +26,7 @@ const Video = ({
 
     useEffect(() => {
         if (stream && typeof stream !== "boolean") {
+            console.log("Attaching Stream to Video:", stream);
             const video = videoRef.current;
 
             if (video) {
