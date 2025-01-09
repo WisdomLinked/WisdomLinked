@@ -10,12 +10,12 @@ import { useNavigate } from "react-router-dom";
 import CloseIcon from '@mui/icons-material/Close';
 import SelectDateTime from "../selectDateTime";
 import { showAlert } from "../../../actions/alertActions";
-import {setChosenChatDetails} from "../../../actions/chatActions";
+import {setChosenChatDetails, setChosenGroupChatDetails} from "../../../actions/chatActions";
 import Chatbot from "../../../components/chatbot";
 
 const Dashboard = () => {
 
-    const { auth: { userDetails: { pendingGroupChats, events, status,_id:userId } } } = useAppSelector(state => state)
+    const { auth: { userDetails: { pendingGroupChats, events, groupChats:groupChat, status,_id:userId } }, friends: { groupChatList }} = useAppSelector(state => state)
     const dispatch = useDispatch()
     const navigate = useNavigate()
 
@@ -88,28 +88,48 @@ const Dashboard = () => {
         dispatch(setChosenChatDetails({ userId: item._id, username: item.username, image: item.image }));
     };
 
+    const navigateSeminar = (item: any) => {
+        const selectedGroupChat:any = groupChatList.find((x: any) => x.groupId === item._id)
+        console.log("navigate events", item);
+        navigate(`${process.env.REACT_APP_AUTH_URL}customerdashboard/chat`);
+        dispatch(setChosenGroupChatDetails( selectedGroupChat ));
+    };
+
     // Batch state updates for sessions and groupChats
     useEffect(() => {
         const now = new Date().getTime();
 
         const updatedSessions = events.filter((item: any) => new Date(item.end).getTime() >= now);
         const updatedGroupChats = pendingGroupChats.filter((item: any) => new Date(item.groupChatId.end).getTime() >= now);
+        const updatedSeminars = groupChat.filter((item: any) => new Date(item.end).getTime() >= now);
+        console.log("updatedSeminars: ", updatedSeminars);
+        console.log("updatedgroupChats: ", updatedGroupChats);
+        console.log("updatedSessions: ", updatedSessions);
 
         set_sessions(updatedSessions);
         set_groupChats(updatedGroupChats);
+        set_acceptedSeminars(updatedSeminars);
 
         // Trigger image fetch only once
         if (!fetchImagesRef.current) {
             fetchImagesRef.current = true;
-            fetchImages(updatedSessions);
+            const allExperts = [...updatedSessions, ...groupChats, ...updatedSeminars];
+            fetchImages(allExperts);
         }
-    }, [events, pendingGroupChats]);
+    }, [events, pendingGroupChats, groupChat]);
 
     const fetchImages = async (sessionList: any[]) => {
         const uniqueExperts = new Map<string, string>();
         sessionList.forEach((item) => {
             if (item.expert && item.expert._id && item.expert.image) {
                 uniqueExperts.set(item.expert._id, item.expert.image);
+            }
+            else if (item.customerId && item.customerId._id && item.customerId.image) {
+                uniqueExperts.set(item.customerId._id, item.customerId.image);
+            }
+
+            else if (item.admin && item.admin._id && item.admin.image) {
+                uniqueExperts.set(item.admin._id, item.admin.image);
             }
         });
 
@@ -144,32 +164,37 @@ const Dashboard = () => {
         <div className="w-full h-full mx-auto p-6 text-white overflow-y-auto relative">
             <div className="text-center text-2xl mb-6">Seminar Appointments </div>
             {
-                groupChats.length ?
+                acceptedSeminars.length ?
                     <div className="flex flex-wrap justify-center gap-6">
                         {
-                            groupChats.map((item: any, index: number) => (
+                            acceptedSeminars.map((item: any, index: number) => (
                                 <div key={index} className="w-fit p-4 bg-darkgrey">
                                     <div className="flex space-x-3 items-center">
                                         <Avatar
-                                            username={item.groupChatId.admin.username}
-                                            image={item.groupChatId.admin.image}
+                                            username={item.admin.username}
+                                            // image={item.customerId.image}
+                                            image={base64Images.get(item.admin._id)}
                                         />
                                         <div>
-                                            <div className="text-lg">{item.groupChatId.admin.username}</div>
-                                            <div className="text-sm">{item.groupChatId.admin.email}</div>
+                                            <div className="text-lg">{item.admin.username}</div>
+                                            <div className="text-sm">{item.admin.email}</div>
                                         </div>
                                     </div>
-                                    <hr className="my-2" />
-                                    <div><span className="font-bold">Title  : </span> {item.groupChatId.name}</div>
-                                    <div><span className="font-bold">Starts at : </span> {formatDateYYYY_MM_DD_h_m(item.groupChatId.start)}</div>
-                                    <div><span className="font-bold">Duration  : </span> {item.groupChatId.duration} min</div>
-                                    <div><span className="font-bold">Price  : </span> ${item.groupChatId.price}</div>
-                                    <hr className="my-3" />
+                                    <hr className="my-2"/>
+                                    <div><span className="font-bold">Title  : </span> {item.name}</div>
+                                    <div><span className="font-bold">Description  : </span> {item.description}</div>
+                                    <div><span
+                                        className="font-bold">Starts at : </span> {formatDateYYYY_MM_DD_h_m(item.start)}
+                                    </div>
+                                    <div><span className="font-bold">Duration  : </span> {item.duration} min
+                                    </div>
+                                    <div><span className="font-bold">Price  : </span> ${item.price}</div>
+                                    <hr className="my-2"/>
                                     <button
                                         className="py-1 w-full bg-green rounded-lg flex items-center justify-center disabled:opacity-50"
-                                        onClick={() => cancelSeminarAppointment(item)}
+                                        onClick={() => navigateSeminar(item)}
                                     >
-                                        Cancel
+                                        Go To Seminar
                                     </button>
                                 </div>
                             ))
@@ -179,7 +204,7 @@ const Dashboard = () => {
             }
 
 
-            <div className="text-center text-2xl mb-6">Pending Seminar Appointments </div>
+            <div className="text-center text-2xl mb-6">Pending Seminar Appointments</div>
             {
                 groupChats.length ?
                     <div className="flex flex-wrap justify-center gap-6">
@@ -189,19 +214,23 @@ const Dashboard = () => {
                                     <div className="flex space-x-3 items-center">
                                         <Avatar
                                             username={item.groupChatId.admin.username}
-                                            image={item.groupChatId.admin.image}
+                                            //image={item.groupChatId.admin.image}
+                                            image={base64Images.get(item.groupChatId.admin._id)}
                                         />
                                         <div>
                                             <div className="text-lg">{item.groupChatId.admin.username}</div>
                                             <div className="text-sm">{item.groupChatId.admin.email}</div>
                                         </div>
                                     </div>
-                                    <hr className="my-2" />
+                                    <hr className="my-2"/>
                                     <div><span className="font-bold">Title  : </span> {item.groupChatId.name}</div>
-                                    <div><span className="font-bold">Starts at : </span> {formatDateYYYY_MM_DD_h_m(item.groupChatId.start)}</div>
-                                    <div><span className="font-bold">Duration  : </span> {item.groupChatId.duration} min</div>
+                                    <div><span
+                                        className="font-bold">Starts at : </span> {formatDateYYYY_MM_DD_h_m(item.groupChatId.start)}
+                                    </div>
+                                    <div><span className="font-bold">Duration  : </span> {item.groupChatId.duration} min
+                                    </div>
                                     <div><span className="font-bold">Price  : </span> ${item.groupChatId.price}</div>
-                                    <hr className="my-3" />
+                                    <hr className="my-3"/>
                                     <button
                                         className="py-1 w-full bg-green rounded-lg flex items-center justify-center disabled:opacity-50"
                                         onClick={() => cancelSeminarAppointment(item)}
