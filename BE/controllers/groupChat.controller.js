@@ -283,7 +283,6 @@ const addMemberToGroup = async (req, res) => {
 
 
         // add friend to the group
-
         if (!groupChat.participants.includes(friendId)) {
             groupChat.participants = [...groupChat.participants, friendId];
             customer.groupChats.push(groupChatId);

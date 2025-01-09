@@ -21,6 +21,7 @@ const Dashboard = () => {
 
     const [groupChats, set_groupChats] = useState<any>([])
     const [sessions, set_sessions] = useState<any>([])
+    const [acceptedSeminars, set_acceptedSeminars] = useState<any>([])
     const [editModalShow, set_editModalShow] = useState<boolean>(false)
     const [selectedEvent, set_selectedEvent] = useState<any>(null)
     const [base64Images, setBase64Images] = useState<Map<string, string>>(new Map());
@@ -142,6 +143,43 @@ const Dashboard = () => {
     return (
         <div className="w-full h-full mx-auto p-6 text-white overflow-y-auto relative">
             <div className="text-center text-2xl mb-6">Seminar Appointments </div>
+            {
+                groupChats.length ?
+                    <div className="flex flex-wrap justify-center gap-6">
+                        {
+                            groupChats.map((item: any, index: number) => (
+                                <div key={index} className="w-fit p-4 bg-darkgrey">
+                                    <div className="flex space-x-3 items-center">
+                                        <Avatar
+                                            username={item.groupChatId.admin.username}
+                                            image={item.groupChatId.admin.image}
+                                        />
+                                        <div>
+                                            <div className="text-lg">{item.groupChatId.admin.username}</div>
+                                            <div className="text-sm">{item.groupChatId.admin.email}</div>
+                                        </div>
+                                    </div>
+                                    <hr className="my-2" />
+                                    <div><span className="font-bold">Title  : </span> {item.groupChatId.name}</div>
+                                    <div><span className="font-bold">Starts at : </span> {formatDateYYYY_MM_DD_h_m(item.groupChatId.start)}</div>
+                                    <div><span className="font-bold">Duration  : </span> {item.groupChatId.duration} min</div>
+                                    <div><span className="font-bold">Price  : </span> ${item.groupChatId.price}</div>
+                                    <hr className="my-3" />
+                                    <button
+                                        className="py-1 w-full bg-green rounded-lg flex items-center justify-center disabled:opacity-50"
+                                        onClick={() => cancelSeminarAppointment(item)}
+                                    >
+                                        Cancel
+                                    </button>
+                                </div>
+                            ))
+                        }
+                    </div> :
+                    <div className="text-center text-lightgrey my-10">No appointments found</div>
+            }
+
+
+            <div className="text-center text-2xl mb-6">Pending Seminar Appointments </div>
             {
                 groupChats.length ?
                     <div className="flex flex-wrap justify-center gap-6">
