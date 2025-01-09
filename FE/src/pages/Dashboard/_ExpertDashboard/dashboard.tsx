@@ -132,7 +132,7 @@ const Dashboard = () => {
 
     return (
         <div className="w-full h-full mx-auto p-6 text-white overflow-y-auto">
-            <div className="text-center text-2xl mb-6">Seminar Appointments</div>
+            <div className="text-center text-2xl mb-6">Booked Seminar Sessions</div>
             {
                 acceptedSeminars.length ?
                     <div className="flex flex-wrap justify-center gap-6">
@@ -146,12 +146,13 @@ const Dashboard = () => {
                                             image={base64Images.get(item.admin._id)}
                                         />
                                         <div>
-                                            <div className="text-lg">{item.admin.username}</div>
-                                            <div className="text-sm">{item.admin.email}</div>
+                                            <div className="text-lg">{item.name}</div>
+                                            {/*<div className="text-sm">{item.description}</div>*/}
                                         </div>
                                     </div>
                                     <hr className="my-2"/>
-                                    <div><span className="font-bold">Title  : </span> {item.name}</div>
+                                    {/*<div><span className="font-bold">Expert  : </span> {item.admin.username}</div>*/}
+                                    {/*<div><span className="font-bold">Email  : </span> {item.admin.email}</div>*/}
                                     <div><span className="font-bold">Description  : </span> {item.description}</div>
                                     <div><span
                                         className="font-bold">Starts at : </span> {formatDateYYYY_MM_DD_h_m(item.start)}
@@ -170,10 +171,10 @@ const Dashboard = () => {
                             ))
                         }
                     </div> :
-                    <div className="text-center text-lightgrey my-10">No Seminar found</div>
+                    <div className="text-center text-lightgrey my-10">No Booked Seminar sessions</div>
             }
 
-            <div className="text-center text-2xl mb-6">Pending Seminar Appointments</div>
+            <div className="text-center text-2xl mb-6">Pending Seminar Sessions</div>
             {
                 groupChats.length ?
                     <div className="flex flex-wrap justify-center gap-6">
@@ -192,6 +193,7 @@ const Dashboard = () => {
                                     </div>
                                     <hr className="my-2"/>
                                     <div><span className="font-bold">Title  : </span> {item.groupChatId.name}</div>
+                                    <div><span className="font-bold">Description  : </span> {item.groupChatId.description}</div>
                                     <div><span
                                         className="font-bold">Starts at : </span> {formatDateYYYY_MM_DD_h_m(item.groupChatId.start)}
                                     </div>
@@ -210,9 +212,9 @@ const Dashboard = () => {
                             ))
                         }
                     </div> :
-                    <div className="text-center text-lightgrey my-10">No appointments found</div>
+                    <div className="text-center text-lightgrey my-10">No pending seminar sessions</div>
             }
-            <div className="text-center text-2xl my-6">Session Appointments</div>
+            <div className="text-center text-2xl my-6">Booked Individual Sessions</div>
             {
                 sessions.length ?
                     <div className="flex flex-wrap justify-center gap-6">
@@ -254,9 +256,9 @@ const Dashboard = () => {
                             ))
                         }
                     </div> :
-                    <div className="text-center text-lightgrey my-10">No appointments found</div>
+                    <div className="text-center text-lightgrey my-10">No booked individual sessions</div>
             }
-            <div className="text-center text-2xl my-6">Pending Invitations</div>
+            <div className="text-center text-2xl my-6">Pending Individual Sessions</div>
             {
                 pendingInvitations.length ?
                     <div className="flex flex-wrap justify-center gap-6">
@@ -301,7 +303,7 @@ const Dashboard = () => {
                             ))
                         }
                     </div> :
-                    <div className="text-center text-lightgrey my-10">No appointments found</div>
+                    <div className="text-center text-lightgrey my-10">No pending individual session</div>
             }
             <div
                 style={{

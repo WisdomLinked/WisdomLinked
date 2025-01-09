@@ -162,7 +162,7 @@ const Dashboard = () => {
 
     return (
         <div className="w-full h-full mx-auto p-6 text-white overflow-y-auto relative">
-            <div className="text-center text-2xl mb-6">Seminar Appointments </div>
+            <div className="text-center text-2xl mb-6">Booked Seminar Sessions</div>
             {
                 acceptedSeminars.length ?
                     <div className="flex flex-wrap justify-center gap-6">
@@ -200,11 +200,11 @@ const Dashboard = () => {
                             ))
                         }
                     </div> :
-                    <div className="text-center text-lightgrey my-10">No appointments found</div>
+                    <div className="text-center text-lightgrey my-10">No Booked Seminar sessions</div>
             }
 
 
-            <div className="text-center text-2xl mb-6">Pending Seminar Appointments</div>
+            <div className="text-center text-2xl mb-6">Pending Seminar Sessions</div>
             {
                 groupChats.length ?
                     <div className="flex flex-wrap justify-center gap-6">
@@ -225,6 +225,9 @@ const Dashboard = () => {
                                     <hr className="my-2"/>
                                     <div><span className="font-bold">Title  : </span> {item.groupChatId.name}</div>
                                     <div><span
+                                        className="font-bold">Description  : </span> {item.groupChatId.description}
+                                    </div>
+                                    <div><span
                                         className="font-bold">Starts at : </span> {formatDateYYYY_MM_DD_h_m(item.groupChatId.start)}
                                     </div>
                                     <div><span className="font-bold">Duration  : </span> {item.groupChatId.duration} min
@@ -241,9 +244,9 @@ const Dashboard = () => {
                             ))
                         }
                     </div> :
-                    <div className="text-center text-lightgrey my-10">No appointments found</div>
+                    <div className="text-center text-lightgrey my-10">No pending seminar sessions</div>
             }
-            <div className="text-center text-2xl my-6">Session Appointments </div>
+            <div className="text-center text-2xl my-6">Booked Individual Sessions</div>
             {
                 sessions.length ?
                     <div className="flex flex-wrap justify-center gap-6">
@@ -293,9 +296,9 @@ const Dashboard = () => {
                             ))
                         }
                     </div> :
-                    <div className="text-center text-lightgrey my-10">No appointments found</div>
+                    <div className="text-center text-lightgrey my-10">No booked individual sessions</div>
             }
-            <div className="text-center text-2xl my-6">Pending Invitations</div>
+            <div className="text-center text-2xl my-6">Pending Individual Sessions</div>
             {
                 sessions.length ?
                     <div className="flex flex-wrap justify-center gap-6">
@@ -340,7 +343,7 @@ const Dashboard = () => {
                             ))
                         }
                     </div> :
-                    <div className="text-center text-lightgrey my-10">No appointments found</div>
+                    <div className="text-center text-lightgrey my-10">No pending individual session</div>
             }
             {
                 editModalShow ?
