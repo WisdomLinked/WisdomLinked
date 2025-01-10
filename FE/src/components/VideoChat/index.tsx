@@ -21,31 +21,56 @@ const VideoChat = () => {
 
     const updatePosition = useCallback((x: number, y: number) => {
         if (containerRef.current) {
-            containerRef.current.style.transform = `translate3d(${x}px, ${y}px, 0)`;
+            if (isRoomMinimized) {
+                containerRef.current.style.transform = `translate3d(${x}px, ${y}px, 0)`;
+            } else {
+                containerRef.current.style.transform = 'translate3d(0, 0, 0)';
+            }
         }
-    }, []);
+    }, [isRoomMinimized]);
+
 
     const handleStart = useCallback((clientX: number, clientY: number) => {
         isDraggingRef.current = true;
         const startX = clientX - positionRef.current.x;
         const startY = clientY - positionRef.current.y;
 
+        // const handleMove = (moveClientX: number, moveClientY: number) => {
+        //     if (!isDraggingRef.current) return;
+        //
+        //     requestAnimationFrame(() => {
+        //         let newX = moveClientX - startX;
+        //         let newY = moveClientY - startY;
+        //
+        //         const containerWidth = containerRef.current?.offsetWidth || 0;
+        //         const containerHeight = containerRef.current?.offsetHeight || 0;
+        //         newX = Math.max(0, Math.min(newX, window.innerWidth - containerWidth));
+        //         newY = Math.max(63, Math.min(newY, window.innerHeight - containerHeight));
+        //
+        //         positionRef.current = { x: newX, y: newY };
+        //         updatePosition(newX, newY);
+        //     });
+        // };
+
         const handleMove = (moveClientX: number, moveClientY: number) => {
             if (!isDraggingRef.current) return;
 
             requestAnimationFrame(() => {
-                let newX = moveClientX - startX;
-                let newY = moveClientY - startY;
+                if (isRoomMinimized) {
+                    let newX = moveClientX - startX;
+                    let newY = moveClientY - startY;
 
-                const containerWidth = containerRef.current?.offsetWidth || 0;
-                const containerHeight = containerRef.current?.offsetHeight || 0;
-                newX = Math.max(0, Math.min(newX, window.innerWidth - containerWidth));
-                newY = Math.max(63, Math.min(newY, window.innerHeight - containerHeight));
+                    const maxX = window.innerWidth - 300;
+                    const maxY = window.innerHeight - 300;
+                    newX = Math.max(0, Math.min(newX, maxX));
+                    newY = Math.max(63, Math.min(newY, maxY));
 
-                positionRef.current = { x: newX, y: newY };
-                updatePosition(newX, newY);
+                    positionRef.current = { x: newX, y: newY };
+                    updatePosition(newX, newY);
+                }
             });
         };
+
 
         const handleEnd = () => {
             isDraggingRef.current = false;
@@ -83,6 +108,15 @@ const VideoChat = () => {
         updatePosition(positionRef.current.x, positionRef.current.y);
     }, [updatePosition]);
 
+    useEffect(() => {
+        if (!isRoomMinimized) {
+            updatePosition(0, 0);
+        } else {
+            updatePosition(positionRef.current.x, positionRef.current.y);
+        }
+    }, [isRoomMinimized, updatePosition]);
+
+
     return (
         <React.Fragment>
             {hidden ? (
@@ -107,9 +141,8 @@ const VideoChat = () => {
                         transition: isDraggingRef.current ? "none" : "transform 0.1s ease-out",
                         touchAction: "none",
                     }}
-                    className={`
-                        flex flex-col items-center justify-center bg-black border-2 border-green rounded-[8px] z-[200] overflow-clip
-                        ${isRoomMinimized ? "w-[300px] h-[300px]" : "w-[100vw] md:w-[calc(100vw-70px)] h-[calc(100vh-63px)]"}
+                    className={`flex flex-col items-center justify-center bg-black border-2 border-green rounded-[8px] z-[200] overflow-clip
+                        ${isRoomMinimized ? "w-[300px] h-[300px]" : "fixed top-[63px] left-0 w-screen h-[calc(100vh-63px)]"}
                     `}
                 >
                     <button
