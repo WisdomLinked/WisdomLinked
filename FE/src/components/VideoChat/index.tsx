@@ -109,38 +109,39 @@ const VideoChat = () => {
                 >
                     <VisibilityIcon />
                 </button>
-            ) : (
-                <div
-                    ref={containerRef}
-                    onMouseDown={handleMouseDown}
-                    onTouchStart={handleTouchStart}
-                    style={{
-                        position: "absolute",
-                        left: 0,
-                        top: 0,
-                        cursor: "grab",
-                        willChange: "transform",
-                        transition: isDraggingRef.current ? "none" : "transform 0.1s ease-out",
-                        touchAction: "none",
-                    }}
-                    className={`flex flex-col items-center justify-center bg-black border-2 border-green rounded-[8px] z-[200] overflow-clip
-                        ${isRoomMinimized ? "w-[300px] h-[300px]" : "fixed top-[63px] left-0 w-screen h-[calc(100vh-63px)]"}
-                    `}
+            ) : null}
+
+            <div
+                ref={containerRef}
+                onMouseDown={handleMouseDown}
+                onTouchStart={handleTouchStart}
+                style={{
+                    position: "absolute",
+                    left: 0,
+                    top: 0,
+                    cursor: "grab",
+                    willChange: "transform",
+                    transition: isDraggingRef.current ? "none" : "transform 0.1s ease-out",
+                    touchAction: "none",
+                    display: hidden ? "none" : "block", // Use CSS to hide the component
+                }}
+                className={`flex flex-col items-center justify-center bg-black border-2 border-green rounded-[8px] z-[200] overflow-clip
+        ${isRoomMinimized ? "w-[300px] h-[300px]" : "fixed top-[63px] left-0 w-screen h-[calc(100vh-63px)]"}
+    `}
+            >
+                <button
+                    className="absolute top-1 right-1 p-1 rounded-md text-white hover:bg-lightgrey hover:text-black z-[10000]"
+                    title="Hide call window"
+                    onClick={() => set_hidden(true)}
                 >
-                    <button
-                        className="absolute top-1 right-1 p-1 rounded-md text-white hover:bg-lightgrey hover:text-black z-[10000]"
-                        title="Hide call window"
-                        onClick={() => set_hidden(true)}
-                    >
-                        <VisibilityOffIcon />
-                    </button>
-                    <VideosContainer videoChat={videoChat} isRoomMinimized={isRoomMinimized} />
-                    <RoomButtons
-                        isRoomMinimized={isRoomMinimized}
-                        handleRoomResize={roomResizeHandler}
-                    />
-                </div>
-            )}
+                    <VisibilityOffIcon />
+                </button>
+                <VideosContainer videoChat={videoChat} isRoomMinimized={isRoomMinimized} />
+                <RoomButtons
+                    isRoomMinimized={isRoomMinimized}
+                    handleRoomResize={roomResizeHandler}
+                />
+            </div>
         </React.Fragment>
     );
 };
