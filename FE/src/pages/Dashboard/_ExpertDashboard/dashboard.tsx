@@ -175,7 +175,7 @@ const Dashboard = () => {
                     <div className="text-center text-lightgrey my-10">No Booked Seminar sessions</div>
             }
 
-            <div className="text-center text-2xl mb-6">Pending Seminar Sessions</div>
+            <div className="text-center text-2xl my-6">Pending Seminar Sessions</div>
             {
                 groupChats.length ?
                     <div className="flex flex-wrap justify-center gap-6">
