@@ -35,23 +35,6 @@ const VideoChat = () => {
         const startX = clientX - positionRef.current.x;
         const startY = clientY - positionRef.current.y;
 
-        // const handleMove = (moveClientX: number, moveClientY: number) => {
-        //     if (!isDraggingRef.current) return;
-        //
-        //     requestAnimationFrame(() => {
-        //         let newX = moveClientX - startX;
-        //         let newY = moveClientY - startY;
-        //
-        //         const containerWidth = containerRef.current?.offsetWidth || 0;
-        //         const containerHeight = containerRef.current?.offsetHeight || 0;
-        //         newX = Math.max(0, Math.min(newX, window.innerWidth - containerWidth));
-        //         newY = Math.max(63, Math.min(newY, window.innerHeight - containerHeight));
-        //
-        //         positionRef.current = { x: newX, y: newY };
-        //         updatePosition(newX, newY);
-        //     });
-        // };
-
         const handleMove = (moveClientX: number, moveClientY: number) => {
             if (!isDraggingRef.current) return;
 
@@ -115,7 +98,6 @@ const VideoChat = () => {
             updatePosition(positionRef.current.x, positionRef.current.y);
         }
     }, [isRoomMinimized, updatePosition]);
-
 
     return (
         <React.Fragment>
