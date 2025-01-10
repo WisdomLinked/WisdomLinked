@@ -20,15 +20,11 @@ const Microphone: React.FC<{
     } = useAppSelector((state) => state);
 
     const handleToggleMic = () => {
-        if (!forceMuted) {
-            localStream.getAudioTracks().forEach((track) => track.enabled = !track.enabled);
-            dispatch(setVideoAudioStatus(localVideoEnabled, !localAudioEnabled, true))
-            if (roomDetails) {
-                setAudioStatusInRoom({
-                    customerId: userDetails.userId,
-                    roomId: roomDetails?.roomId,
-                    audioStatus: !localAudioEnabled
-                })
+        if (!forceMuted && localStream) {
+            const audioTrack = localStream.getAudioTracks()[0];
+            if (audioTrack) {
+                audioTrack.enabled = !audioTrack.enabled;
+                dispatch(setVideoAudioStatus(localVideoEnabled, audioTrack.enabled, true));
             }
         }
     };
@@ -46,12 +42,12 @@ const Microphone: React.FC<{
     }, [forceMuted])
 
     return (
-        <button 
-            onClick={handleToggleMic} 
+        <button
+            onClick={handleToggleMic}
             className="text-white disabled:opacity-50"
             disabled={forceMuted || !audioStreamAvailable}
         >
-            {forceMuted || localAudioEnabled ? <MicIcon /> : <MicOffIcon />}
+            {localAudioEnabled ? <MicIcon /> : <MicOffIcon />}
         </button>
     );
 };

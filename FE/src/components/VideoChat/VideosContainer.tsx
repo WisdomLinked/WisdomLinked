@@ -292,7 +292,6 @@ const VideosContainer = (props: any) => {
 
    return (
         <div className={`w-full h-[calc(100%-50px)] overflow-clip relative`}>
-            {/* Loader sound audio element (from new code) */}
             <audio ref={audioRef} preload="auto" loop>
                 <source
                     src="https://www.soundjay.com/phone/sounds/cell-phone-vibrate-1.mp3"

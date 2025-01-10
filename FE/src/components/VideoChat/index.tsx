@@ -9,6 +9,7 @@ const VideoChat = () => {
     const [isRoomMinimized, setIsRoomMinimized] = useState(true);
     const { videoChat, app: { feedbackModalShow } } = useAppSelector((state) => state);
     const [hidden, set_hidden] = useState(false);
+    const [isMicMuted, setIsMicMuted] = useState(false);
     const positionRef = useRef({ x: window.innerWidth - 300, y: 63 });
     const containerRef = useRef<HTMLDivElement>(null);
     const isDraggingRef = useRef(false);
@@ -36,7 +37,6 @@ const VideoChat = () => {
                 let newX = moveClientX - startX;
                 let newY = moveClientY - startY;
 
-                // Constrain movement within the viewport
                 const containerWidth = containerRef.current?.offsetWidth || 0;
                 const containerHeight = containerRef.current?.offsetHeight || 0;
                 newX = Math.max(0, Math.min(newX, window.innerWidth - containerWidth));
@@ -105,7 +105,7 @@ const VideoChat = () => {
                         cursor: "grab",
                         willChange: "transform",
                         transition: isDraggingRef.current ? "none" : "transform 0.1s ease-out",
-                        touchAction: "none", // Prevent default touch actions
+                        touchAction: "none",
                     }}
                     className={`
                         flex flex-col items-center justify-center bg-black border-2 border-green rounded-[8px] z-[200] overflow-clip

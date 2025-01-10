@@ -54,8 +54,19 @@ const Video = ({
                 const videoEnabled = stream.getVideoTracks()?.[0]?.enabled;
                 const audioEnabled = stream.getAudioTracks()?.[0]?.enabled;
 
+                // if (!remoteRoomStream) {
+                //     dispatch(setVideoAudioStatus(videoEnabled, audioEnabled, isLocalStream));
+                // }
                 if (!remoteRoomStream) {
-                    dispatch(setVideoAudioStatus(videoEnabled, audioEnabled, isLocalStream));
+                    // Check if this is a screen share stream
+                    const isScreenShare = stream.getVideoTracks()[0].label.includes('screen');
+
+                    // If it's a screen share, only update video status
+                    if (isScreenShare) {
+                        dispatch(setVideoAudioStatus(videoEnabled, localAudioEnabled, isLocalStream));
+                    } else {
+                        dispatch(setVideoAudioStatus(videoEnabled, audioEnabled, isLocalStream));
+                    }
                 }
             }
         }

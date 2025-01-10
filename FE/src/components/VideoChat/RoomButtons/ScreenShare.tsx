@@ -22,23 +22,18 @@ const ScreenShare: React.FC<{
     const [screenShareEnabled, setScreenShareEnabled] = useState(false);
 
     const handleScreenShareToggle = async () => {
-
         if(type === "DIRECT CALL") {
             handleDirectCall();
         }
-
         if(type === "ROOM") {
             handleRoomCall()
         }
     };
 
-
     const handleDirectCall = async () => {
-
         if(!videoChat) {
             return
         }
-
         if (screenShareEnabled) {
             try {
                 currentPeerConnection?.replaceTrack(
@@ -61,22 +56,26 @@ const ScreenShare: React.FC<{
                 video: true,
                 audio: false,
             });
-            dispatch(setScreenSharingStream(screenShareStream));
+
+            // Combine screen share video with original audio
+            const combinedStream = new MediaStream([
+                ...screenShareStream.getVideoTracks(),
+                ...(videoChat?.localStream?.getAudioTracks() || [])
+            ]);
+
+
+            dispatch(setScreenSharingStream(combinedStream));
             setScreenShareEnabled(true);
 
-            // replace outgoing local stream with screen share stream
-            // replaceTrack (oldTrack, newTrack, oldStream);
             currentPeerConnection?.replaceTrack(
                 currentPeerConnection.streams[0].getVideoTracks()[0],
                 screenShareStream.getTracks()[0],
                 currentPeerConnection.streams[0]
             );
 
-            // const screenTrack = screenShareStream.getVideoTracks()[0];
-
-            // screenTrack.onended = function () {
-            //     currentPeerConnection?.replaceTrack(screenTrack, videoChat.localStream?.getTracks()[0], currentPeerConnection.streams[0]);
-            // };
+            screenShareStream.getVideoTracks()[0].onended = () => {
+                handleScreenShareToggle();
+            };
         }
     }
 
