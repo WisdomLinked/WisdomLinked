@@ -16,7 +16,6 @@ const directMessageHandler = async (socket, data) => {
         });
 
         // check if conversation between sender and receiver already exists
-
         const conversation = await Conversation.findOne({
             participants: { $all: [receiverUserId, senderUserId] },
         });

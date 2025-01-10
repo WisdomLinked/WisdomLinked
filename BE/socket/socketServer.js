@@ -43,11 +43,6 @@ const createSocketServer = (server) => {
         console.log(socket.user)
         console.log(`[SOCKET SERVER] New connection established: ${socket.id}`);
         newConnectionHandler(socket, io);
-
-        socket.on("direct-message", (data) => {
-            console.log("[SOCKET SERVER] Received direct message event", data);
-            directMessageHandler(socket, data);
-        })
         
         socket.on("setRemoteVideoAudioStatus", (data) => {
             const activeConnections = getActiveConnections(data.otherUserId);
@@ -63,15 +58,23 @@ const createSocketServer = (server) => {
             });
         })
 
+        socket.on("direct-message", (data) => {
+            console.log("[SOCKET SERVER] Received direct message event", data);
+            directMessageHandler(socket, data);
+        })
+
         socket.on("group-message", (data) => {
+            console.log("Received group message event:", data);
             groupMessageHandler(socket, data);
         });
 
         socket.on("direct-chat-history", (data) => {
+            console.log("Direct Chat history received:", data);
             directChatHistoryHandler(socket, data.receiverUserId, data.currentPage);
         });
 
         socket.on("group-chat-history", (data) => {
+            console.log("Group Chat history received:", data);
             groupChatHistoryHandler(socket, data.groupChatId, data.currentPage);
         });
 

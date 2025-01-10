@@ -65,6 +65,28 @@ const Messages = () => {
         processMessages();
     }, []);
 
+    useEffect(() => {
+        const processMessages = async () => {
+            const tempImages = new Map<string, string>();
+
+            for (const message of messages) {
+                const userId = message.author._id;
+                // If not fetched yet, fetch it
+                if (message.author.image && !tempImages.has(userId)) {
+                    try {
+                        const base64Image = await profileImageFetch(message.author.image, 'small');
+                        tempImages.set(userId, base64Image);
+                    } catch (error) {
+                        console.error(`Error fetching Base64 image for userId ${userId}:`, error);
+                    }
+                }
+            }
+
+            setProfileImages(tempImages);
+        };
+
+        processMessages();
+    }, [messages]);
 
     const sameAuthor = (message: MessageType, index: number) => {
         if (index === 0) {
@@ -144,12 +166,7 @@ const Messages = () => {
     useEffect(() => {
         if (messages.length > prevMessagesLength.current) {
             console.log("New message detected. Playing audio...");
-            // Play notification sound only if not initial load
-            // if (!isFirstLoad && audioRef.current) {
-            //     audioRef.current.play().catch((err) => {
-            //         console.error("Error playing audio:", err);
-            //     });
-            // }
+
             if (!isFirstLoad && audioRef.current) {
                 audioRef.current.volume = 0.005;
                 audioRef.current
@@ -206,6 +223,20 @@ const Messages = () => {
                 const incomingMessage =
                     message.author._id !== (userDetails as any)._id;
 
+                // Handle direct chat and group chat scenarios
+                let participantImage = null;
+
+                if (chosenChatDetails) {
+                    // Direct chat
+                    participantImage = chosenChatDetails.image;
+                } else if (chosenGroupChatDetails) {
+                    // Group chat: Find the participant in the group
+                    const participant = chosenGroupChatDetails?.participants?.find(
+                        (participant: any) => participant._id === message.author._id
+                    );
+                    participantImage = participant?.image;
+                }
+
                 const isFriend = friends.find((x: any) => (x._id === message.author._id))
                 const disableBookButton = message.author?.role === 'admin' || userDetails?.role === 'admin' || userDetails?.status === 'review' || message.author?.status === 'review'
                 return (
@@ -218,7 +249,9 @@ const Messages = () => {
                             content={message.content}
                             userId={message.author._id}
                             username={message.author.username}
-                            image={chosenChatDetails.image}
+                            // image={chosenChatDetails.image}
+                            // image={participantImage} // Dynamically use image
+                            image={profileImages.get(message.author._id)}
                             role={message.author.role}
                             status={message.author.status}
                             sameAuthor={sameAuthor(message, index)}

@@ -133,17 +133,13 @@ const connectWithSocketServer = (userDetails: UserDetails) => {
 
     socket.on("direct-message", (data: any) => {
         const { newMessage, participants } = data;
-
         const chatDetails = store.getState().chat.chosenChatDetails;
         const friends = store.getState().friends.friends
 
         if (chatDetails) {
             const receiverId = chatDetails.userId;
             const senderId = (store.getState().auth.userDetails as any)._id;
-
-            const isActive =
-                participants.includes(receiverId) &&
-                participants.includes(senderId);
+            const isActive = participants.includes(receiverId) && participants.includes(senderId);
 
             if (isActive) {
                 store.dispatch(addNewMessage(newMessage) as any);
@@ -159,13 +155,11 @@ const connectWithSocketServer = (userDetails: UserDetails) => {
 
     socket.on("group-message", (data: any) => {
         const { newMessage, groupChatId } = data;
-
         const chatDetails = store.getState().chat.chosenGroupChatDetails;
         const userDetails = store.getState().auth.userDetails;
 
         if (chatDetails) {
             const isActive = chatDetails.groupId === groupChatId;
-
             if (isActive) {
                 store.dispatch(addNewMessage(newMessage) as any);
             }
@@ -289,6 +283,7 @@ const sendDirectMessage = (data: {
 };
 
 const sendGroupMessage = (data: { message: any; groupChatId: string }) => {
+    console.log("Emitting group message:", data);
     socket.emit("group-message", data);
 };
 

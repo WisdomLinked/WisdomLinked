@@ -54,6 +54,9 @@ const NewMessageInput: React.FC = () => {
             message = correctStyling(message, "h3");
 
             if (chosenChatDetails) {
+                console.log("Sending direct message...");
+                console.log("Message content:", message);
+                console.log("Receiver User ID:", chosenChatDetails.userId);
                 sendDirectMessage({
                     message,
                     receiverUserId: chosenChatDetails.userId!,
@@ -61,6 +64,9 @@ const NewMessageInput: React.FC = () => {
             }
 
             if (chosenGroupChatDetails) {
+                console.log("Sending group message...");
+                console.log("Message content:", message);
+                console.log("Group Chat ID:", chosenGroupChatDetails.groupId);
                 sendGroupMessage({
                     message,
                     groupChatId: chosenGroupChatDetails.groupId,
@@ -123,7 +129,6 @@ const NewMessageInput: React.FC = () => {
     };
 
     useEffect(() => {
-        //console.log('OKOKOKOK')
         if (chosenChatDetails?.userId && _message) {
             console.log('00000')
             notifyTyping({
@@ -167,19 +172,6 @@ const NewMessageInput: React.FC = () => {
         set_prevChosenChatDetails(chosenChatDetails)
         set_prevChosenGroupChatDetails(chosenGroupChatDetails)
     }, [chosenChatDetails, chosenGroupChatDetails])
-
-    // return (
-    //     <div className='w-full p-4 pt-0 pb-12 sm:pb-4'>
-    //         <ReactQuill
-    //             theme="snow"
-    //             className="w-full bg-black flex flex-col-reverse rounded-md"
-    //             value={_message}
-    //             onChange={set_message}
-    //             onKeyDown={handleSendMessage}
-    //             onBlur={onBlur}
-    //         />
-    //     </div>
-    // );
 
     return (
         <div className="w-full p-4 pt-0 pb-12 sm:pb-4 flex items-center">
