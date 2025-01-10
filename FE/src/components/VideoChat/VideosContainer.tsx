@@ -17,7 +17,6 @@ import PersonRemoveIcon from "@mui/icons-material/PersonRemove";
 import VolumeUpIcon from "@mui/icons-material/VolumeUp";
 import VolumeOffIcon from "@mui/icons-material/VolumeOff";
 
-/* --------------------- The RoomVideo component (unchanged from old) --------------------- */
 const RoomVideo = ({
                        isRoomMinimized,
                        stream,
@@ -151,7 +150,6 @@ const RoomVideo = ({
     );
 };
 
-/* --------------------- Merged VideosContainer component (old + loader logic) --------------------- */
 const VideosContainer = (props: any) => {
     const dispatch = useDispatch();
 
@@ -172,8 +170,6 @@ const VideosContainer = (props: any) => {
             remoteStream,
             screenSharingStream,
             otherUserId,
-            // 'loading' existed in new code, but do not rename or break old logic
-            // if you want to keep it, you can rename or safely ignore
         },
         room: {
             roomDetails,
@@ -186,11 +182,9 @@ const VideosContainer = (props: any) => {
     const [remoteStreamsWithUserData, set_remoteStreamsWithUserData] = useState<any[]>([]);
     const [localStreamVisible, set_localStreamVisible] = useState(true);
 
-    // ---------------------- LOADER STATES/REFS (from new code) ----------------------
     const [isLoading, setIsLoading] = useState(true);
     const audioRef = useRef<HTMLAudioElement>(null);
     const dummyVideoRef = useRef<HTMLVideoElement | null>(null);
-    // -------------------------------------------------------------------------------
 
     const handleLeaveRoom = () => {
         // notify other user that I left the call
@@ -205,18 +199,13 @@ const VideosContainer = (props: any) => {
         }
     };
 
-    // keep old effect for callStatus === "rejected"
     useEffect(() => {
         if (callStatus === "rejected") {
             handleLeaveRoom();
         }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [props]);
 
-    // --------------------- NEW LOADER LOGIC (for 1-on-1 calls) ---------------------
     useEffect(() => {
-        // If there's a single remoteStream in a 1-on-1 call, we handle the dummy video approach
-        // For group calls, remoteStream is not used, but remoteStreamsWithUserData is used instead
         if (remoteStream) {
             // Use a dummy <video> to detect stream readiness
             const videoElement = document.createElement("video");
@@ -259,9 +248,7 @@ const VideosContainer = (props: any) => {
             }
         }
     }, [remoteStream]);
-    // -------------------------------------------------------------------------------
 
-    /* --------------------- Old effect to map remote streams (group calls) --------------------- */
     useEffect(() => {
         if (roomDetails) {
             console.log(roomDetails, "-----------");
@@ -303,8 +290,7 @@ const VideosContainer = (props: any) => {
         }
     }, [remoteStreamsWithUserData]);
 
-    /* --------------------- Return old structure, with 1-on-1 loader logic inserted --------------------- */
-    return (
+   return (
         <div className={`w-full h-[calc(100%-50px)] overflow-clip relative`}>
             {/* Loader sound audio element (from new code) */}
             <audio ref={audioRef} preload="auto" loop>
@@ -315,7 +301,6 @@ const VideosContainer = (props: any) => {
                 Your browser does not support the audio element.
             </audio>
 
-            {/* Old code for call status check */}
             {callStatus !== "accepted" && callStatus ? (
                 <div className="w-full h-full flex items-center justify-center text-white">
                     <div className="w-[120px] h-[120px] rounded-full flex justify-center items-center border-2 border-gray-500 text-gray-100 text-5xl font-bold animate-pulse">
@@ -329,9 +314,7 @@ const VideosContainer = (props: any) => {
             ) : (
                 <div className="w-full h-full">
                     <div className="w-full h-full flex justify-center items-center">
-                        {/* ---------------- Handling 1-on-1 call with loader ---------------- */}
                         {remoteStream ? (
-                                // If we do have a single remote stream (1-on-1), show loader or show the remote
                                 isLoading ? (
                                     <div className="w-full h-full flex justify-center items-center">
                                         <div className="w-[120px] h-[120px] rounded-full flex justify-center items-center border-2 border-gray-500 text-gray-100 text-5xl font-bold animate-pulse">
@@ -343,7 +326,6 @@ const VideosContainer = (props: any) => {
                                         </div>
                                     </div>
                                 ) : (
-                                    // Once loaded, display the remote stream normally (old code)
                                     <div className="relative w-full h-full">
                                         <Video
                                             stream={remoteStream}
@@ -363,9 +345,8 @@ const VideosContainer = (props: any) => {
                                         </div>
                                     </div>
                                 )
-                            ) : /* Otherwise, might be group calls or no remote stream yet */
+                            ) :
                             remoteStreamsWithUserData.length ? (
-                                /* Group call logic from old code (unchanged) */
                                 <div
                                     className={`w-full h-fit max-h-full overflow-y-auto flex flex-wrap justify-center p-1`}
                                 >
@@ -379,7 +360,6 @@ const VideosContainer = (props: any) => {
                                     ))}
                                 </div>
                             ) : localStream ? (
-                                // If we only have a local stream
                                 <div className="w-full h-full flex justify-center items-center overflow-clip">
                                     <div className="w-[120px] h-[120px] rounded-full flex justify-center items-center border-2 border-gray-500 text-gray-100 text-5xl font-bold">
                                         {getAvatarTitle(
@@ -396,7 +376,6 @@ const VideosContainer = (props: any) => {
                             )}
                     </div>
 
-                    {/* Old local-stream corner window (unchanged) */}
                     <div
                         title={localStreamVisible ? "Minimize the window" : "Maximize the window"}
                         className={`absolute bottom-0 right-0 z-[201] bg-midgrey-1 rounded-tl-lg overflow-clip border-0 border-l-2 border-t-2 border-green ${
@@ -415,7 +394,6 @@ const VideosContainer = (props: any) => {
                                 avatarTitle={getAvatarTitle(userDetails?.username)}
                             />
                         ) : localStreamRoom ? (
-                            // For virtual (room) local stream
                             <Video
                                 stream={
                                     screenSharingStreamRoom
