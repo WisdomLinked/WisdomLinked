@@ -85,6 +85,7 @@ const UserMgmt = () => {
             currentPage: pageNum,
             numPerPage: numPerPage
         });
+        console.log(response.result);
         if (response) {
             const updatedUsers = await updateUsersWithImages(response.result);
             set_users([...updatedUsers])

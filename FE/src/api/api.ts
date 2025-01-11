@@ -686,28 +686,14 @@ export const getCustomerById = async (id: any) => {
 
 // ADMIN APIS ------------------
 
-// export const doFilterUsers = async (filter: any) => {
-//     try {
-//         const res = await api.post("admin/filterUsers", filter);
-//         return res.data;
-//     } catch (err: any) {
-//         return checkForAuthorization(err);
-//     }
-// }
-
 export const doFilterUsers = async (filter: any) => {
     try {
-        const res = await api.post("admin/filterUsers", {
-            ...filter,
-            sortBy: 'createdAt',
-            sortOrder: 'DESC'
-        });
+        const res = await api.post("admin/filterUsers", filter);
         return res.data;
     } catch (err: any) {
         return checkForAuthorization(err);
     }
-};
-
+}
 
 export const doFilterPaymentHistories = async (filter: any) => {
     try {

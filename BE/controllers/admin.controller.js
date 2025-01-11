@@ -7,9 +7,10 @@ const { getFullUserData } = require('../middlewares/requireAuth')
 
 const filterUsers = async (req, res) => {
     try {
-        const { username, email, role, sortBy, numPerPage, currentPage } = req.body
+        const { username, email, role, sortBy, sortOrder, numPerPage, currentPage } = req.body
         let query = User.find({ role: { $ne: 'admin' } })
         let countQuery = User.count({ role: { $ne: 'admin' } })
+
         if (username) {
             query.where({ username: { '$regex': username, '$options': 'i' } })
             countQuery.where({ username: { '$regex': username, '$options': 'i' } })
@@ -22,16 +23,12 @@ const filterUsers = async (req, res) => {
             query.where({ role: role })
             countQuery.where({ role: role })
         }
-        switch (sortBy) {
-            case "ASC":
-                query.sort({ username: 1 })
-                break;
-            case "DESC":
-                query.sort({ username: -1 })
-                break;
-            default:
-                break;
-        }
+
+        // Dynamic sorting based on `sortBy` and `sortOrder`
+        const sortField = sortBy || "createdAt";
+        const sortOrderValue = sortOrder === "DESC" ? -1 : 1;
+        query.sort({ [sortField]: sortOrderValue });
+
         query.skip(numPerPage * currentPage).limit(numPerPage)
         const totalCount = await countQuery.exec()
         const users = await query.exec();
