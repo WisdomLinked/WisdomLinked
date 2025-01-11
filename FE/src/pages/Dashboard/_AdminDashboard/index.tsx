@@ -27,7 +27,6 @@ const AdminDashboard = () => {
         }
     }, [userDetails, navigate]);
 
-
     return (
         <div className="w-full h-[100vh] flex flex-col">
             <DashboardHeader userDetails={userDetails}/>

@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import SelectionWithCheckBox from "../../../../components/SelectionWithCheckBox";
-import { doFilterUsers, doUpdateProfileByAdmin } from "../../../../api/api";
+import {doFilterUsers, doUpdateProfileByAdmin, profileImageFetch} from "../../../../api/api";
 import Avatar from "../../../../components/Avatar";
 import LoadingPlaceHolder from "../../../../components/LoadingPlaceholder";
 import ManageModal from "./manageModal";
@@ -47,6 +47,31 @@ const UserMgmt = () => {
     const [auditModalShow, set_auditModalShow] = useState(false)
     const [isFirstLoad, set_isFirstLoad] = useState(true)
 
+    const updateUsersWithImages = async (usersList: any[]) => {
+        try {
+            const updated = await Promise.all(
+                usersList.map(async (user) => {
+                    let base64Image = "";
+                    if (user.image) {
+                        try {
+                            base64Image = await profileImageFetch(user.image, "small");
+                        } catch (error) {
+                            console.error(`Error fetching image for user ${user.email}:`, error);
+                        }
+                    }
+                    return {
+                        ...user,
+                        image: base64Image
+                    };
+                })
+            );
+            return updated;
+        } catch (error) {
+            console.error("Error updating users with images:", error);
+            return usersList;
+        }
+    };
+
     const filterUsers = async (pageNum: number) => {
         set_currentPage(pageNum)
         SetLoadingStatus(true)
@@ -61,9 +86,14 @@ const UserMgmt = () => {
             numPerPage: numPerPage
         });
         if (response) {
-            set_users([...response.result])
+            const updatedUsers = await updateUsersWithImages(response.result);
+            set_users([...updatedUsers])
             set_totalCount(response.totalCount)
-            set_totalPage(response.totalCount % numPerPage ? Math.floor(response.totalCount / numPerPage) : response.totalCount / numPerPage - 1)
+            set_totalPage(
+                response.totalCount % numPerPage
+                    ? Math.floor(response.totalCount / numPerPage)
+                    : response.totalCount / numPerPage - 1
+            )
         }
         SetLoadingStatus(false)
         set_isFirstLoad(false)
