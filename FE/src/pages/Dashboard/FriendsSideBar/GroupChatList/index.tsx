@@ -2,9 +2,28 @@ import React, { useEffect, useState } from "react";
 import { useAppSelector } from "../../../../store";
 import GroupChatListItem from "./GroupChatListItem";
 
+import { styled } from "@mui/system";
+
+const SearchInput = styled("input")({
+    width: "100%",
+    padding: "10px",
+    marginBottom: "20px",
+    borderRadius: "5px",
+    border: "1px solid #444", // Darker border
+    fontSize: "16px",
+    backgroundColor: "#222", // Blackish background
+    color: "#fff", // White text color for contrast
+    outline: "none",
+    caretColor: "#00ffff", // Highlighted cursor color to match the theme
+    "::placeholder": {
+        color: "#888", // Greyish placeholder color
+    },
+});
+
 const GroupChatList = () => {
     const { friends: { groupChatList }, auth: { userDetails } } = useAppSelector((state) => state);
     const [updatedGroupChats, set_updatedGroupChats] = useState<any>([])
+    const [searchQuery, setSearchQuery] = useState<string>("");
 
     useEffect(() => {
         const now = new Date().getTime();
@@ -26,9 +45,20 @@ const GroupChatList = () => {
         set_updatedGroupChats(sortedChats);
     }, [groupChatList, userDetails]);
 
+    const filteredChats = updatedGroupChats.filter((chat: any) =>
+        chat.groupName?.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+
     return (
         <div className="w-full my-5">
-            {updatedGroupChats.map((chat: any) => (
+            {/* Added Search Input */}
+            <SearchInput
+                type="text"
+                placeholder="Search seminars..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+            />
+            {filteredChats.map((chat: any) => (
                 <GroupChatListItem
                     chat={chat}
                     key={chat.groupId}
