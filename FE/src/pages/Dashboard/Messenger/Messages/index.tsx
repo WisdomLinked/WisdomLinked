@@ -181,7 +181,6 @@ const Messages = () => {
 
     return (
         <div className="w-full flex flex-col items-center h-full overflow-auto pb-[10px]" onScroll={handleScroll}>
-            {/* Audio element for notification sound */}
             <audio ref={audioRef} preload="auto">
                 <source
                     src="https://www.soundjay.com/buttons/sounds/button-16a.mp3"
