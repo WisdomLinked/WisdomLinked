@@ -45,9 +45,15 @@ const ScreenShare: React.FC<{
                 console.log(err);
             }
 
+            // videoChat.screenSharingStream
+            //     ?.getTracks()
+            //     .forEach((track) => track.stop());
+
             videoChat.screenSharingStream
-                ?.getTracks()
+                ?.getVideoTracks()
                 .forEach((track) => track.stop());
+
+
             dispatch(setScreenSharingStream(null));
             setScreenShareEnabled(false);
         } else {
@@ -111,9 +117,12 @@ const ScreenShare: React.FC<{
             }
         } else {
             switchOutgoingTracks(room.localStreamRoom);
-            room.screenSharingStream?.getTracks().forEach((t) => t.stop());
-            setScreenSharingStreamRoom(null);
-            setScreenShareEnabled(false);
+            // room.screenSharingStream?.getTracks().forEach((t) => t.stop());
+            // setScreenSharingStreamRoom(null);
+            // setScreenShareEnabled(false);
+            room.screenSharingStream
+                ?.getVideoTracks()
+                .forEach((t) => t.stop());
         }
     }
 
