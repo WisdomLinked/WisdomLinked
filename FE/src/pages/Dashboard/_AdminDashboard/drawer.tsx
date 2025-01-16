@@ -54,7 +54,7 @@ export default function AdminDrawer(props: Props) {
                     </Link>
                 </div>
                 <div className={`w-[300px] h-full bg-darkgrey overflow-y-auto px-[15px] pt-4 pb-[5px] ${location === 'adminchat' ? '' : 'hidden'}`}>
-                    <FriendsTitle title="General Chats" />
+                    <FriendsTitle title="Shared Community Chats" />
                     <GeneralChatList />
                 </div>
             </div>

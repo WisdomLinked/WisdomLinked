@@ -198,7 +198,7 @@ export default function ExpertDrawer(props: Props) {
                     </Link>
                 </div>
                 <div className={`w-[300px] h-full bg-darkgrey overflow-y-auto px-[15px] pt-4 pb-[5px] ${location === 'expertchat' ? '' : 'hidden'}`}>
-                    <FriendsTitle title="General Chats" />
+                    <FriendsTitle title="Shared Community Chats" />
                     <GeneralChatList />
                     <div className="bg-black w-full h-[1px] mb-2" />
                     <FriendsTitle title="Private Chats" />
