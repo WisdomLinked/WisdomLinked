@@ -56,7 +56,12 @@ const GeneralChatListItem = ({
                     <InboxIcon fontSize="small" />
                 </div>
                 <div className="w-[calc(100%-50px)]">
-                    <div className="text-md text-left w-full truncate">{userDetails.userId === chat.admin?._id ? chat.description : chat.name}</div>
+                    {/*<div className="text-md text-left w-full truncate">{userDetails.userId === chat.admin?._id ? chat.description : chat.name}</div>*/}
+                    {/*<div className="text-md text-left w-full truncate">{chat.name}</div>*/}
+                    <div className="text-md text-left w-full truncate">
+                        {chat.name} {chat.type === 'mine' && '(Me)'}
+                    </div>
+
                 </div>
                 <div className="h-full w-[100px] absolute top-0 right-0 py-2 pr-2 flex flex-col justify-between">
                     <div className="flex items-center justify-end space-x-2">
