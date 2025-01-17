@@ -2,7 +2,13 @@ import React, { useState, useEffect } from "react";
 import { Calendar } from "react-big-calendar";
 import CloseIcon from '@mui/icons-material/Close';
 import EventDetail from "./eventDetail";
-import { doAcceptEvent, doCancelInvitation, doDeclineEvent, doGetMyEvents } from "../../../api/api";
+import {
+    doAcceptEvent,
+    doCancelInvitation,
+    doCreateMeetingAnalytics,
+    doDeclineEvent,
+    doGetMyEvents
+} from "../../../api/api";
 import { useDispatch } from "react-redux";
 import { useAppSelector } from "../../../store";
 import SeminarDetails from "../seminarDetails";
@@ -89,6 +95,11 @@ const ExpertCalendar = () => {
                 temp[index].status = 'accepted'
                 set_events([...temp])
             }
+            await doCreateMeetingAnalytics({
+                _id: selectedEvent._id,
+                type: "event",
+                admin: selectedEvent.expert?._id
+            });
         }
     }
 

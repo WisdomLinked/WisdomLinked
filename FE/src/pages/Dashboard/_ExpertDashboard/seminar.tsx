@@ -7,14 +7,14 @@ import { useAppSelector } from "../../../store";
 import ShowFieldError from "../../../components/ShowFieldError";
 import SelectionWithCheckBox from "../../../components/SelectionWithCheckBox";
 import { Link, useNavigate } from "react-router-dom";
-import { createGroupChat, updateGroupChat } from "../../../api/api";
+import {createGroupChat, doCreateMeetingAnalytics, updateGroupChat} from "../../../api/api";
 import { useDispatch } from "react-redux";
 import { SetLoadingStatus } from "../../../actions/appActions";
 import { showAlert } from "../../../actions/alertActions";
 
 const ExpertSeminar = ({
-    selectedSeminar
-}: any) => {
+                           selectedSeminar
+                       }: any) => {
     const dispatch = useDispatch()
     const navigate = useNavigate()
     const { auth: { userDetails } } = useAppSelector((state) => state)
@@ -106,6 +106,16 @@ const ExpertSeminar = ({
                 price: price,
             })
             if (response) {
+                console.log("response: ",response);
+
+                const groupChatId = response.result.groupChats[response.result.groupChats.length - 1];
+
+                // Use groupChatId instead of response.result._id
+                await doCreateMeetingAnalytics({
+                    _id: groupChatId, // Use the groupChat ID
+                    type: 'groupchat',
+                    admin: userDetails._id,
+                });
                 set_step(3)
             }
         }
@@ -189,11 +199,11 @@ const ExpertSeminar = ({
                                     <div
                                         className={`w-[210px] h-[85px] py-2 px-3 rounded-xl flex flex-col justify-center space-y-1 border
                                     ${(index === 1 && !enableToGoNext) ?
+                                            'pointer-events-none' :
+                                            (index === 2 && (!startTime || !endTime || !duration || !enableToGoNext)) ?
                                                 'pointer-events-none' :
-                                                (index === 2 && (!startTime || !endTime || !duration || !enableToGoNext)) ?
-                                                    'pointer-events-none' :
-                                                    'cursor-pointer'
-                                            }
+                                                'cursor-pointer'
+                                        }
                                     ${step > index ? 'bg-green' : 'bg-darkgrey'}
                                     ${step === index ? 'border-green' : 'border-darkgrey'}`}
                                         onClick={() => goToStep(index)}

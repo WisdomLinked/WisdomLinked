@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { doUpdateMeetingAnalytics } from "../api/api"; // adjust path as needed
 import { useAppSelector } from "../store";
 
@@ -6,9 +6,10 @@ interface FeedbackFormProps {
     type: "event" | "groupchat";
     referenceId: string;            // eventId or groupchatId
     onClose: () => void;           // callback if you want to close the form after submission
+    joinTime: string;              // user's join time passed as a prop
 }
 
-const FeedbackForm: React.FC<FeedbackFormProps> = ({ type, referenceId, onClose }) => {
+const FeedbackForm: React.FC<FeedbackFormProps> = ({ type, referenceId, onClose, joinTime }) => {
     const { auth: { userDetails } } = useAppSelector((state) => state);
 
     const [rating, setRating] = useState<number>(0);
@@ -16,14 +17,26 @@ const FeedbackForm: React.FC<FeedbackFormProps> = ({ type, referenceId, onClose 
 
     const handleSubmit = async () => {
         try {
-            await doUpdateMeetingAnalytics({
+            const currentTime = new Date().toISOString(); // Get current time in UTC
+            const updateData: any = {
                 type,
                 referenceId,
                 userId: userDetails.userId,
                 role: userDetails.role,
                 rating,
-                feedback
-            });
+                feedback,
+                joinTime,
+                leftTime: currentTime
+            };
+
+            // If the user is an expert, include expert-specific fields
+            if (userDetails.role === "expert") {
+                updateData.expertJoinTime = joinTime;
+                updateData.expertLeftTime = currentTime;
+            }
+
+            await doUpdateMeetingAnalytics(updateData);
+
             if (onClose) {
                 onClose();
             }
