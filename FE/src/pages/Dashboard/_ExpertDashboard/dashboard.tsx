@@ -3,7 +3,13 @@ import { useAppSelector } from "../../../store";
 import { useNavigate } from "react-router-dom";
 import Avatar from "../../../components/Avatar";
 import { formatDateYYYY_MM_DD_h_m } from "../../../actions/common";
-import {addMemberToGroup, doAcceptEvent, doCancelInvitation, profileImageFetch} from "../../../api/api";
+import {
+    addMemberToGroup,
+    doAcceptEvent,
+    doCancelInvitation,
+    doCreateMeetingAnalytics,
+    profileImageFetch
+} from "../../../api/api";
 import { updateMe } from "../../../actions/authActions";
 import { useDispatch } from "react-redux";
 import { SetLoadingStatus } from "../../../actions/appActions";
@@ -12,7 +18,9 @@ import Chatbot from "../../../components/chatbot";
 
 const Dashboard = () => {
 
-    const { auth: { userDetails: { pendingGroupChats, groupChats:groupChat, events, status } }, friends: { groupChatList } } = useAppSelector(state => state)
+    const { auth: { userDetails = {} }, friends: { groupChatList } } = useAppSelector((state) => state);
+    const { _id, pendingGroupChats, groupChats: groupChat, events, status } = userDetails;
+
     const dispatch = useDispatch()
     const navigate = useNavigate()
 
@@ -40,6 +48,13 @@ const Dashboard = () => {
         SetLoadingStatus(true)
         const response = await doAcceptEvent(event._id)
         if (response) {
+
+            await doCreateMeetingAnalytics({
+                _id: event._id,
+                type: "event",
+                admin: userDetails._id
+            })
+
             dispatch(updateMe())
         }
         SetLoadingStatus(false)
@@ -74,9 +89,9 @@ const Dashboard = () => {
         const updatedPendingInvitations = events.filter((item: any) => (new Date(item.end).getTime() >= now || !item.duration) && (item.status === 'pending'));
         const updatedGroupChats = pendingGroupChats.filter((item: any) => new Date(item.groupChatId.end).getTime() >= now);
         const updatedSeminars = groupChat.filter((item: any) => new Date(item.end).getTime() >= now);
-        console.log("updatedSeminars: ", updatedSeminars);
-        console.log("updatedgroupChats: ", updatedGroupChats);
-        console.log("updatedSessions: ", updatedSessions);
+        // console.log("updatedSeminars: ", updatedSeminars);
+        // console.log("updatedgroupChats: ", updatedGroupChats);
+        // console.log("updatedSessions: ", updatedSessions);
 
         set_sessions(updatedSessions);
         set_pendingInvitations(updatedPendingInvitations);
