@@ -740,40 +740,16 @@ export const doGetGroupChatHistory = async (filter: any) => {
     }
 };
 
-
 export const doCreateMeetingAnalytics = async (data: any) => {
     try {
-        /*
-          data = {
-            type: "event" | "groupchat",
-            referenceId: string, // eventId or groupId
-            admin: string, // userId of the expert
-          }
-        */
         const res = await api.post("meeting-analytics/create", data);
         return res.data;
     } catch (err: any) {
         return checkForAuthorization(err);
     }
 };
-
 export const doUpdateMeetingAnalytics = async (data: any) => {
     try {
-        /*
-          data can contain:
-          {
-            type: "event"|"groupchat",
-            referenceId: string,
-            userId: string,
-            rating: number,
-            feedback: string,
-            joinTime: Date,
-            leftTime: Date,
-            expertJoinTime: Date,
-            expertLeftTime: Date,
-            totalMeetingTime: number
-          }
-        */
         const res = await api.post("meeting-analytics/update", data);
         return res.data;
     } catch (err: any) {
@@ -783,9 +759,6 @@ export const doUpdateMeetingAnalytics = async (data: any) => {
 
 export const doGetMeetingAnalytics = async (data: any) => {
     try {
-        /*
-          data = { type: "event"|"groupchat", referenceId: "..." }
-        */
         const res = await api.post("meeting-analytics/get", data);
         return res.data;
     } catch (err: any) {
