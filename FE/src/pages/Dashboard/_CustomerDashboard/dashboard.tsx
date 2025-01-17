@@ -102,9 +102,9 @@ const Dashboard = () => {
         const updatedSessions = events.filter((item: any) => new Date(item.end).getTime() >= now);
         const updatedGroupChats = pendingGroupChats.filter((item: any) => new Date(item.groupChatId.end).getTime() >= now);
         const updatedSeminars = groupChat.filter((item: any) => new Date(item.end).getTime() >= now);
-        console.log("updatedSeminars: ", updatedSeminars);
-        console.log("updatedgroupChats: ", updatedGroupChats);
-        console.log("updatedSessions: ", updatedSessions);
+        // console.log("updatedSeminars: ", updatedSeminars);
+        // console.log("updatedgroupChats: ", updatedGroupChats);
+        // console.log("updatedSessions: ", updatedSessions);
 
         set_sessions(updatedSessions);
         set_groupChats(updatedGroupChats);
