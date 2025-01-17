@@ -282,8 +282,8 @@ const updateEvent = async (req, res) => {
         const { eventId, updates } = req.body
 
         const event = await Event.findById(eventId)
-        if (event.status === 'accepted' && new Date(event.start).getTime() <= new Date().getTime()) {
-            throw new Error("Unable to cancel past or ongoing event")
+        if (event.status === 'accepted' && new Date(event.end).getTime() <= new Date().getTime()) {
+            throw new Error("Unable to update past or ongoing event")
         }
 
         if (updates.title && checkTitleNameInvalid('Title', updates.title)) {
@@ -319,8 +319,8 @@ const acceptEvent = async (req, res) => {
         if (!event)
             throw new Error("No event found with provided id")
 
-        if (new Date(event.start).getTime() <= new Date().getTime()) {
-            throw new Error("Unable to cancel past or ongoing event")
+        if (new Date(event.end).getTime() <= new Date().getTime()) {
+            throw new Error("Unable to accept past or ongoing event")
         }
 
         const updatedEvent = await Event.findByIdAndUpdate(eventId, { status: 'accepted' }, { new: true })
