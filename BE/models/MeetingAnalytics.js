@@ -8,7 +8,7 @@ const feedbackSchema = new mongoose.Schema(
         rating: { type: Number, default: 0 },
         feedback: { type: String, default: "" },
         joinTime: { type: Date, default: null },
-        leftTime: { type: Date, default: null },
+
     },
     { _id: false }
 );
@@ -30,9 +30,6 @@ const meetingAnalyticsSchema = new mongoose.Schema(
 
         // Feedback from each participant, including the expert
         participantsFeedback: [feedbackSchema],
-
-        // Total meeting time in seconds (or milliseconds), adjustable as needed
-        totalMeetingTime: { type: Number, default: 0 },
 
     },
     { timestamps: true }

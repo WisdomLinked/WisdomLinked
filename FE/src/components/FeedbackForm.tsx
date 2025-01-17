@@ -27,7 +27,6 @@ const FeedbackForm: React.FC<FeedbackFormProps> = ({ _id, type, onClose, joinTim
         }
 
         try {
-            const currentTime = new Date().toISOString(); // Current UTC time
             const updateData: any = {
                 _id,                  // MeetingAnalytics ID
                 type,                 // Type of meeting (event/groupchat)
@@ -36,7 +35,6 @@ const FeedbackForm: React.FC<FeedbackFormProps> = ({ _id, type, onClose, joinTim
                 rating,               // User-provided rating
                 feedback,             // User-provided feedback
                 joinTime,             // User's join time
-                leftTime: currentTime // User's leave time
             };
 
             // Call the API to update MeetingAnalytics

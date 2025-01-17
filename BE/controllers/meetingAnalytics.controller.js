@@ -21,7 +21,6 @@ const createMeetingAnalytics = async (req, res) => {
             type,
             admin,
             participantsFeedback: [],
-            totalMeetingTime: 0
         });
         await newAnalytics.save();
 
@@ -39,16 +38,11 @@ const createMeetingAnalytics = async (req, res) => {
 // Update existing MeetingAnalytics with participant feedback or total time
 const updateMeetingAnalytics = async (req, res) => {
     try {
-        const { _id, userId, rating, feedback, joinTime, leftTime, totalMeetingTime } = req.body;
+        const { _id, userId, rating, feedback, joinTime } = req.body;
 
         const analyticsDoc = await MeetingAnalytics.findById(_id);
         if (!analyticsDoc) {
             return res.status(404).send("No MeetingAnalytics document found");
-        }
-
-        // Update total meeting time
-        if (typeof totalMeetingTime === "number") {
-            analyticsDoc.totalMeetingTime = totalMeetingTime;
         }
 
         // Update feedback for a specific user
@@ -60,15 +54,13 @@ const updateMeetingAnalytics = async (req, res) => {
                 if (rating !== undefined) analyticsDoc.participantsFeedback[idx].rating = rating;
                 if (feedback !== undefined) analyticsDoc.participantsFeedback[idx].feedback = feedback;
                 if (joinTime) analyticsDoc.participantsFeedback[idx].joinTime = joinTime;
-                if (leftTime) analyticsDoc.participantsFeedback[idx].leftTime = leftTime;
             } else {
                 analyticsDoc.participantsFeedback.push({
                     userId,
                     role: "participant",
                     rating: rating || 0,
                     feedback: feedback || "",
-                    joinTime: joinTime || null,
-                    leftTime: leftTime || null
+                    joinTime: joinTime || null
                 });
             }
         }
