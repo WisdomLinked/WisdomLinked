@@ -38,7 +38,7 @@ const createMeetingAnalytics = async (req, res) => {
 // Update existing MeetingAnalytics with participant feedback or total time
 const updateMeetingAnalytics = async (req, res) => {
     try {
-        const { _id, userId, rating, feedback, joinTime } = req.body;
+        const { _id, userId, rating, feedback} = req.body;
 
         const analyticsDoc = await MeetingAnalytics.findById(_id);
         if (!analyticsDoc) {
@@ -53,14 +53,12 @@ const updateMeetingAnalytics = async (req, res) => {
             if (idx > -1) {
                 if (rating !== undefined) analyticsDoc.participantsFeedback[idx].rating = rating;
                 if (feedback !== undefined) analyticsDoc.participantsFeedback[idx].feedback = feedback;
-                if (joinTime) analyticsDoc.participantsFeedback[idx].joinTime = joinTime;
             } else {
                 analyticsDoc.participantsFeedback.push({
                     userId,
                     role: "participant",
                     rating: rating || 0,
                     feedback: feedback || "",
-                    joinTime: joinTime || null
                 });
             }
         }

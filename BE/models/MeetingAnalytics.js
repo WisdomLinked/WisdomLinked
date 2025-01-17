@@ -7,8 +7,6 @@ const feedbackSchema = new mongoose.Schema(
         role: { type: String, enum: ["expert", "customer"], required: true },
         rating: { type: Number, default: 0 },
         feedback: { type: String, default: "" },
-        joinTime: { type: Date, default: null },
-
     },
     { _id: false }
 );

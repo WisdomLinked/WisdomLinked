@@ -6,10 +6,9 @@ interface FeedbackFormProps {
     _id: string;                   // MeetingAnalytics ID (same as event/groupchat ID)
     type: "event" | "groupchat";   // Type of the meeting
     onClose: () => void;           // Callback to close the form after submission
-    joinTime: string;              // User's join time passed as a prop
 }
 
-const FeedbackForm: React.FC<FeedbackFormProps> = ({ _id, type, onClose, joinTime }) => {
+const FeedbackForm: React.FC<FeedbackFormProps> = ({ _id, type, onClose}) => {
     const { auth: { userDetails } } = useAppSelector((state) => state);
 
     const [rating, setRating] = useState<number>(0); // Rating (0–5)
@@ -34,7 +33,6 @@ const FeedbackForm: React.FC<FeedbackFormProps> = ({ _id, type, onClose, joinTim
                 role: userDetails.role,     // Role of the user (e.g., customer, expert)
                 rating,               // User-provided rating
                 feedback,             // User-provided feedback
-                joinTime,             // User's join time
             };
 
             // Call the API to update MeetingAnalytics
