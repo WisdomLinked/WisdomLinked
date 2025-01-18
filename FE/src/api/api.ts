@@ -748,6 +748,7 @@ export const doCreateMeetingAnalytics = async (data: any) => {
         return checkForAuthorization(err);
     }
 };
+
 export const doUpdateMeetingAnalytics = async (data: any) => {
     try {
         const res = await api.post("meeting-analytics/update", data);

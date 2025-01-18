@@ -1,16 +1,15 @@
 import React, { useState } from "react";
-import { doUpdateMeetingAnalytics } from "../api/api"; // Adjust the import path as needed
-import { useAppSelector } from "../store";
+import { doUpdateMeetingAnalytics } from "../api/api";
 
 interface FeedbackFormProps {
     _id: string;                   // MeetingAnalytics ID (same as event/groupchat ID)
     type: "event" | "groupchat";   // Type of the meeting
+    userId: string;                // User ID
+    role: string;                  // Role of the user
     onClose: () => void;           // Callback to close the form after submission
 }
 
-const FeedbackForm: React.FC<FeedbackFormProps> = ({ _id, type, onClose}) => {
-    const { auth: { userDetails } } = useAppSelector((state) => state);
-
+const FeedbackForm: React.FC<FeedbackFormProps> = ({ _id, type, userId, role, onClose }) => {
     const [rating, setRating] = useState<number>(0); // Rating (0–5)
     const [feedback, setFeedback] = useState<string>(""); // Feedback comment
 
@@ -26,29 +25,36 @@ const FeedbackForm: React.FC<FeedbackFormProps> = ({ _id, type, onClose}) => {
         }
 
         try {
-            const updateData: any = {
-                _id,                  // MeetingAnalytics ID
-                type,                 // Type of meeting (event/groupchat)
-                userId: userDetails.userId, // User ID from the store
-                role: userDetails.role,     // Role of the user (e.g., customer, expert)
-                rating,               // User-provided rating
-                feedback,             // User-provided feedback
+            const updateData = {
+                _id,         // MeetingAnalytics ID
+                type,        // Type of meeting (event/groupchat)
+                userId,      // User ID passed as prop
+                role,        // Role passed as prop
+                rating,      // User-provided rating
+                feedback,    // User-provided feedback
             };
 
+            // Debugging: Log the payload
+            console.log("Sending feedback data:", updateData);
+
             // Call the API to update MeetingAnalytics
-            console.log("Updating Meeting Analytics:", updateData);
             const response = await doUpdateMeetingAnalytics(updateData);
-            console.log("Meeting Analytics updated successfully:", response);
 
-            alert("Feedback submitted successfully!");
-
-            // Trigger onClose callback if provided
-            if (onClose) {
-                onClose();
+            if (response && response.success) { // Assuming `response.success` indicates success
+                console.log("Meeting Analytics updated successfully:", response);
+                alert("Feedback submitted successfully!");
+                onClose(); // Trigger onClose callback if provided
+            } else {
+                // Handle API errors if the response indicates failure
+                console.error("API response error:", response);
+                alert(
+                    response?.message || "Failed to submit feedback. Please try again."
+                );
             }
         } catch (error) {
+            // Log and display the error for debugging
             console.error("Error updating Meeting Analytics:", error);
-            alert("Failed to submit feedback. Please try again.");
+            alert("An error occurred while submitting feedback. Please try again.");
         }
     };
 

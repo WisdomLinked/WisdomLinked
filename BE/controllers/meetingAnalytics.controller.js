@@ -38,7 +38,7 @@ const createMeetingAnalytics = async (req, res) => {
 // Update existing MeetingAnalytics with participant feedback or total time
 const updateMeetingAnalytics = async (req, res) => {
     try {
-        const { _id, userId, rating, feedback} = req.body;
+        const { _id, userId, role, rating, feedback } = req.body; // Include `role` in destructuring
 
         const analyticsDoc = await MeetingAnalytics.findById(_id);
         if (!analyticsDoc) {
@@ -51,12 +51,14 @@ const updateMeetingAnalytics = async (req, res) => {
                 (item) => item.userId.toString() === userId.toString()
             );
             if (idx > -1) {
+                // Update existing feedback
                 if (rating !== undefined) analyticsDoc.participantsFeedback[idx].rating = rating;
                 if (feedback !== undefined) analyticsDoc.participantsFeedback[idx].feedback = feedback;
             } else {
+                // Add new feedback entry with the correct role
                 analyticsDoc.participantsFeedback.push({
                     userId,
-                    role: "participant",
+                    role, // Use the role passed in the request
                     rating: rating || 0,
                     feedback: feedback || "",
                 });
@@ -67,13 +69,14 @@ const updateMeetingAnalytics = async (req, res) => {
 
         return res.status(200).json({
             success: true,
-            meetingAnalytics: analyticsDoc
+            meetingAnalytics: analyticsDoc,
         });
     } catch (err) {
         console.error(err);
         return res.status(500).send(err.message);
     }
 };
+
 
 // Retrieve MeetingAnalytics by _id
 const getMeetingAnalytics = async (req, res) => {
