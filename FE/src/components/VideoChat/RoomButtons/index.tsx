@@ -49,13 +49,13 @@ const RoomButtons: React.FC<{
                     {feedbackId && (
                         <>
                             <button
-                                className="mx-2 py-2 px-4 rounded bg-midgrey-2 text-white hover:bg-midgrey-3"
+                                className="mx-1 py-0.5 px-2 text-xs rounded bg-midgrey-2 text-white hover:bg-midgrey-3"
                                 onClick={() => setShowFeedback(true)}
                             >
                                 Feedback
                             </button>
                             {showFeedback && (
-                                <div className="absolute top-0 left-0 w-full h-full flex items-center justify-center bg-black/50 z-50">
+                                <div className="fixed top-0 left-0 w-full h-full flex items-center justify-center bg-black/70 z-50">
                                     <FeedbackForm
                                         _id={feedbackId}
                                         type={feedbackType}
@@ -85,7 +85,7 @@ const RoomButtons: React.FC<{
                     {feedbackId && (
                         <>
                             <button
-                                className="mx-2 py-2 px-4 rounded bg-midgrey-2 text-white hover:bg-midgrey-3"
+                                className="mx-1 py-0.5 px-2 text-xs rounded bg-midgrey-2 text-white hover:bg-midgrey-3"
                                 onClick={() => setShowFeedback(true)}
                             >
                                 Feedback
