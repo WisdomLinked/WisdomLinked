@@ -12,7 +12,8 @@ const {
     acceptEvent,
     declineEvent,
     createEventByExpert,
-    cancelInvitation
+    cancelInvitation,
+    createFeedback,
 } = require('../controllers/event.controller')
 
 router.post(
@@ -60,5 +61,8 @@ router.post(
 router.get("/getUser/:id",expertAuth(false),getCustomerById)
 
 router.post("/createEvent", expertAuth(true), createEventByExpert);
+
+router.post("/createEventFeedback", expertAuth(true), createFeedback);
+
 
 module.exports = router;

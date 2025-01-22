@@ -8,7 +8,7 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import EventDetail from "../eventDetail";
 import { useAppSelector } from "../../../../store";
 import { getAvatarTitle } from "../../../../actions/common";
-import {doAppendEvent, doCreateMeetingAnalytics, doUpdateEvent, profileImageFetch} from "../../../../api/api";
+import {doAppendEvent, doUpdateEvent, profileImageFetch} from "../../../../api/api";
 import { useDispatch } from "react-redux";
 import { Swiper, SwiperSlide } from "swiper/react";
 import { Pagination, Navigation } from "swiper";
@@ -132,17 +132,6 @@ const Search = () => {
 
             console.log("response new event",response , response.newEventId)
             set_newEvent(response.newEventId)
-
-            // const expertId = response.newEvent.expert; // Extract expert ID
-            // const analyticsData = {
-            //     _id: response.newEventId, // Event ID
-            //     type: "event",
-            //     admin: expertId, // Expert ID as admin
-            // };
-            //
-            // console.log("Creating Meeting Analytics:", analyticsData);
-            // const analyticsResponse = await doCreateMeetingAnalytics(analyticsData);
-            // console.log("Meeting Analytics created successfully:", analyticsResponse);
 
             if (details.eventId) {
                 goToStep(4)

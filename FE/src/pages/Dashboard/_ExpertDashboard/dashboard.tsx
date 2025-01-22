@@ -7,7 +7,6 @@ import {
     addMemberToGroup,
     doAcceptEvent,
     doCancelInvitation,
-    doCreateMeetingAnalytics,
     profileImageFetch
 } from "../../../api/api";
 import { updateMe } from "../../../actions/authActions";
@@ -48,13 +47,6 @@ const Dashboard = () => {
         SetLoadingStatus(true)
         const response = await doAcceptEvent(event._id)
         if (response) {
-
-            await doCreateMeetingAnalytics({
-                _id: event._id,
-                type: "event",
-                admin: userDetails._id
-            })
-
             dispatch(updateMe())
         }
         SetLoadingStatus(false)

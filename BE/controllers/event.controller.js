@@ -536,6 +536,73 @@ const checkIfTheEventOngoing = async (participants, eventId) => {
     }
 }
 
+const createFeedback = async (req, res) => {
+    try {
+        const { _id, updateData } = req.body;
+
+        if (!_id || !updateData) {
+            return res.status(400).json({ error: "Event ID and feedback details are required." });
+        }
+
+        // Find the event by ID
+        const event = await Event.findById(_id);
+
+        if (!event) {
+            return res.status(404).json({ error: "Event not found." });
+        }
+
+        // Check if feedback from the same user already exists
+        const existingFeedbackIndex = event.feedback.findIndex(
+            (feedback) => feedback.userId === updateData.userId
+        );
+
+        console.log("existing feedback:", existingFeedbackIndex);
+
+        if (existingFeedbackIndex !== -1) {
+            // Update the existing feedback
+            event.feedback[existingFeedbackIndex] = updateData;
+        } else {
+            // Add new feedback if no existing feedback is found
+            event.feedback.push(updateData);
+        }
+
+        // Save the updated event
+        await event.save();
+
+        res.status(200).json({
+            message: "Feedback processed successfully.",
+            feedback: updateData
+        });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ error: "An error occurred while processing feedback." });
+    }
+};
+
+
+// Get Feedback
+const getFeedback = async (req, res) => {
+    try {
+        const { _id } = req.body;
+
+        if (!_id) {
+            return res.status(400).json({ error: "Event ID is required." });
+        }
+
+        // Find the event by ID and populate feedback if needed
+        const event = await Event.findById(_id).select("feedback");
+
+        if (!event) {
+            return res.status(404).json({ error: "Event not found." });
+        }
+
+        res.status(200).json({ feedback: event.feedback });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ error: "An error occurred while retrieving feedback." });
+    }
+};
+
 module.exports = {
     appendEvent,
     updateEvent,
@@ -547,4 +614,6 @@ module.exports = {
     createEventByExpert,
     cancelInvitation,
     cancelEvent,
+    createFeedback,
+    getFeedback
 }

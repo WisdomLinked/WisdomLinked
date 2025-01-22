@@ -7,7 +7,7 @@ import { useAppSelector } from "../../../store";
 import ShowFieldError from "../../../components/ShowFieldError";
 import SelectionWithCheckBox from "../../../components/SelectionWithCheckBox";
 import { Link, useNavigate } from "react-router-dom";
-import {createGroupChat, doCreateMeetingAnalytics, updateGroupChat} from "../../../api/api";
+import {createGroupChat, updateGroupChat} from "../../../api/api";
 import { useDispatch } from "react-redux";
 import { SetLoadingStatus } from "../../../actions/appActions";
 import { showAlert } from "../../../actions/alertActions";
@@ -110,12 +110,6 @@ const ExpertSeminar = ({
 
                 const groupChatId = response.result.groupChats[response.result.groupChats.length - 1];
 
-                // Use groupChatId instead of response.result._id
-                await doCreateMeetingAnalytics({
-                    _id: groupChatId, // Use the groupChat ID
-                    type: 'groupchat',
-                    admin: userDetails._id,
-                });
                 set_step(3)
             }
         }

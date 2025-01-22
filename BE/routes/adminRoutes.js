@@ -12,8 +12,12 @@ const {
     updateProfileOfUser, 
     filterPaymentHistories ,
     getDirectChatHistory,
-    getGroupChatHistory
+    getGroupChatHistory,
 } = require("../controllers/admin.controller");
+
+const {
+    getFeedback
+} = require("../controllers/event.controller");
 
 router.post("/setStripeMode", adminAuth, setStripeMode)
 router.post("/filterUsers", adminAuth, filterUsers)
@@ -22,5 +26,6 @@ router.post("/getFullUserDataByEmail", adminAuth, getFullUserDataByEmail)
 router.post("/updateProfileOfUser", adminAuth, updateProfileOfUser)
 router.post("/getDirectChatHistory", adminAuth, getDirectChatHistory)
 router.post("/getGroupChatHistory", adminAuth, getGroupChatHistory)
+router.get("/getEventFeedback", adminAuth, getFeedback)
 
 module.exports = router;

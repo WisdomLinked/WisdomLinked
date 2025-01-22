@@ -8,7 +8,7 @@ const feedbackSchema = new mongoose.Schema(
         rating: { type: Number, default: 0 },
         feedback: { type: String, default: "" },
     },
-    { _id: false }
+    { timestamps: true }
 );
 
 // Define schema for MeetingAnalytics

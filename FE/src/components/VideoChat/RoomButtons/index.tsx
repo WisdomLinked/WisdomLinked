@@ -59,7 +59,6 @@ const RoomButtons: React.FC<{
                                 <div className="fixed top-0 left-0 w-full h-full flex items-center justify-center bg-black/70 z-50">
                                     <FeedbackForm
                                         _id={feedbackId}
-                                        type={feedbackType}
                                         userId={userDetails.userId}
                                         role={userDetails.role}
                                         onClose={() => setShowFeedback(false)}
@@ -95,7 +94,6 @@ const RoomButtons: React.FC<{
                                 <div className="absolute top-0 left-0 w-full h-full flex items-center justify-center bg-black/50 z-50">
                                     <FeedbackForm
                                         _id={feedbackId}
-                                        type={feedbackType}
                                         userId={userDetails.userId}
                                         role={userDetails.role}
                                         onClose={() => setShowFeedback(false)}

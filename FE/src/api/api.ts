@@ -740,29 +740,38 @@ export const doGetGroupChatHistory = async (filter: any) => {
     }
 };
 
-export const doCreateMeetingAnalytics = async (data: any) => {
+interface FeedbackPayload {
+    userId: string;
+    role: string;
+    rating: number;
+    feedback: string;
+}
+
+
+export const doCreateCustomerFeedback = async (payload: { updateData: FeedbackPayload; _id: string }) => {
     try {
-        const res = await api.post("meeting-analytics/create", data);
+        const res = await api.post("customer/createEventFeedback", payload);
         return res.data;
     } catch (err: any) {
         return checkForAuthorization(err);
     }
 };
 
-export const doUpdateMeetingAnalytics = async (data: any) => {
+export const doCreateExpertFeedback = async (payload: { updateData: FeedbackPayload; _id: string }) => {
     try {
-        const res = await api.post("meeting-analytics/update", data);
+        const res = await api.post("expert/createEventFeedback", payload);
         return res.data;
     } catch (err: any) {
         return checkForAuthorization(err);
     }
 };
 
-export const doGetMeetingAnalytics = async (data: any) => {
+export const doGetFeedback = async (payload: { eventId: string }) => {
     try {
-        const res = await api.post("meeting-analytics/get", data);
+        const res = await api.post("admin/getEventFeedback", payload);
         return res.data;
     } catch (err: any) {
         return checkForAuthorization(err);
     }
 };
+

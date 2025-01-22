@@ -5,7 +5,6 @@ import EventDetail from "./eventDetail";
 import {
     doAcceptEvent,
     doCancelInvitation,
-    doCreateMeetingAnalytics,
     doDeclineEvent,
     doGetMyEvents
 } from "../../../api/api";
@@ -95,11 +94,6 @@ const ExpertCalendar = () => {
                 temp[index].status = 'accepted'
                 set_events([...temp])
             }
-            await doCreateMeetingAnalytics({
-                _id: selectedEvent._id,
-                type: "event",
-                admin: selectedEvent.expert?._id
-            });
         }
     }
 

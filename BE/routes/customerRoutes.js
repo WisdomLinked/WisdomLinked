@@ -10,6 +10,7 @@ const {
     appendEvent,
     updateEvent,
     cancelEvent,
+    createFeedback,
 } = require('../controllers/event.controller')
 const {
     cancelPendingSeminar,
@@ -24,5 +25,5 @@ router.post("/updateEvent", customerAuth(true), updateEvent);
 router.post("/cancelEvent", customerAuth(false), cancelEvent);
 router.post("/cancelPendingSeminar", customerAuth(false), cancelPendingSeminar);
 router.post("/leftSeminar", customerAuth(false), leftSeminar);
-
+router.post("/createEventFeedback", customerAuth(true), createFeedback);
 module.exports = router;

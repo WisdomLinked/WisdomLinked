@@ -1,15 +1,23 @@
 import React, { useState } from "react";
-import { doUpdateMeetingAnalytics } from "../api/api";
+import { doCreateCustomerFeedback, doCreateExpertFeedback } from "../api/api";
 
+// Define types for props
 interface FeedbackFormProps {
-    _id: string;                   // MeetingAnalytics ID (same as event/groupchat ID)
-    type: "event" | "groupchat";   // Type of the meeting
-    userId: string;                // User ID
-    role: string;                  // Role of the user
-    onClose: () => void;           // Callback to close the form after submission
+    _id: string; // ID of the entity (e.g., meeting or session)
+    userId: string; // ID of the user providing feedback
+    role: "customer" | "expert"; // Role of the user
+    onClose: () => void; // Callback to close the form
 }
 
-const FeedbackForm: React.FC<FeedbackFormProps> = ({ _id, type, userId, role, onClose }) => {
+// Define types for the API payload
+interface FeedbackPayload {
+    userId: string;
+    role: string;
+    rating: number;
+    feedback: string;
+}
+
+const FeedbackForm: React.FC<FeedbackFormProps> = ({ _id, userId, role, onClose }) => {
     const [rating, setRating] = useState<number>(0); // Rating (0–5)
     const [feedback, setFeedback] = useState<string>(""); // Feedback comment
 
@@ -25,35 +33,31 @@ const FeedbackForm: React.FC<FeedbackFormProps> = ({ _id, type, userId, role, on
         }
 
         try {
-            const updateData = {
-                _id,         // MeetingAnalytics ID
-                type,        // Type of meeting (event/groupchat)
-                userId,      // User ID passed as prop
-                role,        // Role passed as prop
-                rating,      // User-provided rating
-                feedback,    // User-provided feedback
+            const updateData: FeedbackPayload = {
+                userId, // User ID passed as prop
+                role, // Role passed as prop
+                rating, // User-provided rating
+                feedback, // User-provided feedback
             };
 
             // Debugging: Log the payload
             console.log("Sending feedback data:", updateData);
 
             // Call the API to update MeetingAnalytics
-            const response = await doUpdateMeetingAnalytics(updateData);
+            const response = role === "expert"
+                ? await doCreateExpertFeedback({ _id, updateData })
+                : await doCreateCustomerFeedback({ _id, updateData });
 
-            if (response && response.success) { // Assuming `response.success` indicates success
-                console.log("Meeting Analytics updated successfully:", response);
+            if (response) {
+                console.log("Feedback submitted successfully:", response);
                 alert("Feedback submitted successfully!");
                 onClose(); // Trigger onClose callback if provided
             } else {
-                // Handle API errors if the response indicates failure
                 console.error("API response error:", response);
-                alert(
-                    response?.message || "Failed to submit feedback. Please try again."
-                );
+                alert(response?.message || "Failed to submit feedback. Please try again.");
             }
         } catch (error) {
-            // Log and display the error for debugging
-            console.error("Error updating Meeting Analytics:", error);
+            console.error("Error submitting feedback:", error);
             alert("An error occurred while submitting feedback. Please try again.");
         }
     };
