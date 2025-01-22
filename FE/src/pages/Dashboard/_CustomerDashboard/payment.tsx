@@ -20,6 +20,17 @@ const CheckoutForm = ({
 
     const [errorMessage, set_errorMessage] = useState<any>(null);
 
+    function checkStorageUsage() {
+        let total = 0;
+        for (let key in localStorage) {
+            if (localStorage.hasOwnProperty(key)) {
+                total += (localStorage[key].length + key.length) * 2; // Estimate size in bytes
+            }
+        }
+        console.log(`Approximate localStorage usage: ${total} bytes`);
+        return total;
+    }
+
     const handleSubmit = async (event: any) => {
         try {
             event.preventDefault();
@@ -43,6 +54,11 @@ const CheckoutForm = ({
                 amount: price,
             })
             const { client_secret: clientSecret } = response;
+
+            console.log("pending details", pendingDetails);
+            console.log("pending details len", );
+
+            checkStorageUsage();
 
             window.localStorage.setItem('pendingDetails', JSON.stringify(pendingDetails))
             const { paymentIntent } = await stripe.confirmPayment({
