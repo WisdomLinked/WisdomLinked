@@ -158,6 +158,18 @@ const Search = () => {
         }
     }
 
+    function checkStorageUsage() {
+        let total = 0;
+        for (let key in localStorage) {
+            if (localStorage.hasOwnProperty(key)) {
+                total += (localStorage[key].length + key.length) * 2; // Estimate size in bytes
+            }
+        }
+        console.log('Approximate localStorage usage: ${total} bytes');
+        return total;
+    }
+
+
     useEffect(() => {
         console.log('Query params updated:', { qExpertId, qDuration, qStart, qEnd });
         console.log(selectedExpert, qDuration, qStart, qEnd, '=====')
@@ -223,6 +235,8 @@ const Search = () => {
             if (redirect_status === 'succeeded') {
                 const pendingDetails = window.localStorage.getItem('pendingDetails')
                 if (pendingDetails) {
+                    checkStorageUsage();
+                    console.log("pendingDetails: ", pendingDetails);
                     const details = JSON.parse(pendingDetails)
                     window.localStorage.removeItem('pendingDetails')
                     set_eventTitle(details.title)
