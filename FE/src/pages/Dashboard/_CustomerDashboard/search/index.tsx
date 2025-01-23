@@ -8,7 +8,7 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import EventDetail from "../eventDetail";
 import { useAppSelector } from "../../../../store";
 import { getAvatarTitle } from "../../../../actions/common";
-import {doAppendEvent, doUpdateEvent, profileImageFetch} from "../../../../api/api";
+import {doAppendEvent, doUpdateEvent, getCustomerById, getExpertById, profileImageFetch} from "../../../../api/api";
 import { useDispatch } from "react-redux";
 import { Swiper, SwiperSlide } from "swiper/react";
 import { Pagination, Navigation } from "swiper";
@@ -218,55 +218,133 @@ const Search = () => {
         set_myEvents([...temp])
     }, [userDetails])
 
+    // useEffect(() => {
+    //     console.log('Location search updated:', location.search);
+    //     let { redirect_status, payment_intent, _id, _duration, _start, _end, _eventId } = queryString.parse(location.search);
+    //     if (_id) {
+    //         console.log('Query parameter _id detected:', _id);set_qExpertId(_id)
+    //         set_qEventId(_eventId)
+    //         if (_duration && _start && _end) {
+    //             console.log('Setting query parameters for duration, start, end:', { _duration, _start, _end });
+    //             set_qDuration(Number(_duration))
+    //             set_qStart(new Date(Number(_start)))
+    //             set_qEnd(new Date(Number(_end)))
+    //         }
+    //     } else {
+    //         set_qExpertId('')
+    //         if (redirect_status === 'succeeded') {
+    //             const pendingDetails = window.localStorage.getItem('pendingDetails')
+    //
+    //             if (pendingDetails) {
+    //                 checkStorageUsage();
+    //                 console.log("pendingDetails: ", pendingDetails);
+    //                 const details = JSON.parse(pendingDetails)
+    //                 const {result} = await getExpertById(details.expert)
+    //                 window.localStorage.removeItem('pendingDetails')
+    //                 set_eventTitle(details.title)
+    //                 set_selectedExpert(result)
+    //                 set_startTime(details.start)
+    //                 set_endTime(details.end)
+    //                 set_duration(details.duration)
+    //                 set_price(details.price)
+    //                 set_qEventId(details.eventId)
+    //                 submit({
+    //                     title: details.title,
+    //                     start: details.start,
+    //                     end: details.end,
+    //                     duration: details.duration,
+    //                     price: details.price,
+    //                     expert: result.email,
+    //                     customer: details.customer.email,
+    //                     payment_intent: payment_intent,
+    //                     eventId: details.eventId,
+    //                     createdBy:userDetails._id
+    //                 })
+    //             }
+    //         } else {
+    //             window.localStorage.removeItem('pendingDetails')
+    //             if (redirect_status) {
+    //                 set_paymentFailed(true)
+    //             }
+    //         }
+    //     }
+    // }, [location])
     useEffect(() => {
-        console.log('Location search updated:', location.search);
-        let { redirect_status, payment_intent, _id, _duration, _start, _end, _eventId } = queryString.parse(location.search);
-        if (_id) {
-            console.log('Query parameter _id detected:', _id);set_qExpertId(_id)
-            set_qEventId(_eventId)
-            if (_duration && _start && _end) {
-                console.log('Setting query parameters for duration, start, end:', { _duration, _start, _end });
-                set_qDuration(Number(_duration))
-                set_qStart(new Date(Number(_start)))
-                set_qEnd(new Date(Number(_end)))
-            }
-        } else {
-            set_qExpertId('')
-            if (redirect_status === 'succeeded') {
-                const pendingDetails = window.localStorage.getItem('pendingDetails')
-                if (pendingDetails) {
-                    checkStorageUsage();
-                    console.log("pendingDetails: ", pendingDetails);
-                    const details = JSON.parse(pendingDetails)
-                    window.localStorage.removeItem('pendingDetails')
-                    set_eventTitle(details.title)
-                    set_selectedExpert(details.expert)
-                    set_startTime(details.start)
-                    set_endTime(details.end)
-                    set_duration(details.duration)
-                    set_price(details.price)
-                    set_qEventId(details.eventId)
-                    submit({
-                        title: details.title,
-                        start: details.start,
-                        end: details.end,
-                        duration: details.duration,
-                        price: details.price,
-                        expert: details.expert.email,
-                        customer: details.customer.email,
-                        payment_intent: payment_intent,
-                        eventId: details.eventId,
-                        createdBy:userDetails._id
-                    })
+        const processQueryParameters = async () => {
+            console.log('Location search updated:', location.search);
+            const {
+                redirect_status,
+                payment_intent,
+                _id,
+                _duration,
+                _start,
+                _end,
+                _eventId
+            } = queryString.parse(location.search);
+
+            if (_id) {
+                console.log('Query parameter _id detected:', _id);
+                set_qExpertId(_id);
+                set_qEventId(_eventId);
+
+                if (_duration && _start && _end) {
+                    console.log('Setting query parameters for duration, start, end:', {
+                        _duration,
+                        _start,
+                        _end
+                    });
+                    set_qDuration(Number(_duration));
+                    set_qStart(new Date(Number(_start)));
+                    set_qEnd(new Date(Number(_end)));
                 }
             } else {
-                window.localStorage.removeItem('pendingDetails')
-                if (redirect_status) {
-                    set_paymentFailed(true)
+                set_qExpertId('');
+                if (redirect_status === 'succeeded') {
+                    const pendingDetails = window.localStorage.getItem('pendingDetails');
+                    if (pendingDetails) {
+                        try {
+                            checkStorageUsage();
+                            console.log("pendingDetails: ", pendingDetails);
+                            const details = JSON.parse(pendingDetails);
+                            const { result } = await getExpertById(details.expert);
+
+                            window.localStorage.removeItem('pendingDetails');
+
+                            set_eventTitle(details.title);
+                            set_selectedExpert(result);
+                            set_startTime(details.start);
+                            set_endTime(details.end);
+                            set_duration(details.duration);
+                            set_price(details.price);
+                            set_qEventId(details.eventId);
+
+                            submit({
+                                title: details.title,
+                                start: details.start,
+                                end: details.end,
+                                duration: details.duration,
+                                price: details.price,
+                                expert: result.email,
+                                customer: details.customer,
+                                payment_intent: payment_intent,
+                                eventId: details.eventId,
+                                createdBy: userDetails._id
+                            });
+                        } catch (error) {
+                            console.error("Error processing pending details:", error);
+                        }
+                    }
+                } else {
+                    window.localStorage.removeItem('pendingDetails');
+                    if (redirect_status) {
+                        set_paymentFailed(true);
+                    }
                 }
             }
-        }
-    }, [location])
+        };
+
+        processQueryParameters();
+    }, [location]);
 
     return (
         !paymentFailed ?
@@ -421,8 +499,8 @@ const Search = () => {
                                                             end: endTime,
                                                             duration: duration,
                                                             price: price,
-                                                            expert: selectedExpert,
-                                                            customer: userDetails,
+                                                            expert: selectedExpert._id,
+                                                            customer: userDetails.email,
                                                             eventId: qEventId
                                                         }}
                                                         //expert={selectedExpert}
