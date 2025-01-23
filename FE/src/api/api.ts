@@ -457,8 +457,6 @@ export const setStripeMode = async ({ stripeMode }: any) => {
 }
 
 // CUSTOMER APIS ------------------
-
-
 export async function profileImageUpload(formData: FormData): Promise<any> {
     try {
         const response = await api.post("image-upload/upload",
@@ -585,7 +583,6 @@ export const getExpertById = async (id: any) => {
 };
 
 // EXPERT APIS ------------------
-
 export const getDailyTimeSlots = async (startTime: number, endTime: number, userId: string) => {
     try {
         const res = await api.post("expert/getDailyTimeSlots", {
@@ -684,8 +681,16 @@ export const getCustomerById = async (id: any) => {
     }
 };
 
-// ADMIN APIS ------------------
+export const doUpdateExpertEvent = async (eventId: any, updates: any) => {
+    try {
+        const res = await api.post("expert/updateEvent", { eventId, updates });
+        return res.data;
+    } catch (err: any) {
+        return checkForAuthorization(err);
+    }
+}
 
+// ADMIN APIS ------------------
 export const doFilterUsers = async (filter: any) => {
     try {
         const res = await api.post("admin/filterUsers", filter);

@@ -46,7 +46,9 @@ const RoomButtons: React.FC<{
                         isRoomMinimized={isRoomMinimized}
                         handleRoomResize={handleRoomResize}
                     />
-                    <CloseRoom type="DIRECT CALL" />
+                    <CloseRoom type="DIRECT CALL"
+                        eventId={feedbackId}
+                    />
                     {feedbackId && (
                         <>
                             <button
@@ -81,7 +83,9 @@ const RoomButtons: React.FC<{
                         isRoomMinimized={isRoomMinimized}
                         handleRoomResize={handleRoomResize}
                     />
-                    <CloseRoom type="ROOM" />
+                    <CloseRoom type="ROOM"
+                               eventId={feedbackId}
+                    />
                     {feedbackId && (
                         <>
                             <button

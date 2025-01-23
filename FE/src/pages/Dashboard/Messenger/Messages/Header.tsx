@@ -23,7 +23,7 @@ import { createNewRoom, joinRoom } from "../../../../socket/roomHandler";
 import CloseIcon from '@mui/icons-material/Close';
 import EditIcon from '@mui/icons-material/Edit';
 import {doLeftSeminar, doUpdateProfile, getCustomerById, getExpertById, profileImageFetch} from "../../../../api/api";
-import { SetLoadingStatus } from "../../../../actions/appActions";
+import {SetLoadingStatus, SetTotalTimeSpent} from "../../../../actions/appActions";
 import { updateMe } from "../../../../actions/authActions";
 import { showAlert } from "../../../../actions/alertActions";
 import { resetChatAction, setChosenGroupChatDetails } from "../../../../actions/chatActions";
@@ -261,7 +261,8 @@ const MessagesHeader = ({ scrollPosition, events, openCalendarModal, openSeminar
                                         ? userDetails.username
                                         : "",
                                     receiverUserId: chosenChatDetails?.userId!,
-                                    eventId: enabledEvent?._id
+                                    eventId: enabledEvent?._id,
+                                    userRole: userDetails?.role,
                                 });
                             }}
                         >
@@ -279,11 +280,17 @@ const MessagesHeader = ({ scrollPosition, events, openCalendarModal, openSeminar
                                     callerName: userDetails?.username,
                                     eventId: enabledEvent?._id,
                                 });
+
+                                if(userDetails.role === 'expert' && enabledEvent){
+                                    SetTotalTimeSpent(Date.now());
+                                }
+
                                 callRequest({
                                     audioOnly: false,
                                     callerName: userDetails ? userDetails.username : "",
                                     receiverUserId: chosenChatDetails?.userId!,
-                                    eventId: enabledEvent?._id
+                                    eventId: enabledEvent?._id,
+                                    userRole: userDetails.role,
                                 });
                             }}
                         >

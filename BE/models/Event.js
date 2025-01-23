@@ -17,6 +17,7 @@ const eventSchema = new mongoose.Schema(
         start: {type: Date},
         end: {type: Date},
         duration: {type: Number},
+        totalTimeSpent: {type: Number, default: 0},
         title: {type: String},
         status: {type: String, default: 'pending'},
         paidBy: {type: String},

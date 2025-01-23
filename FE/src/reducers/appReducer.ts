@@ -7,6 +7,7 @@ const initialState = {
     audioStreamAvailable: false,
     feedbackModalShow: false,
     connectedWithSocketServer: false,
+    totalTimeSpent: null,
 };
 
 const appReducer = (
@@ -43,6 +44,12 @@ const appReducer = (
             return {
                 ... state,
                 loading: action.payload,
+            }
+
+        case "SetTotalTimeSpent":
+            return {
+                ... state,
+                totalTimeSpent: action.payload,
             }
 
         default:

@@ -75,14 +75,6 @@ export const clearVideoChat = (
         localStream?.getTracks().forEach((track:any) => track.stop());
         screenSharingStream?.getTracks().forEach((track:any) => track.stop());
 
-        // destroy the active peer connection with the other user that was established
-        // if (currentPeerConnection) {
-        //     currentPeerConnection.destroy();
-        //     console.log("DESTROYED PEER CONNECTION");
-        // }
-
-        // setCurrentPeerConnection(null);
-
         dispatch({
             type: actionTypes.resetVideoChatState,
         });

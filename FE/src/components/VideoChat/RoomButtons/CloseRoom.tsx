@@ -6,11 +6,11 @@ import { useAppSelector } from "../../../store";
 import { clearVideoChat } from "../../../actions/videoChatActions";
 import { callRequest, callResponse, cancelCallRequest, notifyChatLeft } from "../../../socket/socketConnection";
 import { leaveRoom } from "../../../socket/roomHandler";
+import {doUpdateExpertEvent} from "../../../api/api";
 
 type CallType = "DIRECT CALL" | "ROOM"
 
-
-const CloseRoom = ({ type } : { type: CallType }) => {
+const CloseRoom = ({ type, eventId } : { type: CallType, eventId: any}) => {
     const dispatch = useDispatch();
     const {
         friends: {
@@ -32,11 +32,9 @@ const CloseRoom = ({ type } : { type: CallType }) => {
         });
     }
 
-    const handleLeaveRoom = () => {
-
+    const handleLeaveRoom = async () => {
         // notify other user that I left the call
         if (type === "DIRECT CALL") {
-
             if(otherUserId) {
                 // OPENING FEEDBACK POPUP -----------
                 // if (remoteStream) {
@@ -45,6 +43,24 @@ const CloseRoom = ({ type } : { type: CallType }) => {
 
                 notifyChatLeft(otherUserId, remoteStream ? true : false);
             }
+
+            if (userDetails.role === 'expert' && eventId) {
+                const timeSpent = localStorage.getItem('totalTimeSpent');
+
+                if (timeSpent) {
+                    // Convert timeSpent to a number before using it
+                    const parsedTimeSpent = parseInt(timeSpent, 10);
+                    const totalTimeSpent = Date.now() - parsedTimeSpent;
+                    const totalTimeSpentInMinutes = Math.floor(totalTimeSpent / 60000);
+
+                    // Update the totalTimeSpent API
+                    await doUpdateExpertEvent(eventId, { totalTimeSpent :totalTimeSpentInMinutes });
+                    localStorage.removeItem('totalTimeSpent');
+                } else {
+                    console.error('Time spent data is missing in localStorage.');
+                }
+            }
+
             dispatch(clearVideoChat("You left the chat"));
         }
 

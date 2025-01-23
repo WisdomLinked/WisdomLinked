@@ -15,7 +15,7 @@ import {
     setTyping,
 } from "../actions/chatActions";
 import { ActiveRoom, Message } from "../actions/types";
-import { store } from "../store";
+import {store, useAppSelector} from "../store";
 import {
     setCallRequest,
     setCallStatus,
@@ -32,6 +32,10 @@ import {
     newPeerConnection,
     prepareNewPeerConnection,
 } from "./webRTC";
+
+import {
+    SetTotalTimeSpent
+} from "../actions/appActions";
 import SimplePeer from "simple-peer";
 import { initialRoomsUpdate, newRoomCreated, updateActiveRooms, leaveRoom } from "./roomHandler";
 import { setLocalStreamRoom } from "../actions/roomActions";
@@ -304,6 +308,7 @@ const callRequest = (data: {
     callerName: string;
     audioOnly: boolean;
     eventId: string;
+    userRole: string;
 }) => {
     console.log("Initiating call request with data:", data);
 
@@ -374,7 +379,6 @@ const callResponse = (data: {
         return store.dispatch(setCallRequest(null) as any);
     }
 
-    // 1) The user accepted => set callStatus to "accepted" and set the loading flag to true
     store.dispatch(setCallStatus("accepted"));
     store.dispatch(setVideoChatLoading(true));
 

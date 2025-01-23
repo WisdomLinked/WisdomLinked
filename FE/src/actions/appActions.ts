@@ -15,3 +15,11 @@ export const SetLoadingStatus = (loading: Boolean) => {
         payload: loading,
     })
 }
+
+export const SetTotalTimeSpent = (totalTimeSpent: any) => {
+    localStorage.setItem('totalTimeSpent', totalTimeSpent)
+    return {
+        type: "SetTotalTimeSpent",
+        payload: totalTimeSpent,
+    }
+}

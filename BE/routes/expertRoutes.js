@@ -10,6 +10,7 @@ const {
 } = require('../controllers/expert.controller')
 const {
     acceptEvent,
+    updateEvent,
     declineEvent,
     createEventByExpert,
     cancelInvitation,
@@ -38,6 +39,12 @@ router.post(
     "/acceptEvent",
     expertAuth(true),
     acceptEvent
+);
+
+router.post(
+    "/updateEvent",
+    expertAuth(true),
+    updateEvent
 );
 
 router.post(

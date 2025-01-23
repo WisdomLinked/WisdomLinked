@@ -279,38 +279,61 @@ const appendEvent = async (req, res) => {
 
 const updateEvent = async (req, res) => {
     try {
-        const { eventId, updates } = req.body
+        const { eventId, updates } = req.body;
 
-        const event = await Event.findById(eventId)
+        // Find the event by ID
+        const event = await Event.findById(eventId);
+
+        if (!event) {
+            throw new Error("Event not found");
+        }
+
+        // Check for invalid updates or constraints
         if (event.status === 'accepted' && new Date(event.end).getTime() <= new Date().getTime()) {
-            throw new Error("Unable to update past or ongoing event")
+            throw new Error("Unable to update past or ongoing event");
         }
 
         if (updates.title && checkTitleNameInvalid('Title', updates.title)) {
-            throw new Error(checkTitleNameInvalid('Title', updates.title))
+            throw new Error(checkTitleNameInvalid('Title', updates.title));
         }
-        const newEventData = {}
+
+        // Prepare the updated data
+        const newEventData = {};
+
         if (updates.title) {
-            newEventData.title = updates.title
+            newEventData.title = updates.title;
         }
+
         if (updates.start) {
-            newEventData.start = updates.start
+            newEventData.start = updates.start;
         }
+
         if (updates.end) {
-            newEventData.end = updates.end
+            newEventData.end = updates.end;
         }
+
         if (updates.status) {
-            newEventData.status = updates.status
+            newEventData.status = updates.status;
         }
-        const updatedEvent = await Event.findByIdAndUpdate(eventId, newEventData, { new: true })
+
+        if (updates.totalTimeSpent) {
+            // Append new totalTimeSpent to the existing value
+            const existingTotalTimeSpent = event.totalTimeSpent || 0; // Default to 0 if not set
+            newEventData.totalTimeSpent = existingTotalTimeSpent + updates.totalTimeSpent;
+        }
+
+        // Update the event and return the updated document
+        const updatedEvent = await Event.findByIdAndUpdate(eventId, newEventData, { new: true });
+
         res.status(200).json({
-            result: updatedEvent
-        })
+            result: updatedEvent,
+        });
     } catch (err) {
-        console.log(err)
+        console.error(err);
         return res.status(500).send(err.message);
     }
-}
+};
+
 
 const acceptEvent = async (req, res) => {
     try {

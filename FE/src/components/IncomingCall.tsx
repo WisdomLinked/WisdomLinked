@@ -8,6 +8,7 @@
     import VideocamIcon from "@mui/icons-material/Videocam";
     import { useAppSelector } from '../store';
     import { callResponse } from '../socket/socketConnection';
+    import {SetTotalTimeSpent} from "../actions/appActions";
 
     const MainContainer = styled("div")({
         display: "flex",
@@ -22,6 +23,7 @@
     const IncomingCall = () => {
         const callRequest = useAppSelector(state => state.videoChat.callRequest);
         const audioRef = useRef<HTMLAudioElement>(null);
+        const { auth: { userDetails } } = useAppSelector((state) => state);
 
         const handleCall = (accepted: boolean, audioOnly: boolean) => {
             // Stop the ringing sound
@@ -29,6 +31,10 @@
                 console.log("Stopping audio playback...");
                 audioRef.current.pause();
                 audioRef.current.currentTime = 0; // Reset to the start
+            }
+
+            if(userDetails.role === 'expert'){
+                SetTotalTimeSpent(Date.now());
             }
 
             // Respond to the call
