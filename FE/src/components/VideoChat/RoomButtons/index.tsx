@@ -14,7 +14,7 @@ const RoomButtons: React.FC<{
     const {videoChat, room, chat: { currentEvent }, auth: { userDetails }} = useAppSelector((state) => state);
 
     // State for showing/hiding feedback form
-    const [showFeedback, setShowFeedback] = useState(false);
+    const [showFeedback, setShowFeedback] = useState('');
 
 
     // Determine the feedback ID and type
@@ -47,23 +47,19 @@ const RoomButtons: React.FC<{
                         handleRoomResize={handleRoomResize}
                     />
                     <CloseRoom type="DIRECT CALL"
-                        eventId={feedbackId}
+                               eventId={feedbackId}
+                               setShowFeedback={setShowFeedback}
+                               showFeedback={showFeedback}
                     />
                     {feedbackId && (
                         <>
-                            <button
-                                className="mx-1 py-0.5 px-2 text-xs rounded bg-midgrey-2 text-white hover:bg-midgrey-3"
-                                onClick={() => setShowFeedback(true)}
-                            >
-                                Feedback
-                            </button>
-                            {showFeedback && (
+                            {showFeedback == 'true'&& (
                                 <div className="fixed top-0 left-0 w-full h-full flex items-center justify-center bg-black/70 z-50">
                                     <FeedbackForm
                                         _id={feedbackId}
                                         userId={userDetails.userId}
                                         role={userDetails.role}
-                                        onClose={() => setShowFeedback(false)}
+                                        onClose={() => setShowFeedback('false')}
                                     />
                                 </div>
                             )}
@@ -85,22 +81,18 @@ const RoomButtons: React.FC<{
                     />
                     <CloseRoom type="ROOM"
                                eventId={feedbackId}
+                               setShowFeedback={setShowFeedback}
+                               showFeedback={showFeedback}
                     />
                     {feedbackId && (
                         <>
-                            <button
-                                className="mx-1 py-0.5 px-2 text-xs rounded bg-midgrey-2 text-white hover:bg-midgrey-3"
-                                onClick={() => setShowFeedback(true)}
-                            >
-                                Feedback
-                            </button>
-                            {showFeedback && (
+                            {showFeedback == 'true'&& (
                                 <div className="absolute top-0 left-0 w-full h-full flex items-center justify-center bg-black/50 z-50">
                                     <FeedbackForm
                                         _id={feedbackId}
                                         userId={userDetails.userId}
                                         role={userDetails.role}
-                                        onClose={() => setShowFeedback(false)}
+                                        onClose={() => setShowFeedback('false')}
                                     />
                                 </div>
                             )}
