@@ -5,17 +5,12 @@ import CloseRoom from "./CloseRoom";
 import ScreenShare from "./ScreenShare";
 import {useAppSelector} from "../../../store"
 import ResizeRoomButton from "../ResizeRoomButton";
-import FeedbackForm from "../../FeedbackForm";
 
 const RoomButtons: React.FC<{
     isRoomMinimized: boolean;
     handleRoomResize: () => void;
 }> = ({ isRoomMinimized, handleRoomResize }) => {
     const {videoChat, room, chat: { currentEvent }, auth: { userDetails }} = useAppSelector((state) => state);
-
-    // State for showing/hiding feedback form
-    const [showFeedback, setShowFeedback] = useState('');
-
 
     // Determine the feedback ID and type
     const feedbackId = videoChat.localStream && currentEvent?._id
@@ -48,23 +43,7 @@ const RoomButtons: React.FC<{
                     />
                     <CloseRoom type="DIRECT CALL"
                                eventId={feedbackId}
-                               setShowFeedback={setShowFeedback}
-                               showFeedback={showFeedback}
                     />
-                    {feedbackId && (
-                        <>
-                            {showFeedback == 'true'&& (
-                                <div className="fixed top-0 left-0 w-full h-full flex items-center justify-center bg-black/70 z-50">
-                                    <FeedbackForm
-                                        _id={feedbackId}
-                                        userId={userDetails.userId}
-                                        role={userDetails.role}
-                                        onClose={() => setShowFeedback('false')}
-                                    />
-                                </div>
-                            )}
-                        </>
-                    )}
                 </div>
             ) : room.localStreamRoom ? (
                 <div className="w-full h-full flex items-center justify-center">
@@ -81,23 +60,7 @@ const RoomButtons: React.FC<{
                     />
                     <CloseRoom type="ROOM"
                                eventId={feedbackId}
-                               setShowFeedback={setShowFeedback}
-                               showFeedback={showFeedback}
                     />
-                    {feedbackId && (
-                        <>
-                            {showFeedback == 'true'&& (
-                                <div className="absolute top-0 left-0 w-full h-full flex items-center justify-center bg-black/50 z-50">
-                                    <FeedbackForm
-                                        _id={feedbackId}
-                                        userId={userDetails.userId}
-                                        role={userDetails.role}
-                                        onClose={() => setShowFeedback('false')}
-                                    />
-                                </div>
-                            )}
-                        </>
-                    )}
                 </div>
             ) : null}
         </div>

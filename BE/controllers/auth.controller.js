@@ -13,7 +13,8 @@ const { createGeneralChatAndJoinGlobalChat } = require("./groupChat.controller")
 const { checkTitleNameInvalid } = require('../services/global')
 const { v4: uuidv4 } = require('uuid');
 const utils = require('../services/utils')
-const randomize = require('randomatic')
+const randomize = require('randomatic');
+const Event = require("../models/Event");
 
 const getUniqueConfirmCode = async () => {
     try {
@@ -621,37 +622,73 @@ const handleSubmit = async (req, res) => {
 const leaveFeedback = async (req, res) => {
     try {
         const { userId, role } = req.user
-        const { otherUserId, description, rating } = req.body
+        const { eventId=null,otherUserId, description, rating } = req.body
 
-        const otherUser = await User.findById(otherUserId)
 
-        if (!otherUser) {
-            throw new Error("No user found for feedback")
-        }
+        if(eventId)
+        {
+            const otherUser = await Event.findById(eventId)
 
-        if (role === otherUser.role) {
-            throw new Error('Not available to leave feedback to the same role.')
-        }
-
-        otherUser.feedbacks.push({
-            rating,
-            description,
-            otherUserId: userId,
-            date: new Date()
-        })
-
-        if (role === 'customer') {
-            let rating = 0
-            for (let i = 0; i < otherUser.feedbacks.length; i++) {
-                console.log(otherUser.feedbacks[i])
-                rating += otherUser.feedbacks[i].rating
+            if (!otherUser) {
+                throw new Error("No event found for feedback")
             }
-            rating = (rating / otherUser.feedbacks.length).toFixed(2)
-            console.log(rating)
-            otherUser.rating = rating
-        }
 
-        await otherUser.save()
+            if (role === otherUser.role) {
+                throw new Error('Not available to leave feedback to the same role.')
+            }
+
+            otherUser.feedbacks.push({
+                rating,
+                role,
+                description,
+                otherUserId: userId,
+                date: new Date()
+            })
+
+            // if (role === 'customer') {
+            //     let rating = 0
+            //     for (let i = 0; i < otherUser.feedbacks.length; i++) {
+            //         console.log(otherUser.feedbacks[i])
+            //         rating += otherUser.feedbacks[i].rating
+            //     }
+            //     rating = (rating / otherUser.feedbacks.length).toFixed(2)
+            //     console.log(rating)
+            //     otherUser.rating = rating
+            // }
+
+            await otherUser.save()
+        }
+        else{
+            const otherUser = await User.findById(otherUserId)
+
+            if (!otherUser) {
+                throw new Error("No user found for feedback")
+            }
+
+            if (role === otherUser.role) {
+                throw new Error('Not available to leave feedback to the same role.')
+            }
+
+            otherUser.feedbacks.push({
+                rating,
+                description,
+                otherUserId: userId,
+                date: new Date()
+            })
+
+            if (role === 'customer') {
+                let rating = 0
+                for (let i = 0; i < otherUser.feedbacks.length; i++) {
+                    console.log(otherUser.feedbacks[i])
+                    rating += otherUser.feedbacks[i].rating
+                }
+                rating = (rating / otherUser.feedbacks.length).toFixed(2)
+                console.log(rating)
+                otherUser.rating = rating
+            }
+
+            await otherUser.save()
+        }
 
         res.status(200).send('SUCCESS')
     } catch (err) {
@@ -711,3 +748,4 @@ module.exports = {
     healthCheck,
     getTimeZone
 }
+

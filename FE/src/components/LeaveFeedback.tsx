@@ -11,7 +11,7 @@ import { SetLoadingStatus } from "../actions/appActions";
 export default function LeaveFeedback() {
 
     const dispatch = useDispatch();
-    const { app: { feedbackModalShow }, auth: { userDetails } } = useAppSelector((state) => state);
+    const { app: { feedbackModalShow },chat: { currentEvent }, auth: { userDetails } } = useAppSelector((state) => state);
     const [description, set_description] = useState("");
     const [rating, set_rating] = useState(0);
     const [enableToSubmit, set_enableToSubmit] = useState(false)
@@ -23,9 +23,11 @@ export default function LeaveFeedback() {
         });
     }
 
+
     const submit = async () => {
         SetLoadingStatus(true)
         const response = await leaveFeedback({
+            eventId: currentEvent?._id || null,
             otherUserId: feedbackModalShow,
             description,
             rating
@@ -43,17 +45,14 @@ export default function LeaveFeedback() {
     }
 
     useEffect(() => {
-        if (
-            (userDetails?.role === "expert" && description) ||
-            (userDetails?.role === "customer" && description && rating)
-        ) {
+        if (description && rating) {
             set_enableToSubmit(true);
         } else {
             set_enableToSubmit(false);
         }
     }, [description, rating])
 
-    return null
+    // return null
 
     return (
         <React.Fragment>
@@ -81,12 +80,10 @@ export default function LeaveFeedback() {
                                     onChange={(e) => set_description(e.target.value)}
                                 />
                                 {
-                                    userDetails?.role !== "expert" ?
-                                        <>
-                                            <div className="mt-6 text-grey text-[12px] leading-[19px]">Rate *</div>
-                                            <Rating size="large" onChange={(e, newValue) => set_rating(newValue || 0)} value={rating} />
-                                        </> :
-                                        null
+                                    <>
+                                        <div className="mt-6 text-grey text-[12px] leading-[19px]">Rate *</div>
+                                        <Rating size="large" onChange={(e, newValue) => set_rating(newValue || 0)} value={rating} />
+                                    </>
                                 }
                                 <div className="w-full h-10 flex justify-between mt-6 text-lightgrey">
                                     <button
