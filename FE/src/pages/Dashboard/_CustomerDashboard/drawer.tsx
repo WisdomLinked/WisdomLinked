@@ -202,10 +202,14 @@ export default function CustomerDrawer(props: Props) {
                 </div>
                 <div className={`w-[300px] h-full bg-darkgrey overflow-y-auto px-[15px] pt-4 pb-[5px] ${location === 'customerchat' ? '' : 'hidden'}`}>
                     <FriendsTitle title="Shared Community Chats" />
-                    <GeneralChatList />
-                    <div className="bg-black w-full h-[1px] mb-2" />
+                    <div className="h-[220px] overflow-y-auto">
+                        <GeneralChatList/>
+                    </div>
+                    <div className="bg-black w-full h-[1px] mb-2"/>
                     <FriendsTitle title="Private Chats" />
-                    <FriendsList />
+                    <div className="h-[250  px] overflow-y-auto">
+                        <FriendsList/>
+                    </div>
                     {/* <div className="flex items-center mt-2">
                         <FriendsTitle title="Active Rooms" />
                         <CreateRoomButton isUserInRoom={props.isUserInRoom} />
@@ -215,7 +219,9 @@ export default function CustomerDrawer(props: Props) {
                     <div className="flex items-center mt-2">
                         <FriendsTitle title="Seminars" />
                     </div>
-                    <GroupChatList />
+                    <div className="h-[250px] overflow-y-auto">
+                        <GroupChatList/>
+                    </div>
                 </div>
             </div>
             <div className={`w-full ${location === 'customerchat' ? 'lg:w-[calc(100%-370px)]' : 'lg:w-[calc(100%-70px)]'} h-full`}>
