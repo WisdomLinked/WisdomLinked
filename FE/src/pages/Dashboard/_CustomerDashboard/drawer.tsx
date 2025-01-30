@@ -216,7 +216,7 @@ export default function CustomerDrawer(props: Props) {
                     </div>
                     <ActiveRooms /> */}
                     <div className="bg-black w-full h-[1px]" />
-                    <div className="flex items-center mt-4">
+                    <div className="flex items-center mb-4">
                         <FriendsTitle title="Seminars" />
                     </div>
                     <div className="h-[250px] overflow-y-auto">

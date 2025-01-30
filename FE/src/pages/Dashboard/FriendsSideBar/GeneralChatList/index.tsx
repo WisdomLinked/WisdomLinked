@@ -1,10 +1,35 @@
 import { useState, useEffect } from "react";
 import { useAppSelector } from "../../../../store";
 import GeneralChatListItem from "./GeneralChatListItem";
+import { styled } from "@mui/system";
+
+const MainContainer = styled("div")({
+    flexGrow: 1,
+    width: "100%",
+    margin: "20px 0",
+});
+
+const SearchInput = styled("input")({
+    width: "100%",
+    padding: "10px",
+    marginBottom: "20px",
+    borderRadius: "5px",
+    border: "1px solid #444",
+    fontSize: "16px",
+    backgroundColor: "#222",
+    color: "#fff",
+    outline: "none",
+    caretColor: "#00ffff",
+    "::placeholder": {
+        color: "#888",
+    },
+});
 
 const GeneralChatList = () => {
     const { auth: { userDetails } } = useAppSelector((state) => state);
     const [updatedGeneralChats, set_updatedGeneralChats] = useState<any>([])
+    const [searchQuery, setSearchQuery] = useState<string>("");
+
     useEffect(() => {
         let temp: any = []
         let globalChat: any, adminChat: any, generalChat: any
@@ -38,9 +63,22 @@ const GeneralChatList = () => {
         set_updatedGeneralChats([...temp])
 
     }, [userDetails])
+
+    const filteredGeneralChats = updatedGeneralChats.filter((chat: any) =>
+        chat.name?.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+
     return (
-        <div className="w-full my-5">
-            {updatedGeneralChats.map((chat: any) => (
+        <MainContainer>
+            {/* Search bar identical in style & behavior to FriendsList */}
+            <SearchInput
+                type="text"
+                placeholder="Search by user name..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+            />
+
+            {filteredGeneralChats.map((chat: any) => (
                 <GeneralChatListItem
                     chat={chat}
                     key={chat._id}
@@ -48,7 +86,7 @@ const GeneralChatList = () => {
                     lastChatDate={chat.updatedAt}
                 />
             ))}
-        </div>
+        </MainContainer>
     );
 };
 
