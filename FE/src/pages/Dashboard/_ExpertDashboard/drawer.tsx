@@ -202,7 +202,7 @@ export default function ExpertDrawer(props: Props) {
                     <div className="h-[220px] overflow-y-auto">
                         <GeneralChatList/>
                     </div>
-                    <div className="bg-black w-full h-[1px] mb-2"/>
+                    <div className="bg-black w-full h-[1px] mb-4"/>
                     <FriendsTitle title="Private Chats" />
                     <div className="h-[250px] overflow-y-auto">
                         <FriendsList/>
@@ -213,7 +213,7 @@ export default function ExpertDrawer(props: Props) {
                     </div>
                     <ActiveRooms /> */}
                     <div className="bg-black w-full h-[1px]" />
-                    <div className="flex items-center mt-2">
+                    <div className="flex items-center mb-4">
                         <FriendsTitle title="Seminars" />
                         <Link
                             title="Create New Seminar"
