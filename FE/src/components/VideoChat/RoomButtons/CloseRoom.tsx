@@ -17,13 +17,14 @@ const CloseRoom = ({ type, eventId}: { type: CallType; eventId: any; }) => {
         auth: { userDetails },
         videoChat: { otherUserId, remoteStream },
         chat: { chosenChatDetails },
-        room: { roomDetails },
+        room: { roomDetails},
     } = useAppSelector((state) => state);
 
     const [expert, set_expert] = useState<any>(null);
     const [isExpertInRoom, set_isExpertInRoom] = useState<any>(null);
 
     const openFeedbackModal = (otherUserId: any) => {
+        console.log("feedback",roomDetails)
         dispatch({
             type: "SetFeedbackModalShow",
             payload: otherUserId,
@@ -47,11 +48,6 @@ const CloseRoom = ({ type, eventId}: { type: CallType; eventId: any; }) => {
         }
     };
 
-    const handleFeedback = async () => {
-        handleLeaveRoom();
-        openFeedbackModal(otherUserId)
-    };
-
     const handleLeaveRoom = async () => {
         // Notify the other user that the call is being left
         if (type === "DIRECT CALL") {
@@ -62,10 +58,12 @@ const CloseRoom = ({ type, eventId}: { type: CallType; eventId: any; }) => {
             await calculateTotalTime(); // Update the total time spent
 
             dispatch(clearVideoChat("You left the chat"));
+            openFeedbackModal(otherUserId)
         }
 
         if (type === "ROOM") {
             leaveRoom(); // Handle leaving the room
+            openFeedbackModal(roomDetails?.roomCreator?.userId)
         }
 
         // Cancel the call request after feedback is completed
@@ -84,7 +82,7 @@ const CloseRoom = ({ type, eventId}: { type: CallType; eventId: any; }) => {
 
     return (
         <button
-            onClick={handleFeedback}
+            onClick={handleLeaveRoom}
             className="bg-white px-4 py-0.5 text-green rounded-md ml-3 border border-green hover:bg-green hover:border-white hover:text-white"
         >
             {type === "DIRECT CALL" ? "Exit" : "Leave"}
