@@ -624,71 +624,34 @@ const leaveFeedback = async (req, res) => {
         const { userId, role } = req.user
         const { eventId=null,otherUserId, description, rating } = req.body
 
+        const otherUser = await User.findById(otherUserId)
 
-        if(eventId)
-        {
-            const otherUser = await Event.findById(eventId)
-
-            if (!otherUser) {
-                throw new Error("No event found for feedback")
-            }
-
-            if (role === otherUser.role) {
-                throw new Error('Not available to leave feedback to the same role.')
-            }
-
-            otherUser.feedbacks.push({
-                rating,
-                role,
-                description,
-                otherUserId: userId,
-                date: new Date()
-            })
-
-            // if (role === 'customer') {
-            //     let rating = 0
-            //     for (let i = 0; i < otherUser.feedbacks.length; i++) {
-            //         console.log(otherUser.feedbacks[i])
-            //         rating += otherUser.feedbacks[i].rating
-            //     }
-            //     rating = (rating / otherUser.feedbacks.length).toFixed(2)
-            //     console.log(rating)
-            //     otherUser.rating = rating
-            // }
-
-            await otherUser.save()
+        if (!otherUser) {
+            throw new Error("No user found for feedback")
         }
-        else{
-            const otherUser = await User.findById(otherUserId)
 
-            if (!otherUser) {
-                throw new Error("No user found for feedback")
-            }
-
-            if (role === otherUser.role) {
-                throw new Error('Not available to leave feedback to the same role.')
-            }
-
-            otherUser.feedbacks.push({
-                rating,
-                description,
-                otherUserId: userId,
-                date: new Date()
-            })
-
-            if (role === 'customer') {
-                let rating = 0
-                for (let i = 0; i < otherUser.feedbacks.length; i++) {
-                    console.log(otherUser.feedbacks[i])
-                    rating += otherUser.feedbacks[i].rating
-                }
-                rating = (rating / otherUser.feedbacks.length).toFixed(2)
-                console.log(rating)
-                otherUser.rating = rating
-            }
-
-            await otherUser.save()
+        if (role === otherUser.role) {
+            throw new Error('Not available to leave feedback to the same role.')
         }
+
+        otherUser.feedbacks.push({
+            eventId,
+            rating,
+            description,
+            otherUserId: userId,
+            date: new Date()
+        })
+
+        let userRating = 0
+        for (let i = 0; i < otherUser.feedbacks.length; i++) {
+            console.log(otherUser.feedbacks[i])
+            userRating += otherUser.feedbacks[i].rating
+        }
+        userRating = (rating / otherUser.feedbacks.length).toFixed(2)
+        console.log(userRating)
+        otherUser.rating = userRating
+
+        await otherUser.save()
 
         res.status(200).send('SUCCESS')
     } catch (err) {

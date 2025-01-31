@@ -65,11 +65,12 @@ const Customers = ({
             console.log(response.result, '========')
             set_customers([...response.result])
             const imagePromises = response.result.map((customer: any) =>
-                fetchCustomerProfile(customer.image)
+                    fetchCustomerProfile(customer.image)
             );
 
             const customerImages = await Promise.all(imagePromises);
             set_customers_image(customerImages);
+            console.log("customerImaged", customerImages)
             if (qCustomerId) {
                 selectCustomer(response.result?.[0])
             }
@@ -77,18 +78,19 @@ const Customers = ({
         SetLoadingStatus(false)
     }
 
-    const fetchCustomerProfile=async(customerId: string) =>
-    {
-        try{
-            const res= await profileImageFetch(customerId,"medium")
-            return res
+    const fetchCustomerProfile = async (customerId: string | null) => {
+        try {
+            if (!customerId) {
+                return null;
+            }
+            const res = await profileImageFetch(customerId, "medium");
+            return res;
+        } catch (err) {
+            console.error("Error while fetching customer profile:", err);
+            return null; // Ensure null is returned in case of an error
         }
-        catch(err)
-        {
-            console.log("error while fetching customers",err)
-            return
-        }
-    }
+    };
+
 
     const joinGeneralChatOfCustomer = async (otherUserId: string) => {
         SetLoadingStatus(true)
@@ -212,6 +214,7 @@ const Customers = ({
                             <div className="w-full p-2 pb-3 !flex flex-col items-center justify-center">
                                 <div className="text-2xl text-center text-white font-bold">{customer.username}</div>
                                 <div className="text-md text-center text-lightgrey">{customer.title}</div>
+                                <Rating name="read-only" className="mt-2" value={customer.rating || 0} readOnly />
                                 <div className="w-full flex space-x-4 mt-4">
                                     <button
                                         className="w-[calc(50%-8px)] rounded-lg border text-lightgrey border-lightgrey flex items-center justify-center"
