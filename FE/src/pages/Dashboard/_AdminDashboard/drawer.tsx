@@ -10,9 +10,12 @@ import Dashboard from "./dashboard";
 import Payment from "./payment";
 import UserMgmt from "./usermgmt";
 import ChatIcon from '@mui/icons-material/Chat';
+import { IoAccessibility } from "react-icons/io5";
 import Messenger from "../Messenger/Messenger";
 import FriendsTitle from "../FriendsSideBar/FriendsTitle";
 import GeneralChatList from "../FriendsSideBar/GeneralChatList";
+import Feedback from "../../../components/getFeedback";
+
 
 interface Props {
     window?: () => Window;
@@ -52,6 +55,17 @@ export default function AdminDrawer(props: Props) {
                         <ChatIcon fontSize="medium" />
                         <span className="text-[10px]">Chat</span>
                     </Link>
+                    <Link
+                        to={`${process.env.REACT_APP_AUTH_URL}admindashboard/feedbacks`}
+                        className={`flex flex-col items-center ${
+                            location === "adminfeedbacks"
+                                ? "text-lightgrey"
+                                : "text-grey hover:text-lightgrey"
+                        }`}
+                    >
+                        <span className="material-icons"><IoAccessibility /></span>
+                        <span className="text-[10px] mt-1">Feedback</span>
+                    </Link>
                 </div>
                 <div className={`w-[300px] h-full bg-darkgrey overflow-y-auto px-[15px] pt-4 pb-[5px] ${location === 'adminchat' ? '' : 'hidden'}`}>
                     <FriendsTitle title="Shared Community Chats" />
@@ -63,6 +77,7 @@ export default function AdminDrawer(props: Props) {
                     <Route path="/usermgmt" element={<UserMgmt />} />
                     <Route path="/payment" element={<Payment />} />
                     <Route path="/chat" element={<Messenger />} />
+                    <Route path="/feedbacks" element={<Feedback />} />
                     <Route path="/*" element={<Dashboard />} />
                 </Routes>
             </div>

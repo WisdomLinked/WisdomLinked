@@ -16,6 +16,10 @@ const {
 } = require("../controllers/admin.controller");
 
 const {
+    getUserFeedbacks
+} = require("../controllers/admin.controller");
+
+const {
     getFeedback
 } = require("../controllers/event.controller");
 
@@ -27,5 +31,6 @@ router.post("/updateProfileOfUser", adminAuth, updateProfileOfUser)
 router.post("/getDirectChatHistory", adminAuth, getDirectChatHistory)
 router.post("/getGroupChatHistory", adminAuth, getGroupChatHistory)
 router.get("/getEventFeedback", adminAuth, getFeedback)
+router.post("/getUserFeedbacks", adminAuth, getUserFeedbacks);
 
 module.exports = router;

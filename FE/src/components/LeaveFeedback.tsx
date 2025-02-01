@@ -23,7 +23,6 @@ export default function LeaveFeedback() {
         });
     }
 
-
     const submit = async () => {
         SetLoadingStatus(true)
         console.log("roomDetails", roomDetails)

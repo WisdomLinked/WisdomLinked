@@ -429,6 +429,15 @@ export const leaveFeedback = async (data: any) => {
     }
 }
 
+export const getUserFeedbacks = async (userId: string) => {
+    try {
+        const res = await api.post("admin/getUserFeedbacks", { userId });
+        return res.data;
+    } catch (err: any) {
+        return checkForAuthorization(err);
+    }
+};
+
 export const createStripePaymentIntent = async (data: any) => {
     try {
         const res = await api.post("auth/createStripePaymentIntent", data);

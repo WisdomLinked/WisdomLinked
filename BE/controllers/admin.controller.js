@@ -261,11 +261,50 @@ const getGroupChatHistory = async (req, res) => {
     }
 }
 
+const getUserFeedbacks = async (req, res) => {
+    try {
+        const { userId } = req.body;
+        if (!userId) {
+            return res.status(400).send("userId is required");
+        }
+        const user = await User.findById(userId);
+        if (!user) {
+            return res.status(404).send("User not found");
+        }
+        // feedbacks array
+        const feedbacks = user.feedbacks || [];
+        // Enrich each feedback with other user info
+        const enriched = [];
+        for (let i = 0; i < feedbacks.length; i++) {
+            const feedback = feedbacks[i];
+            let otherUser = null;
+            if (feedback.otherUserId) {
+                otherUser = await User.findById(feedback.otherUserId).select("username _id image role");
+            }
+            enriched.push({
+                eventId: feedback.eventId || null,
+                groupChatId: feedback.groupChatId || null,
+                rating: feedback.rating || 0,
+                description: feedback.description || "",
+                date: feedback.date || null,
+                otherUserId: feedback.otherUserId || null,
+                otherUser: otherUser || null
+            });
+        }
+        return res.status(200).json({ result: enriched });
+    } catch (err) {
+        console.log(err);
+        return res.status(500).send(err.message);
+    }
+};
+
+
 module.exports = {
     filterUsers,
     getFullUserDataByEmail,
     updateProfileOfUser,
     filterPaymentHistories,
     getDirectChatHistory,
-    getGroupChatHistory
+    getGroupChatHistory,
+    getUserFeedbacks
 }
