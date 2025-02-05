@@ -130,6 +130,14 @@ export const newPeerConnection = (initiator: boolean) => {
         config: configuration,
         stream: stream,
     });
+
+    peer.on("error", (err: any) => {
+        console.error("WebRTC peer error in newPeerConnection:", err);
+    });
+    peer.on("iceStateChange", (iceState: any) => {
+        console.log("ICE state changed in newPeerConnection:", iceState);
+    });
+
     return peer;
 }
 
@@ -165,6 +173,13 @@ export const prepareNewPeerConnection = (connUserSocketId: string, isInitiator: 
         console.log("Received remote stream:", remoteStream);
         remoteStream.connUserSocketId = connUserSocketId;
         addNewRemoteStream(remoteStream);
+    });
+
+    peers[connUserSocketId].on("error", (err: any) => {
+        console.error("WebRTC peer error in prepareNewPeerConnection:", err);
+    });
+    peers[connUserSocketId].on("iceStateChange", (iceState: any) => {
+        console.log("ICE state changed in prepareNewPeerConnection:", iceState);
     });
 };
 
