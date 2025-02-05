@@ -96,8 +96,8 @@ const peerConfiguration = () => {
                         `turn:${process.env.REACT_APP_TURN_URL}:3478?transport=udp`,
                         `turn:${process.env.REACT_APP_TURN_URL}:80?transport=tcp`
                     ],
-                    username: "efA389S6BJFSNKYQP2",
-                    credential: "dkvSztjG5Rs60Er0"
+                    username: "efRXSXFPE63R9RIO40",
+                    credential: "mfC08YbrsCacihuc"
                 }
             ]
         }
