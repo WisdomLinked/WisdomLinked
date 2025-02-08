@@ -84,6 +84,7 @@ export const getLocalStreamPreview = async (audioOnly: boolean, callback?: () =>
             failedCallback(err)
     })
 }
+
 //
 // const peerConfiguration = () => {
 //     if (process.env.REACT_APP_TURN_URL) {
