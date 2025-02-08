@@ -5,6 +5,7 @@ import CloseRoom from "./CloseRoom";
 import ScreenShare from "./ScreenShare";
 import {useAppSelector} from "../../../store"
 import ResizeRoomButton from "../ResizeRoomButton";
+import FlipCamera from "./FlipCamera";
 
 const RoomButtons: React.FC<{
     isRoomMinimized: boolean;
@@ -34,6 +35,7 @@ const RoomButtons: React.FC<{
                                 type="DIRECT CALL"
                             />
                             <Camera localStream={videoChat.localStream} />
+                            <FlipCamera localStream={videoChat.localStream} />
                         </>
                     )}
                     <Microphone localStream={videoChat.localStream} />
@@ -48,7 +50,12 @@ const RoomButtons: React.FC<{
             ) : room.localStreamRoom ? (
                 <div className="w-full h-full flex items-center justify-center">
                     {!room.isUserJoinedWithOnlyAudio && (
-                        <ScreenShare room={room} type="ROOM" />
+                        // <ScreenShare room={room} type="ROOM" />
+                        <>
+                            <ScreenShare room={room} type="ROOM" />
+                            <Camera localStream={room.localStreamRoom} />
+                            <FlipCamera localStream={room.localStreamRoom} />
+                        </>
                     )}
                     <Microphone localStream={room.localStreamRoom} />
                     {!room.isUserJoinedWithOnlyAudio && (
