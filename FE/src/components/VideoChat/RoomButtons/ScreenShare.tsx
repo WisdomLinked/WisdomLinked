@@ -53,7 +53,6 @@ const ScreenShare: React.FC<{
                 ?.getVideoTracks()
                 .forEach((track) => track.stop());
 
-
             dispatch(setScreenSharingStream(null));
             setScreenShareEnabled(false);
         } else {
@@ -68,7 +67,6 @@ const ScreenShare: React.FC<{
                 ...screenShareStream.getVideoTracks(),
                 ...(videoChat?.localStream?.getAudioTracks() || [])
             ]);
-
 
             dispatch(setScreenSharingStream(combinedStream));
             setScreenShareEnabled(true);
@@ -85,18 +83,12 @@ const ScreenShare: React.FC<{
         }
     }
 
-
     const handleRoomCall = async () => {
-
-        console.log("hi")
-        console.log(room)
         if(!room || !room.localStreamRoom) {
             return 
         }
 
-        console.log("hi2");
         if (!screenShareEnabled) {
-            console.log("hi3");
             let stream = null;
             try {
                 const mediaDevices = navigator.mediaDevices as any;
@@ -117,12 +109,13 @@ const ScreenShare: React.FC<{
             }
         } else {
             switchOutgoingTracks(room.localStreamRoom);
-            // room.screenSharingStream?.getTracks().forEach((t) => t.stop());
-            // setScreenSharingStreamRoom(null);
-            // setScreenShareEnabled(false);
+
             room.screenSharingStream
                 ?.getVideoTracks()
                 .forEach((t) => t.stop());
+
+            dispatch(setScreenSharingStreamRoom(null));
+            setScreenShareEnabled(false);
         }
     }
 
