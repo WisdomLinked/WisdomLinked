@@ -269,8 +269,35 @@ const connectWithSocketServer = (userDetails: UserDetails) => {
         })
     });
 
-    socket.on("setAudioStatusInRoom", (data: any) => {
+    // socket.on("setAudioStatusInRoom", (data: any) => {
+    //
+    // });
 
+    socket.on("setAudioStatusInRoom", (data: any) => {
+        // data contains { customerId, roomId, audioStatus }
+        // We update the room's selfMutedParticipants array to reflect the user's new status
+        const currentRoomDetails = store.getState().room.roomDetails;
+        if (currentRoomDetails && currentRoomDetails.roomId === data.roomId) {
+            if (!currentRoomDetails.selfMutedParticipants) {
+                currentRoomDetails.selfMutedParticipants = [];
+            }
+            if (data.audioStatus === false) {
+                // Add to selfMuted array if not present
+                if (!currentRoomDetails.selfMutedParticipants.includes(data.customerId)) {
+                    currentRoomDetails.selfMutedParticipants.push(data.customerId);
+                }
+            } else {
+                // Remove from selfMuted array if present
+                const index = currentRoomDetails.selfMutedParticipants.indexOf(data.customerId);
+                if (index !== -1) {
+                    currentRoomDetails.selfMutedParticipants.splice(index, 1);
+                }
+            }
+            store.dispatch({
+                type: "SET_ROOM_DETAILS",
+                payload: { ...currentRoomDetails }
+            });
+        }
     });
 
     socket.on("cancelCallRequest", () => {
@@ -468,9 +495,17 @@ const enableAudioCustomerFromRoom = (data: { customerId: string, roomId: any }) 
     socket.emit("enableAudioCustomerFromRoom", data)
 }
 
-const setAudioStatusInRoom = (data: { customerId: string, roomId: any, audioStatus: boolean }) => {
-    socket.emit("setAudioStatusInRoom", data)
-}
+// const setAudioStatusInRoom = (data: { customerId: string, roomId: any, audioStatus: boolean }) => {
+//     socket.emit("setAudioStatusInRoom", data)
+// }
+
+const setAudioStatusInRoom = (data: {
+    customerId: string;
+    roomId: any;
+    audioStatus: boolean;
+}) => {
+    socket.emit("setAudioStatusInRoom", data);
+};
 
 
 const signalPeerData = (data: {
@@ -480,10 +515,18 @@ const signalPeerData = (data: {
     socket.emit("conn-signal", data);
 };
 
+// const setRemoteVideoAudioStatus = (data: {
+//     audioEnabled: boolean,
+//     videoEnabled: boolean,
+//     otherUserId: string
+// }) => {
+//     socket.emit("setRemoteVideoAudioStatus", data);
+// };
+
 const setRemoteVideoAudioStatus = (data: {
-    audioEnabled: boolean,
-    videoEnabled: boolean,
-    otherUserId: string
+    audioEnabled: boolean;
+    videoEnabled: boolean;
+    otherUserId: string;
 }) => {
     socket.emit("setRemoteVideoAudioStatus", data);
 };

@@ -5,7 +5,7 @@ import MicOffIcon from "@mui/icons-material/MicOff";
 import { useAppSelector } from "../../../store";
 import { useDispatch } from "react-redux";
 import { setVideoAudioStatus } from "../../../actions/videoChatActions";
-import { setAudioStatusInRoom } from "../../../socket/socketConnection";
+import {setAudioStatusInRoom, setRemoteVideoAudioStatus} from "../../../socket/socketConnection";
 
 const Microphone: React.FC<{
     localStream: MediaStream;
@@ -16,15 +16,43 @@ const Microphone: React.FC<{
         app: { audioStreamAvailable },
         auth: {userDetails},
         room: { roomDetails },
-        videoChat: { localVideoEnabled, localAudioEnabled, forceMuted  },
+        videoChat: { localVideoEnabled, localAudioEnabled, forceMuted, otherUserId  },
     } = useAppSelector((state) => state);
 
+    // const handleToggleMic = () => {
+    //     if (!forceMuted && localStream) {
+    //         const audioTrack = localStream.getAudioTracks()[0];
+    //         if (audioTrack) {
+    //             audioTrack.enabled = !audioTrack.enabled;
+    //             dispatch(setVideoAudioStatus(localVideoEnabled, audioTrack.enabled, true));
+    //         }
+    //     }
+    // };
+
     const handleToggleMic = () => {
+        // Prevent toggling if forcibly muted or no local stream
         if (!forceMuted && localStream) {
             const audioTrack = localStream.getAudioTracks()[0];
             if (audioTrack) {
                 audioTrack.enabled = !audioTrack.enabled;
-                dispatch(setVideoAudioStatus(localVideoEnabled, audioTrack.enabled, true));
+                // Update our local Redux state
+                dispatch(
+                    setVideoAudioStatus(localVideoEnabled, audioTrack.enabled, true)
+                );
+
+                if (roomDetails?.roomId) {
+                    setAudioStatusInRoom({
+                        customerId: userDetails.userId,
+                        roomId: roomDetails.roomId,
+                        audioStatus: audioTrack.enabled
+                    });
+                } else if (otherUserId) {
+                    setRemoteVideoAudioStatus({
+                        audioEnabled: audioTrack.enabled,
+                        videoEnabled: localVideoEnabled,
+                        otherUserId
+                    });
+                }
             }
         }
     };
