@@ -51,23 +51,46 @@ const Video = ({
                         .catch((err) => console.error("setSinkId error:", err));
                 }
 
-                const videoEnabled = stream.getVideoTracks()?.[0]?.enabled;
-                const audioEnabled = stream.getAudioTracks()?.[0]?.enabled;
+                const videoTracks = stream.getVideoTracks();
+                const audioTracks = stream.getAudioTracks();
+
+                const videoEnabled = videoTracks.length > 0 ? videoTracks[0].enabled : false;
+                const audioEnabled = audioTracks.length > 0 ? audioTracks[0].enabled : false;
+
+                if (!remoteRoomStream) {
+                    // CHANGED: Safely check for screen-share label only if video track exists.
+                    const isScreenShare =
+                        videoTracks.length > 0 &&
+                        videoTracks[0].label &&
+                        videoTracks[0].label.includes("screen");
+
+                    if (isScreenShare) {
+                        // If it's a screen share, only update video status
+                        dispatch(setVideoAudioStatus(videoEnabled, localAudioEnabled, isLocalStream));
+                    } else {
+                        // Normal camera or audio-only
+                        dispatch(setVideoAudioStatus(videoEnabled, audioEnabled, isLocalStream));
+                    }
+                }
+
+                // const videoEnabled = stream.getVideoTracks()?.[0]?.enabled;
+                // const audioEnabled = stream.getAudioTracks()?.[0]?.enabled;
 
                 // if (!remoteRoomStream) {
                 //     dispatch(setVideoAudioStatus(videoEnabled, audioEnabled, isLocalStream));
                 // }
-                if (!remoteRoomStream) {
-                    // Check if this is a screen share stream
-                    const isScreenShare = stream.getVideoTracks()[0].label.includes('screen');
 
-                    // If it's a screen share, only update video status
-                    if (isScreenShare) {
-                        dispatch(setVideoAudioStatus(videoEnabled, localAudioEnabled, isLocalStream));
-                    } else {
-                        dispatch(setVideoAudioStatus(videoEnabled, audioEnabled, isLocalStream));
-                    }
-                }
+                // if (!remoteRoomStream) {
+                //     // Check if this is a screen share stream
+                //     const isScreenShare = stream.getVideoTracks()[0].label.includes('screen');
+                //
+                //     // If it's a screen share, only update video status
+                //     if (isScreenShare) {
+                //         dispatch(setVideoAudioStatus(videoEnabled, localAudioEnabled, isLocalStream));
+                //     } else {
+                //         dispatch(setVideoAudioStatus(videoEnabled, audioEnabled, isLocalStream));
+                //     }
+                // }
             }
         }
     }, [stream, isLocalStream]);
