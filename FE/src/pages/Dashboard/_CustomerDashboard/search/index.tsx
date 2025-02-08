@@ -53,6 +53,7 @@ const Search = () => {
     // Query params variables -----
     const [qExpertId, set_qExpertId] = useState<any>('')
     const [qDuration, set_qDuration] = useState<any>('')
+    const [qPrice, set_qPrice] = useState<any>('')
     const [qStart, set_qStart] = useState<any>('')
     const [qEnd, set_qEnd] = useState<any>('')
     const [qEventId, set_qEventId] = useState<any>('')
@@ -106,12 +107,17 @@ const Search = () => {
     };
 
 
-    const setStartEndTime = (start: any, end: any, duration: any) => {
+    const setStartEndTime = (start: any, end: any, duration: any, qPrice: any) => {
         console.log('Setting start and end time:', { start, end, duration });
         set_startTime(start)
         set_endTime(end)
         set_duration(duration)
-        set_price(duration * selectedExpert?.price / 60)
+
+        const computedPrice = (qPrice !== null && qPrice !== undefined)
+            ? qPrice
+            : (duration * selectedExpert?.price) / 60;
+
+        set_price(computedPrice);
         goToStep(2)
     }
 
@@ -171,13 +177,16 @@ const Search = () => {
 
 
     useEffect(() => {
-        console.log('Query params updated:', { qExpertId, qDuration, qStart, qEnd });
+        console.log('Query params updated:', { qExpertId, qDuration, qStart, qEnd , qPrice});
         console.log(selectedExpert, qDuration, qStart, qEnd, '=====')
-        if (selectedExpert && qDuration && qStart && qEnd) {
-            setStartEndTime(qStart, qEnd, qDuration)
+        if (selectedExpert && qDuration && qStart && qEnd && (qPrice !== null && qPrice !== undefined)) {
+            setStartEndTime(qStart, qEnd, qDuration, qPrice);
         }
+        // if (selectedExpert && qDuration && qStart && qEnd && (qPrice!==null || qPrice!==undefined)) {
+        //     setStartEndTime(qStart, qEnd, qDuration, qPrice)
+        // }
         console.log('User details:', userDetails);
-    }, [selectedExpert, qDuration, qStart, qEnd])
+    }, [selectedExpert, qDuration, qStart, qEnd, qPrice])
 
     useEffect(() => {
         console.log('Effect triggered for userDetails:', userDetails);
@@ -279,7 +288,8 @@ const Search = () => {
                 _duration,
                 _start,
                 _end,
-                _eventId
+                _eventId,
+                _price
             } = queryString.parse(location.search);
 
             if (_id) {
@@ -287,15 +297,23 @@ const Search = () => {
                 set_qExpertId(_id);
                 set_qEventId(_eventId);
 
-                if (_duration && _start && _end) {
+                if (_duration && _start && _end && _price) {
                     console.log('Setting query parameters for duration, start, end:', {
                         _duration,
                         _start,
-                        _end
+                        _end,
+                        _price
                     });
                     set_qDuration(Number(_duration));
                     set_qStart(new Date(Number(_start)));
                     set_qEnd(new Date(Number(_end)));
+                    set_qPrice(Number(_price));
+
+                    // if (_price === '0' && !redirect_status) {
+                    //     const newUrl = `${window.location.pathname}?_id=${_id}&_duration=${_duration}&_start=${_start}&_end=${_end}&_eventId=${_eventId}&_price=${_price}&redirect_status=succeeded`;
+                    //     window.history.replaceState({}, '', newUrl);
+                    //     // After this, the effect will re-run with redirect_status=succeeded
+                    // }
                 }
             } else {
                 set_qExpertId('');

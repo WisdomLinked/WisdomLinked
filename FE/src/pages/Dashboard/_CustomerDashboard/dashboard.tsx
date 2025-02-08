@@ -56,7 +56,7 @@ const Dashboard = () => {
     }
 
     const acceptInvitation = async (event: any) => {
-        navigate(`${process.env.REACT_APP_AUTH_URL}customerdashboard/search?_id=${event.expert._id}&_duration=${event.duration}&_start=${event.start ? new Date(event.start).getTime() : ''}&_end=${event.end ? new Date(event.end).getTime() : ''}&_eventId=${event._id}`)
+        navigate(`${process.env.REACT_APP_AUTH_URL}customerdashboard/search?_id=${event.expert._id}&_duration=${event.duration}&_start=${event.start ? new Date(event.start).getTime() : ''}&_end=${event.end ? new Date(event.end).getTime() : ''}&_eventId=${event._id}&_price=${event.price}`)
     }
 
     const updateEventStartEndTime = async (start: any, end: any, price: any) => {
