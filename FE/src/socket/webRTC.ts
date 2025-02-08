@@ -84,34 +84,64 @@ export const getLocalStreamPreview = async (audioOnly: boolean, callback?: () =>
             failedCallback(err)
     })
 }
+//
+// const peerConfiguration = () => {
+//     if (process.env.REACT_APP_TURN_URL) {
+//         console.log("Using only TURN server");
+//         return {
+//             iceServers: [
+//                 {
+//                     urls: [
+//                         `turn:${process.env.REACT_APP_TURN_URL}:3478?transport=udp`,
+//                         `turn:${process.env.REACT_APP_TURN_URL}:80?transport=tcp`
+//                     ],
+//                     username: "efRXSXFPE63R9RIO40",
+//                     credential: "mfC08YbrsCacihuc"
+//                 }
+//             ]
+//         }
+//     } else {
+//         console.log("Using only STUN server");
+//         return {
+//             iceServers: [
+//                 {
+//                     urls: "stun:stun.l.google.com:19302",
+//                 },
+//             ],
+//         };
+//     }
+// };
 
 const peerConfiguration = () => {
-
     if (process.env.REACT_APP_TURN_URL) {
-        console.log("Using only TURN server");
+        console.log("Using STUN + TURN servers");
         return {
             iceServers: [
                 {
+                    urls: "stun:stun.l.google.com:19302"
+                },
+                {
                     urls: [
                         `turn:${process.env.REACT_APP_TURN_URL}:3478?transport=udp`,
-                        `turn:${process.env.REACT_APP_TURN_URL}:80?transport=tcp`
+                        `turn:${process.env.REACT_APP_TURN_URL}:3478?transport=tcp`
                     ],
                     username: "efRXSXFPE63R9RIO40",
                     credential: "mfC08YbrsCacihuc"
                 }
             ]
-        }
+        };
     } else {
         console.log("Using only STUN server");
         return {
             iceServers: [
                 {
-                    urls: "stun:stun.l.google.com:19302",
-                },
-            ],
+                    urls: "stun:stun.l.google.com:19302"
+                }
+            ]
         };
     }
 };
+
 
 export const newPeerConnection = (initiator: boolean) => {
 
