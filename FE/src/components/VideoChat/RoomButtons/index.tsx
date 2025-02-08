@@ -35,7 +35,10 @@ const RoomButtons: React.FC<{
                                 type="DIRECT CALL"
                             />
                             <Camera localStream={videoChat.localStream} />
-                            <FlipCamera localStream={videoChat.localStream} />
+                            <FlipCamera
+                                localStream={videoChat.localStream}
+                                callType="DIRECT CALL"
+                            />
                         </>
                     )}
                     <Microphone localStream={videoChat.localStream} />
@@ -54,7 +57,10 @@ const RoomButtons: React.FC<{
                         <>
                             <ScreenShare room={room} type="ROOM" />
                             <Camera localStream={room.localStreamRoom} />
-                            <FlipCamera localStream={room.localStreamRoom} />
+                            <FlipCamera
+                                localStream={room.localStreamRoom}
+                                callType="ROOM"
+                            />
                         </>
                     )}
                     <Microphone localStream={room.localStreamRoom} />
