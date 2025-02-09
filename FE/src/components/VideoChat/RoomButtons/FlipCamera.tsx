@@ -1,7 +1,10 @@
 import React, { useState } from "react";
 import IconButton from "@mui/material/IconButton";
 import FlipCameraIosIcon from "@mui/icons-material/FlipCameraIos";
-import { useAppSelector } from "../../../store";
+import { useDispatch } from "react-redux";
+// NOTE: We import both setLocalStream (direct call) and setLocalStreamRoom (room)
+import { setLocalStream } from "../../../actions/videoChatActions";
+import { setLocalStreamRoom } from "../../../actions/roomActions";
 import { currentPeerConnection } from "../../../socket/socketConnection";
 import { switchOutgoingTracks } from "../../../socket/webRTC";
 
@@ -11,70 +14,68 @@ const FlipCamera: React.FC<{
     localStream: MediaStream;
     callType: CallType;
 }> = ({ localStream, callType }) => {
+    const dispatch = useDispatch();
     const [usingFrontCamera, setUsingFrontCamera] = useState(true);
 
-    const {
-        videoChat: { localVideoEnabled },
-    } = useAppSelector((state) => state);
-
-    // Quick user-agent check for mobile
+    // Simple mobile check
     const isMobileDevice = /Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
         navigator.userAgent
     );
 
-    // Handle flipping camera
-    const handleSwitchCamera = async () => {
-        try {
-            // Step 1) Identify the old camera track (don’t stop it yet).
-            const oldTrack = localStream.getVideoTracks()[0];
+    // Hide the flip button if not mobile or no localStream
+    if (!isMobileDevice || !localStream) {
+        return null;
+    }
 
-            // Step 2) Request a new track with opposite facingMode.
+    const handleSwitchCamera = async () => {
+        console.log("[FlipCamera] Toggling camera...");
+
+        try {
+            // 1) Stop old video tracks (but keep audio tracks)
+            localStream.getVideoTracks().forEach(track => track.stop());
+
+            // 2) Get new camera track with opposite facingMode
             const newFacingMode = usingFrontCamera ? "environment" : "user";
             const newStream = await navigator.mediaDevices.getUserMedia({
                 video: { facingMode: newFacingMode },
-                audio: localStream.getAudioTracks().length > 0,
+                audio: localStream.getAudioTracks().length > 0
             });
-            const newVideoTrack = newStream.getVideoTracks()[0];
 
-            // Step 3) Create a combined stream with new video + any existing audio from localStream.
+            // 3) Combine new video track with existing audio track(s)
             const combinedStream = new MediaStream([
                 ...newStream.getVideoTracks(),
-                ...localStream.getAudioTracks(),
+                ...localStream.getAudioTracks()
             ]);
 
-            // Step 4) Update the peer connection so the remote side sees the flipped camera immediately.
+            // 4) Replace the old track in the peer connection
             if (callType === "DIRECT CALL") {
-                if (oldTrack && currentPeerConnection) {
-                    currentPeerConnection.replaceTrack(
-                        oldTrack,
-                        newVideoTrack,
-                        currentPeerConnection.streams[0]
-                    );
-                }
+                console.log("[FlipCamera] Replacing track in direct call...");
+                currentPeerConnection?.replaceTrack(
+                    currentPeerConnection.streams[0].getVideoTracks()[0],
+                    newStream.getVideoTracks()[0],
+                    currentPeerConnection.streams[0]
+                );
             } else {
-                // For rooms, reuse the "switchOutgoingTracks" approach
+                console.log("[FlipCamera] Switching outgoing tracks for room...");
                 switchOutgoingTracks(combinedStream);
             }
 
-            // Step 5) Now safely remove & stop the old track from localStream
-            if (oldTrack) {
-                oldTrack.stop(); // stop old camera
-                localStream.removeTrack(oldTrack);
+            // 5) Update Redux so the UI & code sees the new local stream
+            //    (direct call => setLocalStream, room => setLocalStreamRoom)
+            if (callType === "DIRECT CALL") {
+                dispatch(setLocalStream(combinedStream));
+            } else {
+                dispatch(setLocalStreamRoom(combinedStream));
             }
-            // Add the new video track to localStream
-            localStream.addTrack(newVideoTrack);
 
-            // Flip local boolean
+            // 6) Toggle camera state
             setUsingFrontCamera(!usingFrontCamera);
+
+            console.log("[FlipCamera] Camera flipped successfully!");
         } catch (err) {
-            console.error("Error switching camera:", err);
+            console.error("[FlipCamera] Error switching camera:", err);
         }
     };
-
-    // Hide button if not mobile, or camera is disabled, or no localStream
-    if (!isMobileDevice || !localVideoEnabled || !localStream) {
-        return null;
-    }
 
     return (
         <IconButton onClick={handleSwitchCamera} style={{ color: "white" }}>
