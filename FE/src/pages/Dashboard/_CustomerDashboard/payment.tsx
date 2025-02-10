@@ -141,8 +141,11 @@ const Payment = ({
     }
 
     useEffect(() => {
-        setStripeMode()
-    }, [])
+        console.log("price:", price)
+            setStripeMode()
+
+    },[])
+
 
     useEffect(() => {
         if (stripeMode && stripePromise) {

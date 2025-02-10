@@ -176,6 +176,7 @@ const Search = () => {
     }
 
 
+
     useEffect(() => {
         console.log('Query params updated:', { qExpertId, qDuration, qStart, qEnd , qPrice});
         console.log(selectedExpert, qDuration, qStart, qEnd, '=====')
@@ -292,7 +293,13 @@ const Search = () => {
                 _price
             } = queryString.parse(location.search);
 
-            if (_id) {
+            // if (_price === '0') {
+            //     const newUrl = `${window.location.pathname}?redirect_status=succeeded`;
+            //     window.history.replaceState({}, '', newUrl);
+            //     goToStep(3)
+            // }
+
+            if (_id && _price!== '0') {
                 console.log('Query parameter _id detected:', _id);
                 set_qExpertId(_id);
                 set_qEventId(_eventId);
@@ -317,8 +324,11 @@ const Search = () => {
                 }
             } else {
                 set_qExpertId('');
-                if (redirect_status === 'succeeded') {
+                if (redirect_status === 'succeeded' || _price==='0') {
+                    console.log("inside",_price)
                     const pendingDetails = window.localStorage.getItem('pendingDetails');
+
+                    console.log("inside 2",pendingDetails)
                     if (pendingDetails) {
                         try {
                             checkStorageUsage();
@@ -335,6 +345,7 @@ const Search = () => {
                             set_duration(details.duration);
                             set_price(details.price);
                             set_qEventId(details.eventId);
+                            set_qPrice(Number(_price));
 
                             submit({
                                 title: details.title,
