@@ -287,9 +287,15 @@ const getUserFeedbacks = async (req, res) => {
             if(feedback.eventId){
                 eventData = await Event.findById(feedback.eventId).select("title");
             }
+
+            let groupChatData = null;
+            if(feedback.groupChatId){
+                groupChatData = await GroupChat.findById(feedback.groupChatId).select("name");
+            }
+
             enriched.push({
                 event: eventData || null,
-                groupChatId: feedback.groupChatId || null,
+                groupChat: groupChatData || null,
                 rating: feedback.rating || 0,
                 description: feedback.description || "",
                 date: feedback.date || null,

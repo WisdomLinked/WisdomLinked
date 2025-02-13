@@ -117,48 +117,96 @@ const createGroupChat = async (req, res) => {
     }
 };
 
+// const updateGroupChat = async (req, res) => {
+//     try {
+//         const { userId } = req.user;
+//         const { groupId, name, description, services, keywords, start, end, duration, price, totalTimeSpent} = req.body;
+//
+//         if (checkTitleNameInvalid('Name', name)) {
+//             throw new Error(checkTitleNameInvalid('Name', name))
+//         }
+//
+//         console.log(groupId, name, description, services, keywords, start, end, duration, price);
+//
+//         const groupChat = await GroupChat.findById(groupId);
+//
+//         if (groupChat.participants.length > 1) {
+//             throw new Error("Group is already in use");
+//         }
+//
+//         // update group
+//         await GroupChat.findByIdAndUpdate(groupId, {
+//             name: name,
+//             description: description,
+//             services: services,
+//             keywords: keywords,
+//             start: start,
+//             end: end,
+//             duration: duration,
+//             price: price,
+//             admin: userId,
+//             totalTimeSpend: totalTimeSpent,
+//         });
+//
+//         const currentUser = await User.findById(userId).populate(['events', 'keywords', 'services', 'groupChats'])
+//         updateUsersGroupChatList(userId.toString());
+//
+//         return res.status(200).json({
+//             result: currentUser,
+//         });
+//     } catch (err) {
+//         return res
+//             .status(500)
+//             .send(err.message);
+//     }
+// };
+
 const updateGroupChat = async (req, res) => {
     try {
         const { userId } = req.user;
-        const { groupId, name, description, services, keywords, start, end, duration, price } = req.body;
+        const { groupId, name, description, services, keywords, start, end, duration, price, totalTimeSpent } = req.body;
 
-        if (checkTitleNameInvalid('Name', name)) {
-            throw new Error(checkTitleNameInvalid('Name', name))
+        if (!groupId) {
+            throw new Error("Group ID is required");
         }
 
-        console.log(groupId, name, description, services, keywords, start, end, duration, price)
+        console.log(groupId, name, description, services, keywords, start, end, duration, price);
 
         const groupChat = await GroupChat.findById(groupId);
 
-        if (groupChat.participants.length > 1) {
-            throw new Error("Group is already in use");
+        if (!groupChat) {
+            throw new Error("Group chat not found");
         }
 
-        // update group
-        await GroupChat.findByIdAndUpdate(groupId, {
-            name: name,
-            description: description,
-            services: services,
-            keywords: keywords,
-            start: start,
-            end: end,
-            duration: duration,
-            price: price,
-            admin: userId,
-        });
+        // Construct dynamic update object
+        const updateFields = {};
+        if (name !== undefined) updateFields.name = name;
+        if (description !== undefined) updateFields.description = description;
+        if (services !== undefined) updateFields.services = services;
+        if (keywords !== undefined) updateFields.keywords = keywords;
+        if (start !== undefined) updateFields.start = start;
+        if (end !== undefined) updateFields.end = end;
+        if (duration !== undefined) updateFields.duration = duration;
+        if (price !== undefined) updateFields.price = price;
+        if (totalTimeSpent !== undefined) updateFields.totalTimeSpend = totalTimeSpent;
 
-        const currentUser = await User.findById(userId).populate(['events', 'keywords', 'services', 'groupChats'])
+        // Ensure admin is always updated
+        updateFields.admin = userId;
+
+        // Update group chat with only provided fields
+        await GroupChat.findByIdAndUpdate(groupId, updateFields, { new: true });
+
+        const currentUser = await User.findById(userId).populate(['events', 'keywords', 'services', 'groupChats']);
         updateUsersGroupChatList(userId.toString());
 
         return res.status(200).json({
             result: currentUser,
         });
     } catch (err) {
-        return res
-            .status(500)
-            .send(err.message);
+        return res.status(500).send(err.message);
     }
 };
+
 
 const addMemberToPendingGroup = async (req, res) => {
     try {
@@ -167,7 +215,7 @@ const addMemberToPendingGroup = async (req, res) => {
 
         const paymentIntentSucceeded_test = await checkPaymentIntentSucceeded(payment_intent, 'test')
         const paymentIntentSucceeded_live = await checkPaymentIntentSucceeded(payment_intent, 'live')
-        if (!paymentIntentSucceeded_test && !paymentIntentSucceeded_live) {
+        if (price && !paymentIntentSucceeded_test && !paymentIntentSucceeded_live) {
             throw new Error("Payment intent not succeeded")
         }
 

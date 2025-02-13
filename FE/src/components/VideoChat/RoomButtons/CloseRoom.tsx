@@ -4,19 +4,25 @@ import IconButton from "@mui/material/IconButton";
 import CloseIcon from "@mui/icons-material/Close";
 import { useAppSelector } from "../../../store";
 import { clearVideoChat } from "../../../actions/videoChatActions";
-import { callRequest, callResponse, cancelCallRequest, notifyChatLeft } from "../../../socket/socketConnection";
+import {
+    callRequest,
+    callResponse,
+    cancelCallRequest,
+    notifyChatLeft,
+    sendDirectMessage, sendGroupMessage
+} from "../../../socket/socketConnection";
 import { leaveRoom } from "../../../socket/roomHandler";
-import { doUpdateExpertEvent } from "../../../api/api";
+import {doUpdateExpertEvent, updateGroupChat} from "../../../api/api";
 
 type CallType = "DIRECT CALL" | "ROOM";
 
-const CloseRoom = ({ type, eventId}: { type: CallType; eventId: any; }) => {
+const CloseRoom = ({ type, eventId = null}: { type: CallType; eventId: any;}) => {
     const dispatch = useDispatch();
     const {
         friends: { groupChatList },
         auth: { userDetails },
         videoChat: { otherUserId, remoteStream },
-        chat: { chosenChatDetails },
+        chat: { chosenChatDetails, chosenGroupChatDetails },
         room: { roomDetails},
     } = useAppSelector((state) => state);
 
@@ -32,7 +38,7 @@ const CloseRoom = ({ type, eventId}: { type: CallType; eventId: any; }) => {
     };
 
     const calculateTotalTime = async () => {
-        if (userDetails.role === "expert" && eventId) {
+        if (userDetails.role === "expert" && eventId || chosenGroupChatDetails) {
             const timeSpent = localStorage.getItem("totalTimeSpent");
 
             if (timeSpent) {
@@ -40,7 +46,34 @@ const CloseRoom = ({ type, eventId}: { type: CallType; eventId: any; }) => {
                 const totalTimeSpent = Date.now() - parsedTimeSpent;
                 const totalTimeSpentInMinutes = Math.floor(totalTimeSpent / 60000);
 
-                await doUpdateExpertEvent(eventId, { totalTimeSpent: totalTimeSpentInMinutes });
+                if (chosenChatDetails) {
+                    eventId && await doUpdateExpertEvent(eventId, { totalTimeSpent: totalTimeSpentInMinutes });
+
+                    const message = `Call Lasted for: ${totalTimeSpent / 1000} seconds`;
+                    console.log("Sending direct message...");
+                    console.log("Receiver User ID:", chosenChatDetails.userId);
+                    sendDirectMessage({
+                        message,
+                        receiverUserId: chosenChatDetails.userId!,
+                    });
+                }
+
+                // console.log("chosengroupchatdetails", chosenGroupChatDetails, groupChatId);
+                // console.log("event id", eventId);
+                if (chosenGroupChatDetails) {
+                    await updateGroupChat({groupId : chosenGroupChatDetails.groupId, totalTimeSpent: totalTimeSpentInMinutes });
+
+                    console.log("Sending group message...");
+
+                    console.log("Group Chat ID:", chosenGroupChatDetails.groupId);
+
+                    const message = `Seminar Lasted for: ${totalTimeSpent / 1000} seconds`;
+                    sendGroupMessage({
+                        message,
+                        groupChatId: chosenGroupChatDetails.groupId,
+                    });
+                }
+
                 localStorage.removeItem("totalTimeSpent");
             } else {
                 console.error("Time spent data is missing in localStorage.");
@@ -50,12 +83,13 @@ const CloseRoom = ({ type, eventId}: { type: CallType; eventId: any; }) => {
 
     const handleLeaveRoom = async () => {
         // Notify the other user that the call is being left
+
+        await calculateTotalTime();
+
         if (type === "DIRECT CALL") {
             if (otherUserId) {
                 notifyChatLeft(otherUserId, remoteStream ? true : false);
             }
-
-            await calculateTotalTime(); // Update the total time spent
 
             dispatch(clearVideoChat("You left the chat"));
             openFeedbackModal(otherUserId)
@@ -63,8 +97,13 @@ const CloseRoom = ({ type, eventId}: { type: CallType; eventId: any; }) => {
 
         if (type === "ROOM") {
             leaveRoom(); // Handle leaving the room
+
             openFeedbackModal(roomDetails?.roomCreator?.userId)
         }
+
+        //TODO: dispatch totaltime call duration
+
+
 
         // Cancel the call request after feedback is completed
         cancelCallRequest({ otherUserId: otherUserId || "" });

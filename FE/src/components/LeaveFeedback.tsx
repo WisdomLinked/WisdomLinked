@@ -27,7 +27,8 @@ export default function LeaveFeedback() {
         SetLoadingStatus(true)
         console.log("roomDetails", roomDetails)
         const response = await leaveFeedback({
-            eventId: currentEvent ? currentEvent._id : (roomDetails ? roomDetails.groupId : null),
+            eventId: currentEvent ? currentEvent._id : null,
+            groupChatId: roomDetails ? roomDetails.groupId : null,
             otherUserId: feedbackModalShow,
             description,
             rating

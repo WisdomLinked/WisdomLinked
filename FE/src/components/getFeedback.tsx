@@ -10,7 +10,7 @@ interface UserType {
 
 interface FeedbackItem {
     event: {_id: string, title: string},
-    groupChatId: string | null;
+    groupChat: {_id: string, name: string},
     rating: number;
     description: string;
     date: string;
@@ -112,13 +112,15 @@ export default function Feedback() {
                             key={idx}
                             className="p-4 rounded-lg border border-gray-700 bg-[#252525] shadow-lg hover:shadow-[#31B099] transition-shadow"
                         >
-                            {fb.event? (
+                            {fb.event && (
                                 <p className="text-gray-300">
-                                    <strong className="text-white">Event Name:</strong> {fb.event.title}
+                                    <strong className="text-white">Event Name:</strong> {fb.event.title || "N/A"}
                                 </p>
-                            ) : (
+                            )}
+
+                            {fb.groupChat && (
                                 <p className="text-gray-300">
-                                    <strong className="text-white">GroupChat ID:</strong> {fb.groupChatId || "N/A"}
+                                    <strong className="text-white">GroupChat Name:</strong> {fb.groupChat.name || "N/A"}
                                 </p>
                             )}
 

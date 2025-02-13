@@ -13,16 +13,8 @@ const RoomButtons: React.FC<{
 }> = ({ isRoomMinimized, handleRoomResize }) => {
     const {videoChat, room, chat: { currentEvent }, auth: { userDetails }} = useAppSelector((state) => state);
 
-    // Determine the feedback ID and type
-    const feedbackId = videoChat.localStream && currentEvent?._id
-        ? currentEvent._id // Direct call
-        : room.localStreamRoom && room.roomDetails?.groupId
-            ? room.roomDetails.groupId // Room call
-            : "";
 
-    const feedbackType: "event" | "groupchat" = videoChat.localStream && currentEvent?._id
-        ? "event"
-        : "groupchat";
+    const eventId = videoChat.localStream && currentEvent?._id !== undefined ? currentEvent._id : null;
 
     return (
         <div className={`w-[100%] h-[50px] bg-green flex items-center justify-center`}>
@@ -47,7 +39,7 @@ const RoomButtons: React.FC<{
                         handleRoomResize={handleRoomResize}
                     />
                     <CloseRoom type="DIRECT CALL"
-                               eventId={feedbackId}
+                               eventId={eventId}
                     />
                 </div>
             ) : room.localStreamRoom ? (
@@ -72,7 +64,7 @@ const RoomButtons: React.FC<{
                         handleRoomResize={handleRoomResize}
                     />
                     <CloseRoom type="ROOM"
-                               eventId={feedbackId}
+                               eventId
                     />
                 </div>
             ) : null}

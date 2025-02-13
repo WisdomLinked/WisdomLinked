@@ -17,7 +17,7 @@ const groupChatSchema = new mongoose.Schema(
         duration: { type: Number },
         price: { type: Number },
         paidBy: { type: String },
-
+        totalTimeSpent: {type: Number, default: null},
         participants: [
             {
                 type: mongoose.Schema.Types.ObjectId,
