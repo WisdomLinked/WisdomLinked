@@ -1,4 +1,5 @@
 const User = require("../models/User");
+const Event = require("../models/Event");
 const PaymentHistory = require("../models/PaymentHistory");
 const Conversation = require("../models/Conversation");
 const GroupChat = require("../models/GroupChat");
@@ -281,8 +282,13 @@ const getUserFeedbacks = async (req, res) => {
             if (feedback.otherUserId) {
                 otherUser = await User.findById(feedback.otherUserId).select("username _id image role");
             }
+
+            let eventData = null;
+            if(feedback.eventId){
+                eventData = await Event.findById(feedback.eventId).select("title");
+            }
             enriched.push({
-                eventId: feedback.eventId || null,
+                event: eventData || null,
                 groupChatId: feedback.groupChatId || null,
                 rating: feedback.rating || 0,
                 description: feedback.description || "",
