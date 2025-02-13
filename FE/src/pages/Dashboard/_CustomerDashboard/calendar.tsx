@@ -91,8 +91,12 @@ const CustomerCalendar = () => {
         }
     }
 
+    // const acceptInvitation = async (event: any) => {
+    //     navigate(`${process.env.REACT_APP_AUTH_URL}customerdashboard/search?_id=${selectedEvent.expert._id}&_duration=${selectedEvent.duration}&_start=${selectedEvent.start ? new Date(selectedEvent.start).getTime() : ''}&_end=${selectedEvent.end ? new Date(selectedEvent.end).getTime() : ''}`)
+    // }
+
     const acceptInvitation = async (event: any) => {
-        navigate(`${process.env.REACT_APP_AUTH_URL}customerdashboard/search?_id=${selectedEvent.expert._id}&_duration=${selectedEvent.duration}&_start=${selectedEvent.start ? new Date(selectedEvent.start).getTime() : ''}&_end=${selectedEvent.end ? new Date(selectedEvent.end).getTime() : ''}`)
+        navigate(`${process.env.REACT_APP_AUTH_URL}customerdashboard/search?_id=${selectedEvent.expert._id}&_duration=${selectedEvent.duration}&_start=${selectedEvent.start ? new Date(selectedEvent.start).getTime() : ''}&_end=${selectedEvent.end ? new Date(selectedEvent.end).getTime() : ''}&_price=${selectedEvent.price}`)
     }
 
     const getEvents = async () => {

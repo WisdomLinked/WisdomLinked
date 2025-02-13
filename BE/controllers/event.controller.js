@@ -112,7 +112,10 @@ const appendEvent = async (req, res) => {
 
         const paymentIntentSucceeded_test = await checkPaymentIntentSucceeded(payment_intent, 'test')
         const paymentIntentSucceeded_live = await checkPaymentIntentSucceeded(payment_intent, 'live')
-        if (!paymentIntentSucceeded_test && !paymentIntentSucceeded_live) {
+        // if (!paymentIntentSucceeded_test && !paymentIntentSucceeded_live) {
+        //     throw new Error("Payment intent not succeeded")
+        // }
+        if (price && !paymentIntentSucceeded_test && !paymentIntentSucceeded_live) {
             throw new Error("Payment intent not succeeded")
         }
         const expertUser = await User.findOne({ email: expert });

@@ -18,7 +18,8 @@ const CheckoutForm = ({
     const stripe: any = useStripe();
     const elements = useElements();
 
-    const [errorMessage, set_errorMessage] = useState<any>(null);
+    // const [errorMessage, set_errorMessage] = useState<any>(null);
+    const [errorMessage, set_errorMessage] = useState<string>("");
 
     function checkStorageUsage() {
         let total = 0;
@@ -31,76 +32,135 @@ const CheckoutForm = ({
         return total;
     }
 
-    const handleSubmit = async (event: any) => {
+    // const handleSubmit = async (event: any) => {
+    //     try {
+    //         event.preventDefault();
+    //         if (elements == null) {
+    //             return;
+    //         }
+    //
+    //         // Trigger form validation and wallet collection
+    //         const { error: submitError }: any = await elements.submit();
+    //         if (submitError) {
+    //             // Show error to your customer
+    //             set_errorMessage(submitError.message);
+    //             SetLoadingStatus(false)
+    //             return;
+    //         }
+    //
+    //         SetLoadingStatus(true)
+    //         // Create the PaymentIntent and obtain clientSecret from your server endpoint
+    //         const response = await createStripePaymentIntent({
+    //             stripeMode,
+    //             amount: price,
+    //         })
+    //         const { client_secret: clientSecret } = response;
+    //
+    //         console.log("pending details", pendingDetails);
+    //         console.log("pending details len", );
+    //
+    //         checkStorageUsage();
+    //
+    //         window.localStorage.setItem('pendingDetails', JSON.stringify(pendingDetails))
+    //         const { paymentIntent } = await stripe.confirmPayment({
+    //             //`Elements` instance that was used to create the Payment Element
+    //             elements,
+    //             clientSecret,
+    //             confirmParams: {
+    //                 return_url: `${window.location.href}`,
+    //             },
+    //             redirect: "if_required"
+    //         });
+    //         SetLoadingStatus(false)
+    //
+    //         if (paymentIntent.status === 'succeeded') {
+    //             window.location.replace(`${window.location.href.split('?')[0]}?redirect_status=succeeded&payment_intent=${paymentIntent.id}`)
+    //         } else {
+    //             window.localStorage.removeItem('pendingDetails')
+    //             set_errorMessage('Payment failed, try again');
+    //         }
+    //
+    //     } catch (error: any) {
+    //         set_errorMessage(error.message);
+    //         SetLoadingStatus(false)
+    //     }
+    // };
+
+    const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+        e.preventDefault();
+        if (!stripe || !elements) {
+            return;
+        }
+
         try {
-            event.preventDefault();
-            if (elements == null) {
+            if (price === 0) {
+                // Directly mark the payment as successful
+                window.localStorage.setItem('pendingDetails', JSON.stringify(pendingDetails));
+                window.location.replace(`${window.location.href.split('?')[0]}?redirect_status=succeeded&payment_intent=0`);
                 return;
             }
 
-            // Trigger form validation and wallet collection
+            // Force validation
             const { error: submitError }: any = await elements.submit();
             if (submitError) {
-                // Show error to your customer
                 set_errorMessage(submitError.message);
-                SetLoadingStatus(false)
+                SetLoadingStatus(false);
                 return;
             }
 
-            SetLoadingStatus(true)
-            // Create the PaymentIntent and obtain clientSecret from your server endpoint
+            SetLoadingStatus(true);
+
+            // Always create a PaymentIntent, even if amount=0
             const response = await createStripePaymentIntent({
                 stripeMode,
-                amount: price,
-            })
+                amount: price, // Possibly 0
+            });
             const { client_secret: clientSecret } = response;
 
-            console.log("pending details", pendingDetails);
-            console.log("pending details len", );
-
             checkStorageUsage();
+            window.localStorage.setItem('pendingDetails', JSON.stringify(pendingDetails));
 
-            window.localStorage.setItem('pendingDetails', JSON.stringify(pendingDetails))
             const { paymentIntent } = await stripe.confirmPayment({
-                //`Elements` instance that was used to create the Payment Element
                 elements,
                 clientSecret,
                 confirmParams: {
-                    return_url: `${window.location.href}`,
+                    return_url: window.location.href, // user is redirected back
                 },
                 redirect: "if_required"
             });
-            SetLoadingStatus(false)
 
-            if (paymentIntent.status === 'succeeded') {
-                window.location.replace(`${window.location.href.split('?')[0]}?redirect_status=succeeded&payment_intent=${paymentIntent.id}`)
+            SetLoadingStatus(false);
+
+            if (paymentIntent?.status === 'succeeded') {
+                window.location.replace(`${window.location.href.split('?')[0]}?redirect_status=succeeded&payment_intent=${paymentIntent.id}`);
             } else {
-                window.localStorage.removeItem('pendingDetails')
-                set_errorMessage('Payment failed, try again');
+                window.localStorage.removeItem('pendingDetails');
+                set_errorMessage('Payment failed, try again.');
             }
-
-        } catch (error: any) {
-            set_errorMessage(error.message);
-            SetLoadingStatus(false)
+        } catch (err: any) {
+            console.error("Error during handleSubmit", err);
+            set_errorMessage(err.message || "Error while processing payment.");
+            SetLoadingStatus(false);
         }
     };
 
     useEffect(() => {
-        let timeout = setTimeout(() => {
+        const timer = setTimeout(() => {
             set_errorMessage('')
-        }, 3000)
+        }, 4000)
         return () => {
-            clearTimeout(timeout)
+            clearTimeout(timer)
         }
     }, [errorMessage])
 
     return (
         <form onSubmit={handleSubmit}>
             <PaymentElement />
-            <ShowFieldError
-                show={errorMessage}
-                label={errorMessage}
-            />
+            {/*<ShowFieldError*/}
+            {/*    show={errorMessage}*/}
+            {/*    label={errorMessage}*/}
+            {/*/>*/}
+            <ShowFieldError show={!!errorMessage} label={errorMessage} />
             <button
                 type="submit"
                 disabled={!stripe || !elements}
@@ -121,7 +181,8 @@ const Payment = ({
 
     const options: any = {
         mode: 'payment',
-        amount: price * 1000,
+        // amount: price * 1000,
+        amount: price > 0 ? price * 1000 : 1,
         currency: 'usd',
         // Fully customizable with appearance API.
         appearance: {
@@ -130,21 +191,37 @@ const Payment = ({
     };
 
     const [stripeMode, set_stripeMode] = useState('')
-    const [stripePromise, set_stripePromise] = useState<any>()
+    const [stripePromise, set_stripePromise] = useState<any>(null)
 
+    // const setStripeMode = async () => {
+    //     const response = await getStripeMode()
+    //     if (response) {
+    //         set_stripeMode(response.stripeMode || 'test')
+    //         set_stripePromise(loadStripe((response.stripeMode === 'test' ? process.env.REACT_APP_STRIPE_PUBLISHABLE_KEY_TEST : process.env.REACT_APP_STRIPE_PUBLISHABLE_KEY_LIVE) || ''))
+    //     }
+    // }
     const setStripeMode = async () => {
-        const response = await getStripeMode()
+        const response = await getStripeMode();
         if (response) {
-            set_stripeMode(response.stripeMode || 'test')
-            set_stripePromise(loadStripe((response.stripeMode === 'test' ? process.env.REACT_APP_STRIPE_PUBLISHABLE_KEY_TEST : process.env.REACT_APP_STRIPE_PUBLISHABLE_KEY_LIVE) || ''))
+            set_stripeMode(response.stripeMode || 'test');
+            set_stripePromise(
+                loadStripe(
+                    response.stripeMode === 'test'
+                        ? process.env.REACT_APP_STRIPE_PUBLISHABLE_KEY_TEST || ''
+                        : process.env.REACT_APP_STRIPE_PUBLISHABLE_KEY_LIVE || ''
+                )
+            );
         }
-    }
+    };
 
+    // useEffect(() => {
+    //     console.log("price:", price)
+    //         setStripeMode()
+    //
+    // },[])
     useEffect(() => {
-        console.log("price:", price)
-            setStripeMode()
-
-    },[])
+        setStripeMode();
+    }, []);
 
 
     useEffect(() => {
