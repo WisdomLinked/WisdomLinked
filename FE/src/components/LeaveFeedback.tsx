@@ -31,6 +31,9 @@ export default function LeaveFeedback() {
             // groupChatId: roomDetails ? roomDetails.groupId : null,
             groupChatId: currentEvent ? currentEvent._id : null,
             eventType: currentEvent ? currentEvent.type : null,
+            start: currentEvent ? currentEvent.start : null,
+            end: currentEvent ? currentEvent.end : null,
+            totalTimeSpent: currentEvent ? currentEvent.totalTimeSpent : null,
             otherUserId: feedbackModalShow,
             description,
             rating

@@ -622,7 +622,7 @@ const handleSubmit = async (req, res) => {
 const leaveFeedback = async (req, res) => {
     try {
         const { userId, role } = req.user
-        const { eventId=null, groupChatId = null, eventType, otherUserId, description, rating } = req.body
+        const { eventId=null, groupChatId = null, eventType, start, end, totalTimeSpent, otherUserId, description, rating } = req.body
 
         const otherUser = await User.findById(otherUserId)
 
@@ -638,6 +638,9 @@ const leaveFeedback = async (req, res) => {
             eventId,
             groupChatId,
             eventType,
+            start,
+            end,
+            totalTimeSpent,
             rating,
             description,
             otherUserId: userId,
