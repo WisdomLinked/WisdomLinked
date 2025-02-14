@@ -56,9 +56,9 @@ const RoomButtons: React.FC<{
                         </>
                     )}
                     <Microphone localStream={room.localStreamRoom} />
-                    {!room.isUserJoinedWithOnlyAudio && (
-                        <Camera localStream={room.localStreamRoom} />
-                    )}
+                    {/*{!room.isUserJoinedWithOnlyAudio && (*/}
+                    {/*    <Camera localStream={room.localStreamRoom} />*/}
+                    {/*)}*/}
                     <ResizeRoomButton
                         isRoomMinimized={isRoomMinimized}
                         handleRoomResize={handleRoomResize}
