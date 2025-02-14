@@ -64,7 +64,6 @@ const CloseRoom = ({ type, eventId = null}: { type: CallType; eventId: any;}) =>
                     await updateGroupChat({groupId : chosenGroupChatDetails.groupId, totalTimeSpent: totalTimeSpentInMinutes });
 
                     console.log("Sending group message...");
-
                     console.log("Group Chat ID:", chosenGroupChatDetails.groupId);
 
                     const message = `Seminar Lasted for: ${totalTimeSpent / 1000} seconds`;

@@ -117,50 +117,6 @@ const createGroupChat = async (req, res) => {
     }
 };
 
-// const updateGroupChat = async (req, res) => {
-//     try {
-//         const { userId } = req.user;
-//         const { groupId, name, description, services, keywords, start, end, duration, price, totalTimeSpent} = req.body;
-//
-//         if (checkTitleNameInvalid('Name', name)) {
-//             throw new Error(checkTitleNameInvalid('Name', name))
-//         }
-//
-//         console.log(groupId, name, description, services, keywords, start, end, duration, price);
-//
-//         const groupChat = await GroupChat.findById(groupId);
-//
-//         if (groupChat.participants.length > 1) {
-//             throw new Error("Group is already in use");
-//         }
-//
-//         // update group
-//         await GroupChat.findByIdAndUpdate(groupId, {
-//             name: name,
-//             description: description,
-//             services: services,
-//             keywords: keywords,
-//             start: start,
-//             end: end,
-//             duration: duration,
-//             price: price,
-//             admin: userId,
-//             totalTimeSpend: totalTimeSpent,
-//         });
-//
-//         const currentUser = await User.findById(userId).populate(['events', 'keywords', 'services', 'groupChats'])
-//         updateUsersGroupChatList(userId.toString());
-//
-//         return res.status(200).json({
-//             result: currentUser,
-//         });
-//     } catch (err) {
-//         return res
-//             .status(500)
-//             .send(err.message);
-//     }
-// };
-
 const updateGroupChat = async (req, res) => {
     try {
         const { userId } = req.user;
@@ -188,7 +144,10 @@ const updateGroupChat = async (req, res) => {
         if (end !== undefined) updateFields.end = end;
         if (duration !== undefined) updateFields.duration = duration;
         if (price !== undefined) updateFields.price = price;
-        if (totalTimeSpent !== undefined) updateFields.totalTimeSpend = totalTimeSpent;
+        if (totalTimeSpent !== undefined){
+            //updateFields.totalTimeSpend = totalTimeSpent;
+            updateFields.totalTimeSpent = (groupChat.totalTimeSpent || 0) + totalTimeSpent;
+        }
 
         // Ensure admin is always updated
         updateFields.admin = userId;
