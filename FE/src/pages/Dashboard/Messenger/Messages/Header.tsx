@@ -314,7 +314,7 @@ const MessagesHeader = ({ scrollPosition, events, openCalendarModal, openSeminar
                                         className="bg-green rounded-md mr-4 py-0.5 px-4 text-lg text-white font-bold disabled:opacity-50"
                                         title={!enabledEvent ? 'Seminar not started' : isUserInRoom ? 'You are already in the seminar' : kickedFromSeminar ? 'You are blocked from this seminar by the expert' : 'Join a seminar'}
                                         disabled={
-                                            //!enabledEvent ||
+                                            !enabledEvent ||
                                             isUserInRoom ||
                                             kickedFromSeminar
                                             // activeRooms?.kickedParticipants?.find(x => x === userDetails.userId)
