@@ -535,6 +535,7 @@ const Search = () => {
                             // We do normal 'submit' now
                             submit({
                                 ...details,
+                                createdBy: userDetails._id,
                                 expert: result.email,
                                 payment_intent: payment_intent
                             });
