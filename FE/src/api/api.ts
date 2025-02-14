@@ -753,39 +753,3 @@ export const doGetGroupChatHistory = async (filter: any) => {
         return checkForAuthorization(err);
     }
 };
-
-interface FeedbackPayload {
-    userId: string;
-    role: string;
-    rating: number;
-    feedback: string;
-}
-
-
-export const doCreateCustomerFeedback = async (payload: { updateData: FeedbackPayload; _id: string }) => {
-    try {
-        const res = await api.post("customer/createEventFeedback", payload);
-        return res.data;
-    } catch (err: any) {
-        return checkForAuthorization(err);
-    }
-};
-
-export const doCreateExpertFeedback = async (payload: { updateData: FeedbackPayload; _id: string }) => {
-    try {
-        const res = await api.post("expert/createEventFeedback", payload);
-        return res.data;
-    } catch (err: any) {
-        return checkForAuthorization(err);
-    }
-};
-
-export const doGetFeedback = async (payload: { eventId: string }) => {
-    try {
-        const res = await api.post("admin/getEventFeedback", payload);
-        return res.data;
-    } catch (err: any) {
-        return checkForAuthorization(err);
-    }
-};
-

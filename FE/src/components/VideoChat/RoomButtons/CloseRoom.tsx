@@ -97,9 +97,17 @@ const CloseRoom = ({ type, eventId = null}: { type: CallType; eventId: any;}) =>
 
         if (type === "ROOM") {
             leaveRoom(); // Handle leaving the room
+            console.log("userDetail: ", userDetails);
+            console.log("chosengroupchatdetails: ", chosenGroupChatDetails);
+            // openFeedbackModal(roomDetails?.roomCreator?.userId)
 
-            openFeedbackModal(roomDetails?.roomCreator?.userId)
+            if (userDetails.userId !== chosenGroupChatDetails?.admin._id) {
+                openFeedbackModal(roomDetails?.roomCreator?.userId);
+            } else {
+                console.log("User is the room admin. Feedback modal not shown.");
+            }
         }
+
 
         //TODO: dispatch totaltime call duration
 
