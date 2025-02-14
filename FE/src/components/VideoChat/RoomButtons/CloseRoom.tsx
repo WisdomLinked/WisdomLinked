@@ -96,13 +96,15 @@ const CloseRoom = ({ type, eventId = null}: { type: CallType; eventId: any;}) =>
         }
 
         if (type === "ROOM") {
-            leaveRoom(); // Handle leaving the room
             console.log("userDetail: ", userDetails);
             console.log("chosengroupchatdetails: ", chosenGroupChatDetails);
+            leaveRoom(); // Handle leaving the room
             // openFeedbackModal(roomDetails?.roomCreator?.userId)
 
+            dispatch(clearVideoChat("You left the Seminar"));
             if (userDetails.userId !== chosenGroupChatDetails?.admin._id) {
-                openFeedbackModal(roomDetails?.roomCreator?.userId);
+                // openFeedbackModal(roomDetails?.roomCreator?.userId);
+                openFeedbackModal(chosenGroupChatDetails?.admin._id);
             } else {
                 console.log("User is the room admin. Feedback modal not shown.");
             }
