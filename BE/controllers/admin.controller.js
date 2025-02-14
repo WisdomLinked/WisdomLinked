@@ -296,6 +296,7 @@ const getUserFeedbacks = async (req, res) => {
             enriched.push({
                 event: eventData || null,
                 groupChat: groupChatData || null,
+                eventType: feedback.eventType || null,
                 rating: feedback.rating || 0,
                 description: feedback.description || "",
                 date: feedback.date || null,

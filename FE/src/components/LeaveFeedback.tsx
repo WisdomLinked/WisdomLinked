@@ -25,10 +25,12 @@ export default function LeaveFeedback() {
 
     const submit = async () => {
         SetLoadingStatus(true)
-        console.log("roomDetails", roomDetails)
+        console.log("currentEvent", currentEvent);
         const response = await leaveFeedback({
             eventId: currentEvent ? currentEvent._id : null,
-            groupChatId: roomDetails ? roomDetails.groupId : null,
+            // groupChatId: roomDetails ? roomDetails.groupId : null,
+            groupChatId: currentEvent ? currentEvent._id : null,
+            eventType: currentEvent ? currentEvent.type : null,
             otherUserId: feedbackModalShow,
             description,
             rating
