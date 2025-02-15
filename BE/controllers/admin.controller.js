@@ -5,7 +5,7 @@ const Conversation = require("../models/Conversation");
 const GroupChat = require("../models/GroupChat");
 const Keyword = require("../models/Keyword");
 const ContactedUs = require("../models/ContactedUs");
-// const nodemailer = require("nodemailer");
+const nodemailer = require("nodemailer");
 
 const { getFullUserData } = require('../middlewares/requireAuth')
 
@@ -392,50 +392,54 @@ const toggleActionedStatus = async (req, res) => {
         });
     }
 };
-//
-// const sendEmailToUser = async (req, res) => {
-//     try {
-//         const { email, message } = req.body;
-//
-//         // Validate required fields
-//         if (!email || !message) {
-//             return res.status(400).json({
-//                 status: "FAILED",
-//                 message: "Email and message are required."
-//             });
-//         }
-//
-//         // Create transporter with your Google account credentials
-//         // These should be stored in environment variables for security.
-//         let transporter = nodemailer.createTransport({
-//             service: "gmail",
-//             auth: {
-//                 user: process.env.GOOGLE_EMAIL,
-//                 pass: process.env.GOOGLE_PASSWORD
-//             }
-//         });
-//
-//         let mailOptions = {
-//             from: process.env.GOOGLE_EMAIL,
-//             to: email,
-//             subject: "Message from Admin",
-//             text: message
-//         };
-//
-//         await transporter.sendMail(mailOptions);
-//
-//         return res.status(200).json({
-//             status: "SUCCESS",
-//             message: "Email sent successfully."
-//         });
-//     } catch (error) {
-//         console.error("Error sending email:", error);
-//         return res.status(500).json({
-//             status: "FAILED",
-//             message: "An error occurred while sending email."
-//         });
-//     }
-// };
+
+const sendEmailToUser = async (req, res) => {
+    try {
+        const { email, message } = req.body;
+
+        // Basic validation
+        if (!email || !message) {
+            return res.status(400).json({
+                status: "FAILED",
+                message: "Email and message are required."
+            });
+        }
+
+        let transporter = nodemailer.createTransport({
+            host: "smtp.gmail.com",      // same as Python's smtp.gmail.com
+            port: 587,                   // TLS port
+            secure: false,               // use TLS rather than SSL
+            auth: {
+                user: process.env.GOOGLE_EMAIL,
+                pass: process.env.GOOGLE_PASSWORD
+            },
+            tls: {
+                rejectUnauthorized: false
+            }
+        });
+
+        let mailOptions = {
+            from: process.env.GOOGLE_EMAIL,
+            to: email,
+            subject: "Message from WisdomLink.io",
+            text: message
+        };
+
+        // Send the mail
+        await transporter.sendMail(mailOptions);
+
+        return res.status(200).json({
+            status: "SUCCESS",
+            message: "Email sent successfully."
+        });
+    } catch (error) {
+        console.error("Error sending email:", error);
+        return res.status(500).json({
+            status: "FAILED",
+            message: "An error occurred while sending email."
+        });
+    }
+};
 
 module.exports = {
     filterUsers,
@@ -447,5 +451,5 @@ module.exports = {
     getUserFeedbacks,
     getContactedUs,
     toggleActionedStatus,
-    // sendEmailToUser
+    sendEmailToUser
 }

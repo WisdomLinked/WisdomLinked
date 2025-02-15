@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { doGetContactedUs, toggleActionedStatus } from "../api/api";
-// import { doGetContactedUs, toggleActionedStatus, sendEmailToUser } from "../api/api";
+import {doGetContactedUs, sendEmailToUser, toggleActionedStatus} from "../api/api";
 import { DateRangePicker, createStaticRanges } from "react-date-range";
 
 import "react-date-range/dist/styles.css";
@@ -153,7 +152,6 @@ export default function GetContactedUs() {
     // Re-fetch whenever filters/sorts/date range/actioned changes
     useEffect(() => {
         fetchContactedUs();
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [filterName, filterEmail, dateFrom, dateTo, sortBy, sortOrder, filterActioned]);
 
     // Handle toggling the "actioned" status for a record
@@ -176,28 +174,50 @@ export default function GetContactedUs() {
         }
     };
 
-    // Handle sending email to a particular user
-    // const handleSendEmail = async (id: string, email: string) => {
-    //     try {
-    //         const message = adminMessages[id] || "";
-    //         if (!message.trim()) {
-    //             alert("Please enter a message before sending.");
-    //             return;
-    //         }
-    //
-    //         const res = await sendEmailToUser(email, message);
-    //         if (res && res.status === "SUCCESS") {
-    //             alert("Email sent successfully!");
-    //             // Clear the message for that user in the UI
-    //             setAdminMessages(prev => ({ ...prev, [id]: "" }));
-    //         } else {
-    //             alert("Failed to send email.");
-    //         }
-    //     } catch (error) {
-    //         console.error("Error sending email:", error);
-    //         alert("An error occurred while sending email.");
-    //     }
-    // };
+    const createEmailTemplate = (adminRawMessage: string) => {
+        return `
+Hello from WisdomLink.io,
+
+Thank you for reaching out to us. Whether you’re seeking academic guidance or offering your expertise, we appreciate your interest.
+
+Here's our response to your inquiry:
+
+${adminRawMessage}
+
+If you have any further questions or need more assistance, please let us know.
+
+Warm Regards,
+The WisdomLink.io Team
+        `.trim();
+    };
+
+    const handleSendEmail = async (id: string, email: string) => {
+        try {
+            const adminRawMessage = adminMessages[id] || "";
+
+            // Must have something in the admin's typed message
+            if (!adminRawMessage.trim()) {
+                alert("Please enter a message before sending.");
+                return;
+            }
+
+            // Wrap the raw message with a simple template
+            const finalMessage = createEmailTemplate(adminRawMessage);
+
+            // Make API call to sendEmailToUser, passing the "finalMessage"
+            const res = await sendEmailToUser(email, finalMessage);
+            if (res && res.status === "SUCCESS") {
+                alert("Email sent successfully!");
+                // Clear the message for that user in the UI
+                setAdminMessages(prev => ({ ...prev, [id]: "" }));
+            } else {
+                alert("Failed to send email.");
+            }
+        } catch (error) {
+            console.error("Error sending email:", error);
+            alert("An error occurred while sending email.");
+        }
+    };
 
     // Render
     return (
@@ -429,7 +449,7 @@ export default function GetContactedUs() {
                                     }
                                 />
                                 <button
-                                    // onClick={() => handleSendEmail(item._id, item.email)}
+                                    onClick={() => handleSendEmail(item._id, item.email)}
                                     className="mt-2 bg-[#31B099] text-black px-3 py-2 rounded"
                                 >
                                     Send Email

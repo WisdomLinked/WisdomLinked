@@ -763,7 +763,6 @@ export const doGetContactedUs = async (filters: {
     sortOrder?: string;
 }) => {
     try {
-        // We use POST to pass filter/sort parameters in the body
         const res = await api.post("admin/getContactedUs", filters);
         return res.data;
     } catch (err: any) {
@@ -780,13 +779,11 @@ export const toggleActionedStatus = async (id: string) => {
     }
 };
 
-// Send an email to a user from the admin
-// This calls the backend route that uses Google SMTP
-// export const sendEmailToUser = async (email: string, message: string) => {
-//     try {
-//         const res = await api.post("admin/sendEmailToUser", { email, message });
-//         return res.data;
-//     } catch (err: any) {
-//         return checkForAuthorization(err);
-//     }
-// };
+export const sendEmailToUser = async (email: string, message: string) => {
+    try {
+        const res = await api.post("admin/sendEmailToUser", { email, message });
+        return res.data;
+    } catch (err: any) {
+        return checkForAuthorization(err);
+    }
+};

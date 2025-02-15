@@ -14,7 +14,8 @@ const {
     getDirectChatHistory,
     getGroupChatHistory,
     getContactedUs,
-    toggleActionedStatus
+    toggleActionedStatus,
+    sendEmailToUser,
 } = require("../controllers/admin.controller");
 
 const {
@@ -36,5 +37,6 @@ router.get("/getEventFeedback", adminAuth, getFeedback)
 router.post("/getUserFeedbacks", adminAuth, getUserFeedbacks);
 router.post("/getContactedUs", adminAuth, getContactedUs);
 router.post("/toggleActionedStatus", adminAuth, toggleActionedStatus);
+router.post("/sendEmailToUser", adminAuth, sendEmailToUser);
 
 module.exports = router;
