@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
-import { doGetContactedUs } from "../api/api";
+import { doGetContactedUs, toggleActionedStatus } from "../api/api";
+// import { doGetContactedUs, toggleActionedStatus, sendEmailToUser } from "../api/api";
 import { DateRangePicker, createStaticRanges } from "react-date-range";
 
 import "react-date-range/dist/styles.css";
@@ -12,6 +13,7 @@ interface ContactedUsItem {
     countryCode?: string;
     contactNumber?: string;
     issue?: string;
+    actioned: string;
     createdAt: string;
 }
 
@@ -23,7 +25,7 @@ function formatDateYYYY_MM_DD(dateObj: Date): string {
     return `${yyyy}-${mm}-${dd}`;
 }
 
-// Some custom static ranges
+// Some custom static ranges for DateRangePicker
 const currentYear = new Date().getFullYear();
 const currentMonth = new Date().getMonth() + 1;
 const currentDate = new Date().getDate();
@@ -33,40 +35,43 @@ const customStaticRanges = createStaticRanges([
         label: "Last month",
         range: () => ({
             startDate: new Date(currentYear, currentMonth - 2, currentDate - 1),
-            endDate: new Date(currentYear, currentMonth - 1, currentDate - 1),
-        }),
+            endDate: new Date(currentYear, currentMonth - 1, currentDate - 1)
+        })
     },
     {
         label: "Last quarter",
         range: () => ({
             startDate: new Date(currentYear, currentMonth - 4, currentDate - 1),
-            endDate: new Date(currentYear, currentMonth - 1, currentDate - 1),
-        }),
+            endDate: new Date(currentYear, currentMonth - 1, currentDate - 1)
+        })
     },
     {
         label: "Last 6 months",
         range: () => ({
             startDate: new Date(currentYear, currentMonth - 7, currentDate - 1),
-            endDate: new Date(currentYear, currentMonth - 1, currentDate - 1),
-        }),
+            endDate: new Date(currentYear, currentMonth - 1, currentDate - 1)
+        })
     },
     {
         label: "Last year",
         range: () => ({
             startDate: new Date(currentYear - 1, currentMonth - 1, currentDate - 1),
-            endDate: new Date(currentYear, currentMonth - 1, currentDate - 1),
-        }),
-    },
+            endDate: new Date(currentYear, currentMonth - 1, currentDate - 1)
+        })
+    }
 ]);
 
 export default function GetContactedUs() {
-    // State
+    // State to hold the fetched ContactedUs records
     const [contactedUsList, setContactedUsList] = useState<ContactedUsItem[]>([]);
     const [isLoading, setIsLoading] = useState(false);
 
     // Filters
     const [filterName, setFilterName] = useState("");
     const [filterEmail, setFilterEmail] = useState("");
+
+    // New filter for "actioned" status: "Yes", "No", or "" for all
+    const [filterActioned, setFilterActioned] = useState("");
 
     // Sorting
     const [sortBy, setSortBy] = useState("name");     // "name" or "createdAt"
@@ -81,10 +86,14 @@ export default function GetContactedUs() {
     const [selectionRange, setSelectionRange] = useState({
         startDate: new Date(),
         endDate: new Date(),
-        key: "selection",
+        key: "selection"
     });
 
-    // Handler when user picks date range
+    // Track the message typed by admin for each user (by ID)
+    // We'll store messages in an object keyed by the ContactedUsItem._id
+    const [adminMessages, setAdminMessages] = useState<{ [key: string]: string }>({});
+
+    // Handler when user picks a date range
     const handleSelect = (ranges: any) => {
         const { startDate, endDate } = ranges.selection;
         setDateFrom(formatDateYYYY_MM_DD(startDate));
@@ -99,7 +108,7 @@ export default function GetContactedUs() {
         setSelectionRange({
             startDate: new Date(),
             endDate: new Date(),
-            key: "selection",
+            key: "selection"
         });
     };
 
@@ -109,7 +118,7 @@ export default function GetContactedUs() {
             setIsLoading(true);
             const filters: any = {
                 sortBy,
-                sortOrder,
+                sortOrder
             };
             // Add filters if provided
             if (filterName.trim()) {
@@ -119,9 +128,12 @@ export default function GetContactedUs() {
                 filters.email = filterEmail.trim();
             }
             if (dateFrom && dateTo) {
-                // Provide date range to backend
-                filters.dateFrom = dateFrom; // e.g. "2025-02-15"
-                filters.dateTo = dateTo;     // e.g. "2025-02-20"
+                filters.dateFrom = dateFrom;
+                filters.dateTo = dateTo;
+            }
+            // Add actioned filter if "Yes" or "No" selected
+            if (filterActioned) {
+                filters.actioned = filterActioned;
             }
 
             const res = await doGetContactedUs(filters);
@@ -138,64 +150,101 @@ export default function GetContactedUs() {
         }
     };
 
-    // Re-fetch whenever filters / sorts / date range changes
+    // Re-fetch whenever filters/sorts/date range/actioned changes
     useEffect(() => {
         fetchContactedUs();
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [filterName, filterEmail, dateFrom, dateTo, sortBy, sortOrder]);
+    }, [filterName, filterEmail, dateFrom, dateTo, sortBy, sortOrder, filterActioned]);
 
+    // Handle toggling the "actioned" status for a record
+    const handleToggleActioned = async (id: string) => {
+        try {
+            const res = await toggleActionedStatus(id);
+            if (res && res.actioned) {
+                // Update local state with new actioned value
+                setContactedUsList(prev =>
+                    prev.map(item => {
+                        if (item._id === id) {
+                            return { ...item, actioned: res.actioned };
+                        }
+                        return item;
+                    })
+                );
+            }
+        } catch (error) {
+            console.error("Error toggling actioned status:", error);
+        }
+    };
+
+    // Handle sending email to a particular user
+    // const handleSendEmail = async (id: string, email: string) => {
+    //     try {
+    //         const message = adminMessages[id] || "";
+    //         if (!message.trim()) {
+    //             alert("Please enter a message before sending.");
+    //             return;
+    //         }
+    //
+    //         const res = await sendEmailToUser(email, message);
+    //         if (res && res.status === "SUCCESS") {
+    //             alert("Email sent successfully!");
+    //             // Clear the message for that user in the UI
+    //             setAdminMessages(prev => ({ ...prev, [id]: "" }));
+    //         } else {
+    //             alert("Failed to send email.");
+    //         }
+    //     } catch (error) {
+    //         console.error("Error sending email:", error);
+    //         alert("An error occurred while sending email.");
+    //     }
+    // };
+
+    // Render
     return (
         <div className="min-h-screen p-6 bg-[#181818] text-white">
             {/* Inline style overrides for react-date-range */}
             <style>{`
-        /* Dark background for calendar and more readable text */
-        .rdrCalendarWrapper,
-        .rdrDateRangeWrapper {
-          background-color: #252525 !important;
-          color: #ffffff !important;
-        }
-        /* Ensure static range labels (e.g., Last month, Last quarter) are visible */
-        .rdrDefinedRangesWrapper,
-        .rdrStaticRangeLabel {
-          background-color: #252525 !important;
-          color: #ffffff !important;
-        }
-        .rdrStaticRangeLabel:hover {
-          background-color: #333333 !important;
-        }
-        /* Month and year pickers (dropdowns) */
-        .rdrMonthAndYearWrapper,
-        .rdrMonthAndYearPickers select {
-          background-color: #252525 !important;
-          color: #ffffff !important;
-        }
-        /* Weekday headers */
-        .rdrWeekDay {
-          color: #bbbbbb !important;
-        }
-        /* Make selected date range stand out a bit more */
-        .rdrSelected,
-        .rdrInRange,
-        .rdrStartEdge,
-        .rdrEndEdge {
-          opacity: 0.9;
-        }
-        /* Other small tweaks for clarity */
-        .rdrDayNumber span {
-          color: #ffffff !important;
-        }
-        .rdrDayPassive .rdrDayNumber span {
-          color: #555555 !important;
-        }
-      `}</style>
+                .rdrCalendarWrapper,
+                .rdrDateRangeWrapper {
+                    background-color: #252525 !important;
+                    color: #ffffff !important;
+                }
+                .rdrDefinedRangesWrapper,
+                .rdrStaticRangeLabel {
+                    background-color: #252525 !important;
+                    color: #ffffff !important;
+                }
+                .rdrStaticRangeLabel:hover {
+                    background-color: #333333 !important;
+                }
+                .rdrMonthAndYearWrapper,
+                .rdrMonthAndYearPickers select {
+                    background-color: #252525 !important;
+                    color: #ffffff !important;
+                }
+                .rdrWeekDay {
+                    color: #bbbbbb !important;
+                }
+                .rdrSelected,
+                .rdrInRange,
+                .rdrStartEdge,
+                .rdrEndEdge {
+                    opacity: 0.9;
+                }
+                .rdrDayNumber span {
+                    color: #ffffff !important;
+                }
+                .rdrDayPassive .rdrDayNumber span {
+                    color: #555555 !important;
+                }
+            `}</style>
 
             <h2 className="text-2xl font-semibold text-[#31B099] mb-6">
-                ContactedUs Records
+                ContactedUs Records (Admin View)
             </h2>
 
             {/* Filters & Sorting */}
             <div className="flex flex-col lg:flex-row lg:space-x-4 space-y-4 lg:space-y-0 mb-4">
-
                 {/* Filter by Name */}
                 <div className="flex flex-col">
                     <label className="text-gray-300 mb-1">Search by Name:</label>
@@ -218,23 +267,37 @@ export default function GetContactedUs() {
                     />
                 </div>
 
+                {/* Filter by Actioned (Yes/No/All) */}
+                <div className="flex flex-col">
+                    <label className="text-gray-300 mb-1">Filter by Actioned:</label>
+                    <select
+                        className="bg-[#252525] text-white px-3 py-2 rounded-md border border-gray-700"
+                        value={filterActioned}
+                        onChange={(e) => setFilterActioned(e.target.value)}
+                    >
+                        <option value="">All</option>
+                        <option value="Yes">Yes</option>
+                        <option value="No">No</option>
+                    </select>
+                </div>
+
                 {/* Date Range Picker */}
                 <div className="flex flex-col relative">
                     <label className="text-gray-300 mb-1">Date Range:</label>
                     <div
                         className="bg-[#252525] text-white px-3 py-2 rounded-md border border-gray-700 focus:outline-none
-                       focus:ring-2 focus:ring-[#31B099] flex items-center justify-between cursor-pointer"
+                                   focus:ring-2 focus:ring-[#31B099] flex items-center justify-between cursor-pointer"
                         onClick={() => setDatePickerShow(!datePickerShow)}
                     >
                         {dateFrom && dateTo ? (
                             <span className="text-sm mr-2">
-                {dateFrom} ~ {dateTo}
-              </span>
+                                {dateFrom} ~ {dateTo}
+                            </span>
                         ) : (
-                            <span className="text-gray-400 text-sm mr-2">Select Range</span>
+                            <span className="text-gray-400 text-sm mr-2">
+                                Select Range
+                            </span>
                         )}
-
-                        {/* Clear button if date range is set */}
                         {dateFrom && dateTo && (
                             <button
                                 className="bg-[#31B099] text-black px-2 py-1 rounded mr-2"
@@ -246,7 +309,6 @@ export default function GetContactedUs() {
                                 Clear
                             </button>
                         )}
-                        {/* Arrow icon */}
                         <svg
                             className={`${datePickerShow ? "rotate-180" : ""} transition-all`}
                             width="14"
@@ -263,7 +325,6 @@ export default function GetContactedUs() {
                     </div>
                     {datePickerShow && (
                         <>
-                            {/* overlay to close */}
                             <div
                                 className="fixed top-0 left-0 w-full h-full z-10"
                                 onClick={() => setDatePickerShow(false)}
@@ -341,6 +402,39 @@ export default function GetContactedUs() {
                                 <strong className="text-white">Created At:</strong>{" "}
                                 {new Date(item.createdAt).toLocaleString()}
                             </p>
+                            <p className="text-gray-300">
+                                <strong className="text-white">Actioned:</strong> {item.actioned}
+                            </p>
+
+                            {/* Toggle Actioned Button */}
+                            <button
+                                onClick={() => handleToggleActioned(item._id)}
+                                className="mt-2 bg-[#31B099] text-black px-2 py-1 rounded"
+                            >
+                                Toggle Actioned
+                            </button>
+
+                            {/* Textbox and Send Email Button for admin to contact user */}
+                            <div className="mt-4">
+                                <label className="text-gray-300">Message to User:</label>
+                                <textarea
+                                    className="block w-full mt-1 bg-[#1f1f1f] text-white p-2 rounded border border-gray-700 focus:outline-none focus:ring-2 focus:ring-[#31B099]"
+                                    rows={3}
+                                    value={adminMessages[item._id] || ""}
+                                    onChange={(e) =>
+                                        setAdminMessages((prev) => ({
+                                            ...prev,
+                                            [item._id]: e.target.value
+                                        }))
+                                    }
+                                />
+                                <button
+                                    // onClick={() => handleSendEmail(item._id, item.email)}
+                                    className="mt-2 bg-[#31B099] text-black px-3 py-2 rounded"
+                                >
+                                    Send Email
+                                </button>
+                            </div>
                         </div>
                     ))}
                 </div>

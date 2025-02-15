@@ -155,22 +155,6 @@ export const getTimezone = async ({ lat, lng }: { lat: number; lng: number }) =>
     }
 };
 
-
-export const doContactUs = async (data: {
-    name: string;
-    email: string;
-    countryCode?: string;
-    contactNumber?: string;
-    issue?: string;
-}) => {
-    try {
-        const res = await api.post("auth/contact-form", data);
-        return res.data;
-    } catch (err: any) {
-        return checkForAuthorization(err);
-    }
-};
-
 // protected routes
 
 export const getMe = async () => {
@@ -755,8 +739,24 @@ export const doGetGroupChatHistory = async (filter: any) => {
     }
 };
 
+export const doContactUs = async (data: {
+    name: string;
+    email: string;
+    countryCode?: string;
+    contactNumber?: string;
+    issue?: string;
+}) => {
+    try {
+        const res = await api.post("auth/contact-form", data);
+        return res.data;
+    } catch (err: any) {
+        return checkForAuthorization(err);
+    }
+};
+
 export const doGetContactedUs = async (filters: {
     name?: string;
+    email?: string;
     startDate?: string;
     endDate?: string;
     sortBy?: string;
@@ -770,3 +770,23 @@ export const doGetContactedUs = async (filters: {
         return checkForAuthorization(err);
     }
 };
+
+export const toggleActionedStatus = async (id: string) => {
+    try {
+        const res = await api.post("admin/toggleActionedStatus", { id });
+        return res.data;
+    } catch (err: any) {
+        return checkForAuthorization(err);
+    }
+};
+
+// Send an email to a user from the admin
+// This calls the backend route that uses Google SMTP
+// export const sendEmailToUser = async (email: string, message: string) => {
+//     try {
+//         const res = await api.post("admin/sendEmailToUser", { email, message });
+//         return res.data;
+//     } catch (err: any) {
+//         return checkForAuthorization(err);
+//     }
+// };

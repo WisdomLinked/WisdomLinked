@@ -18,6 +18,10 @@ const ContactedUsSchema = new mongoose.Schema({
     issue: {
         type: String
     },
+    actioned: {
+        type: String,
+        default: "No"
+    },
     createdAt: {
         type: Date,
         default: Date.now

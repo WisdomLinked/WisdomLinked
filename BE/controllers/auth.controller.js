@@ -715,7 +715,7 @@ const submitContactForm = async (req, res) => {
             email,
             countryCode,
             contactNumber,
-            issue
+            issue,
         });
         await contactEntry.save();
 

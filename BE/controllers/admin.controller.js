@@ -5,6 +5,7 @@ const Conversation = require("../models/Conversation");
 const GroupChat = require("../models/GroupChat");
 const Keyword = require("../models/Keyword");
 const ContactedUs = require("../models/ContactedUs");
+// const nodemailer = require("nodemailer");
 
 const { getFullUserData } = require('../middlewares/requireAuth')
 
@@ -318,7 +319,7 @@ const getUserFeedbacks = async (req, res) => {
 
 const getContactedUs = async (req, res) => {
     try {
-        const { name, email, dateFrom, dateTo, sortBy, sortOrder } = req.body;
+        const { name, email, dateFrom, dateTo, sortBy, sortOrder, actioned } = req.body;
 
         let query = ContactedUs.find({});
 
@@ -342,6 +343,10 @@ const getContactedUs = async (req, res) => {
             query = query.where("createdAt").gte(fromDate).lte(toDate);
         }
 
+        if (actioned) {
+            query = query.where("actioned", actioned);
+        }
+
         // Sorting with Case-Insensitive Collation
         query = query.collation({ locale: "en", strength: 2 });
 
@@ -363,6 +368,75 @@ const getContactedUs = async (req, res) => {
     }
 };
 
+const toggleActionedStatus = async (req, res) => {
+    try {
+        const { id } = req.body;
+        const contactEntry = await ContactedUs.findById(id);
+
+        if (!contactEntry) {
+            return res.status(404).json({ message: "Record not found" });
+        }
+
+        // If actioned is "Yes", switch to "No". Otherwise switch to "Yes".
+        contactEntry.actioned = contactEntry.actioned === "Yes" ? "No" : "Yes";
+        await contactEntry.save();
+
+        return res.status(200).json({
+            message: "Actioned status updated",
+            actioned: contactEntry.actioned
+        });
+    } catch (error) {
+        console.error("Error updating actioned status:", error);
+        return res.status(500).json({
+            message: "An error occurred while updating actioned status."
+        });
+    }
+};
+//
+// const sendEmailToUser = async (req, res) => {
+//     try {
+//         const { email, message } = req.body;
+//
+//         // Validate required fields
+//         if (!email || !message) {
+//             return res.status(400).json({
+//                 status: "FAILED",
+//                 message: "Email and message are required."
+//             });
+//         }
+//
+//         // Create transporter with your Google account credentials
+//         // These should be stored in environment variables for security.
+//         let transporter = nodemailer.createTransport({
+//             service: "gmail",
+//             auth: {
+//                 user: process.env.GOOGLE_EMAIL,
+//                 pass: process.env.GOOGLE_PASSWORD
+//             }
+//         });
+//
+//         let mailOptions = {
+//             from: process.env.GOOGLE_EMAIL,
+//             to: email,
+//             subject: "Message from Admin",
+//             text: message
+//         };
+//
+//         await transporter.sendMail(mailOptions);
+//
+//         return res.status(200).json({
+//             status: "SUCCESS",
+//             message: "Email sent successfully."
+//         });
+//     } catch (error) {
+//         console.error("Error sending email:", error);
+//         return res.status(500).json({
+//             status: "FAILED",
+//             message: "An error occurred while sending email."
+//         });
+//     }
+// };
+
 module.exports = {
     filterUsers,
     getFullUserDataByEmail,
@@ -371,5 +445,7 @@ module.exports = {
     getDirectChatHistory,
     getGroupChatHistory,
     getUserFeedbacks,
-    getContactedUs
+    getContactedUs,
+    toggleActionedStatus,
+    // sendEmailToUser
 }
