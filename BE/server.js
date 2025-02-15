@@ -15,6 +15,7 @@
     const expertRoutes = require("./routes/expertRoutes")
     const customerRoutes = require("./routes/customerRoutes")
     const adminRoutes = require("./routes/adminRoutes")
+    const contactRoutes = require("./routes/contactRoutes")
     const meetingAnalyticsRoutes = require("./routes/meetingAnalyticsRoutes");
 
     const { appendDefaultServices, appendAdminUserAndGroupChat, initAppStates } = require('./initDB')

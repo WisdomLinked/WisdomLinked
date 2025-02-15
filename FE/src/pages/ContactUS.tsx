@@ -9,6 +9,7 @@ import { SetLoadingStatus } from "../actions/appActions";
 const ContactUS = () => {
     const navigate = useNavigate(); // For programmatic navigation
 
+    // State Variables
     const [name, set_name] = useState("");
     const [email, set_email] = useState("");
     const [isValidEmail, set_isValidEmail] = useState(false);
@@ -16,9 +17,18 @@ const ContactUS = () => {
     const [countryCode, set_countryCode] = useState("");
     const [contactNumber, set_contactNumber] = useState("");
     const [showError, set_showError] = useState(false);
+    const [issueError, set_issueError] = useState(false);
     const [enableToSubmit, set_enableToSubmit] = useState(false);
 
+    // Submit Function
     const submit = async () => {
+        // Validate Reason Field (Issue)
+        if (!issue.trim()) {
+            set_issueError(true);
+            return; // Stop submission if Reason is empty
+        }
+        set_issueError(false);
+
         if (!enableToSubmit) {
             set_showError(true);
         } else {
@@ -26,7 +36,7 @@ const ContactUS = () => {
             SetLoadingStatus(true);
 
             try {
-                // Instead of sending email, we call doContactUs to store data in DB
+                // Call API to submit contact details
                 const response = await doContactUs({
                     name,
                     email,
@@ -48,8 +58,7 @@ const ContactUS = () => {
                     // Navigate to home
                     navigate("/");
 
-                    // Ensure page scrolls to the top once the new page mounts
-                    // A short delay helps if the home page or route is rendered asynchronously
+                    // Scroll to top
                     setTimeout(() => {
                         window.scrollTo(0, 0);
                     }, 0);
@@ -65,18 +74,20 @@ const ContactUS = () => {
         }
     };
 
+    // Validate Email Format
     useEffect(() => {
         set_isValidEmail(!email ? true : !!validateEmail(email));
     }, [email]);
 
+    // Enable Submit Button Only If Valid
     useEffect(() => {
-        if (name.length >= 3 && isValidEmail) {
+        if (name.length >= 3 && isValidEmail && issue.trim().length > 0) {
             set_enableToSubmit(true);
             set_showError(false);
         } else {
             set_enableToSubmit(false);
         }
-    }, [name, isValidEmail]);
+    }, [name, isValidEmail, issue]);
 
     return (
         <div className="w-full main_container py-[40px] lg:py-[60px]">
@@ -89,6 +100,7 @@ const ContactUS = () => {
                 Please contact us
             </div>
             <div className="w-full max-w-[734px] mx-auto mt-[55px] lg:mt-12">
+                {/* Full Name Field */}
                 <div className="text-lightgrey text-[12px] leading-[19px]">Full Name *</div>
                 <input
                     className="w-full bg-black rounded-[15px] h-[62px] mt-0.5 border text-white text-[14px] leading-[21px] px-[24px]"
@@ -101,6 +113,7 @@ const ContactUS = () => {
                     label="Name must be longer than 3 characters."
                 />
 
+                {/* Email Field */}
                 <div className="mt-6 text-white text-[12px] leading-[19px]">Email *</div>
                 <input
                     className="w-full bg-black text-white rounded-[15px] h-[50px] mt-0.5 border text-[14px] leading-[21px] px-[24px]"
@@ -114,6 +127,7 @@ const ContactUS = () => {
                     label={!isValidEmail ? "Invalid email address." : "Email is required."}
                 />
 
+                {/* Country Code Field */}
                 <div className="mt-6 text-white text-[12px] leading-[19px]">Country Code</div>
                 <input
                     className="w-full bg-black text-white rounded-[15px] h-[50px] mt-0.5 border text-[14px] leading-[21px] px-[24px]"
@@ -123,6 +137,7 @@ const ContactUS = () => {
                     onChange={(e) => set_countryCode(e.target.value)}
                 />
 
+                {/* Contact Number Field */}
                 <div className="mt-6 text-white text-[12px] leading-[19px]">Contact Number</div>
                 <input
                     className="w-full bg-black text-white rounded-[15px] h-[50px] mt-0.5 border text-[14px] leading-[21px] px-[24px]"
@@ -132,14 +147,20 @@ const ContactUS = () => {
                     onChange={(e) => set_contactNumber(e.target.value)}
                 />
 
-                <div className="mt-8 lg:mt-12 text-lightgrey text-[12px] leading-[19px]">Reason</div>
+                {/* Reason Field (Mandatory) */}
+                <div className="mt-8 lg:mt-12 text-lightgrey text-[12px] leading-[19px]">Reason *</div>
                 <textarea
                     className="w-full bg-black rounded-[15px] h-[200px] mt-0.5 border text-white text-[14px] leading-[21px] p-[24px]"
                     placeholder="Input your reason in detail"
                     value={issue}
                     onChange={(e) => set_issue(e.target.value)}
                 />
+                <ShowFieldError
+                    show={issueError || (showError && issue.trim().length === 0)}
+                    label="Reason is required."
+                />
 
+                {/* Submit Button */}
                 <div className="flex flex-row-reverse mt-[54px]">
                     <button
                         className="px-[48px] py-[15px] rounded-[14px] bg-green text-white text-[16px] leading-[24px] font-[600] disabled:opacity-50"
