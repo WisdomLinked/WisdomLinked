@@ -2,10 +2,7 @@ import React, { useEffect, useState } from "react";
 import { doGetContactedUs } from "../api/api";
 import { DateRangePicker, createStaticRanges } from "react-date-range";
 
-// Import default styles
 import "react-date-range/dist/styles.css";
-// Overwrite default theme with partial dark theme
-// (We also pass a `theme` prop below for further color overrides)
 import "react-date-range/dist/theme/default.css";
 
 interface ContactedUsItem {
@@ -149,6 +146,49 @@ export default function GetContactedUs() {
 
     return (
         <div className="min-h-screen p-6 bg-[#181818] text-white">
+            {/* Inline style overrides for react-date-range */}
+            <style>{`
+        /* Dark background for calendar and more readable text */
+        .rdrCalendarWrapper,
+        .rdrDateRangeWrapper {
+          background-color: #252525 !important;
+          color: #ffffff !important;
+        }
+        /* Ensure static range labels (e.g., Last month, Last quarter) are visible */
+        .rdrDefinedRangesWrapper,
+        .rdrStaticRangeLabel {
+          background-color: #252525 !important;
+          color: #ffffff !important;
+        }
+        .rdrStaticRangeLabel:hover {
+          background-color: #333333 !important;
+        }
+        /* Month and year pickers (dropdowns) */
+        .rdrMonthAndYearWrapper,
+        .rdrMonthAndYearPickers select {
+          background-color: #252525 !important;
+          color: #ffffff !important;
+        }
+        /* Weekday headers */
+        .rdrWeekDay {
+          color: #bbbbbb !important;
+        }
+        /* Make selected date range stand out a bit more */
+        .rdrSelected,
+        .rdrInRange,
+        .rdrStartEdge,
+        .rdrEndEdge {
+          opacity: 0.9;
+        }
+        /* Other small tweaks for clarity */
+        .rdrDayNumber span {
+          color: #ffffff !important;
+        }
+        .rdrDayPassive .rdrDayNumber span {
+          color: #555555 !important;
+        }
+      `}</style>
+
             <h2 className="text-2xl font-semibold text-[#31B099] mb-6">
                 ContactedUs Records
             </h2>
@@ -239,13 +279,6 @@ export default function GetContactedUs() {
                                     inputRanges={[]}
                                     direction="vertical"
                                     rangeColors={["#31B099"]}
-                                    // Pass a theme object to override default (white) background:
-                                    // theme={{
-                                    //     background: "#252525",
-                                    //     text: "#ffffff",
-                                    //     selectionColor: "#31B099",
-                                    //     fontFamily: "inherit",
-                                    // }}
                                 />
                             </div>
                         </>
