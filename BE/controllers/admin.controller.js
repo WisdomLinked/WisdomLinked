@@ -3,7 +3,9 @@ const Event = require("../models/Event");
 const PaymentHistory = require("../models/PaymentHistory");
 const Conversation = require("../models/Conversation");
 const GroupChat = require("../models/GroupChat");
-const Keyword = require("../models/Keyword")
+const Keyword = require("../models/Keyword");
+const ContactedUs = require("../models/ContactedUs");
+
 const { getFullUserData } = require('../middlewares/requireAuth')
 
 const filterUsers = async (req, res) => {
@@ -314,6 +316,52 @@ const getUserFeedbacks = async (req, res) => {
     }
 };
 
+const getContactedUs = async (req, res) => {
+    try {
+        const { name, email, dateFrom, dateTo, sortBy, sortOrder } = req.body;
+
+        let query = ContactedUs.find({});
+
+        // Name Filter (case-insensitive)
+        if (name) {
+            query = query.where("name", new RegExp(name, "i"));
+        }
+
+        // Email Filter (case-insensitive)
+        if (email) {
+            query = query.where("email", new RegExp(email, "i"));
+        }
+
+        // Date Range Filter (INCLUSIVE)
+        if (dateFrom && dateTo) {
+            const fromDate = new Date(dateFrom);
+            fromDate.setUTCHours(0, 0, 0, 0); // Start of the day
+            const toDate = new Date(dateTo);
+            toDate.setUTCHours(23, 59, 59, 999); // End of the day
+
+            query = query.where("createdAt").gte(fromDate).lte(toDate);
+        }
+
+        // Sorting with Case-Insensitive Collation
+        query = query.collation({ locale: "en", strength: 2 });
+
+        if (sortBy) {
+            const order = sortOrder && sortOrder.toLowerCase() === "desc" ? -1 : 1;
+            query = query.sort({ [sortBy]: order });
+        }
+
+        // Execute Query
+        const results = await query.exec();
+
+        return res.status(200).json({
+            status: "SUCCESS",
+            data: results,
+        });
+    } catch (err) {
+        console.error(err);
+        return res.status(500).send(err.message);
+    }
+};
 
 module.exports = {
     filterUsers,
@@ -322,5 +370,6 @@ module.exports = {
     filterPaymentHistories,
     getDirectChatHistory,
     getGroupChatHistory,
-    getUserFeedbacks
+    getUserFeedbacks,
+    getContactedUs
 }

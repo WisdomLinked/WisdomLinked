@@ -754,3 +754,19 @@ export const doGetGroupChatHistory = async (filter: any) => {
         return checkForAuthorization(err);
     }
 };
+
+export const doGetContactedUs = async (filters: {
+    name?: string;
+    startDate?: string;
+    endDate?: string;
+    sortBy?: string;
+    sortOrder?: string;
+}) => {
+    try {
+        // We use POST to pass filter/sort parameters in the body
+        const res = await api.post("admin/getContactedUs", filters);
+        return res.data;
+    } catch (err: any) {
+        return checkForAuthorization(err);
+    }
+};

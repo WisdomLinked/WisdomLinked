@@ -15,6 +15,7 @@ import Messenger from "../Messenger/Messenger";
 import FriendsTitle from "../FriendsSideBar/FriendsTitle";
 import GeneralChatList from "../FriendsSideBar/GeneralChatList";
 import Feedback from "../../../components/getFeedback";
+import GetContactedUs from "../../../components/getContactedUs";
 
 
 interface Props {
@@ -66,6 +67,17 @@ export default function AdminDrawer(props: Props) {
                         <span className="material-icons"><IoAccessibility /></span>
                         <span className="text-[10px] mt-1">Feedback</span>
                     </Link>
+                    <Link
+                        to={`${process.env.REACT_APP_AUTH_URL}admindashboard/contactedus`}
+                        className={`flex flex-col items-center ${
+                            location === 'admincontactedus'
+                                ? 'text-lightgrey'
+                                : 'text-grey hover:text-lightgrey'
+                        }`}
+                    >
+                        <span className="material-icons"><IoAccessibility/></span>
+                        <span className="text-[10px]">ContactedUs</span>
+                    </Link>
                 </div>
                 <div className={`w-[300px] h-full bg-darkgrey overflow-y-auto px-[15px] pt-4 pb-[5px] ${location === 'adminchat' ? '' : 'hidden'}`}>
                     <FriendsTitle title="Shared Community Chats" />
@@ -78,6 +90,8 @@ export default function AdminDrawer(props: Props) {
                     <Route path="/payment" element={<Payment />} />
                     <Route path="/chat" element={<Messenger />} />
                     <Route path="/feedbacks" element={<Feedback />} />
+                    <Route path="/contactedus" element={<GetContactedUs />} />
+
                     <Route path="/*" element={<Dashboard />} />
                 </Routes>
             </div>
