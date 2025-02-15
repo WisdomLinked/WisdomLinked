@@ -13,8 +13,12 @@ const RoomButtons: React.FC<{
 }> = ({ isRoomMinimized, handleRoomResize }) => {
     const {videoChat, room, chat: { currentEvent }, auth: { userDetails }} = useAppSelector((state) => state);
 
-
     const eventId = videoChat.localStream && currentEvent?._id !== undefined ? currentEvent._id : null;
+    const groupChatId = room.localStreamRoom && currentEvent?._id !== undefined ? currentEvent._id : null;
+    console.log("currentEvent", );
+    console.log("videoChat", videoChat);
+    console.log("room", room);
+    console.log("groupChatId", groupChatId);
 
     return (
         <div className={`w-[100%] h-[50px] bg-green flex items-center justify-center`}>
@@ -64,7 +68,7 @@ const RoomButtons: React.FC<{
                         handleRoomResize={handleRoomResize}
                     />
                     <CloseRoom type="ROOM"
-                               eventId
+                               eventId={groupChatId}
                     />
                 </div>
             ) : null}

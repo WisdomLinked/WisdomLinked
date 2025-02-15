@@ -260,6 +260,24 @@ export const updateGroupChat = async (details: any) => {
     }
 };
 
+export const doUpdateExpertEvent = async (eventId: any, updates: any) => {
+    try {
+        const res = await api.post("expert/updateEvent", { eventId, updates });
+        return res.data;
+    } catch (err: any) {
+        return checkForAuthorization(err);
+    }
+}
+
+export const doUpdateEvent = async (eventId: any, updates: any) => {
+    try {
+        const res = await api.post("customer/updateEvent", { eventId, updates });
+        return res.data;
+    } catch (err: any) {
+        return checkForAuthorization(err);
+    }
+}
+
 export const addMemberToGroup = async (data: any) => {
     try {
         const res = await api.post("group-chat/add", {
@@ -562,16 +580,6 @@ export const doLeftSeminar = async (seminarId: any) => {
     }
 }
 
-
-export const doUpdateEvent = async (eventId: any, updates: any) => {
-    try {
-        const res = await api.post("customer/updateEvent", { eventId, updates });
-        return res.data;
-    } catch (err: any) {
-        return checkForAuthorization(err);
-    }
-}
-
 export const doGetMyEvents = async () => {
     try {
         const res = await api.get("auth/getMyEvents");
@@ -689,15 +697,6 @@ export const getCustomerById = async (id: any) => {
         return checkForAuthorization(err);
     }
 };
-
-export const doUpdateExpertEvent = async (eventId: any, updates: any) => {
-    try {
-        const res = await api.post("expert/updateEvent", { eventId, updates });
-        return res.data;
-    } catch (err: any) {
-        return checkForAuthorization(err);
-    }
-}
 
 // ADMIN APIS ------------------
 export const doFilterUsers = async (filter: any) => {

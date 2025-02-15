@@ -38,7 +38,8 @@ const CloseRoom = ({ type, eventId = null}: { type: CallType; eventId: any;}) =>
     };
 
     const calculateTotalTime = async () => {
-        if (userDetails.role === "expert" && eventId || chosenGroupChatDetails) {
+        if (userDetails.role === "expert" && eventId) {
+            console.log("eventId: ", eventId);
             const timeSpent = localStorage.getItem("totalTimeSpent");
 
             if (timeSpent) {
@@ -47,6 +48,7 @@ const CloseRoom = ({ type, eventId = null}: { type: CallType; eventId: any;}) =>
                 const totalTimeSpentInMinutes = Math.floor(totalTimeSpent / 60000);
 
                 if (chosenChatDetails) {
+                    console.log("inside chosenChatDetails");
                     eventId && await doUpdateExpertEvent(eventId, { totalTimeSpent: totalTimeSpentInMinutes });
 
                     const message = `Call Lasted for: ${totalTimeSpent / 1000} seconds`;
@@ -58,10 +60,9 @@ const CloseRoom = ({ type, eventId = null}: { type: CallType; eventId: any;}) =>
                     });
                 }
 
-                // console.log("chosengroupchatdetails", chosenGroupChatDetails, groupChatId);
-                // console.log("event id", eventId);
                 if (chosenGroupChatDetails) {
-                    await updateGroupChat({groupId : chosenGroupChatDetails.groupId, totalTimeSpent: totalTimeSpentInMinutes });
+                    console.log("inside chosenGroupChatDetails");
+                    eventId && await updateGroupChat({groupId : chosenGroupChatDetails.groupId, totalTimeSpent: totalTimeSpentInMinutes });
 
                     console.log("Sending group message...");
                     console.log("Group Chat ID:", chosenGroupChatDetails.groupId);
@@ -97,36 +98,32 @@ const CloseRoom = ({ type, eventId = null}: { type: CallType; eventId: any;}) =>
         if (type === "ROOM") {
             console.log("userDetail: ", userDetails);
             console.log("chosengroupchatdetails: ", chosenGroupChatDetails);
-            leaveRoom(); // Handle leaving the room
-            // openFeedbackModal(roomDetails?.roomCreator?.userId)
+            leaveRoom();
 
             dispatch(clearVideoChat("You left the Seminar"));
             if (userDetails.userId !== chosenGroupChatDetails?.admin._id) {
-                // openFeedbackModal(roomDetails?.roomCreator?.userId);
                 openFeedbackModal(chosenGroupChatDetails?.admin._id);
             } else {
                 console.log("User is the room admin. Feedback modal not shown.");
             }
         }
 
-
         //TODO: dispatch totaltime call duration
-
 
 
         // Cancel the call request after feedback is completed
         cancelCallRequest({ otherUserId: otherUserId || "" });
     };
 
-    useEffect(() => {
-        // Set expert information from group chat data
-        const groupChat = groupChatList.find((x) => x.groupId === roomDetails?.groupId);
-        if (groupChat) {
-            set_expert(groupChat?.admin?._id);
-            set_isExpertInRoom(roomDetails?.participants?.find((x) => x.userId === groupChat?.admin?._id));
-        }
-
-    }, [roomDetails, groupChatList, userDetails]);
+    // useEffect(() => {
+    //     // Set expert information from group chat data
+    //     const groupChat = groupChatList.find((x) => x.groupId === roomDetails?.groupId);
+    //     if (groupChat) {
+    //         set_expert(groupChat?.admin?._id);
+    //         set_isExpertInRoom(roomDetails?.participants?.find((x) => x.userId === groupChat?.admin?._id));
+    //     }
+    //
+    // }, [roomDetails, groupChatList, userDetails]);
 
     return (
         <button

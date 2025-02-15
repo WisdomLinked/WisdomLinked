@@ -146,7 +146,8 @@ const updateGroupChat = async (req, res) => {
         if (price !== undefined) updateFields.price = price;
         if (totalTimeSpent !== undefined){
             //updateFields.totalTimeSpend = totalTimeSpent;
-            updateFields.totalTimeSpent = (groupChat.totalTimeSpent || 0) + totalTimeSpent;
+            const existingTotalTimeSpent = groupChat.totalTimeSpent || 0;
+            updateFields.totalTimeSpent = existingTotalTimeSpent+ totalTimeSpent;
         }
 
         // Ensure admin is always updated
