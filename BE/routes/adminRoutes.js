@@ -13,7 +13,8 @@ const {
     filterPaymentHistories ,
     getDirectChatHistory,
     getGroupChatHistory,
-    getContactedUs
+    getContactedUs,
+    toggleActionedStatus
 } = require("../controllers/admin.controller");
 
 const {
@@ -34,5 +35,6 @@ router.post("/getGroupChatHistory", adminAuth, getGroupChatHistory)
 router.get("/getEventFeedback", adminAuth, getFeedback)
 router.post("/getUserFeedbacks", adminAuth, getUserFeedbacks);
 router.post("/getContactedUs", adminAuth, getContactedUs);
+router.post("/toggleActionedStatus", adminAuth, toggleActionedStatus);
 
 module.exports = router;
