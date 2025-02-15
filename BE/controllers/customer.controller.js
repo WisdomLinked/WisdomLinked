@@ -180,5 +180,5 @@ const  getExpertById =async (req,res) =>{
 module.exports = {
     filterExperts,
     filterSeminars,
-    getExpertById
+    getExpertById,
 }

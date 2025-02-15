@@ -3,14 +3,18 @@ import { useNavigate } from "react-router-dom"; // Hook for navigation
 import FileBrowser from "../components/fileBrowser";
 import ShowFieldError from "../components/ShowFieldError";
 import { validateEmail } from "../actions/common";
-import {callApi, sendEmailContactUs} from "../api/api";
+import { doContactUs } from "../api/api"; // Import the new function
 import { SetLoadingStatus } from "../actions/appActions";
-import { sendContactDetails } from "../../../BE/services/utils"; // Relative path from FE/src/pages to BE/services/utils
+
 const ContactUS = () => {
+    const navigate = useNavigate(); // For programmatic navigation
+
     const [name, set_name] = useState("");
     const [email, set_email] = useState("");
     const [isValidEmail, set_isValidEmail] = useState(false);
     const [issue, set_issue] = useState("");
+    const [countryCode, set_countryCode] = useState("");
+    const [contactNumber, set_contactNumber] = useState("");
     const [showError, set_showError] = useState(false);
     const [enableToSubmit, set_enableToSubmit] = useState(false);
 
@@ -22,21 +26,35 @@ const ContactUS = () => {
             SetLoadingStatus(true);
 
             try {
-                const emailResponse = await sendEmailContactUs("POST", "send-contact", {
-                    // targetEmail: " xbwang@hotmail.com",
-                    targetEmail: "varunsahni286@gmail.com",
+                // Instead of sending email, we call doContactUs to store data in DB
+                const response = await doContactUs({
                     name,
                     email,
-                    issue,
+                    countryCode,
+                    contactNumber,
+                    issue
                 });
 
-                if (emailResponse) {
-                    alert("Thank you for contacting us. We will respond to your message asap.");
+                if (response) {
+                    alert("Thank you for contacting us. Your query has been submitted successfully.");
+
+                    // Clear input fields
                     set_name("");
                     set_email("");
                     set_issue("");
+                    set_countryCode("");
+                    set_contactNumber("");
+
+                    // Navigate to home
+                    navigate("/");
+
+                    // Ensure page scrolls to the top once the new page mounts
+                    // A short delay helps if the home page or route is rendered asynchronously
+                    setTimeout(() => {
+                        window.scrollTo(0, 0);
+                    }, 0);
                 } else {
-                    alert("Failed to send email. Please try again later.");
+                    alert("Failed to submit contact details. Please try again later.");
                 }
             } catch (error) {
                 console.error("Error submitting contact:", error);
@@ -96,6 +114,24 @@ const ContactUS = () => {
                     label={!isValidEmail ? "Invalid email address." : "Email is required."}
                 />
 
+                <div className="mt-6 text-white text-[12px] leading-[19px]">Country Code</div>
+                <input
+                    className="w-full bg-black text-white rounded-[15px] h-[50px] mt-0.5 border text-[14px] leading-[21px] px-[24px]"
+                    placeholder="e.g. +1"
+                    type="text"
+                    value={countryCode}
+                    onChange={(e) => set_countryCode(e.target.value)}
+                />
+
+                <div className="mt-6 text-white text-[12px] leading-[19px]">Contact Number</div>
+                <input
+                    className="w-full bg-black text-white rounded-[15px] h-[50px] mt-0.5 border text-[14px] leading-[21px] px-[24px]"
+                    placeholder="Your phone number"
+                    type="text"
+                    value={contactNumber}
+                    onChange={(e) => set_contactNumber(e.target.value)}
+                />
+
                 <div className="mt-8 lg:mt-12 text-lightgrey text-[12px] leading-[19px]">Reason</div>
                 <textarea
                     className="w-full bg-black rounded-[15px] h-[200px] mt-0.5 border text-white text-[14px] leading-[21px] p-[24px]"
@@ -103,17 +139,6 @@ const ContactUS = () => {
                     value={issue}
                     onChange={(e) => set_issue(e.target.value)}
                 />
-
-                {/*<div className="mt-8 lg:mt-12 text-lightgrey text-[12px] leading-[19px]">Upload a File *</div>*/}
-                {/*<FileBrowser*/}
-                {/*    file={file}*/}
-                {/*    set_file={set_file}*/}
-                {/*    set_fileError={set_fileError}*/}
-                {/*/>*/}
-                {/*<ShowFieldError*/}
-                {/*    show={fileError || (!file && showError)}*/}
-                {/*    label={file ? fileError : "File is required."}*/}
-                {/*/>*/}
 
                 <div className="flex flex-row-reverse mt-[54px]">
                     <button

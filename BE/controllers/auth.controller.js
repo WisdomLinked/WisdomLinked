@@ -15,6 +15,7 @@ const { v4: uuidv4 } = require('uuid');
 const utils = require('../services/utils')
 const randomize = require('randomatic');
 const Event = require("../models/Event");
+const ContactedUs = require("../models/ContactedUs");
 
 const getUniqueConfirmCode = async () => {
     try {
@@ -698,6 +699,34 @@ const getTimeZone = async (req,res) => {
     }
 };
 
+
+const submitContactForm = async (req, res) => {
+    try {
+        const { name, email, countryCode, contactNumber, issue } = req.body;
+
+        // Basic validation check
+        if (!name || !email) {
+            return res.status(400).json({ message: "Name and Email are required." });
+        }
+
+        // Create and save new contact entry
+        const contactEntry = new ContactedUs({
+            name,
+            email,
+            countryCode,
+            contactNumber,
+            issue
+        });
+        await contactEntry.save();
+
+        return res.status(200).json({ message: "Contact form submitted successfully." });
+    } catch (error) {
+        console.error("Error saving contact form:", error);
+        return res.status(500).json({ message: "An error occurred while submitting contact form." });
+    }
+};
+
+
 module.exports = {
     login,
     register,
@@ -714,6 +743,7 @@ module.exports = {
     confirmPasswordResetByCode,
     updateResume,
     healthCheck,
-    getTimeZone
+    getTimeZone,
+    submitContactForm
 }
 

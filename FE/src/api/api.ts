@@ -155,6 +155,22 @@ export const getTimezone = async ({ lat, lng }: { lat: number; lng: number }) =>
     }
 };
 
+
+export const doContactUs = async (data: {
+    name: string;
+    email: string;
+    countryCode?: string;
+    contactNumber?: string;
+    issue?: string;
+}) => {
+    try {
+        const res = await api.post("auth/contact-form", data);
+        return res.data;
+    } catch (err: any) {
+        return checkForAuthorization(err);
+    }
+};
+
 // protected routes
 
 export const getMe = async () => {
@@ -423,20 +439,6 @@ export const callApi = async (method: string, url: string, data: any, file?: any
         return checkForAuthorization(err);
     }
 }
-
-export const sendEmailContactUs = async (method: Method, endpoint: string, data: object) => {
-    try {
-        const response = await api.request({
-            method, // Now correctly typed as Method
-            url: endpoint, // Endpoint relative to BASE_URL
-            data, // Payload for the request
-        });
-        return response.data; // Return response data if successful
-    } catch (error: any) {
-        console.error("Error in sendEmailContactUs:", error);
-        return checkForAuthorization(error); // Use existing error handling logic
-    }
-};
 
 export const leaveFeedback = async (data: any) => {
     try {

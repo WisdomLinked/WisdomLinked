@@ -18,7 +18,9 @@ const {
     confirmPasswordResetByCode,
     updateResume,
     healthCheck,
-    getTimeZone
+    getTimeZone,
+    submitContactForm
+
 } = require("../controllers/auth.controller");
 const { requireAuth } = require("../middlewares/requireAuth");
 const {
@@ -57,4 +59,5 @@ router.post("/createStripePaymentIntent", requireAuth(false), createStripePaymen
 router.post("/getStripeMode", requireAuth(false), getStripeMode)
 router.get("/healthCheck", healthCheck)
 router.get("/getTimezone",getTimeZone)
+router.post("/contact-form", submitContactForm)
 module.exports = router;
