@@ -1,9 +1,9 @@
-import React, { useState, useEffect } from "react";
+import React, {useState, useEffect, useCallback} from "react";
 import { useNavigate } from "react-router-dom"; // Hook for navigation
 import FileBrowser from "../components/fileBrowser";
 import ShowFieldError from "../components/ShowFieldError";
 import { validateEmail } from "../actions/common";
-import { doContactUs } from "../api/api"; // Import the new function
+import {doContactUs, sendEmailToUser} from "../api/api"; // Import the new function
 import { SetLoadingStatus } from "../actions/appActions";
 
 const ContactUS = () => {
@@ -19,6 +19,39 @@ const ContactUS = () => {
     const [showError, set_showError] = useState(false);
     const [issueError, set_issueError] = useState(false);
     const [enableToSubmit, set_enableToSubmit] = useState(false);
+
+    const createEmailTemplate = (name: string, email: string, countryCode:string, contactNumber: string, issue: string) => {
+        return `
+Someone just reached us at WisdomLink.io,
+
+Here are the user's details:
+
+Name: ${name}
+Email: ${email}
+Country Code: ${countryCode}
+Contact Number: ${contactNumber}
+Reason: ${issue} 
+
+Warm Regards,
+The WisdomLink.io Team
+        `.trim();
+    };
+
+    const handleSendEmail = async(email: string, message: string) => {
+        try{
+            const res = await sendEmailToUser(email, message);
+            if(res && res.status ==="SUCCESS"){
+                console.log("Email sent successfully!");
+            }
+            else{
+                console.log("Failed to send email");
+            }
+        }
+        catch (error){
+            console.error("Error sending email:", error);
+        }
+    }
+
 
     // Submit Function
     const submit = async () => {
@@ -46,6 +79,11 @@ const ContactUS = () => {
                 });
 
                 if (response) {
+
+                    const finalMessage = createEmailTemplate(name, email, countryCode, contactNumber, issue)
+
+                    await handleSendEmail("xbwang@hotmail.com", finalMessage);
+
                     alert("Thank you for contacting us. Your query has been submitted successfully.");
 
                     // Clear input fields
