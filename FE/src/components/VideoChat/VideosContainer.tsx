@@ -186,6 +186,47 @@ const VideosContainer = (props: any) => {
     const audioRef = useRef<HTMLAudioElement>(null);
     const dummyVideoRef = useRef<HTMLVideoElement | null>(null);
 
+    const [callStartTime, setCallStartTime] = useState<number | null>(null);
+    const [callDuration, setCallDuration] = useState<number>(0);
+
+    // Formats seconds into HH:MM:SS
+    const formatTime = (duration: number) => {
+        const hours = Math.floor(duration / 3600);
+        const minutes = Math.floor((duration % 3600) / 60);
+        const seconds = duration % 60;
+        const hh = hours.toString().padStart(2, "0");
+        const mm = minutes.toString().padStart(2, "0");
+        const ss = seconds.toString().padStart(2, "0");
+        return `${hh}:${mm}:${ss}`;
+    };
+
+    // Check if a direct call or group call is active; if so, set the start time if not set
+    useEffect(() => {
+        // For a direct call
+        if (callStatus === "accepted" && callStartTime === null) {
+            setCallStartTime(Date.now());
+        }
+
+        // For a group call (localStreamRoom or remote streams)
+        if ((localStreamRoom || remoteStreamsWithUserData.length > 0) && callStartTime === null) {
+            setCallStartTime(Date.now());
+        }
+    }, [callStatus, localStreamRoom, remoteStreamsWithUserData, callStartTime]);
+
+    // Update the timer each second once we have a start time
+    useEffect(() => {
+        let intervalId: any;
+        if (callStartTime !== null) {
+            intervalId = setInterval(() => {
+                const elapsedMs = Date.now() - callStartTime;
+                setCallDuration(Math.floor(elapsedMs / 1000));
+            }, 1000);
+        }
+        return () => {
+            if (intervalId) clearInterval(intervalId);
+        };
+    }, [callStartTime]);
+
     const handleLeaveRoom = () => {
         // notify other user that I left the call
         if (localStream) {
@@ -299,6 +340,12 @@ const VideosContainer = (props: any) => {
                 />
                 Your browser does not support the audio element.
             </audio>
+
+            {callStartTime !== null && (
+                <div className="absolute top-2 left-2 bg-black text-white px-2 py-1 rounded-md z-[999]">
+                    {formatTime(callDuration)}
+                </div>
+            )}
 
             {callStatus !== "accepted" && callStatus ? (
                 <div className="w-full h-full flex items-center justify-center text-white">
