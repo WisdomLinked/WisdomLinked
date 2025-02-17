@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import {doGetContactedUs, sendEmailToUser, toggleActionedStatus} from "../api/api";
+import { doGetContactedUs, sendEmailToUser, toggleActionedStatus } from "../api/api";
 import { DateRangePicker, createStaticRanges } from "react-date-range";
 
 import "react-date-range/dist/styles.css";
@@ -16,7 +16,6 @@ interface ContactedUsItem {
     createdAt: string;
 }
 
-// Utility to format date for the backend
 function formatDateYYYY_MM_DD(dateObj: Date): string {
     const yyyy = dateObj.getFullYear();
     const mm = `0${dateObj.getMonth() + 1}`.slice(-2);
@@ -24,7 +23,6 @@ function formatDateYYYY_MM_DD(dateObj: Date): string {
     return `${yyyy}-${mm}-${dd}`;
 }
 
-// Some custom static ranges for DateRangePicker
 const currentYear = new Date().getFullYear();
 const currentMonth = new Date().getMonth() + 1;
 const currentDate = new Date().getDate();
@@ -34,65 +32,56 @@ const customStaticRanges = createStaticRanges([
         label: "Last month",
         range: () => ({
             startDate: new Date(currentYear, currentMonth - 2, currentDate - 1),
-            endDate: new Date(currentYear, currentMonth - 1, currentDate - 1)
-        })
+            endDate: new Date(currentYear, currentMonth - 1, currentDate - 1),
+        }),
     },
     {
         label: "Last quarter",
         range: () => ({
             startDate: new Date(currentYear, currentMonth - 4, currentDate - 1),
-            endDate: new Date(currentYear, currentMonth - 1, currentDate - 1)
-        })
+            endDate: new Date(currentYear, currentMonth - 1, currentDate - 1),
+        }),
     },
     {
         label: "Last 6 months",
         range: () => ({
             startDate: new Date(currentYear, currentMonth - 7, currentDate - 1),
-            endDate: new Date(currentYear, currentMonth - 1, currentDate - 1)
-        })
+            endDate: new Date(currentYear, currentMonth - 1, currentDate - 1),
+        }),
     },
     {
         label: "Last year",
         range: () => ({
             startDate: new Date(currentYear - 1, currentMonth - 1, currentDate - 1),
-            endDate: new Date(currentYear, currentMonth - 1, currentDate - 1)
-        })
-    }
+            endDate: new Date(currentYear, currentMonth - 1, currentDate - 1),
+        }),
+    },
 ]);
 
 export default function GetContactedUs() {
-    // State to hold the fetched ContactedUs records
     const [contactedUsList, setContactedUsList] = useState<ContactedUsItem[]>([]);
     const [isLoading, setIsLoading] = useState(false);
 
-    // Filters
     const [filterName, setFilterName] = useState("");
     const [filterEmail, setFilterEmail] = useState("");
 
-    // New filter for "actioned" status: "Yes", "No", or "" for all
     const [filterActioned, setFilterActioned] = useState("");
 
-    // Sorting
-    const [sortBy, setSortBy] = useState("name");     // "name" or "createdAt"
+    const [sortBy, setSortBy] = useState("name"); // "name" or "createdAt"
     const [sortOrder, setSortOrder] = useState("asc"); // "asc" or "desc"
 
-    // Date Range
     const [datePickerShow, setDatePickerShow] = useState(false);
     const [dateFrom, setDateFrom] = useState("");
     const [dateTo, setDateTo] = useState("");
 
-    // For <DateRangePicker>
     const [selectionRange, setSelectionRange] = useState({
         startDate: new Date(),
         endDate: new Date(),
-        key: "selection"
+        key: "selection",
     });
 
-    // Track the message typed by admin for each user (by ID)
-    // We'll store messages in an object keyed by the ContactedUsItem._id
     const [adminMessages, setAdminMessages] = useState<{ [key: string]: string }>({});
 
-    // Handler when user picks a date range
     const handleSelect = (ranges: any) => {
         const { startDate, endDate } = ranges.selection;
         setDateFrom(formatDateYYYY_MM_DD(startDate));
@@ -100,26 +89,24 @@ export default function GetContactedUs() {
         setSelectionRange({ startDate, endDate, key: "selection" });
     };
 
-    // Clear date range
     const clearDateRange = () => {
         setDateFrom("");
         setDateTo("");
         setSelectionRange({
             startDate: new Date(),
             endDate: new Date(),
-            key: "selection"
+            key: "selection",
         });
     };
 
-    // Fetch data from backend
     const fetchContactedUs = async () => {
         try {
             setIsLoading(true);
             const filters: any = {
                 sortBy,
-                sortOrder
+                sortOrder,
             };
-            // Add filters if provided
+
             if (filterName.trim()) {
                 filters.name = filterName.trim();
             }
@@ -130,7 +117,7 @@ export default function GetContactedUs() {
                 filters.dateFrom = dateFrom;
                 filters.dateTo = dateTo;
             }
-            // Add actioned filter if "Yes" or "No" selected
+
             if (filterActioned) {
                 filters.actioned = filterActioned;
             }
@@ -149,19 +136,16 @@ export default function GetContactedUs() {
         }
     };
 
-    // Re-fetch whenever filters/sorts/date range/actioned changes
     useEffect(() => {
         fetchContactedUs();
     }, [filterName, filterEmail, dateFrom, dateTo, sortBy, sortOrder, filterActioned]);
 
-    // Handle toggling the "actioned" status for a record
     const handleToggleActioned = async (id: string) => {
         try {
             const res = await toggleActionedStatus(id);
             if (res && res.actioned) {
-                // Update local state with new actioned value
-                setContactedUsList(prev =>
-                    prev.map(item => {
+                setContactedUsList((prev) =>
+                    prev.map((item) => {
                         if (item._id === id) {
                             return { ...item, actioned: res.actioned };
                         }
@@ -195,21 +179,17 @@ The WisdomLink.io Team
         try {
             const adminRawMessage = adminMessages[id] || "";
 
-            // Must have something in the admin's typed message
             if (!adminRawMessage.trim()) {
                 alert("Please enter a message before sending.");
                 return;
             }
 
-            // Wrap the raw message with a simple template
             const finalMessage = createEmailTemplate(adminRawMessage);
 
-            // Make API call to sendEmailToUser, passing the "finalMessage"
             const res = await sendEmailToUser(email, finalMessage);
             if (res && res.status === "SUCCESS") {
                 alert("Email sent successfully!");
-                // Clear the message for that user in the UI
-                setAdminMessages(prev => ({ ...prev, [id]: "" }));
+                setAdminMessages((prev) => ({ ...prev, [id]: "" }));
             } else {
                 alert("Failed to send email.");
             }
@@ -219,7 +199,6 @@ The WisdomLink.io Team
         }
     };
 
-    // Render
     return (
         <div className="min-h-screen p-6 bg-[#181818] text-white">
             {/* Inline style overrides for react-date-range */}
@@ -260,7 +239,7 @@ The WisdomLink.io Team
             `}</style>
 
             <h2 className="text-2xl font-semibold text-[#31B099] mb-6">
-                ContactedUs Records (Admin View)
+                Contacted Us Records (Admin View)
             </h2>
 
             {/* Filters & Sorting */}
@@ -314,13 +293,11 @@ The WisdomLink.io Team
                                 {dateFrom} ~ {dateTo}
                             </span>
                         ) : (
-                            <span className="text-gray-400 text-sm mr-2">
-                                Select Range
-                            </span>
+                            <span className="text-gray-400 text-sm mr-2">Select Range</span>
                         )}
                         {dateFrom && dateTo && (
                             <button
-                                className="bg-[#31B099] text-black px-2 py-1 rounded mr-2"
+                                className="bg-[#31B099] text-black px-2 py-1 rounded mr-2 hover:bg-[#28a286] transition-colors"
                                 onClick={(e) => {
                                     e.stopPropagation();
                                     clearDateRange();
@@ -400,63 +377,94 @@ The WisdomLink.io Team
                 <p className="text-gray-400">No records found.</p>
             ) : (
                 <div className="space-y-4">
-                    {contactedUsList.map((item) => (
-                        <div
-                            key={item._id}
-                            className="p-4 rounded-lg border border-gray-700 bg-[#252525] shadow-lg"
-                        >
-                            <p className="text-gray-300">
-                                <strong className="text-white">Name:</strong> {item.name}
-                            </p>
-                            <p className="text-gray-300">
-                                <strong className="text-white">Email:</strong> {item.email}
-                            </p>
-                            <p className="text-gray-300">
-                                <strong className="text-white">Contact Number:</strong>{" "}
-                                {(item.countryCode || "") + " " + (item.contactNumber || "")}
-                            </p>
-                            <p className="text-gray-300">
-                                <strong className="text-white">Reason:</strong> {item.issue}
-                            </p>
-                            <p className="text-gray-300">
-                                <strong className="text-white">Created At:</strong>{" "}
-                                {new Date(item.createdAt).toLocaleString()}
-                            </p>
-                            <p className="text-gray-300">
-                                <strong className="text-white">Actioned:</strong> {item.actioned}
-                            </p>
-
-                            {/* Toggle Actioned Button */}
-                            <button
-                                onClick={() => handleToggleActioned(item._id)}
-                                className="mt-2 bg-[#31B099] text-black px-2 py-1 rounded"
+                    {contactedUsList.map((item) => {
+                        const isActionedYes = item.actioned === "No";
+                        return (
+                            <div
+                                key={item._id}
+                                className={`p-4 rounded-lg border border-gray-700 shadow-lg hover:shadow-[0_0_10px_2px_rgba(49,176,153,0.5)] transition-shadow ${
+                                    isActionedYes ? "bg-[#333333]" : "bg-[#252525]"
+                                }`}
                             >
-                                Toggle Actioned
-                            </button>
+                                <p className="text-gray-300">
+                                    <strong className="text-white">Name:</strong> {item.name}
+                                </p>
+                                <p className="text-gray-300">
+                                    <strong className="text-white">Email:</strong> {item.email}
+                                </p>
+                                <p className="text-gray-300">
+                                    <strong className="text-white">Contact Number:</strong>{" "}
+                                    {(item.countryCode || "") + " " + (item.contactNumber || "")}
+                                </p>
+                                {/* Reason row, highlighted green if Actioned: Yes */}
+                                <p className="text-gray-300">
+                                    <strong
+                                        className={`mr-1 ${
+                                            isActionedYes ? "text-[#31B099]" : "text-white"
+                                        }`}
+                                    >
+                                        Reason:
+                                    </strong>
+                                    <span
+                                        className={`${isActionedYes ? "text-[#31B099]" : ""}`}
+                                    >
+                                        {item.issue}
+                                    </span>
+                                </p>
+                                <p className="text-gray-300">
+                                    <strong className="text-white">Created At:</strong>{" "}
+                                    {new Date(item.createdAt).toLocaleString()}
+                                </p>
+                                {/* Actioned row, highlighted green if Actioned: Yes */}
+                                <p className="text-gray-300">
+                                    <strong
+                                        className={`mr-1 ${
+                                            isActionedYes ? "text-[#31B099]" : "text-white"
+                                        }`}
+                                    >
+                                        Actioned:
+                                    </strong>
+                                    <span
+                                        className={`${isActionedYes ? "text-[#31B099]" : ""}`}
+                                    >
+                                        {item.actioned}
+                                    </span>
+                                </p>
 
-                            {/* Textbox and Send Email Button for admin to contact user */}
-                            <div className="mt-4">
-                                <label className="text-gray-300">Message to User:</label>
-                                <textarea
-                                    className="block w-full mt-1 bg-[#1f1f1f] text-white p-2 rounded border border-gray-700 focus:outline-none focus:ring-2 focus:ring-[#31B099]"
-                                    rows={3}
-                                    value={adminMessages[item._id] || ""}
-                                    onChange={(e) =>
-                                        setAdminMessages((prev) => ({
-                                            ...prev,
-                                            [item._id]: e.target.value
-                                        }))
-                                    }
-                                />
+                                {/* Toggle Actioned Button */}
                                 <button
-                                    onClick={() => handleSendEmail(item._id, item.email)}
-                                    className="mt-2 bg-[#31B099] text-black px-3 py-2 rounded"
+                                    onClick={() => handleToggleActioned(item._id)}
+                                    className="mt-2 bg-[#31B099] text-black px-2 py-1 rounded font-semibold
+                                               hover:bg-[#28a286] transition-colors"
                                 >
-                                    Send Email
+                                    Toggle Actioned
                                 </button>
+
+                                {/* Textbox and Send Email Button for admin to contact user */}
+                                <div className="mt-4">
+                                    <label className="text-gray-300">Message to User:</label>
+                                    <textarea
+                                        className="block w-full mt-1 bg-[#1f1f1f] text-white p-2 rounded border border-gray-700 focus:outline-none focus:ring-2 focus:ring-[#31B099]"
+                                        rows={3}
+                                        value={adminMessages[item._id] || ""}
+                                        onChange={(e) =>
+                                            setAdminMessages((prev) => ({
+                                                ...prev,
+                                                [item._id]: e.target.value,
+                                            }))
+                                        }
+                                    />
+                                    <button
+                                        onClick={() => handleSendEmail(item._id, item.email)}
+                                        className="mt-2 bg-[#31B099] text-black px-3 py-2 rounded font-semibold
+                                                   hover:bg-[#28a286] transition-colors"
+                                    >
+                                        Send Email
+                                    </button>
+                                </div>
                             </div>
-                        </div>
-                    ))}
+                        );
+                    })}
                 </div>
             )}
         </div>
