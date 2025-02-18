@@ -33,7 +33,11 @@
                 audioRef.current.currentTime = 0; // Reset to the start
             }
 
-            if(userDetails.role === 'expert'){
+            // if(userDetails.role === 'expert'){
+            //     SetTotalTimeSpent(Date.now());
+            // }
+
+            if (accepted) {
                 SetTotalTimeSpent(Date.now());
             }
 

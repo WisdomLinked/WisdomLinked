@@ -259,6 +259,10 @@ const MessagesHeader = ({ scrollPosition, events, openCalendarModal, openSeminar
                             className="disabled:opacity-50"
                             disabled={(!isOnline(chosenChatDetails.userId) || !enabledEvent) && userDetails.role==="customer"}
                             onClick={() => {
+                                if (enabledEvent) {
+                                    SetTotalTimeSpent(Date.now());
+                                }
+
                                 callRequest({
                                     audioOnly: true,
                                     callerName: userDetails
@@ -285,7 +289,11 @@ const MessagesHeader = ({ scrollPosition, events, openCalendarModal, openSeminar
                                     eventId: enabledEvent?._id,
                                 });
 
-                                if(userDetails.role === 'expert' && enabledEvent){
+                                // if(userDetails.role === 'expert' && enabledEvent){
+                                //     SetTotalTimeSpent(Date.now());
+                                // }
+
+                                if (enabledEvent) {
                                     SetTotalTimeSpent(Date.now());
                                 }
 

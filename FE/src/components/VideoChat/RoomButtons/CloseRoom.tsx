@@ -12,7 +12,7 @@ import {
     sendDirectMessage, sendGroupMessage
 } from "../../../socket/socketConnection";
 import { leaveRoom } from "../../../socket/roomHandler";
-import {doUpdateExpertEvent, updateGroupChat} from "../../../api/api";
+import {doUpdateEvent, doUpdateExpertEvent, updateGroupChat} from "../../../api/api";
 
 type CallType = "DIRECT CALL" | "ROOM";
 
@@ -38,49 +38,48 @@ const CloseRoom = ({ type, eventId = null}: { type: CallType; eventId: any;}) =>
     };
 
     const calculateTotalTime = async () => {
-        if (userDetails.role === "expert" && eventId) {
-            console.log("eventId: ", eventId);
-            const timeSpent = localStorage.getItem("totalTimeSpent");
+        if (!eventId) return;
 
-            if (timeSpent) {
-                const parsedTimeSpent = parseInt(timeSpent, 10);
-                const totalTimeSpent = Date.now() - parsedTimeSpent;
-                const totalTimeSpentInMinutes = Math.floor(totalTimeSpent / 60000);
+        const timeSpent = localStorage.getItem("totalTimeSpent");
+        if (timeSpent) {
+            const parsedTimeSpent = parseInt(timeSpent, 10);
+            const totalTimeSpent = Date.now() - parsedTimeSpent;
+            const totalTimeSpentInMinutes = Math.floor(totalTimeSpent / 60000);
 
-                if (chosenChatDetails) {
-                    console.log("inside chosenChatDetails");
-                    eventId && await doUpdateExpertEvent(eventId, { totalTimeSpent: totalTimeSpentInMinutes });
-
-                    const message = `Call Lasted for: ${totalTimeSpent / 1000} seconds`;
-                    console.log("Sending direct message...");
-                    console.log("Receiver User ID:", chosenChatDetails.userId);
-                    sendDirectMessage({
-                        message,
-                        receiverUserId: chosenChatDetails.userId!,
-                    });
+            if (chosenChatDetails && type === "DIRECT CALL") {
+                if (userDetails.role === "expert") {
+                    await doUpdateExpertEvent(eventId, { totalTimeSpent: totalTimeSpentInMinutes });
+                } else {
+                    await doUpdateEvent(eventId, { totalTimeSpent: totalTimeSpentInMinutes });
                 }
 
-                if (chosenGroupChatDetails) {
-                    console.log("inside chosenGroupChatDetails");
-                    eventId && await updateGroupChat({groupId : chosenGroupChatDetails.groupId, totalTimeSpent: totalTimeSpentInMinutes });
-
-                    console.log("Sending group message...");
-                    console.log("Group Chat ID:", chosenGroupChatDetails.groupId);
-
-                    const message = `Seminar Lasted for: ${totalTimeSpent / 1000} seconds`;
-                    sendGroupMessage({
-                        message,
-                        groupChatId: chosenGroupChatDetails.groupId,
-                    });
-                }
-
-                localStorage.removeItem("totalTimeSpent");
-            } else {
-                console.error("Time spent data is missing in localStorage.");
+                const message = `Call Lasted for: ${totalTimeSpent / 1000} seconds`;
+                console.log("Sending direct message...");
+                console.log("Receiver User ID:", chosenChatDetails.userId);
+                sendDirectMessage({
+                    message,
+                    receiverUserId: chosenChatDetails.userId!,
+                });
             }
+
+            if (chosenGroupChatDetails && type === "ROOM") {
+                await updateGroupChat({groupId : chosenGroupChatDetails.groupId, totalTimeSpent: totalTimeSpentInMinutes });
+
+                console.log("Sending group message...");
+                console.log("Group Chat ID:", chosenGroupChatDetails.groupId);
+
+                const message = `Seminar Lasted for: ${totalTimeSpent / 1000} seconds`;
+                sendGroupMessage({
+                    message,
+                    groupChatId: chosenGroupChatDetails.groupId,
+                });
+            }
+
+            localStorage.removeItem("totalTimeSpent");
+        } else {
+            console.error("Time spent data is missing in localStorage.");
         }
     };
-
     const handleLeaveRoom = async () => {
         // Notify the other user that the call is being left
 

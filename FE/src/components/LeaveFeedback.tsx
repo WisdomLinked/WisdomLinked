@@ -39,6 +39,8 @@ export default function LeaveFeedback() {
             rating
         })
         if (response) {
+
+            localStorage.removeItem("totalTimeSpent");
             dispatch({
                 type: "SetFeedbackModalShow",
                 payload: null,
