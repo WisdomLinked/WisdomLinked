@@ -62,7 +62,7 @@ const CloseRoom = ({ type, eventId = null}: { type: CallType; eventId: any;}) =>
                 });
             }
 
-            if (chosenGroupChatDetails && type === "ROOM") {
+            if (chosenGroupChatDetails && type === "ROOM" && userDetails.role === "expert") {
                 await updateGroupChat({groupId : chosenGroupChatDetails.groupId, totalTimeSpent: totalTimeSpentInMinutes });
 
                 console.log("Sending group message...");
