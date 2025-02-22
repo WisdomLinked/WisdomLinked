@@ -3,10 +3,14 @@ import { useAppSelector } from "../../../store";
 import { notifyTyping, sendDirectMessage, sendGroupMessage } from "../../../socket/socketConnection";
 import ReactQuill from 'react-quill'
 import 'react-quill/dist/quill.snow.css'
+import data from '@emoji-mart/data';
+import Picker from '@emoji-mart/react';
 
 const NewMessageInput: React.FC = () => {
     const [_message, set_message] = useState("");
     const [typing, set_typing] = useState(0);
+
+    const [showEmojiPicker, setShowEmojiPicker] = useState(false);
 
     const onBlur = () => set_typing(0);
 
@@ -173,6 +177,11 @@ const NewMessageInput: React.FC = () => {
         set_prevChosenGroupChatDetails(chosenGroupChatDetails)
     }, [chosenChatDetails, chosenGroupChatDetails])
 
+    const handleEmojiSelect = (emoji: any) => {
+        set_message((prev) => prev + emoji.native);
+        setShowEmojiPicker(false);
+    };
+
     return (
         <div className="w-full p-4 pt-0 pb-12 sm:pb-4 flex items-center">
             <ReactQuill
@@ -183,6 +192,35 @@ const NewMessageInput: React.FC = () => {
                 onKeyDown={handleSendMessage}
                 onBlur={onBlur}
             />
+            {/* ADDED: Toggle button to show/hide emoji picker */}
+            <button
+                onClick={() => setShowEmojiPicker(!showEmojiPicker)}
+                className="ml-2 flex items-center justify-center"
+                style={{
+                    backgroundColor: "#f0f0f0",
+                    borderRadius: "50%",
+                    width: "40px",
+                    height: "40px",
+                    marginRight: "8px"
+                }}
+            >
+                <span role="img" aria-label="emoji-picker">
+                    😊
+                </span>
+            </button>
+
+            {showEmojiPicker && (
+                <div
+                    style={{
+                        position: "absolute",
+                        bottom: "60px",
+                        right: "60px",
+                        zIndex: 1000
+                    }}
+                >
+                    <Picker data={data} onEmojiSelect={handleEmojiSelect} />
+                </div>
+            )}
             <button
                 onClick={sendMessage}
                 className="ml-2 flex items-center justify-center"
