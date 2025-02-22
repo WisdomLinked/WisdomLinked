@@ -787,3 +787,12 @@ export const sendEmailToUser = async (email: string, message: string) => {
         return checkForAuthorization(err);
     }
 };
+
+export const sendEmailToAdmin = async (email: string, message: string) => {
+    try {
+        const res = await api.post("auth/sendEmailToAdmin", { email, message });
+        return res.data;
+    } catch (err: any) {
+        return checkForAuthorization(err);
+    }
+};

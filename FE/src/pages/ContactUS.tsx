@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom"; // Hook for navigation
 import FileBrowser from "../components/fileBrowser";
 import ShowFieldError from "../components/ShowFieldError";
 import { validateEmail } from "../actions/common";
-import {doContactUs, sendEmailToUser} from "../api/api"; // Import the new function
+import {doContactUs, sendEmailToAdmin, sendEmailToUser} from "../api/api"; // Import the new function
 import { SetLoadingStatus } from "../actions/appActions";
 
 const ContactUS = () => {
@@ -39,7 +39,7 @@ The WisdomLink.io Team
 
     const handleSendEmail = async(email: string, message: string) => {
         try{
-            const res = await sendEmailToUser(email, message);
+            const res = await sendEmailToAdmin(email, message);
             if(res && res.status ==="SUCCESS"){
                 console.log("Email sent successfully!");
             }
@@ -82,7 +82,8 @@ The WisdomLink.io Team
 
                     const finalMessage = createEmailTemplate(name, email, countryCode, contactNumber, issue)
 
-                    await handleSendEmail("xbwang@hotmail.com", finalMessage);
+                    //await handleSendEmail("xbwang@hotmail.com", finalMessage);
+                    await handleSendEmail("varunsahni286@gmail.com", finalMessage);
 
                     alert("Thank you for contacting us. Your query has been submitted successfully.");
 

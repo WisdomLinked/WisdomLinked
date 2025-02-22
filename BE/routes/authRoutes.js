@@ -19,7 +19,8 @@ const {
     updateResume,
     healthCheck,
     getTimeZone,
-    submitContactForm
+    submitContactForm,
+    sendEmailToAdmin
 
 } = require("../controllers/auth.controller");
 const { requireAuth } = require("../middlewares/requireAuth");
@@ -60,4 +61,5 @@ router.post("/getStripeMode", requireAuth(false), getStripeMode)
 router.get("/healthCheck", healthCheck)
 router.get("/getTimezone",getTimeZone)
 router.post("/contact-form", submitContactForm)
+router.post("/sendEmailToAdmin", sendEmailToAdmin)
 module.exports = router;
