@@ -5,6 +5,8 @@ const Conversation = require("../models/Conversation");
 const GroupChat = require("../models/GroupChat");
 const Keyword = require("../models/Keyword");
 const ContactedUs = require("../models/ContactedUs");
+const PendingUser = require("../models/PendingUser");
+const PendingLogin = require("../models/PendingLogin");
 const nodemailer = require("nodemailer");
 
 const { getFullUserData } = require('../middlewares/requireAuth')
@@ -442,6 +444,63 @@ const sendEmailToUser = async (req, res) => {
     }
 };
 
+const getPendingUsers = async (req, res) => {
+    try {
+        const pendingUsers = await PendingUser.find();
+        return res.status(200).json(pendingUsers);
+    } catch (err) {
+        return res.status(500).json({ message: err.message });
+    }
+};
+
+const getPendingLogins = async (req, res) => {
+    try {
+        const pendingLogins = await PendingLogin.find();
+        return res.status(200).json(pendingLogins);
+    } catch (err) {
+        return res.status(500).json({ message: err.message });
+    }
+};
+
+const deleteUser = async (req, res) => {
+    try {
+        const { userId } = req.body;
+        if (!userId) {
+            return res.status(400).json({ message: "userId is required" });
+        }
+        await User.findByIdAndDelete(userId);
+        return res.status(200).json({ message: "User deleted successfully" });
+    } catch (err) {
+        return res.status(500).json({ message: err.message });
+    }
+};
+
+const deletePendingUser = async (req, res) => {
+    try {
+        const { pendingUserId } = req.body;
+        if (!pendingUserId) {
+            return res.status(400).json({ message: "pendingUserId is required" });
+        }
+        await PendingUser.findByIdAndDelete(pendingUserId);
+        return res.status(200).json({ message: "Pending User deleted successfully" });
+    } catch (err) {
+        return res.status(500).json({ message: err.message });
+    }
+};
+
+const deletePendingLogin = async (req, res) => {
+    try {
+        const { pendingLoginId } = req.body;
+        if (!pendingLoginId) {
+            return res.status(400).json({ message: "pendingLoginId is required" });
+        }
+        await PendingLogin.findByIdAndDelete(pendingLoginId);
+        return res.status(200).json({ message: "Pending Login deleted successfully" });
+    } catch (err) {
+        return res.status(500).json({ message: err.message });
+    }
+};
+
 module.exports = {
     filterUsers,
     getFullUserDataByEmail,
@@ -452,5 +511,10 @@ module.exports = {
     getUserFeedbacks,
     getContactedUs,
     toggleActionedStatus,
-    sendEmailToUser
+    sendEmailToUser,
+    getPendingUsers,
+    getPendingLogins,
+    deleteUser,
+    deletePendingUser,
+    deletePendingLogin
 }
