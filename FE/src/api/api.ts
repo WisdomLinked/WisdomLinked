@@ -879,12 +879,3 @@ export const doActivatePendingUserById = async (pendingUserId: string) => {
     }
 };
 
-
-export const doDeleteUserById = async (userId: string) => {
-    try {
-        const res = await api.post("admin/deleteUser", { userId });
-        return res.data;
-    } catch (err: any) {
-        return checkForAuthorization(err);
-    }
-};
