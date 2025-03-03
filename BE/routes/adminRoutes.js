@@ -18,9 +18,10 @@ const {
     sendEmailToUser,
     getPendingLogins,
     getPendingUsers,
-    deleteUser,
     deletePendingLogin,
     deletePendingUser,
+    convertPendingUserToUserByAdmin,
+    deleteUser
 } = require("../controllers/admin.controller");
 
 const {
@@ -43,10 +44,11 @@ router.post("/getUserFeedbacks", adminAuth, getUserFeedbacks);
 router.post("/getContactedUs", adminAuth, getContactedUs);
 router.post("/toggleActionedStatus", adminAuth, toggleActionedStatus);
 router.post("/sendEmailToUser", adminAuth, sendEmailToUser);
-router.post("/getPendingUsers", adminAuth, getPendingUsers);
-router.post("/getPendingLogins", adminAuth, getPendingLogins);
-router.post("/deleteUser", adminAuth, deleteUser);
+router.get("/getPendingUsers", adminAuth, getPendingUsers);
+router.get("/getPendingLogins", adminAuth, getPendingLogins);
 router.post("/deletePendingUser", adminAuth, deletePendingUser);
-router.post("/deletePendingLogins", adminAuth, deletePendingLogin);
+router.post("/deletePendingLogin", adminAuth, deletePendingLogin);
+router.post("/convertPendingUserToUserByAdmin", adminAuth, convertPendingUserToUserByAdmin);
+router.post("/deleteUser", adminAuth, deleteUser);
 
 module.exports = router;

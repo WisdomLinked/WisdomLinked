@@ -443,6 +443,50 @@ const sendEmailToUser = async (req, res) => {
         });
     }
 };
+//
+// const getPendingUsers = async (req, res) => {
+//     try {
+//         const pendingUsers = await PendingUser.find();
+//         return res.status(200).json(pendingUsers);
+//     } catch (err) {
+//         return res.status(500).json({ message: err.message });
+//     }
+// };
+//
+// const getPendingLogins = async (req, res) => {
+//     try {
+//         const pendingLogins = await PendingLogin.find();
+//         return res.status(200).json(pendingLogins);
+//     } catch (err) {
+//         return res.status(500).json({ message: err.message });
+//     }
+// };
+//
+// const deletePendingUser = async (req, res) => {
+//     try {
+//         const { pendingUserId } = req.body;
+//         if (!pendingUserId) {
+//             return res.status(400).json({ message: "pendingUserId is required" });
+//         }
+//         await PendingUser.findByIdAndDelete(pendingUserId);
+//         return res.status(200).json({ message: "Pending User deleted successfully" });
+//     } catch (err) {
+//         return res.status(500).json({ message: err.message });
+//     }
+// };
+//
+// const deletePendingLogin = async (req, res) => {
+//     try {
+//         const { pendingLoginId } = req.body;
+//         if (!pendingLoginId) {
+//             return res.status(400).json({ message: "pendingLoginId is required" });
+//         }
+//         await PendingLogin.findByIdAndDelete(pendingLoginId);
+//         return res.status(200).json({ message: "Pending Login deleted successfully" });
+//     } catch (err) {
+//         return res.status(500).json({ message: err.message });
+//     }
+// };
 
 const getPendingUsers = async (req, res) => {
     try {
@@ -453,6 +497,10 @@ const getPendingUsers = async (req, res) => {
     }
 };
 
+/*
+  Function: getPendingLogins
+  Description: Fetch all PendingLogin records from the database
+*/
 const getPendingLogins = async (req, res) => {
     try {
         const pendingLogins = await PendingLogin.find();
@@ -462,19 +510,10 @@ const getPendingLogins = async (req, res) => {
     }
 };
 
-const deleteUser = async (req, res) => {
-    try {
-        const { userId } = req.body;
-        if (!userId) {
-            return res.status(400).json({ message: "userId is required" });
-        }
-        await User.findByIdAndDelete(userId);
-        return res.status(200).json({ message: "User deleted successfully" });
-    } catch (err) {
-        return res.status(500).json({ message: err.message });
-    }
-};
-
+/*
+  Function: deletePendingUser
+  Description: Delete a PendingUser by ID
+*/
 const deletePendingUser = async (req, res) => {
     try {
         const { pendingUserId } = req.body;
@@ -488,6 +527,10 @@ const deletePendingUser = async (req, res) => {
     }
 };
 
+/*
+  Function: deletePendingLogin
+  Description: Delete a PendingLogin by ID
+*/
 const deletePendingLogin = async (req, res) => {
     try {
         const { pendingLoginId } = req.body;
@@ -501,6 +544,66 @@ const deletePendingLogin = async (req, res) => {
     }
 };
 
+/*
+  Function: convertPendingUserToUserByAdmin
+  Description: Convert a PendingUser into a regular User without sending any email/OTP
+*/
+const convertPendingUserToUserByAdmin = async (req, res) => {
+    try {
+        const { pendingUserId } = req.body;
+        if (!pendingUserId) {
+            return res.status(400).json({ message: "pendingUserId is required" });
+        }
+
+        // Find the pending user
+        const pendingUser = await PendingUser.findById(pendingUserId);
+        if (!pendingUser) {
+            return res.status(404).json({ message: "Pending User not found" });
+        }
+
+        // Create a new user with the pending user's info
+        const newUser = new User({
+            username: pendingUser.username,
+            title: pendingUser.title,
+            description: pendingUser.description,
+            services: pendingUser.services,
+            keywords: pendingUser.keywords,
+            country: pendingUser.country,
+            state: pendingUser.state,
+            city: pendingUser.city,
+            phoneNumber: pendingUser.phoneNumber,
+            email: pendingUser.email.toLowerCase(),
+            password: pendingUser.password,  // already encrypted if stored as such
+            resume: pendingUser.resume,
+            role: pendingUser.role,
+            timeSlots: pendingUser.timeSlots,
+            price: pendingUser.price,
+            status: "active" // or set it to whatever status you prefer
+        });
+
+        // Save the newly created user
+        await newUser.save();
+
+        // Remove the pending user record
+        await PendingUser.findByIdAndDelete(pendingUserId);
+
+        return res.status(200).json({ message: "Pending User converted to a regular User successfully" });
+    } catch (err) {
+        return res.status(500).json({ message: err.message });
+    }
+};
+const deleteUser = async (req, res) => {
+    try {
+        const { userId } = req.body;
+        if (!userId) {
+            return res.status(400).json({ message: "userId is required" });
+        }
+        await User.findByIdAndDelete(userId);
+        return res.status(200).json({ message: "User deleted successfully" });
+    } catch (err) {
+        return res.status(500).json({ message: err.message });
+    }
+};
 module.exports = {
     filterUsers,
     getFullUserDataByEmail,
@@ -514,7 +617,8 @@ module.exports = {
     sendEmailToUser,
     getPendingUsers,
     getPendingLogins,
-    deleteUser,
     deletePendingUser,
-    deletePendingLogin
+    deletePendingLogin,
+    convertPendingUserToUserByAdmin,
+    deleteUser
 }

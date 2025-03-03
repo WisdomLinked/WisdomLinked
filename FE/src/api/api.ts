@@ -796,10 +796,46 @@ export const sendEmailToAdmin = async (email: string, message: string) => {
         return checkForAuthorization(err);
     }
 };
+//
+// export const doGetPendingUsers = async () => {
+//     try {
+//         const res = await api.get("admin/getPendingUsers");
+//         return res.data;
+//     } catch (err: any) {
+//         return checkForAuthorization(err);
+//     }
+// };
+//
+// export const doGetPendingLogins = async () => {
+//     try {
+//         const res = await api.get("admin/getPendingLogins");
+//         return res.data;
+//     } catch (err: any) {
+//         return checkForAuthorization(err);
+//     }
+// };
+//
+// export const doDeletePendingUserById = async (pendingUserId: string) => {
+//     try {
+//         const res = await api.post("admin/deletePendingUser", { pendingUserId });
+//         return res.data;
+//     } catch (err: any) {
+//         return checkForAuthorization(err);
+//     }
+// };
+//
+// export const doDeletePendingLoginById = async (pendingLoginId: string) => {
+//     try {
+//         const res = await api.post("admin/deletePendingLogin", { pendingLoginId });
+//         return res.data;
+//     } catch (err: any) {
+//         return checkForAuthorization(err);
+//     }
+// };
 
 export const doGetPendingUsers = async () => {
     try {
-        const res = await api.post("admin/getPendingUsers", {});
+        const res = await api.get("admin/getPendingUsers");
         return res.data;
     } catch (err: any) {
         return checkForAuthorization(err);
@@ -808,16 +844,7 @@ export const doGetPendingUsers = async () => {
 
 export const doGetPendingLogins = async () => {
     try {
-        const res = await api.post("admin/getPendingLogins", {});
-        return res.data;
-    } catch (err: any) {
-        return checkForAuthorization(err);
-    }
-};
-
-export const doDeleteUserById = async (userId: string) => {
-    try {
-        const res = await api.post("admin/deleteUser", { userId });
+        const res = await api.get("admin/getPendingLogins");
         return res.data;
     } catch (err: any) {
         return checkForAuthorization(err);
@@ -836,6 +863,26 @@ export const doDeletePendingUserById = async (pendingUserId: string) => {
 export const doDeletePendingLoginById = async (pendingLoginId: string) => {
     try {
         const res = await api.post("admin/deletePendingLogin", { pendingLoginId });
+        return res.data;
+    } catch (err: any) {
+        return checkForAuthorization(err);
+    }
+};
+
+// New API call to convert a pending user to a regular user by admin
+export const doActivatePendingUserById = async (pendingUserId: string) => {
+    try {
+        const res = await api.post("admin/convertPendingUserToUserByAdmin", { pendingUserId });
+        return res.data;
+    } catch (err: any) {
+        return checkForAuthorization(err);
+    }
+};
+
+
+export const doDeleteUserById = async (userId: string) => {
+    try {
+        const res = await api.post("admin/deleteUser", { userId });
         return res.data;
     } catch (err: any) {
         return checkForAuthorization(err);
