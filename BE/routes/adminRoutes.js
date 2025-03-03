@@ -21,7 +21,6 @@ const {
     deletePendingLogin,
     deletePendingUser,
     convertPendingUserToUserByAdmin,
-    deleteUser
 } = require("../controllers/admin.controller");
 
 const {
@@ -49,6 +48,5 @@ router.get("/getPendingLogins", adminAuth, getPendingLogins);
 router.post("/deletePendingUser", adminAuth, deletePendingUser);
 router.post("/deletePendingLogin", adminAuth, deletePendingLogin);
 router.post("/convertPendingUserToUserByAdmin", adminAuth, convertPendingUserToUserByAdmin);
-router.post("/deleteUser", adminAuth, deleteUser);
 
 module.exports = router;
