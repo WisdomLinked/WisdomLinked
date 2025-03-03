@@ -174,7 +174,7 @@ const updateProfileOfUser = async (req, res) => {
         if (joinPopupBlocked) {
             updates.joinPopupBlocked = joinPopupBlocked
         }
-        // [User Model] -- add more updating fields based on the user model
+
         await User.findOneAndUpdate({ email: email }, updates, { new: true })
         const result = await getFullUserData(email)
         result.password = null
@@ -277,9 +277,9 @@ const getUserFeedbacks = async (req, res) => {
         if (!user) {
             return res.status(404).send("User not found");
         }
-        // feedbacks array
+
         const feedbacks = user.feedbacks || [];
-        // Enrich each feedback with other user info
+
         const enriched = [];
         for (let i = 0; i < feedbacks.length; i++) {
             const feedback = feedbacks[i];
@@ -325,17 +325,14 @@ const getContactedUs = async (req, res) => {
 
         let query = ContactedUs.find({});
 
-        // Name Filter (case-insensitive)
         if (name) {
             query = query.where("name", new RegExp(name, "i"));
         }
 
-        // Email Filter (case-insensitive)
         if (email) {
             query = query.where("email", new RegExp(email, "i"));
         }
 
-        // Date Range Filter (INCLUSIVE)
         if (dateFrom && dateTo) {
             const fromDate = new Date(dateFrom);
             fromDate.setUTCHours(0, 0, 0, 0); // Start of the day
@@ -349,7 +346,6 @@ const getContactedUs = async (req, res) => {
             query = query.where("actioned", actioned);
         }
 
-        // Sorting with Case-Insensitive Collation
         query = query.collation({ locale: "en", strength: 2 });
 
         if (sortBy) {
@@ -357,7 +353,6 @@ const getContactedUs = async (req, res) => {
             query = query.sort({ [sortBy]: order });
         }
 
-        // Execute Query
         const results = await query.exec();
 
         return res.status(200).json({
@@ -379,7 +374,6 @@ const toggleActionedStatus = async (req, res) => {
             return res.status(404).json({ message: "Record not found" });
         }
 
-        // If actioned is "Yes", switch to "No". Otherwise switch to "Yes".
         contactEntry.actioned = contactEntry.actioned === "Yes" ? "No" : "Yes";
         await contactEntry.save();
 
@@ -399,7 +393,6 @@ const sendEmailToUser = async (req, res) => {
     try {
         const { email, message } = req.body;
 
-        // Basic validation
         if (!email || !message) {
             return res.status(400).json({
                 status: "FAILED",
@@ -408,9 +401,9 @@ const sendEmailToUser = async (req, res) => {
         }
 
         let transporter = nodemailer.createTransport({
-            host: "smtp.gmail.com",      // same as Python's smtp.gmail.com
-            port: 587,                   // TLS port
-            secure: false,               // use TLS rather than SSL
+            host: "smtp.gmail.com",
+            port: 587,
+            secure: false,
             auth: {
                 user: process.env.GOOGLE_EMAIL,
                 pass: process.env.GOOGLE_PASSWORD
@@ -443,50 +436,6 @@ const sendEmailToUser = async (req, res) => {
         });
     }
 };
-//
-// const getPendingUsers = async (req, res) => {
-//     try {
-//         const pendingUsers = await PendingUser.find();
-//         return res.status(200).json(pendingUsers);
-//     } catch (err) {
-//         return res.status(500).json({ message: err.message });
-//     }
-// };
-//
-// const getPendingLogins = async (req, res) => {
-//     try {
-//         const pendingLogins = await PendingLogin.find();
-//         return res.status(200).json(pendingLogins);
-//     } catch (err) {
-//         return res.status(500).json({ message: err.message });
-//     }
-// };
-//
-// const deletePendingUser = async (req, res) => {
-//     try {
-//         const { pendingUserId } = req.body;
-//         if (!pendingUserId) {
-//             return res.status(400).json({ message: "pendingUserId is required" });
-//         }
-//         await PendingUser.findByIdAndDelete(pendingUserId);
-//         return res.status(200).json({ message: "Pending User deleted successfully" });
-//     } catch (err) {
-//         return res.status(500).json({ message: err.message });
-//     }
-// };
-//
-// const deletePendingLogin = async (req, res) => {
-//     try {
-//         const { pendingLoginId } = req.body;
-//         if (!pendingLoginId) {
-//             return res.status(400).json({ message: "pendingLoginId is required" });
-//         }
-//         await PendingLogin.findByIdAndDelete(pendingLoginId);
-//         return res.status(200).json({ message: "Pending Login deleted successfully" });
-//     } catch (err) {
-//         return res.status(500).json({ message: err.message });
-//     }
-// };
 
 const getPendingUsers = async (req, res) => {
     try {
@@ -497,10 +446,6 @@ const getPendingUsers = async (req, res) => {
     }
 };
 
-/*
-  Function: getPendingLogins
-  Description: Fetch all PendingLogin records from the database
-*/
 const getPendingLogins = async (req, res) => {
     try {
         const pendingLogins = await PendingLogin.find();
@@ -510,10 +455,6 @@ const getPendingLogins = async (req, res) => {
     }
 };
 
-/*
-  Function: deletePendingUser
-  Description: Delete a PendingUser by ID
-*/
 const deletePendingUser = async (req, res) => {
     try {
         const { pendingUserId } = req.body;
@@ -527,10 +468,6 @@ const deletePendingUser = async (req, res) => {
     }
 };
 
-/*
-  Function: deletePendingLogin
-  Description: Delete a PendingLogin by ID
-*/
 const deletePendingLogin = async (req, res) => {
     try {
         const { pendingLoginId } = req.body;
@@ -544,10 +481,6 @@ const deletePendingLogin = async (req, res) => {
     }
 };
 
-/*
-  Function: convertPendingUserToUserByAdmin
-  Description: Convert a PendingUser into a regular User without sending any email/OTP
-*/
 const convertPendingUserToUserByAdmin = async (req, res) => {
     try {
         const { pendingUserId } = req.body;
@@ -555,13 +488,11 @@ const convertPendingUserToUserByAdmin = async (req, res) => {
             return res.status(400).json({ message: "pendingUserId is required" });
         }
 
-        // Find the pending user
         const pendingUser = await PendingUser.findById(pendingUserId);
         if (!pendingUser) {
             return res.status(404).json({ message: "Pending User not found" });
         }
 
-        // Create a new user with the pending user's info
         const newUser = new User({
             username: pendingUser.username,
             title: pendingUser.title,
@@ -573,18 +504,16 @@ const convertPendingUserToUserByAdmin = async (req, res) => {
             city: pendingUser.city,
             phoneNumber: pendingUser.phoneNumber,
             email: pendingUser.email.toLowerCase(),
-            password: pendingUser.password,  // already encrypted if stored as such
+            password: pendingUser.password,
             resume: pendingUser.resume,
             role: pendingUser.role,
             timeSlots: pendingUser.timeSlots,
             price: pendingUser.price,
-            status: "active" // or set it to whatever status you prefer
+            status: "active"
         });
 
-        // Save the newly created user
         await newUser.save();
 
-        // Remove the pending user record
         await PendingUser.findByIdAndDelete(pendingUserId);
 
         return res.status(200).json({ message: "Pending User converted to a regular User successfully" });
@@ -592,18 +521,7 @@ const convertPendingUserToUserByAdmin = async (req, res) => {
         return res.status(500).json({ message: err.message });
     }
 };
-const deleteUser = async (req, res) => {
-    try {
-        const { userId } = req.body;
-        if (!userId) {
-            return res.status(400).json({ message: "userId is required" });
-        }
-        await User.findByIdAndDelete(userId);
-        return res.status(200).json({ message: "User deleted successfully" });
-    } catch (err) {
-        return res.status(500).json({ message: err.message });
-    }
-};
+
 module.exports = {
     filterUsers,
     getFullUserDataByEmail,
@@ -620,5 +538,4 @@ module.exports = {
     deletePendingUser,
     deletePendingLogin,
     convertPendingUserToUserByAdmin,
-    deleteUser
 }

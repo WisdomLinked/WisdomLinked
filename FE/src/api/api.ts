@@ -796,42 +796,6 @@ export const sendEmailToAdmin = async (email: string, message: string) => {
         return checkForAuthorization(err);
     }
 };
-//
-// export const doGetPendingUsers = async () => {
-//     try {
-//         const res = await api.get("admin/getPendingUsers");
-//         return res.data;
-//     } catch (err: any) {
-//         return checkForAuthorization(err);
-//     }
-// };
-//
-// export const doGetPendingLogins = async () => {
-//     try {
-//         const res = await api.get("admin/getPendingLogins");
-//         return res.data;
-//     } catch (err: any) {
-//         return checkForAuthorization(err);
-//     }
-// };
-//
-// export const doDeletePendingUserById = async (pendingUserId: string) => {
-//     try {
-//         const res = await api.post("admin/deletePendingUser", { pendingUserId });
-//         return res.data;
-//     } catch (err: any) {
-//         return checkForAuthorization(err);
-//     }
-// };
-//
-// export const doDeletePendingLoginById = async (pendingLoginId: string) => {
-//     try {
-//         const res = await api.post("admin/deletePendingLogin", { pendingLoginId });
-//         return res.data;
-//     } catch (err: any) {
-//         return checkForAuthorization(err);
-//     }
-// };
 
 export const doGetPendingUsers = async () => {
     try {
@@ -869,7 +833,6 @@ export const doDeletePendingLoginById = async (pendingLoginId: string) => {
     }
 };
 
-// New API call to convert a pending user to a regular user by admin
 export const doActivatePendingUserById = async (pendingUserId: string) => {
     try {
         const res = await api.post("admin/convertPendingUserToUserByAdmin", { pendingUserId });

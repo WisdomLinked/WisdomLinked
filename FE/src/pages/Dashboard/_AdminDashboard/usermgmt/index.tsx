@@ -39,35 +39,26 @@ const UserMgmt = () => {
         { value: "DESC", label: "DESC" }
     ];
 
-    // Which data type we are managing
     const [dataType, set_dataType] = useState<any>(dataTypeOptions[0]);
 
-    // State for "User"
     const [users, set_users] = useState<any[]>([]);
     const [numPerPage, set_numPerPage] = useState<number>(5);
     const [currentPage, set_currentPage] = useState<number>(0);
     const [totalCount, set_totalCount] = useState<number>(0);
     const [totalPage, set_totalPage] = useState<number>(0);
 
-    // Filter fields for "User"
     const [sortBy, set_sortBy] = useState<any>(sorts[0]);
     const [role, set_role] = useState<any>(roles[0]);
     const [email, set_email] = useState<string>("");
     const [username, set_username] = useState<string>("");
 
-    // States for "PendingUser" and "PendingLogin"
     const [pendingUsers, set_pendingUsers] = useState<any[]>([]);
     const [pendingLogins, set_pendingLogins] = useState<any[]>([]);
 
-    // Misc
     const [selectedUser, set_selectedUser] = useState<any>(null);
     const [manageModalShow, set_manageModalShow] = useState<boolean>(false);
     const [auditModalShow, set_auditModalShow] = useState<boolean>(false);
     const [isFirstLoad, set_isFirstLoad] = useState<boolean>(true);
-
-    // -----------------------------------------------------------------
-    // Fetch / Filter Functions
-    // -----------------------------------------------------------------
 
     const filterUsers = async (pageNum: number) => {
         try {
@@ -108,7 +99,6 @@ const UserMgmt = () => {
         }
     };
 
-    // Convert user images to base64 if they exist
     const updateUsersWithImages = async (usersList: any[]) => {
         try {
             const updated = await Promise.all(
@@ -132,7 +122,6 @@ const UserMgmt = () => {
         }
     };
 
-    // Fetch "PendingUsers" -> Always set as array
     const fetchPendingUsers = async () => {
         try {
             SetLoadingStatus(true);
@@ -147,7 +136,6 @@ const UserMgmt = () => {
         }
     };
 
-    // Fetch "PendingLogins" -> Always set as array
     const fetchPendingLogins = async () => {
         try {
             SetLoadingStatus(true);
@@ -162,11 +150,6 @@ const UserMgmt = () => {
         }
     };
 
-    // -----------------------------------------------------------------
-    // Delete / Activate
-    // -----------------------------------------------------------------
-
-    // PendingUser
     const handleDeletePendingUser = async (pendingUserId: string) => {
         try {
             SetLoadingStatus(true);
@@ -190,7 +173,6 @@ const UserMgmt = () => {
         }
     };
 
-    // PendingLogin
     const handleDeletePendingLogin = async (pendingLoginId: string) => {
         try {
             SetLoadingStatus(true);
@@ -203,7 +185,6 @@ const UserMgmt = () => {
         }
     };
 
-    // Update an existing user
     const updateProfile = async (updates: any) => {
         try {
             SetLoadingStatus(true);
@@ -226,15 +207,10 @@ const UserMgmt = () => {
         }
     };
 
-    // -----------------------------------------------------------------
-    // Manage DataType
-    // -----------------------------------------------------------------
-
     const handleDataTypeChange = (selected: any) => {
         set_dataType(selected);
     };
 
-    // Load data whenever dataType changes
     useEffect(() => {
         if (dataType.value === "User") {
             filterUsers(0);
@@ -243,26 +219,20 @@ const UserMgmt = () => {
         } else if (dataType.value === "PendingLogin") {
             fetchPendingLogins();
         }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [dataType]);
 
-    // If user changes number of rows (only relevant for "User")
     useEffect(() => {
         if (!isFirstLoad && dataType.value === "User") {
             filterUsers(0);
         }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [numPerPage]);
 
-    // Page change for "User"
     useEffect(() => {
         if (!isFirstLoad && dataType.value === "User") {
             filterUsers(currentPage);
         }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [currentPage]);
 
-    // Filters (email, username, role, sortBy) for "User"
     useEffect(() => {
         if (!isFirstLoad && dataType.value === "User") {
             const timer = setTimeout(() => {
@@ -270,12 +240,9 @@ const UserMgmt = () => {
             }, 500);
             return () => clearTimeout(timer);
         }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [sortBy, role, email, username]);
 
-    // -----------------------------------------------------------------
-    // Modal Handlers
-    // -----------------------------------------------------------------
+
     const openManageModal = (u: any) => {
         set_manageModalShow(true);
         set_selectedUser(u);
@@ -294,16 +261,12 @@ const UserMgmt = () => {
         set_selectedUser(null);
     };
 
-    // -----------------------------------------------------------------
-    // Render
-    // -----------------------------------------------------------------
     return (
         <div className="relative w-full h-full">
             <div className={`w-full h-full py-10 px-5 ${manageModalShow || auditModalShow ? "overflow-hidden" : "overflow-y-auto"}`}>
                 <div className="w-full max-w-[1400px] mx-auto text-white">
                     <div className="text-center text-2xl">User Management</div>
 
-                    {/* Dropdown to choose what we manage: User / PendingUser / PendingLogin */}
                     <div className="w-full my-4">
                         <div className="text-grey mb-0.5 text-[12px] leading-[19px]">Manage:</div>
                         <SelectionWithCheckBox
@@ -315,7 +278,6 @@ const UserMgmt = () => {
                         />
                     </div>
 
-                    {/* Filters only for "User" */}
                     {dataType.value === "User" && (
                         <div className="w-full py-1">
                             <div className="flex justify-between mt-4">
@@ -365,7 +327,6 @@ const UserMgmt = () => {
 
                     <div className="w-full rounded-[16px] mt-4 bg-midgrey shadow-md">
 
-                        {/* Pagination header only for "User" */}
                         {dataType.value === "User" && (
                             <div className="w-full flex flex-col sm:flex-row sm:justify-between sm:items-center p-4 gap-4">
                                 <div>Total of {totalCount} Users</div>
@@ -380,7 +341,6 @@ const UserMgmt = () => {
                             </div>
                         )}
 
-                        {/* 1) USERS TABLE */}
                         {dataType.value === "User" && (
                             <div className="relative overflow-x-auto w-full px-4">
                                 <table className="w-full text-sm text-left">
@@ -481,7 +441,6 @@ const UserMgmt = () => {
                             </div>
                         )}
 
-                        {/* 2) PENDING USERS TABLE */}
                         {dataType.value === "PendingUser" && (
                             <div className="relative overflow-x-auto w-full px-4">
                                 <table className="w-full text-sm text-left">
@@ -524,7 +483,6 @@ const UserMgmt = () => {
                             </div>
                         )}
 
-                        {/* 3) PENDING LOGIN TABLE */}
                         {dataType.value === "PendingLogin" && (
                             <div className="relative overflow-x-auto w-full px-4">
                                 <table className="w-full text-sm text-left">
@@ -559,7 +517,6 @@ const UserMgmt = () => {
                             </div>
                         )}
 
-                        {/* Pagination footer only for "User" */}
                         {dataType.value === "User" && (
                             <div className="w-full flex flex-col sm:flex-row sm:justify-between sm:items-center p-4 gap-4">
                                 <div className="flex gap-6">
@@ -589,7 +546,6 @@ const UserMgmt = () => {
                 </div>
             </div>
 
-            {/* ManageModal */}
             {manageModalShow && (
                 <ManageModal
                     selectedUser={selectedUser}
@@ -597,7 +553,6 @@ const UserMgmt = () => {
                     closeModal={closeManageModal}
                 />
             )}
-            {/* AuditModal */}
             {auditModalShow && (
                 <AuditModal
                     selectedUser={selectedUser}
