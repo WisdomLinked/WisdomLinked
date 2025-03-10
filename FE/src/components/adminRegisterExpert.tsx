@@ -1,0 +1,327 @@
+import React, { useEffect, useState } from "react";
+import { useDispatch } from "react-redux";
+import {
+    checkTitleNameInvalid,
+    validateEmail,
+    makeAnOffsetToAvailableTimeSlots
+} from "../actions/common";
+
+import ShowFieldError from "./ShowFieldError";
+import MultiSelectionWithInputTag from "./MultiSelectionWithInputTag";
+import SelectionWithCheckBox from "./SelectionWithCheckBox";
+import CountrySelect from "./CountrySelection";
+import FileBrowser from "./fileBrowser";
+import PhoneInput from "react-phone-input-2";
+
+import { doGetKeywordsAndServices, registerUserByAdmin } from "../api/api";
+import { SetLoadingStatus } from "../actions/appActions";
+import { showAlert } from "../actions/alertActions";
+import { useAppSelector } from "../store";
+
+function AdminRegisterExpert() {
+    const dispatch = useDispatch();
+    const { userDetails } = useAppSelector((state) => state.auth);
+
+    const [keywords, set_keywords] = useState<any[]>([]);
+    const [services, set_services] = useState<any[]>([]);
+    const [name, set_name] = useState("");
+    const [title, set_title] = useState("");
+    const [description, set_description] = useState("");
+    const [selectedKeywords, set_selectedKeywords] = useState<Array<any>>([]);
+    const [selectedServices, set_selectedServices] = useState<Array<any>>([]);
+
+    const [country, set_country] = useState<any>();
+    const [state, set_state] = useState<any>();
+    const [city, set_city] = useState<any>();
+    const [stateAvailable, set_stateAvailable] = useState(false);
+    const [cityAvailable, set_cityAvailable] = useState(false);
+
+    const [phoneNumber, set_phoneNumber] = useState<any>("");
+    const [email, set_email] = useState("");
+    const [isValidEmail, set_isValidEmail] = useState(false);
+
+    const [file, set_file] = useState("");
+    const [fileError, set_fileError] = useState("");
+
+    const [pwd, set_pwd] = useState("");
+    const [confirmPwd, set_confirmPwd] = useState("");
+    const [isValidConfirmPwd, set_isValidConfirmPwd] = useState(false);
+
+    const [showError, set_showError] = useState(false);
+    const [enableToRegister, set_enableToRegister] = useState(false);
+
+    useEffect(() => {
+        set_description("This is an Expert Account created by the Admin");
+    }, []);
+
+    const handleRegisterAsExpert = async () => {
+        if (!enableToRegister) {
+            set_showError(true);
+            return;
+        }
+        SetLoadingStatus(true);
+
+        let slots = [16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35];
+        const timezoneOffset = - new Date().getTimezoneOffset() / 30;
+        slots = makeAnOffsetToAvailableTimeSlots(slots, -timezoneOffset);
+
+        const data: any = {
+            role: "expert",
+            username: name,
+            title,
+            description,
+            keywords: selectedKeywords,
+            services: selectedServices.map((x: any) => x._id),
+            country,
+            state,
+            city,
+            phoneNumber,
+            email,
+            password: pwd,
+            timeSlots: slots
+        };
+
+        const response = await registerUserByAdmin(data);
+        if (response && response.status === "SUCCESS") {
+            dispatch(showAlert("Expert has been Registered Successfully!"));
+        } else {
+            dispatch(showAlert(response?.error || "Failed to create user."));
+        }
+        SetLoadingStatus(false);
+    };
+
+    const getKeywordsAndServices = async () => {
+        const response: any = await doGetKeywordsAndServices();
+        if (response) {
+            set_keywords(response.keywords || []);
+            set_services(response.services || []);
+        }
+    };
+
+    useEffect(() => {
+        set_isValidEmail(!email ? true : validateEmail(email) ? true : false);
+    }, [email]);
+
+    useEffect(() => {
+        set_isValidConfirmPwd(!pwd && !confirmPwd ? true : pwd === confirmPwd);
+    }, [pwd, confirmPwd]);
+
+    useEffect(() => {
+        if (country) {
+            set_phoneNumber(country.phonecode);
+        } else {
+            set_phoneNumber("");
+        }
+    }, [country]);
+
+    useEffect(() => {
+        const canRegister =
+            name.length >= 3 &&
+            !checkTitleNameInvalid("Username", name) &&
+            title.length > 0 &&
+            description.length > 20 &&
+            description.length <= 100 &&
+            selectedKeywords.length > 0 &&
+            selectedServices.length > 0 &&
+            country &&
+            (!stateAvailable || (stateAvailable && state)) &&
+            (!cityAvailable || (cityAvailable && city)) &&
+            phoneNumber.length >= 8 &&
+            isValidEmail &&
+            pwd.length >= 6 &&
+            isValidConfirmPwd &&
+            (!fileError && file);
+
+        if (canRegister) {
+            set_enableToRegister(true);
+            set_showError(false);
+        } else {
+            set_enableToRegister(false);
+        }
+    }, [
+        name, title, description, selectedKeywords, selectedServices,
+        country, state, stateAvailable, city, cityAvailable,
+        phoneNumber, isValidEmail, pwd, isValidConfirmPwd,
+        file, fileError
+    ]);
+
+    useEffect(() => {
+        getKeywordsAndServices();
+    }, []);
+
+    return (
+        <div className="bg-[#181818] text-white p-6 rounded-lg shadow-lg w-[500px]">
+            <h3 className="text-xl font-bold text-[#31B099] mb-4">
+                Register Expert (By Admin)
+            </h3>
+
+            <div className="mb-2 text-sm text-gray-200">Full name *</div>
+            <input
+                className="w-full mb-1 p-2 rounded bg-[#2e2e2e] text-white
+                   border border-gray-700 focus:outline-none"
+                placeholder="Input your name"
+                value={name}
+                onChange={(e) => set_name(e.target.value)}
+            />
+            <ShowFieldError
+                show={!(name.length >= 3 && !checkTitleNameInvalid("Username", name)) && showError}
+                label={
+                    checkTitleNameInvalid("Username", name)
+                        ? checkTitleNameInvalid("Username", name)
+                        : "Name must be longer than 3 characters."
+                }
+            />
+
+            <div className="mb-2 text-sm text-gray-200 mt-4">Title *</div>
+            <input
+                className="w-full mb-1 p-2 rounded bg-[#2e2e2e] text-white
+                   border border-gray-700 focus:outline-none"
+                placeholder="Input your title"
+                value={title}
+                onChange={(e) => set_title(e.target.value)}
+            />
+            <ShowFieldError
+                show={!title.length && showError}
+                label="Title is required."
+            />
+
+            <div className="mb-2 text-sm text-gray-200 mt-4">Short bio *</div>
+            <textarea
+                className="w-full mb-1 p-2 rounded bg-[#2e2e2e] text-white
+                   border border-gray-700 focus:outline-none"
+                rows={3}
+                value={description}
+                onChange={(e) => set_description(e.target.value)}
+            />
+            <ShowFieldError
+                show={!(description.length > 20 && description.length <= 100) && showError}
+                label="Bio should include 20 ~ 100 characters."
+            />
+
+            <div className="mb-2 text-sm text-gray-200 mt-4">Majors *</div>
+            <MultiSelectionWithInputTag
+                options={keywords}
+                selectedOptions={selectedKeywords}
+                set_selectedOptions={set_selectedKeywords}
+                placeholder="Input or select majors"
+            />
+            <ShowFieldError
+                show={selectedKeywords.length < 3 && showError}
+                label="Add at least 3 keywords"
+            />
+
+            <div className="mb-2 text-sm text-gray-200 mt-4">Services *</div>
+            <SelectionWithCheckBox
+                options={services}
+                set_selectedOptions={set_selectedServices}
+                placeholder="Select services"
+                isMulti={true}
+            />
+            <ShowFieldError
+                show={selectedServices.length < 1 && showError}
+                label="Select at least 1 service"
+            />
+
+            <CountrySelect
+                selectedCountry={country}
+                set_selectedCountry={set_country}
+                selectedState={state}
+                set_selectedState={set_state}
+                selectedCity={city}
+                set_selectedCity={set_city}
+                stateAvailable={stateAvailable}
+                set_stateAvailable={set_stateAvailable}
+                cityAvailable={cityAvailable}
+                set_cityAvailable={set_cityAvailable}
+                showError={showError}
+            />
+
+            <div className="mb-2 text-sm text-gray-200 mt-4">Phone number *</div>
+            <PhoneInput
+                placeholder="Enter phone number"
+                value={phoneNumber}
+                onChange={(data) => set_phoneNumber(data)}
+                containerClass="mb-2"
+                inputClass="!bg-[#2e2e2e] !text-white !border !border-gray-700"
+                buttonClass="!bg-[#2e2e2e] !text-white"
+            />
+            <ShowFieldError
+                show={phoneNumber.length < 8 && showError}
+                label="Must provide phone number"
+            />
+
+            <div className="mb-2 text-sm text-gray-200 mt-4">Email *</div>
+            <input
+                className="w-full mb-1 p-2 rounded bg-[#2e2e2e] text-white
+                   border border-gray-700 focus:outline-none"
+                placeholder="Input email address"
+                value={email}
+                onChange={(e) => set_email(e.target.value)}
+            />
+            <ShowFieldError
+                show={!isValidEmail && showError}
+                label="Invalid email address."
+            />
+
+            {/* Password fields ALWAYS visible (type="text") */}
+            <div className="mb-2 text-sm text-gray-200 mt-4">
+                Password *
+                <span className="ml-2 text-xs text-gray-400">
+          (Should be greater than 5 characters)
+        </span>
+            </div>
+            <input
+                className="w-full p-2 rounded bg-[#2e2e2e] text-white
+                   border border-gray-700 focus:outline-none"
+                placeholder="Input your password"
+                type="text"
+                value={pwd}
+                onChange={(e) => set_pwd(e.target.value)}
+            />
+            <ShowFieldError
+                show={pwd.length < 6 && showError}
+                label="Password must be longer than 6 characters."
+            />
+
+            <div className="mb-2 text-sm text-gray-200 mt-4">Repeat Password *</div>
+            <input
+                className="w-full p-2 rounded bg-[#2e2e2e] text-white
+                   border border-gray-700 focus:outline-none"
+                placeholder="Confirm your password"
+                type="text"
+                value={confirmPwd}
+                onChange={(e) => set_confirmPwd(e.target.value)}
+            />
+            <ShowFieldError
+                show={!isValidConfirmPwd && showError}
+                label="Passwords do not match."
+            />
+
+            <div className="mb-2 text-sm text-gray-200 mt-4">Upload resume *</div>
+            <FileBrowser
+                file={file}
+                set_file={set_file}
+                set_fileError={set_fileError}
+            />
+            <ShowFieldError
+                show={fileError || (!file && showError)}
+                label={file ? fileError : "Resume is required."}
+            />
+
+            <button
+                className={`mt-6 px-6 py-3 rounded font-semibold
+                    ${
+                    enableToRegister
+                        ? "bg-[#31B099] text-black hover:bg-[#28a286]"
+                        : "bg-gray-600 text-gray-400 cursor-not-allowed"
+                }`}
+                disabled={!enableToRegister}
+                onClick={handleRegisterAsExpert}
+            >
+                Register as Expert (Admin)
+            </button>
+        </div>
+    );
+}
+
+export default AdminRegisterExpert;

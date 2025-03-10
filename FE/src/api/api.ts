@@ -842,3 +842,12 @@ export const doActivatePendingUserById = async (pendingUserId: string) => {
     }
 };
 
+export const registerUserByAdmin = async (userdata: any) => {
+    try {
+        // This uses the /registerUserByAdmin route
+        const res = await api.post<any>("admin/registerUserByAdmin", userdata);
+        return res.data;
+    } catch (err: any) {
+        return checkForAuthorization(err);
+    }
+};

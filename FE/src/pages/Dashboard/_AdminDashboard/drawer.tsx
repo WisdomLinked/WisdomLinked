@@ -10,7 +10,6 @@ import Dashboard from "./dashboard";
 import Payment from "./payment";
 import UserMgmt from "./usermgmt";
 import ChatIcon from '@mui/icons-material/Chat';
-import AttributionIcon from '@mui/icons-material/Attribution';
 import EmojiPeopleIcon from '@mui/icons-material/EmojiPeople';
 
 import { IoAccessibility } from "react-icons/io5";
@@ -19,6 +18,7 @@ import FriendsTitle from "../FriendsSideBar/FriendsTitle";
 import GeneralChatList from "../FriendsSideBar/GeneralChatList";
 import Feedback from "../../../components/getFeedback";
 import GetContactedUs from "../../../components/getContactedUs";
+import RegisterUserByAdmin from "../../../components/registerUserByAdmin";
 
 
 interface Props {
@@ -81,6 +81,17 @@ export default function AdminDrawer(props: Props) {
                         <span className="material-icons"><EmojiPeopleIcon fontSize="medium"/></span>
                         <span className="text-[10px]">ContactedUs</span>
                     </Link>
+                    <Link
+                        to={`${process.env.REACT_APP_AUTH_URL}admindashboard/registerUser`}
+                        className={`flex flex-col items-center ${
+                            location === 'adminregisteruser'
+                                ? 'text-lightgrey'
+                                : 'text-grey hover:text-lightgrey'
+                        }`}
+                    >
+                        <span className="material-icons"><EmojiPeopleIcon fontSize="medium"/></span>
+                        <span className="text-[10px]">Register User</span>
+                    </Link>
                 </div>
                 <div className={`w-[300px] h-full bg-darkgrey overflow-y-auto px-[15px] pt-4 pb-[5px] ${location === 'adminchat' ? '' : 'hidden'}`}>
                     <FriendsTitle title="Shared Community Chats" />
@@ -94,6 +105,7 @@ export default function AdminDrawer(props: Props) {
                     <Route path="/chat" element={<Messenger />} />
                     <Route path="/feedbacks" element={<Feedback />} />
                     <Route path="/contactedus" element={<GetContactedUs />} />
+                    <Route path="/registerUser" element={<RegisterUserByAdmin />} />
 
                     <Route path="/*" element={<Dashboard />} />
                 </Routes>

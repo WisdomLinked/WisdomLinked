@@ -10,6 +10,10 @@ const PendingLogin = require("../models/PendingLogin");
 const nodemailer = require("nodemailer");
 
 const { getFullUserData } = require('../middlewares/requireAuth')
+const {checkTitleNameInvalid} = require("../services/global");
+const path = require("path");
+const fs = require("fs");
+const bcrypt = require("bcryptjs");
 
 const filterUsers = async (req, res) => {
     try {
@@ -522,6 +526,109 @@ const convertPendingUserToUserByAdmin = async (req, res) => {
     }
 };
 
+const registerUserByAdmin = async (req, res) => {
+    try {
+        // Parse incoming fields
+        const role = !req.body.role ? null : req.body.role;
+        const username = !req.body.username ? null : req.body.username;
+        const title = !req.body.title ? null : req.body.title;
+        const description = !req.body.description ? null : req.body.description;
+        const keywords = !req.body.keywords ? null : req.body.keywords;
+        const services = !req.body.services ? null : req.body.services;
+        const country = !req.body.country ? null : req.body.country;
+        const state = !req.body.state ? null : req.body.state;
+        const city = !req.body.city ? null : req.body.city;
+        const phoneNumber = !req.body.phoneNumber ? null : req.body.phoneNumber;
+        const email = !req.body.email ? null : req.body.email;
+        const password = !req.body.password ? null : req.body.password;
+        const timeSlots = !req.body.timeSlots ? null : req.body.timeSlots;
+
+        if (checkTitleNameInvalid('Username', username)) {
+            return res.status(200).json({ status: 'FAIL', error: checkTitleNameInvalid('Username', username) });
+        }
+
+        // check if user exists
+        const userExists = await User.exists({ email: email.toLowerCase() });
+        if (userExists) {
+            return res.status(200).json({ status: 'FAIL', error: "E-mail already in use." });
+        }
+
+        // check if user exists in pending list
+        const userExistsInPending = await PendingUser.exists({ email: email.toLowerCase() });
+        if (userExistsInPending) {
+            return res.status(200).json({ status: 'FAIL', error: "E-mail already in use in pending list." });
+        }
+
+        // Handle uploading a resume if file is present
+        const file = req.file
+        let fileName = ''
+        if (file) {
+            const directory = path.join(__dirname, '../uploads/resumes');
+
+            // Check if the directory exists
+            if (!fs.existsSync(directory)) {
+                // If the directory doesn't exist, create it
+                fs.mkdirSync(directory, { recursive: true });
+            }
+            fileName = `${new Date().getTime()}_${file.originalname}`
+            const filePath = path.join(__dirname, '../uploads/resumes', fileName);
+            fs.writeFileSync(filePath, file.buffer);
+        }
+
+        let _keywords = []
+        if (keywords?.length) {
+            for (let i = 0; i < keywords.length; i++) {
+                if (keywords[i].new) {
+                    const sameKeywordExist = await Keyword.find({ value: keywords[i].value })
+                    if (sameKeywordExist.length) {
+                        _keywords.push(sameKeywordExist[0]._id)
+                    } else {
+                        const temp = new Keyword(keywords[i])
+                        const newKeyword = await temp.save()
+                        _keywords.push(newKeyword._id)
+                    }
+                } else {
+                    _keywords.push(keywords[i]._id)
+                }
+            }
+        }
+
+        // encrypt password
+        const encryptedPassword = await bcrypt.hash(password, 10);
+
+
+        let newUser = new User({
+            username,
+            title,
+            description,
+            services,
+            keywords: _keywords,
+            country,
+            state,
+            city,
+            phoneNumber,
+            email: email.toLowerCase(),
+            password: encryptedPassword,
+            resume: file ? `uploads/resumes/${fileName}` : '',
+            role,
+            timeSlots,
+            status: 'active'
+        });
+
+        // Save user
+        await newUser.save();
+
+        return res.status(200).json({
+            status: 'SUCCESS',
+            message: 'User created successfully by admin'
+        });
+    } catch (err) {
+        console.log(err);
+        return res.status(500).send(err.message);
+    }
+};
+
+
 module.exports = {
     filterUsers,
     getFullUserDataByEmail,
@@ -538,4 +645,5 @@ module.exports = {
     deletePendingUser,
     deletePendingLogin,
     convertPendingUserToUserByAdmin,
+    registerUserByAdmin
 }
