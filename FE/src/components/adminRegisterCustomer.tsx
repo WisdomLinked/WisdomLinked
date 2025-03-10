@@ -65,9 +65,10 @@ function AdminRegisterCustomer() {
 
         const response = await registerUserByAdmin(data);
         if (response && response.status === "SUCCESS") {
-            dispatch(showAlert("Customer has been Registered Successfully!"));
+            alert("Customer has been Registered Successfully!");
         } else {
-            dispatch(showAlert(response?.error || "Failed to create user."));
+            const errorMessage = response?.error ? `${response.error}` : "";
+            alert(`Failed to create user as ${errorMessage}`);
         }
         SetLoadingStatus(false);
     };
