@@ -6,7 +6,7 @@ function RegisterUserByAdmin() {
     const [view, setView] = useState<"none" | "customer" | "expert">("none");
 
     return (
-        <div className="w-full mx-auto text-white relative z-[9999] flex flex-col items-center py-6">
+        <div className="w-full min-h-screen bg-[#181818] text-white relative z-[9999] flex flex-col items-center py-6">
             {view === "none" && (
                 <div className="w-fit flex flex-col items-center">
                     <div className="bg-[#181818] p-6 rounded-md shadow-lg mb-6 w-fit text-center">
@@ -19,7 +19,6 @@ function RegisterUserByAdmin() {
                     </div>
 
                     <div className="flex flex-col md:flex-row gap-6 items-center justify-center w-fit">
-                        {/* Register a Customer Card */}
                         <div
                             onClick={() => setView("customer")}
                             className="bg-[#252525] hover:bg-[#2e2e2e] p-6 rounded-lg shadow-md
@@ -29,7 +28,7 @@ function RegisterUserByAdmin() {
                                 Register a Customer
                             </h3>
                             <p className="text-gray-400">
-                                Create a new <strong>Customer</strong> account with basic privileges.
+                                Create a new <strong>Customer</strong> account.
                             </p>
                         </div>
 
@@ -42,7 +41,7 @@ function RegisterUserByAdmin() {
                                 Register an Expert
                             </h3>
                             <p className="text-gray-400">
-                                Create a new <strong>Expert</strong> account with advanced privileges.
+                                Create a new <strong>Expert</strong> account.
                             </p>
                         </div>
                     </div>

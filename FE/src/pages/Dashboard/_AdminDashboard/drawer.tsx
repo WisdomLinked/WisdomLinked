@@ -11,6 +11,7 @@ import Payment from "./payment";
 import UserMgmt from "./usermgmt";
 import ChatIcon from '@mui/icons-material/Chat';
 import EmojiPeopleIcon from '@mui/icons-material/EmojiPeople';
+import GroupAddIcon from '@mui/icons-material/GroupAdd';
 
 import { IoAccessibility } from "react-icons/io5";
 import Messenger from "../Messenger/Messenger";
@@ -89,7 +90,7 @@ export default function AdminDrawer(props: Props) {
                                 : 'text-grey hover:text-lightgrey'
                         }`}
                     >
-                        <span className="material-icons"><EmojiPeopleIcon fontSize="medium"/></span>
+                        <span className="material-icons"><GroupAddIcon fontSize="medium"/></span>
                         <span className="text-[10px]">Register User</span>
                     </Link>
                 </div>
