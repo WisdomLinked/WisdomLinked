@@ -13,7 +13,7 @@ import CountrySelect from "./CountrySelection";
 import FileBrowser from "./fileBrowser";
 import PhoneInput from "react-phone-input-2";
 
-import { doGetKeywordsAndServices, registerUserByAdmin } from "../api/api";
+import {doGetKeywordsAndServices, registerUserByAdmin, sendEmailToUser} from "../api/api";
 import { SetLoadingStatus } from "../actions/appActions";
 import { showAlert } from "../actions/alertActions";
 import { useAppSelector } from "../store";
@@ -54,6 +54,24 @@ function AdminRegisterExpert() {
         set_description("This is an Expert Account created by the Admin");
     }, []);
 
+    const buildWelcomeEmailMessage = (email: string, password: string) => {
+                return `
+        Greetings of the day!
+        
+        Your account has been successfully registered at varun-sahni.com.
+        
+        Below are your credentials:
+        Email ID: ${email}
+        Password: ${password}
+        
+        We look forward to having you explore our services.
+        
+        Best Regards,
+        Team varun-sahni.com
+        `;
+            };
+
+
     const handleRegisterAsExpert = async () => {
         if (!enableToRegister) {
             set_showError(true);
@@ -82,12 +100,28 @@ function AdminRegisterExpert() {
         };
 
         const response = await registerUserByAdmin(data);
+
+        let accountCreationMsg = "";
+        let emailSendingMsg = "";
+
         if (response && response.status === "SUCCESS") {
-            alert("Expert has been Registered Successfully!");
+            accountCreationMsg = "Expert account registered successfully.";
+
+            const welcomeMessage = buildWelcomeEmailMessage(email, pwd);
+            const emailRes = await sendEmailToUser(email, welcomeMessage);
+
+            if (emailRes && emailRes.status === "SUCCESS") {
+                emailSendingMsg = "Welcome email sent successfully.";
+            } else {
+                emailSendingMsg = "Failed to send welcome email.";
+            }
         } else {
             const errorMessage = response?.error ? `${response.error}` : "";
-            alert(`Failed to create user as ${errorMessage}`);
+            accountCreationMsg = `Failed to create Expert: ${errorMessage}`;
+            emailSendingMsg = "Failed to send email to the Expert";
         }
+
+        alert(`${accountCreationMsg}\n${emailSendingMsg}`);
         SetLoadingStatus(false);
     };
 
