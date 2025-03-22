@@ -72,7 +72,8 @@ const RoomVideo = ({
         <div
             className={`${
                 maximized
-                    ? "absolute w-full h-full top-0 left-0 z-[200]"
+                    // ? "absolute w-full h-full top-0 left-0 z-[200]"
+                    ? "fixed top-[5%] left-[10%] right-[10%] bottom-[10%] z-[200]"
                     : isRoomMinimized
                         ? "basis-full relative"
                         : "basis-full sm:basis-1/2 md:basis-full lg:basis-1/2 xl:basis-1/3 relative"
