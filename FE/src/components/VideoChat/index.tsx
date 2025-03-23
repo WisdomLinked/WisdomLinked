@@ -125,9 +125,15 @@ const VideoChat = () => {
                     touchAction: "none",
                     display: hidden ? "none" : "block", // Use CSS to hide the component
                 }}
-                className={`flex flex-col items-center justify-center bg-black border-2 border-green rounded-[8px] z-[200] overflow-clip
-        ${isRoomMinimized ? "w-[300px] h-[300px]" : "fixed top-[63px] left-0 w-screen h-[calc(100vh-63px)]"}
-    `}
+    //             className={`flex flex-col items-center justify-center bg-black border-2 border-green rounded-[8px] z-[200] overflow-clip
+    //     ${isRoomMinimized ? "w-[300px] h-[300px]" : "fixed top-[63px] left-0 w-screen h-[calc(100vh-63px)]"}
+    // `}
+                className={`flex flex-col items-center justify-center bg-black border-2 border-green rounded-[8px] z-[200] overflow-clip ${
+                    isRoomMinimized
+                        ? "w-[300px] h-[300px]"
+                        : "fixed top-[63px] left-0 w-screen h-[calc(100vh-63px-150px)]"
+                }
+`}
             >
                 <button
                     className="absolute top-1 right-1 p-1 rounded-md text-white hover:bg-lightgrey hover:text-black z-[10000]"
