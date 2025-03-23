@@ -54,7 +54,7 @@
     "use-timer": "^2.0.1"
   },
   "scripts": {
-    "start": "set PORT=8080&& react-scripts start",
+    "start": "set PORT=3000&& react-scripts start",
     "build": "react-scripts build",
     "build-stg": "env-cmd -f .env.stg react-scripts build",
     "test": "react-scripts test",

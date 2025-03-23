@@ -45,11 +45,14 @@ app.use(express.json({limit: maxRequestBodySize}));
 app.use(express.urlencoded({limit: maxRequestBodySize}));
 app.use(cookieParser());
 app.use(express.json());
-app.use(cors({
-    origin: process.env.FE_URL,
-    methods: ['GET', 'POST', 'PUT', 'DELETE'],
-    credentials: true
-}));
+const corsOptions = {
+        origin: [process.env.FE_URL, "https://www.wisdomlinked.com" ],
+        methods: ['GET', 'POST', 'PUT', 'DELETE'],
+        credentials: true,
+        allowedHeaders: ['Content-Type', 'Authorization']
+    };
+    app.use(cors(corsOptions));
+    app.options('*', cors(corsOptions)); // Pre-flight handling
 
 // register the routes
 app.use("/api/auth", authRoutes);
