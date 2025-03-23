@@ -131,7 +131,7 @@ const VideoChat = () => {
                 className={`flex flex-col items-center justify-center bg-black border-2 border-green rounded-[8px] z-[200] overflow-clip ${
                     isRoomMinimized
                         ? "w-[300px] h-[300px]"
-                        : "fixed top-[63px] left-0 w-screen h-[calc(100vh-63px-150px)]"
+                        : "fixed top-[63px] left-0 w-screen h-[calc(100vh)]"
                 }
 `}
             >
