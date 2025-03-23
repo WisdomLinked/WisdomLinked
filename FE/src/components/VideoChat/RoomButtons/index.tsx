@@ -44,7 +44,7 @@ const RoomButtons: React.FC<{
                         </>
                     )}
                     <Microphone localStream={videoChat.localStream} />
-                    <ChatButton isChatOpen={isChatOpen} toggleChat={toggleChat} />
+                    {!isRoomMinimized && (<ChatButton isChatOpen={isChatOpen} toggleChat={toggleChat} />)}
                     <ResizeRoomButton
                         isRoomMinimized={isRoomMinimized}
                         handleRoomResize={handleRoomResize}
@@ -67,7 +67,7 @@ const RoomButtons: React.FC<{
                         </>
                     )}
                     <Microphone localStream={room.localStreamRoom} />
-                    <ChatButton isChatOpen={isChatOpen} toggleChat={toggleChat} />
+                    {!isRoomMinimized && (<ChatButton isChatOpen={isChatOpen} toggleChat={toggleChat} />)}
                     {/*{!room.isUserJoinedWithOnlyAudio && (*/}
                     {/*    <Camera localStream={room.localStreamRoom} />*/}
                     {/*)}*/}
