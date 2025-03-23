@@ -6,15 +6,21 @@ import ScreenShare from "./ScreenShare";
 import {useAppSelector} from "../../../store"
 import ResizeRoomButton from "../ResizeRoomButton";
 import FlipCamera from "./FlipCamera";
+import ChatButton from "./ChatButton";
+
 
 const RoomButtons: React.FC<{
     isRoomMinimized: boolean;
     handleRoomResize: () => void;
 }> = ({ isRoomMinimized, handleRoomResize }) => {
     const {videoChat, room, chat: { currentEvent }, auth: { userDetails }} = useAppSelector((state) => state);
-
+    const [isChatOpen, setIsChatOpen] = useState(false);
     const eventId = videoChat.localStream && currentEvent?._id !== undefined ? currentEvent._id : null;
     const groupChatId = room.localStreamRoom && currentEvent?._id !== undefined ? currentEvent._id : null;
+    const toggleChat = () => {
+        setIsChatOpen(!isChatOpen);
+        // Add any additional logic for opening/closing the chat here
+      };
     console.log("currentEvent", );
     console.log("videoChat", videoChat);
     console.log("room", room);
@@ -38,6 +44,7 @@ const RoomButtons: React.FC<{
                         </>
                     )}
                     <Microphone localStream={videoChat.localStream} />
+                    <ChatButton isChatOpen={isChatOpen} toggleChat={toggleChat} />
                     <ResizeRoomButton
                         isRoomMinimized={isRoomMinimized}
                         handleRoomResize={handleRoomResize}
@@ -60,6 +67,7 @@ const RoomButtons: React.FC<{
                         </>
                     )}
                     <Microphone localStream={room.localStreamRoom} />
+                    <ChatButton isChatOpen={isChatOpen} toggleChat={toggleChat} />
                     {/*{!room.isUserJoinedWithOnlyAudio && (*/}
                     {/*    <Camera localStream={room.localStreamRoom} />*/}
                     {/*)}*/}
