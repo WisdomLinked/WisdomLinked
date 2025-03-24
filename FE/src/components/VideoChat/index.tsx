@@ -14,6 +14,11 @@ const VideoChat = () => {
     const containerRef = useRef<HTMLDivElement>(null);
     const isDraggingRef = useRef(false);
     const [, forceUpdate] = useState({});
+    const [isChatOpen, setIsChatOpen] = useState(false);
+
+    const toggleChat = () => {
+        setIsChatOpen(!isChatOpen);
+      };
 
     const roomResizeHandler = () => {
         setIsRoomMinimized(!isRoomMinimized);
@@ -131,9 +136,10 @@ const VideoChat = () => {
                 className={`flex flex-col items-center justify-center bg-black border-2 border-green rounded-[8px] z-[200] overflow-clip ${
                     isRoomMinimized
                         ? "w-[300px] h-[300px]"
-                        : "fixed top-[63px] left-0 w-screen h-[calc(100vh)]"
-                }
-`}
+                        : isChatOpen
+                            ? "fixed top-[63px] left-0 w-[calc(100vw-300px)] h-[calc(100vh)]"
+                            : "fixed top-[63px] left-0 w-screen h-[calc(100vh)]"
+                }`}
             >
                 <button
                     className="absolute top-1 right-1 p-1 rounded-md text-white hover:bg-lightgrey hover:text-black z-[10000]"
@@ -146,8 +152,16 @@ const VideoChat = () => {
                 <RoomButtons
                     isRoomMinimized={isRoomMinimized}
                     handleRoomResize={roomResizeHandler}
+                    isChatOpen={isChatOpen}
+                    toggleChat={toggleChat}
                 />
             </div>
+            {!isRoomMinimized && isChatOpen && (
+                <div className="fixed top-[63px] right-0 w-[300px] h-[calc(100vh)] bg-white border-l-2 border-green">
+                    {/* Add your chat component here */}
+                    <h2>Chat Window</h2>
+                </div>
+            )}
         </React.Fragment>
     );
 };

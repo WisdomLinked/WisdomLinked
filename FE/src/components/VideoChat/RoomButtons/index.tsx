@@ -12,15 +12,17 @@ import ChatButton from "./ChatButton";
 const RoomButtons: React.FC<{
     isRoomMinimized: boolean;
     handleRoomResize: () => void;
-}> = ({ isRoomMinimized, handleRoomResize }) => {
+    isChatOpen: boolean;
+    toggleChat: () => void;
+}> = ({ isRoomMinimized, handleRoomResize, isChatOpen, toggleChat}) => {
     const {videoChat, room, chat: { currentEvent }, auth: { userDetails }} = useAppSelector((state) => state);
-    const [isChatOpen, setIsChatOpen] = useState(false);
+    // const [isChatOpen, setIsChatOpen] = useState(false);
     const eventId = videoChat.localStream && currentEvent?._id !== undefined ? currentEvent._id : null;
     const groupChatId = room.localStreamRoom && currentEvent?._id !== undefined ? currentEvent._id : null;
-    const toggleChat = () => {
-        setIsChatOpen(!isChatOpen);
-        // Add any additional logic for opening/closing the chat here
-      };
+    // const toggleChat = () => {
+    //     setIsChatOpen(!isChatOpen);
+    //     // Add any additional logic for opening/closing the chat here
+    //   };
     console.log("currentEvent", );
     console.log("videoChat", videoChat);
     console.log("room", room);
