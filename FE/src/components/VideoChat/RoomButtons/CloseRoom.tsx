@@ -4,6 +4,7 @@ import IconButton from "@mui/material/IconButton";
 import CloseIcon from "@mui/icons-material/Close";
 import { useAppSelector } from "../../../store";
 import { clearVideoChat } from "../../../actions/videoChatActions";
+import { useVideoChatContext } from "../VideoChatContext";
 import {
     callRequest,
     callResponse,
@@ -17,6 +18,7 @@ import {doUpdateEvent, doUpdateExpertEvent, updateGroupChat} from "../../../api/
 type CallType = "DIRECT CALL" | "ROOM";
 
 const CloseRoom = ({ type, eventId = null}: { type: CallType; eventId: any;}) => {
+    const {isRoomMinimized, setIsRoomMinimized} = useVideoChatContext();
     const dispatch = useDispatch();
     const {
         friends: { groupChatList },
@@ -112,6 +114,8 @@ const CloseRoom = ({ type, eventId = null}: { type: CallType; eventId: any;}) =>
 
         // Cancel the call request after feedback is completed
         cancelCallRequest({ otherUserId: otherUserId || "" });
+
+        setIsRoomMinimized(true);
     };
 
     // useEffect(() => {
