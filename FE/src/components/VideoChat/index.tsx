@@ -4,9 +4,10 @@ import RoomButtons from "./RoomButtons";
 import { useAppSelector } from "../../store";
 import VisibilityOffIcon from "@mui/icons-material/VisibilityOff";
 import VisibilityIcon from "@mui/icons-material/Visibility";
+import { useVideoChatContext } from "./VideoChatContext";
 
 const VideoChat = () => {
-    const [isRoomMinimized, setIsRoomMinimized] = useState(true);
+    const {isRoomMinimized, setIsRoomMinimized} = useVideoChatContext();
     const { videoChat, app: { feedbackModalShow } } = useAppSelector((state) => state);
     const [hidden, set_hidden] = useState(false);
     const [isMicMuted, setIsMicMuted] = useState(false);
@@ -137,7 +138,7 @@ const VideoChat = () => {
                     isRoomMinimized
                         ? "w-[300px] h-[300px]"
                         : isChatOpen
-                            ? "fixed top-[63px] left-0 w-[calc(100vw-300px)] h-[calc(100vh)]"
+                            ? "fixed top-[63px] left-0 w-[calc(100vw-350px)] h-[calc(100vh)]"
                             : "fixed top-[63px] left-0 w-screen h-[calc(100vh)]"
                 }`}
             >
@@ -156,12 +157,6 @@ const VideoChat = () => {
                     toggleChat={toggleChat}
                 />
             </div>
-            {!isRoomMinimized && isChatOpen && (
-                <div className="fixed top-[63px] right-0 w-[300px] h-[calc(100vh)] bg-white border-l-2 border-green">
-                    {/* Add your chat component here */}
-                    <h2>Chat Window</h2>
-                </div>
-            )}
         </React.Fragment>
     );
 };

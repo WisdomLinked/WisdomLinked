@@ -27,6 +27,8 @@ import LeaveFeedback from './components/LeaveFeedback';
 import AdminDashboard from './pages/Dashboard/_AdminDashboard';
 import VerifyEmail from './pages/VerifyEmail';
 import ForgotPassword from './pages/ForgotPassword';
+import { VideoChatProvider } from './components/VideoChat/VideoChatContext';
+
 
 const UnauthenticatedRoutes = () => {
   return (
@@ -184,6 +186,7 @@ function App() {
 
   return (
     <>
+    <VideoChatProvider>
       <Routes>
         <Route path={process.env.REACT_APP_AUTH_URL + '*'} element={<AuthenticatedRoutes />} />
         <Route path={process.env.REACT_APP_BASE_URL + '*'} element={<UnauthenticatedRoutes />} />
@@ -191,6 +194,7 @@ function App() {
       <AlertNotification />
       <LeaveFeedback />
       <Loading loading={loading} />
+      </VideoChatProvider>
     </>
   );
 }
