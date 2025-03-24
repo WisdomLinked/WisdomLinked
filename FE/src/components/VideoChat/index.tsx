@@ -4,9 +4,10 @@ import RoomButtons from "./RoomButtons";
 import { useAppSelector } from "../../store";
 import VisibilityOffIcon from "@mui/icons-material/VisibilityOff";
 import VisibilityIcon from "@mui/icons-material/Visibility";
+import { useVideoChatContext } from "./VideoChatContext";
 
 const VideoChat = () => {
-    const [isRoomMinimized, setIsRoomMinimized] = useState(true);
+    const {isRoomMinimized, setIsRoomMinimized} = useVideoChatContext();
     const { videoChat, app: { feedbackModalShow } } = useAppSelector((state) => state);
     const [hidden, set_hidden] = useState(false);
     const [isMicMuted, setIsMicMuted] = useState(false);
@@ -14,6 +15,11 @@ const VideoChat = () => {
     const containerRef = useRef<HTMLDivElement>(null);
     const isDraggingRef = useRef(false);
     const [, forceUpdate] = useState({});
+    const [isChatOpen, setIsChatOpen] = useState(false);
+
+    const toggleChat = () => {
+        setIsChatOpen(!isChatOpen);
+      };
 
     const roomResizeHandler = () => {
         setIsRoomMinimized(!isRoomMinimized);
@@ -131,9 +137,10 @@ const VideoChat = () => {
                 className={`flex flex-col items-center justify-center bg-black border-2 border-green rounded-[8px] z-[200] overflow-clip ${
                     isRoomMinimized
                         ? "w-[300px] h-[300px]"
-                        : "fixed top-[63px] left-0 w-screen h-[calc(100vh-63px-150px)]"
-                }
-`}
+                        : isChatOpen
+                            ? "fixed top-[63px] left-0 w-[calc(100vw-350px)] h-[calc(100vh)]"
+                            : "fixed top-[63px] left-0 w-screen h-[calc(100vh)]"
+                }`}
             >
                 <button
                     className="absolute top-1 right-1 p-1 rounded-md text-white hover:bg-lightgrey hover:text-black z-[10000]"
@@ -146,6 +153,8 @@ const VideoChat = () => {
                 <RoomButtons
                     isRoomMinimized={isRoomMinimized}
                     handleRoomResize={roomResizeHandler}
+                    isChatOpen={isChatOpen}
+                    toggleChat={toggleChat}
                 />
             </div>
         </React.Fragment>
