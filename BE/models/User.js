@@ -29,6 +29,7 @@ const userSchema = new mongoose.Schema(
 
         token: { type: String, select: false },
         password: { type: String, required: [true, "can't be blank"], select: false },
+        profileImageUrl: { type: String, default: null, },
 
         // EXPERT -------------
         title: { type: String },

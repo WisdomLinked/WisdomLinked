@@ -22,7 +22,7 @@
 
     const { createSocketServer } = require("./socket/socketServer");
 
-    const PORT = process.env.PORT || 5000;
+    const PORT = process.env.PORT || 8080;
 
     const MONGO_URI = process.env.MONGO_URI
 
@@ -46,7 +46,7 @@
     app.use(cookieParser());
     app.use(express.json());
     const corsOptions = {
-        origin: [process.env.FE_URL, "https://www.wisdomlinked.com" ],
+        origin: [process.env.FE_URL,  "http://localhost:3000" ],
         methods: ['GET', 'POST', 'PUT', 'DELETE'],
         credentials: true,
 	allowedHeaders: ['Content-Type', 'Authorization']

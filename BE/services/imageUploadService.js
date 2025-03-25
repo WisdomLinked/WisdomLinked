@@ -1,27 +1,23 @@
-const axios = require("axios");
+const { PutObjectCommand } = require("@aws-sdk/client-s3");
+const s3 = require("./spacesClient");
 const FormData = require("form-data");
 
 exports.uploadImageToStorage = async (file) => {
-    try {
-        const formData = new FormData();
-        formData.append("image", file.buffer, {
-            filename: file.originalname,
-            contentType: file.mimetype
-        });
-
-        const response = await axios.post(
-            `${process.env.AWS_URL}/upload`,
-            formData,
-            {
-                headers: {
-                    ...formData.getHeaders()
-                }
-            }
-        );
-
-        return response.data;
-    } catch (error) {
-        console.error("Error uploading to storage API:", error);
-        throw new Error("Image upload failed.");
-    }
-};
+    const fileName = `profile/${Date.now()}-${file.originalname}`;
+  
+    const uploadParams = {
+      Bucket: process.env.DO_SPACES_BUCKET,
+      Key: fileName,
+      Body: file.buffer,
+      ContentType: file.mimetype,
+      ACL: "public-read",
+    };
+  
+    await s3.send(new PutObjectCommand(uploadParams));
+  
+    const publicUrl = `${process.env.DO_SPACES_ENDPOINT.replace(
+      "https://",
+      `https://${process.env.DO_SPACES_BUCKET}.`
+    )}/${fileName}`;
+    return publicUrl;
+  };

@@ -1,29 +1,23 @@
 const express = require("express");
-const multer = require("multer");
-const { uploadImageToStorage } = require("../services/imageUploadService");
-
 const router = express.Router();
-
-// Configure multer for file handling
-const storage = multer.memoryStorage();
-const upload = multer({ storage });
+const multer = require("multer");
+const upload = multer();
+const { uploadImageToStorage } = require("../services/imageUploadService");
+const User = require("../models/User");
 
 router.post("/upload", upload.single("image"), async (req, res) => {
     try {
-        const file = req.file;
-
-        console.log("Received file:", file);
-
-        if (!file) {
-            return res.status(400).json({ message: "Image file is required." });
-        }
-
-        const result = await uploadImageToStorage(file);
-
-        return res.status(200).json({ message: "Image uploaded successfully.", data: result });
+      const imageUrl = await uploadImageToStorage(req.file);
+  
+      // Optional: Save to user profile
+    //   const userId = req.user.id;
+        const userId = "67c3a219a398892e87ad3a64"
+      await User.findByIdAndUpdate(userId, { profileImageUrl: imageUrl });
+  
+      res.status(200).json({ imageUrl });
     } catch (error) {
-        console.error("Error uploading image:", error);
-        return res.status(500).json({ message: "Failed to upload image.", error: error.message });
+      console.error("Upload failed:", error);
+      res.status(500).json({ error: "Image upload failed" });
     }
 });
 

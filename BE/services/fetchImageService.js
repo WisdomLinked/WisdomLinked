@@ -1,5 +1,16 @@
 // services/fetchImageService.js
-const axios = require("axios");
+const { S3Client, GetObjectCommand } = require("@aws-sdk/client-s3");
+const { getSignedUrl } = require("@aws-sdk/s3-request-presigner");
+
+const s3 = new S3Client({
+    endpoint: "https://nyc3.digitaloceanspaces.com", 
+    region: "us-east-1",
+    credentials: {
+        accessKeyId: process.env.DO_SPACES_KEY,
+        secretAccessKey: process.env.DO_SPACES_SECRET,
+    },
+});
+
 
 const getImage = async (file, folder) => {
     try {
