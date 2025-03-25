@@ -2,7 +2,7 @@ import React, {useEffect, useRef, useState} from "react";
 import { useAppSelector } from "../../../store";
 import Avatar from "../../../components/Avatar";
 import { formatDateYYYY_MM_DD_h_m } from "../../../actions/common";
-import {doCancelEvent, doCancelPendingSeminar, doUpdateEvent, profileImageFetch} from "../../../api/api";
+import {doCancelEvent, doCancelPendingSeminar, doUpdateEvent} from "../../../api/api";
 import { updateMe } from "../../../actions/authActions";
 import { useDispatch } from "react-redux";
 import { SetLoadingStatus } from "../../../actions/appActions";
@@ -85,7 +85,11 @@ const Dashboard = () => {
         console.log("navigate events", item); // Use item here instead of event
         navigate(`${process.env.REACT_APP_AUTH_URL}customerdashboard/chat`);
         // Assuming item contains customer details, you can use item directly
-        dispatch(setChosenChatDetails({ userId: item._id, username: item.username, image: item.image }));
+        dispatch(setChosenChatDetails({
+            userId: item._id,
+            username: item.username,
+            image: item.profileImageUrl // ✅ use full image URL
+          }));
     };
 
     const navigateSeminar = (item: any) => {
@@ -133,26 +137,14 @@ const Dashboard = () => {
             }
         });
 
-        const imagePromises = Array.from(uniqueExperts.entries()).map(
-            async ([expertId, imageUrl]) => {
-                try {
-                    const base64 = await profileImageFetch(imageUrl, "small");
-                    return { id: expertId, base64 };
-                } catch (error) {
-                    console.error(`Error fetching image for expert ${expertId}:`, error);
-                    return null;
-                }
-            }
-        );
+        const newImageMap = new Map<string, string>();
 
-        const images = await Promise.all(imagePromises);
-        const newImageMap = new Map(base64Images);
-
-        images.forEach((image) => {
-            if (image) newImageMap.set(image.id, image.base64);
+        uniqueExperts.forEach((imageUrl, expertId) => {
+        if (imageUrl) newImageMap.set(expertId, imageUrl); 
         });
 
-        setBase64Images(newImageMap);
+        setBase64Images(newImageMap); 
+
     };
 
     // Dispatch `updateMe` only once when the component mounts

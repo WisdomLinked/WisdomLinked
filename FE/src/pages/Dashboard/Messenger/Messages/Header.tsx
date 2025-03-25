@@ -22,7 +22,7 @@ import CastForEducationIcon from '@mui/icons-material/CastForEducation';
 import { createNewRoom, joinRoom } from "../../../../socket/roomHandler";
 import CloseIcon from '@mui/icons-material/Close';
 import EditIcon from '@mui/icons-material/Edit';
-import {doLeftSeminar, doUpdateProfile, getCustomerById, getExpertById, profileImageFetch} from "../../../../api/api";
+import {doLeftSeminar, doUpdateProfile, getCustomerById, getExpertById} from "../../../../api/api";
 import {SetLoadingStatus, SetTotalTimeSpent} from "../../../../actions/appActions";
 import { updateMe } from "../../../../actions/authActions";
 import { showAlert } from "../../../../actions/alertActions";
@@ -220,7 +220,7 @@ const MessagesHeader = ({ scrollPosition, events, openCalendarModal, openSeminar
                                  onClick={()=>{
                                      handleProfileModalOpen(chosenChatDetails)
                                  }}>
-                                <Avatar username={chosenChatDetails.username!} image={chosenChatDetails.image} />
+                                <Avatar username={chosenChatDetails.username!} image={chosenChatDetails.profileImageUrl} />
                                 <div className="w-[calc(100%-48px)] text-[20px] text-white mr-2 truncate">
                                     {chosenChatDetails?.username}
                                 </div>

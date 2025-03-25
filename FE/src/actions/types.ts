@@ -178,7 +178,7 @@ export interface Message {
     author: {
         username: string;
         _id: string;
-        email: string;
+        email?: string;
         role: string;
         status: string;
     };

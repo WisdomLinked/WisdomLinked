@@ -488,25 +488,45 @@ export async function profileImageUpload(formData: FormData): Promise<any> {
 }
 
 
-export const profileImageFetch = async (url: string, size: string) => {
-    try {
-        const res = await api.get(`image-fetch?file=${url}&folder=${size}`, {
-            responseType: 'arraybuffer'
-        });
+// export const profileImageFetch = async (url: string, size: string) => {
+//     try {
+//         const res = await api.get(`image-fetch?file=${url}&folder=${size}`, {
+//             responseType: 'arraybuffer'
+//         });
 
-        const blob = new Blob([res.data], { type: res.headers['content-type'] });
+//         const blob = new Blob([res.data], { type: res.headers['content-type'] });
 
-        const base64Data = await new Promise((resolve) => {
-            const reader = new FileReader();
-            reader.onloadend = () => resolve(reader.result);
-            reader.readAsDataURL(blob);
-        });
+//         const base64Data = await new Promise((resolve) => {
+//             const reader = new FileReader();
+//             reader.onloadend = () => resolve(reader.result);
+//             reader.readAsDataURL(blob);
+//         });
 
-        return base64Data;
-    } catch (err) {
-        return err;
+//         return base64Data;
+//     } catch (err) {
+//         return err;
+//     }
+// };
+export const profileImageFetch = async (imageRef: string, size: string): Promise<string> => {
+    if (imageRef.startsWith("http://") || imageRef.startsWith("https://")) {
+      return imageRef;
     }
-};
+  
+    // 🧪 Otherwise, fall back to the legacy backend fetch
+    try {
+      const res = await axios.get(`${BASE_URL}/api/image-fetch/${imageRef}?size=${size}`, {
+        responseType: "arraybuffer",
+      });
+  
+      const contentType = res.headers["content-type"];
+      const base64 = Buffer.from(res.data, "binary").toString("base64");
+      return `data:${contentType};base64,${base64}`;
+    } catch (error) {
+      console.error("Error fetching image:", error);
+      return "";
+    }
+  };
+  
 
 
 

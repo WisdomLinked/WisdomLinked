@@ -2,7 +2,6 @@ import React, { useEffect, useState } from "react";
 import { styled } from "@mui/system";
 import FriendsListItem from "./FriendsListItem";
 import { useAppSelector } from "../../../../store";
-import { profileImageFetch } from "../../../../api/api";
 
 const MainContainer = styled("div")({
   flexGrow: 1,
@@ -11,95 +10,57 @@ const MainContainer = styled("div")({
 });
 
 const SearchInput = styled("input")({
-    width: "100%",
-    padding: "10px",
-    marginBottom: "20px",
-    borderRadius: "5px",
-    border: "1px solid #444", // Darker border
-    fontSize: "16px",
-    backgroundColor: "#222", // Blackish background
-    color: "#fff", // White text color for contrast
-    outline: "none",
-    caretColor: "#00ffff", // Highlighted cursor color to match the theme
-    "::placeholder": {
-        color: "#888", // Greyish placeholder color
-    },
+  width: "100%",
+  padding: "10px",
+  marginBottom: "20px",
+  borderRadius: "5px",
+  border: "1px solid #444",
+  fontSize: "16px",
+  backgroundColor: "#222",
+  color: "#fff",
+  outline: "none",
+  caretColor: "#00ffff",
+  "::placeholder": {
+    color: "#888",
+  },
 });
-
 
 const FriendsList = () => {
   const { friends, onlineUsers } = useAppSelector((state) => state.friends);
-  const [modifiedFriends, setModifiedFriends] = useState<any[]>([]);
   const [searchQuery, setSearchQuery] = useState<string>("");
 
-  // Function to fetch and update friends with images
-  const updateFriendsWithImages = async (friends: any[], onlineUsers: any[]) => {
-    try {
-      return await Promise.all(
-          friends.map(async (friend) => {
-            const isOnline = onlineUsers.find((user) => user.userId === friend.id);
-            let base64Image = "";
-
-            if (friend.image) {
-              try {
-                base64Image = await profileImageFetch(friend.image, "small");
-              } catch (error) {
-                console.error(`Error fetching image for friend ${friend.id}:`, error);
-              }
-            }
-
-            return {
-              ...friend,
-              isOnline: !!isOnline,
-              image: base64Image, // Update the .image property with Base64
-            };
-          })
-      );
-    } catch (error) {
-      console.error("Error updating friends with images:", error);
-      return friends; // Return original friends if something goes wrong
-    }
-  };
-
-  // useEffect to handle asynchronous data fetching
-  useEffect(() => {
-    const fetchModifiedFriends = async () => {
-      const updatedFriends = await updateFriendsWithImages(friends, onlineUsers);
-      setModifiedFriends(updatedFriends);
-    };
-
-    fetchModifiedFriends();
-  }, [friends, onlineUsers]);
-
-    // Filter friends based on the search query
-    const filteredFriends = modifiedFriends.filter((friend) =>
-        friend.username.toLowerCase().includes(searchQuery.toLowerCase())
+  const filteredFriends = friends
+    .map((friend) => ({
+      ...friend,
+      isOnline: onlineUsers.some((user) => user.userId === friend.id),
+    }))
+    .filter((friend) =>
+      friend.username.toLowerCase().includes(searchQuery.toLowerCase())
     );
 
   return (
-      <MainContainer>
-          <SearchInput
-              type="text"
-              placeholder="Search by username..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-          />
-          {filteredFriends.map((f) => (
-              <FriendsListItem
-                  username={f.username}
-                  status={f.status}
-                  id={f.id}
-                  key={f.id}
-                  isOnline={f.isOnline}
-                  email={f.email}
-                  image={f.image}
-                  lastChatDate={f.lastChatDate}
-                  missedChats={f.missedChats}
-              />
-          ))}
-      </MainContainer>
+    <MainContainer>
+      <SearchInput
+        type="text"
+        placeholder="Search by username..."
+        value={searchQuery}
+        onChange={(e) => setSearchQuery(e.target.value)}
+      />
+      {filteredFriends.map((f) => (
+        <FriendsListItem
+          key={f.id}
+          id={f.id}
+          username={f.username}
+          email={f.email}
+          status={f.status}
+          isOnline={f.isOnline}
+          image={f.profileImageUrl}
+          lastChatDate={f.lastChatDate}
+          missedChats={f.missedChats}
+        />
+      ))}
+    </MainContainer>
   );
 };
 
 export default FriendsList;
-

@@ -8,28 +8,28 @@ import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings';
 import LogoutIcon from '@mui/icons-material/Logout';
 import { useDispatch } from "react-redux";
 import { logoutUser } from "../../actions/authActions";
-import {profileImageFetch} from "../../api/api";
+// import {profileImageFetch} from "../../api/api";
 
 const DashboardHeader = ({ userDetails }: any) => {
 
     const dispatch = useDispatch()
     const [modalShow, set_modalShow] = useState(false)
-    const [image, setImageSrc] = useState("");
+    // const [image, setImageSrc] = useState("");
 
-    useEffect(() => {
-        const fetchImage = async () => {
-            if (userDetails.image) {
-                try {
-                    const src = await profileImageFetch(userDetails.image,"small");
-                    setImageSrc(src);
-                } catch (error) {
-                    console.error("Error fetching image:", error);
-                }
-            }
-        };
+    // useEffect(() => {
+    //     const fetchImage = async () => {
+    //         if (userDetails.image) {
+    //             try {
+    //                 const src = await profileImageFetch(userDetails.image,"small");
+    //                 setImageSrc(src);
+    //             } catch (error) {
+    //                 console.error("Error fetching image:", error);
+    //             }
+    //         }
+    //     };
 
-        fetchImage();
-    }, []);
+    //     fetchImage();
+    // }, []);
 
     const logOut = () => {
         dispatch(logoutUser());
@@ -65,7 +65,7 @@ const DashboardHeader = ({ userDetails }: any) => {
                         <div className={`text-md text-center ${userDetails.role === 'expert' ? 'text-green' : 'text-lightgrey'}`}>{userDetails.role}</div>
                 }
                 <button title="Open Setting modal" onClick={() => set_modalShow(true)}>
-                    <Avatar username={userDetails.username} isOnline={true} image={image} />
+                    <Avatar username={userDetails.username} isOnline={true} image={userDetails.profileImageUrl} />
                 </button>
             </div>
             {

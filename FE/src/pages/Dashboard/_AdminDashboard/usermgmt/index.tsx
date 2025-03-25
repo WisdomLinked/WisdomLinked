@@ -3,7 +3,6 @@ import SelectionWithCheckBox from "../../../../components/SelectionWithCheckBox"
 import {
     doFilterUsers,
     doUpdateProfileByAdmin,
-    profileImageFetch
 } from "../../../../api/api";
 
 import {
@@ -99,29 +98,13 @@ const UserMgmt = () => {
         }
     };
 
-    const updateUsersWithImages = async (usersList: any[]) => {
-        try {
-            const updated = await Promise.all(
-                usersList.map(async (u) => {
-                    if (u.image) {
-                        try {
-                            const base64Image = await profileImageFetch(u.image, "small");
-                            return { ...u, image: base64Image };
-                        } catch (error) {
-                            console.error("Error loading image:", error);
-                            return u;
-                        }
-                    }
-                    return u;
-                })
-            );
-            return updated;
-        } catch (error) {
-            console.error(error);
-            return usersList;
-        }
-    };
-
+    const updateUsersWithImages = (usersList: any[]) => {
+        return usersList.map((u) => ({
+          ...u,
+          image: u.profileImageUrl || null, // optional: for backward compatibility
+        }));
+      };
+      
     const fetchPendingUsers = async () => {
         try {
             SetLoadingStatus(true);
@@ -368,7 +351,7 @@ const UserMgmt = () => {
                                                 {numPerPage * currentPage + idx + 1}
                                             </td>
                                             <td className="px-2 py-1 flex justify-center">
-                                                <Avatar username={u.username} image={u.image} />
+                                                <Avatar username={u.username} image={u.profileImageUrl} />
                                             </td>
                                             <td className="text-center px-2">{u.email}</td>
                                             <td className="text-center px-2">{u.username}</td>
