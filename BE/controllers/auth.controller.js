@@ -33,7 +33,6 @@ const getUniqueConfirmCode = async () => {
 
 const getKeywordsAndServices = async (req, res) => {
     try {
-        //console.log('OKOKOKOK')
         const keywords = await Keyword.find()
         const services = await Service.find()
         return res.status(200).json({
@@ -252,9 +251,8 @@ const verifyRegistration = async (req, res) => {
 const login = async (req, res) => {
     try {
         const { email, password } = req.body;
-
+        
         const user = await getFullUserData(email)
-
         if (!user) {
             return res.status(200).json({ status: 'FAIL', error: "Invalid credentials. Please try again" });
         }
@@ -284,8 +282,9 @@ const login = async (req, res) => {
         }
 
         let text = `<div>Verify your login to TOE by the code <br/><b>${code}</b></div>`
+        console.log("Sending OTP for login confirmation to: ", email)
+        
         await utils.sendOTP(
-            // process.env.NODE_ENV === 'development' ? 'varunsahni10134@gmail.com' : email,
             email,
             utils.getCurrentDateString(),
             text
@@ -730,39 +729,37 @@ const submitContactForm = async (req, res) => {
 
 const sendEmailToAdmin = async (req, res) => {
     try {
-        const { email, message } = req.body;
+        const { message } = req.body;
 
         // Basic validation
-        if (!email || !message) {
+        if (!message) {
             return res.status(400).json({
                 status: "FAILED",
-                message: "Email and message are required."
+                message: "Message is required."
             });
         }
 
-        let transporter = nodemailer.createTransport({
-            host: "smtp.gmail.com",      // same as Python's smtp.gmail.com
-            port: 587,                   // TLS port
-            secure: false,               // use TLS rather than SSL
-            auth: {
-                user: process.env.GOOGLE_EMAIL,
-                pass: process.env.GOOGLE_PASSWORD
-            },
-            tls: {
-                rejectUnauthorized: false
-            }
-        });
 
         let mailOptions = {
-            from: process.env.GOOGLE_EMAIL,
-            to: email,
+            from: process.env.ZOHOADMIN_USER,
+            to: process.env.ZOHOADMIN_USER,
             subject: "Message from WisdomLink.io",
             text: message
         };
 
+        // Zoho Transport for Contact form emails
+        const adminTransporter = nodemailer.createTransport({
+            host: "smtp.zoho.com",
+            port: 465,
+            secure: true,
+            auth: {
+                user: process.env.ZOHOADMIN_USER,
+                pass: process.env.ZOHOADMIN_PASS,
+            },
+        });
         // Send the mail
-        await transporter.sendMail(mailOptions);
-
+        await adminTransporter.sendMail(mailOptions);
+        console.log("Email sent to admin:", mailOptions);
         return res.status(200).json({
             status: "SUCCESS",
             message: "Email sent successfully."
@@ -775,8 +772,6 @@ const sendEmailToAdmin = async (req, res) => {
         });
     }
 };
-
-
 
 module.exports = {
     login,

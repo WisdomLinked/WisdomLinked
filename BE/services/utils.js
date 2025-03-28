@@ -1,12 +1,24 @@
 const nodemailer = require("nodemailer");
 
-const transporter = nodemailer.createTransport({
-  host: "smtp.gmail.com",
-  port: 587,
-  secure: false,
+// Zoho Transport for OTPs
+const noreplyTransporter = nodemailer.createTransport({
+  host: "smtp.zoho.com",
+  port: 465,
+  secure: true,
   auth: {
-    user: process.env.GOOGLE_EMAIL,
-    pass: process.env.GOOGLE_PASSWORD,
+    user: process.env.ZOHONOREPLY_USER,
+    pass: process.env.ZOHONOREPLY_PASS,
+  },
+});
+
+// Zoho Transport for Contact form emails
+const adminTransporter = nodemailer.createTransport({
+  host: "smtp.zoho.com",
+  port: 465,
+  secure: true,
+  auth: {
+    user: process.env.ZOHOADMIN_USER,
+    pass: process.env.ZOHOADMIN_PASS,
   },
 });
 
@@ -20,7 +32,7 @@ exports.getCurrentDateString = () => {
 
 exports.sendOTP = async (targetEmail, todays_date_str, smurf_details_str) => {
   const mailOptions = {
-    from: `"WisdomLinked Admin" <${process.env.GOOGLE_EMAIL}>`,
+    from: `"WisdomLinked Support" <${process.env.ZOHONOREPLY_USER}>`,
     to: targetEmail,
     subject: "Your One-Time Passcode (OTP)",
     html: `
@@ -28,9 +40,8 @@ exports.sendOTP = async (targetEmail, todays_date_str, smurf_details_str) => {
       ${smurf_details_str}
     `,
   };
-
   try {
-    const info = await transporter.sendMail(mailOptions);
+    const info = await noreplyTransporter.sendMail(mailOptions);
     console.log("OTP email sent:", info.messageId);
   } catch (error) {
     console.error("Error sending OTP email:", error.message);
@@ -48,17 +59,17 @@ exports.sendContactDetails = async (targetEmail, name, email, demand) => {
   `;
 
   const mailOptions = {
-    from: `"TOE Contact" <${process.env.GOOGLE_EMAIL}>`,
+    from: `"Wisdom Linked Admin" <${process.env.ZOHOADMIN_USER}>`,
     to: targetEmail,
     subject: "New Contact Form Submission",
     html,
   };
 
   try {
-    const info = await transporter.sendMail(mailOptions);
+    const info = await adminTransporter.sendMail(mailOptions);
     console.log("Contact email sent:", info.messageId);
   } catch (error) {
-    console.error(" Error sending contact email:", error.message);
+    console.error("Error sending contact email:", error.message);
     throw error;
   }
 };
