@@ -20,7 +20,7 @@ const buildWelcomeEmailMessage = (email: string, password: string) => {
             return `
         Greetings of the day!
         
-        Your account has been successfully registered at varun-sahni.com.
+        Your account has been successfully registered at Wisdom Linked.
         
         Below are your credentials:
         Email ID: ${email}
@@ -29,7 +29,7 @@ const buildWelcomeEmailMessage = (email: string, password: string) => {
         We look forward to having you explore our services.
         
         Best Regards,
-        Team varun-sahni.com
+        Team wisdomlinked.com
         `;
         };
 

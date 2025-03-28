@@ -1,141 +1,64 @@
-const axios = require("axios");
+const nodemailer = require("nodemailer");
+
+const transporter = nodemailer.createTransport({
+  host: "smtp.gmail.com",
+  port: 587,
+  secure: false,
+  auth: {
+    user: process.env.GOOGLE_EMAIL,
+    pass: process.env.GOOGLE_PASSWORD,
+  },
+});
 
 exports.getCurrentDateString = () => {
-    const date = new Date();
+  const date = new Date();
+  const day = String(date.getDate()).padStart(2, "0");
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const year = date.getFullYear();
+  return `${day}-${month}-${year}`;
+};
 
-    let currentDay = String(date.getDate()).padStart(2, '0');
+exports.sendOTP = async (targetEmail, todays_date_str, smurf_details_str) => {
+  const mailOptions = {
+    from: `"WisdomLinked Admin" <${process.env.GOOGLE_EMAIL}>`,
+    to: targetEmail,
+    subject: "Your One-Time Passcode (OTP)",
+    html: `
+      <p>Date: <strong>${todays_date_str}</strong></p>
+      ${smurf_details_str}
+    `,
+  };
 
-    let currentMonth = String(date.getMonth() + 1).padStart(2, "0");
+  try {
+    const info = await transporter.sendMail(mailOptions);
+    console.log("OTP email sent:", info.messageId);
+  } catch (error) {
+    console.error("Error sending OTP email:", error.message);
+  }
+};
 
-    let currentYear = date.getFullYear();
+exports.sendContactDetails = async (targetEmail, name, email, demand) => {
+  const html = `
+    <h3>New Contact Request</h3>
+    <ul>
+      <li><strong>Name:</strong> ${name || "N/A"}</li>
+      <li><strong>Email:</strong> ${email || "N/A"}</li>
+      <li><strong>Demand:</strong> ${demand || "N/A"}</li>
+    </ul>
+  `;
 
-    let currentDate = `${currentDay}-${currentMonth}-${currentYear}`;
+  const mailOptions = {
+    from: `"TOE Contact" <${process.env.GOOGLE_EMAIL}>`,
+    to: targetEmail,
+    subject: "New Contact Form Submission",
+    html,
+  };
 
-    return currentDate;
-}
-
-exports.sendOTP = (targetEmail, todays_date_str, smurf_details_str) => {
-    var data = JSON.stringify({
-        "from": {
-            "email": "varunsahni286@gmail.com"
-        },
-        "personalizations": [{
-            "to": [
-                {
-                    "email": targetEmail
-                }
-            ],
-            "dynamic_template_data": {
-                "todays_date": todays_date_str,
-                "smurf_details": smurf_details_str
-            }
-        }],
-        "template_id": "d-46afc30a193342d5b3795022b0fc4c53"
-    });
-
-    console.log("OTP Email Data: ", data);
-
-    var config = {
-        method: 'post',
-        url: 'https://api.sendgrid.com/v3/mail/send',
-        headers: {
-            'Authorization': `Bearer ${process.env.SENDGRID_APIKEY}`,
-            'Content-Type': 'application/json'
-        },
-        data: data
-    };
-
-    axios(config)
-        .then(function (response) {
-            console.log(JSON.stringify(response.data));
-        })
-        .catch(function (error) {
-            console.log(error);
-        });
-
-}
-
-//
-// exports.sendContactDetails = (targetEmail, name, email, demand, fileName) => {
-//     const data = JSON.stringify({
-//         from: {
-//             email: "varunsahni286@gmail.com"
-//         },
-//         personalizations: [
-//             {
-//                 to: [
-//                     {
-//                         email: targetEmail
-//                     }
-//                 ],
-//                 dynamic_template_data: {
-//                     name: name,
-//                     email: email,
-//                     demand: demand,
-//                     fileName: fileName || "No file uploaded"
-//                 }
-//             }
-//         ],
-//         template_id: "d-b2822afa5ff441f897415de5a0f8b180" // Replace with your dynamic template ID
-//     });
-//
-//     console.log("Contact Details Email Data: ", data);
-//
-//     const config = {
-//         method: "post",
-//         url: "https://api.sendgrid.com/v3/mail/send",
-//         headers: {
-//             Authorization: `Bearer ${process.env.SENDGRID_APIKEY}`,
-//             "Content-Type": "application/json"
-//         },
-//         data: data
-//     };
-//
-//     axios(config)
-//         .then((response) => {
-//             console.log("Email sent successfully:", response.data);
-//         })
-//         .catch((error) => {
-//             console.error("Error sending email:", error.response ? error.response.data : error.message);
-//         });
-// };
-
-exports.sendContactDetails = (targetEmail, name, email, demand) => {
-    const data = JSON.stringify({
-        from: {
-            email: "varunsahni286@gmail.com"
-        },
-        personalizations: [
-            {
-                to: [
-                    { email: targetEmail }
-                ],
-                dynamic_template_data: {
-                    name: name || "N/A",
-                    email: email || "N/A",
-                    demand: demand || "N/A"
-                }
-            }
-        ],
-        template_id: "d-b2822afa5ff441f897415de5a0f8b180" // Ensure this matches your SendGrid template
-    });
-
-    const config = {
-        method: "post",
-        url: "https://api.sendgrid.com/v3/mail/send",
-        headers: {
-            Authorization: `Bearer ${process.env.SENDGRID_APIKEY}`,
-            "Content-Type": "application/json"
-        },
-        data: data
-    };
-
-    return axios(config)
-        .then((response) => {
-            console.log("Email sent successfully:", response.data);
-        })
-        .catch((error) => {
-            console.error("Error sending email:", error.response ? error.response.data : error.message);
-            throw error; // Ensure error propagates to handle it properly
-        });
+  try {
+    const info = await transporter.sendMail(mailOptions);
+    console.log("Contact email sent:", info.messageId);
+  } catch (error) {
+    console.error(" Error sending contact email:", error.message);
+    throw error;
+  }
 };
