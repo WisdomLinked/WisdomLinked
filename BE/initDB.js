@@ -35,7 +35,7 @@ const appendDefaultServices = async () => {
 
 const appendAdminUserAndGroupChat = async () => {
     try {
-        const email = "admin@toe.com",
+        const email = "admin@wisdomlinked.com",
             password = "no9x@mhc#z11l<k",
             role = "admin";
 

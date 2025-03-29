@@ -17,6 +17,9 @@ const randomize = require('randomatic');
 const Event = require("../models/Event");
 const ContactedUs = require("../models/ContactedUs");
 const nodemailer = require("nodemailer");
+const sgMail = require("@sendgrid/mail");
+
+sgMail.setApiKey(process.env.SENDGRID_API_KEY);
 
 const getUniqueConfirmCode = async () => {
     try {
@@ -739,31 +742,30 @@ const sendEmailToAdmin = async (req, res) => {
             });
         }
 
-
-        let mailOptions = {
-            from: process.env.ZOHOADMIN_USER,
-            to: process.env.ZOHOADMIN_USER,
-            subject: "Message from WisdomLink.io",
-            text: message
+        const msg = {
+        to: "admin@wisdomlinked.com",
+        from: {
+            name: "WisdomLinked Admin",
+            email: "admin@wisdomlinked.com", 
+        },
+        subject: "Message from WisdomLinked.com",
+        text: message,
         };
-
-        // Zoho Transport for Contact form emails
-        const adminTransporter = nodemailer.createTransport({
-            host: "smtp.zoho.com",
-            port: 465,
-            secure: true,
-            auth: {
-                user: process.env.ZOHOADMIN_USER,
-                pass: process.env.ZOHOADMIN_PASS,
-            },
-        });
-        // Send the mail
-        await adminTransporter.sendMail(mailOptions);
-        console.log("Email sent to admin:", mailOptions);
+    
+        try {
+        const response = await sgMail.send(msg);
+        console.log("Email sent to admin via SendGrid:", response[0].statusCode);
         return res.status(200).json({
             status: "SUCCESS",
-            message: "Email sent successfully."
-        });
+            message: "Email sent successfully.",
+          });
+        } catch (error) {
+        console.error("Error sending email to admin via SendGrid:", error.message);
+        return res.status(500).json({
+            status: "FAILED",
+            message: "Error sending email.",
+          });
+        }
     } catch (error) {
         console.error("Error sending email:", error);
         return res.status(500).json({

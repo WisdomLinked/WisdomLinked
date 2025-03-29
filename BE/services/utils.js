@@ -1,26 +1,6 @@
-const nodemailer = require("nodemailer");
+const sgMail = require("@sendgrid/mail");
 
-// Zoho Transport for OTPs
-const noreplyTransporter = nodemailer.createTransport({
-  host: "smtp.zoho.com",
-  port: 465,
-  secure: true,
-  auth: {
-    user: process.env.ZOHONOREPLY_USER,
-    pass: process.env.ZOHONOREPLY_PASS,
-  },
-});
-
-// Zoho Transport for Contact form emails
-const adminTransporter = nodemailer.createTransport({
-  host: "smtp.zoho.com",
-  port: 465,
-  secure: true,
-  auth: {
-    user: process.env.ZOHOADMIN_USER,
-    pass: process.env.ZOHOADMIN_PASS,
-  },
-});
+sgMail.setApiKey(process.env.SENDGRID_API_KEY);
 
 exports.getCurrentDateString = () => {
   const date = new Date();
@@ -31,45 +11,52 @@ exports.getCurrentDateString = () => {
 };
 
 exports.sendOTP = async (targetEmail, todays_date_str, smurf_details_str) => {
-  const mailOptions = {
-    from: `"WisdomLinked Support" <${process.env.ZOHONOREPLY_USER}>`,
-    to: targetEmail,
-    subject: "Your One-Time Passcode (OTP)",
-    html: `
-      <p>Date: <strong>${todays_date_str}</strong></p>
-      ${smurf_details_str}
-    `,
+    const msg = {
+      to: targetEmail,
+      from: {
+        name: "WisdomLinked Support",
+        email: "noreply@wisdomlinked.com",
+      },
+      subject: "Your One-Time Passcode (OTP)",
+      html: `
+        <p>Date: <strong>${todays_date_str}</strong></p>
+        ${smurf_details_str}
+      `,
+    };
+    try {
+      const response = await sgMail.send(msg);
+      console.log("OTP email sent via SendGrid:", response[0].statusCode);
+    } catch (error) {
+      console.error("Error sending OTP email via SendGrid:", error.message);
+    }
   };
-  try {
-    const info = await noreplyTransporter.sendMail(mailOptions);
-    console.log("OTP email sent:", info.messageId);
-  } catch (error) {
-    console.error("Error sending OTP email:", error.message);
-  }
-};
 
 exports.sendContactDetails = async (targetEmail, name, email, demand) => {
-  const html = `
-    <h3>New Contact Request</h3>
-    <ul>
-      <li><strong>Name:</strong> ${name || "N/A"}</li>
-      <li><strong>Email:</strong> ${email || "N/A"}</li>
-      <li><strong>Demand:</strong> ${demand || "N/A"}</li>
-    </ul>
-  `;
-
-  const mailOptions = {
-    from: `"Wisdom Linked Admin" <${process.env.ZOHOADMIN_USER}>`,
-    to: targetEmail,
-    subject: "New Contact Form Submission",
-    html,
+    const html = `
+      <h3>New Contact Request</h3>
+      <ul>
+        <li><strong>Name:</strong> ${name || "N/A"}</li>
+        <li><strong>Email:</strong> ${email || "N/A"}</li>
+        <li><strong>Demand:</strong> ${demand || "N/A"}</li>
+      </ul>
+    `;
+  
+    const msg = {
+      to: targetEmail,
+      from: {
+        name: "WisdomLinked Admin",
+        email: "admin@wisdomlinked.com", 
+      },
+      subject: "New Contact Form Submission",
+      html,
+      replyTo: email, 
+    };
+  
+    try {
+      const response = await sgMail.send(msg);
+      console.log("Contact email sent via SendGrid:", response[0].statusCode);
+    } catch (error) {
+      console.error("Error sending contact email via SendGrid:", error.message);
+      throw error;
+    }
   };
-
-  try {
-    const info = await adminTransporter.sendMail(mailOptions);
-    console.log("Contact email sent:", info.messageId);
-  } catch (error) {
-    console.error("Error sending contact email:", error.message);
-    throw error;
-  }
-};

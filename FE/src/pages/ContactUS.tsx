@@ -22,7 +22,7 @@ const ContactUS = () => {
 
     const createEmailTemplate = (name: string, email: string, countryCode:string, contactNumber: string, issue: string) => {
         return `
-Someone just reached us at WisdomLink.io,
+Someone just reached us at WisdomLinked.com,
 
 Here are the user's details:
 
@@ -33,7 +33,7 @@ Contact Number: ${contactNumber}
 Reason: ${issue} 
 
 Warm Regards,
-The WisdomLink.io Team
+The WisdomLinked.com Team
         `.trim();
     };
 
