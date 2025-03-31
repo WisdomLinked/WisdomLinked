@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { Calendar } from "react-big-calendar";
 import CloseIcon from '@mui/icons-material/Close';
 import EventDetail from "./eventDetail";
@@ -137,6 +137,22 @@ const ExpertCalendar = () => {
         }
     }
 
+    const dayPropGetter = useCallback(
+        (date) => {
+            const hasEvent = events.some(
+                (event) =>
+                    date >= new Date(event.start).setHours(0, 0, 0, 0) &&
+                    date <= new Date(event.end).setHours(23, 59, 59, 999)
+            );
+            return {
+                style: {
+                    backgroundColor: hasEvent ? "#f94144" : "#30B199", // Red for busy days, green for available days
+                },
+            };
+        },
+        [events]
+    );
+
     const cancelInvitation = async (id: any) => {
         SetLoadingStatus(true)
         const response = await doCancelInvitation(id)
@@ -166,6 +182,7 @@ const ExpertCalendar = () => {
                 events={events || []}
                 eventPropGetter={eventStyleGetter}
                 onSelectEvent={handleSelectEvent}
+                dayPropGetter={dayPropGetter}
             />
             {
                 eventModalShow ?
