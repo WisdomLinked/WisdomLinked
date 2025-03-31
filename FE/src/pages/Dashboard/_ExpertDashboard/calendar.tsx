@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from "react";
-import { Calendar } from "react-big-calendar";
+import { Calendar, SlotInfo } from "react-big-calendar";
 import CloseIcon from '@mui/icons-material/Close';
 import EventDetail from "./eventDetail";
 import {
@@ -26,6 +26,10 @@ const ExpertCalendar = () => {
     const [selectedEvent, set_selectedEvent] = useState<any>(null)
     const [eventModalShow, set_eventModalShow] = useState<boolean>(false)
     const [seminarModalShow, set_seminarModalShow] = useState<boolean>(false)
+    const [selectedDay, set_selectedDay] = useState<Date | null>(null);
+    const [selectedDayEvents, set_selectedDayEvents] = useState<Array<any>>([]);
+    const [dayModalShow, set_dayModalShow] = useState<boolean>(false);
+
 
     const eventStyleGetter = (event: any, start: any, end: any) => {
         const now = new Date()
@@ -160,6 +164,23 @@ const ExpertCalendar = () => {
         [events]
     );
 
+    const handleDayClick = (date: Date) => {
+        const dayStart = new Date(date);
+        dayStart.setHours(0, 0, 0, 0);
+        
+        const dayEnd = new Date(date);
+        dayEnd.setHours(23, 59, 59, 999);
+        
+        const filteredEvents = events.filter(
+          (event) => event.start >= dayStart && event.start <= dayEnd
+        );
+        
+        set_selectedDay(date);
+        set_selectedDayEvents(filteredEvents);
+        set_dayModalShow(true);
+      };      
+    
+
     const cancelInvitation = async (id: any) => {
         SetLoadingStatus(true)
         const response = await doCancelInvitation(id)
@@ -189,9 +210,10 @@ const ExpertCalendar = () => {
                 events={events || []}
                 eventPropGetter={eventStyleGetter}
                 onSelectEvent={handleSelectEvent}
+                onSelectSlot={(slotInfo) => handleDayClick(slotInfo.start)} // Add this line
                 dayPropGetter={dayPropGetter}
             />
-            {
+            { 
                 eventModalShow ?
                     <div className={`absolute top-0 left-0 w-full h-full bg-white bg-opacity-10 backdrop-blur-sm z-10 flex items-center justify-center p-8`}>
                         <div
@@ -328,6 +350,48 @@ const ExpertCalendar = () => {
                     </div> :
                     null
             }
+            {dayModalShow && (
+  <div className="absolute top-0 left-0 w-full h-full bg-white bg-opacity-10 backdrop-blur-sm z-10 flex items-center justify-center p-8">
+    <div
+      className="absolute top-0 left-0 w-full h-full cursor-pointer"
+      onClick={() => set_dayModalShow(false)}
+    />
+    <div className="w-max max-w-[600px] bg-black rounded-lg text-white p-6 relative">
+      <div className="text-center text-white text-2xl mb-6">
+        Events on {selectedDay?.toLocaleDateString()}
+      </div>
+      <button
+        className="absolute right-2 top-2 rounded-md hover:bg-grey"
+        onClick={() => set_dayModalShow(false)}
+      >
+        <CloseIcon />
+      </button>
+      {selectedDayEvents.length === 0 ? (
+        <div className="text-center py-4">No events scheduled for this day</div>
+      ) : (
+        <div className="max-h-[60vh] overflow-y-auto">
+          {selectedDayEvents.map((event) => (
+            <div key={event.id} className="mb-4 pb-4 border-b border-gray-700">
+              <div className="font-bold mb-2">{event.title}</div>
+              <div className="text-sm">
+                {new Date(event.start).toLocaleTimeString()} - 
+                {new Date(event.end).toLocaleTimeString()}
+              </div>
+              {event.type === 'event' ? (
+                <div className="mt-2 text-sm">
+                  Session with {event.customer?.username || 'Unknown'}
+                </div>
+              ) : (
+                <div className="mt-2 text-sm">Seminar</div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  </div>
+)}
+
         </div>
     );
 };
