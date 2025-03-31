@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { Calendar } from "react-big-calendar";
 import CloseIcon from '@mui/icons-material/Close';
 import "react-big-calendar/lib/css/react-big-calendar.css";
@@ -55,20 +55,53 @@ const SelectDateTime = ({
         };
     };
 
-    const dayStyleGetter = (date: any) => {
-        const today = new Date().setHours(0, 0, 0, 0)
-        const style =
-            date < today ?
-                {
-                    backgroundColor: '#141414',
-                    cursor: 'not-allowed'
-                } : {
-                    cursor: 'pointer'
+    const dayStyleGetter = useCallback(
+        (date) => {
+            const today = new Date().setHours(0, 0, 0, 0); // Normalize today's date to midnight
+    
+            // Style for past dates
+            if (date < today) {
+                return {
+                    style: {
+                        backgroundColor: '#141414',
+                        cursor: 'not-allowed',
+                    },
                 };
-        return {
-            style: style,
-        };
-    };
+            }
+    
+            // Check if the date has an event
+            const hasEvent = events.some(
+                (event) =>
+                    date >= new Date(event.start).setHours(0, 0, 0, 0) &&
+                    date <= new Date(event.end).setHours(23, 59, 59, 999)
+            );
+    
+            // Style for future dates based on event presence
+            return {
+                style: {
+                    backgroundColor: hasEvent ? '#f94144' : '#30B199', // Red for busy days, green for available days
+                    cursor: 'pointer',
+                },
+            };
+        },
+        [events]
+    );
+    
+
+    // const dayStyleGetter = (date: any) => {
+    //     const today = new Date().setHours(0, 0, 0, 0)
+    //     const style =
+    //         date < today ?
+    //             {
+    //                 backgroundColor: '#141414',
+    //                 cursor: 'not-allowed'
+    //             } : {
+    //                 cursor: 'pointer'
+    //             };
+    //     return {
+    //         style: style,
+    //     };
+    // };
 
     const isToday = (selectedDate: any) => {
         const today = new Date();
