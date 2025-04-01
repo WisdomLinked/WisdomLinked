@@ -67,7 +67,7 @@ function AdminRegisterExpert() {
         We look forward to having you explore our services.
         
         Best Regards,
-        Team varun-sahni.com
+        Team wisdomlinked.com
         `;
             };
 

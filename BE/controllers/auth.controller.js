@@ -17,6 +17,9 @@ const randomize = require('randomatic');
 const Event = require("../models/Event");
 const ContactedUs = require("../models/ContactedUs");
 const nodemailer = require("nodemailer");
+const sgMail = require("@sendgrid/mail");
+
+sgMail.setApiKey(process.env.SENDGRID_API_KEY);
 
 const getUniqueConfirmCode = async () => {
     try {
@@ -33,7 +36,6 @@ const getUniqueConfirmCode = async () => {
 
 const getKeywordsAndServices = async (req, res) => {
     try {
-        //console.log('OKOKOKOK')
         const keywords = await Keyword.find()
         const services = await Service.find()
         return res.status(200).json({
@@ -252,9 +254,8 @@ const verifyRegistration = async (req, res) => {
 const login = async (req, res) => {
     try {
         const { email, password } = req.body;
-
+        
         const user = await getFullUserData(email)
-
         if (!user) {
             return res.status(200).json({ status: 'FAIL', error: "Invalid credentials. Please try again" });
         }
@@ -284,8 +285,9 @@ const login = async (req, res) => {
         }
 
         let text = `<div>Verify your login to TOE by the code <br/><b>${code}</b></div>`
+        console.log("Sending OTP for login confirmation to: ", email)
+        
         await utils.sendOTP(
-            // process.env.NODE_ENV === 'development' ? 'varunsahni10134@gmail.com' : email,
             email,
             utils.getCurrentDateString(),
             text
@@ -730,43 +732,40 @@ const submitContactForm = async (req, res) => {
 
 const sendEmailToAdmin = async (req, res) => {
     try {
-        const { email, message } = req.body;
+        const { message } = req.body;
 
         // Basic validation
-        if (!email || !message) {
+        if (!message) {
             return res.status(400).json({
                 status: "FAILED",
-                message: "Email and message are required."
+                message: "Message is required."
             });
         }
 
-        let transporter = nodemailer.createTransport({
-            host: "smtp.gmail.com",      // same as Python's smtp.gmail.com
-            port: 587,                   // TLS port
-            secure: false,               // use TLS rather than SSL
-            auth: {
-                user: process.env.GOOGLE_EMAIL,
-                pass: process.env.GOOGLE_PASSWORD
-            },
-            tls: {
-                rejectUnauthorized: false
-            }
-        });
-
-        let mailOptions = {
-            from: process.env.GOOGLE_EMAIL,
-            to: email,
-            subject: "Message from WisdomLink.io",
-            text: message
+        const msg = {
+        to: "admin@wisdomlinked.com",
+        from: {
+            name: "WisdomLinked Admin",
+            email: "admin@wisdomlinked.com", 
+        },
+        subject: "Message from WisdomLinked.com",
+        text: message,
         };
-
-        // Send the mail
-        await transporter.sendMail(mailOptions);
-
+    
+        try {
+        const response = await sgMail.send(msg);
+        console.log("Email sent to admin via SendGrid:", response[0].statusCode);
         return res.status(200).json({
             status: "SUCCESS",
-            message: "Email sent successfully."
-        });
+            message: "Email sent successfully.",
+          });
+        } catch (error) {
+        console.error("Error sending email to admin via SendGrid:", error.message);
+        return res.status(500).json({
+            status: "FAILED",
+            message: "Error sending email.",
+          });
+        }
     } catch (error) {
         console.error("Error sending email:", error);
         return res.status(500).json({
@@ -775,8 +774,6 @@ const sendEmailToAdmin = async (req, res) => {
         });
     }
 };
-
-
 
 module.exports = {
     login,

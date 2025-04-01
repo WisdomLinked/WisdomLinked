@@ -22,7 +22,7 @@ const ContactUS = () => {
 
     const createEmailTemplate = (name: string, email: string, countryCode:string, contactNumber: string, issue: string) => {
         return `
-Someone just reached us at WisdomLink.io,
+Someone just reached us at WisdomLinked.com,
 
 Here are the user's details:
 
@@ -33,13 +33,13 @@ Contact Number: ${contactNumber}
 Reason: ${issue} 
 
 Warm Regards,
-The WisdomLink.io Team
+The WisdomLinked.com Team
         `.trim();
     };
 
-    const handleSendEmail = async(email: string, message: string) => {
-        try{
-            const res = await sendEmailToAdmin(email, message);
+    const handleSendEmail = async (message: string) => {
+        try {
+          const res = await sendEmailToAdmin(message);      
             if(res && res.status ==="SUCCESS"){
                 console.log("Email sent successfully!");
             }
@@ -80,11 +80,8 @@ The WisdomLink.io Team
 
                 if (response) {
 
-                    const finalMessage = createEmailTemplate(name, email, countryCode, contactNumber, issue)
-
-                    await handleSendEmail("xbwang@hotmail.com", finalMessage);
-                    //await handleSendEmail("varunsahni286@gmail.com", finalMessage);
-
+                    const finalMessage = createEmailTemplate(name, email, countryCode, contactNumber, issue);
+                    await handleSendEmail(finalMessage);
                     alert("Thank you for contacting us. Your query has been submitted successfully.");
 
                     // Clear input fields

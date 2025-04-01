@@ -9,8 +9,9 @@ exports.uploadImageToStorage = async (file) => {
             contentType: file.mimetype
         });
 
+        console.log("Uploading:", file.originalname);
         const response = await axios.post(
-            `${process.env.AWS_URL}/upload`,
+            `https://faas-nyc1-2ef2e6cc.doserverless.co/api/v1/web/fn-de24ea01-bfb2-4672-9e1c-82d2f1b3000a/package1/imageUpload`,
             formData,
             {
                 headers: {
@@ -18,6 +19,8 @@ exports.uploadImageToStorage = async (file) => {
                 }
             }
         );
+        console.log(" Upload complete, triggering resize");
+        await axios.get(`https://faas-nyc1-2ef2e6cc.doserverless.co/api/v1/web/fn-de24ea01-bfb2-4672-9e1c-82d2f1b3000a/package1/imageResize?key=originals/${file.originalname}`);
 
         return response.data;
     } catch (error) {

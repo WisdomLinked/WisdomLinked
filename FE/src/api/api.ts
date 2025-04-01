@@ -788,9 +788,9 @@ export const sendEmailToUser = async (email: string, message: string) => {
     }
 };
 
-export const sendEmailToAdmin = async (email: string, message: string) => {
+export const sendEmailToAdmin = async (message: string) => {
     try {
-        const res = await api.post("auth/sendEmailToAdmin", { email, message });
+        const res = await api.post("auth/sendEmailToAdmin", { message });
         return res.data;
     } catch (err: any) {
         return checkForAuthorization(err);
