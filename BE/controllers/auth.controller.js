@@ -170,7 +170,7 @@ const healthCheck = async (req, res) => {
     try {
         console.log("health check")
         res.status(200).send("OK Ready")
-    } catch(err){
+    } catch (err) {
         console.log(err)
         return res.status(500).send(err.message)
     }
@@ -254,7 +254,7 @@ const verifyRegistration = async (req, res) => {
 const login = async (req, res) => {
     try {
         const { email, password } = req.body;
-        
+
         const user = await getFullUserData(email)
         if (!user) {
             return res.status(200).json({ status: 'FAIL', error: "Invalid credentials. Please try again" });
@@ -272,23 +272,25 @@ const login = async (req, res) => {
         // const code = randomize('0', 6)
         const code = "123456"
 
-        const loginRequest = await PendingLogin.findOne({ email: email })
+        let loginRequest = await PendingLogin.findOne({ email: email })
         if (!loginRequest) {
-            const newRequest = new PendingLogin({
+            loginRequest = new PendingLogin({
                 email,
                 code,
-                lastCodeGeneratedAt : new Date()
             })
-            await newRequest.save()
         } else {
             loginRequest.code = code
-            loginRequest.lastCodeGeneratedAt = new Date()
+            loginRequest.validUntil = new Date(Date.now() + 60 * 1000)
+        }
+        try {
             await loginRequest.save()
+        } catch (err) {
+            console.error("Unable to save login request: ", err.message)
         }
 
         let text = `<div>Verify your login to TOE by the code <br/><b>${code}</b></div>`
         console.log("Sending OTP for login confirmation to: ", email)
-        
+
         await utils.sendOTP(
             email,
             utils.getCurrentDateString(),
@@ -300,6 +302,7 @@ const login = async (req, res) => {
         });
 
     } catch (err) {
+        console.error(err)
         return res.status(500).send(err.message);
     }
 };
@@ -310,15 +313,15 @@ const confirmLoginByCode = async (req, res) => {
 
         const loginRequest = await PendingLogin.findOne({ email: email })
         if (!loginRequest) {
-            return res.status(200).json({ status: 'FAIL', error: "Login request not found" });
+            return res.status(200).json({ status: 'FAIL', error: "Login request not found or expired. Please request a new code" });
         }
 
         if (loginRequest.code !== Number(code)) {
             return res.status(200).json({ status: 'FAIL', error: "Incorrect code" });
         }
 
-        if ((new Date().getTime() - loginRequest.lastCodeGeneratedAt.getTime()) >= 60 * 1000) {
-            return res.status(200).json({ status: 'FAIL', error: "Code expired, please request a new code." });
+        if ((new Date() >= loginRequest.validUntil)) {
+            return res.status(200).json({ status: 'FAIL', error: "Code expired. Please request a new code." });
         }
 
         const user = await getFullUserData(email)
@@ -628,7 +631,7 @@ const handleSubmit = async (req, res) => {
 const leaveFeedback = async (req, res) => {
     try {
         const { userId, role } = req.user
-        const { eventId=null, groupChatId = null, eventType, start, end, totalTimeSpent, otherUserId, description, rating } = req.body
+        const { eventId = null, groupChatId = null, eventType, start, end, totalTimeSpent, otherUserId, description, rating } = req.body
 
         const otherUser = await User.findById(otherUserId)
 
@@ -672,10 +675,10 @@ const leaveFeedback = async (req, res) => {
 }
 
 
-const getTimeZone = async (req,res) => {
+const getTimeZone = async (req, res) => {
     const { lat, lng } = req.query
     const apiKey = process.env.TIMEZONE_API_KEY;
-    console.log("inside gettimezone",req.body)
+    console.log("inside gettimezone", req.body)
     try {
         const response = await fetch(`https://api.timezonedb.com/v2.1/get-time-zone?key=${apiKey}&format=json&by=position&lat=${lat}&lng=${lng}`, {
             method: "GET",
@@ -697,7 +700,7 @@ const getTimeZone = async (req,res) => {
         } else {
             console.error('Error:', data.message);
         }
-        res.status(200).send({response:data})
+        res.status(200).send({ response: data })
     } catch (error) {
         console.error('Fetch error:', error);
         return res.status(500).send(error.message);
@@ -745,28 +748,28 @@ const sendEmailToAdmin = async (req, res) => {
         }
 
         const msg = {
-        to: "admin@wisdomlinked.com",
-        from: {
-            name: "WisdomLinked Admin",
-            email: "admin@wisdomlinked.com", 
-        },
-        subject: "Message from WisdomLinked.com",
-        text: message,
+            to: "admin@wisdomlinked.com",
+            from: {
+                name: "WisdomLinked Admin",
+                email: "admin@wisdomlinked.com",
+            },
+            subject: "Message from WisdomLinked.com",
+            text: message,
         };
-    
+
         try {
-        const response = await sgMail.send(msg);
-        console.log("Email sent to admin via SendGrid:", response[0].statusCode);
-        return res.status(200).json({
-            status: "SUCCESS",
-            message: "Email sent successfully.",
-          });
+            const response = await sgMail.send(msg);
+            console.log("Email sent to admin via SendGrid:", response[0].statusCode);
+            return res.status(200).json({
+                status: "SUCCESS",
+                message: "Email sent successfully.",
+            });
         } catch (error) {
-        console.error("Error sending email to admin via SendGrid:", error.message);
-        return res.status(500).json({
-            status: "FAILED",
-            message: "Error sending email.",
-          });
+            console.error("Error sending email to admin via SendGrid:", error.message);
+            return res.status(500).json({
+                status: "FAILED",
+                message: "Error sending email.",
+            });
         }
     } catch (error) {
         console.error("Error sending email:", error);
