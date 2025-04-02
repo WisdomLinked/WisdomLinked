@@ -7,7 +7,8 @@ const pendingLoginSchema = new mongoose.Schema(
             unique: true,
             required: [true, "can't be blank"],
         },
-        code: { type: Number }
+        code: { type: Number },
+        lastCodeGeneratedAt: { type: Date, default: Date.now },
     },
     { timestamps: true }
 );

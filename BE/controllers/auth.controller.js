@@ -276,11 +276,13 @@ const login = async (req, res) => {
         if (!loginRequest) {
             const newRequest = new PendingLogin({
                 email,
-                code
+                code,
+                lastCodeGeneratedAt : new Date()
             })
             await newRequest.save()
         } else {
             loginRequest.code = code
+            loginRequest.lastCodeGeneratedAt = new Date()
             await loginRequest.save()
         }
 
@@ -315,8 +317,8 @@ const confirmLoginByCode = async (req, res) => {
             return res.status(200).json({ status: 'FAIL', error: "Incorrect code" });
         }
 
-        if ((new Date().getTime() - loginRequest.updatedAt.getTime()) >= 60 * 1000) {
-            return res.status(200).json({ status: 'FAIL', error: "Code was expired." });
+        if ((new Date().getTime() - loginRequest.lastCodeGeneratedAt.getTime()) >= 60 * 1000) {
+            return res.status(200).json({ status: 'FAIL', error: "Code expired, please request a new code." });
         }
 
         const user = await getFullUserData(email)
