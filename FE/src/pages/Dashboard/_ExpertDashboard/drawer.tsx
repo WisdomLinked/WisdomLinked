@@ -31,6 +31,7 @@ import { leaveRoom } from "../../../socket/roomHandler";
 import GeneralChatList from "../FriendsSideBar/GeneralChatList";
 import PersonSearchIcon from '@mui/icons-material/PersonSearch';
 import Search from "./search";
+import ExpertDashboard from "./dashboard";
 
 interface Props {
     window?: () => Window;
@@ -236,7 +237,7 @@ export default function ExpertDrawer(props: Props) {
                     <Route path="/profile" element={<ExpertProfile userDetails={userDetails} />} />
                     <Route path="/seminar" element={<ExpertSeminar />} />
                     <Route path="/search" element={<Search />} />
-                    <Route path="/*" element={<Dashboard />} />
+                    <Route path="/*" element={<ExpertDashboard />} />
                 </Routes>
                 {props.localStream && <VideoChat />}
                 <IncomingCall />
