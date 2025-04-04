@@ -8,7 +8,7 @@ export type RegisterArgs = {
     password: string;
     username: string;
     role: string;
-    
+
 };
 
 export type InviteFriendArgs = {
@@ -52,3 +52,24 @@ export type DeleteGroupArgs = {
 export type RemoveFriendArgs = {
     friendId: string;
 };
+
+export type User  = {
+    _id: string;
+    email: string;
+    username: string;
+    role: string;
+    createdAt: string;
+    updatedAt: string;    
+}
+
+export type Session = {
+    _id: string;
+    createdAt: string;
+    updatedAt: string;
+    status: string;
+    customer: User;
+    expert: User;
+    start: string;
+    duration: number;
+    price: number;
+}

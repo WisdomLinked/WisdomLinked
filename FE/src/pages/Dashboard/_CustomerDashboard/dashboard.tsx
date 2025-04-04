@@ -1,8 +1,8 @@
-import React, {useEffect, useRef, useState} from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { useAppSelector } from "../../../store";
 import Avatar from "../../../components/Avatar";
 import { formatDateYYYY_MM_DD_h_m } from "../../../actions/common";
-import {doCancelEvent, doCancelPendingSeminar, doUpdateEvent, profileImageFetch} from "../../../api/api";
+import { doCancelEvent, doCancelPendingSeminar, doUpdateEvent, profileImageFetch } from "../../../api/api";
 import { updateMe } from "../../../actions/authActions";
 import { useDispatch } from "react-redux";
 import { SetLoadingStatus } from "../../../actions/appActions";
@@ -10,17 +10,19 @@ import { useNavigate } from "react-router-dom";
 import CloseIcon from '@mui/icons-material/Close';
 import SelectDateTime from "../selectDateTime";
 import { showAlert } from "../../../actions/alertActions";
-import {setChosenChatDetails, setChosenGroupChatDetails} from "../../../actions/chatActions";
+import { setChosenChatDetails, setChosenGroupChatDetails } from "../../../actions/chatActions";
 import Chatbot from "../../../components/chatbot";
+import CollapsibleSection from "../../../components/collapsibleSection";
+import { Session } from "../../../api/types";
 
 const Dashboard = () => {
 
-    const { auth: { userDetails: { pendingGroupChats, events, groupChats:groupChat, status,_id:userId } }, friends: { groupChatList }} = useAppSelector(state => state)
+    const { auth: { userDetails: { pendingGroupChats, events, groupChats: groupChat, status, _id: userId } }, friends: { groupChatList } } = useAppSelector(state => state)
     const dispatch = useDispatch()
     const navigate = useNavigate()
 
     const [groupChats, set_groupChats] = useState<any>([])
-    const [sessions, set_sessions] = useState<any>([])
+    const [sessions, set_sessions] = useState<Session[]>([])
     const [acceptedSeminars, set_acceptedSeminars] = useState<any>([])
     const [editModalShow, set_editModalShow] = useState<boolean>(false)
     const [selectedEvent, set_selectedEvent] = useState<any>(null)
@@ -69,7 +71,7 @@ const Dashboard = () => {
                 start: new Date(start),
                 end: new Date(end)
             })
-            let temp = sessions
+            let temp : any[] = sessions
             let index = sessions.findIndex((x: any) => x._id === selectedEvent._id)
             if (index > -1) {
                 temp[index].start = new Date(start)
@@ -89,10 +91,10 @@ const Dashboard = () => {
     };
 
     const navigateSeminar = (item: any) => {
-        const selectedGroupChat:any = groupChatList.find((x: any) => x.groupId === item._id)
+        const selectedGroupChat: any = groupChatList.find((x: any) => x.groupId === item._id)
         console.log("navigate events", item);
         navigate(`${process.env.REACT_APP_AUTH_URL}customerdashboard/chat`);
-        dispatch(setChosenGroupChatDetails( selectedGroupChat ));
+        dispatch(setChosenGroupChatDetails(selectedGroupChat));
     };
 
     // Batch state updates for sessions and groupChats
@@ -158,198 +160,198 @@ const Dashboard = () => {
     // Dispatch `updateMe` only once when the component mounts
     useEffect(() => {
         dispatch(updateMe());
-        }, [dispatch]);
+    }, [dispatch]);
+
+
+    const acceptedSeminarCards = acceptedSeminars.length ?
+    <div className="flex flex-wrap justify-center gap-6">
+        {
+            acceptedSeminars.map((item: any, index: number) => (
+                <div key={index} className="w-fit p-4 bg-darkgrey rounded-lg shadow-md transform transition-all duration-300 hover:scale-105 hover:shadow-lg overflow-hidden">
+                    <div className="flex space-x-3 items-center">
+                        <Avatar
+                            username={item.admin.username}
+                            // image={item.customerId.image}
+                            image={base64Images.get(item.admin._id)}
+                        />
+                        <div>
+                            <div className="text-lg">{item.admin.username}</div>
+                            <div className="text-sm">{item.admin.email}</div>
+                        </div>
+                    </div>
+                    <hr className="my-2" />
+                    <div><span className="font-bold">Title  : </span> {item.name}</div>
+                    <div><span className="font-bold">Description  : </span> {item.description}</div>
+                    <div><span
+                        className="font-bold">Starts at : </span> {formatDateYYYY_MM_DD_h_m(item.start)}
+                    </div>
+                    <div><span className="font-bold">Duration  : </span> {item.duration} min
+                    </div>
+                    <div><span className="font-bold">Price  : </span> ${item.price}</div>
+                    <hr className="my-2" />
+                    <button
+                        className="py-1 w-full bg-green rounded-lg flex items-center justify-center disabled:opacity-50"
+                        onClick={() => navigateSeminar(item)}
+                    >
+                        Go To Seminar
+                    </button>
+                </div>
+            ))
+        }
+    </div> :
+    <div className="text-center text-grey my-10">No Booked Seminar sessions</div>
+
+    const pendingSeminarCards =  groupChats.length ?
+    <div className="flex flex-wrap justify-center gap-6">
+        {
+            groupChats.map((item: any, index: number) => (
+                // <div key={index} className="w-fit p-4 bg-darkgrey">
+                <div key={index} className="w-fit p-4 bg-darkgrey rounded-lg shadow-md transform transition-all duration-300 hover:scale-105 hover:shadow-lg overflow-hidden">
+                    <div className="flex space-x-3 items-center">
+                        <Avatar
+                            username={item.groupChatId.admin.username}
+                            //image={item.groupChatId.admin.image}
+                            image={base64Images.get(item.groupChatId.admin._id)}
+                        />
+                        <div>
+                            <div className="text-lg">{item.groupChatId.admin.username}</div>
+                            <div className="text-sm">{item.groupChatId.admin.email}</div>
+                        </div>
+                    </div>
+                    <hr className="my-2" />
+                    <div><span className="font-bold">Title  : </span> {item.groupChatId.name}</div>
+                    <div><span
+                        className="font-bold">Description  : </span> {item.groupChatId.description}
+                    </div>
+                    <div><span
+                        className="font-bold">Starts at : </span> {formatDateYYYY_MM_DD_h_m(item.groupChatId.start)}
+                    </div>
+                    <div><span className="font-bold">Duration  : </span> {item.groupChatId.duration} min
+                    </div>
+                    <div><span className="font-bold">Price  : </span> ${item.groupChatId.price}</div>
+                    <hr className="my-3" />
+                    <button
+                        className="py-1 w-full bg-green rounded-lg flex items-center justify-center disabled:opacity-50"
+                        onClick={() => cancelSeminarAppointment(item)}
+                    >
+                        Cancel
+                    </button>
+                </div>
+            ))
+        }
+    </div> :
+    <div className="text-center text-grey my-10">No pending seminar sessions</div>
+    const acceptedIndividualSessions = sessions.filter((session) => {
+        return session.status === "accepted"
+     })
+    const bookedIndividualCards =  acceptedIndividualSessions.length ?
+    <div className="flex flex-wrap justify-center gap-6">
+        {
+            acceptedIndividualSessions.map((item: any, index: number) => (
+                    // <div key={index} className="w-fit p-4 bg-darkgrey">
+                    <div key={index} className="w-fit p-4 bg-darkgrey rounded-lg shadow-md transform transition-all duration-300 hover:scale-105 hover:shadow-lg overflow-hidden">
+                        <div className="flex space-x-3 items-center">
+                            <Avatar
+                                username={item.expert.username}
+                                image={base64Images.get(item.expert._id)}
+                            />
+                            <div>
+                                <div className="text-lg">{item.expert.username}</div>
+                                <div className="text-sm">{item.expert.email}</div>
+                            </div>
+                        </div>
+                        <hr className="my-2" />
+                        <div><span className="font-bold">Title  : </span> {item.title}</div>
+                        <div><span className="font-bold">Starts at : </span> {formatDateYYYY_MM_DD_h_m(item.start)}</div>
+                        <div><span className="font-bold">Duration  : </span> {item.duration} min</div>
+                        <div><span className="font-bold">Price  : </span> ${item.price}</div>
+                        <hr className="my-3" />
+                        <div className="w-full flex justify-center space-x-4">
+                            <button
+                                className="py-1 w-full border border-lightgrey rounded-lg flex items-center justify-center disabled:opacity-50"
+                                onClick={() => cancelEvent(item)}
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                className="py-1 w-full bg-green rounded-lg flex items-center justify-center disabled:opacity-50"
+                                disabled={status === 'review'}
+                                onClick={() => editEvent(item)}
+                            >
+                                Edit
+                            </button>
+                            <button
+                                className="py-1 w-full bg-green rounded-lg flex items-center justify-center disabled:opacity-50"
+                                onClick={() => navigateExpert(item.expert)}
+                            >
+                                Chat
+                            </button>
+                        </div>
+                    </div>
+            ))
+        }
+    </div> :
+    <div className="text-center text-grey my-10">No booked individual sessions</div>
+
+    const pendingIndividualCards = sessions.length ?
+    <div className="flex flex-wrap justify-center gap-6">
+        {
+            sessions.map((item: any, index: number) => (
+                item.status === 'pending' ?
+                    // <div key={index} className="w-fit p-4 bg-darkgrey">
+                    <div key={index} className="w-fit p-4 bg-darkgrey rounded-lg shadow-md transform transition-all duration-300 hover:scale-105 hover:shadow-lg overflow-hidden">
+                        <div className="flex space-x-3 items-center">
+                            <Avatar
+                                username={item.expert.username}
+                                image={base64Images.get(item.expert._id)}
+                            />
+                            <div>
+                                <div className="text-white text-lg">{item.expert.username}</div>
+                                <div className="text-white text-sm">{item.expert.email}</div>
+                            </div>
+                        </div>
+                        <hr className="my-2" />
+                        <div><span className="text-white font-bold">Title  : </span> <span className="text-white">{item.title}</span></div>
+                        <div><span
+                            className="text-white font-bold">Starts at : </span> <span className="text-white">{item.start ? formatDateYYYY_MM_DD_h_m(item.start) : 'undefined'}</span>
+                        </div>
+                        <div><span
+                            className="text-white font-bold">Duration  : </span> <span className="text-white">{item.start ? `${item.duration} min` : 'undefined'}</span>
+                        </div>
+                        <div><span className="text-white font-bold">Price  : </span> <span className="text-white">${item.price}</span></div>
+                        <hr className="my-3" />
+                        {item.createdBy === userId ?
+                            <button
+                                className="text-white py-1 w-full border border-lightgrey rounded-lg flex items-center justify-center disabled:opacity-50"
+                                onClick={() => cancelEvent(item)}
+                            >
+                                Cancel
+                            </button> :
+                            <button
+                                className="py-1 w-full bg-green rounded-lg flex items-center justify-center disabled:opacity-50"
+                                onClick={() => acceptInvitation(item)}
+                            >
+                                Accept
+                            </button>}
+                    </div> :
+                    null
+            ))
+        }
+    </div> :
+    <div className="text-center text-grey my-10">No pending individual session</div>
 
     return (
-        <div className="w-full h-full mx-auto p-6 text-white overflow-y-auto relative">
-            <div className="text-center text-2xl mb-6">Booked Seminar Sessions</div>
-            {
-                acceptedSeminars.length ?
-                    <div className="flex flex-wrap justify-center gap-6">
-                        {
-                            acceptedSeminars.map((item: any, index: number) => (
-                                // <div key={index} className="w-fit p-4 bg-darkgrey">
-                                    <div key={index} className="w-fit p-4 bg-darkgrey rounded-lg shadow-md transform transition-all duration-300 hover:scale-105 hover:shadow-lg overflow-hidden">
-                                    <div className="flex space-x-3 items-center">
-                                        <Avatar
-                                            username={item.admin.username}
-                                            // image={item.customerId.image}
-                                            image={base64Images.get(item.admin._id)}
-                                        />
-                                        <div>
-                                            <div className="text-lg">{item.admin.username}</div>
-                                            <div className="text-sm">{item.admin.email}</div>
-                                        </div>
-                                    </div>
-                                    <hr className="my-2"/>
-                                    <div><span className="font-bold">Title  : </span> {item.name}</div>
-                                    <div><span className="font-bold">Description  : </span> {item.description}</div>
-                                    <div><span
-                                        className="font-bold">Starts at : </span> {formatDateYYYY_MM_DD_h_m(item.start)}
-                                    </div>
-                                    <div><span className="font-bold">Duration  : </span> {item.duration} min
-                                    </div>
-                                    <div><span className="font-bold">Price  : </span> ${item.price}</div>
-                                    <hr className="my-2"/>
-                                    <button
-                                        className="py-1 w-full bg-green rounded-lg flex items-center justify-center disabled:opacity-50"
-                                        onClick={() => navigateSeminar(item)}
-                                    >
-                                        Go To Seminar
-                                    </button>
-                                </div>
-                            ))
-                        }
-                    </div> :
-                    <div className="text-center text-lightgrey my-10">No Booked Seminar sessions</div>
-            }
+        <div className="w-1/2 h-full mx-auto p-6 text-white overflow-y-auto relative flex gap-6 flex-col">
+            <CollapsibleSection defaultExpanded title={`Seminar Sessions (${acceptedSeminars.length})`} content={acceptedSeminarCards}></CollapsibleSection>
 
+            <CollapsibleSection title={`Pending Seminar Sessions (${groupChats.length})`} content={pendingSeminarCards}
+            ></CollapsibleSection>
 
-            <div className="text-center text-2xl my-6">Pending Seminar Sessions</div>
-            {
-                groupChats.length ?
-                    <div className="flex flex-wrap justify-center gap-6">
-                        {
-                            groupChats.map((item: any, index: number) => (
-                                // <div key={index} className="w-fit p-4 bg-darkgrey">
-                                <div key={index} className="w-fit p-4 bg-darkgrey rounded-lg shadow-md transform transition-all duration-300 hover:scale-105 hover:shadow-lg overflow-hidden">
-                                    <div className="flex space-x-3 items-center">
-                                        <Avatar
-                                            username={item.groupChatId.admin.username}
-                                            //image={item.groupChatId.admin.image}
-                                            image={base64Images.get(item.groupChatId.admin._id)}
-                                        />
-                                        <div>
-                                            <div className="text-lg">{item.groupChatId.admin.username}</div>
-                                            <div className="text-sm">{item.groupChatId.admin.email}</div>
-                                        </div>
-                                    </div>
-                                    <hr className="my-2"/>
-                                    <div><span className="font-bold">Title  : </span> {item.groupChatId.name}</div>
-                                    <div><span
-                                        className="font-bold">Description  : </span> {item.groupChatId.description}
-                                    </div>
-                                    <div><span
-                                        className="font-bold">Starts at : </span> {formatDateYYYY_MM_DD_h_m(item.groupChatId.start)}
-                                    </div>
-                                    <div><span className="font-bold">Duration  : </span> {item.groupChatId.duration} min
-                                    </div>
-                                    <div><span className="font-bold">Price  : </span> ${item.groupChatId.price}</div>
-                                    <hr className="my-3"/>
-                                    <button
-                                        className="py-1 w-full bg-green rounded-lg flex items-center justify-center disabled:opacity-50"
-                                        onClick={() => cancelSeminarAppointment(item)}
-                                    >
-                                        Cancel
-                                    </button>
-                                </div>
-                            ))
-                        }
-                    </div> :
-                    <div className="text-center text-lightgrey my-10">No pending seminar sessions</div>
-            }
-            <div className="text-center text-2xl my-6">Booked Individual Sessions</div>
-            {
-                sessions.length ?
-                    <div className="flex flex-wrap justify-center gap-6">
-                        {
-                            sessions.map((item: any, index: number) => (
-                                item.status === 'accepted' ?
-                                    // <div key={index} className="w-fit p-4 bg-darkgrey">
-                                    <div key={index} className="w-fit p-4 bg-darkgrey rounded-lg shadow-md transform transition-all duration-300 hover:scale-105 hover:shadow-lg overflow-hidden">
-                                        <div className="flex space-x-3 items-center">
-                                            <Avatar
-                                                username={item.expert.username}
-                                                image={base64Images.get(item.expert._id)}
-                                            />
-                                            <div>
-                                                <div className="text-lg">{item.expert.username}</div>
-                                                <div className="text-sm">{item.expert.email}</div>
-                                            </div>
-                                        </div>
-                                        <hr className="my-2" />
-                                        <div><span className="font-bold">Title  : </span> {item.title}</div>
-                                        <div><span className="font-bold">Starts at : </span> {formatDateYYYY_MM_DD_h_m(item.start)}</div>
-                                        <div><span className="font-bold">Duration  : </span> {item.duration} min</div>
-                                        <div><span className="font-bold">Price  : </span> ${item.price}</div>
-                                        <hr className="my-3" />
-                                        <div className="w-full flex justify-center space-x-4">
-                                            <button
-                                                className="py-1 w-full border border-lightgrey rounded-lg flex items-center justify-center disabled:opacity-50"
-                                                onClick={() => cancelEvent(item)}
-                                            >
-                                                Cancel
-                                            </button>
-                                            <button
-                                                className="py-1 w-full bg-green rounded-lg flex items-center justify-center disabled:opacity-50"
-                                                disabled={status === 'review'}
-                                                onClick={() => editEvent(item)}
-                                            >
-                                                Edit
-                                            </button>
-                                            <button
-                                                className="py-1 w-full bg-green rounded-lg flex items-center justify-center disabled:opacity-50"
-                                                onClick={() => navigateExpert(item.expert)}
-                                            >
-                                                Chat
-                                            </button>
-                                        </div>
-                                    </div> :
-                                    null
-                            ))
-                        }
-                    </div> :
-                    <div className="text-center text-lightgrey my-10">No booked individual sessions</div>
-            }
-            <div className="text-center text-2xl my-6">Pending Individual Sessions</div>
-            {
-                sessions.length ?
-                    <div className="flex flex-wrap justify-center gap-6">
-                        {
-                            sessions.map((item: any, index: number) => (
-                                item.status === 'pending' ?
-                                    // <div key={index} className="w-fit p-4 bg-darkgrey">
-                                    <div key={index} className="w-fit p-4 bg-darkgrey rounded-lg shadow-md transform transition-all duration-300 hover:scale-105 hover:shadow-lg overflow-hidden">
-                                        <div className="flex space-x-3 items-center">
-                                            <Avatar
-                                                username={item.expert.username}
-                                                image={base64Images.get(item.expert._id)}
-                                            />
-                                            <div>
-                                                <div className="text-lg">{item.expert.username}</div>
-                                                <div className="text-sm">{item.expert.email}</div>
-                                            </div>
-                                        </div>
-                                        <hr className="my-2"/>
-                                        <div><span className="font-bold">Title  : </span> {item.title}</div>
-                                        <div><span
-                                            className="font-bold">Starts at : </span> {item.start ? formatDateYYYY_MM_DD_h_m(item.start) : 'undefined'}
-                                        </div>
-                                        <div><span
-                                            className="font-bold">Duration  : </span> {item.start ? `${item.duration} min` : 'undefined'}
-                                        </div>
-                                        <div><span className="font-bold">Price  : </span> ${item.price}</div>
-                                        <hr className="my-3"/>
-                                        {item.createdBy === userId ?
-                                        <button
-                                                className="py-1 w-full border border-lightgrey rounded-lg flex items-center justify-center disabled:opacity-50"
-                                                onClick={() => cancelEvent(item)}
-                                            >
-                                                Cancel
-                                            </button>:
-                                            <button
-                                            className="py-1 w-full bg-green rounded-lg flex items-center justify-center disabled:opacity-50"
-                                            onClick={() => acceptInvitation(item)}
-                                        >
-                                            Accept
-                                        </button>}
-                                    </div> :
-                                   null
-                            ))
-                        }
-                    </div> :
-                    <div className="text-center text-lightgrey my-10">No pending individual session</div>
-            }
+            <CollapsibleSection title={`Booked Individual Sessions (${acceptedIndividualSessions.length})`} content={bookedIndividualCards}
+            ></CollapsibleSection>
+
+            <CollapsibleSection title={`Pending Individual Sessions (${sessions.length})`} content={pendingIndividualCards}
+            ></CollapsibleSection>
             {
                 editModalShow ?
                     <div className={`absolute top-0 left-0 w-full h-full bg-white bg-opacity-10 backdrop-blur-sm z-10 p-8`}>
@@ -389,7 +391,7 @@ const Dashboard = () => {
                     zIndex: 1000,
                 }}
             >
-                <Chatbot/>
+                <Chatbot />
             </div>
         </div>
     );

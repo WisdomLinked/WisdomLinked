@@ -1,12 +1,11 @@
 import React, { useState, useRef, useEffect } from "react";
+import { dashboardGreen } from "../utils/constants";
 
 const Chatbot = () => {
     const [isMinimized, setIsMinimized] = useState<boolean>(true);
     const [input, setInput] = useState<string>("");
     const [chat, setChat] = useState<{ question: string; answer: string }[]>([]);
     const chatHistoryRef = useRef<HTMLDivElement | null>(null);
-
-    const dashboardGreen = "#31b099";
 
     const actions = [
         { question: "How to initiate a meeting with an expert?", answer: "Go to the 'Chat' section, select an expert, and click 'Request Meeting'." },
