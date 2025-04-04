@@ -15,8 +15,9 @@ import Chatbot from "../../../components/chatbot";
 import CollapsibleSection from "../../../components/collapsibleSection";
 import { Session } from "../../../api/types";
 import SessionCardComponent from "../../../components/sessionCardComponent";
+import Dashboard from "../../../components/dashboard";
 
-const Dashboard = () => {
+const CustomerDashboard = () => {
 
     const { auth: { userDetails: { pendingGroupChats, events, groupChats: groupChat, status, _id: userId } }, friends: { groupChatList } } = useAppSelector(state => state)
     const dispatch = useDispatch()
@@ -152,7 +153,7 @@ const Dashboard = () => {
         const newImageMap = new Map(base64Images);
 
         images.forEach((image) => {
-            if (image) newImageMap.set(image.id, image.base64);
+            if (image) newImageMap.set(image.id, image.base64 as string);
         });
 
         setBase64Images(newImageMap);
@@ -259,6 +260,7 @@ const Dashboard = () => {
                         onNavigate={navigateExpert}
                         userId={userId}
                         userStatus={status}
+                        userRole={"customer"}
                     />
             ))
         }
@@ -282,6 +284,7 @@ const Dashboard = () => {
                     onNavigate={navigateExpert}
                     userId={userId}
                     userStatus={status}
+                    userRole="customer"
                 />
             ))
         }
@@ -289,60 +292,17 @@ const Dashboard = () => {
     <div className="text-center text-grey my-10">No pending individual session</div>
 
     return (
-        <div className="w-1/2 h-full mx-auto p-6 text-white overflow-y-auto relative flex gap-6 flex-col">
-            <CollapsibleSection defaultExpanded title={`Booked Seminar Sessions (${acceptedSeminars.length})`} content={acceptedSeminarCards}></CollapsibleSection>
-
-            <CollapsibleSection title={`Pending Seminar Sessions (${groupChats.length})`} content={pendingSeminarCards}
-            ></CollapsibleSection>
-
-            <CollapsibleSection title={`Booked Individual Sessions (${acceptedIndividualSessions.length})`} content={bookedIndividualCards}
-            ></CollapsibleSection>
-
-            <CollapsibleSection title={`Pending Individual Sessions (${pendingIndividualSessions.length})`} content={pendingIndividualCards}
-            ></CollapsibleSection>
-            {
-                editModalShow ?
-                    <div className={`absolute top-0 left-0 w-full h-full bg-white bg-opacity-10 backdrop-blur-sm z-10 p-8`}>
-                        <div
-                            className="absolute top-0 left-0 w-full h-full cursor-pointer"
-                            onClick={() => {
-                                set_editModalShow(false)
-                            }}
-                        />
-                        <div className="relative w-full h-full max-w-[846px] mx-auto p-6 bg-black rounded-lg text-white">
-                            <button
-                                className="absolute right-2 top-2 rounded-md hover:bg-grey"
-                                onClick={() => {
-                                    set_editModalShow(false)
-                                }}
-                            >
-                                <CloseIcon />
-                            </button>
-                            <div className="text-center text-white text-2xl mb-6">Update Event Time</div>
-                            <div className="w-full h-[calc(100%-40px)]">
-                                <SelectDateTime
-                                    hideEvents={true}
-                                    disableDurationSelection={true}
-                                    setStartEndTime={updateEventStartEndTime}
-                                    selectedUser={selectedEvent?.expert}
-                                />
-                            </div>
-                        </div>
-                    </div> :
-                    null
-            }
-            <div
-                style={{
-                    position: "fixed",
-                    bottom: "20px",
-                    right: "20px",
-                    zIndex: 1000,
-                }}
-            >
-                <Chatbot />
-            </div>
-        </div>
+        <Dashboard
+            userId={userId}
+            userStatus={status}
+            userRole={"customer"}
+            base64Images={base64Images}
+            pendingGroupChats={pendingGroupChats}
+            groupChats={groupChats}
+            events={events}
+            groupChatList={groupChatList}        
+        ></Dashboard>
     );
 };
 
-export default Dashboard;
+export default CustomerDashboard;

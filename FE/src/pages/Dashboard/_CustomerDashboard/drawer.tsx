@@ -28,6 +28,7 @@ import Seminars from "./seminars";
 import CastForEducationIcon from '@mui/icons-material/CastForEducation';
 import { leaveRoom } from "../../../socket/roomHandler";
 import GeneralChatList from "../FriendsSideBar/GeneralChatList";
+import CustomerDashboard from "./dashboard";
 
 interface Props {
     window?: () => Window;
@@ -231,7 +232,7 @@ export default function CustomerDrawer(props: Props) {
                     <Route path="/search" element={<Search />} />
                     <Route path="/seminar" element={<Seminars />} />
                     <Route path="/profile" element={<CustomerProfile userDetails={userDetails} />} />
-                    <Route path="/*" element={<Dashboard />} />
+                    <Route path="/*" element={<CustomerDashboard />} />
                 </Routes>
             </div>
             {props.localStream && <VideoChat />}

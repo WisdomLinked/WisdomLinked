@@ -9,6 +9,7 @@ interface SessionCardComponentProps {
 
     userId: string;
     userStatus: string;
+    userRole: string;
 
     onCancel: Function;
     onEdit: Function;
@@ -17,6 +18,66 @@ interface SessionCardComponentProps {
 
 }
 const SessionCardComponent = (props: SessionCardComponentProps) => {
+
+
+    const editButton = (
+        <button
+            className="text-white py-1 w-full bg-green rounded-lg flex items-center justify-center disabled:opacity-50"
+            disabled={props.userStatus === 'review'}
+            onClick={() => props.onEdit(props.session)}
+        >
+            Edit
+        </button>
+    )
+
+    const chatButton = (
+        <button
+            className="text-white py-1 w-full bg-green rounded-lg flex items-center justify-center disabled:opacity-50"
+            onClick={() => props.onNavigate(props.session.expert)}
+        >
+            Chat
+        </button>
+    )
+
+    const cancelButton = (
+        <button
+            className="text-white py-1 w-full border border-lightgrey rounded-lg flex items-center justify-center disabled:opacity-50 transition-alll duration-200 hover:bg-green"
+            onClick={() => props.onCancel(props.session)}
+        >
+            Cancel
+        </button>
+    )
+
+    const acceptButton = (
+        <button
+            className="text-white py-1 w-full bg-green rounded-lg flex items-center justify-center disabled:opacity-50"
+            onClick={() => props.onAccept(props.session)}
+        >
+            Accept
+        </button>
+    )
+
+
+    const getButtonsToDisplay = (userRole: string, sessionStatus: string, sessionCreatedBy: string) => {
+        const buttonsToDisplay = [];
+
+        if (sessionStatus === 'accepted') {
+            if (userRole === 'customer') {
+                buttonsToDisplay.push(editButton);
+            }
+            buttonsToDisplay.push(chatButton);
+        }
+        // TODO: Check if an accepted session can be cancelled
+        if (sessionCreatedBy === props.userId) {
+            buttonsToDisplay.push(cancelButton);
+        } else {
+            if (sessionStatus !== 'accepted') {
+                buttonsToDisplay.push(acceptButton);
+            }
+        }
+
+        return buttonsToDisplay;
+    }
 
     return (
         <div key={props.key} className="w-fit p-4 bg-darkgrey rounded-lg shadow-md transform transition-all duration-300 hover:shadow-lg overflow-hidden">
@@ -37,39 +98,13 @@ const SessionCardComponent = (props: SessionCardComponentProps) => {
             <div><span className="text-white font-bold">Price  : </span> <span className="text-white">${props.session.price}</span></div>
             <hr className="my-3" />
             <div className="w-full flex justify-center space-x-4">
-
-                {
-                    props.session.status === 'accepted' ?
-                        <>
-                            <button
-                                className="text-white py-1 w-full bg-green rounded-lg flex items-center justify-center disabled:opacity-50"
-                                disabled={props.userStatus === 'review'}
-                                onClick={() => props.onEdit(props.session)}
-                            >
-                                Edit
-                            </button>
-                            <button
-                                className="text-white py-1 w-full bg-green rounded-lg flex items-center justify-center disabled:opacity-50"
-                                onClick={() => props.onNavigate(props.session.expert)}
-                            >
-                                Chat
-                            </button>
-                        </> : null
-                }
-                {props.session.createdBy === props.userId ?
-                    <button
-                        className="text-white py-1 w-full border border-lightgrey rounded-lg flex items-center justify-center disabled:opacity-50 transition-alll duration-200 hover:bg-green"
-                        onClick={() => props.onCancel(props.session)}
-                    >
-                        Cancel
-                    </button>
-                    : <button
-                        className="text-white py-1 w-full bg-green rounded-lg flex items-center justify-center disabled:opacity-50"
-                        onClick={() => props.onAccept(props.session)}
-                    >
-                        Accept
-                    </button>}
-
+                {getButtonsToDisplay(props.userRole, props.session.status, props.session.createdBy).map((button, index) => {
+                    return (
+                        <div className="w-full flex justify-center space-x-4" key={index}>
+                            {button}
+                        </div>
+                    )
+                })}
             </div>
         </div>
     )
