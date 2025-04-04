@@ -209,7 +209,24 @@ const CustomerProfile = ({
                             aspectRatio: 1
                         }}
                         imageSrcProp={imageSrc}
-                        imageChanged={(newDataUri:any)=> set_imageSrc(newDataUri)}
+                        imageChanged={(newImageSrc:any)=> {
+                            if(!newImageSrc) return;
+                            // Remove the Base64 metadata if present
+                            const cleanedBase64 = newImageSrc?.split(",")[1] || newImageSrc;
+                            // Calculate the size in bytes
+                            const sizeInBytes = (cleanedBase64.length * 3) / 4 - (cleanedBase64.endsWith("==") ? 2 : cleanedBase64.endsWith("=") ? 1 : 0);
+
+                            // Convert to kilobytes (optional)
+                            const sizeInKB = sizeInBytes / 1024;
+                            if(sizeInKB > 500) {
+                                alert(`Image size exceeds 500KB. Image size: ${sizeInKB}KB. Please choose a smaller image.`);
+                                set_imageSrc(oldImageSrc);
+                                return;
+                            } else {
+                                console.log("Setting new image")
+                                set_imageSrc(newImageSrc);    
+                            }
+                        }}
                     />
                     <div className="w-full max-w-[400px] mt-6">
                         {
