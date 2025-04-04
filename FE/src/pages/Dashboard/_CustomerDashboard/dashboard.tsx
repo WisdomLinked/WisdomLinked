@@ -14,6 +14,7 @@ import { setChosenChatDetails, setChosenGroupChatDetails } from "../../../action
 import Chatbot from "../../../components/chatbot";
 import CollapsibleSection from "../../../components/collapsibleSection";
 import { Session } from "../../../api/types";
+import SessionCardComponent from "../../../components/sessionCardComponent";
 
 const Dashboard = () => {
 
@@ -199,7 +200,7 @@ const Dashboard = () => {
             ))
         }
     </div> :
-    <div className="text-center text-grey my-10">No Booked Seminar sessions</div>
+    <div className="text-center text-grey my-10">No booked seminar sessions</div>
 
     const pendingSeminarCards =  groupChats.length ?
     <div className="flex flex-wrap justify-center gap-6">
@@ -248,93 +249,40 @@ const Dashboard = () => {
     <div className="flex flex-wrap justify-center gap-6">
         {
             acceptedIndividualSessions.map((item: any, index: number) => (
-                    // <div key={index} className="w-fit p-4 bg-darkgrey">
-                    <div key={index} className="w-fit p-4 bg-darkgrey rounded-lg shadow-md transform transition-all duration-300 hover:scale-105 hover:shadow-lg overflow-hidden">
-                        <div className="flex space-x-3 items-center">
-                            <Avatar
-                                username={item.expert.username}
-                                image={base64Images.get(item.expert._id)}
-                            />
-                            <div>
-                                <div className="text-lg">{item.expert.username}</div>
-                                <div className="text-sm">{item.expert.email}</div>
-                            </div>
-                        </div>
-                        <hr className="my-2" />
-                        <div><span className="font-bold">Title  : </span> {item.title}</div>
-                        <div><span className="font-bold">Starts at : </span> {formatDateYYYY_MM_DD_h_m(item.start)}</div>
-                        <div><span className="font-bold">Duration  : </span> {item.duration} min</div>
-                        <div><span className="font-bold">Price  : </span> ${item.price}</div>
-                        <hr className="my-3" />
-                        <div className="w-full flex justify-center space-x-4">
-                            <button
-                                className="py-1 w-full border border-lightgrey rounded-lg flex items-center justify-center disabled:opacity-50"
-                                onClick={() => cancelEvent(item)}
-                            >
-                                Cancel
-                            </button>
-                            <button
-                                className="py-1 w-full bg-green rounded-lg flex items-center justify-center disabled:opacity-50"
-                                disabled={status === 'review'}
-                                onClick={() => editEvent(item)}
-                            >
-                                Edit
-                            </button>
-                            <button
-                                className="py-1 w-full bg-green rounded-lg flex items-center justify-center disabled:opacity-50"
-                                onClick={() => navigateExpert(item.expert)}
-                            >
-                                Chat
-                            </button>
-                        </div>
-                    </div>
+                   <SessionCardComponent
+                        key={index}
+                        session={item}
+                        image={base64Images.get(item.expert._id)}
+                        onCancel={cancelEvent}
+                        onEdit={editEvent}
+                        onAccept={acceptInvitation}
+                        onNavigate={navigateExpert}
+                        userId={userId}
+                        userStatus={status}
+                    />
             ))
         }
     </div> :
     <div className="text-center text-grey my-10">No booked individual sessions</div>
-
-    const pendingIndividualCards = sessions.length ?
+    
+    const pendingIndividualSessions = sessions.filter((session) => {
+        return session.status === "pending"
+    })
+    const pendingIndividualCards = pendingIndividualSessions.length ?
     <div className="flex flex-wrap justify-center gap-6">
         {
-            sessions.map((item: any, index: number) => (
-                item.status === 'pending' ?
-                    // <div key={index} className="w-fit p-4 bg-darkgrey">
-                    <div key={index} className="w-fit p-4 bg-darkgrey rounded-lg shadow-md transform transition-all duration-300 hover:scale-105 hover:shadow-lg overflow-hidden">
-                        <div className="flex space-x-3 items-center">
-                            <Avatar
-                                username={item.expert.username}
-                                image={base64Images.get(item.expert._id)}
-                            />
-                            <div>
-                                <div className="text-white text-lg">{item.expert.username}</div>
-                                <div className="text-white text-sm">{item.expert.email}</div>
-                            </div>
-                        </div>
-                        <hr className="my-2" />
-                        <div><span className="text-white font-bold">Title  : </span> <span className="text-white">{item.title}</span></div>
-                        <div><span
-                            className="text-white font-bold">Starts at : </span> <span className="text-white">{item.start ? formatDateYYYY_MM_DD_h_m(item.start) : 'undefined'}</span>
-                        </div>
-                        <div><span
-                            className="text-white font-bold">Duration  : </span> <span className="text-white">{item.start ? `${item.duration} min` : 'undefined'}</span>
-                        </div>
-                        <div><span className="text-white font-bold">Price  : </span> <span className="text-white">${item.price}</span></div>
-                        <hr className="my-3" />
-                        {item.createdBy === userId ?
-                            <button
-                                className="text-white py-1 w-full border border-lightgrey rounded-lg flex items-center justify-center disabled:opacity-50"
-                                onClick={() => cancelEvent(item)}
-                            >
-                                Cancel
-                            </button> :
-                            <button
-                                className="py-1 w-full bg-green rounded-lg flex items-center justify-center disabled:opacity-50"
-                                onClick={() => acceptInvitation(item)}
-                            >
-                                Accept
-                            </button>}
-                    </div> :
-                    null
+            pendingIndividualSessions.map((item: any, index: number) => (
+                <SessionCardComponent
+                    key={index}
+                    session={item}
+                    image={base64Images.get(item.expert._id)}
+                    onCancel={cancelEvent}
+                    onEdit={editEvent}
+                    onAccept={acceptInvitation}
+                    onNavigate={navigateExpert}
+                    userId={userId}
+                    userStatus={status}
+                />
             ))
         }
     </div> :
@@ -342,7 +290,7 @@ const Dashboard = () => {
 
     return (
         <div className="w-1/2 h-full mx-auto p-6 text-white overflow-y-auto relative flex gap-6 flex-col">
-            <CollapsibleSection defaultExpanded title={`Seminar Sessions (${acceptedSeminars.length})`} content={acceptedSeminarCards}></CollapsibleSection>
+            <CollapsibleSection defaultExpanded title={`Booked Seminar Sessions (${acceptedSeminars.length})`} content={acceptedSeminarCards}></CollapsibleSection>
 
             <CollapsibleSection title={`Pending Seminar Sessions (${groupChats.length})`} content={pendingSeminarCards}
             ></CollapsibleSection>
@@ -350,7 +298,7 @@ const Dashboard = () => {
             <CollapsibleSection title={`Booked Individual Sessions (${acceptedIndividualSessions.length})`} content={bookedIndividualCards}
             ></CollapsibleSection>
 
-            <CollapsibleSection title={`Pending Individual Sessions (${sessions.length})`} content={pendingIndividualCards}
+            <CollapsibleSection title={`Pending Individual Sessions (${pendingIndividualSessions.length})`} content={pendingIndividualCards}
             ></CollapsibleSection>
             {
                 editModalShow ?

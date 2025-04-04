@@ -66,10 +66,13 @@ export type Session = {
     _id: string;
     createdAt: string;
     updatedAt: string;
+    title: string;
     status: string;
     customer: User;
     expert: User;
     start: string;
     duration: number;
     price: number;
+
+    createdBy: string;
 }
