@@ -3,13 +3,12 @@ import { Method } from "axios";
 
 import {
     LoginArgs,
-    AuthResponse,
     InviteFriendArgs,
     GetMeResponse,
-    AddMembersToGroupArgs,
     LeaveGroupArgs,
     RemoveFriendArgs,
     DeleteGroupArgs,
+    LoginResponse,
 } from "./types";
 
 import { store } from "../store";
@@ -54,32 +53,36 @@ const checkForAuthorization = (error: any) => {
 
     if (responseCode === 401 || responseCode === 403) {
         logOut();
-        return false
+        return
     }
     store.dispatch({
         type: actionTypes.authError,
         payload: error.message
     })
-    if(responseCode == 413){
+    if (responseCode == 413) {
         store.dispatch(showAlert('payload size too large'));
     }
-    else
-    store.dispatch(showAlert(error.response?.data || error.message));
+    else {
+        store.dispatch(showAlert(error.response?.data || error.message));
+    }
     SetLoadingStatus(false)
-    return false
+    return
 };
 
 export const login = async ({ email, password }: LoginArgs) => {
     try {
-        const res = await api.post<AuthResponse>("auth/login", {
+        const res = await api.post<LoginResponse>("auth/login", {
             email,
             password,
         });
-
         return res.data;
     } catch (err: any) {
         console.error('Login error:', err);
-        return checkForAuthorization(err);
+        checkForAuthorization(err);
+        return {
+            status: "ERROR",
+            error: err.response?.data || err.message
+        }
     }
 };
 
@@ -530,9 +533,9 @@ export const doFilterSeminars = async (filter: any) => {
     }
 };
 
-export const doAppendEvent = async ({ title, start, end, duration, price, paidBy, expert, customer, payment_intent, eventId ,createdBy }: any) => {
+export const doAppendEvent = async ({ title, start, end, duration, price, paidBy, expert, customer, payment_intent, eventId, createdBy }: any) => {
     try {
-        const res = await api.post("customer/appendEvent", { title, start, end, duration, price, paidBy, expert, customer, payment_intent, eventId,createdBy });
+        const res = await api.post("customer/appendEvent", { title, start, end, duration, price, paidBy, expert, customer, payment_intent, eventId, createdBy });
         return res.data;
     } catch (err: any) {
         return checkForAuthorization(err);
@@ -622,7 +625,7 @@ export const doUpdateTimeSlots = async (timeSlots: any) => {
 
 export const createEvent = async ({ title, start, end, duration, price, expert, customer, createdBy }: any) => {
     try {
-        const res = await api.post("expert/createEvent", { title, start, end, duration, price, expert, customer ,createdBy });
+        const res = await api.post("expert/createEvent", { title, start, end, duration, price, expert, customer, createdBy });
         return res.data;
     } catch (err: any) {
         return checkForAuthorization(err);

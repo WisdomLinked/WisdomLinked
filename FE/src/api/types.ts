@@ -15,6 +15,10 @@ export type InviteFriendArgs = {
     email: string;
 }
 
+export type LoginResponse = {
+    status: string;
+    error?: string;
+}
 export type AuthResponse = {
     userDetails: {
         _id: string;

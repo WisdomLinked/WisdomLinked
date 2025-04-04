@@ -9,6 +9,7 @@ import { validateEmail } from "../actions/common";
 import { login } from "../api/api";
 import { showAlert } from "../actions/alertActions";
 import ConfirmCode from "../components/ConfirmCode";
+import { LoginResponse } from "../api/types";
 
 const LogIn = () => {
 
@@ -24,15 +25,14 @@ const LogIn = () => {
 
     const handleLogin = async () => {
         SetLoadingStatus(true)
-        const response: any = await login({ email: email, password: pwd });
+        const response: LoginResponse = await login({ email: email, password: pwd });
         //console.log('Full login response:', JSON.stringify(response, null, 2));
         if (response.status === 'SUCCESS') {
             //console.log('Login successful, code:', response.code);
             set_codeSent(true)
         } else {
-            console.error('Login failed:', response.error);
-            dispatch(showAlert(response.error))
-
+            console.error('Login failed:', response);
+            dispatch(showAlert(response.error || "Login Failed"))
         }
         SetLoadingStatus(false)
     }
