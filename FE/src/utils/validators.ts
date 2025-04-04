@@ -37,3 +37,21 @@ const validateUsername = (username: string) => {
 export const validateGroupName = (name: string) => {
     return name.length > 2 && name.length < 13;
 };
+
+export const validateImageSize = (imageSrc : string) => {
+    if(!imageSrc) return;
+    // Remove the Base64 metadata if present
+    const cleanedBase64 = imageSrc?.split(",")[1] || imageSrc;
+    // Calculate the size in bytes
+    const sizeInBytes = (cleanedBase64.length * 3) / 4 - (cleanedBase64.endsWith("==") ? 2 : cleanedBase64.endsWith("=") ? 1 : 0);
+
+    // Convert to kilobytes (optional)
+    const sizeInKB = sizeInBytes / 1024;
+
+    // Check if the size exceeds 1MB (1024KB)
+    if (sizeInKB > 1024) {
+        return false; // Image is larger than 1MB
+    } else {
+        return true; // Image is within the size limit
+    }
+}
