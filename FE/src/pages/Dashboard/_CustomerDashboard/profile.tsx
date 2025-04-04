@@ -205,11 +205,11 @@ const CustomerProfile = ({
                             width: '195px',
                             height: '195px',
                             objectFit: 'cover',
-                            compressInitial: 50,
+                            compressInitial: null,
                             aspectRatio: 1
                         }}
                         imageSrcProp={imageSrc}
-                        imageChanged={(newDataUri:any)=>set_imageSrc(newDataUri)}
+                        imageChanged={(newDataUri:any)=> set_imageSrc(newDataUri)}
                     />
                     <div className="w-full max-w-[400px] mt-6">
                         {
