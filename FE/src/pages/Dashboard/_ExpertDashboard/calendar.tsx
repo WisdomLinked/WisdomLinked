@@ -141,28 +141,28 @@ const ExpertCalendar = () => {
         }
     }
 
-    const dayPropGetter = useCallback(
-        (date) => {
-            const today = new Date();
-            today.setHours(0, 0, 0, 0); // Normalize today's date to midnight
+    // const dayPropGetter = useCallback(
+    //     (date) => {
+    //         const today = new Date();
+    //         today.setHours(0, 0, 0, 0); // Normalize today's date to midnight
 
-            // Check if the date is in the future
-            if (date < today) {
-                return {}; // No styling for past dates
-            }
-            const hasEvent = events.some(
-                (event) =>
-                    date >= new Date(event.start).setHours(0, 0, 0, 0) &&
-                    date <= new Date(event.end).setHours(23, 59, 59, 999)
-            );
-            return {
-                style: {
-                    backgroundColor: hasEvent ? "#f94144" : "#30B199", // Red for busy days, green for available days
-                },
-            };
-        },
-        [events]
-    );
+    //         // Check if the date is in the future
+    //         if (date < today) {
+    //             return {}; // No styling for past dates
+    //         }
+    //         const hasEvent = events.some(
+    //             (event) =>
+    //                 date >= new Date(event.start).setHours(0, 0, 0, 0) &&
+    //                 date <= new Date(event.end).setHours(23, 59, 59, 999)
+    //         );
+    //         return {
+    //             style: {
+    //                 backgroundColor: hasEvent ? "#f94144" : "#30B199", // Red for busy days, green for available days
+    //             },
+    //         };
+    //     },
+    //     [events]
+    // );
 
     const handleDayClick = (date: Date) => {
         const dayStart = new Date(date);
@@ -211,7 +211,7 @@ const ExpertCalendar = () => {
                 eventPropGetter={eventStyleGetter}
                 onSelectEvent={handleSelectEvent}
                 onSelectSlot={(slotInfo) => handleDayClick(slotInfo.start)} // Add this line
-                dayPropGetter={dayPropGetter}
+                // dayPropGetter={dayPropGetter}
             />
             { 
                 eventModalShow ?
