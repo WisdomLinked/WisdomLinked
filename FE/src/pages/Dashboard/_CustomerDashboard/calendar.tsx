@@ -12,15 +12,14 @@ import { useNavigate } from "react-router-dom";
 import { updateMe } from "../../../actions/authActions";
 import { showAlert } from "../../../actions/alertActions";
 import { useAppSelector } from "../../../store";
-import {setChosenChatDetails} from "../../../actions/chatActions";
+import {setChosenChatDetails,setChosenGroupChatDetails} from "../../../actions/chatActions";
 
 
 const CustomerCalendar = () => {
 
     const dispatch = useDispatch()
-    const navigate = useNavigate()
-
-    const { auth: { userDetails } } = useAppSelector(state => state)
+    const navigate = useNavigate()    
+    const { auth: { userDetails },friends: { groupChatList } } = useAppSelector(state => state)
 
     const eventStyleGetter = (event: any, start: any, end: any) => {
         const now = new Date()
@@ -166,6 +165,13 @@ const CustomerCalendar = () => {
         set_selectedEvent(null)
         SetLoadingStatus(false)
     }
+
+    const navigateSeminar = (item: any) => {
+            const selectedGroupChat:any = groupChatList.find((x: any) => x.groupId === item._id)
+            console.log("navigate events", item);
+            navigate(`${process.env.REACT_APP_AUTH_URL}customerdashboard/chat`);
+            dispatch(setChosenGroupChatDetails( selectedGroupChat ));
+    };
 
     const cancelEvent = async (event: any) => {
         SetLoadingStatus(true)
@@ -372,14 +378,14 @@ const CustomerCalendar = () => {
                                         if (selectedEvent?.type === 'pending seminar') {
                                             cancelSeminarAppointment(selectedEvent)
                                         } else {
-                                            leaveSeminar(selectedEvent)
+                                            navigateSeminar(selectedEvent)
                                         }
                                     }}
                                 >
                                     {
                                         selectedEvent?.type === 'pending seminar' ?
                                             'Cancel Request' :
-                                            'Leave Seminar'
+                                            'Enter Seminar'
                                     }
                                 </button>
                             </div>
