@@ -210,7 +210,7 @@ const ExpertCalendar = () => {
                 events={events || []}
                 eventPropGetter={eventStyleGetter}
                 onSelectEvent={handleSelectEvent}
-                onSelectSlot={(slotInfo) => handleDayClick(slotInfo.start)} // Add this line
+                onSelectSlot={(slotInfo) => handleDayClick(slotInfo.start)}
                 // dayPropGetter={dayPropGetter}
             />
             { 
@@ -350,47 +350,49 @@ const ExpertCalendar = () => {
                     </div> :
                     null
             }
-            {dayModalShow && (
-  <div className="absolute top-0 left-0 w-full h-full bg-white bg-opacity-10 backdrop-blur-sm z-10 flex items-center justify-center p-8">
-    <div
-      className="absolute top-0 left-0 w-full h-full cursor-pointer"
-      onClick={() => set_dayModalShow(false)}
-    />
-    <div className="w-max max-w-[600px] bg-black rounded-lg text-white p-6 relative">
-      <div className="text-center text-white text-2xl mb-6">
-        Events on {selectedDay?.toLocaleDateString()}
-      </div>
-      <button
-        className="absolute right-2 top-2 rounded-md hover:bg-grey"
-        onClick={() => set_dayModalShow(false)}
-      >
-        <CloseIcon />
-      </button>
-      {selectedDayEvents.length === 0 ? (
-        <div className="text-center py-4">No events scheduled for this day</div>
-      ) : (
-        <div className="max-h-[60vh] overflow-y-auto">
-          {selectedDayEvents.map((event) => (
-            <div key={event.id} className="mb-4 pb-4 border-b border-gray-700">
-              <div className="font-bold mb-2">{event.title}</div>
-              <div className="text-sm">
-                {new Date(event.start).toLocaleTimeString()} - 
-                {new Date(event.end).toLocaleTimeString()}
-              </div>
-              {event.type === 'event' ? (
-                <div className="mt-2 text-sm">
-                  Session with {event.customer?.username || 'Unknown'}
-                </div>
-              ) : (
-                <div className="mt-2 text-sm">Seminar</div>
-              )}
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  </div>
-)}
+            {
+                dayModalShow && (
+                    <div className="absolute top-0 left-0 w-full h-full bg-white bg-opacity-10 backdrop-blur-sm z-10 flex items-center justify-center p-8">
+                        <div
+                        className="absolute top-0 left-0 w-full h-full cursor-pointer"
+                        onClick={() => set_dayModalShow(false)}
+                        />
+                        <div className="w-max max-w-[600px] bg-black rounded-lg text-white p-6 relative">
+                        <div className="text-center text-white text-2xl mb-6">
+                            Events on {selectedDay?.toLocaleDateString()}
+                        </div>
+                        <button
+                            className="absolute right-2 top-2 rounded-md hover:bg-grey"
+                            onClick={() => set_dayModalShow(false)}
+                        >
+                            <CloseIcon />
+                        </button>
+                        {selectedDayEvents.length === 0 ? (
+                            <div className="text-center py-4">No events scheduled for this day</div>
+                        ) : (
+                            <div className="max-h-[60vh] overflow-y-auto">
+                            {selectedDayEvents.map((event) => (
+                                <div key={event.id} className="mb-4 pb-4 border-b border-gray-700">
+                                <div className="font-bold mb-2">{event.title}</div>
+                                <div className="text-sm">
+                                    {new Date(event.start).toLocaleTimeString()} - 
+                                    {new Date(event.end).toLocaleTimeString()}
+                                </div>
+                                {event.type === 'event' ? (
+                                    <div className="mt-2 text-sm">
+                                    Session with {event.customer?.username || 'Unknown'}
+                                    </div>
+                                ) : (
+                                    <div className="mt-2 text-sm">Seminar</div>
+                                )}
+                                </div>
+                            ))}
+                            </div>
+                        )}
+                        </div>
+                    </div>
+                )
+            }
 
         </div>
     );

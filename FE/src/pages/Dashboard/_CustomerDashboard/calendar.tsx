@@ -47,6 +47,9 @@ const CustomerCalendar = () => {
     const [eventModalShow, set_eventModalShow] = useState<boolean>(false)
     const [editModalShow, set_editModalShow] = useState<boolean>(false)
     const [seminarModalShow, set_seminarModalShow] = useState<boolean>(false)
+    const [selectedDay, set_selectedDay] = useState<Date | null>(null);
+    const [selectedDayEvents, set_selectedDayEvents] = useState<Array<any>>([]);
+    const [dayModalShow, set_dayModalShow] = useState<boolean>(false);
 
     const handleSelectEvent = async (event: any) => {
         console.log("Event Details",event);
@@ -93,6 +96,22 @@ const CustomerCalendar = () => {
     // const acceptInvitation = async (event: any) => {
     //     navigate(`${process.env.REACT_APP_AUTH_URL}customerdashboard/search?_id=${selectedEvent.expert._id}&_duration=${selectedEvent.duration}&_start=${selectedEvent.start ? new Date(selectedEvent.start).getTime() : ''}&_end=${selectedEvent.end ? new Date(selectedEvent.end).getTime() : ''}`)
     // }
+
+    const handleDayClick = (date: Date) => {
+        const dayStart = new Date(date);
+        dayStart.setHours(0, 0, 0, 0);
+        
+        const dayEnd = new Date(date);
+        dayEnd.setHours(23, 59, 59, 999);
+        
+        const filteredEvents = events.filter(
+          (event) => event.start >= dayStart && event.start <= dayEnd
+        );
+        
+        set_selectedDay(date);
+        set_selectedDayEvents(filteredEvents);
+        set_dayModalShow(true);
+      };
 
     const acceptInvitation = async (event: any) => {
         navigate(`${process.env.REACT_APP_AUTH_URL}customerdashboard/search?_id=${selectedEvent.expert._id}&_duration=${selectedEvent.duration}&_start=${selectedEvent.start ? new Date(selectedEvent.start).getTime() : ''}&_end=${selectedEvent.end ? new Date(selectedEvent.end).getTime() : ''}&_price=${selectedEvent.price}`)
@@ -210,6 +229,7 @@ const CustomerCalendar = () => {
                 events={events || []}
                 eventPropGetter={eventStyleGetter}
                 onSelectEvent={handleSelectEvent}
+                onSelectSlot={(slotInfo) => handleDayClick(slotInfo.start)}
             />
             {
                 eventModalShow ?
@@ -392,6 +412,49 @@ const CustomerCalendar = () => {
                         </div>
                     </div> :
                     null
+            }
+            {
+                dayModalShow && (
+                    <div className="absolute top-0 left-0 w-full h-full bg-white bg-opacity-10 backdrop-blur-sm z-10 flex items-center justify-center p-8">
+                        <div
+                        className="absolute top-0 left-0 w-full h-full cursor-pointer"
+                        onClick={() => set_dayModalShow(false)}
+                        />
+                        <div className="w-max max-w-[600px] bg-black rounded-lg text-white p-6 relative">
+                        <div className="text-center text-white text-2xl mb-6">
+                            Events on {selectedDay?.toLocaleDateString()}
+                        </div>
+                        <button
+                            className="absolute right-2 top-2 rounded-md hover:bg-grey"
+                            onClick={() => set_dayModalShow(false)}
+                        >
+                            <CloseIcon />
+                        </button>
+                        {selectedDayEvents.length === 0 ? (
+                            <div className="text-center py-4">No events scheduled for this day</div>
+                        ) : (
+                            <div className="max-h-[60vh] overflow-y-auto">
+                            {selectedDayEvents.map((event) => (
+                                <div key={event.id} className="mb-4 pb-4 border-b border-gray-700">
+                                <div className="font-bold mb-2">{event.title}</div>
+                                <div className="text-sm">
+                                    {new Date(event.start).toLocaleTimeString()} - 
+                                    {new Date(event.end).toLocaleTimeString()}
+                                </div>
+                                {event.type === 'event' ? (
+                                    <div className="mt-2 text-sm">
+                                    Session with {event.customer?.username || 'Unknown'}
+                                    </div>
+                                ) : (
+                                    <div className="mt-2 text-sm">Seminar</div>
+                                )}
+                                </div>
+                            ))}
+                            </div>
+                        )}
+                        </div>
+                    </div>
+                )
             }
         </div>
     );
