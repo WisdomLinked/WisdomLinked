@@ -75,11 +75,21 @@ const SelectDateTime = ({
                     date >= new Date(event.start).setHours(0, 0, 0, 0) &&
                     date <= new Date(event.end).setHours(23, 59, 59, 999)
             );
+
+            let backgroundColor
+            if(!getAvailableTimeSlots(date, 30).length){
+                backgroundColor = '#f94144'
+            }
+            else if(hasEvent){
+                backgroundColor = '#f9a826'
+            } else {
+                backgroundColor = '#30B199'
+            }
     
             // Style for future dates based on event presence
             return {
                 style: {
-                    backgroundColor: hasEvent ? '#f94144' : '#30B199', // Red for busy days, green for available days
+                    backgroundColor, // Red for busy days, green for available days
                     cursor: 'pointer',
                 },
             };
@@ -110,7 +120,7 @@ const SelectDateTime = ({
             selectedDate.getFullYear() === today.getFullYear();
     }
 
-    const getAvailableTimeSlots = async (selectedDate: any, duration: number) => {
+    const getAvailableTimeSlots = (selectedDate: any, duration: number) => {
         const dayStartTime = new Date(selectedDate).getTime()
         const dayEndTime = dayStartTime + (24 * 60 * 60 * 1000) - 1
         const start = new Date(dayStartTime)
@@ -122,20 +132,23 @@ const SelectDateTime = ({
 
         let _availableSlots: Array<any> = []
         // setting available time slot -----
-        SetLoadingStatus(true)
-        const response: any = await getDailyTimeSlots(dayStartTime, dayEndTime, userDetails.role === 'customer' ? selectedUser._id : null)
-        if (response) {
-            if (response.dailyTimeSlots?.length) {
-                _availableSlots = response.dailyTimeSlots.map((time: number) => {
-                    return (time - dayStartTime) / (30 * 60 * 1000)
-                })
-            } else {
-                const timezoneOffset = - new Date().getTimezoneOffset() / 30
-                _availableSlots = makeAnOffsetToAvailableTimeSlots(availableSlots || [], timezoneOffset)
-            }
-            set_modalShow(true)
-        }
-        SetLoadingStatus(false)
+        // SetLoadingStatus(true)
+        // const response: any = await getDailyTimeSlots(dayStartTime, dayEndTime, userDetails.role === 'customer' ? selectedUser._id : null)
+        // if (response) {
+        //     if (response.dailyTimeSlots?.length) {
+        //         _availableSlots = response.dailyTimeSlots.map((time: number) => {
+        //             return (time - dayStartTime) / (30 * 60 * 1000)
+        //         })
+        //     } else {
+        //         const timezoneOffset = - new Date().getTimezoneOffset() / 30
+        //         _availableSlots = makeAnOffsetToAvailableTimeSlots(availableSlots || [], timezoneOffset)
+        //     }
+        //     set_modalShow(true)
+        // }
+        // SetLoadingStatus(false)
+        const timezoneOffset = - new Date().getTimezoneOffset() / 30
+        _availableSlots = makeAnOffsetToAvailableTimeSlots(availableSlots || [], timezoneOffset)
+        // set_modalShow(true)
 
         _availableSlots.splice(_availableSlots.length - (duration / 30 - 1), duration / 30 - 1)
 
