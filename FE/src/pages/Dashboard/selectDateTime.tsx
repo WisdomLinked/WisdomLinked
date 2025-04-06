@@ -8,6 +8,7 @@ import { localizer } from "../../actions/common"
 import { SetLoadingStatus } from "../../actions/appActions";
 import { getDailyTimeSlots } from "../../api/api";
 import { useAppSelector } from "../../store";
+import LegendCalendar from "../../components/LegendCalendar"
 
 const SelectDateTime = ({
     setStartEndTime,
@@ -254,8 +255,9 @@ const SelectDateTime = ({
 
     return (
         <>
+            <LegendCalendar />
             <Calendar
-                className="customerSelectDateTimeCalendar !h-full min-h-[400px] pt-1 pb-6 text-white"
+                className="customerSelectDateTimeCalendar !h min-h-[400px] pt-1 pb-6 text-white"
                 views={["month"]}
                 selectable
                 localizer={localizer}
