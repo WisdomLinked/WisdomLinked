@@ -289,44 +289,46 @@ const SelectDateTime = ({
         <>
             <LegendCalendar />
             <div style={{ display: "flex", gap: "10px" }}>
-                {/* Time Slot Dropdown */}
-                <select
-                    className="bg-black text-white rounded-md px-4 py-2"
-                    value={selectedIndex || ""}
-                    onChange={(e) => set_selectedIndex(parseInt(e.target.value))}
-                >
-                    <option value="" disabled>
+            <select
+                className="bg-black text-white rounded-md px-4 py-2"
+                value={selectedIndex >= 0 ? selectedIndex : ""}
+                onChange={(e) => set_selectedIndex(parseInt(e.target.value))}
+            >
+                <option value="" disabled>
                     Select Time Slot
-                    </option>
-                    {timeSlotIndices.map((slot) => (
+                </option>
+                {timeSlotIndices.map((slot) => (
                     <option key={slot.index} value={slot.index}>
                         {slot.time}
                     </option>
-                    ))}
-                </select>
+                ))}
+            </select>
 
-                {/* Duration Dropdown */}
-                <select
-                    className="bg-black text-white rounded-md px-4 py-2"
-                    value={duration}
-                    onChange={(e) => set_duration(parseInt(e.target.value))}
-                >
-                    {durations.map((val) => (
+            <button
+                className="bg-black text-white px-4 py-2 rounded-md"
+                onClick={() => {
+                    set_selectedIndex(-1); // Reset selectedIndex to -1 (invalid index)
+                }}
+            >
+                Clear time
+            </button>
+
+            <select
+                className="bg-black text-white rounded-md px-4 py-2"
+                value={duration}
+                onChange={(e) => set_duration(parseInt(e.target.value))}
+            >
+                {durations.map((val) => (
                     <option key={val} value={val}>
                         {val} min{" "}
                         {hidePriceInDurationSelection ? "" : `( $${(val * selectedUser?.price) / 60} )`}
                     </option>
-                    ))}
-                </select>
+                ))}
+            </select>
 
-                {/* Clear Button */}
-                <button
-                    className="bg-black text-white px-4 py-2 rounded-md"
-                    onClick={() => set_selectedIndex(-1)}
-                >
-                    Clear
-                </button>
-            </div>
+    
+</div>
+
             <Calendar
                 className="customerSelectDateTimeCalendar !h min-h-[400px] pt-1 pb-6 text-white"
                 views={["month"]}
