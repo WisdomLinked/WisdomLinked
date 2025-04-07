@@ -33,6 +33,7 @@ const SelectDateTime = ({
     const [duration, set_duration] = useState(30)
     const [timeSlots, set_timeSlots] = useState<Array<any>>([])
     const [selectedTimeSlot, set_selectedTimeSlot] = useState<any>()
+    const [selectedIndex, set_selectedIndex] = useState(-1);
 
     const eventStyleGetter = (event: any, start: any, end: any) => {
         const now = new Date()
@@ -76,15 +77,27 @@ const SelectDateTime = ({
                     date >= new Date(event.start).setHours(0, 0, 0, 0) &&
                     date <= new Date(event.end).setHours(23, 59, 59, 999)
             );
-
+            
+            let availableTimeSlots = getAvailableTimeSlots(date, duration)
             let backgroundColor
-            if(!getAvailableTimeSlots(date, 30).length){
-                backgroundColor = '#f94144'
+            if(selectedIndex === -1)
+            {
+                if(!availableTimeSlots.length){
+                    backgroundColor = '#f94144'
+                }
+                else if(hasEvent){
+                    backgroundColor = '#f9a826'
+                } else {
+                    backgroundColor = '#30B199'
+                }
             }
-            else if(hasEvent){
-                backgroundColor = '#f9a826'
-            } else {
-                backgroundColor = '#30B199'
+            else{
+                if(availableTimeSlots.includes(selectedIndex)){
+                    backgroundColor = '#30B199'
+                }
+                else{
+                    backgroundColor = '#f94144'
+                }
             }
     
             // Style for future dates based on event presence
@@ -95,7 +108,7 @@ const SelectDateTime = ({
                 },
             };
         },
-        [events]
+        [events, selectedIndex, duration] 
     );
     
 
@@ -253,9 +266,67 @@ const SelectDateTime = ({
         set_events([...temp])
     }, [selectedUser, myEvents])
 
+    
+    const generateTimeSlotIndices = () => {
+        const slots = [];
+        let currentTime = new Date("2025-04-06T00:00:00"); // Start at 12:00 AM
+        const endTime = new Date("2025-04-06T23:30:00"); // End at 11:30 PM
+        let index = 0;
+      
+        while (currentTime <= endTime) {
+          slots.push({ index, time: currentTime.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: true }) });
+          currentTime = new Date(currentTime.getTime() + 30 * 60 * 1000); // Increment by 30 minutes
+          index++;
+        }
+      
+        return slots;
+      };
+      
+      const timeSlotIndices = generateTimeSlotIndices();
+      
+
     return (
         <>
             <LegendCalendar />
+            <div style={{ display: "flex", gap: "10px" }}>
+                {/* Time Slot Dropdown */}
+                <select
+                    className="bg-black text-white rounded-md px-4 py-2"
+                    value={selectedIndex || ""}
+                    onChange={(e) => set_selectedIndex(parseInt(e.target.value))}
+                >
+                    <option value="" disabled>
+                    Select Time Slot
+                    </option>
+                    {timeSlotIndices.map((slot) => (
+                    <option key={slot.index} value={slot.index}>
+                        {slot.time}
+                    </option>
+                    ))}
+                </select>
+
+                {/* Duration Dropdown */}
+                <select
+                    className="bg-black text-white rounded-md px-4 py-2"
+                    value={duration}
+                    onChange={(e) => set_duration(parseInt(e.target.value))}
+                >
+                    {durations.map((val) => (
+                    <option key={val} value={val}>
+                        {val} min{" "}
+                        {hidePriceInDurationSelection ? "" : `( $${(val * selectedUser?.price) / 60} )`}
+                    </option>
+                    ))}
+                </select>
+
+                {/* Clear Button */}
+                <button
+                    className="bg-black text-white px-4 py-2 rounded-md"
+                    onClick={() => set_selectedIndex(-1)}
+                >
+                    Clear
+                </button>
+            </div>
             <Calendar
                 className="customerSelectDateTimeCalendar !h min-h-[400px] pt-1 pb-6 text-white"
                 views={["month"]}
