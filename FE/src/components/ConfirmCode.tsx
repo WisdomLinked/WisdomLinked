@@ -98,7 +98,8 @@ const ConfirmCode = ({ email, password }: any) => {
                 <ReactCodeInput
                     name="code"
                     inputMode="numeric"
-                    type="number"
+                    type="text"
+                    pattern="[0-9]*" 
                     fields={6}
                     value={inputCode}
                     onChange={(value: any) => set_inputCode(value)}
