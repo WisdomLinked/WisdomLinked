@@ -15,7 +15,7 @@ const Avatar = ({ username, isOnline, image, size = 'small', borderClass = '' }:
             {
                 image ?
                     <div className="rounded-full overflow-hidden">
-                        <img src={image} className="w-full h-full object-center object-cover" />
+                        <img src={image} className="w-full h-full object-center object-cover aspect-square" />
                     </div> :
                     getAvatarTitle(username || '')
             }

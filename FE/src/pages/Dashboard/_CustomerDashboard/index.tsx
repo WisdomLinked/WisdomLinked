@@ -12,7 +12,7 @@ const CustomerDashboard = () => {
     const navigate = useNavigate();
     const dispatch = useDispatch()
     const location = useLocation()
-
+    
     useEffect(() => {
         const isLoggedIn = userDetails?.email;
 

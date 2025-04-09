@@ -29,7 +29,7 @@ const DashboardHeader = ({ userDetails }: any) => {
         };
 
         fetchImage();
-    }, []);
+    }, [userDetails.image]);
 
     const logOut = () => {
         dispatch(logoutUser());

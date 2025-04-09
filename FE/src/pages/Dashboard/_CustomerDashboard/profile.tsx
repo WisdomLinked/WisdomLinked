@@ -18,6 +18,8 @@ import CountrySelect from "../../../components/CountrySelection";
 import PhoneInput from "react-phone-input-2";
 import {useDispatch} from "react-redux";
 import ReactImagePickerEditor from "react-image-picker-editor";
+import { validateImageSize } from "../../../utils/validators";
+import { showAlert } from "../../../actions/alertActions";
 
 const CustomerProfile = ({
     userDetails,
@@ -45,8 +47,11 @@ const CustomerProfile = ({
     const [phoneNumber, set_phoneNumber] = useState<any>('')
     const [showError, set_showError] = useState(false)
     const [enableToUpdate, set_enableToUpdate] = useState(false)
+    const [saveButtonPopover, set_saveButtonPopOver] = useState("")
     const [file, set_file] = useState('')
     const [fileError, set_fileError] = useState('')
+
+    let initialImage = imageSrc;
 
     const reset = async () => {
         console.log("inside reset outside if");
@@ -175,6 +180,10 @@ const CustomerProfile = ({
         getKeywordsAndServices()
     }, [])
 
+    useEffect(() => {
+        initialImage = imageSrc
+    }, [imageSrc])
+
     return (
         <div className={`w-full h-full overflow-y-auto relative ${isFromAdminPanel ? 'py-0' : 'py-6'}`}>
             <div className={`w-full max-w-[400px] p-6 mx-auto flex flex-col items-center ${isFromAdminPanel ? 'p-0' : 'p-6'}`}>
@@ -205,11 +214,18 @@ const CustomerProfile = ({
                             width: '195px',
                             height: '195px',
                             objectFit: 'cover',
-                            compressInitial: 50,
+                            compressInitial: null,
                             aspectRatio: 1
                         }}
-                        imageSrcProp={imageSrc}
-                        imageChanged={(newDataUri:any)=>set_imageSrc(newDataUri)}
+                        imageSrcProp={initialImage}
+                        imageChanged={(newImageSrc:any)=> {
+                            if(validateImageSize(newImageSrc) === false) {
+                                dispatch(showAlert("Image size should be less than 1MB"));
+                                set_enableToUpdate(false)
+                            } else {
+                                set_imageSrc(newImageSrc);    
+                            }
+                        }}
                     />
                     <div className="w-full max-w-[400px] mt-6">
                         {
