@@ -11,29 +11,22 @@ const InputOption = ({
     innerProps,
     ...rest
 }: any) => {
-    const [isActive, set_isActive] = useState(false);
-    const onMouseDown = () => set_isActive(true);
-    const onMouseUp = () => set_isActive(false);
-    const onMouseLeave = () => set_isActive(false);
 
-    // styles
-    let bg = "white";
+    // Styles
+    let bg="white"
     if (isFocused) bg = "#eee";
-    if (isActive) bg = "#B2D4FF";
+    // if (isSelected) bg = "#B2D4FF";
 
     const style = {
         alignItems: "center",
-        backgroundColor: bg,
-        display: "flex "
+        display: "flex ",
+        background: bg,
     };
 
     // prop assignment
     const props = {
         ...innerProps,
-        onMouseDown,
-        onMouseUp,
-        onMouseLeave,
-        style
+        style,
     };
 
     return (
@@ -45,7 +38,7 @@ const InputOption = ({
             getStyles={getStyles}
             innerProps={props}
         >
-            <input type="checkbox" className="mr-2" defaultChecked={isSelected} />
+            <input type="checkbox" className="mr-2" defaultChecked={isSelected} checked={isSelected} />
             <span className="text-darkgrey">{children}</span>
         </components.Option>
     );
