@@ -58,14 +58,14 @@ const CountrySelect = ({
 }: any) => {
 
 
-    const on_countryChange = (country : ICountry) => {
+    const on_countryChange = (country: ICountry) => {
         set_selectedCountry(country);
         set_selectedState(null)
         set_selectedCity(null)
         set_stateAvailable(State.getStatesOfCountry(country?.isoCode)?.length > 0)
     }
 
-    const on_stateChange = (state : IState) => {
+    const on_stateChange = (state: IState) => {
         set_selectedState(state);
         set_selectedCity(null)
         set_cityAvailable(City.getCitiesOfState(state?.countryCode, state?.isoCode)?.length > 0)
