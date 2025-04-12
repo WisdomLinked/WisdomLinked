@@ -48,8 +48,8 @@ export const validateImageSize = (imageSrc : string) => {
     // Convert to kilobytes (optional)
     const sizeInKB = sizeInBytes / 1024;
 
-    // Check if the size exceeds 1MB (1024KB)
-    if (sizeInKB > 1024) {
+    // Check if the size exceeds 5MB (5120KB)
+    if (sizeInKB > 5120) {
         return false; // Image is larger than 1MB
     } else {
         return true; // Image is within the size limit

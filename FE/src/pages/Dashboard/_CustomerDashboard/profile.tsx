@@ -1,7 +1,5 @@
-import React, { useState, useEffect } from "react";
-import EditAvatar from "../EditAvatar";
+import { useState, useEffect } from "react";
 import {
-    callApi,
     doGetKeywordsAndServices,
     doUpdateProfile,
     doUpdateProfileByAdmin,
@@ -17,23 +15,30 @@ import { SetLoadingStatus } from "../../../actions/appActions";
 import CountrySelect from "../../../components/CountrySelection";
 import PhoneInput from "react-phone-input-2";
 import {useDispatch} from "react-redux";
-import ReactImagePickerEditor from "react-image-picker-editor";
 import { validateImageSize } from "../../../utils/validators";
 import { showAlert } from "../../../actions/alertActions";
+import ImagePicker from "../../../components/imagePicker";
 
 const CustomerProfile = ({
     userDetails,
     isFromAdminPanel = false,
     updateOneUser
 }: any) => {
-
     let curr_filename=""  // Need to implement this with the state instead of a new variable
 
     const dispatch = useDispatch()
     const navigate = useNavigate()
+
+    // This key is used to force re-render image picker component when reset button is clicked
+    const [imagePickerKey, set_imagePickerKey] = useState(0);
+
+    // This is the variable that gets updated by the image picker component.
     const [imageSrc, set_imageSrc] = useState<any>(null)
+    // This is the original image downloaded when page loads. This state shouldn't be modified. 
+    const [originalImageSrc, set_originalImageSrc] = useState<any>(null);
     const [image, set_image] = useState<any>(null)
-    const [oldImageSrc, set_oldImageSrc] = useState<any>(null)
+
+
     const [name, set_name] = useState(userDetails.username)
     const [keywords, set_keywords] = useState([])
     const [services, set_services] = useState([])
@@ -47,16 +52,11 @@ const CustomerProfile = ({
     const [phoneNumber, set_phoneNumber] = useState<any>('')
     const [showError, set_showError] = useState(false)
     const [enableToUpdate, set_enableToUpdate] = useState(false)
-    const [saveButtonPopover, set_saveButtonPopOver] = useState("")
-    const [file, set_file] = useState('')
-    const [fileError, set_fileError] = useState('')
 
-    let initialImage = imageSrc;
-
-    const reset = async () => {
-        console.log("inside reset outside if");
+    const reset = () => {
         if (userDetails.image) {
-            set_imageSrc(oldImageSrc)
+            set_imagePickerKey((key) => key + 1)
+            set_imageSrc(originalImageSrc)
         }
         set_name(userDetails.username)
         set_selectedKeywords(userDetails.keywords)
@@ -68,13 +68,10 @@ const CustomerProfile = ({
     }
 
     const loadData = async () => {
-        console.log("inside load outside if");
         if (userDetails.image) {
             const image: any = imageSrc? imageSrc:await profileImageFetch(userDetails.image,"small");
             if (image) {
-                console.log("inside load inside if");
-                set_imageSrc(image)
-                set_oldImageSrc(image)
+                set_originalImageSrc(image);
                 set_image(userDetails.image)
             }
         }
@@ -105,16 +102,15 @@ const CustomerProfile = ({
             curr_filename=res.data.details[0].filename
 
             return res.data.details[0].filename;
-        } catch (error) {
-            console.error('Error uploading image:', error);
+        } catch (error: any) {
+            dispatch(showAlert("Error uploading image: " + error.response.data.error))
         }
     };
 
     const updateProfile = async () => {
         SetLoadingStatus(true)
-        if(oldImageSrc!=imageSrc)
+        if(originalImageSrc!=imageSrc)
         {
-            console.log("inside upload ",oldImageSrc,imageSrc,image)
             await uploadProfileImage(imageSrc)
             console.log("after upload ",image)
         }
@@ -148,7 +144,7 @@ const CustomerProfile = ({
         }
     }
 
-    useEffect(() => {
+    const validateInput = () => {
         if (
             name.length >= 3 &&
             !checkTitleNameInvalid('Username', name) &&
@@ -157,7 +153,7 @@ const CustomerProfile = ({
             (!cityAvailable || (cityAvailable && city)) &&
             phoneNumber &&
             (
-                !(imageSrc == oldImageSrc) ||
+                !(imageSrc == originalImageSrc) ||
                 name !== userDetails.username ||
                 !arraysEqual(selectedKeywords, userDetails.keywords || []) ||
                 !arraysEqual(selectedServices, userDetails.services || []) ||
@@ -167,12 +163,24 @@ const CustomerProfile = ({
                 phoneNumber !== userDetails.phoneNumber
             )
         ) {
-            set_enableToUpdate(true)
-            set_showError(false)
+            return true;
         } else {
-            set_enableToUpdate(false)
-            set_showError(true)
+            return false;
         }
+    }
+
+    const on_imageChange = (newImageSrc: any) => {
+        if (validateImageSize(newImageSrc) === false) {
+            dispatch(showAlert("Image size should be less than 5MB"));
+            set_enableToUpdate(false)
+        } else {
+            set_imageSrc(newImageSrc);    
+        }
+    }
+
+    useEffect(() => {
+        set_enableToUpdate(validateInput())
+        set_showError(!validateInput())
     }, [imageSrc, name, selectedKeywords, selectedServices, country, state, stateAvailable, city, cityAvailable, phoneNumber])
 
     useEffect(() => {
@@ -180,139 +188,116 @@ const CustomerProfile = ({
         getKeywordsAndServices()
     }, [])
 
-    useEffect(() => {
-        initialImage = imageSrc
-    }, [imageSrc])
+        return (
+            <div className={`w-full h-full overflow-y-auto relative ${isFromAdminPanel ? 'py-0' : 'py-6'}`}>
+                <div className={`w-full max-w-[400px] p-6 mx-auto flex flex-col items-center ${isFromAdminPanel ? 'p-0' : 'p-6'}`}>
+                    {
+                        !isFromAdminPanel ?
+                            <>
+                                <div className="w-full flex">
+                                    <button
+                                        className="w-6 h-6 text-white hover:opacity-50"
+                                        onClick={() => navigate(-1)}
+                                    >
+                                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                            <path d="M9.57 5.92993L3.5 11.9999L9.57 18.0699" stroke="currentColor" strokeWidth="1.5" strokeMiterlimit="10" strokeLinecap="round" strokeLinejoin="round" />
+                                            <path d="M20.5 12H3.67004" stroke="currentColor" strokeWidth="1.5" strokeMiterlimit="10" strokeLinecap="round" strokeLinejoin="round" />
+                                        </svg>
+                                    </button>
+                                </div>
+                                <div className="text-center text-white text-3xl">Edit Profile</div>
+                            </> :
+                            null
+                    }
 
-    return (
-        <div className={`w-full h-full overflow-y-auto relative ${isFromAdminPanel ? 'py-0' : 'py-6'}`}>
-            <div className={`w-full max-w-[400px] p-6 mx-auto flex flex-col items-center ${isFromAdminPanel ? 'p-0' : 'p-6'}`}>
-                {
-                    !isFromAdminPanel ?
-                        <>
-                            <div className="w-full flex">
-                                <button
-                                    className="w-6 h-6 text-white hover:opacity-50"
-                                    onClick={() => navigate(-1)}
-                                >
-                                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                        <path d="M9.57 5.92993L3.5 11.9999L9.57 18.0699" stroke="currentColor" strokeWidth="1.5" strokeMiterlimit="10" strokeLinecap="round" strokeLinejoin="round" />
-                                        <path d="M20.5 12H3.67004" stroke="currentColor" strokeWidth="1.5" strokeMiterlimit="10" strokeLinecap="round" strokeLinejoin="round" />
-                                    </svg>
-                                </button>
-                            </div>
-                            <div className="text-center text-white text-3xl">Edit Profile</div>
-                        </> :
-                        null
-                }
-                <div className="w-full text-white flex flex-col justify-center items-center mt-8">
-
-                    <ReactImagePickerEditor
-                        config={{
-                            borderRadius: '100%',
-                            language: 'en',
-                            width: '195px',
-                            height: '195px',
-                            objectFit: 'cover',
-                            compressInitial: null,
-                            aspectRatio: 1
-                        }}
-                        imageSrcProp={initialImage}
-                        imageChanged={(newImageSrc:any)=> {
-                            if(validateImageSize(newImageSrc) === false) {
-                                dispatch(showAlert("Image size should be less than 1MB"));
-                                set_enableToUpdate(false)
-                            } else {
-                                set_imageSrc(newImageSrc);    
+                    <div className="w-full text-white flex flex-col justify-center items-center mt-8">
+                    <ImagePicker key={imagePickerKey} initialImage={originalImageSrc} on_imageChange={on_imageChange} />
+                        <div className="w-full max-w-[400px] mt-6">
+                            {
+                                isFromAdminPanel ?
+                                    <>
+                                        <div className="mt-6 text-grey text-[12px] leading-[19px]">Email *</div>
+                                        <input
+                                            className="w-full bg-transparent rounded-[15px] h-[50px] mt-0.5 border text-[14px] leading-[21px] px-[24px] border-lightgrey"
+                                            disabled={true}
+                                            value={userDetails.email}
+                                        />
+                                    </> :
+                                    null
                             }
-                        }}
-                    />
-                    <div className="w-full max-w-[400px] mt-6">
-                        {
-                            isFromAdminPanel ?
-                                <>
-                                    <div className="mt-6 text-grey text-[12px] leading-[19px]">Email *</div>
-                                    <input
-                                        className="w-full bg-transparent rounded-[15px] h-[50px] mt-0.5 border text-[14px] leading-[21px] px-[24px] border-lightgrey"
-                                        disabled={true}
-                                        value={userDetails.email}
-                                    />
-                                </> :
-                                null
-                        }
-                        <div className="mt-6 text-grey text-[12px] leading-[19px]">Full name *</div>
-                        <input
-                            className="w-full bg-transparent rounded-[15px] h-[50px] mt-0.5 border text-[14px] leading-[21px] px-[24px] border-lightgrey"
-                            placeholder="Input your name"
-                            value={name}
-                            onChange={(e) => set_name(e.target.value)}
-                        />
-                        <ShowFieldError
-                            show={!(name.length >= 3 && !checkTitleNameInvalid('Username', name)) && showError}
-                            label={checkTitleNameInvalid('Username', name) ? checkTitleNameInvalid('Username', name) : "Name must be longer than 3 characters."}
-                        />
-
-                        <div className="mt-6 text-grey text-[12px] leading-[19px]">Majors</div>
-                        <MultiSelectionWithInputTag
-                            options={keywords}
-                            selectedOptions={selectedKeywords}
-                            set_selectedOptions={set_selectedKeywords}
-                            placeholder="Select majors"
-                        />
-
-                        <div className="mt-6 text-grey text-[12px] leading-[19px]">Services</div>
-                        <SelectionWithCheckBox
-                            options={services}
-                            selectedOptions={selectedServices}
-                            set_selectedOptions={set_selectedServices}
-                            placeholder="Select services"
-                            isMulti={true}
-                        />
-
-                        <CountrySelect
-                            selectedCountry={country}
-                            set_selectedCountry={set_country}
-                            selectedState={state}
-                            set_selectedState={set_state}
-                            selectedCity={city}
-                            set_selectedCity={set_city}
-                            stateAvailable={stateAvailable}
-                            set_stateAvailable={set_stateAvailable}
-                            cityAvailable={cityAvailable}
-                            set_cityAvailable={set_cityAvailable}
-                            showError={showError}
-                        />
-
-                        <div className="mt-6 text-grey text-[12px] leading-[19px]">Phone number *</div>
-                        <PhoneInput
-                            placeholder="Enter phone number"
-                            value={phoneNumber}
-                            onChange={(data) => set_phoneNumber(data)}
-                        />
-                        <ShowFieldError
-                            show={!phoneNumber.length && showError}
-                            label="You have to provide your phone number"
-                        />
+                            <div className="mt-6 text-grey text-[12px] leading-[19px]">Full name *</div>
+                            <input
+                                className="w-full bg-transparent rounded-[15px] h-[50px] mt-0.5 border text-[14px] leading-[21px] px-[24px] border-lightgrey"
+                                placeholder="Input your name"
+                                value={name}
+                                onChange={(e) => set_name(e.target.value)}
+                            />
+                            <ShowFieldError
+                                show={!(name.length >= 3 && !checkTitleNameInvalid('Username', name)) && showError}
+                                label={checkTitleNameInvalid('Username', name) ? checkTitleNameInvalid('Username', name) : "Name must be longer than 3 characters."}
+                            />
+    
+                            <div className="mt-6 text-grey text-[12px] leading-[19px]">Majors</div>
+                            <MultiSelectionWithInputTag
+                                options={keywords}
+                                selectedOptions={selectedKeywords}
+                                set_selectedOptions={set_selectedKeywords}
+                                placeholder="Select majors"
+                            />
+    
+                            <div className="mt-6 text-grey text-[12px] leading-[19px]">Services</div>
+                            <SelectionWithCheckBox
+                                options={services}
+                                selectedOptions={selectedServices}
+                                set_selectedOptions={set_selectedServices}
+                                placeholder="Select services"
+                                isMulti={true}
+                            />
+    
+                            <CountrySelect
+                                selectedCountry={country}
+                                set_selectedCountry={set_country}
+                                selectedState={state}
+                                set_selectedState={set_state}
+                                selectedCity={city}
+                                set_selectedCity={set_city}
+                                stateAvailable={stateAvailable}
+                                set_stateAvailable={set_stateAvailable}
+                                cityAvailable={cityAvailable}
+                                set_cityAvailable={set_cityAvailable}
+                                showError={showError}
+                            />
+    
+                            <div className="mt-6 text-grey text-[12px] leading-[19px]">Phone number *</div>
+                            <PhoneInput
+                                placeholder="Enter phone number"
+                                value={phoneNumber}
+                                onChange={(data) => set_phoneNumber(data)}
+                            />
+                            <ShowFieldError
+                                show={!phoneNumber.length && showError}
+                                label="You have to provide your phone number"
+                            />
+                        </div>
+                    </div>
+                    <div className="w-full h-10 flex justify-between mt-14 text-lightgrey">
+                        <button
+                            className="w-[calc(50%-8px)] rounded-lg border border-lightgrey flex items-center justify-center"
+                            onClick={reset}
+                        >
+                            Reset
+                        </button>
+                        <button
+                            className="w-[calc(50%-8px)] bg-green rounded-lg flex items-center justify-center disabled:opacity-50"
+                            disabled={!enableToUpdate}
+                            onClick={updateProfile}
+                        >
+                            Save
+                        </button>
                     </div>
                 </div>
-                <div className="w-full h-10 flex justify-between mt-14 text-lightgrey">
-                    <button
-                        className="w-[calc(50%-8px)] rounded-lg border border-lightgrey flex items-center justify-center"
-                        onClick={reset}
-                    >
-                        Reset
-                    </button>
-                    <button
-                        className="w-[calc(50%-8px)] bg-green rounded-lg flex items-center justify-center disabled:opacity-50"
-                        disabled={!enableToUpdate}
-                        onClick={updateProfile}
-                    >
-                        Save
-                    </button>
-                </div>
             </div>
-        </div>
-    );
+        );
 };
 
 export default CustomerProfile;

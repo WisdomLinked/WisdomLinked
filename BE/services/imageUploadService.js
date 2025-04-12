@@ -25,6 +25,6 @@ exports.uploadImageToStorage = async (file) => {
         return response.data;
     } catch (error) {
         console.error("Error uploading to storage API:", error);
-        throw new Error("Image upload failed.");
+        throw new Error(error.response.data.error || "Failed to upload image");
     }
 };
