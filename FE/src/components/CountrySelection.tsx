@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import Select, { components } from "react-select";
-import { Country, State, City } from "country-state-city";
+import { Country, State, City, ICountry, IState } from "country-state-city";
 import ShowFieldError from "./ShowFieldError";
 
 const InputOption = ({
@@ -13,15 +13,10 @@ const InputOption = ({
     innerProps,
     ...rest
 }: any) => {
-    const [isActive, set_isActive] = useState(false);
-    const onMouseDown = () => set_isActive(true);
-    const onMouseUp = () => set_isActive(false);
-    const onMouseLeave = () => set_isActive(false);
-
     // styles
     let bg = "white";
     if (isFocused) bg = "#eee";
-    if (isActive) bg = "#B2D4FF";
+    if (isSelected) bg = "#B2D4FF";
 
     const style = {
         alignItems: "center",
@@ -32,9 +27,6 @@ const InputOption = ({
     // prop assignment
     const props = {
         ...innerProps,
-        onMouseDown,
-        onMouseUp,
-        onMouseLeave,
         style
     };
 
@@ -47,7 +39,6 @@ const InputOption = ({
             getStyles={getStyles}
             innerProps={props}
         >
-            <input type="checkbox" className="mr-2" defaultChecked={isSelected} />
             <span className="text-darkgrey">{children}</span>
         </components.Option>
     );
@@ -66,10 +57,19 @@ const CountrySelect = ({
     set_cityAvailable
 }: any) => {
 
-    useEffect(() => {
-        set_stateAvailable(State?.getStatesOfCountry(selectedCountry?.isoCode)?.length > 0)
-        set_cityAvailable(City.getCitiesOfState(selectedState?.countryCode, selectedState?.isoCode)?.length > 0)
-    }, [selectedCountry, selectedState])
+
+    const on_countryChange = (country : ICountry) => {
+        set_selectedCountry(country);
+        set_selectedState(null)
+        set_selectedCity(null)
+        set_stateAvailable(State.getStatesOfCountry(country?.isoCode)?.length > 0)
+    }
+
+    const on_stateChange = (state : IState) => {
+        set_selectedState(state);
+        set_selectedCity(null)
+        set_cityAvailable(City.getCitiesOfState(state?.countryCode, state?.isoCode)?.length > 0)
+    }
 
     return (
         <>
@@ -86,9 +86,7 @@ const CountrySelect = ({
                 }}
                 value={selectedCountry}
                 onChange={(item) => {
-                    set_selectedCountry(item);
-                    set_selectedState(null)
-                    set_selectedCity(null)
+                    on_countryChange(item)
                 }}
                 components={{
                     Option: InputOption
@@ -115,8 +113,7 @@ const CountrySelect = ({
                             }}
                             value={selectedState}
                             onChange={(item) => {
-                                set_selectedState(item);
-                                set_selectedCity(null)
+                                on_stateChange(item)
                             }}
                             components={{
                                 Option: InputOption
