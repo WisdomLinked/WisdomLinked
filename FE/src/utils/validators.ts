@@ -41,7 +41,7 @@ export const validateGroupName = (name: string) => {
 };
 
 export const validateImageSize = (imageSrc : string) => {
-    if(!imageSrc) return;
+    if(!imageSrc) return true;
     // Remove the Base64 metadata if present
     const cleanedBase64 = imageSrc?.split(",")[1] || imageSrc;
     // Calculate the size in bytes

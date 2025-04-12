@@ -14,7 +14,7 @@ import { useNavigate } from "react-router-dom";
 import { SetLoadingStatus } from "../../../actions/appActions";
 import CountrySelect from "../../../components/CountrySelection";
 import PhoneInput from "react-phone-input-2";
-import {useDispatch} from "react-redux";
+import { useDispatch } from "react-redux";
 import { validateImageSize } from "../../../utils/validators";
 import { showAlert } from "../../../actions/alertActions";
 import ImagePicker from "../../../components/imagePicker";
@@ -25,7 +25,7 @@ const CustomerProfile = ({
     isFromAdminPanel = false,
     updateOneUser
 }: any) => {
-    let curr_filename=""  // Need to implement this with the state instead of a new variable
+    let curr_filename = ""  // Need to implement this with the state instead of a new variable
 
     const dispatch = useDispatch()
     const navigate = useNavigate()
@@ -70,7 +70,7 @@ const CustomerProfile = ({
 
     const loadData = async () => {
         if (userDetails.image) {
-            const image: any = imageSrc? imageSrc:await profileImageFetch(userDetails.image,"small");
+            const image: any = imageSrc ? imageSrc : await profileImageFetch(userDetails.image, "small");
             if (image) {
                 set_originalImageSrc(image);
                 set_image(userDetails.image)
@@ -100,7 +100,7 @@ const CustomerProfile = ({
             formData.append('image', file);
 
             const res = await profileImageUpload(formData);
-            curr_filename=res.data.details[0].filename
+            curr_filename = res.data.details[0].filename
 
             return res.data.details[0].filename;
         } catch (error: any) {
@@ -110,14 +110,13 @@ const CustomerProfile = ({
 
     const updateProfile = async () => {
         SetLoadingStatus(true)
-        if(originalImageSrc!=imageSrc)
-        {
+        if (originalImageSrc != imageSrc) {
             await uploadProfileImage(imageSrc)
-            console.log("after upload ",image)
+            console.log("after upload ", image)
         }
         const updates = {
             email: userDetails.email,
-            image: curr_filename?curr_filename:image,
+            image: curr_filename ? curr_filename : image,
             username: name,
             keywords: selectedKeywords,
             services: selectedServices.map((x: any) => x._id),
@@ -145,6 +144,7 @@ const CustomerProfile = ({
         }
     }
 
+    // Returns true if input is valid
     const validateInput = () => {
         if (
             name.length >= 3 &&
@@ -170,12 +170,13 @@ const CustomerProfile = ({
         }
     }
 
+    // Validates input and controls if submit button is enabled
     const on_imageChange = (newImageSrc: any) => {
         if (validateImageSize(newImageSrc) === false) {
-            dispatch(showAlert(`Image size cannot be greater than ${MAX_IMAGE_SIZE_IN_MB}MB`));
-            set_enableToUpdate(false)
+            set_enableToUpdate(false);
         } else {
-            set_imageSrc(newImageSrc);    
+            set_imageSrc(newImageSrc);
+            set_enableToUpdate(true);
         }
     }
 
@@ -189,116 +190,116 @@ const CustomerProfile = ({
         getKeywordsAndServices()
     }, [])
 
-        return (
-            <div className={`w-full h-full overflow-y-auto relative ${isFromAdminPanel ? 'py-0' : 'py-6'}`}>
-                <div className={`w-full max-w-[400px] p-6 mx-auto flex flex-col items-center ${isFromAdminPanel ? 'p-0' : 'p-6'}`}>
-                    {
-                        !isFromAdminPanel ?
-                            <>
-                                <div className="w-full flex">
-                                    <button
-                                        className="w-6 h-6 text-white hover:opacity-50"
-                                        onClick={() => navigate(-1)}
-                                    >
-                                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                            <path d="M9.57 5.92993L3.5 11.9999L9.57 18.0699" stroke="currentColor" strokeWidth="1.5" strokeMiterlimit="10" strokeLinecap="round" strokeLinejoin="round" />
-                                            <path d="M20.5 12H3.67004" stroke="currentColor" strokeWidth="1.5" strokeMiterlimit="10" strokeLinecap="round" strokeLinejoin="round" />
-                                        </svg>
-                                    </button>
-                                </div>
-                                <div className="text-center text-white text-3xl">Edit Profile</div>
-                            </> :
-                            null
-                    }
+    return (
+        <div className={`w-full h-full overflow-y-auto relative ${isFromAdminPanel ? 'py-0' : 'py-6'}`}>
+            <div className={`w-full max-w-[400px] p-6 mx-auto flex flex-col items-center ${isFromAdminPanel ? 'p-0' : 'p-6'}`}>
+                {
+                    !isFromAdminPanel ?
+                        <>
+                            <div className="w-full flex">
+                                <button
+                                    className="w-6 h-6 text-white hover:opacity-50"
+                                    onClick={() => navigate(-1)}
+                                >
+                                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                        <path d="M9.57 5.92993L3.5 11.9999L9.57 18.0699" stroke="currentColor" strokeWidth="1.5" strokeMiterlimit="10" strokeLinecap="round" strokeLinejoin="round" />
+                                        <path d="M20.5 12H3.67004" stroke="currentColor" strokeWidth="1.5" strokeMiterlimit="10" strokeLinecap="round" strokeLinejoin="round" />
+                                    </svg>
+                                </button>
+                            </div>
+                            <div className="text-center text-white text-3xl">Edit Profile</div>
+                        </> :
+                        null
+                }
 
-                    <div className="w-full text-white flex flex-col justify-center items-center mt-8">
-                    <ImagePicker key={imagePickerKey} initialImage={originalImageSrc} on_imageChange={on_imageChange} />
-                        <div className="w-full max-w-[400px] mt-6">
-                            {
-                                isFromAdminPanel ?
-                                    <>
-                                        <div className="mt-6 text-grey text-[12px] leading-[19px]">Email *</div>
-                                        <input
-                                            className="w-full bg-transparent rounded-[15px] h-[50px] mt-0.5 border text-[14px] leading-[21px] px-[24px] border-lightgrey"
-                                            disabled={true}
-                                            value={userDetails.email}
-                                        />
-                                    </> :
-                                    null
-                            }
-                            <div className="mt-6 text-grey text-[12px] leading-[19px]">Full name *</div>
-                            <input
-                                className="w-full bg-transparent rounded-[15px] h-[50px] mt-0.5 border text-[14px] leading-[21px] px-[24px] border-lightgrey"
-                                placeholder="Input your name"
-                                value={name}
-                                onChange={(e) => set_name(e.target.value)}
-                            />
-                            <ShowFieldError
-                                show={!(name.length >= 3 && !checkTitleNameInvalid('Username', name)) && showError}
-                                label={checkTitleNameInvalid('Username', name) ? checkTitleNameInvalid('Username', name) : "Name must be longer than 3 characters."}
-                            />
-    
-                            <div className="mt-6 text-grey text-[12px] leading-[19px]">Majors</div>
-                            <MultiSelectionWithInputTag
-                                options={keywords}
-                                selectedOptions={selectedKeywords}
-                                set_selectedOptions={set_selectedKeywords}
-                                placeholder="Select majors"
-                            />
-    
-                            <div className="mt-6 text-grey text-[12px] leading-[19px]">Services</div>
-                            <SelectionWithCheckBox
-                                options={services}
-                                selectedOptions={selectedServices}
-                                set_selectedOptions={set_selectedServices}
-                                placeholder="Select services"
-                                isMulti={true}
-                            />
-    
-                            <CountrySelect
-                                selectedCountry={country}
-                                set_selectedCountry={set_country}
-                                selectedState={state}
-                                set_selectedState={set_state}
-                                selectedCity={city}
-                                set_selectedCity={set_city}
-                                stateAvailable={stateAvailable}
-                                set_stateAvailable={set_stateAvailable}
-                                cityAvailable={cityAvailable}
-                                set_cityAvailable={set_cityAvailable}
-                                showError={showError}
-                            />
-    
-                            <div className="mt-6 text-grey text-[12px] leading-[19px]">Phone number *</div>
-                            <PhoneInput
-                                placeholder="Enter phone number"
-                                value={phoneNumber}
-                                onChange={(data) => set_phoneNumber(data)}
-                            />
-                            <ShowFieldError
-                                show={!phoneNumber.length && showError}
-                                label="You have to provide your phone number"
-                            />
-                        </div>
-                    </div>
-                    <div className="w-full h-10 flex justify-between mt-14 text-lightgrey">
-                        <button
-                            className="w-[calc(50%-8px)] rounded-lg border border-lightgrey flex items-center justify-center"
-                            onClick={reset}
-                        >
-                            Reset
-                        </button>
-                        <button
-                            className="w-[calc(50%-8px)] bg-green rounded-lg flex items-center justify-center disabled:opacity-50"
-                            disabled={!enableToUpdate}
-                            onClick={updateProfile}
-                        >
-                            Save
-                        </button>
+                <div className="w-full text-white flex flex-col justify-center items-center mt-8">
+                    <ImagePicker key={imagePickerKey} initialImage={originalImageSrc} on_imageChange={on_imageChange} validator={validateImageSize} />
+                    <div className="w-full max-w-[400px] mt-6">
+                        {
+                            isFromAdminPanel ?
+                                <>
+                                    <div className="mt-6 text-grey text-[12px] leading-[19px]">Email *</div>
+                                    <input
+                                        className="w-full bg-transparent rounded-[15px] h-[50px] mt-0.5 border text-[14px] leading-[21px] px-[24px] border-lightgrey"
+                                        disabled={true}
+                                        value={userDetails.email}
+                                    />
+                                </> :
+                                null
+                        }
+                        <div className="mt-6 text-grey text-[12px] leading-[19px]">Full name *</div>
+                        <input
+                            className="w-full bg-transparent rounded-[15px] h-[50px] mt-0.5 border text-[14px] leading-[21px] px-[24px] border-lightgrey"
+                            placeholder="Input your name"
+                            value={name}
+                            onChange={(e) => set_name(e.target.value)}
+                        />
+                        <ShowFieldError
+                            show={!(name.length >= 3 && !checkTitleNameInvalid('Username', name)) && showError}
+                            label={checkTitleNameInvalid('Username', name) ? checkTitleNameInvalid('Username', name) : "Name must be longer than 3 characters."}
+                        />
+
+                        <div className="mt-6 text-grey text-[12px] leading-[19px]">Majors</div>
+                        <MultiSelectionWithInputTag
+                            options={keywords}
+                            selectedOptions={selectedKeywords}
+                            set_selectedOptions={set_selectedKeywords}
+                            placeholder="Select majors"
+                        />
+
+                        <div className="mt-6 text-grey text-[12px] leading-[19px]">Services</div>
+                        <SelectionWithCheckBox
+                            options={services}
+                            selectedOptions={selectedServices}
+                            set_selectedOptions={set_selectedServices}
+                            placeholder="Select services"
+                            isMulti={true}
+                        />
+
+                        <CountrySelect
+                            selectedCountry={country}
+                            set_selectedCountry={set_country}
+                            selectedState={state}
+                            set_selectedState={set_state}
+                            selectedCity={city}
+                            set_selectedCity={set_city}
+                            stateAvailable={stateAvailable}
+                            set_stateAvailable={set_stateAvailable}
+                            cityAvailable={cityAvailable}
+                            set_cityAvailable={set_cityAvailable}
+                            showError={showError}
+                        />
+
+                        <div className="mt-6 text-grey text-[12px] leading-[19px]">Phone number *</div>
+                        <PhoneInput
+                            placeholder="Enter phone number"
+                            value={phoneNumber}
+                            onChange={(data) => set_phoneNumber(data)}
+                        />
+                        <ShowFieldError
+                            show={!phoneNumber.length && showError}
+                            label="You have to provide your phone number"
+                        />
                     </div>
                 </div>
+                <div className="w-full h-10 flex justify-between mt-14 text-lightgrey">
+                    <button
+                        className="w-[calc(50%-8px)] rounded-lg border border-lightgrey flex items-center justify-center"
+                        onClick={reset}
+                    >
+                        Reset
+                    </button>
+                    <button
+                        className="w-[calc(50%-8px)] bg-green rounded-lg flex items-center justify-center disabled:opacity-50"
+                        disabled={!enableToUpdate}
+                        onClick={updateProfile}
+                    >
+                        Save
+                    </button>
+                </div>
             </div>
-        );
+        </div>
+    );
 };
 
 export default CustomerProfile;

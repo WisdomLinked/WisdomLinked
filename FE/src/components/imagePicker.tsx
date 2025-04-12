@@ -10,14 +10,16 @@ interface ImagePickerProps {
     key: any;
     initialImage: any;
     on_imageChange: any;
-    showError?: boolean;
+    validator?: any;
 }
 
-const ImagePicker = ({ key, initialImage, on_imageChange, showError }: ImagePickerProps) => {
+const ImagePicker = ({  initialImage, on_imageChange, validator }: ImagePickerProps) => {
+
+    const [showError, set_showError] = useState(false);
+
     return (
         <>
             <ReactImagePickerEditor
-                key={key}
                 config={{
                     borderRadius: '100%',
                     language: 'en',
@@ -30,6 +32,7 @@ const ImagePicker = ({ key, initialImage, on_imageChange, showError }: ImagePick
                 imageSrcProp={initialImage}
                 imageChanged={(newImageSrc: any) => {
                     on_imageChange(newImageSrc);
+                    set_showError(!validator(newImageSrc))
                 }}
             />
             <ShowFieldError
