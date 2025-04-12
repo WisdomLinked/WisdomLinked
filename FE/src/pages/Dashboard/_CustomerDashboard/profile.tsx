@@ -18,6 +18,7 @@ import {useDispatch} from "react-redux";
 import { validateImageSize } from "../../../utils/validators";
 import { showAlert } from "../../../actions/alertActions";
 import ImagePicker from "../../../components/imagePicker";
+import { MAX_IMAGE_SIZE_IN_MB } from "../../../utils/constants";
 
 const CustomerProfile = ({
     userDetails,
@@ -171,7 +172,7 @@ const CustomerProfile = ({
 
     const on_imageChange = (newImageSrc: any) => {
         if (validateImageSize(newImageSrc) === false) {
-            dispatch(showAlert("Image size should be less than 5MB"));
+            dispatch(showAlert(`Image size cannot be greater than ${MAX_IMAGE_SIZE_IN_MB}MB`));
             set_enableToUpdate(false)
         } else {
             set_imageSrc(newImageSrc);    

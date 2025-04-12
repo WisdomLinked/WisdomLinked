@@ -1,3 +1,5 @@
+import { MAX_IMAGE_SIZE_IN_MB, MEGA_BYTE } from "./constants";
+
 export const validateLoginForm = ({ email, password }: {email: string, password: string}) => {
     const isMailValid = validateMail(email);
     const isPasswordValid = validatePassword(password);
@@ -45,12 +47,12 @@ export const validateImageSize = (imageSrc : string) => {
     // Calculate the size in bytes
     const sizeInBytes = (cleanedBase64.length * 3) / 4 - (cleanedBase64.endsWith("==") ? 2 : cleanedBase64.endsWith("=") ? 1 : 0);
 
-    // Convert to kilobytes (optional)
-    const sizeInKB = sizeInBytes / 1024;
+    // Convert to MEGA_BYTES
+    const sizeInKB = sizeInBytes / MEGA_BYTE;
 
-    // Check if the size exceeds 5MB (5120KB)
-    if (sizeInKB > 5120) {
-        return false; // Image is larger than 1MB
+    // Check if the size exceeds MAX_IMAGE_SIZE_IN_MB
+    if (sizeInKB > MAX_IMAGE_SIZE_IN_MB) {
+        return false; // Image is larger than MAX_IMAGE_SIZE_IN_MB
     } else {
         return true; // Image is within the size limit
     }
