@@ -1,7 +1,5 @@
 import React, { useState, useEffect } from "react";
-import EditAvatar from "../EditAvatar";
 import {
-    callApi,
     doGetKeywordsAndServices,
     doUpdateProfile,
     doUpdateProfileByAdmin,
@@ -11,15 +9,13 @@ import {
 import ShowFieldError from "../../../components/ShowFieldError";
 import MultiSelectionWithInputTag from "../../../components/MultiSelectionWithInputTag";
 import SelectionWithCheckBox from "../../../components/SelectionWithCheckBox";
-import { arraysEqual, checkTitleNameInvalid } from "../../../actions/common";
+import { checkTitleNameInvalid } from "../../../actions/common";
 import { useNavigate } from "react-router-dom";
 import { SetLoadingStatus } from "../../../actions/appActions";
 import CountrySelect, { Address } from "../../../components/CountrySelection";
 import PhoneInput from "react-phone-input-2";
-import { useDispatch } from "react-redux";
 import ReactImagePickerEditor from "react-image-picker-editor";
 import { City, ICity, ICountry, IState, State } from "country-state-city";
-import { set } from "date-fns";
 
 
 const CustomerProfile = ({
@@ -75,6 +71,10 @@ const CustomerProfile = ({
         set_phoneNumber(userDetails.phoneNumber)
     }
 
+    // TODO (Navya) : Check what are we doing here? The argument this function gets is the base64 encoded image data. 
+    // What is happening with fetch(base64EncodedImage) ? Why do we need it if we already have the imageSrc
+    // Can we simplify this?
+    // TODO (Navya) : Change parameter name to something better
     const uploadProfileImage = async (newDataUri: any) => {
         try {
             const fileExtension = newDataUri.split(';')[0].split('/')[1];
