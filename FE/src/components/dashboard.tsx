@@ -5,26 +5,26 @@ import { SetLoadingStatus } from "../actions/appActions";
 import { updateMe } from "../actions/authActions";
 import { setChosenChatDetails, setChosenGroupChatDetails } from "../actions/chatActions";
 import { formatDateYYYY_MM_DD_h_m } from "../actions/common";
-import { doCancelPendingSeminar, doCancelEvent, doUpdateEvent, doAcceptEvent, addMemberToGroup, doCancelInvitation } from "../api/api";
+import { doCancelPendingSeminar, doCancelEvent, doUpdateEvent, doAcceptEvent, addMemberToGroup, doCancelInvitation, profileImageFetch } from "../api/api";
 import SelectDateTime from "../pages/Dashboard/selectDateTime";
 import Chatbot from "./chatbot";
 import CollapsibleSection from "./collapsibleSection";
 import SessionCardComponent from "./sessionCardComponent";
 import { useDispatch } from "react-redux";
 import { useNavigate } from "react-router-dom";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Session } from "../api/types";
 import Avatar from "./Avatar";
 import { event } from 'jquery';
+import { Persona } from '../utils/constants';
 
 
 interface DashboardProps {
     // Define the props for the Dashboard component here
     userId: string;
     userStatus: string;
-    userRole: string;
+    userRole: Persona;
 
-    base64Images: Map<string, string>;
 
     pendingGroupChats: any[];
     groupChats: any[];
@@ -32,9 +32,46 @@ interface DashboardProps {
     groupChatList: any[];
 }
 
+const fetchImages = async (sessionList: any[]) => {
+    const uniqueExperts = new Map<string, string>();
+    sessionList.forEach((item) => {
+        if (item.expert && item.expert._id && item.expert.image) {
+            uniqueExperts.set(item.expert._id, item.expert.image);
+        }
+        else if (item.customerId && item.customerId._id && item.customerId.image) {
+            uniqueExperts.set(item.customerId._id, item.customerId.image);
+        }
+
+        else if (item.admin && item.admin._id && item.admin.image) {
+            uniqueExperts.set(item.admin._id, item.admin.image);
+        }
+    });
+
+    const imagePromises = Array.from(uniqueExperts.entries()).map(
+        async ([expertId, imageUrl]) => {
+            try {
+                const base64 = await profileImageFetch(imageUrl, "small");
+                return { id: expertId, base64 };
+            } catch (error) {
+                console.error(`Error fetching image for expert ${expertId}:`, error);
+                return null;
+            }
+        }
+    );
+
+    const images = await Promise.all(imagePromises);
+    const newImageMap = new Map();
+
+    images.forEach((image) => {
+        if (image) newImageMap.set(image.id, image.base64 as string);
+    });
+
+    return newImageMap
+};
 
 
-const Dashboard = ({ userId, userStatus, userRole, base64Images, pendingGroupChats, groupChats, events, groupChatList }: DashboardProps) => {
+
+const Dashboard = ({ userId, userStatus, userRole, pendingGroupChats, groupChats, events, groupChatList }: DashboardProps) => {
 
 
     const dispatch = useDispatch()
@@ -42,17 +79,29 @@ const Dashboard = ({ userId, userStatus, userRole, base64Images, pendingGroupCha
 
     const [editModalShow, set_editModalShow] = useState<boolean>(false)
     const [selectedEvent, set_selectedEvent] = useState<any>(null)
-    const [updatedSessions, set_sessions] = useState<Session[]>([])
+    const [base64Images, setBase64Images] = useState<Map<string, string>>(new Map());
 
 
     const now = new Date().getTime();
 
+    // Remove sessions (events) in the past
     const upcomingSessions = events.filter((item: any) => new Date(item.end).getTime() >= now);
+
+    // Remove group chats (seminars) that were pending but expired
     const upcomingPendingSeminars = pendingGroupChats.filter((item: any) => new Date(item.groupChatId.end).getTime() >= now);
+
+    // Remove accepted group chats (seminars) in the past
     const upcomingSeminars = groupChats.filter((item: any) => new Date(item.end).getTime() >= now);
 
     const acceptedIndividualSessions = upcomingSessions.filter((item: any) => item.status === 'accepted');
     const pendingIndividualSessions = upcomingSessions.filter((item: any) => item.status === 'pending');
+    
+    useEffect(() => {
+        fetchImages([...upcomingSessions, ...upcomingPendingSeminars, ...upcomingSeminars]).then((imageMap) => {
+            setBase64Images(imageMap)
+        });    
+    }, [])
+
 
     // Only if user role is customer
     const cancelSeminarAppointment = async (data: any) => {
@@ -122,14 +171,14 @@ const Dashboard = ({ userId, userStatus, userRole, base64Images, pendingGroupCha
                 start: new Date(start),
                 end: new Date(end)
             })
-            let temp: any[] = upcomingSessions
-            let index = upcomingSessions.findIndex((x: any) => x._id === selectedEvent._id)
-            if (index > -1) {
-                temp[index].start = new Date(start)
-                temp[index].end = new Date(end)
-                temp[index].status = 'pending'
-                set_sessions([...temp])
-            }
+            // let temp: any[] = upcomingSessions
+            // let index = upcomingSessions.findIndex((x: any) => x._id === selectedEvent._id)
+            // if (index > -1) {
+            //     temp[index].start = new Date(start)
+            //     temp[index].end = new Date(end)
+            //     temp[index].status = 'pending'
+            //     set_sessions([...temp])
+            // }
             set_editModalShow(false)
         }
     }
@@ -189,8 +238,6 @@ const Dashboard = ({ userId, userStatus, userRole, base64Images, pendingGroupCha
         }
         SetLoadingStatus(false)
     }
-
-
 
     const acceptedSeminarCards = upcomingSeminars.length ?
         <div className="flex flex-wrap justify-center gap-6">
