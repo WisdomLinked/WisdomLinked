@@ -12,10 +12,11 @@ import { callApi, doGetKeywordsAndServices } from "../api/api";
 import PhoneInput from 'react-phone-input-2'
 import 'react-phone-input-2/lib/style.css'
 import { SetLoadingStatus } from "../actions/appActions";
-import CountrySelect from "../components/CountrySelection";
+import CountrySelect, { Address } from "../components/CountrySelection";
 import FileBrowser from "../components/fileBrowser";
 import ConfirmEmail from "../components/ConfirmEmail";
 import { showAlert } from "../actions/alertActions";
+import { State, City, ICountry, IState, ICity } from "country-state-city";
 
 const ExpertRegister = () => {
 
@@ -28,6 +29,9 @@ const ExpertRegister = () => {
     const [description, set_description] = useState('')
     const [selectedKeywords, set_selectedKeywords] = useState<Array<any>>([])
     const [selectedServices, set_selectedServices] = useState<Array<any>>([])
+
+    // Country State and City picker
+    const [address, set_address] = useState<Address>({ country: null, state: null, city: null })
     const [country, set_country] = useState<any>()
     const [state, set_state] = useState<any>()
     const [city, set_city] = useState<any>()
@@ -147,6 +151,42 @@ const ExpertRegister = () => {
         getKeywordsAndServices()
     }, [])
 
+
+    const on_addressChange = (address: Address) => {
+        set_address(address)
+        const isValid = validateAddress(address)
+        set_enableToRegister(isValid)
+    }
+
+    const validateAddress = (address: Address) => {
+        const availableStates = address.country ? State.getStatesOfCountry(address.country.isoCode) : []
+        const availableCities = address.state ? City.getCitiesOfState(address.state?.countryCode, address.state?.isoCode) : []
+
+        return (validateCountry(address.country) && validateState(address.state, availableStates) && validateCity(address.city, availableCities))
+    }
+
+    const validateCountry = (country: ICountry | null | undefined) => {
+        if (!country) {
+            return false;
+        }
+        return true;
+    }
+
+    const validateState = (state: IState | null | undefined, statesAvailable: IState[] | null) => {
+        if (statesAvailable?.length && (!state || !statesAvailable.includes(state))) {
+            return false;
+        }
+        return true;
+    }
+
+    const validateCity = (city: ICity | null, citiesAvailable: ICity[] | null) => {
+        if (citiesAvailable?.length && (!city || !citiesAvailable.includes(city))) {
+            return false;
+        }
+        return true;
+    }
+
+
     return (
         confirmEmailSent ?
             <ConfirmEmail email={email} /> :
@@ -236,17 +276,8 @@ const ExpertRegister = () => {
                         />
 
                         <CountrySelect
-                            selectedCountry={country}
-                            set_selectedCountry={set_country}
-                            selectedState={state}
-                            set_selectedState={set_state}
-                            selectedCity={city}
-                            set_selectedCity={set_city}
-                            stateAvailable={stateAvailable}
-                            set_stateAvailable={set_stateAvailable}
-                            cityAvailable={cityAvailable}
-                            set_cityAvailable={set_cityAvailable}
-                            showError={showError}
+                            address={address}
+                            on_Change={on_addressChange}
                         />
 
                         <div className="mt-6 text-grey text-[12px] leading-[19px]">Phone number *</div>

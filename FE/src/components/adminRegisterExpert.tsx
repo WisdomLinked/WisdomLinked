@@ -9,7 +9,7 @@ import {
 import ShowFieldError from "./ShowFieldError";
 import MultiSelectionWithInputTag from "./MultiSelectionWithInputTag";
 import SelectionWithCheckBox from "./SelectionWithCheckBox";
-import CountrySelect from "./CountrySelection";
+import CountrySelect, { Address } from "./CountrySelection";
 import FileBrowser from "./fileBrowser";
 import PhoneInput from "react-phone-input-2";
 
@@ -17,6 +17,7 @@ import {doGetKeywordsAndServices, registerUserByAdmin, sendEmailToUser} from "..
 import { SetLoadingStatus } from "../actions/appActions";
 import { showAlert } from "../actions/alertActions";
 import { useAppSelector } from "../store";
+import { State, City, ICountry, IState, ICity } from "country-state-city";
 
 function AdminRegisterExpert() {
     const dispatch = useDispatch();
@@ -30,6 +31,8 @@ function AdminRegisterExpert() {
     const [selectedKeywords, set_selectedKeywords] = useState<Array<any>>([]);
     const [selectedServices, set_selectedServices] = useState<Array<any>>([]);
 
+    // Country State and City picker
+    const [address, set_address] = useState<Address>({ country: userDetails?.country, state: userDetails?.state, city: userDetails?.city })
     const [country, set_country] = useState<any>();
     const [state, set_state] = useState<any>();
     const [city, set_city] = useState<any>();
@@ -184,6 +187,42 @@ function AdminRegisterExpert() {
         getKeywordsAndServices();
     }, []);
 
+
+
+    const on_addressChange = (address: Address) => {
+        set_address(address)
+        const isValid = validateAddress(address)
+        set_enableToRegister(isValid)
+    }
+
+    const validateAddress = (address: Address) => {
+        const availableStates = address.country ? State.getStatesOfCountry(address.country.isoCode) : []
+        const availableCities = address.state ? City.getCitiesOfState(address.state?.countryCode, address.state?.isoCode) : []
+
+        return (validateCountry(address.country) && validateState(address.state, availableStates) && validateCity(address.city, availableCities))
+    }
+
+    const validateCountry = (country: ICountry | null | undefined) => {
+        if (!country) {
+            return false;
+        }
+        return true;
+    }
+
+    const validateState = (state: IState | null | undefined, statesAvailable: IState[] | null) => {
+        if (statesAvailable?.length && (!state || !statesAvailable.includes(state))) {
+            return false;
+        }
+        return true;
+    }
+
+    const validateCity = (city: ICity | null, citiesAvailable: ICity[] | null) => {
+        if (citiesAvailable?.length && (!city || !citiesAvailable.includes(city))) {
+            return false;
+        }
+        return true;
+    }
+
     return (
         <div className="bg-[#181818] text-white p-6 rounded-lg shadow-lg w-[500px]">
             <h3 className="text-xl font-bold text-[#31B099] mb-4">
@@ -258,17 +297,8 @@ function AdminRegisterExpert() {
             />
 
             <CountrySelect
-                selectedCountry={country}
-                set_selectedCountry={set_country}
-                selectedState={state}
-                set_selectedState={set_state}
-                selectedCity={city}
-                set_selectedCity={set_city}
-                stateAvailable={stateAvailable}
-                set_stateAvailable={set_stateAvailable}
-                cityAvailable={cityAvailable}
-                set_cityAvailable={set_cityAvailable}
-                showError={showError}
+            address={address}
+            on_Change={on_addressChange}
             />
 
             <div className="mb-2 text-sm text-gray-200 mt-4">Phone number *</div>

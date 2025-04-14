@@ -14,10 +14,13 @@ import SelectionWithCheckBox from "../../../components/SelectionWithCheckBox";
 import { arraysEqual, checkTitleNameInvalid } from "../../../actions/common";
 import { useNavigate } from "react-router-dom";
 import { SetLoadingStatus } from "../../../actions/appActions";
-import CountrySelect from "../../../components/CountrySelection";
+import CountrySelect, { Address } from "../../../components/CountrySelection";
 import PhoneInput from "react-phone-input-2";
-import {useDispatch} from "react-redux";
+import { useDispatch } from "react-redux";
 import ReactImagePickerEditor from "react-image-picker-editor";
+import { City, ICity, ICountry, IState, State } from "country-state-city";
+import { set } from "date-fns";
+
 
 const CustomerProfile = ({
     userDetails,
@@ -25,9 +28,8 @@ const CustomerProfile = ({
     updateOneUser
 }: any) => {
 
-    let curr_filename=""  // Need to implement this with the state instead of a new variable
+    let curr_filename = ""  // Need to implement this with the state instead of a new variable
 
-    const dispatch = useDispatch()
     const navigate = useNavigate()
     const [imageSrc, set_imageSrc] = useState<any>(null)
     const [image, set_image] = useState<any>(null)
@@ -37,16 +39,12 @@ const CustomerProfile = ({
     const [services, set_services] = useState([])
     const [selectedKeywords, set_selectedKeywords] = useState<Array<any>>([])
     const [selectedServices, set_selectedServices] = useState<Array<any>>([])
-    const [country, set_country] = useState<any>()
-    const [state, set_state] = useState<any>()
-    const [city, set_city] = useState<any>()
-    const [stateAvailable, set_stateAvailable] = useState(false)
-    const [cityAvailable, set_cityAvailable] = useState(false)
+
+    // Country State and City picker
+    const [address, set_address] = useState<Address>({ country: userDetails?.country, state: userDetails?.state, city: userDetails?.city })
+
     const [phoneNumber, set_phoneNumber] = useState<any>('')
-    const [showError, set_showError] = useState(false)
     const [enableToUpdate, set_enableToUpdate] = useState(false)
-    const [file, set_file] = useState('')
-    const [fileError, set_fileError] = useState('')
 
     const reset = async () => {
         console.log("inside reset outside if");
@@ -56,16 +54,14 @@ const CustomerProfile = ({
         set_name(userDetails.username)
         set_selectedKeywords(userDetails.keywords)
         set_selectedServices(userDetails.services)
-        set_country(userDetails.country)
-        set_state(userDetails.state)
-        set_city(userDetails.city)
+        set_address({ country: userDetails.country, state: userDetails.state, city: userDetails.city })
         set_phoneNumber(userDetails.phoneNumber)
     }
 
     const loadData = async () => {
         console.log("inside load outside if");
         if (userDetails.image) {
-            const image: any = imageSrc? imageSrc:await profileImageFetch(userDetails.image,"small");
+            const image: any = imageSrc ? imageSrc : await profileImageFetch(userDetails.image, "small");
             if (image) {
                 console.log("inside load inside if");
                 set_imageSrc(image)
@@ -76,9 +72,6 @@ const CustomerProfile = ({
         set_name(userDetails.username)
         set_selectedKeywords(userDetails.keywords)
         set_selectedServices(userDetails.services)
-        set_country(userDetails.country)
-        set_state(userDetails.state)
-        set_city(userDetails.city)
         set_phoneNumber(userDetails.phoneNumber)
     }
 
@@ -97,7 +90,7 @@ const CustomerProfile = ({
             formData.append('image', file);
 
             const res = await profileImageUpload(formData);
-            curr_filename=res.data.details[0].filename
+            curr_filename = res.data.details[0].filename
 
             return res.data.details[0].filename;
         } catch (error) {
@@ -105,23 +98,23 @@ const CustomerProfile = ({
         }
     };
 
+    // TODO (Navya) : Do not re-upload image if image has not changed. Check backend logs of updateProfile API for more details
     const updateProfile = async () => {
         SetLoadingStatus(true)
-        if(oldImageSrc!=imageSrc)
-        {
-            console.log("inside upload ",oldImageSrc,imageSrc,image)
+        if (oldImageSrc != imageSrc) {
+            console.log("inside upload ", oldImageSrc, imageSrc, image)
             await uploadProfileImage(imageSrc)
-            console.log("after upload ",image)
+            console.log("after upload ", image)
         }
         const updates = {
             email: userDetails.email,
-            image: curr_filename?curr_filename:image,
+            image: curr_filename ? curr_filename : image,
             username: name,
             keywords: selectedKeywords,
             services: selectedServices.map((x: any) => x._id),
-            country,
-            state,
-            city,
+            country: address.country,
+            state: address.state,
+            city: address.city,
             phoneNumber: phoneNumber
         }
         if (!isFromAdminPanel) {
@@ -144,37 +137,80 @@ const CustomerProfile = ({
     }
 
     useEffect(() => {
-        if (
-            name.length >= 3 &&
-            !checkTitleNameInvalid('Username', name) &&
-            country &&
-            (!stateAvailable || (stateAvailable && state)) &&
-            (!cityAvailable || (cityAvailable && city)) &&
-            phoneNumber &&
-            (
-                !(imageSrc == oldImageSrc) ||
-                name !== userDetails.username ||
-                !arraysEqual(selectedKeywords, userDetails.keywords || []) ||
-                !arraysEqual(selectedServices, userDetails.services || []) ||
-                !userDetails.country?.name !== country?.name ||
-                !userDetails.state?.name !== state?.name ||
-                !userDetails.city?.name !== city?.name ||
-                phoneNumber !== userDetails.phoneNumber
-            )
-        ) {
-            set_enableToUpdate(true)
-            set_showError(false)
-        } else {
-            set_enableToUpdate(false)
-            set_showError(true)
-        }
-    }, [imageSrc, name, selectedKeywords, selectedServices, country, state, stateAvailable, city, cityAvailable, phoneNumber])
-
-    useEffect(() => {
         loadData()
         getKeywordsAndServices()
     }, [])
 
+    /*** INPUT CHANGE HANDLERS ***/
+    const on_nameChange = (name: string) => {
+        set_name(name)
+        set_enableToUpdate(validateName(name))
+    }
+
+    const on_phoneNumberChange = (phoneNumber: string) => {
+        set_phoneNumber(phoneNumber);
+        set_enableToUpdate(validatePhoneNumber(phoneNumber))
+    }
+
+    const on_addressChange = (address: Address) => {
+        set_address(address)
+        const isValid = validateAddress(address)
+        set_enableToUpdate(isValid)
+    }
+
+    /*** INPUT CHANGE HANDLERS END ***/
+
+
+    /*** INPUT VALIDATORS ***/
+    // Return true if input is valid
+    // Return false if input is invalid
+    const validatePhoneNumber = (phoneNumber: string) => {
+        if (phoneNumber.length > 0) {
+            return true;
+        }
+        return false;
+    }
+
+    const validateName = (name: string) => {
+        if (name.length >= 3 && !checkTitleNameInvalid('Username', name)) {
+            return true;
+        }
+        return false;
+    }
+
+    const validateAddress = (address: Address) => {
+        const availableStates = address.country ? State.getStatesOfCountry(address.country.isoCode) : []
+        const availableCities = address.state ? City.getCitiesOfState(address.state?.countryCode, address.state?.isoCode) : []
+
+        return (validateCountry(address.country) && validateState(address.state, availableStates) && validateCity(address.city, availableCities))
+    }
+
+    const validateCountry = (country: ICountry | null | undefined) => {
+        if (!country) {
+            return false;
+        }
+        return true;
+    }
+
+    const validateState = (state: IState | null | undefined, statesAvailable: IState[] | null) => {
+        if (statesAvailable?.length && (!state || !statesAvailable.includes(state))) {
+            return false;
+        }
+        return true;
+    }
+
+    const validateCity = (city: ICity | null, citiesAvailable: ICity[] | null) => {
+        if (citiesAvailable?.length && (!city || !citiesAvailable.includes(city))) {
+            return false;
+        }
+        return true;
+    }
+
+    /*** INPUT VALIDATORS END ***/
+
+
+    // TODO (Navya) : Input component + Error component can be made a new component
+    // TODO (Navya) : Button can be made a component
     return (
         <div className={`w-full h-full overflow-y-auto relative ${isFromAdminPanel ? 'py-0' : 'py-6'}`}>
             <div className={`w-full max-w-[400px] p-6 mx-auto flex flex-col items-center ${isFromAdminPanel ? 'p-0' : 'p-6'}`}>
@@ -209,7 +245,7 @@ const CustomerProfile = ({
                             aspectRatio: 1
                         }}
                         imageSrcProp={imageSrc}
-                        imageChanged={(newDataUri:any)=>set_imageSrc(newDataUri)}
+                        imageChanged={(newDataUri: any) => set_imageSrc(newDataUri)}
                     />
                     <div className="w-full max-w-[400px] mt-6">
                         {
@@ -229,10 +265,10 @@ const CustomerProfile = ({
                             className="w-full bg-transparent rounded-[15px] h-[50px] mt-0.5 border text-[14px] leading-[21px] px-[24px] border-lightgrey"
                             placeholder="Input your name"
                             value={name}
-                            onChange={(e) => set_name(e.target.value)}
+                            onChange={(e) => on_nameChange(e.target.value)}
                         />
                         <ShowFieldError
-                            show={!(name.length >= 3 && !checkTitleNameInvalid('Username', name)) && showError}
+                            show={!validateName(name)}
                             label={checkTitleNameInvalid('Username', name) ? checkTitleNameInvalid('Username', name) : "Name must be longer than 3 characters."}
                         />
 
@@ -254,27 +290,18 @@ const CustomerProfile = ({
                         />
 
                         <CountrySelect
-                            selectedCountry={country}
-                            set_selectedCountry={set_country}
-                            selectedState={state}
-                            set_selectedState={set_state}
-                            selectedCity={city}
-                            set_selectedCity={set_city}
-                            stateAvailable={stateAvailable}
-                            set_stateAvailable={set_stateAvailable}
-                            cityAvailable={cityAvailable}
-                            set_cityAvailable={set_cityAvailable}
-                            showError={showError}
+                            address={address}
+                            on_Change={on_addressChange}
                         />
 
                         <div className="mt-6 text-grey text-[12px] leading-[19px]">Phone number *</div>
                         <PhoneInput
                             placeholder="Enter phone number"
                             value={phoneNumber}
-                            onChange={(data) => set_phoneNumber(data)}
+                            onChange={(data) => on_phoneNumberChange(data)}
                         />
                         <ShowFieldError
-                            show={!phoneNumber.length && showError}
+                            show={!phoneNumber.length}
                             label="You have to provide your phone number"
                         />
                     </div>

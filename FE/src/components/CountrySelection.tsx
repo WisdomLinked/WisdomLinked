@@ -1,6 +1,5 @@
-import React, { useEffect, useState } from "react";
 import Select, { components } from "react-select";
-import { Country, State, City, ICountry, IState } from "country-state-city";
+import { Country, State, City, ICountry, IState, ICity } from "country-state-city";
 import ShowFieldError from "./ShowFieldError";
 
 const InputOption = ({
@@ -43,33 +42,31 @@ const InputOption = ({
         </components.Option>
     );
 };
+
+
+export interface Address {
+    country: ICountry | null;
+    state: IState | null;
+    city: ICity | null;
+}
+
+interface CountrySelectProps {
+    address: Address;
+    on_Change: any;
+    validator?: any;
+    showError?: boolean;
+}
+
 const CountrySelect = ({
-    selectedCountry,
-    set_selectedCountry,
-    selectedState,
-    set_selectedState,
-    selectedCity,
-    set_selectedCity,
-    showError,
-    stateAvailable,
-    set_stateAvailable,
-    cityAvailable,
-    set_cityAvailable
-}: any) => {
+    address,
+    on_Change,
+    validator,
+    showError
+}: CountrySelectProps) => {
 
 
-    const on_countryChange = (country: ICountry) => {
-        set_selectedCountry(country);
-        set_selectedState(null)
-        set_selectedCity(null)
-        set_stateAvailable(State.getStatesOfCountry(country?.isoCode)?.length > 0)
-    }
-
-    const on_stateChange = (state: IState) => {
-        set_selectedState(state);
-        set_selectedCity(null)
-        set_cityAvailable(City.getCitiesOfState(state?.countryCode, state?.isoCode)?.length > 0)
-    }
+    const availableStates = address.country && State.getStatesOfCountry(address.country.isoCode);
+    const availableCities = address.state && City.getCitiesOfState(address.state.countryCode, address.state.isoCode);
 
     return (
         <>
@@ -84,43 +81,46 @@ const CountrySelect = ({
                 getOptionValue={(options) => {
                     return options["name"];
                 }}
-                value={selectedCountry}
-                onChange={(item) => {
-                    on_countryChange(item)
-                }}
+                value={address.country}
+                onChange={(country) => on_Change(
+                    {
+                        ...address,
+                        country: country,
+                        state: null,
+                        city: null
+                    }
+                )}
                 components={{
                     Option: InputOption
                 }}
             />
             <ShowFieldError
-                show={!selectedCountry && showError}
+                show={!address.country}
                 label='Select country'
             />
 
             {
-                stateAvailable ?
+                availableStates?.length ?
                     <>
                         <div className="mt-8 text-grey text-[12px] leading-[19px]">State *</div>
                         <Select
                             className="w-full rounded-[15px] min-h-[50px] mt-0.5 border text-inherit text-[14px] leading-[21px] py-[5px] border-lightgrey MultiSelection flex flex-col justify-center"
                             placeholder='Select state'
-                            options={State?.getStatesOfCountry(selectedCountry?.isoCode)}
+                            options={availableStates}
                             getOptionLabel={(options) => {
                                 return options["name"];
                             }}
                             getOptionValue={(options) => {
                                 return options["name"];
                             }}
-                            value={selectedState}
-                            onChange={(item) => {
-                                on_stateChange(item)
-                            }}
+                            value={address.state}
+                            onChange={(state) => on_Change({ ...address, state: state, city: null })}
                             components={{
                                 Option: InputOption
                             }}
                         />
                         <ShowFieldError
-                            show={!selectedState && showError}
+                            show={!address.state}
                             label='Select state'
                         />
                     </> :
@@ -128,32 +128,29 @@ const CountrySelect = ({
             }
 
             {
-                cityAvailable ?
+                availableCities?.length ?
                     <>
                         <div className="mt-8 text-grey text-[12px] leading-[19px]">City *</div>
                         <Select
                             className="w-full rounded-[15px] min-h-[50px] mt-0.5 border text-inherit text-[14px] leading-[21px] py-[5px] border-lightgrey MultiSelection flex flex-col justify-center"
                             placeholder='Select city'
-                            options={City.getCitiesOfState(
-                                selectedState?.countryCode,
-                                selectedState?.isoCode
-                            )}
-                            getOptionLabel={(options) => {
+                            options={availableCities}
+                            getOptionLabel={(options: ICity) => {
                                 return options["name"];
                             }}
                             getOptionValue={(options) => {
                                 return options["name"];
                             }}
-                            value={selectedCity}
-                            onChange={(item) => {
-                                set_selectedCity(item);
+                            value={address.city}
+                            onChange={(city) => {
+                                on_Change({ ...address, city: city });
                             }}
                             components={{
                                 Option: InputOption
                             }}
                         />
                         <ShowFieldError
-                            show={!selectedCity && showError}
+                            show={!address.city}
                             label='Select city'
                         />
                     </> :
