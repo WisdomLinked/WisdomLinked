@@ -251,19 +251,19 @@ const Dashboard = ({ userId, userStatus, userRole, pendingGroupChats, groupChats
                                 image={base64Images.get(item.admin._id)}
                             />
                             <div>
-                                <div className="text-lg">{item.admin.username}</div>
+                                <div className="text-lg text-white">{item.admin.username}</div>
                                 <div className="text-sm">{item.admin.email}</div>
                             </div>
                         </div>
                         <hr className="my-2" />
-                        <div><span className="font-bold">Title  : </span> {item.name}</div>
-                        <div><span className="font-bold">Description  : </span> {item.description}</div>
+                        <div><span className="font-bold text-white">Title  : </span> <span className="text-white">{item.name}</span></div>
+                        <div><span className="font-bold text-white">Description  : </span> <span className="text-white">{item.description}</span></div>
                         <div><span
-                            className="font-bold">Starts at : </span> {formatDateYYYY_MM_DD_h_m(item.start)}
+                            className="font-bold text-white">Starts at : </span> <span className="text-white">{formatDateYYYY_MM_DD_h_m(item.start)}</span>
                         </div>
-                        <div><span className="font-bold">Duration  : </span> {item.duration} min
+                        <div><span className="font-bold text-white">Duration  : </span> <span className="text-white">{item.duration} min</span>
                         </div>
-                        <div><span className="font-bold">Price  : </span> ${item.price}</div>
+                        <div><span className="font-bold text-white">Price  : </span> <span className="text-white">${item.price}</span></div>
                         <hr className="my-2" />
                         <button
                             className="py-1 w-full bg-green rounded-lg flex items-center justify-center disabled:opacity-50"
@@ -290,21 +290,21 @@ const Dashboard = ({ userId, userStatus, userRole, pendingGroupChats, groupChats
                                 image={base64Images.get(item.groupChatId.admin._id)}
                             />
                             <div>
-                                <div className="text-lg">{item.groupChatId.admin.username}</div>
-                                <div className="text-sm">{item.groupChatId.admin.email}</div>
+                                <div className="text-lg text-white">{item.groupChatId.admin.username}</div>
+                                <div className="text-sm text-white">{item.groupChatId.admin.email}</div>
                             </div>
                         </div>
                         <hr className="my-2" />
-                        <div><span className="font-bold">Title  : </span> {item.groupChatId.name}</div>
+                        <div><span className="font-bold text-white">Title  : </span> <span className="text-white">{item.groupChatId.name}</span></div>
                         <div><span
-                            className="font-bold">Description  : </span> {item.groupChatId.description}
+                            className="font-bold text-white">Description  : </span> <span className="text-white">{item.groupChatId.description}</span>
                         </div>
                         <div><span
-                            className="font-bold">Starts at : </span> {formatDateYYYY_MM_DD_h_m(item.groupChatId.start)}
+                            className="font-bold text-white">Starts at : </span> <span className="text-white">{formatDateYYYY_MM_DD_h_m(item.groupChatId.start)}</span>
                         </div>
-                        <div><span className="font-bold">Duration  : </span> {item.groupChatId.duration} min
+                        <div><span className="font-bold text-white">Duration  : </span> <span className="text-white">{item.groupChatId.duration} min</span>
                         </div>
-                        <div><span className="font-bold">Price  : </span> ${item.groupChatId.price}</div>
+                        <div><span className="font-bold text-white">Price  : </span> <span className="text-white">${item.groupChatId.price}</span></div>
                         <hr className="my-3" />
                         {userRole === 'customer' ?
                             <button
