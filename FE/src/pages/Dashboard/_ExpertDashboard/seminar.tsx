@@ -327,13 +327,8 @@ const ExpertSeminar = ({
                                             min={0}
                                             onChange={(e) => set_price(parseInt(e.target.value))}
                                         />
-                                        {/*<ShowFieldError*/}
-                                        {/*    show={!price}*/}
-                                        {/*    label="Price is required"*/}
-                                        {/*/>*/}
                                         <button
                                             className="mt-6 mx-auto w-fit py-2 px-6 bg-green rounded-lg flex items-center justify-center  disabled:opacity-50"
-                                            //disabled={!price}
                                             onClick={submit}
                                         >
                                             {selectedSeminar ? 'Submit' : 'Save'}
