@@ -270,6 +270,7 @@ const Search = () => {
                                                 selectedUser={selectedCustomer}
                                                 myEvents={myEvents}
                                                 hideEvents={true}
+                                                hidePriceInDurationSelection={false}
                                             /> :
                                             <div className="max-w-[400px] mx-auto text-white">
                                                 <div className="mt-10 text-white text-2xl text-center">Please update the title & price</div>
