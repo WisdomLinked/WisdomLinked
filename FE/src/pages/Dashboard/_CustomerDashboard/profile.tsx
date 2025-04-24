@@ -1,7 +1,5 @@
-import React, { useState, useEffect } from "react";
-import EditAvatar from "../EditAvatar";
+import { useState, useEffect } from "react";
 import {
-    callApi,
     doGetKeywordsAndServices,
     doUpdateProfile,
     doUpdateProfileByAdmin,
@@ -16,24 +14,32 @@ import { useNavigate } from "react-router-dom";
 import { SetLoadingStatus } from "../../../actions/appActions";
 import CountrySelect from "../../../components/CountrySelection";
 import PhoneInput from "react-phone-input-2";
-import {useDispatch} from "react-redux";
-import ReactImagePickerEditor from "react-image-picker-editor";
+import { useDispatch } from "react-redux";
 import { validateImageSize } from "../../../utils/validators";
 import { showAlert } from "../../../actions/alertActions";
+import ImagePicker from "../../../components/imagePicker";
+import { MAX_IMAGE_SIZE_IN_MB } from "../../../utils/constants";
 
 const CustomerProfile = ({
     userDetails,
     isFromAdminPanel = false,
     updateOneUser
 }: any) => {
-
-    let curr_filename=""  // Need to implement this with the state instead of a new variable
+    let curr_filename = ""  // Need to implement this with the state instead of a new variable
 
     const dispatch = useDispatch()
     const navigate = useNavigate()
+
+    // This key is used to force re-render image picker component when reset button is clicked
+    const [imagePickerKey, set_imagePickerKey] = useState(0);
+
+    // This is the variable that gets updated by the image picker component.
     const [imageSrc, set_imageSrc] = useState<any>(null)
+    // This is the original image downloaded when page loads. This state shouldn't be modified. 
+    const [originalImageSrc, set_originalImageSrc] = useState<any>(null);
     const [image, set_image] = useState<any>(null)
-    const [oldImageSrc, set_oldImageSrc] = useState<any>(null)
+
+
     const [name, set_name] = useState(userDetails.username)
     const [keywords, set_keywords] = useState([])
     const [services, set_services] = useState([])
@@ -47,16 +53,11 @@ const CustomerProfile = ({
     const [phoneNumber, set_phoneNumber] = useState<any>('')
     const [showError, set_showError] = useState(false)
     const [enableToUpdate, set_enableToUpdate] = useState(false)
-    const [saveButtonPopover, set_saveButtonPopOver] = useState("")
-    const [file, set_file] = useState('')
-    const [fileError, set_fileError] = useState('')
 
-    let initialImage = imageSrc;
-
-    const reset = async () => {
-        console.log("inside reset outside if");
+    const reset = () => {
         if (userDetails.image) {
-            set_imageSrc(oldImageSrc)
+            set_imagePickerKey((key) => key + 1)
+            set_imageSrc(originalImageSrc)
         }
         set_name(userDetails.username)
         set_selectedKeywords(userDetails.keywords)
@@ -68,13 +69,10 @@ const CustomerProfile = ({
     }
 
     const loadData = async () => {
-        console.log("inside load outside if");
         if (userDetails.image) {
-            const image: any = imageSrc? imageSrc:await profileImageFetch(userDetails.image,"small");
+            const image: any = imageSrc ? imageSrc : await profileImageFetch(userDetails.image, "small");
             if (image) {
-                console.log("inside load inside if");
-                set_imageSrc(image)
-                set_oldImageSrc(image)
+                set_originalImageSrc(image);
                 set_image(userDetails.image)
             }
         }
@@ -102,25 +100,23 @@ const CustomerProfile = ({
             formData.append('image', file);
 
             const res = await profileImageUpload(formData);
-            curr_filename=res.data.details[0].filename
+            curr_filename = res.data.details[0].filename
 
             return res.data.details[0].filename;
-        } catch (error) {
-            console.error('Error uploading image:', error);
+        } catch (error: any) {
+            dispatch(showAlert("Error uploading image: " + error.response.data.error))
         }
     };
 
     const updateProfile = async () => {
         SetLoadingStatus(true)
-        if(oldImageSrc!=imageSrc)
-        {
-            console.log("inside upload ",oldImageSrc,imageSrc,image)
+        if (originalImageSrc != imageSrc) {
             await uploadProfileImage(imageSrc)
-            console.log("after upload ",image)
+            console.log("after upload ", image)
         }
         const updates = {
             email: userDetails.email,
-            image: curr_filename?curr_filename:image,
+            image: curr_filename ? curr_filename : image,
             username: name,
             keywords: selectedKeywords,
             services: selectedServices.map((x: any) => x._id),
@@ -148,7 +144,8 @@ const CustomerProfile = ({
         }
     }
 
-    useEffect(() => {
+    // Returns true if input is valid
+    const validateInput = () => {
         if (
             name.length >= 3 &&
             !checkTitleNameInvalid('Username', name) &&
@@ -157,7 +154,7 @@ const CustomerProfile = ({
             (!cityAvailable || (cityAvailable && city)) &&
             phoneNumber &&
             (
-                !(imageSrc == oldImageSrc) ||
+                !(imageSrc == originalImageSrc) ||
                 name !== userDetails.username ||
                 !arraysEqual(selectedKeywords, userDetails.keywords || []) ||
                 !arraysEqual(selectedServices, userDetails.services || []) ||
@@ -167,22 +164,31 @@ const CustomerProfile = ({
                 phoneNumber !== userDetails.phoneNumber
             )
         ) {
-            set_enableToUpdate(true)
-            set_showError(false)
+            return true;
         } else {
-            set_enableToUpdate(false)
-            set_showError(true)
+            return false;
         }
+    }
+
+    // Validates input and controls if submit button is enabled
+    const on_imageChange = (newImageSrc: any) => {
+        if (validateImageSize(newImageSrc) === false) {
+            set_enableToUpdate(false);
+        } else {
+            set_imageSrc(newImageSrc);
+            set_enableToUpdate(true);
+        }
+    }
+
+    useEffect(() => {
+        set_enableToUpdate(validateInput())
+        set_showError(!validateInput())
     }, [imageSrc, name, selectedKeywords, selectedServices, country, state, stateAvailable, city, cityAvailable, phoneNumber])
 
     useEffect(() => {
         loadData()
         getKeywordsAndServices()
     }, [])
-
-    useEffect(() => {
-        initialImage = imageSrc
-    }, [imageSrc])
 
     return (
         <div className={`w-full h-full overflow-y-auto relative ${isFromAdminPanel ? 'py-0' : 'py-6'}`}>
@@ -205,28 +211,9 @@ const CustomerProfile = ({
                         </> :
                         null
                 }
-                <div className="w-full text-white flex flex-col justify-center items-center mt-8">
 
-                    <ReactImagePickerEditor
-                        config={{
-                            borderRadius: '100%',
-                            language: 'en',
-                            width: '195px',
-                            height: '195px',
-                            objectFit: 'cover',
-                            compressInitial: null,
-                            aspectRatio: 1
-                        }}
-                        imageSrcProp={initialImage}
-                        imageChanged={(newImageSrc:any)=> {
-                            if(validateImageSize(newImageSrc) === false) {
-                                dispatch(showAlert("Image size should be less than 1MB"));
-                                set_enableToUpdate(false)
-                            } else {
-                                set_imageSrc(newImageSrc);    
-                            }
-                        }}
-                    />
+                <div className="w-full text-white flex flex-col justify-center items-center mt-8">
+                    <ImagePicker key={imagePickerKey} initialImage={originalImageSrc} on_imageChange={on_imageChange} validator={validateImageSize} />
                     <div className="w-full max-w-[400px] mt-6">
                         {
                             isFromAdminPanel ?
