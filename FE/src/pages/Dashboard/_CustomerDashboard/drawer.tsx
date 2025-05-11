@@ -227,7 +227,7 @@ export default function CustomerDrawer(props: Props) {
             <div className={`w-full ${location === 'customerchat' ? 'lg:w-[calc(100%-370px)]' : 'lg:w-[calc(100%-70px)]'} h-full`}>
                 <Routes>
                     <Route path="/calendar" element={<Calendar />} />
-                    <Route path="/chat" element={<Messenger />} />
+                    <Route path="/chat" element={<Messenger videoChaton = {!!props.localStream}/>} />
                     <Route path="/search" element={<Search />} />
                     <Route path="/seminar" element={<Seminars />} />
                     <Route path="/profile" element={<CustomerProfile userDetails={userDetails} />} />
