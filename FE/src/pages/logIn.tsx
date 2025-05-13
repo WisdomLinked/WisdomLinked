@@ -17,6 +17,8 @@ const LogIn = () => {
     const [email, set_email] = useState('')
     const [pwd, set_pwd] = useState('')
     const [isValidEmail, set_isValidEmail] = useState(false)
+    const [emailTouched, setEmailTouched] = useState(false)
+    const [pwdTouched, setpwdTouched] = useState(false)
     const [type, set_type] = useState('password')
     const [isRemembered, set_isRemembered] = useState(localStorage.getItem("isLoginRemembered") === "true")
     const { userDetails } = useAppSelector(state => state.auth)
@@ -38,7 +40,9 @@ const LogIn = () => {
     }
 
     useEffect(() => {
-        set_isValidEmail(!email ? true : validateEmail(email) ? true : false)
+        if (emailTouched) {
+            set_isValidEmail(!email ? true : validateEmail(email) ? true : false)
+        }
     }, [email])
 
     useEffect(() => {
@@ -87,9 +91,10 @@ const LogIn = () => {
                             type='email'
                             value={email}
                             onChange={(e) => set_email(e.target.value)}
+                            onBlur={() => setEmailTouched(true)}
                         />
                         <ShowFieldError
-                            show={!isValidEmail}
+                            show={emailTouched && !isValidEmail}
                             label="Invalid email address"
                         />
                         <div className="mt-8 w-full relative">
@@ -100,6 +105,7 @@ const LogIn = () => {
                                 type={type}
                                 value={pwd}
                                 onChange={(e) => set_pwd(e.target.value)}
+                                onBlur={() => setpwdTouched(true)}
                             />
                             {/*<button className="absolute bottom-[19px] right-[24px] w-6 h-6 text-darkgrey" onMouseDown={() => set_type('')} onMouseUp={() => set_type('password')} onMouseLeave={() => set_type('password')}>*/}
                             {/*    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">*/}
@@ -126,7 +132,7 @@ const LogIn = () => {
 
                         </div>
                         <ShowFieldError
-                            show={!(pwd.length >= 6 || !pwd)}
+                            show={pwdTouched && !(pwd.length >= 6 || !pwd)}
                             label="Password must be longer than 6 characters."
                         />
                         <div className="w-full mt-6 flex justify-between items-center">

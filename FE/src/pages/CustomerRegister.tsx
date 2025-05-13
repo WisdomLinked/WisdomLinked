@@ -34,6 +34,9 @@ const CustomerRegister = () => {
     const [confirmPwd, set_confirmPwd] = useState('')
     const [isValidEmail, set_isValidEmail] = useState(false)
     const [isValidConfirmPwd, set_isValidConfirmPwd] = useState(false)
+    const [emailTouched, setEmailTouched] = useState(false)
+    const [pwdTouched, setpwdTouched] = useState(false)
+    const [confirmPwdTouched, setConfirmPwdTouched] = useState(false)
     const [type, set_type] = useState('password')
     const [type1, set_type1] = useState('password')
     const [haveRead, set_haveRead] = useState(false)
@@ -80,11 +83,15 @@ const CustomerRegister = () => {
     }
 
     useEffect(() => {
-        set_isValidEmail(!email ? true : validateEmail(email) ? true : false)
-    }, [email])
+            if (emailTouched) {
+                set_isValidEmail(!email ? true : validateEmail(email) ? true : false);
+            }
+        }, [email]);
 
     useEffect(() => {
-        set_isValidConfirmPwd(!pwd && !confirmPwd ? true : pwd === confirmPwd ? true : false)
+        if (confirmPwdTouched) {
+            set_isValidConfirmPwd(!pwd && !confirmPwd ? true : pwd === confirmPwd ? true : false)
+        }
     }, [pwd, confirmPwd])
 
     // useEffect(() => {
@@ -216,9 +223,10 @@ const CustomerRegister = () => {
                             type='email'
                             value={email}
                             onChange={(e) => set_email(e.target.value)}
+                            onBlur={() => setEmailTouched(true)}
                         />
                         <ShowFieldError
-                            show={!isValidEmail}
+                            show={emailTouched && !isValidEmail}
                             label="Invalid email address."
                         />
 
@@ -230,6 +238,7 @@ const CustomerRegister = () => {
                                 type={type}
                                 value={pwd}
                                 onChange={(e) => set_pwd(e.target.value)}
+                                onBlur={() => setpwdTouched(true)}
                             />
                             <button className="absolute bottom-[19px] right-[24px] w-6 h-6 text-darkgrey" onMouseDown={() => set_type('')} onMouseUp={() => set_type('password')} onMouseLeave={() => set_type('password')}>
                                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -243,7 +252,7 @@ const CustomerRegister = () => {
                             </button>
                         </div>
                         <ShowFieldError
-                            show={!(pwd.length >= 6 || !pwd)}
+                            show={pwdTouched && !(pwd.length >= 6 || !pwd)}
                             label="Password must be longer than 6 characters."
                         />
 
@@ -255,6 +264,7 @@ const CustomerRegister = () => {
                                 type={type1}
                                 value={confirmPwd}
                                 onChange={(e) => set_confirmPwd(e.target.value)}
+                                onBlur={() => setConfirmPwdTouched(true)}
                             />
                             <button className="absolute bottom-[19px] right-[24px] w-6 h-6 text-darkgrey" onMouseDown={() => set_type1('')} onMouseUp={() => set_type1('password')} onMouseLeave={() => set_type('password')}>
                                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -268,7 +278,7 @@ const CustomerRegister = () => {
                             </button>
                         </div>
                         <ShowFieldError
-                            show={!isValidConfirmPwd}
+                            show={confirmPwdTouched && !isValidConfirmPwd}
                             label="Invalid confirm password."
                         />
 

@@ -47,6 +47,10 @@ function AdminRegisterExpert() {
     const [confirmPwd, set_confirmPwd] = useState("");
     const [isValidConfirmPwd, set_isValidConfirmPwd] = useState(false);
 
+    const [emailTouched, setEmailTouched] = useState(false)
+    const [pwdTouched, setpwdTouched] = useState(false)
+    const [confirmPwdTouched, setConfirmPwdTouched] = useState(false)
+
     const [showError, set_showError] = useState(false);
     const [enableToRegister, set_enableToRegister] = useState(false);
 
@@ -134,11 +138,15 @@ function AdminRegisterExpert() {
     };
 
     useEffect(() => {
-        set_isValidEmail(!email ? true : validateEmail(email) ? true : false);
+        if (emailTouched) {
+            set_isValidEmail(!email ? true : validateEmail(email) ? true : false);
+        }
     }, [email]);
 
     useEffect(() => {
-        set_isValidConfirmPwd(!pwd && !confirmPwd ? true : pwd === confirmPwd);
+        if (confirmPwdTouched) {
+            set_isValidConfirmPwd(!pwd && !confirmPwd ? true : pwd === confirmPwd);
+        }
     }, [pwd, confirmPwd]);
 
     useEffect(() => {
@@ -292,9 +300,10 @@ function AdminRegisterExpert() {
                 placeholder="Input email address"
                 value={email}
                 onChange={(e) => set_email(e.target.value)}
+                onBlur={() => setEmailTouched(true)}
             />
             <ShowFieldError
-                show={!isValidEmail && showError}
+                show={emailTouched && !isValidEmail && showError}
                 label="Invalid email address."
             />
 
@@ -312,9 +321,10 @@ function AdminRegisterExpert() {
                 type="text"
                 value={pwd}
                 onChange={(e) => set_pwd(e.target.value)}
+                onBlur={() => setpwdTouched(true)}
             />
             <ShowFieldError
-                show={pwd.length < 6 && showError}
+                show={pwdTouched && pwd.length < 6 && showError}
                 label="Password must be longer than 6 characters."
             />
 
@@ -326,9 +336,10 @@ function AdminRegisterExpert() {
                 type="text"
                 value={confirmPwd}
                 onChange={(e) => set_confirmPwd(e.target.value)}
+                onBlur={() => setConfirmPwdTouched(true)}
             />
             <ShowFieldError
-                show={!isValidConfirmPwd && showError}
+                show={confirmPwdTouched && !isValidConfirmPwd && showError}
                 label="Passwords do not match."
             />
 
