@@ -31,13 +31,13 @@ const ForgotPassword = () => {
         if (emailTouched) {
             set_isValidEmail(!email ? true : validateEmail(email) ? true : false)
         }
-    }, [email])
+    }, [email, emailTouched])
 
     useEffect(() => {
         if(confirmPwdTouched) {
             set_isValidConfirmPwd(!pwd && !confirmPwd ? true : pwd === confirmPwd ? true : false)
         }
-    }, [pwd, confirmPwd])
+    }, [pwd, confirmPwd, confirmPwdTouched])
 
     useEffect(() => {
         if (
