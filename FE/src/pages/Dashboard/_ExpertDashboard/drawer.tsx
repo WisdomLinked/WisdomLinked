@@ -238,7 +238,7 @@ export default function ExpertDrawer(props: Props) {
                     <Route path="/search" element={<Search />} />
                     <Route path="/*" element={<Dashboard />} />
                 </Routes>
-                {props.localStream && <VideoChat />}
+                {props.localStream && <VideoChat role = {userDetails.role} otherUserId ={otherUserId}/>}
                 <IncomingCall />
             </div>
         </div>

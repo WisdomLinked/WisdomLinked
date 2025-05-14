@@ -56,6 +56,7 @@ const Dashboard = () => {
         console.log("navigate events", item); // Use item here instead of event
         navigate(`${process.env.REACT_APP_AUTH_URL}expertdashboard/chat`);
         dispatch(setChosenChatDetails({ userId: item._id, username: item.username, image: item.image }));
+        console.log("item", item);
     };
 
     const navigateSeminar = (item: any) => {

@@ -234,7 +234,7 @@ export default function CustomerDrawer(props: Props) {
                     <Route path="/*" element={<Dashboard />} />
                 </Routes>
             </div>
-            {props.localStream && <VideoChat />}
+            {props.localStream && <VideoChat  role = {userDetails.role} otherUserId ={otherUserId}/>}
             <IncomingCall />
         </div>
     );
