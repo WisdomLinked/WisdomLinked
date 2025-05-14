@@ -232,13 +232,13 @@ export default function ExpertDrawer(props: Props) {
                 <Routes>
                     <Route path="/timeslots" element={<Availability />} />
                     <Route path="/calendar" element={<Calendar />} />
-                    <Route path="/chat" element={<Messenger />} />
+                    <Route path="/chat" element={<Messenger videoChaton = {!!props.localStream}/>} />
                     <Route path="/profile" element={<ExpertProfile userDetails={userDetails} />} />
                     <Route path="/seminar" element={<ExpertSeminar />} />
                     <Route path="/search" element={<Search />} />
                     <Route path="/*" element={<Dashboard />} />
                 </Routes>
-                {props.localStream && <VideoChat />}
+                {props.localStream && <VideoChat role = {userDetails.role} otherUserId ={otherUserId}/>}
                 <IncomingCall />
             </div>
         </div>

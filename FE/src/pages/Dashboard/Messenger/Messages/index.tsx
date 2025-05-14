@@ -110,6 +110,7 @@ const Messages = () => {
     };
 
     const getChatHistory = () => {
+        console.log(chosenChatDetails)
         if (chosenChatDetails) {
             fetchDirectChatHistory({
                 receiverUserId: chosenChatDetails.userId,

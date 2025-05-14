@@ -5,8 +5,17 @@ import { useAppSelector } from "../../store";
 import VisibilityOffIcon from "@mui/icons-material/VisibilityOff";
 import VisibilityIcon from "@mui/icons-material/Visibility";
 import { useVideoChatContext } from "./VideoChatContext";
+import { is } from "date-fns/locale";
+import { getCustomerById, getExpertById } from "../../api/api";
+import { setChosenChatDetails } from "../../actions/chatActions";
+import { useDispatch } from "react-redux";
+import { useNavigate } from "react-router-dom";
+import { actionTypes } from "../../actions/types";
 
-const VideoChat = () => {
+const VideoChat = ({
+    role,
+    otherUserId
+  }: any) => {
     const {isRoomMinimized, setIsRoomMinimized} = useVideoChatContext();
     const { videoChat, app: { feedbackModalShow } } = useAppSelector((state) => state);
     const [hidden, set_hidden] = useState(false);
@@ -16,6 +25,9 @@ const VideoChat = () => {
     const isDraggingRef = useRef(false);
     const [, forceUpdate] = useState({});
     const [isChatOpen, setIsChatOpen] = useState(false);
+    const [otherUserInfo, setOtherUserInfo] = useState<any>(null);
+    const dispatch = useDispatch();
+    const navigate = useNavigate();
 
     const toggleChat = () => {
         setIsChatOpen(!isChatOpen);
@@ -98,8 +110,35 @@ const VideoChat = () => {
     }, [updatePosition]);
 
     useEffect(() => {
+        const fetchOtherUser = async () => {
+            try {
+                const response = role === "expert"
+                    ? await getCustomerById(otherUserId)
+                    : await getExpertById(otherUserId);
+                setOtherUserInfo(response.result);
+            } catch (err) {
+                console.error("Failed to fetch user data:", err);
+            }
+        };
+    
+        if (otherUserId) {
+            fetchOtherUser();
+        }
+    }, [role, otherUserId]);
+
+    useEffect(() => {
         if (!isRoomMinimized) {
             updatePosition(0, 0);
+            dispatch(setChosenChatDetails({
+                userId: otherUserInfo._id,
+                username: otherUserInfo.username,
+                image: otherUserInfo.image,
+              }))
+            dispatch({ type: actionTypes.updateMissedChats, payload: { receiverId: otherUserId, count: 0 } })
+            const response = role === "expert"
+                    ? navigate(`${process.env.REACT_APP_AUTH_URL}expertdashboard/chat`)
+                    : navigate(`${process.env.REACT_APP_AUTH_URL}customerdashboard/chat`)
+            
         } else {
             updatePosition(positionRef.current.x, positionRef.current.y);
         }

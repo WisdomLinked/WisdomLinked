@@ -9,13 +9,15 @@ const Wrapper = styled("div")({
     flexGrow: 1,
 });
 
-const ChatDetails = () => {
+const ChatDetails = ({
+    videoChaton
+  }: any) => {
     const { isRoomMinimized } = useVideoChatContext();
     return (
         <div className={
-            isRoomMinimized 
-                ? "w-full h-full flex flex-col relative"
-                : "fixed top-[63px] right-0 w-[350px] h-[calc(100vh-63px-100px)]"
+            videoChaton && !isRoomMinimized 
+                ? "fixed top-[63px] right-0 w-[350px] h-[calc(100vh-63px-100px)]"
+                : "w-full h-full flex flex-col relative"
         }>
             <Messages />
             <Typing/>

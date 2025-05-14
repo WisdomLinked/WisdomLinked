@@ -37,7 +37,9 @@ import ChatDetails from "./ChatDetails";
 import { setChosenGroupChatDetails } from "../../../actions/chatActions";
 import { useDispatch } from "react-redux";
 
-const Messenger = () => {
+const Messenger = ({
+  videoChaton
+}: any) => {
   // Extract relevant data from the store
   const {
     chat: { chosenChatDetails, chosenGroupChatDetails },
@@ -66,7 +68,7 @@ const Messenger = () => {
       <div className="w-full h-full flex">
         <div className="w-full flex flex-grow bg-darkgrey-1">
           {chosenChatDetails?.userId || chosenGroupChatDetails?.groupId ? (
-              <ChatDetails />
+              <ChatDetails videoChaton = {videoChaton}/>
           ) : (
               <WelcomeMessage />
           )}

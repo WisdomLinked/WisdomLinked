@@ -18,6 +18,9 @@ const ForgotPassword = () => {
     const [pwd, set_pwd] = useState('')
     const [confirmPwd, set_confirmPwd] = useState('')
     const [isValidConfirmPwd, set_isValidConfirmPwd] = useState(false)
+    const [emailTouched, setEmailTouched] = useState(false)
+    const [pwdTouched, setpwdTouched] = useState(false)
+    const [confirmPwdTouched, setConfirmPwdTouched] = useState(false)
     const [type, set_type] = useState('password')
     const [type1, set_type1] = useState('password')
     const [enableToRegister, set_enableToRegister] = useState(false)
@@ -25,11 +28,15 @@ const ForgotPassword = () => {
     const [success, set_success] = useState(false)
 
     useEffect(() => {
-        set_isValidEmail(!email ? true : validateEmail(email) ? true : false)
+        if (emailTouched) {
+            set_isValidEmail(!email ? true : validateEmail(email) ? true : false)
+        }
     }, [email])
 
     useEffect(() => {
-        set_isValidConfirmPwd(!pwd && !confirmPwd ? true : pwd === confirmPwd ? true : false)
+        if(confirmPwdTouched) {
+            set_isValidConfirmPwd(!pwd && !confirmPwd ? true : pwd === confirmPwd ? true : false)
+        }
     }, [pwd, confirmPwd])
 
     useEffect(() => {
@@ -157,9 +164,10 @@ const ForgotPassword = () => {
                                         type='email'
                                         value={email}
                                         onChange={(e) => set_email(e.target.value)}
+                                        onBlur={() => setEmailTouched(true)}
                                     />
                                     <ShowFieldError
-                                        show={!isValidEmail}
+                                        show={emailTouched && !isValidEmail}
                                         label="Invalid email address"
                                     />
                                     <div className="mt-6 w-full relative">
@@ -170,6 +178,7 @@ const ForgotPassword = () => {
                                             type={type}
                                             value={pwd}
                                             onChange={(e) => set_pwd(e.target.value)}
+                                            onBlur={() => setpwdTouched(true)}
                                         />
                                         <button className="absolute bottom-[13px] text-white right-[24px] w-6 h-6" onMouseDown={() => set_type('')} onMouseUp={() => set_type('password')} onMouseLeave={() => set_type('password')}>
                                             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -183,7 +192,7 @@ const ForgotPassword = () => {
                                         </button>
                                     </div>
                                     <ShowFieldError
-                                        show={!(pwd.length >= 6 || !pwd)}
+                                        show={pwdTouched && !(pwd.length >= 6 || !pwd)}
                                         label="Password must be longer than 6 characters."
                                     />
 
@@ -195,6 +204,7 @@ const ForgotPassword = () => {
                                             type={type1}
                                             value={confirmPwd}
                                             onChange={(e) => set_confirmPwd(e.target.value)}
+                                            onBlur={() => setConfirmPwdTouched(true)}
                                         />
                                         <button className="absolute bottom-[13px] text-white right-[24px] w-6 h-6" onMouseDown={() => set_type1('')} onMouseUp={() => set_type1('password')} onMouseLeave={() => set_type('password')}>
                                             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -208,7 +218,7 @@ const ForgotPassword = () => {
                                         </button>
                                     </div>
                                     <ShowFieldError
-                                        show={!isValidConfirmPwd}
+                                        show={confirmPwdTouched && !isValidConfirmPwd}
                                         label="Invalid confirm password."
                                     />
                                     <button
