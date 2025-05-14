@@ -9,6 +9,7 @@ import { is } from "date-fns/locale";
 import { getCustomerById, getExpertById } from "../../api/api";
 import { setChosenChatDetails } from "../../actions/chatActions";
 import { useDispatch } from "react-redux";
+import { useNavigate } from "react-router-dom";
 import { actionTypes } from "../../actions/types";
 
 const VideoChat = ({
@@ -26,6 +27,7 @@ const VideoChat = ({
     const [isChatOpen, setIsChatOpen] = useState(false);
     const [otherUserInfo, setOtherUserInfo] = useState<any>(null);
     const dispatch = useDispatch();
+    const navigate = useNavigate();
 
     const toggleChat = () => {
         setIsChatOpen(!isChatOpen);
@@ -132,7 +134,11 @@ const VideoChat = ({
                 username: otherUserInfo.username,
                 image: otherUserInfo.image,
               }))
-              dispatch({ type: actionTypes.updateMissedChats, payload: { receiverId: otherUserId, count: 0 } })
+            dispatch({ type: actionTypes.updateMissedChats, payload: { receiverId: otherUserId, count: 0 } })
+            const response = role === "expert"
+                    ? navigate(`${process.env.REACT_APP_AUTH_URL}expertdashboard/chat`)
+                    : navigate(`${process.env.REACT_APP_AUTH_URL}customerdashboard/chat`)
+            
         } else {
             updatePosition(positionRef.current.x, positionRef.current.y);
         }
