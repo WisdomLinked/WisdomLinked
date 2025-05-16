@@ -43,7 +43,7 @@ const LogIn = () => {
         if (emailTouched) {
             set_isValidEmail(!email ? true : validateEmail(email) ? true : false)
         }
-    }, [email])
+    }, [email,emailTouched])
 
     useEffect(() => {
         if (userDetails?.email) {
