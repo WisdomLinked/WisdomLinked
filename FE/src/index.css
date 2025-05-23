@@ -217,6 +217,27 @@ code {
   background-color: #1f1f1f !important;
 }
 
+.resume-link {
+  margin-top: 0.5rem; /* or 1.5rem, 2rem for more space */
+  display: inline-block;
+  padding: 0.5rem 1rem;
+  background-color: #e0f2fe; /* light blue background */
+  color: #0369a1; /* modern blue */
+  border: 1px solid transparent;
+  border-radius: 0.5rem;
+  font-weight: 500;
+  text-decoration: none;
+  transition: all 0.3s ease;
+}
+
+.resume-link:hover {
+  background-color: #bae6fd; /* slightly darker on hover */
+  color: #0c4a6e;
+  border-color: #0c4a6e;
+  text-decoration: none;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+}
+
 .expertTimeSlot .rbc-toolbar {
   display: none;
 }

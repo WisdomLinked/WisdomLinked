@@ -346,7 +346,14 @@ const ExpertProfile = ({
                         />
 
                         <div className="mt-6 text-grey text-[12px] leading-[19px]">Current resume</div>
-                        <a href={`${resume}`} target='_blank' className="text-blue underline">Resume</a>
+                        <a
+                            href={`${resume}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="resume-link"
+                            >
+                            Resume
+                        </a>
                         <div className="mt-6 text-grey text-[12px] leading-[19px]">Update resume</div>
                         <FileBrowser
                             file={file}
