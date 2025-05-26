@@ -1,16 +1,34 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useAppSelector } from "../../../store";
 import { notifyTyping, sendDirectMessage, sendGroupMessage } from "../../../socket/socketConnection";
 import ReactQuill from 'react-quill'
 import 'react-quill/dist/quill.snow.css'
 import data from '@emoji-mart/data';
 import Picker from '@emoji-mart/react';
+import { callApi } from "../../../api/api";
+import { showAlert } from "../../../actions/alertActions";
+import { useDispatch } from "react-redux";
 
 const NewMessageInput: React.FC = () => {
     const [_message, set_message] = useState("");
     const [typing, set_typing] = useState(0);
-
+    const dispatch = useDispatch();
     const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+    const [chatFile, set_chatFile] = useState();
+    const [file, set_file] = useState<File | undefined>(undefined)
+
+    const fileInputRef = useRef<HTMLInputElement | null>(null);
+    
+    const handleButtonClick = () => {
+        fileInputRef.current?.click();
+    };
+
+    const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+        const selectedFile = event.target.files?.[0];
+        if (selectedFile) {
+            set_file(selectedFile);
+        }
+    };
 
     const onBlur = () => set_typing(0);
 
@@ -177,6 +195,23 @@ const NewMessageInput: React.FC = () => {
         set_prevChosenGroupChatDetails(chosenGroupChatDetails)
     }, [chosenChatDetails, chosenGroupChatDetails])
 
+    useEffect(() => {
+        const uploadFile = async () => {
+            if (file) {
+                console.log("Uploading file:", file);
+                const response = await callApi('POST', 'auth/uploadChatFile', { email: userDetails.email }, file);
+                if (response.status === 'SUCCESS') {
+                    set_chatFile(response.chatFile);
+                    console.log('File uploaded successfully:', response.chatFile);
+                } else {
+                    dispatch(showAlert(response.error));
+                }
+            }
+        };
+    
+        uploadFile();
+    }, [file]);
+
     const handleEmojiSelect = (emoji: any) => {
         set_message((prev) => prev + emoji.native);
         setShowEmojiPicker(false);
@@ -193,6 +228,15 @@ const NewMessageInput: React.FC = () => {
                 onBlur={onBlur}
             />
             {/* ADDED: Toggle button to show/hide emoji picker */}
+            <button onClick={handleButtonClick}>
+                📎
+            </button>
+            <input
+                type="file"
+                ref={fileInputRef}
+                style={{ display: 'none' }}
+                onChange={handleFileChange}
+            />
             <button
                 onClick={() => setShowEmojiPicker(!showEmojiPicker)}
                 className="ml-2 flex items-center justify-center"

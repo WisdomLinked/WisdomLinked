@@ -17,6 +17,7 @@ const {
     passwordResetRequest,
     confirmPasswordResetByCode,
     updateResume,
+    uploadChatFile,
     healthCheck,
     getTimeZone,
     submitContactForm,
@@ -41,6 +42,7 @@ const {
 
 router.post("/register", uploads, register);
 router.post("/updateResume", uploads, updateResume);
+router.post("/uploadChatFile", uploads, uploadChatFile);
 router.post("/resendConfirmEmail", resendConfirmEmail);
 router.post("/verifyRegistration", verifyRegistration);
 router.post("/login", validateLoginSchema, login);
