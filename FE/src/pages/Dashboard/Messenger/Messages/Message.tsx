@@ -49,9 +49,32 @@ const Message = ({ content, sameAuthor, hiddenDropDown, disableBookButton, hideD
     }
 
     const isCallDurationMessage =
-        content.includes("Call Lasted for:") || content.includes("Seminar Lasted for:");
+        content.startsWith("Call Lasted for:") || content.startsWith("Seminar Lasted for:");
+
+    const isFile = content.startsWith("Chatfile: ");
 
     if (!incomingMessage) {
+        // If it's a file message, show the file link
+        if (isFile) {
+            const fileUrl = content.replace("Chatfile: ", "");
+            return (
+                <div className="chat_value_container flex flex-col items-end mt-1 pl-14">
+                    {!hideDate && (
+                        <div className="text-grey text-[12px]">
+                            {formatDate(new Date(date))}
+                        </div>
+                    )}
+                    <a
+                        href={fileUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-blue-500 underline"
+                    >
+                        File
+                    </a>
+                </div>
+            );
+        }
         // If it's a call-duration message, show the special template
         if (isCallDurationMessage) {
             return (
@@ -181,6 +204,18 @@ const Message = ({ content, sameAuthor, hiddenDropDown, disableBookButton, hideD
                             </Typography>
                         </CardContent>
                     </Card>
+                    ) : isFile ? (
+                        <div className="chat_value_container flex flex-col items-end px-4 py-1">
+                            
+                            <a
+                                href={content.replace("Chatfile: ", "")}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-blue-500 underline"
+                            >
+                                File
+                            </a>
+                        </div>
                 ) : (
                     // Otherwise, show the regular incoming message bubble
                     <div className="w-fit text-white bg-black rounded-[13px] px-1.5 py-1">

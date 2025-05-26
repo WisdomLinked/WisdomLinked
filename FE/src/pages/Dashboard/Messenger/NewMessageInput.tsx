@@ -203,6 +203,21 @@ const NewMessageInput: React.FC = () => {
                 if (response.status === 'SUCCESS') {
                     set_chatFile(response.chatFile);
                     console.log('File uploaded successfully:', response.chatFile);
+                    let message = "Chatfile: " + response.chatFile;
+                    if (chosenChatDetails) {
+                        sendDirectMessage({
+                            message,
+                            receiverUserId: chosenChatDetails.userId!,
+                        });
+                    }
+    
+                    if (chosenGroupChatDetails) {
+                        sendGroupMessage({
+                            message,
+                            groupChatId: chosenGroupChatDetails.groupId
+                        })
+                    }
+                    set_message("");
                 } else {
                     dispatch(showAlert(response.error));
                 }
