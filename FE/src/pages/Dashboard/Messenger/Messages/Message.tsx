@@ -56,7 +56,7 @@ const Message = ({ content, sameAuthor, hiddenDropDown, disableBookButton, hideD
     if (!incomingMessage) {
         // If it's a file message, show the file link
         if (isFile) {
-            const fileUrl = content.replace("Chatfile: ", "");
+            const fileUrl = content.replace("Chatfile: ", "").split("#####")[0];
             return (
                 <div className="chat_value_container flex flex-col items-end mt-1 pl-14">
                     {!hideDate && (
@@ -70,7 +70,7 @@ const Message = ({ content, sameAuthor, hiddenDropDown, disableBookButton, hideD
                         rel="noopener noreferrer"
                         className="text-blue-500 underline"
                     >
-                        File
+                        {content.split("#####")[1]}
                     </a>
                 </div>
             );
@@ -208,12 +208,12 @@ const Message = ({ content, sameAuthor, hiddenDropDown, disableBookButton, hideD
                         <div className="chat_value_container flex flex-col items-end px-4 py-1">
                             
                             <a
-                                href={content.replace("Chatfile: ", "")}
+                                href={content.replace("Chatfile: ", "").split("#####")[0]}
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 className="text-blue-500 underline"
                             >
-                                File
+                                {content.split("#####")[1]}
                             </a>
                         </div>
                 ) : (

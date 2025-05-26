@@ -14,7 +14,6 @@ const NewMessageInput: React.FC = () => {
     const [typing, set_typing] = useState(0);
     const dispatch = useDispatch();
     const [showEmojiPicker, setShowEmojiPicker] = useState(false);
-    const [chatFile, set_chatFile] = useState();
     const [file, set_file] = useState<File | undefined>(undefined)
 
     const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -201,9 +200,8 @@ const NewMessageInput: React.FC = () => {
                 console.log("Uploading file:", file);
                 const response = await callApi('POST', 'auth/uploadChatFile', { email: userDetails.email }, file);
                 if (response.status === 'SUCCESS') {
-                    set_chatFile(response.chatFile);
                     console.log('File uploaded successfully:', response.chatFile);
-                    let message = "Chatfile: " + response.chatFile;
+                    let message = "Chatfile: " + response.chatFile + "#####" + file.name;
                     if (chosenChatDetails) {
                         sendDirectMessage({
                             message,

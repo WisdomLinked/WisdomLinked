@@ -644,7 +644,8 @@ const uploadChatFile = async (req, res) => {
         const chatFileUrl = `https://${process.env.DO_SPACES_BUCKET}.${process.env.DO_SPACES_ENDPOINT.replace('https://', '')}/${key}`;
         return res.status(200).json({
             status: 'SUCCESS',
-            chatFile: chatFileUrl
+            chatFile: chatFileUrl,
+            fileName: file.originalname,
         });
     } catch (err) {
         console.log(err)
