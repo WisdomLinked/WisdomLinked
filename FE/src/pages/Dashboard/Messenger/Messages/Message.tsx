@@ -61,20 +61,26 @@ const Message = ({ content, sameAuthor, hiddenDropDown, disableBookButton, hideD
         // If it's a file message, show the file link
         if (isFile) {
             return (
-                <div className="chat_value_container flex flex-col items-end mt-1 pl-14">
+                <div className="chat_value_container flex flex-col items-end px-1 py-1">
                     {!hideDate && (
                         <div className="text-grey text-[12px]">
                             {formatDate(new Date(date))}
                         </div>
                     )}
-                    <a
-                        href={fileUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-blue-500 underline"
-                    >
-                        {fileName}
-                    </a>
+                            <button
+                                onClick={() => setShowPreview(true)}
+                                style={{ backgroundColor: '#227768' }}
+                                className="flex items-center gap-2 text-white font-semibold px-4 py-1.5 rounded-lg shadow-md hover:brightness-90 hover:shadow-lg transition text-sm"
+                            >
+                                📄 {fileName}
+                            </button>
+                            {showPreview && (
+                                <FilePreviewModal
+                                fileUrl={fileUrl}
+                                fileName={fileName}
+                                onClose={() => setShowPreview(false)}
+                                />
+                            )}
                 </div>
             );
         }
