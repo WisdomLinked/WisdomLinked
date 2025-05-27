@@ -17,6 +17,7 @@ const NewMessageInput: React.FC = () => {
     const [file, set_file] = useState<File | undefined>(undefined)
 
     const fileInputRef = useRef<HTMLInputElement | null>(null);
+    const quillRef = useRef<ReactQuill | null>(null);
     
     const handleButtonClick = () => {
         fileInputRef.current?.click();
@@ -230,54 +231,102 @@ const NewMessageInput: React.FC = () => {
         setShowEmojiPicker(false);
     };
 
+    const toggleEmojiPicker = () => {
+        setShowEmojiPicker(!showEmojiPicker);
+    };
+
+    // Standard toolbar configuration
+    const modules = {
+        toolbar: [
+            [{ 'header': [1, 2, 3, 4, 5, 6, false] }],
+            ['bold', 'italic', 'underline', 'strike'],
+            [{ 'color': [] }, { 'background': [] }],
+            [{ 'list': 'ordered'}, { 'list': 'bullet' }],
+            [{ 'align': [] }],
+            ['link', 'image'],
+            ['clean']
+        ]
+    };
+
+    // Add custom buttons to toolbar after component mounts
+    useEffect(() => {
+        const toolbar = document.querySelector('.ql-toolbar');
+        if (toolbar && !toolbar.querySelector('.custom-attachment-btn')) {
+            // Create attachment button
+            const attachmentBtn = document.createElement('button');
+            attachmentBtn.className = 'custom-attachment-btn';
+            attachmentBtn.innerHTML = '📎';
+            attachmentBtn.title = 'Attach file';
+            attachmentBtn.style.cssText = 'margin-left: 8px; padding: 6px 8px; border: none; background: transparent; border-radius: 3px; cursor: pointer; font-size: 12px';
+            attachmentBtn.onclick = (e) => {
+                e.preventDefault();
+                handleButtonClick();
+            };
+
+            // Create emoji button
+            const emojiBtn = document.createElement('button');
+            emojiBtn.className = 'custom-emoji-btn';
+            emojiBtn.innerHTML = '😊';
+            emojiBtn.title = 'Add emoji';
+            emojiBtn.style.cssText = 'margin-left: 4px; padding: 6px 8px; border: none; background: transparent; border-radius: 3px; cursor: pointer; font-size: 12px;';
+            attachmentBtn.onclick = (e) => {
+                e.preventDefault();
+                handleButtonClick();
+            };
+
+            // Add buttons to toolbar
+            toolbar.appendChild(attachmentBtn);
+            toolbar.appendChild(emojiBtn);
+        }
+
+        // Update emoji button click handler
+        const emojiBtn = toolbar?.querySelector('.custom-emoji-btn');
+        if (emojiBtn) {
+            (emojiBtn as HTMLButtonElement).onclick = (e) => {
+                e.preventDefault();
+                setShowEmojiPicker(prev => !prev);
+            };
+        }
+    }, []);
+
     return (
         <div className="w-full p-4 pt-0 pb-12 sm:pb-4 flex items-center">
-            <ReactQuill
-                theme="snow"
-                className="w-full bg-black flex flex-col-reverse rounded-md"
-                value={_message}
-                onChange={set_message}
-                onKeyDown={handleSendMessage}
-                onBlur={onBlur}
-            />
-            {/* ADDED: Toggle button to show/hide emoji picker */}
-            <button onClick={handleButtonClick}>
-                📎
-            </button>
-            <input
-                type="file"
-                ref={fileInputRef}
-                style={{ display: 'none' }}
-                onChange={handleFileChange}
-            />
-            <button
-                onClick={() => setShowEmojiPicker(!showEmojiPicker)}
-                className="ml-2 flex items-center justify-center"
-                style={{
-                    backgroundColor: "#f0f0f0",
-                    borderRadius: "50%",
-                    width: "40px",
-                    height: "40px",
-                    marginRight: "8px"
-                }}
-            >
-                <span role="img" aria-label="emoji-picker">
-                    😊
-                </span>
-            </button>
-
-            {showEmojiPicker && (
-                <div
-                    style={{
-                        position: "absolute",
-                        bottom: "60px",
-                        right: "60px",
-                        zIndex: 1000
-                    }}
-                >
-                    <Picker data={data} onEmojiSelect={handleEmojiSelect} />
-                </div>
-            )}
+            <div className="relative w-full">
+                <ReactQuill
+                    ref={quillRef}
+                    theme="snow"
+                    className="w-full bg-black flex flex-col-reverse rounded-md"
+                    value={_message}
+                    onChange={set_message}
+                    onKeyDown={handleSendMessage}
+                    onBlur={onBlur}
+                    modules={modules}
+                />
+                
+                {/* Hidden file input */}
+                <input
+                    type="file"
+                    ref={fileInputRef}
+                    style={{ display: 'none' }}
+                    onChange={handleFileChange}
+                />
+                
+                {/* Emoji picker positioned above the toolbar */}
+                {showEmojiPicker && (
+                    <div
+                        style={{
+                            position: "absolute",
+                            bottom: "60px",
+                            left: "10px",
+                            zIndex: 1000
+                        }}
+                    >
+                        <Picker data={data} onEmojiSelect={handleEmojiSelect} />
+                    </div>
+                )}
+            </div>
+            
+            {/* Send button */}
             <button
                 onClick={sendMessage}
                 className="ml-2 flex items-center justify-center"
