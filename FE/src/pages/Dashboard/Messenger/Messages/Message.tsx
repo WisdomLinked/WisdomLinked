@@ -8,6 +8,7 @@ import { useNavigate } from "react-router-dom";
 import { SetLoadingStatus } from "../../../../actions/appActions";
 import {joinGeneralChat, profileImageFetch} from "../../../../api/api";
 import { Card, CardContent, Typography } from "@mui/material";
+import FilePreviewModal from "../../FilePreviewModal";
 
 const parseHtml = (html: any) => {
     return parse(html ? html : '')
@@ -17,6 +18,7 @@ const Message = ({ content, sameAuthor, hiddenDropDown, disableBookButton, hideD
 
     const dispatch = useDispatch()
     const navigate = useNavigate()
+    const [showPreview, setShowPreview] = useState(false);
 
     const chat = async () => {
         SetLoadingStatus(true)
@@ -206,16 +208,21 @@ const Message = ({ content, sameAuthor, hiddenDropDown, disableBookButton, hideD
                         </CardContent>
                     </Card>
                     ) : isFile ? (
-                        <div className="chat_value_container flex flex-col items-end px-4 py-1">
-                            
-                            <a
-                                href={fileUrl}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="text-blue-500 underline"
+                        <div className="chat_value_container flex flex-col items-end px-1 py-1">
+                            <button
+                                onClick={() => setShowPreview(true)}
+                                style={{ backgroundColor: '#227768' }}
+                                className="flex items-center gap-2 text-white font-semibold px-4 py-1.5 rounded-lg shadow-md hover:brightness-90 hover:shadow-lg transition text-sm"
                             >
-                                {fileName}
-                            </a>
+                                📄 {fileName}
+                            </button>
+                            {showPreview && (
+                                <FilePreviewModal
+                                fileUrl={fileUrl}
+                                fileName={fileName}
+                                onClose={() => setShowPreview(false)}
+                                />
+                            )}
                         </div>
                 ) : (
                     // Otherwise, show the regular incoming message bubble
