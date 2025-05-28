@@ -8,7 +8,7 @@ interface FilePreviewModalProps {
 }
 
 const FilePreviewModal: React.FC<FilePreviewModalProps> = ({ fileUrl, fileName, onClose }) => {
-  const extension = fileName.split(".").pop()?.toLowerCase();
+  const extension = fileUrl.split(".").pop()?.toLowerCase();
 
   const renderPreview = () => {
     if (["png", "jpg", "jpeg", "gif", "webp"].includes(extension || "")) {
@@ -34,7 +34,7 @@ const FilePreviewModal: React.FC<FilePreviewModalProps> = ({ fileUrl, fileName, 
         ></iframe>
       );
     }
-
+    
     return <div className="text-gray-400 text-sm">Preview not available for this file type.</div>;
   };
 

@@ -8,7 +8,7 @@ import SelectionWithCheckBox from "../../../../components/SelectionWithCheckBox"
 import { useAppSelector } from "../../../../store";
 import OverlayPortal from "../../../../components/OverayPortal";
 import { SetLoadingStatus } from "../../../../actions/appActions";
-import { updateMe } from "../../../../actions/authActions";
+import FilePreviewModal from "../../FilePreviewModal";
 import { useDispatch } from "react-redux";
 import { setChosenGroupChatDetails } from "../../../../actions/chatActions";
 import { useNavigate } from "react-router-dom";
@@ -50,6 +50,7 @@ const Experts = ({
     const [filterModalShow, set_filterModalShow] = useState(false)
     const [mobileView, set_mobileView] = useState(window.innerWidth <= 768)
     const [expertsImage,set_experts_image]= useState<Array<any>>([])
+    const [showPreview, setShowPreview] = useState(false);
 
     const getKeywordsAndServices = async () => {
         const response: any = await doGetKeywordsAndServices();
@@ -225,14 +226,17 @@ const Experts = ({
                                 <div className="text-md text-center text-lightgrey">{expert.title}</div>
                                 <div className="text-md text-center text-lightgrey">${expert.price} / hour</div>
                                 <Rating name="read-only" className="mt-2" value={expert.rating || 0} readOnly />
-                                <a
-                                    href={`${expert.resume}`}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="resume-link"
-                                    >
-                                    View Resume
-                                </a>
+                                <button
+                                onClick={() => setShowPreview(true)}
+                                className="resume-link"
+                                >View Resume</button>
+                                {showPreview && (
+                                        <FilePreviewModal
+                                        fileUrl={expert.resume}
+                                        fileName="Resume"
+                                        onClose={() => setShowPreview(false)}
+                                        />
+                                )}
                                 <div className="w-full flex space-x-4 mt-4">
                                     <button
                                         className="w-[calc(50%-8px)] rounded-lg border text-lightgrey border-lightgrey flex items-center justify-center"
