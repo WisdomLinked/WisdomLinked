@@ -225,6 +225,14 @@ const Experts = ({
                                 <div className="text-md text-center text-lightgrey">{expert.title}</div>
                                 <div className="text-md text-center text-lightgrey">${expert.price} / hour</div>
                                 <Rating name="read-only" className="mt-2" value={expert.rating || 0} readOnly />
+                                <a
+                                    href={`${expert.resume}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="resume-link"
+                                    >
+                                    View Resume
+                                </a>
                                 <div className="w-full flex space-x-4 mt-4">
                                     <button
                                         className="w-[calc(50%-8px)] rounded-lg border text-lightgrey border-lightgrey flex items-center justify-center"

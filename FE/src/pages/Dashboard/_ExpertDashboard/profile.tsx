@@ -27,8 +27,6 @@ const ExpertProfile = ({
     updateOneUser
 }: any) => {
 
-    let curr_filename=""  // Need to implement this with the state instead of a new variable
-
     const dispatch = useDispatch()
     const navigate = useNavigate()
     const [imageSrc, set_imageSrc] = useState<any>(null)
@@ -52,6 +50,7 @@ const ExpertProfile = ({
     const [resume, set_resume] = useState('')
     const [file, set_file] = useState('')
     const [fileError, set_fileError] = useState('')
+    const [currFileName, set_currFileName] = useState('')
 
     const reset = async () => {
         console.log("inside reset outside if");
@@ -108,7 +107,7 @@ const ExpertProfile = ({
             formData.append('image', file);
 
             const res = await profileImageUpload(formData);
-           curr_filename=res.data.details[0].filename
+            set_currFileName(res.data.details[0].filename)
 
             return res.data.details[0].filename;
         } catch (error) {
@@ -126,7 +125,7 @@ const ExpertProfile = ({
         }
         const updates = {
             email: userDetails.email,
-            image: curr_filename?curr_filename:image,
+            image: currFileName?currFileName:image,
             username: name,
             title: title,
             description: description,
@@ -347,7 +346,14 @@ const ExpertProfile = ({
                         />
 
                         <div className="mt-6 text-grey text-[12px] leading-[19px]">Current resume</div>
-                        <a href={`${process.env.REACT_APP_SERVER_URL}/${resume}`} target='_blank' className="text-blue underline">Resume</a>
+                        <a
+                            href={`${resume}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="resume-link"
+                            >
+                            Resume
+                        </a>
                         <div className="mt-6 text-grey text-[12px] leading-[19px]">Update resume</div>
                         <FileBrowser
                             file={file}

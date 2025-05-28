@@ -18,8 +18,17 @@ const Event = require("../models/Event");
 const ContactedUs = require("../models/ContactedUs");
 const nodemailer = require("nodemailer");
 const sgMail = require("@sendgrid/mail");
+const AWS = require('aws-sdk');
+
 
 sgMail.setApiKey(process.env.SENDGRID_API_KEY);
+
+const s3 = new AWS.S3({
+  endpoint: process.env.DO_SPACES_ENDPOINT,
+  accessKeyId: process.env.DO_SPACES_KEY,
+  secretAccessKey: process.env.DO_SPACES_SECRET,
+  region: 'us-east-1',
+});
 
 const getUniqueConfirmCode = async () => {
     try {
@@ -571,32 +580,72 @@ const updateResume = async (req, res) => {
 
         const file = req.file
         if (file) {
-            const directory = path.join(__dirname, '../uploads/resumes');
+            const timestamp = Date.now();
+            const key = `resumes/${timestamp}_${file.originalname}`;
 
-            // Check if the directory exists
-            if (!fs.existsSync(directory)) {
-                // If the directory doesn't exist, create it
-                fs.mkdirSync(directory, { recursive: true });
-            }
-            const filename = `${new Date().getTime()}_${file.originalname}`
-            const filePath = path.join(__dirname, '../uploads/resumes', filename);
-            fs.writeFileSync(filePath, file.buffer);
+            // Upload the resume to DigitalOcean Spaces
+            const params = {
+                Bucket: process.env.DO_SPACES_BUCKET,
+                Key: key,
+                Body: file.buffer,
+                ACL: 'public-read',
+                ContentType: file.mimetype,
+            };
 
+            await s3.upload(params).promise();
+
+            // Delete old resume from DO Spaces if it exists
             if (user.resume) {
                 try {
-                    // delete old resume file
-                    fs.unlinkSync(path.join(__dirname, `../${user.resume}`))
+                const oldKey = user.resume.replace(`https://${process.env.DO_SPACES_BUCKET}.${process.env.DO_SPACES_ENDPOINT.replace('https://', '')}/`, '');
+                await s3
+                    .deleteObject({
+                    Bucket: process.env.DO_SPACES_BUCKET,
+                    Key: oldKey,
+                    })
+                    .promise();
                 } catch (err) {
-                    console.log(err.message)
+                console.log('Error deleting old resume:', err.message);
                 }
             }
 
-            user.resume = `uploads/resumes/${filename}`
+            // Update user document
+            const resumeUrl = `https://${process.env.DO_SPACES_BUCKET}.${process.env.DO_SPACES_ENDPOINT.replace('https://', '')}/${key}`;
+            user.resume = resumeUrl;
             await user.save()
         }
         return res.status(200).json({
             status: 'SUCCESS',
             newResume: user.resume,
+        });
+    } catch (err) {
+        console.log(err)
+        return res.status(500).send(err.message);
+    }
+}
+
+const uploadChatFile = async (req, res) => {
+    try {
+        const file = req.file
+        const timestamp = Date.now();
+        const key = `chatFiles/${timestamp}_${file.originalname}`;
+
+        // Upload the file to DigitalOcean Spaces
+        const params = {
+            Bucket: process.env.DO_SPACES_BUCKET,
+            Key: key,
+            Body: file.buffer,
+            ACL: 'public-read',
+            ContentType: file.mimetype,
+        };
+
+        await s3.upload(params).promise();
+
+        const chatFileUrl = `https://${process.env.DO_SPACES_BUCKET}.${process.env.DO_SPACES_ENDPOINT.replace('https://', '')}/${key}`;
+        return res.status(200).json({
+            status: 'SUCCESS',
+            chatFile: chatFileUrl,
+            fileName: file.originalname,
         });
     } catch (err) {
         console.log(err)
@@ -795,6 +844,7 @@ module.exports = {
     passwordResetRequest,
     confirmPasswordResetByCode,
     updateResume,
+    uploadChatFile,
     healthCheck,
     getTimeZone,
     submitContactForm,
