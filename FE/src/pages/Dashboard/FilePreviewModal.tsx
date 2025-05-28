@@ -1,4 +1,3 @@
-// components/FilePreviewModal.tsx
 import React from "react";
 
 interface FilePreviewModalProps {
@@ -34,7 +33,7 @@ const FilePreviewModal: React.FC<FilePreviewModalProps> = ({ fileUrl, fileName, 
         ></iframe>
       );
     }
-    
+    console.log("Unsupported file type:",fileUrl, extension);
     return <div className="text-gray-400 text-sm">Preview not available for this file type.</div>;
   };
 

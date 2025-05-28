@@ -1,3 +1,4 @@
+const { uploadFileToS3} = require("./auth.controller")
 const User = require("../models/User");
 const Event = require("../models/Event");
 const PaymentHistory = require("../models/PaymentHistory");
@@ -561,19 +562,7 @@ const registerUserByAdmin = async (req, res) => {
 
         // Handle uploading a resume if file is present
         const file = req.file
-        let fileName = ''
-        if (file) {
-            const directory = path.join(__dirname, '../uploads/resumes');
-
-            // Check if the directory exists
-            if (!fs.existsSync(directory)) {
-                // If the directory doesn't exist, create it
-                fs.mkdirSync(directory, { recursive: true });
-            }
-            fileName = `${new Date().getTime()}_${file.originalname}`
-            const filePath = path.join(__dirname, '../uploads/resumes', fileName);
-            fs.writeFileSync(filePath, file.buffer);
-        }
+        resumeUrl = file ? await uploadFileToS3(file, 'resumes') : '';
 
         let _keywords = []
         if (keywords?.length) {
@@ -609,7 +598,7 @@ const registerUserByAdmin = async (req, res) => {
             phoneNumber,
             email: email.toLowerCase(),
             password: encryptedPassword,
-            resume: file ? `uploads/resumes/${fileName}` : '',
+            resume: resumeUrl,
             role,
             timeSlots,
             status: 'active'
