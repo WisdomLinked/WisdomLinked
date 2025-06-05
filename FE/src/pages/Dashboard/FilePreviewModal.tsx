@@ -1,4 +1,3 @@
-// components/FilePreviewModal.tsx
 import React from "react";
 
 interface FilePreviewModalProps {
@@ -8,7 +7,23 @@ interface FilePreviewModalProps {
 }
 
 const FilePreviewModal: React.FC<FilePreviewModalProps> = ({ fileUrl, fileName, onClose }) => {
-  const extension = fileName.split(".").pop()?.toLowerCase();
+  console.log("FilePreviewModal rendered with fileUrl:", fileUrl, "fileName:", fileName);
+  if (fileUrl === "") {
+    return (
+      <div className="fixed inset-0 z-[99999] bg-black bg-opacity-50 flex items-center justify-center">
+        <div className="bg-white rounded-lg shadow-lg p-4 max-w-3xl w-full relative">
+          <button
+            onClick={onClose}
+            className="absolute top-2 right-3 text-gray-500 hover:text-red-500 text-xl"
+          >
+            &times;
+          </button>
+          <h2 className="text-lg font-semibold mb-4">No file exists for preview</h2>
+        </div>
+      </div>
+    );
+  }
+  const extension = fileUrl.split(".").pop()?.toLowerCase();
 
   const renderPreview = () => {
     if (["png", "jpg", "jpeg", "gif", "webp"].includes(extension || "")) {
@@ -35,6 +50,20 @@ const FilePreviewModal: React.FC<FilePreviewModalProps> = ({ fileUrl, fileName, 
       );
     }
 
+    if (["docx", "doc", "pptx", "ppt", "xlsx", "xls"].includes(extension || "")) {
+      const officeViewerUrl = `https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(fileUrl)}`;
+      
+      return (
+        <iframe
+          src={officeViewerUrl}
+          title={`${(extension || "unknown").toUpperCase()} Preview`}
+          className="w-full h-[80vh] border rounded-md"
+          frameBorder="0"
+        ></iframe>
+      );
+    }
+
+    console.log("Unsupported file type:",fileUrl, extension);
     return <div className="text-gray-400 text-sm">Preview not available for this file type.</div>;
   };
 

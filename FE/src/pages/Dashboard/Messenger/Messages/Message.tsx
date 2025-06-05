@@ -50,6 +50,11 @@ const Message = ({ content, sameAuthor, hiddenDropDown, disableBookButton, hideD
         }
     }
 
+    const handleDownload = () => {
+        // Open file in new tab for download
+        window.open(fileUrl, '_blank');
+    };  
+
     const isCallDurationMessage =
         content.startsWith("Call Lasted for:") || content.startsWith("Seminar Lasted for:");
 
@@ -67,20 +72,34 @@ const Message = ({ content, sameAuthor, hiddenDropDown, disableBookButton, hideD
                             {formatDate(new Date(date))}
                         </div>
                     )}
-                            <button
-                                onClick={() => setShowPreview(true)}
-                                style={{ backgroundColor: '#227768' }}
-                                className="flex items-center gap-2 text-white font-semibold px-4 py-1.5 rounded-lg shadow-md hover:brightness-90 hover:shadow-lg transition text-sm"
-                            >
-                                📄 {fileName}
-                            </button>
-                            {showPreview && (
-                                <FilePreviewModal
-                                fileUrl={fileUrl}
-                                fileName={fileName}
-                                onClose={() => setShowPreview(false)}
-                                />
-                            )}
+                    <div className="flex">
+                        {/* Preview section */}
+                        <button
+                        onClick={() => setShowPreview(true)}
+                        style={{ backgroundColor: '#227768' }}
+                        className="flex items-center gap-2 text-white font-semibold px-4 py-1.5 rounded-l-lg shadow-md hover:brightness-90 transition text-sm"
+                        >
+                            📄 {fileName}
+                        </button>
+                        
+                        {/* Download section */}
+                        <button
+                        onClick={handleDownload}
+                        style={{ backgroundColor: '#227768' }}
+                        className="flex items-center px-3 py-1.5 text-white font-semibold rounded-r-lg shadow-md hover:brightness-90 transition text-sm"
+                        title="Download file"
+                        >
+                            ⬇                        
+                        </button>
+
+                        {showPreview && (
+                        <FilePreviewModal
+                            fileUrl={fileUrl}
+                            fileName={fileName}
+                            onClose={() => setShowPreview(false)}
+                        />
+                        )}
+                    </div>
                 </div>
             );
         }
@@ -215,20 +234,34 @@ const Message = ({ content, sameAuthor, hiddenDropDown, disableBookButton, hideD
                     </Card>
                     ) : isFile ? (
                         <div className="chat_value_container flex flex-col items-end px-1 py-1">
-                            <button
+                            <div className="flex">
+                                {/* Preview section */}
+                                <button
                                 onClick={() => setShowPreview(true)}
                                 style={{ backgroundColor: '#227768' }}
-                                className="flex items-center gap-2 text-white font-semibold px-4 py-1.5 rounded-lg shadow-md hover:brightness-90 hover:shadow-lg transition text-sm"
-                            >
-                                📄 {fileName}
-                            </button>
-                            {showPreview && (
+                                className="flex items-center gap-2 text-white font-semibold px-4 py-1.5 rounded-l-lg shadow-md hover:brightness-90 transition text-sm"
+                                >
+                                    📄 {fileName}
+                                </button>
+                                
+                                {/* Download section */}
+                                <button
+                                onClick={handleDownload}
+                                style={{ backgroundColor: '#227768' }}
+                                className="flex items-center px-3 py-1.5 text-white font-semibold rounded-r-lg shadow-md hover:brightness-90 transition text-sm"
+                                title="Download file"
+                                >
+                                    ⬇                        
+                                </button>
+
+                                {showPreview && (
                                 <FilePreviewModal
-                                fileUrl={fileUrl}
-                                fileName={fileName}
-                                onClose={() => setShowPreview(false)}
+                                    fileUrl={fileUrl}
+                                    fileName={fileName}
+                                    onClose={() => setShowPreview(false)}
                                 />
-                            )}
+                                )}
+                            </div>
                         </div>
                 ) : (
                     // Otherwise, show the regular incoming message bubble

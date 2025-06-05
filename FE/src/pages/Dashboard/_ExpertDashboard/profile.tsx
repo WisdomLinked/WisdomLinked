@@ -20,6 +20,7 @@ import { useDispatch } from "react-redux";
 import { showAlert } from "../../../actions/alertActions";
 import ReactImagePickerEditor from 'react-image-picker-editor';
 import 'react-image-picker-editor/dist/index.css'
+import FilePreviewModal from "../FilePreviewModal";
 
 const ExpertProfile = ({
     userDetails,
@@ -51,6 +52,7 @@ const ExpertProfile = ({
     const [file, set_file] = useState('')
     const [fileError, set_fileError] = useState('')
     const [currFileName, set_currFileName] = useState('')
+    const [showPreview, setShowPreview] = useState(false);
 
     const reset = async () => {
         console.log("inside reset outside if");
@@ -346,14 +348,17 @@ const ExpertProfile = ({
                         />
 
                         <div className="mt-6 text-grey text-[12px] leading-[19px]">Current resume</div>
-                        <a
-                            href={`${resume}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="resume-link"
-                            >
-                            Resume
-                        </a>
+                        <button
+                                onClick={() => setShowPreview(true)}
+                                className="resume-link"
+                                >   Resume</button>
+                        {showPreview && (
+                                <FilePreviewModal
+                                fileUrl={resume}
+                                fileName="Resume"
+                                onClose={() => setShowPreview(false)}
+                                />
+                        )}
                         <div className="mt-6 text-grey text-[12px] leading-[19px]">Update resume</div>
                         <FileBrowser
                             file={file}

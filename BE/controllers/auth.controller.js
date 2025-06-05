@@ -91,19 +91,7 @@ const register = async (req, res) => {
         }
 
         const file = req.file
-        let fileName = ''
-        if (file) {
-            const directory = path.join(__dirname, '../uploads/resumes');
-
-            // Check if the directory exists
-            if (!fs.existsSync(directory)) {
-                // If the directory doesn't exist, create it
-                fs.mkdirSync(directory, { recursive: true });
-            }
-            fileName = `${new Date().getTime()}_${file.originalname}`
-            const filePath = path.join(__dirname, '../uploads/resumes', fileName);
-            fs.writeFileSync(filePath, file.buffer);
-        }
+        resumeUrl = file ? await uploadFileToS3(file, 'resumes') : '';
 
         let _keywords = []
         if (keywords?.length) {
@@ -140,7 +128,7 @@ const register = async (req, res) => {
             phoneNumber,
             email: email.toLowerCase(),
             password: encryptedPassword,
-            resume: file ? `uploads/resumes/${fileName}` : '',
+            resume: resumeUrl,
             role,
             timeSlots,
             price: 10,
@@ -580,37 +568,14 @@ const updateResume = async (req, res) => {
 
         const file = req.file
         if (file) {
-            const timestamp = Date.now();
-            const key = `resumes/${timestamp}_${file.originalname}`;
-
-            // Upload the resume to DigitalOcean Spaces
-            const params = {
-                Bucket: process.env.DO_SPACES_BUCKET,
-                Key: key,
-                Body: file.buffer,
-                ACL: 'public-read',
-                ContentType: file.mimetype,
-            };
-
-            await s3.upload(params).promise();
-
             // Delete old resume from DO Spaces if it exists
             if (user.resume) {
-                try {
                 const oldKey = user.resume.replace(`https://${process.env.DO_SPACES_BUCKET}.${process.env.DO_SPACES_ENDPOINT.replace('https://', '')}/`, '');
-                await s3
-                    .deleteObject({
-                    Bucket: process.env.DO_SPACES_BUCKET,
-                    Key: oldKey,
-                    })
-                    .promise();
-                } catch (err) {
-                console.log('Error deleting old resume:', err.message);
-                }
+                deleteFileFromS3(oldKey);
             }
 
             // Update user document
-            const resumeUrl = `https://${process.env.DO_SPACES_BUCKET}.${process.env.DO_SPACES_ENDPOINT.replace('https://', '')}/${key}`;
+            const resumeUrl = await uploadFileToS3(file, 'resumes');
             user.resume = resumeUrl;
             await user.save()
         }
@@ -626,10 +591,23 @@ const updateResume = async (req, res) => {
 
 const uploadChatFile = async (req, res) => {
     try {
-        const file = req.file
-        const timestamp = Date.now();
-        const key = `chatFiles/${timestamp}_${file.originalname}`;
+        const file = req.file;
+        const chatFileUrl = await uploadFileToS3(file, 'chatFiles');
+        return res.status(200).json({
+            status: 'SUCCESS',
+            chatFile: chatFileUrl,
+            fileName: file.originalname,
+        });
+    } catch (err) {
+        console.log(err)
+        return res.status(500).send(err.message);
+    }
+}
 
+const uploadFileToS3 = async (file, folder) => {
+    try {
+        const timestamp = Date.now();
+        const key = `${folder}/${timestamp}_${file.originalname}`;
         // Upload the file to DigitalOcean Spaces
         const params = {
             Bucket: process.env.DO_SPACES_BUCKET,
@@ -641,15 +619,23 @@ const uploadChatFile = async (req, res) => {
 
         await s3.upload(params).promise();
 
-        const chatFileUrl = `https://${process.env.DO_SPACES_BUCKET}.${process.env.DO_SPACES_ENDPOINT.replace('https://', '')}/${key}`;
-        return res.status(200).json({
-            status: 'SUCCESS',
-            chatFile: chatFileUrl,
-            fileName: file.originalname,
-        });
+        const fileUrl = `https://${process.env.DO_SPACES_BUCKET}.${process.env.DO_SPACES_ENDPOINT.replace('https://', '')}/${key}`;
+        return fileUrl;
     } catch (err) {
-        console.log(err)
-        return res.status(500).send(err.message);
+        console.log('Error uploading file', err.message);
+    }
+}
+
+const deleteFileFromS3 = async (key) => {
+    try {
+        await s3
+            .deleteObject({
+            Bucket: process.env.DO_SPACES_BUCKET,
+            Key: key,
+            })
+            .promise();
+    } catch (err) {
+        console.log('Error deleting file', err.message);
     }
 }
 
@@ -848,6 +834,7 @@ module.exports = {
     healthCheck,
     getTimeZone,
     submitContactForm,
-    sendEmailToAdmin
+    sendEmailToAdmin,
+    uploadFileToS3,
 }
 
