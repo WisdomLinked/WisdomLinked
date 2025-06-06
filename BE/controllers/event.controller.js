@@ -7,6 +7,7 @@ const { getFullUserData } = require("../middlewares/requireAuth");
 const { checkPaymentIntentSucceeded, refundPaymentIntent } = require("./stripe.controller");
 const { appendPaymentHistory } = require("./payment.controller");
 const { checkTitleNameInvalid } = require('../services/global')
+const { sendEmailMeetingRequestToExpert, sendEmailMeetingRequestToCustomer, scheduleEmailReminder, sendEmailMeetingAcceptance } = require('../services/notifications')
 
 const createEventByExpert = async (req, res) => {
     try {
@@ -47,6 +48,8 @@ const createEventByExpert = async (req, res) => {
         userDetails = await getFullUserData(userDetails.email)
         userDetails.token = null
         userDetails.password = null
+
+        sendEmailMeetingRequestToCustomer(customerUser.email, expertUser.username, customerUser.username, start, duration, price)
 
         // check if invitation has already been sent
         const invitationAlreadyExists = await FriendInvitation.findOne({
@@ -145,6 +148,8 @@ const appendEvent = async (req, res) => {
             eventExists.duration = duration
             await eventExists.save()
 
+            sendEmailMeetingAcceptance(expertUser.email, expertUser.username, customerUser.username, start, duration);
+
             await appendPaymentHistory({
                 stripeMode: paymentIntentSucceeded_test ? 'test' : 'live',
                 paymentType: 'charge',
@@ -193,7 +198,7 @@ const appendEvent = async (req, res) => {
                 newEvent: eventExists
             });
         } else {
-            
+            sendEmailMeetingRequestToExpert(expertUser.email, expertUser.username, customerUser.username, start, duration, price, true)
             const newEvent = new Event({
                 title: title,
                 start: start,
@@ -317,6 +322,9 @@ const updateEvent = async (req, res) => {
 
         if (updates.status) {
             newEventData.status = updates.status;
+            const expert = await User.findById(event.expert);
+            const customer = await User.findById(event.customer);
+            sendEmailMeetingRequestToExpert(expert.email, expert.username, customer.username, updates.start, event.duration, event.price, false);
         }
 
         if (updates.totalTimeSpent) {
@@ -356,15 +364,23 @@ const acceptEvent = async (req, res) => {
             receiverId: event.expert,
         });
 
+        const sender = await User.findById(event.customer);
+        const receiver = await User.findById(event.expert);
+
+        //
+        sendEmailMeetingAcceptance(sender.email, sender.username, receiver.username, updatedEvent.start, updatedEvent.duration);
+
+        // Sending email reminders to both users
+        scheduleEmailReminder(sender.email, sender.username, receiver.username, updatedEvent.start, updatedEvent.duration);
+        scheduleEmailReminder(receiver.email, receiver.username, sender.username, updatedEvent.start, updatedEvent.duration);
+
         if (invitationExists) {
             await FriendInvitation.findByIdAndDelete(
                 invitationExists._id
             );
 
             // update friends list of both users in the database
-            const sender = await User.findById(event.customer);
-            const receiver = await User.findById(event.expert);
-
+            
             sender.friends.push(receiver._id);
             receiver.friends.push(sender._id);
 
