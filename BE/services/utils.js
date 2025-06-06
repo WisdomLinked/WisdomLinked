@@ -1,5 +1,8 @@
 const sgMail = require("@sendgrid/mail");
 
+const adminEmail = "admin@wisdomlinked.com";
+const noReplyEmail = "noreply@wisdomlinked.com";
+
 sgMail.setApiKey(process.env.SENDGRID_API_KEY);
 
 exports.getCurrentDateString = () => {
@@ -15,7 +18,7 @@ exports.sendOTP = async (targetEmail, todays_date_str, smurf_details_str) => {
       to: targetEmail,
       from: {
         name: "WisdomLinked Support",
-        email: "noreply@wisdomlinked.com",
+        email: noReplyEmail,
       },
       subject: "Your One-Time Passcode (OTP)",
       html: `
@@ -28,6 +31,7 @@ exports.sendOTP = async (targetEmail, todays_date_str, smurf_details_str) => {
       console.log("OTP email sent via SendGrid:", response[0].statusCode);
     } catch (error) {
       console.error("Error sending OTP email via SendGrid:", error.message);
+      console.error("Error details:", error.response ? error.response.body : error);
     }
   };
 
@@ -45,7 +49,7 @@ exports.sendContactDetails = async (targetEmail, name, email, demand) => {
       to: targetEmail,
       from: {
         name: "WisdomLinked Admin",
-        email: "admin@wisdomlinked.com", 
+        email: adminEmail, 
       },
       subject: "New Contact Form Submission",
       html,
