@@ -51,6 +51,7 @@ const Experts = ({
     const [mobileView, set_mobileView] = useState(window.innerWidth <= 768)
     const [expertsImage,set_experts_image]= useState<Array<any>>([])
     const [showPreview, setShowPreview] = useState(false);
+    const [previewResumeUrl, setPreviewResumeUrl] = useState("");
 
     const getKeywordsAndServices = async () => {
         const response: any = await doGetKeywordsAndServices();
@@ -227,12 +228,16 @@ const Experts = ({
                                 <div className="text-md text-center text-lightgrey">${expert.price} / hour</div>
                                 <Rating name="read-only" className="mt-2" value={expert.rating || 0} readOnly />
                                 <button
-                                onClick={() => setShowPreview(true)}
+                                onClick={() => {
+                                    setShowPreview(true)
+                                    setPreviewResumeUrl(expert.resume);
+                                    }
+                                }
                                 className="resume-link"
                                 >View Resume</button>
                                 {showPreview && (
                                         <FilePreviewModal
-                                        fileUrl={expert.resume}
+                                        fileUrl={previewResumeUrl}
                                         fileName="Resume"
                                         onClose={() => setShowPreview(false)}
                                         />
