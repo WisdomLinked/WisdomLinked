@@ -7,8 +7,8 @@ interface FilePreviewModalProps {
 }
 
 const FilePreviewModal: React.FC<FilePreviewModalProps> = ({ fileUrl, fileName, onClose }) => {
-  console.log("FilePreviewModal rendered with fileUrl:", fileUrl, "fileName:", fileName);
-  if (fileUrl === "") {
+  // console.log("FilePreviewModal rendered with fileUrl:", fileUrl, "fileName:", fileName);
+  if (!fileUrl || fileUrl === "") {
     return (
       <div className="fixed inset-0 z-[99999] bg-black bg-opacity-50 flex items-center justify-center">
         <div className="bg-white rounded-lg shadow-lg p-4 max-w-3xl w-full relative">
@@ -18,7 +18,7 @@ const FilePreviewModal: React.FC<FilePreviewModalProps> = ({ fileUrl, fileName, 
           >
             &times;
           </button>
-          <h2 className="text-lg font-semibold mb-4">No file exists for preview</h2>
+          <h2 className="text-lg font-semibold mb-4 text-black">No file exists for preview</h2>
         </div>
       </div>
     );

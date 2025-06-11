@@ -6,7 +6,35 @@ sgClient.setApiKey(process.env.SENDGRID_API_KEY);
 
 const noReplyEmail = "noreply@wisdomlinked.com";
 const website_url = "https://wisdomlinked.com";
+const adminEmail = "admin@wisdomlinked.com";
+const adminEmail2 = "xbwang@tamu.edu";
 
+sendEmailNewUserAccountApproval = (userName) => {
+    subject = "New User Account to be approved";
+    html = `
+        <p>Dear Admin,</p>
+        <p>A new user account has been created and is pending approval.</p>
+        <p>User Name: ${userName}</p>
+        <p>Please log in to your admin account to review and approve the new user.</p>
+        <p>
+            <a href="${website_url}">Visit Website</a>
+        </p>
+    `;
+    sendNotificationEmail([adminEmail,adminEmail2], subject, html);
+}
+
+sendEmailUserAccountApproved = (targetEmail, userName) => {
+    subject = "Your account has been approved";
+    html = `
+        <p>Dear ${userName},</p>
+        <p>Your account has been approved by the admin.</p>
+        <p>You can now log in to your account and start using the platform.</p>
+        <p>
+            <a href="${website_url}">Visit Website</a>
+        </p>
+    `;
+    sendNotificationEmail(targetEmail, subject, html);
+}
 
 scheduleEmailReminder = (targetEmail, userName, otherUserName,start, duration) => {
     subject = "You have a meeting with " + otherUserName;
@@ -95,9 +123,9 @@ sendEmailMeetingRequestToCustomer = (targetEmail, expertName, customerName,start
     sendNotificationEmail(targetEmail, subject, html);
 }
 
-sendNotificationEmail = async (targetEmail, subject, html,scheduledTime = null) => {  
+sendNotificationEmail = async (targetEmails, subject, html,scheduledTime = null) => {  
     const msg = {
-      to: targetEmail,
+      to: Array.isArray(targetEmails) ? targetEmails : [targetEmails],
       from: {
         name: "WisdomLinked Support",
         email: noReplyEmail,
@@ -128,4 +156,6 @@ module.exports = {
     sendEmailMeetingRequestToCustomer,
     scheduleEmailReminder,
     sendEmailMeetingAcceptance,
+    sendEmailNewUserAccountApproval,
+    sendEmailUserAccountApproved
 };
