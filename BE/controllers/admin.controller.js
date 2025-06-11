@@ -12,6 +12,7 @@ const nodemailer = require("nodemailer");
 
 const { getFullUserData } = require('../middlewares/requireAuth')
 const {checkTitleNameInvalid} = require("../services/global");
+const { sendEmailUserAccountApproved } = require("../services/notifications");
 const path = require("path");
 const fs = require("fs");
 const bcrypt = require("bcryptjs");
@@ -182,6 +183,10 @@ const updateProfileOfUser = async (req, res) => {
 
         await User.findOneAndUpdate({ email: email }, updates, { new: true })
         const result = await getFullUserData(email)
+        if (status &&  status === 'active') {
+            // If the user is activated, send an email notification
+            await sendEmailUserAccountApproved(result.email, result.username);
+        }
         result.password = null
         result.token = null
         return res.status(200).json({

@@ -11,6 +11,7 @@ const { updateActiveRoomsOfUsers } = require("../socket/activeRooms");
 const { getFullUserData } = require("../middlewares/requireAuth");
 const { createGeneralChatAndJoinGlobalChat } = require("./groupChat.controller");
 const { checkTitleNameInvalid } = require('../services/global')
+const { sendEmailNewUserAccountApproval } = require('../services/notifications')
 const { v4: uuidv4 } = require('uuid');
 const utils = require('../services/utils')
 const randomize = require('randomatic');
@@ -239,6 +240,9 @@ const verifyRegistration = async (req, res) => {
         await createGeneralChatAndJoinGlobalChat(user._id)
         await pendingUser.delete()
 
+        //
+        sendEmailNewUserAccountApproval(user.username)
+        
         res.status(200).json({
             status: 'SUCCESS'
         });
