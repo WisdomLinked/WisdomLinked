@@ -37,7 +37,8 @@ const ExpertCalendar = () => {
             backgroundColor: event.type === 'event' ? '#000000' : '#DCE4E8',
             borderRadius: '0px',
             opacity: 0.7,
-            color: event.type === 'event' ? (event.paidBy === 'none' ? '#03a9f4' : event.status === 'accepted' ? '#31B099' : event.status === 'pending' ? '#a87723' : 'red') : 'black',
+            // color: event.type === 'event' ? (event.paidBy === 'none' ? '#03a9f4' : event.status === 'accepted' ? '#31B099' : event.status === 'pending' ? '#a87723' : 'red') : 'black',
+            color: event.type === 'event' ? '#A0A4A6' : 'black',
             // display: 'block',
             // 'pointer-events': 'none'
         } : {
@@ -266,34 +267,18 @@ const ExpertCalendar = () => {
                                 paidBy={selectedEvent?.paidBy}
                             />
                             {
-                                selectedEvent?.paidBy === 'none' ?
-                                    <div className="w-full h-10 flex justify-center mt-6">
-                                        <button
-                                            className="w-[calc(50%-8px)] rounded-lg border border-lightgrey flex items-center justify-center"
-                                            onClick={() => cancelInvitation(selectedEvent._id)}
-                                        >
-                                            Cancel
-                                        </button>
-                                    </div> :
-                                    selectedEvent?.status === 'pending' ?
-                                        <div className="w-full h-10 flex justify-between mt-6">
+                                selectedEvent?.end > new Date() ?
+                                    selectedEvent?.paidBy === 'none' ?
+                                        <div className="w-full h-10 flex justify-center mt-6">
                                             <button
                                                 className="w-[calc(50%-8px)] rounded-lg border border-lightgrey flex items-center justify-center"
-                                                onClick={declineEvent}
+                                                onClick={() => cancelInvitation(selectedEvent._id)}
                                             >
-                                                Decline
+                                                Cancel
                                             </button>
-                                            <button
-                                                className="w-[calc(50%-8px)] bg-green rounded-lg flex items-center justify-center disabled:opacity-50"
-                                                disabled={status === 'review'}
-                                                onClick={acceptEvent}
-                                            >
-                                                Accept
-                                            </button>
-
                                         </div> :
-                                        selectedEvent?.status === 'accepted' ?
-                                            <div className="w-full h-10 flex justify-center space-x-6 n mt-6">
+                                        selectedEvent?.status === 'pending' ?
+                                            <div className="w-full h-10 flex justify-between mt-6">
                                                 <button
                                                     className="w-[calc(50%-8px)] rounded-lg border border-lightgrey flex items-center justify-center"
                                                     onClick={declineEvent}
@@ -302,12 +287,37 @@ const ExpertCalendar = () => {
                                                 </button>
                                                 <button
                                                     className="w-[calc(50%-8px)] bg-green rounded-lg flex items-center justify-center disabled:opacity-50"
-                                                    onClick={() => navigateCustomer(selectedEvent?.customer)}
+                                                    disabled={status === 'review'}
+                                                    onClick={acceptEvent}
                                                 >
-                                                    Go To Chat
+                                                    Accept
                                                 </button>
+
                                             </div> :
-                                            null
+                                            selectedEvent?.status === 'accepted' ?
+                                                <div className="w-full h-10 flex justify-center space-x-6 n mt-6">
+                                                    <button
+                                                        className="w-[calc(50%-8px)] rounded-lg border border-lightgrey flex items-center justify-center"
+                                                        onClick={declineEvent}
+                                                    >
+                                                        Decline
+                                                    </button>
+                                                    <button
+                                                        className="w-[calc(50%-8px)] bg-green rounded-lg flex items-center justify-center disabled:opacity-50"
+                                                        onClick={() => navigateCustomer(selectedEvent?.customer)}
+                                                    >
+                                                        Go To Chat
+                                                    </button>
+                                                </div> :
+                                                null :
+                                    <div className="w-full h-10 flex justify-center mt-6">
+                                        <button
+                                            className="w-[calc(50%-8px)] bg-green rounded-lg flex items-center justify-center disabled:opacity-50"
+                                            onClick={() => navigateCustomer(selectedEvent?.customer)}
+                                        >
+                                            Chat History
+                                        </button>
+                                    </div>
                             }
                         </div>
                     </div> :
