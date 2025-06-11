@@ -27,7 +27,8 @@ const CustomerCalendar = () => {
             backgroundColor: event.type === 'event' ? '#000000' : '#DCE4E8',
             borderRadius: '0px',
             opacity: 0.7,
-            color: event.type === 'event' ? (event.paidBy === 'none' ? '#03a9f4' : event.status === 'accepted' ? '#31B099' : event.status === 'pending' ? '#a87723' : 'red') : 'black',
+            // color: event.type === 'event' ? (event.paidBy === 'none' ? '#03a9f4' : event.status === 'accepted' ? '#31B099' : event.status === 'pending' ? '#a87723' : 'red') : 'black',
+            color: event.type === 'event' ? '#A0A4A6' : 'black',
             // display: 'block',
             // 'pointer-events': 'none'
         } : {
@@ -285,40 +286,49 @@ const CustomerCalendar = () => {
                             />
                             <div className="w-full h-10 flex justify-center mt-6 space-x-4">
                                 {
-                                    selectedEvent.paidBy === 'none' ?
+                                    selectedEvent?.end > new Date() ?
+                                        selectedEvent.paidBy === 'none' ?
+                                            <>
+                                                <button
+                                                    className="w-[calc(50%-8px)] bg-green rounded-lg flex items-center justify-center disabled:opacity-50"
+                                                    disabled={new Date(selectedEvent.end).getTime() <= new Date().getTime() || userDetails.status === 'review'}
+                                                    onClick={() => acceptInvitation(selectedEvent)}
+                                                >
+                                                    Accept Invitation
+                                                </button>
+                                            </> :
+                                            <>
+                                                <button
+                                                    className="w-[calc(50%-8px)] rounded-lg border border-lightgrey flex items-center justify-center"
+                                                    onClick={() => {
+                                                        cancelEvent(selectedEvent)
+                                                    }}
+                                                >
+                                                    Cancel
+                                                </button>
+                                                <button
+                                                    className="w-[calc(50%-8px)] rounded-lg border border-green bg-green flex items-center justify-center disabled:opacity-50"
+                                                    disabled={userDetails.status === 'review'}
+                                                    onClick={() => {
+                                                        set_eventModalShow(false)
+                                                        set_editModalShow(true)
+                                                    }}
+                                                >
+                                                    Edit
+                                                </button>
+                                                <button
+                                                    className="w-[calc(50%-8px)] rounded-lg border border-green bg-green flex items-center justify-center disabled:opacity-50"
+                                                    onClick={() => setToChat(selectedEvent.expert)}
+                                                >
+                                                    Go To Chat
+                                                </button>
+                                            </> :
                                         <>
-                                            <button
-                                                className="w-[calc(50%-8px)] bg-green rounded-lg flex items-center justify-center disabled:opacity-50"
-                                                disabled={new Date(selectedEvent.end).getTime() <= new Date().getTime() || userDetails.status === 'review'}
-                                                onClick={() => acceptInvitation(selectedEvent)}
-                                            >
-                                                Accept Invitation
-                                            </button>
-                                        </> :
-                                        <>
-                                            <button
-                                                className="w-[calc(50%-8px)] rounded-lg border border-lightgrey flex items-center justify-center"
-                                                onClick={() => {
-                                                    cancelEvent(selectedEvent)
-                                                }}
-                                            >
-                                                Cancel
-                                            </button>
-                                            <button
-                                                className="w-[calc(50%-8px)] rounded-lg border border-green bg-green flex items-center justify-center disabled:opacity-50"
-                                                disabled={userDetails.status === 'review'}
-                                                onClick={() => {
-                                                    set_eventModalShow(false)
-                                                    set_editModalShow(true)
-                                                }}
-                                            >
-                                                Edit
-                                            </button>
                                             <button
                                                 className="w-[calc(50%-8px)] rounded-lg border border-green bg-green flex items-center justify-center disabled:opacity-50"
                                                 onClick={() => setToChat(selectedEvent.expert)}
                                             >
-                                                Go To Chat
+                                                Chat History
                                             </button>
                                         </>
                                 }
@@ -403,9 +413,11 @@ const CustomerCalendar = () => {
                                     }}
                                 >
                                     {
-                                        selectedEvent?.type === 'pending seminar' ?
-                                            'Cancel Request' :
-                                            'Enter Seminar'
+                                        selectedEvent?.end > new Date() ?
+                                            selectedEvent?.type === 'pending seminar' ?
+                                                'Cancel Request' :
+                                                'Enter Seminar' :
+                                            'Chat History'
                                     }
                                 </button>
                             </div>
