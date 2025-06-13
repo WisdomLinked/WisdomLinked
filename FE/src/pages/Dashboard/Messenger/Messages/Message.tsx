@@ -9,6 +9,7 @@ import { SetLoadingStatus } from "../../../../actions/appActions";
 import {joinGeneralChat, profileImageFetch} from "../../../../api/api";
 import { Card, CardContent, Typography } from "@mui/material";
 import FilePreviewModal from "../../FilePreviewModal";
+import { is } from "date-fns/locale";
 
 const parseHtml = (html: any) => {
     return parse(html ? html : '')
@@ -61,6 +62,24 @@ const Message = ({ content, sameAuthor, hiddenDropDown, disableBookButton, hideD
     const isFile = content.startsWith("Chatfile: ");
     const fileUrl = isFile ? content.replace("Chatfile: ", "").split("#####")[0] : "";
     const fileName = isFile ? content.split("#####")[1] : "";
+
+    if( isCallDurationMessage && content.includes("#####") )
+    {
+        const startTimeUTC = content.split("#####")[1];
+        const endTimeUTC = content.split("#####")[2];
+        
+        // Convert UTC strings to Date objects
+        const startDate = new Date(startTimeUTC);
+        const endDate = new Date(endTimeUTC);
+
+        // Log the local time strings
+        const startTimeOnly = startDate.toLocaleTimeString();
+        const endTimeOnly = endDate.toLocaleTimeString();
+        content = content.split("#####")[0];
+        //ADD the start and end time to content
+        content = content + ` <br/> Start Time: ${startTimeOnly} <br/> End Time: ${endTimeOnly}`;
+    }
+
 
     if (!incomingMessage) {
         // If it's a file message, show the file link

@@ -26,7 +26,7 @@ const userSchema = new mongoose.Schema(
         joinPopupBlocked: { type: Boolean, default: false },
         feedbacks: [{ type: mongoose.Schema.Types.Mixed }],
         status: { type: String, default: 'review' },
-
+        timeZone: { type: String, default: 'UTC' },
         token: { type: String, select: false },
         password: { type: String, required: [true, "can't be blank"], select: false },
 

@@ -49,7 +49,7 @@ const createEventByExpert = async (req, res) => {
         userDetails.token = null
         userDetails.password = null
 
-        sendEmailMeetingRequestToCustomer(customerUser.email, expertUser.username, customerUser.username, start, duration, price)
+        sendEmailMeetingRequestToCustomer(customerUser.email, expertUser.username, customerUser.username, start, duration, price, customerUser.timeZone)
 
         // check if invitation has already been sent
         const invitationAlreadyExists = await FriendInvitation.findOne({
@@ -148,7 +148,7 @@ const appendEvent = async (req, res) => {
             eventExists.duration = duration
             await eventExists.save()
 
-            sendEmailMeetingAcceptance(expertUser.email, expertUser.username, customerUser.username, start, duration);
+            sendEmailMeetingAcceptance(expertUser.email, expertUser.username, customerUser.username, start, duration, expertUser.timeZone);
 
             await appendPaymentHistory({
                 stripeMode: paymentIntentSucceeded_test ? 'test' : 'live',
@@ -198,7 +198,7 @@ const appendEvent = async (req, res) => {
                 newEvent: eventExists
             });
         } else {
-            sendEmailMeetingRequestToExpert(expertUser.email, expertUser.username, customerUser.username, start, duration, price, true)
+            sendEmailMeetingRequestToExpert(expertUser.email, expertUser.username, customerUser.username, start, duration, price, true, expert.timeZone)
             const newEvent = new Event({
                 title: title,
                 start: start,
@@ -324,7 +324,7 @@ const updateEvent = async (req, res) => {
             newEventData.status = updates.status;
             const expert = await User.findById(event.expert);
             const customer = await User.findById(event.customer);
-            sendEmailMeetingRequestToExpert(expert.email, expert.username, customer.username, updates.start, event.duration, event.price, false);
+            sendEmailMeetingRequestToExpert(expert.email, expert.username, customer.username, updates.start, event.duration, event.price, false, expert.timeZone);
         }
 
         if (updates.totalTimeSpent) {
@@ -368,11 +368,11 @@ const acceptEvent = async (req, res) => {
         const receiver = await User.findById(event.expert);
 
         //
-        sendEmailMeetingAcceptance(sender.email, sender.username, receiver.username, updatedEvent.start, updatedEvent.duration);
+        sendEmailMeetingAcceptance(sender.email, sender.username, receiver.username, updatedEvent.start, updatedEvent.duration, sender.timeZone);
 
         // Sending email reminders to both users
-        scheduleEmailReminder(sender.email, sender.username, receiver.username, updatedEvent.start, updatedEvent.duration);
-        scheduleEmailReminder(receiver.email, receiver.username, sender.username, updatedEvent.start, updatedEvent.duration);
+        scheduleEmailReminder(sender.email, sender.username, receiver.username, updatedEvent.start, updatedEvent.duration, sender.timeZone);
+        scheduleEmailReminder(receiver.email, receiver.username, sender.username, updatedEvent.start, updatedEvent.duration, receiver.timeZone);
 
         if (invitationExists) {
             await FriendInvitation.findByIdAndDelete(

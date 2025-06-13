@@ -103,9 +103,9 @@ export const resendConfirmEmail = async ({ email }: any) => {
     }
 };
 
-export const confirmLoginByCode = async ({ email, password, code }: any) => {
+export const confirmLoginByCode = async ({ email, password, code, timeZone }: any) => {
     try {
-        const res = await api.post<any>("auth/confirmLoginByCode", { email, password, code });
+        const res = await api.post<any>("auth/confirmLoginByCode", { email, password, code, timeZone });
 
         return res.data;
     } catch (err: any) {
