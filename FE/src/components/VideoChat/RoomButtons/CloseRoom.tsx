@@ -1,13 +1,9 @@
-import React, { useEffect, useState } from "react";
+import React, { useState } from "react";
 import { useDispatch } from "react-redux";
-import IconButton from "@mui/material/IconButton";
-import CloseIcon from "@mui/icons-material/Close";
 import { useAppSelector } from "../../../store";
 import { clearVideoChat } from "../../../actions/videoChatActions";
 import { useVideoChatContext } from "../VideoChatContext";
 import {
-    callRequest,
-    callResponse,
     cancelCallRequest,
     notifyChatLeft,
     sendDirectMessage, sendGroupMessage
@@ -40,12 +36,14 @@ const CloseRoom = ({ type, eventId = null}: { type: CallType; eventId: any;}) =>
     };
 
     const calculateTotalTime = async () => {
-        if (!eventId) return;
+        // if (!eventId) return;
 
         const timeSpent = localStorage.getItem("totalTimeSpent");
         if (timeSpent) {
             const parsedTimeSpent = parseInt(timeSpent, 10);
             const totalTimeSpent = Date.now() - parsedTimeSpent;
+            const endTime = new Date().toISOString();
+            const startTime = new Date(parsedTimeSpent).toISOString();
             const totalTimeSpentInMinutes = Math.floor(totalTimeSpent / 60000);
 
             if (chosenChatDetails && type === "DIRECT CALL") {
@@ -55,7 +53,7 @@ const CloseRoom = ({ type, eventId = null}: { type: CallType; eventId: any;}) =>
                     await doUpdateEvent(eventId, { totalTimeSpent: totalTimeSpentInMinutes });
                 }
 
-                const message = `Call Lasted for: ${totalTimeSpent / 1000} seconds`;
+                const message = `Call Lasted for: ${totalTimeSpent / 1000} seconds#####${startTime}#####${endTime}`;
                 console.log("Sending direct message...");
                 console.log("Receiver User ID:", chosenChatDetails.userId);
                 sendDirectMessage({
@@ -83,7 +81,7 @@ const CloseRoom = ({ type, eventId = null}: { type: CallType; eventId: any;}) =>
         }
     };
     const handleLeaveRoom = async () => {
-        // Notify the other user that the call is being left
+        // Notify the other user that the call is being leftß
 
         await calculateTotalTime();
 
