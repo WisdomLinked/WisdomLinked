@@ -45,7 +45,7 @@ const ConfirmCode = ({ email, password }: any) => {
 
     const confirmCode = async () => {
         SetLoadingStatus(true);
-        const response: any = await confirmLoginByCode({ email, password, code: inputCode });
+        const response: any = await confirmLoginByCode({ email, password, code: inputCode, timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone });
         console.log(response, '////')
         if (response.status === "SUCCESS") {
             localStorage.setItem("currentUser", JSON.stringify(response.userDetails));

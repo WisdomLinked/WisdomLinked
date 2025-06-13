@@ -310,8 +310,8 @@ const login = async (req, res) => {
 
 const confirmLoginByCode = async (req, res) => {
     try {
-        const { email, password, code } = req.body;
 
+        const { email, password, code, timeZone} = req.body;
         const loginRequest = await PendingLogin.findOne({ email: email })
         if (!loginRequest) {
             return res.status(200).json({ status: 'FAIL', error: "Login request not found or expired. Please request a new code" });
@@ -341,6 +341,11 @@ const confirmLoginByCode = async (req, res) => {
         }
 
         await loginRequest.delete()
+
+        if (user.timeZone !== timeZone) {
+            user.timeZone = timeZone
+            await user.save()
+        }
 
         const token = await user.generateAuthToken()
         user.token = null

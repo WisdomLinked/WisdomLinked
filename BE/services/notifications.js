@@ -36,10 +36,14 @@ sendEmailUserAccountApproved = (targetEmail, userName) => {
     sendNotificationEmail(targetEmail, subject, html);
 }
 
-scheduleEmailReminder = (targetEmail, userName, otherUserName,start, duration) => {
+scheduleEmailReminder = (targetEmail, userName, otherUserName,start, duration, timeZone) => {
     subject = "You have a meeting with " + otherUserName;
+    // timezone is like "America/New_York" so we need to send the date as per time zone
+    const options = { timeZone: timeZone || "UTC" };
+    // Convert start time to local time based on the provided timezone
     const date = new Date(start);
     const scheduledTime = Math.floor(date.getTime() / 1000) - 900; // Convert to Unix timestamp
+    date = date.toLocaleString("en-US", options);
     html = `
         <p>Dear ${userName},</p>
         <p>You have a meeting with ${otherUserName}.</p>
@@ -53,9 +57,10 @@ scheduleEmailReminder = (targetEmail, userName, otherUserName,start, duration) =
     sendNotificationEmail(targetEmail, subject, html, scheduledTime);
 }
 
-sendEmailMeetingAcceptance = (targetEmail, userName, otherUserName,start, duration) => {
+sendEmailMeetingAcceptance = (targetEmail, userName, otherUserName,start, duration, timeZone) => {
     subject = "Meeting accepted by " + otherUserName;
-    const date = new Date(start);
+    const options = { timeZone: timeZone || "UTC" };
+    const date = new Date(start).toLocaleString("en-US", options);
     html = `
         <p>Dear ${userName},</p>
         <p>Your meeting request with ${otherUserName} has been accepted.</p>
@@ -69,8 +74,9 @@ sendEmailMeetingAcceptance = (targetEmail, userName, otherUserName,start, durati
     sendNotificationEmail(targetEmail, subject, html);
 }
 
-sendEmailMeetingRequestToExpert = (targetEmail, expertName, customerName,start, duration,price, newEvent) => {
-    const date = new Date(start);
+sendEmailMeetingRequestToExpert = (targetEmail, expertName, customerName,start, duration,price, newEvent, timeZone) => {
+    const options = { timeZone: timeZone || "UTC" };
+    const date = new Date(start).toLocaleString("en-US", options);
     if(newEvent)
     {
         subject = "New meeting request from " + customerName;
@@ -106,9 +112,10 @@ sendEmailMeetingRequestToExpert = (targetEmail, expertName, customerName,start, 
     sendNotificationEmail(targetEmail, subject, html);
 }
 
-sendEmailMeetingRequestToCustomer = (targetEmail, expertName, customerName,start,duration,price) => {
+sendEmailMeetingRequestToCustomer = (targetEmail, expertName, customerName,start,duration,price, timeZone) => {
     subject = "New meeting request from " + expertName;
-    const date = new Date(start);
+    const options = { timeZone: timeZone || "UTC" };
+    const date = new Date(start).toLocaleString("en-US", options);
     html = `
         <p>Dear ${customerName},</p>
         <p>You have a new meeting request with ${expertName}.</p>
