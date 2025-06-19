@@ -80,7 +80,7 @@ const joinGeneralChat = async (req, res) => {
 const createGroupChat = async (req, res) => {
     try {
         const { userId } = req.user;
-        const { name, description, services, keywords, start, end, duration, price } = req.body;
+        const { name, description, services, keywords, start, end, duration, price, type } = req.body;
 
         if (checkTitleNameInvalid('Name', name)) {
             throw new Error(checkTitleNameInvalid('Name', name))
@@ -98,6 +98,7 @@ const createGroupChat = async (req, res) => {
             price: price,
             participants: [userId],
             admin: userId,
+            type : type,
         });
 
         const currentUser = await User.findById(userId);
@@ -120,13 +121,13 @@ const createGroupChat = async (req, res) => {
 const updateGroupChat = async (req, res) => {
     try {
         const { userId } = req.user;
-        const { groupId, name, description, services, keywords, start, end, duration, price, totalTimeSpent } = req.body;
+        const { groupId, name, description, services, keywords, start, end, duration, price, totalTimeSpent, type } = req.body;
 
         if (!groupId) {
             throw new Error("Group ID is required");
         }
 
-        console.log(groupId, name, description, services, keywords, start, end, duration, price);
+        console.log(groupId, name, description, services, keywords, start, end, duration, price, type);
 
         const groupChat = await GroupChat.findById(groupId);
 
@@ -144,6 +145,7 @@ const updateGroupChat = async (req, res) => {
         if (end !== undefined) updateFields.end = end;
         if (duration !== undefined) updateFields.duration = duration;
         if (price !== undefined) updateFields.price = price;
+        if (type !== undefined) updateFields.type = type;
         if (totalTimeSpent !== undefined){
             //updateFields.totalTimeSpend = totalTimeSpent;
             const existingTotalTimeSpent = groupChat.totalTimeSpent || 0;

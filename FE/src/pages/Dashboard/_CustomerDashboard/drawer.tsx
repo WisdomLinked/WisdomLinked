@@ -217,10 +217,17 @@ export default function CustomerDrawer(props: Props) {
                     <ActiveRooms /> */}
                     <div className="bg-black w-full h-[1px]" />
                     <div className="flex items-center mb-4">
+                        <FriendsTitle title="Appointments" />
+                    </div>
+                    <div className="h-[250px] overflow-y-auto">
+                        <GroupChatList type = "appointment"/>
+                    </div>
+                    <div className="bg-black w-full h-[1px]" />
+                    <div className="flex items-center mb-4">
                         <FriendsTitle title="Seminars" />
                     </div>
                     <div className="h-[250px] overflow-y-auto">
-                        <GroupChatList/>
+                        <GroupChatList type = "seminar"/>
                     </div>
                 </div>
             </div>

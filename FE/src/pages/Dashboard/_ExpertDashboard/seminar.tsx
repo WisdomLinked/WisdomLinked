@@ -85,6 +85,7 @@ const ExpertSeminar = ({
                 end: endTime,
                 duration: duration,
                 price: price,
+                type: 'seminar',
             })
             if (response) {
                 dispatch({
@@ -104,6 +105,7 @@ const ExpertSeminar = ({
                 end: endTime,
                 duration: duration,
                 price: price,
+                type: 'seminar',
             })
             if (response) {
                 console.log("response: ",response);

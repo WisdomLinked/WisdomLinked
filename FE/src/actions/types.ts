@@ -129,6 +129,7 @@ export interface GroupChatDetails {
     };
     missedChats: any;
     lastChatDate: any;
+    type: string;
 }
 
 interface SetPendingInvitationAction {

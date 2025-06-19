@@ -83,7 +83,8 @@ const updateUsersGroupChatList = async (userId) => {
                 participants: groupChat.participants,
                 admin: groupChat.admin,
                 lastChatDate: groupChat?.updatedAt,
-                missedChats: user.missedChats?.[groupChat._id] || 0
+                missedChats: user.missedChats?.[groupChat._id] || 0,
+                type: groupChat.type
             };
         })
         : [];
