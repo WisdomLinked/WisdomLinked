@@ -27,7 +27,7 @@ const GroupChatList = ({ type }: { type: string }) => {
 
     useEffect(() => {
         const now = new Date().getTime();
-        console.log("GroupChatList: groupChatList", groupChatList[0]);
+        // console.log("GroupChatList: groupChatList", groupChatList[0]);
         const upcomingChats = groupChatList.filter((chat: any) => new Date(chat.end).getTime() >= now && chat.type === type);
         const pastChats = groupChatList.filter((chat: any) => new Date(chat.end).getTime() < now && chat.type === type);
 

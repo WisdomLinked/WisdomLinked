@@ -214,10 +214,10 @@ export default function ExpertDrawer(props: Props) {
                     <ActiveRooms /> */}
                     <div className="bg-black w-full h-[1px]" />
                     <div className="flex items-center mb-4">
-                        <FriendsTitle title="Appointments" />
+                        <FriendsTitle title="Individual Sessions" />
                     </div>
                     <div className="h-[250px] overflow-y-auto">
-                        <GroupChatList type = "appointment"/>
+                        <GroupChatList type = "individual"/>
                     </div>
                     <div className="bg-black w-full h-[1px]" />
                     <div className="flex items-center mb-4">

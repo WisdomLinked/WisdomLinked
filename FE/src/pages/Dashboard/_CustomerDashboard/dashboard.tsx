@@ -21,6 +21,7 @@ const Dashboard = () => {
 
     const [groupChats, set_groupChats] = useState<any>([])
     const [sessions, set_sessions] = useState<any>([])
+    const [pendingSessions, set_pendingSessions] = useState<any>([])
     const [acceptedSeminars, set_acceptedSeminars] = useState<any>([])
     const [editModalShow, set_editModalShow] = useState<boolean>(false)
     const [selectedEvent, set_selectedEvent] = useState<any>(null)
@@ -98,17 +99,17 @@ const Dashboard = () => {
     // Batch state updates for sessions and groupChats
     useEffect(() => {
         const now = new Date().getTime();
+        console.log("Pending Group Chats:", pendingGroupChats);
 
-        const updatedSessions = events.filter((item: any) => new Date(item.end).getTime() >= now);
-        const updatedGroupChats = pendingGroupChats.filter((item: any) => new Date(item.groupChatId.end).getTime() >= now);
-        const updatedSeminars = groupChat.filter((item: any) => new Date(item.end).getTime() >= now);
-        // console.log("updatedSeminars: ", updatedSeminars);
-        // console.log("updatedgroupChats: ", updatedGroupChats);
-        // console.log("updatedSessions: ", updatedSessions);
-
+        const updatedSessions = groupChat.filter((item: any) => new Date(item.end).getTime() >= now && item.type === 'individual');
+        const pendingSessions = pendingGroupChats.filter((item: any) => new Date(item.groupChatId.end).getTime() >= now && item.groupChatId.type === 'individual');
+        const updatedGroupChats = pendingGroupChats.filter((item: any) => new Date(item.groupChatId.end).getTime() >= now && item.groupChatId.type === 'seminar');
+        const updatedSeminars = groupChat.filter((item: any) => new Date(item.end).getTime() >= now && item.type === 'seminar');
+    
         set_sessions(updatedSessions);
         set_groupChats(updatedGroupChats);
         set_acceptedSeminars(updatedSeminars);
+        set_pendingSessions(pendingSessions);
 
         // Trigger image fetch only once
         if (!fetchImagesRef.current) {
@@ -248,107 +249,91 @@ const Dashboard = () => {
                     </div> :
                     <div className="text-center text-lightgrey my-10">No pending seminar sessions</div>
             }
-            <div className="text-center text-2xl my-6">Booked Individual Sessions</div>
+            <div className="text-center text-2xl mb-6">Booked Individual Sessions</div>
             {
                 sessions.length ?
                     <div className="flex flex-wrap justify-center gap-6">
                         {
                             sessions.map((item: any, index: number) => (
-                                item.status === 'accepted' ?
-                                    // <div key={index} className="w-fit p-4 bg-darkgrey">
+                                // <div key={index} className="w-fit p-4 bg-darkgrey">
                                     <div key={index} className="w-fit p-4 bg-darkgrey rounded-lg shadow-md transform transition-all duration-300 hover:scale-105 hover:shadow-lg overflow-hidden">
-                                        <div className="flex space-x-3 items-center">
-                                            <Avatar
-                                                username={item.expert.username}
-                                                image={base64Images.get(item.expert._id)}
-                                            />
-                                            <div>
-                                                <div className="text-lg">{item.expert.username}</div>
-                                                <div className="text-sm">{item.expert.email}</div>
-                                            </div>
+                                    <div className="flex space-x-3 items-center">
+                                        <Avatar
+                                            username={item.admin.username}
+                                            // image={item.customerId.image}
+                                            image={base64Images.get(item.admin._id)}
+                                        />
+                                        <div>
+                                            <div className="text-lg">{item.admin.username}</div>
+                                            <div className="text-sm">{item.admin.email}</div>
                                         </div>
-                                        <hr className="my-2" />
-                                        <div><span className="font-bold">Title  : </span> {item.title}</div>
-                                        <div><span className="font-bold">Starts at : </span> {formatDateYYYY_MM_DD_h_m(item.start)}</div>
-                                        <div><span className="font-bold">Duration  : </span> {item.duration} min</div>
-                                        <div><span className="font-bold">Price  : </span> ${item.price}</div>
-                                        <hr className="my-3" />
-                                        <div className="w-full flex justify-center space-x-4">
-                                            <button
-                                                className="py-1 w-full border border-lightgrey rounded-lg flex items-center justify-center disabled:opacity-50"
-                                                onClick={() => cancelEvent(item)}
-                                            >
-                                                Cancel
-                                            </button>
-                                            <button
-                                                className="py-1 w-full bg-green rounded-lg flex items-center justify-center disabled:opacity-50"
-                                                disabled={status === 'review'}
-                                                onClick={() => editEvent(item)}
-                                            >
-                                                Edit
-                                            </button>
-                                            <button
-                                                className="py-1 w-full bg-green rounded-lg flex items-center justify-center disabled:opacity-50"
-                                                onClick={() => navigateExpert(item.expert)}
-                                            >
-                                                Chat
-                                            </button>
-                                        </div>
-                                    </div> :
-                                    null
+                                    </div>
+                                    <hr className="my-2"/>
+                                    <div><span className="font-bold">Title  : </span> {item.name}</div>
+                                    <div><span className="font-bold">Description  : </span> {item.description}</div>
+                                    <div><span
+                                        className="font-bold">Starts at : </span> {formatDateYYYY_MM_DD_h_m(item.start)}
+                                    </div>
+                                    <div><span className="font-bold">Duration  : </span> {item.duration} min
+                                    </div>
+                                    <div><span className="font-bold">Price  : </span> ${item.price}</div>
+                                    <hr className="my-2"/>
+                                    <button
+                                        className="py-1 w-full bg-green rounded-lg flex items-center justify-center disabled:opacity-50"
+                                        onClick={() => navigateSeminar(item)}
+                                    >
+                                        Go To Seminar
+                                    </button>
+                                </div>
                             ))
                         }
                     </div> :
-                    <div className="text-center text-lightgrey my-10">No booked individual sessions</div>
+                    <div className="text-center text-lightgrey my-10">No Booked Individual sessions</div>
             }
+
+
             <div className="text-center text-2xl my-6">Pending Individual Sessions</div>
             {
-                sessions.length ?
+                pendingSessions.length ?
                     <div className="flex flex-wrap justify-center gap-6">
                         {
-                            sessions.map((item: any, index: number) => (
-                                item.status === 'pending' ?
-                                    // <div key={index} className="w-fit p-4 bg-darkgrey">
-                                    <div key={index} className="w-fit p-4 bg-darkgrey rounded-lg shadow-md transform transition-all duration-300 hover:scale-105 hover:shadow-lg overflow-hidden">
-                                        <div className="flex space-x-3 items-center">
-                                            <Avatar
-                                                username={item.expert.username}
-                                                image={base64Images.get(item.expert._id)}
-                                            />
-                                            <div>
-                                                <div className="text-lg">{item.expert.username}</div>
-                                                <div className="text-sm">{item.expert.email}</div>
-                                            </div>
+                            pendingSessions.map((item: any, index: number) => (
+                                // <div key={index} className="w-fit p-4 bg-darkgrey">
+                                <div key={index} className="w-fit p-4 bg-darkgrey rounded-lg shadow-md transform transition-all duration-300 hover:scale-105 hover:shadow-lg overflow-hidden">
+                                    <div className="flex space-x-3 items-center">
+                                        <Avatar
+                                            username={item.groupChatId.admin.username}
+                                            //image={item.groupChatId.admin.image}
+                                            image={base64Images.get(item.groupChatId.admin._id)}
+                                        />
+                                        <div>
+                                            <div className="text-lg">{item.groupChatId.admin.username}</div>
+                                            <div className="text-sm">{item.groupChatId.admin.email}</div>
                                         </div>
-                                        <hr className="my-2"/>
-                                        <div><span className="font-bold">Title  : </span> {item.title}</div>
-                                        <div><span
-                                            className="font-bold">Starts at : </span> {item.start ? formatDateYYYY_MM_DD_h_m(item.start) : 'undefined'}
-                                        </div>
-                                        <div><span
-                                            className="font-bold">Duration  : </span> {item.start ? `${item.duration} min` : 'undefined'}
-                                        </div>
-                                        <div><span className="font-bold">Price  : </span> ${item.price}</div>
-                                        <hr className="my-3"/>
-                                        {item.createdBy === userId ?
-                                        <button
-                                                className="py-1 w-full border border-lightgrey rounded-lg flex items-center justify-center disabled:opacity-50"
-                                                onClick={() => cancelEvent(item)}
-                                            >
-                                                Cancel
-                                            </button>:
-                                            <button
-                                            className="py-1 w-full bg-green rounded-lg flex items-center justify-center disabled:opacity-50"
-                                            onClick={() => acceptInvitation(item)}
-                                        >
-                                            Accept
-                                        </button>}
-                                    </div> :
-                                   null
+                                    </div>
+                                    <hr className="my-2"/>
+                                    <div><span className="font-bold">Title  : </span> {item.groupChatId.name}</div>
+                                    <div><span
+                                        className="font-bold">Description  : </span> {item.groupChatId.description}
+                                    </div>
+                                    <div><span
+                                        className="font-bold">Starts at : </span> {formatDateYYYY_MM_DD_h_m(item.groupChatId.start)}
+                                    </div>
+                                    <div><span className="font-bold">Duration  : </span> {item.groupChatId.duration} min
+                                    </div>
+                                    <div><span className="font-bold">Price  : </span> ${item.groupChatId.price}</div>
+                                    <hr className="my-3"/>
+                                    <button
+                                        className="py-1 w-full bg-green rounded-lg flex items-center justify-center disabled:opacity-50"
+                                        onClick={() => cancelSeminarAppointment(item)}
+                                    >
+                                        Cancel
+                                    </button>
+                                </div>
                             ))
                         }
                     </div> :
-                    <div className="text-center text-lightgrey my-10">No pending individual session</div>
+                    <div className="text-center text-lightgrey my-10">No pending Individual sessions</div>
             }
             {
                 editModalShow ?

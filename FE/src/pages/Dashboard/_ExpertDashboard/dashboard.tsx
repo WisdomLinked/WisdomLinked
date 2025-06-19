@@ -78,13 +78,18 @@ const Dashboard = () => {
     useEffect(() => {
         const now = new Date().getTime();
 
-        const updatedSessions = events.filter((item: any) => (new Date(item.end).getTime() >= now) && (item.status === 'accepted'));
-        const updatedPendingInvitations = events.filter((item: any) => (new Date(item.end).getTime() >= now || !item.duration) && (item.status === 'pending'));
-        const updatedGroupChats = pendingGroupChats.filter((item: any) => new Date(item.groupChatId.end).getTime() >= now);
-        const updatedSeminars = groupChat.filter((item: any) => new Date(item.end).getTime() >= now);
-        // console.log("updatedSeminars: ", updatedSeminars);
-        // console.log("updatedgroupChats: ", updatedGroupChats);
-        // console.log("updatedSessions: ", updatedSessions);
+
+        // const updatedSessions = events.filter((item: any) => (new Date(item.end).getTime() >= now) && (item.status === 'accepted'));
+        // const updatedPendingInvitations = events.filter((item: any) => (new Date(item.end).getTime() >= now || !item.duration) && (item.status === 'pending'));
+        const updatedPendingInvitations = pendingGroupChats.filter((item: any) => new Date(item.groupChatId.end).getTime() >= now && item.groupChatId.type === 'individual');
+        const updatedSessions = groupChat.filter((item: any) => new Date(item.end).getTime() >= now && item.type === 'individual');
+        const updatedGroupChats = pendingGroupChats.filter((item: any) => new Date(item.groupChatId.end).getTime() >= now && item.groupChatId.type === 'seminar');
+        const updatedSeminars = groupChat.filter((item: any) => new Date(item.end).getTime() >= now && item.type === 'seminar');
+
+        console.log("updatedSessions", updatedSessions);
+        console.log("updatedPendingInvitations", updatedPendingInvitations);
+        console.log("updatedGroupChats", updatedGroupChats);
+        console.log("updatedSeminars", updatedSeminars);
 
         set_sessions(updatedSessions);
         set_pendingInvitations(updatedPendingInvitations);
@@ -224,7 +229,7 @@ const Dashboard = () => {
                     </div> :
                     <div className="text-center text-lightgrey my-10">No pending seminar sessions</div>
             }
-            <div className="text-center text-2xl my-6">Booked Individual Sessions</div>
+            <div className="text-center text-2xl mb-6">Booked Individual Sessions</div>
             {
                 sessions.length ?
                     <div className="flex flex-wrap justify-center gap-6">
@@ -234,40 +239,37 @@ const Dashboard = () => {
                                 <div key={index} className="w-fit p-4 bg-darkgrey rounded-lg shadow-md transform transition-all duration-300 hover:scale-105 hover:shadow-lg overflow-hidden">
                                     <div className="flex space-x-3 items-center">
                                         <Avatar
-                                            username={item.customer.username}
-                                            image={base64Images.get(item.customer._id)}
+                                            username={item.admin.username}
+                                            // image={item.customerId.image}
+                                            image={base64Images.get(item.admin._id)}
                                         />
                                         <div>
-                                            <div className="text-lg">{item.customer.username}</div>
-                                            <div className="text-sm">{item.customer.email}</div>
+                                            <div className="text-lg">{item.name}</div>
+                                            {/*<div className="text-sm">{item.description}</div>*/}
                                         </div>
                                     </div>
                                     <hr className="my-2"/>
-                                    <div><span className="font-bold">Title  : </span> {item.title}</div>
+                                    {/*<div><span className="font-bold">Expert  : </span> {item.admin.username}</div>*/}
+                                    {/*<div><span className="font-bold">Email  : </span> {item.admin.email}</div>*/}
+                                    {/* <div><span className="font-bold">Description  : </span> {item.description}</div> */}
                                     <div><span
                                         className="font-bold">Starts at : </span> {formatDateYYYY_MM_DD_h_m(item.start)}
                                     </div>
-                                    <div><span className="font-bold">Duration  : </span> {item.duration} min</div>
+                                    <div><span className="font-bold">Duration  : </span> {item.duration} min
+                                    </div>
                                     <div><span className="font-bold">Price  : </span> ${item.price}</div>
-                                    <hr className="my-3"/>
-                                    {/* <button
-                                        className="py-1 w-full bg-green rounded-lg flex items-center justify-center disabled:opacity-50"
-                                        disabled={status === 'review'}
-                                        onClick={() => acceptEvent(item)}
-                                    >
-                                        Accept
-                                    </button> */}
+                                    <hr className="my-2"/>
                                     <button
                                         className="py-1 w-full bg-green rounded-lg flex items-center justify-center disabled:opacity-50"
-                                        onClick={() => navigateCustomer(item.customer)}
+                                        onClick={() => navigateSeminar(item)}
                                     >
-                                        Go to chat
+                                        Go To Session
                                     </button>
                                 </div>
                             ))
                         }
                     </div> :
-                    <div className="text-center text-lightgrey my-10">No booked individual sessions</div>
+                    <div className="text-center text-lightgrey my-10">No Booked Individual sessions</div>
             }
             <div className="text-center text-2xl my-6">Pending Individual Sessions</div>
             {
@@ -279,43 +281,36 @@ const Dashboard = () => {
                                 <div key={index} className="w-fit p-4 bg-darkgrey rounded-lg shadow-md transform transition-all duration-300 hover:scale-105 hover:shadow-lg overflow-hidden">
                                     <div className="flex space-x-3 items-center">
                                         <Avatar
-                                            username={item.customer.username}
-                                            image={base64Images.get(item.customer._id)}
+                                            username={item.customerId.username}
+                                            image={base64Images.get(item.customerId._id)}
                                         />
                                         <div>
-                                            <div className="text-lg">{item.customer.username}</div>
-                                            <div className="text-sm">{item.customer.email}</div>
+                                            <div className="text-lg">{item.customerId.username}</div>
+                                            <div className="text-sm">{item.customerId.email}</div>
                                         </div>
                                     </div>
                                     <hr className="my-2"/>
-                                    <div><span className="font-bold">Title  : </span> {item.title}</div>
+                                    <div><span className="font-bold">Title  : </span> {item.groupChatId.name}</div>
+                                    {/* <div><span className="font-bold">Description  : </span> {item.groupChatId.description}</div> */}
                                     <div><span
-                                        className="font-bold">Starts at : </span> {item.start ? formatDateYYYY_MM_DD_h_m(item.start) : 'undefined'}
+                                        className="font-bold">Starts at : </span> {formatDateYYYY_MM_DD_h_m(item.groupChatId.start)}
                                     </div>
-                                    <div><span
-                                        className="font-bold">Duration  : </span> {item.duration ? `${item.duration} min` : 'undefined'}
+                                    <div><span className="font-bold">Duration  : </span> {item.groupChatId.duration} min
                                     </div>
-                                    <div><span className="font-bold">Price  : </span> ${item.price}</div>
-                                    <hr className="my-3"/>
-                                    {item.paidBy === 'none' ?
-                                        <button
-                                            className="py-1 w-full border border-lightgrey rounded-lg flex items-center justify-center disabled:opacity-50"
-                                            onClick={() => cancelInvitation(item)}
-                                        >
-                                            Cancel
-                                        </button>
-                                        : <button
-                                            className="py-1 w-full bg-green rounded-lg flex items-center justify-center disabled:opacity-50"
-                                            onClick={() => acceptEvent(item)}
-                                        >
-                                            Accept
-                                        </button>
-                                    }
+                                    <div><span className="font-bold">Price  : </span> ${item.groupChatId.price}</div>
+                                    <hr className="my-2"/>
+                                    <button
+                                        className="py-1 w-full bg-green rounded-lg flex items-center justify-center disabled:opacity-50"
+                                        disabled={status === 'review'}
+                                        onClick={() => acceptSeminarAppointment(item)}
+                                    >
+                                        Accept
+                                    </button>
                                 </div>
                             ))
                         }
                     </div> :
-                    <div className="text-center text-lightgrey my-10">No pending individual session</div>
+                    <div className="text-center text-lightgrey my-10">No pending Individual sessions</div>
             }
             <div
                 style={{

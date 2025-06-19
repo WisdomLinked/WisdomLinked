@@ -19,7 +19,7 @@ const groupChatSchema = new mongoose.Schema(
         paidBy: { type: String },
         type: {
             type: String,
-            enum: ["seminar", "appointment"],
+            enum: ["seminar", "individual"],
             default: "seminar",
         },
         totalTimeSpent: {type: Number, default: 0},
