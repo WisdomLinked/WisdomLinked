@@ -788,6 +788,15 @@ export const sendEmailToUser = async (email: string, message: string) => {
     }
 };
 
+export const sendWelcomeEmail = async (email: string, password: string) => {
+    try {
+        const res = await api.post("auth/sendWelcomeEmail", { email, password });
+        return res.data;
+    } catch (err: any) {
+        return checkForAuthorization(err);
+    }
+}
+
 export const sendEmailToAdmin = async (message: string) => {
     try {
         const res = await api.post("auth/sendEmailToAdmin", { message });

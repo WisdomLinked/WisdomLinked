@@ -11,27 +11,9 @@ import SelectionWithCheckBox from "./SelectionWithCheckBox";
 import CountrySelect from "./CountrySelection";
 import PhoneInput from "react-phone-input-2";
 
-import {doGetKeywordsAndServices, registerUserByAdmin, sendEmailToUser} from "../api/api";
+import {doGetKeywordsAndServices, registerUserByAdmin, sendWelcomeEmail} from "../api/api";
 import { SetLoadingStatus } from "../actions/appActions";
-import { showAlert } from "../actions/alertActions";
 import { useAppSelector } from "../store";
-
-const buildWelcomeEmailMessage = (email: string, password: string) => {
-            return `
-        Greetings of the day!
-        
-        Your account has been successfully registered at Wisdom Linked.
-        
-        Below are your credentials:
-        Email ID: ${email}
-        Password: ${password}
-        
-        We look forward to having you explore our services.
-        
-        Best Regards,
-        Team wisdomlinked.com
-        `;
-        };
 
 function AdminRegisterCustomer() {
     const dispatch = useDispatch();
@@ -92,8 +74,7 @@ function AdminRegisterCustomer() {
         if (response && response.status === "SUCCESS") {
             accountCreationMsg = "Customer account registered successfully.";
 
-            const welcomeMessage = buildWelcomeEmailMessage(email, pwd);
-            const emailRes = await sendEmailToUser(email, welcomeMessage);
+            const emailRes = await sendWelcomeEmail(email, pwd);
 
             if (emailRes && emailRes.status === "SUCCESS") {
                 emailSendingMsg = "Welcome email sent successfully.";

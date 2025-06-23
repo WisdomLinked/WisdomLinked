@@ -8,7 +8,11 @@ const Keyword = require("../models/Keyword");
 const ContactedUs = require("../models/ContactedUs");
 const PendingUser = require("../models/PendingUser");
 const PendingLogin = require("../models/PendingLogin");
-const nodemailer = require("nodemailer");
+const sgMail = require("@sendgrid/mail");
+const adminEmail = "admin@wisdomlinked.com";
+sgMail.setApiKey(process.env.SENDGRID_API_KEY);
+
+// const nodemailer = require("nodemailer");
 
 const { getFullUserData } = require('../middlewares/requireAuth')
 const {checkTitleNameInvalid} = require("../services/global");
@@ -399,6 +403,58 @@ const toggleActionedStatus = async (req, res) => {
     }
 };
 
+const sendWelcomeEmail = async (req, res) => {
+    try {
+        const { email, password } = req.body;
+
+        if (!email || !password) {
+            return res.status(400).json({
+                status: "FAILED",
+                message: "Email and password are required."
+            });
+        }
+
+        const html = `
+        <p>Greetings of the day!</p>
+        <p>Your account has been successfully registered at Wisdom Linked.</p>
+        <p>Below are your credentials:</p>
+        <p>Email ID: ${email}</p>
+        <p>Password: ${password}</p>
+        <p>We look forward to having you explore our services.</p>
+        <p>Best Regards,<br>Team WisdomLinked</p>
+        `;
+
+        const msg = {
+            to: email,
+            from: {
+              name: "WisdomLinked Admin",
+              email: adminEmail, 
+            },
+            subject: "Welcome to WisdomLinked",
+            html,
+          };
+
+        try {
+            const response = await sgMail.send(msg);
+            console.log("Welcome email sent via SendGrid:", response[0].statusCode);
+        } catch (error) {
+            console.error("Error sending welcome email via SendGrid:", error.message);
+            throw error;
+        }
+
+        return res.status(200).json({
+            status: "SUCCESS",
+            message: "Welcome email sent successfully."
+        });
+    } catch (error) {
+        console.error("Error sending welcome email:", error);
+        return res.status(500).json({
+            status: "FAILED",
+            message: "An error occurred while sending welcome email."
+        });
+    }
+}
+
 const sendEmailToUser = async (req, res) => {
     try {
         const { email, message } = req.body;
@@ -410,29 +466,33 @@ const sendEmailToUser = async (req, res) => {
             });
         }
 
-        let transporter = nodemailer.createTransport({
-            host: "smtp.gmail.com",
-            port: 587,
-            secure: false,
-            auth: {
-                user: process.env.GOOGLE_EMAIL,
-                pass: process.env.GOOGLE_PASSWORD
-            },
-            tls: {
-                rejectUnauthorized: false
-            }
-        });
+        const html = `
+        <p>Hello from WisdomLink.io</p>
+        <p>Thank you for reaching out to us. Whether you're seeking academic guidance or offering your expertise, we appreciate your interest.</p>
+        <p><strong>Here's our response to your inquiry:</strong></p>
+        <p>${message}</p>
+        <p>If you have any further questions or need more assistance, please let us know.</p>
+        <p>Best Regards,<br>Team WisdomLinked</p>
+        `;
 
-        let mailOptions = {
-            from: process.env.GOOGLE_EMAIL,
+        const msg = {
             to: email,
-            cc: "xbwang@hotmail.com",
+            from: {
+              name: "WisdomLinked Admin",
+              email: adminEmail, 
+            },
             subject: "Message from WisdomLink.io",
-            text: message
-        };
+            html,
+            replyTo: email, 
+          };
 
-        // Send the mail
-        await transporter.sendMail(mailOptions);
+        try {
+            const response = await sgMail.send(msg);
+            console.log("Contact email sent via SendGrid:", response[0].statusCode);
+        } catch (error) {
+            console.error("Error sending contact email via SendGrid:", error.message);
+            throw error;
+        }
 
         return res.status(200).json({
             status: "SUCCESS",
@@ -634,6 +694,7 @@ module.exports = {
     getContactedUs,
     toggleActionedStatus,
     sendEmailToUser,
+    sendWelcomeEmail,
     getPendingUsers,
     getPendingLogins,
     deletePendingUser,

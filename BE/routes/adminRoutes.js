@@ -16,6 +16,7 @@ const {
     getContactedUs,
     toggleActionedStatus,
     sendEmailToUser,
+    sendWelcomeEmail,
     getPendingLogins,
     getPendingUsers,
     deletePendingLogin,
@@ -44,6 +45,7 @@ router.post("/getUserFeedbacks", adminAuth, getUserFeedbacks);
 router.post("/getContactedUs", adminAuth, getContactedUs);
 router.post("/toggleActionedStatus", adminAuth, toggleActionedStatus);
 router.post("/sendEmailToUser", adminAuth, sendEmailToUser);
+router.post("/sendWelcomeEmail", adminAuth, sendWelcomeEmail);
 router.get("/getPendingUsers", adminAuth, getPendingUsers);
 router.get("/getPendingLogins", adminAuth, getPendingLogins);
 router.post("/deletePendingUser", adminAuth, deletePendingUser);
