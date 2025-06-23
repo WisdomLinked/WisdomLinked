@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom"; // Hook for navigation
 import FileBrowser from "../components/fileBrowser";
 import ShowFieldError from "../components/ShowFieldError";
 import { validateEmail } from "../actions/common";
-import {doContactUs, sendEmailToAdmin, sendEmailToUser} from "../api/api"; // Import the new function
+import {doContactUs, sendEmailToAdmin} from "../api/api"; // Import the new function
 import { SetLoadingStatus } from "../actions/appActions";
 
 const ContactUS = () => {

@@ -158,23 +158,6 @@ export default function GetContactedUs() {
         }
     };
 
-    const createEmailTemplate = (adminRawMessage: string) => {
-        return `
-Hello from WisdomLink.io,
-
-Thank you for reaching out to us. Whether you’re seeking academic guidance or offering your expertise, we appreciate your interest.
-
-Here's our response to your inquiry:
-
-${adminRawMessage}
-
-If you have any further questions or need more assistance, please let us know.
-
-Warm Regards,
-The WisdomLink.io Team
-        `.trim();
-    };
-
     const handleSendEmail = async (id: string, email: string) => {
         try {
             const adminRawMessage = adminMessages[id] || "";
@@ -184,9 +167,7 @@ The WisdomLink.io Team
                 return;
             }
 
-            const finalMessage = createEmailTemplate(adminRawMessage);
-
-            const res = await sendEmailToUser(email, finalMessage);
+            const res = await sendEmailToUser(email, adminRawMessage);
             if (res && res.status === "SUCCESS") {
                 alert("Email sent successfully!");
                 setAdminMessages((prev) => ({ ...prev, [id]: "" }));
