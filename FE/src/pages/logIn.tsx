@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import logo from '../assets/images/logo.png'
 import { useDispatch } from "react-redux";
@@ -24,6 +24,9 @@ const LogIn = () => {
     const { userDetails } = useAppSelector(state => state.auth)
     const [codeSent, set_codeSent] = useState(false)
 
+    const emailRef = useRef<HTMLInputElement>(null)
+    const passwordRef = useRef<HTMLInputElement>(null)
+
     const handleLogin = async () => {
         SetLoadingStatus(true)
         const response: any = await login({ email: email, password: pwd });
@@ -38,6 +41,19 @@ const LogIn = () => {
         }
         SetLoadingStatus(false)
     }
+
+    // Function to check for autofilled values
+    const checkAutofill = () => {
+        if (emailRef.current && emailRef.current.value && !email) {
+            set_email(emailRef.current.value)
+            setEmailTouched(true)
+        }
+        if (passwordRef.current && passwordRef.current.value && !pwd) {
+            set_pwd(passwordRef.current.value)
+            setpwdTouched(true)
+        }
+    }
+
 
     useEffect(() => {
         if (emailTouched) {
@@ -56,6 +72,33 @@ const LogIn = () => {
             SetLoadingStatus(false)
         }
     }, [userDetails, navigate])
+
+    // Check for autofill on component mount and periodically
+    useEffect(() => {
+        const timer = setTimeout(checkAutofill, 100)
+        const interval = setInterval(checkAutofill, 500)
+        
+        // Also check on focus events
+        const handleFocus = () => setTimeout(checkAutofill, 50)
+        
+        if (emailRef.current) {
+            emailRef.current.addEventListener('focus', handleFocus)
+        }
+        if (passwordRef.current) {
+            passwordRef.current.addEventListener('focus', handleFocus)
+        }
+
+        return () => {
+            clearTimeout(timer)
+            clearInterval(interval)
+            if (emailRef.current) {
+                emailRef.current.removeEventListener('focus', handleFocus)
+            }
+            if (passwordRef.current) {
+                passwordRef.current.removeEventListener('focus', handleFocus)
+            }
+        }
+    }, [])
 
     return (
         codeSent ?
@@ -86,12 +129,14 @@ const LogIn = () => {
                         </div>
                         <div className="mt-8 text-grey text-[12px] leading-[19px]">Email</div>
                         <input
+                            ref={emailRef}
                             className="w-full rounded-[15px] h-[62px] mt-0.5 border text-darkgrey text-[14px] leading-[21px] px-[24px] border-lightgrey"
                             placeholder="Input your email address"
                             type='email'
                             value={email}
                             onChange={(e) => set_email(e.target.value)}
                             onBlur={() => setEmailTouched(true)}
+                            onFocus={checkAutofill}
                         />
                         <ShowFieldError
                             show={emailTouched && !isValidEmail}
@@ -100,12 +145,14 @@ const LogIn = () => {
                         <div className="mt-8 w-full relative">
                             <div className="text-grey text-[12px] leading-[19px]">Password</div>
                             <input
+                                ref={passwordRef}
                                 className="w-full rounded-[15px] h-[62px] mt-0.5 border text-darkgrey text-[14px] leading-[21px] pl-[24px] pr-[58px] border-lightgrey"
                                 placeholder="Input your password"
                                 type={type}
                                 value={pwd}
                                 onChange={(e) => set_pwd(e.target.value)}
                                 onBlur={() => setpwdTouched(true)}
+                                onFocus={checkAutofill}
                             />
                             {/*<button className="absolute bottom-[19px] right-[24px] w-6 h-6 text-darkgrey" onMouseDown={() => set_type('')} onMouseUp={() => set_type('password')} onMouseLeave={() => set_type('password')}>*/}
                             {/*    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">*/}
