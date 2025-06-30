@@ -106,6 +106,8 @@ const ExpertSeminar = ({
                 duration: duration,
                 price: price,
                 type: 'seminar',
+                status: 'active',
+                createdBy: userDetails._id
             })
             if (response) {
                 console.log("response: ",response);

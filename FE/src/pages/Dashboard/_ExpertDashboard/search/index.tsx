@@ -118,6 +118,9 @@ const Search = () => {
                         duration: duration,
                         price: price,
                         type: 'individual',
+                        status: 'pending',
+                        admin: userDetails._id,
+                        customer: selectedCustomer,
         })
         if (response) {
             console.log("response: ",response);

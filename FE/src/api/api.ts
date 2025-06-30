@@ -17,6 +17,7 @@ import { actionTypes } from "../actions/types";
 import { showAlert } from "../actions/alertActions";
 import { logoutUser } from "../actions/authActions";
 import { SetLoadingStatus } from "../actions/appActions";
+import { group } from "console";
 
 const BASE_URL = process.env.REACT_APP_API_BASE_URL;
 
@@ -250,6 +251,16 @@ export const createGroupChat = async (details: any) => {
     }
 };
 
+export const createGroupChatByUser = async (details: any) => {
+    try {
+        const res = await api.post("group-chat/create-by-user", details);
+
+        return res.data;
+    } catch (err: any) {
+        return checkForAuthorization(err);
+    }
+};
+
 export const updateGroupChat = async (details: any) => {
     try {
         const res = await api.post("group-chat/update", details);
@@ -284,6 +295,18 @@ export const addMemberToGroup = async (data: any) => {
             _id: data._id,
             friendId: data.friendId,
             groupChatId: data.groupChatId
+        });
+
+        return res.data;
+    } catch (err: any) {
+        return checkForAuthorization(err);
+    }
+};
+
+export const acceptIndividualAppointment = async (data: any) => {
+    try {
+        const res = await api.post("group-chat/accept-individual-appointment", {
+            groupChatId: data.groupChatId,
         });
 
         return res.data;
@@ -542,6 +565,15 @@ export const doAppendEvent = async ({ title, start, end, duration, price, paidBy
 export const doCancelEvent = async (eventId: any) => {
     try {
         const res = await api.post("customer/cancelEvent", { eventId });
+        return res.data;
+    } catch (err: any) {
+        return checkForAuthorization(err);
+    }
+}
+
+export const cancelIndividualAppointment = async (groupChatId: any) => {
+    try {
+        const res = await api.post("customer/cancelIndividualAppointment", { groupChatId });
         return res.data;
     } catch (err: any) {
         return checkForAuthorization(err);

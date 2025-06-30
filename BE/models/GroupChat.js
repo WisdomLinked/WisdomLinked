@@ -22,6 +22,12 @@ const groupChatSchema = new mongoose.Schema(
             enum: ["seminar", "individual"],
             default: "seminar",
         },
+        status: {type: String, enum: ["pending", "active"], default: 'pending'},
+        createdBy: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: "User",
+            required: true,
+        },
         totalTimeSpent: {type: Number, default: 0},
         participants: [
             {

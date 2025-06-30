@@ -5,6 +5,7 @@ import Avatar from "../../../components/Avatar";
 import { formatDateYYYY_MM_DD_h_m } from "../../../actions/common";
 import {
     addMemberToGroup,
+    acceptIndividualAppointment,
     doAcceptEvent,
     doCancelInvitation,
     profileImageFetch
@@ -35,6 +36,16 @@ const Dashboard = () => {
             _id: data._id,
             friendId: data.customerId._id,
             groupChatId: data.groupChatId._id
+        })
+        if (response) {
+            dispatch(updateMe())
+        }
+        SetLoadingStatus(false)
+    }
+
+    const acceptAppointment = async (data: any) => {
+        const response = await acceptIndividualAppointment({
+            groupChatId: data._id
         })
         if (response) {
             dispatch(updateMe())
@@ -81,15 +92,13 @@ const Dashboard = () => {
 
         // const updatedSessions = events.filter((item: any) => (new Date(item.end).getTime() >= now) && (item.status === 'accepted'));
         // const updatedPendingInvitations = events.filter((item: any) => (new Date(item.end).getTime() >= now || !item.duration) && (item.status === 'pending'));
-        const updatedPendingInvitations = pendingGroupChats.filter((item: any) => new Date(item.groupChatId.end).getTime() >= now && item.groupChatId.type === 'individual');
-        const updatedSessions = groupChat.filter((item: any) => new Date(item.end).getTime() >= now && item.type === 'individual');
+        // const updatedPendingInvitations = pendingGroupChats.filter((item: any) => new Date(item.groupChatId.end).getTime() >= now && item.groupChatId.type === 'individual');
+        const updatedSessions = groupChat.filter((item: any) => new Date(item.end).getTime() >= now && item.type === 'individual' && item.status === 'active');
+        const updatedPendingInvitations = groupChat.filter((item: any) => new Date(item.end).getTime() >= now && item.type === 'individual' && item.status === 'pending');
         const updatedGroupChats = pendingGroupChats.filter((item: any) => new Date(item.groupChatId.end).getTime() >= now && item.groupChatId.type === 'seminar');
         const updatedSeminars = groupChat.filter((item: any) => new Date(item.end).getTime() >= now && item.type === 'seminar');
 
-        console.log("updatedSessions", updatedSessions);
-        console.log("updatedPendingInvitations", updatedPendingInvitations);
-        console.log("updatedGroupChats", updatedGroupChats);
-        console.log("updatedSeminars", updatedSeminars);
+        console.log("updatedSessions", groupChat);
 
         set_sessions(updatedSessions);
         set_pendingInvitations(updatedPendingInvitations);
@@ -281,28 +290,28 @@ const Dashboard = () => {
                                 <div key={index} className="w-fit p-4 bg-darkgrey rounded-lg shadow-md transform transition-all duration-300 hover:scale-105 hover:shadow-lg overflow-hidden">
                                     <div className="flex space-x-3 items-center">
                                         <Avatar
-                                            username={item.customerId.username}
-                                            image={base64Images.get(item.customerId._id)}
+                                            username={item.createdBy.username}
+                                            image={base64Images.get(item.createdBy._id)}
                                         />
                                         <div>
-                                            <div className="text-lg">{item.customerId.username}</div>
-                                            <div className="text-sm">{item.customerId.email}</div>
+                                            <div className="text-lg">{item.createdBy.username}</div>
+                                            <div className="text-sm">{item.createdBy.email}</div>
                                         </div>
                                     </div>
                                     <hr className="my-2"/>
-                                    <div><span className="font-bold">Title  : </span> {item.groupChatId.name}</div>
+                                    <div><span className="font-bold">Title  : </span> {item.name}</div>
                                     {/* <div><span className="font-bold">Description  : </span> {item.groupChatId.description}</div> */}
                                     <div><span
-                                        className="font-bold">Starts at : </span> {formatDateYYYY_MM_DD_h_m(item.groupChatId.start)}
+                                        className="font-bold">Starts at : </span> {formatDateYYYY_MM_DD_h_m(item.start)}
                                     </div>
-                                    <div><span className="font-bold">Duration  : </span> {item.groupChatId.duration} min
+                                    <div><span className="font-bold">Duration  : </span> {item.duration} min
                                     </div>
-                                    <div><span className="font-bold">Price  : </span> ${item.groupChatId.price}</div>
+                                    <div><span className="font-bold">Price  : </span> ${item.price}</div>
                                     <hr className="my-2"/>
                                     <button
                                         className="py-1 w-full bg-green rounded-lg flex items-center justify-center disabled:opacity-50"
                                         disabled={status === 'review'}
-                                        onClick={() => acceptSeminarAppointment(item)}
+                                        onClick={() => acceptAppointment(item)}
                                     >
                                         Accept
                                     </button>

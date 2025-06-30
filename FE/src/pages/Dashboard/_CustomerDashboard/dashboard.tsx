@@ -2,7 +2,7 @@ import React, {useEffect, useRef, useState} from "react";
 import { useAppSelector } from "../../../store";
 import Avatar from "../../../components/Avatar";
 import { formatDateYYYY_MM_DD_h_m } from "../../../actions/common";
-import {doCancelEvent, doCancelPendingSeminar, doUpdateEvent, profileImageFetch} from "../../../api/api";
+import {doCancelEvent,cancelIndividualAppointment, doCancelPendingSeminar, doUpdateEvent, profileImageFetch} from "../../../api/api";
 import { updateMe } from "../../../actions/authActions";
 import { useDispatch } from "react-redux";
 import { SetLoadingStatus } from "../../../actions/appActions";
@@ -34,6 +34,17 @@ const Dashboard = () => {
         if (response) {
             dispatch(updateMe())
             dispatch(showAlert('Seminar Appointment Cancelled and your money refunded'))
+        }
+        SetLoadingStatus(false)
+    }
+
+    const cancelAppointment = async (groupChatId: any) => {
+        SetLoadingStatus(true)
+        console.log("Canceling appointment for ID:", groupChatId);
+        const response = await cancelIndividualAppointment(groupChatId)
+        if (response) {
+            dispatch(updateMe())
+            dispatch(showAlert('Appointment Cancelled and your money refunded'))
         }
         SetLoadingStatus(false)
     }
@@ -101,8 +112,10 @@ const Dashboard = () => {
         const now = new Date().getTime();
         console.log("Pending Group Chats:", pendingGroupChats);
 
-        const updatedSessions = groupChat.filter((item: any) => new Date(item.end).getTime() >= now && item.type === 'individual');
-        const pendingSessions = pendingGroupChats.filter((item: any) => new Date(item.groupChatId.end).getTime() >= now && item.groupChatId.type === 'individual');
+        const updatedSessions = groupChat.filter((item: any) => new Date(item.end).getTime() >= now && item.type === 'individual' && item.status === 'active');
+        // const pendingSessions = pendingGroupChats.filter((item: any) => new Date(item.groupChatId.end).getTime() >= now && item.groupChatId.type === 'individual');
+        const pendingSessions = groupChat.filter((item: any) => new Date(item.end).getTime() >= now && item.type === 'individual' && item.status === 'pending');
+        // pendingSessions.push(...otherpendingSessions);
         const updatedGroupChats = pendingGroupChats.filter((item: any) => new Date(item.groupChatId.end).getTime() >= now && item.groupChatId.type === 'seminar');
         const updatedSeminars = groupChat.filter((item: any) => new Date(item.end).getTime() >= now && item.type === 'seminar');
     
@@ -264,13 +277,12 @@ const Dashboard = () => {
                                             image={base64Images.get(item.admin._id)}
                                         />
                                         <div>
-                                            <div className="text-lg">{item.admin.username}</div>
-                                            <div className="text-sm">{item.admin.email}</div>
+                                            <div className="text-lg">{item.name}</div>
                                         </div>
                                     </div>
                                     <hr className="my-2"/>
-                                    <div><span className="font-bold">Title  : </span> {item.name}</div>
-                                    <div><span className="font-bold">Description  : </span> {item.description}</div>
+                                    {/* <div><span className="font-bold">Title  : </span> {item.name}</div> */}
+                                    {/* <div><span className="font-bold">Description  : </span> {item.description}</div> */}
                                     <div><span
                                         className="font-bold">Starts at : </span> {formatDateYYYY_MM_DD_h_m(item.start)}
                                     </div>
@@ -282,7 +294,7 @@ const Dashboard = () => {
                                         className="py-1 w-full bg-green rounded-lg flex items-center justify-center disabled:opacity-50"
                                         onClick={() => navigateSeminar(item)}
                                     >
-                                        Go To Seminar
+                                        Go To Session
                                     </button>
                                 </div>
                             ))
@@ -302,30 +314,30 @@ const Dashboard = () => {
                                 <div key={index} className="w-fit p-4 bg-darkgrey rounded-lg shadow-md transform transition-all duration-300 hover:scale-105 hover:shadow-lg overflow-hidden">
                                     <div className="flex space-x-3 items-center">
                                         <Avatar
-                                            username={item.groupChatId.admin.username}
+                                            username={item.admin.username}
                                             //image={item.groupChatId.admin.image}
-                                            image={base64Images.get(item.groupChatId.admin._id)}
+                                            image={base64Images.get(item.admin._id)}
                                         />
                                         <div>
-                                            <div className="text-lg">{item.groupChatId.admin.username}</div>
-                                            <div className="text-sm">{item.groupChatId.admin.email}</div>
+                                            <div className="text-lg">{item.admin.username}</div>
+                                            <div className="text-sm">{item.admin.email}</div>
                                         </div>
                                     </div>
                                     <hr className="my-2"/>
-                                    <div><span className="font-bold">Title  : </span> {item.groupChatId.name}</div>
+                                    <div><span className="font-bold">Title  : </span> {item.name}</div>
                                     <div><span
-                                        className="font-bold">Description  : </span> {item.groupChatId.description}
+                                        className="font-bold">Description  : </span> {item.description}
                                     </div>
                                     <div><span
-                                        className="font-bold">Starts at : </span> {formatDateYYYY_MM_DD_h_m(item.groupChatId.start)}
+                                        className="font-bold">Starts at : </span> {formatDateYYYY_MM_DD_h_m(item.start)}
                                     </div>
-                                    <div><span className="font-bold">Duration  : </span> {item.groupChatId.duration} min
+                                    <div><span className="font-bold">Duration  : </span> {item.duration} min
                                     </div>
-                                    <div><span className="font-bold">Price  : </span> ${item.groupChatId.price}</div>
+                                    <div><span className="font-bold">Price  : </span> ${item.price}</div>
                                     <hr className="my-3"/>
                                     <button
                                         className="py-1 w-full bg-green rounded-lg flex items-center justify-center disabled:opacity-50"
-                                        onClick={() => cancelSeminarAppointment(item)}
+                                        onClick={() => cancelAppointment(item._id)}
                                     >
                                         Cancel
                                     </button>

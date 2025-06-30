@@ -27,6 +27,10 @@ const getFullUserData = async (email) => {
                         path: 'participants',
                         select: 'email username image role status'
                     },
+                    {
+                        path: 'createdBy',
+                        select: 'email username image role status'
+                    },
                     "keywords",
                     "services",
                 ]

@@ -3,8 +3,10 @@ const router = express.Router();
 
 const {
     createGroupChat,
+    createGroupChatByUser,
     addMemberToPendingGroup,
     addMemberToGroup,
+    acceptIndividualAppointment,
     leaveGroup,
     deleteGroup,
     updateGroupChat,
@@ -18,6 +20,20 @@ router.post(
     "/",
     expertAuth(true),
     createGroupChat
+);
+
+//create a groupChat by a user
+router.post(
+    "/create-by-user",
+    requireAuth(true),
+    createGroupChatByUser
+);
+
+// accept individual appointment
+router.post(
+    "/accept-individual-appointment",
+    expertAuth(true),
+    acceptIndividualAppointment
 );
 
 // update a groupChat

@@ -55,7 +55,7 @@ const GroupChatList = ({ type }: { type: string }) => {
             {/* Added Search Input */}
             <SearchInput
                 type="text"
-                placeholder="Search seminars..."
+                placeholder={type === "seminar" ? "Search seminars..." : "Search sessions..."}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
             />
