@@ -22,7 +22,7 @@ const groupChatSchema = new mongoose.Schema(
             enum: ["seminar", "individual"],
             default: "seminar",
         },
-        status: {type: String, enum: ["pending", "active"], default: 'pending'},
+        status: {type: String, enum: ["pending", "active", "cancelled"], default: 'pending'},
         createdBy: {
             type: mongoose.Schema.Types.ObjectId,
             ref: "User",

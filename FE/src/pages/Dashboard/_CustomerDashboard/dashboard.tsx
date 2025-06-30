@@ -1,12 +1,14 @@
 import React, {useEffect, useRef, useState} from "react";
 import { useAppSelector } from "../../../store";
+import queryString from "query-string";
 import Avatar from "../../../components/Avatar";
+import Payment from "./payment";
 import { formatDateYYYY_MM_DD_h_m } from "../../../actions/common";
-import {doCancelEvent,cancelIndividualAppointment, doCancelPendingSeminar, doUpdateEvent, profileImageFetch} from "../../../api/api";
+import {doCancelEvent,cancelIndividualAppointment, doCancelPendingSeminar, doUpdateEvent, profileImageFetch,acceptIndividualAppointment} from "../../../api/api";
 import { updateMe } from "../../../actions/authActions";
 import { useDispatch } from "react-redux";
 import { SetLoadingStatus } from "../../../actions/appActions";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import CloseIcon from '@mui/icons-material/Close';
 import SelectDateTime from "../selectDateTime";
 import { showAlert } from "../../../actions/alertActions";
@@ -18,6 +20,7 @@ const Dashboard = () => {
     const { auth: { userDetails: { pendingGroupChats, events, groupChats:groupChat, status,_id:userId } }, friends: { groupChatList }} = useAppSelector(state => state)
     const dispatch = useDispatch()
     const navigate = useNavigate()
+    const location = useLocation()
 
     const [groupChats, set_groupChats] = useState<any>([])
     const [sessions, set_sessions] = useState<any>([])
@@ -27,6 +30,8 @@ const Dashboard = () => {
     const [selectedEvent, set_selectedEvent] = useState<any>(null)
     const [base64Images, setBase64Images] = useState<Map<string, string>>(new Map());
     const fetchImagesRef = useRef(false); // Ref to track image fetch calls
+    const [showPayment, set_showPayment] = useState(false);
+    const [item, set_item] = useState<any>(null);
 
     const cancelSeminarAppointment = async (data: any) => {
         SetLoadingStatus(true)
@@ -38,16 +43,23 @@ const Dashboard = () => {
         SetLoadingStatus(false)
     }
 
-    const cancelAppointment = async (groupChatId: any) => {
+    const cancelAppointment = async (data: any) => {
         SetLoadingStatus(true)
-        console.log("Canceling appointment for ID:", groupChatId);
-        const response = await cancelIndividualAppointment(groupChatId)
+        const response = await cancelIndividualAppointment(data._id)
         if (response) {
             dispatch(updateMe())
             dispatch(showAlert('Appointment Cancelled and your money refunded'))
         }
         SetLoadingStatus(false)
     }
+
+    const acceptAppointment = async (data: any) => {
+            const response = await acceptIndividualAppointment(data)
+            if (response) {
+                dispatch(updateMe())
+            }
+            SetLoadingStatus(false)
+        }
 
     const cancelEvent = async (event: any) => {
         SetLoadingStatus(true)
@@ -173,6 +185,28 @@ const Dashboard = () => {
     useEffect(() => {
         dispatch(updateMe());
         }, [dispatch]);
+
+     useEffect(() => {
+            let { redirect_status, payment_intent, price } = queryString.parse(location.search);
+            if (redirect_status === 'succeeded') {
+                const pendingDetails = window.localStorage.getItem('pendingDetails')
+                if (pendingDetails) {
+                    SetLoadingStatus(true)
+                    const details = JSON.parse(pendingDetails)
+                    window.localStorage.removeItem('pendingDetails')
+                    SetLoadingStatus(false)
+                    acceptAppointment({
+                        groupChatId: details.groupChatId,
+                        payment_intent: payment_intent,
+                    })
+                }
+            } else {
+                window.localStorage.removeItem('pendingDetails')
+                if (redirect_status) {
+                    set_showPayment(false);
+                }
+            }
+    }, [])
 
     return (
         <div className="w-full h-full mx-auto p-6 text-white overflow-y-auto relative">
@@ -335,12 +369,21 @@ const Dashboard = () => {
                                     </div>
                                     <div><span className="font-bold">Price  : </span> ${item.price}</div>
                                     <hr className="my-3"/>
-                                    <button
-                                        className="py-1 w-full bg-green rounded-lg flex items-center justify-center disabled:opacity-50"
-                                        onClick={() => cancelAppointment(item._id)}
-                                    >
-                                        Cancel
-                                    </button>
+                                    {item.createdBy._id === userId ?
+                                        <button
+                                            className="py-1 w-full border border-lightgrey rounded-lg flex items-center justify-center disabled:opacity-50"
+                                            onClick={() => cancelAppointment(item)}
+                                        >
+                                            Cancel
+                                        </button>
+                                        : <button
+                                            className="py-1 w-full bg-green rounded-lg flex items-center justify-center disabled:opacity-50"
+                                            disabled={status === 'review'}
+                                            onClick={() => { set_showPayment(true); set_item(item); }}
+                                        >
+                                            Accept
+                                        </button>
+                                    }
                                 </div>
                             ))
                         }
@@ -378,6 +421,35 @@ const Dashboard = () => {
                     </div> :
                     null
             }
+            {showPayment && (
+                                        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                                            <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4 relative">
+                                                {/* Close button */}
+                                                <button
+                                                    onClick={() => set_showPayment(false)}
+                                                    className="absolute top-4 right-4 text-gray-500 hover:text-gray-700 text-xl font-bold"
+                                                >
+                                                    ×
+                                                </button>
+
+                                                {/* Payment Component */}
+                                                <Payment
+                                                    type="Session"
+                                                    price={item.price}
+                                                    pendingDetails={{
+                                                        name: item.name,
+                                                        start: item.startTime,
+                                                        end: item.endTime,
+                                                        duration: item.duration,
+                                                        price: item.price,
+                                                        expert: item.admin,
+                                                        groupChatId: item._id,
+                                                    }}
+                                                    onClose={() => set_showPayment(true)} // Pass close function to Payment component if needed
+                                                />
+                                            </div>
+                                        </div>
+            )}
             <div
                 style={{
                     position: "fixed",

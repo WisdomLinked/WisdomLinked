@@ -6,6 +6,7 @@ import { formatDateYYYY_MM_DD_h_m } from "../../../actions/common";
 import {
     addMemberToGroup,
     acceptIndividualAppointment,
+    cancelIndividualAppointment,
     doAcceptEvent,
     doCancelInvitation,
     profileImageFetch
@@ -76,6 +77,14 @@ const Dashboard = () => {
         navigate(`${process.env.REACT_APP_AUTH_URL}expertdashboard/chat`);
         dispatch(setChosenGroupChatDetails( selectedGroupChat ));
     };
+
+    const cancelAppointment = async (data: any) => {
+        const response = await cancelIndividualAppointment(data._id)
+        if (response) {
+            dispatch(updateMe())
+        }
+        SetLoadingStatus(false)
+    }
 
     const cancelInvitation = async (event: any) => {
         SetLoadingStatus(true)
@@ -308,13 +317,21 @@ const Dashboard = () => {
                                     </div>
                                     <div><span className="font-bold">Price  : </span> ${item.price}</div>
                                     <hr className="my-2"/>
-                                    <button
-                                        className="py-1 w-full bg-green rounded-lg flex items-center justify-center disabled:opacity-50"
-                                        disabled={status === 'review'}
-                                        onClick={() => acceptAppointment(item)}
-                                    >
-                                        Accept
-                                    </button>
+                                    {item.createdBy._id === _id ?
+                                        <button
+                                            className="py-1 w-full border border-lightgrey rounded-lg flex items-center justify-center disabled:opacity-50"
+                                            onClick={() => cancelAppointment(item)}
+                                        >
+                                            Cancel
+                                        </button>
+                                        : <button
+                                            className="py-1 w-full bg-green rounded-lg flex items-center justify-center disabled:opacity-50"
+                                            disabled={status === 'review'}
+                                            onClick={() => acceptAppointment(item)}
+                                        >
+                                            Accept
+                                        </button>
+                                    }
                                 </div>
                             ))
                         }

@@ -271,6 +271,15 @@ export const updateGroupChat = async (details: any) => {
     }
 };
 
+export const cancelIndividualAppointment = async (groupChatId: any) => {
+    try {
+        const res = await api.post("group-chat/cancel-individual-appointment", { groupChatId });
+        return res.data;
+    } catch (err: any) {
+        return checkForAuthorization(err);
+    }
+}
+
 export const doUpdateExpertEvent = async (eventId: any, updates: any) => {
     try {
         const res = await api.post("expert/updateEvent", { eventId, updates });
@@ -565,15 +574,6 @@ export const doAppendEvent = async ({ title, start, end, duration, price, paidBy
 export const doCancelEvent = async (eventId: any) => {
     try {
         const res = await api.post("customer/cancelEvent", { eventId });
-        return res.data;
-    } catch (err: any) {
-        return checkForAuthorization(err);
-    }
-}
-
-export const cancelIndividualAppointment = async (groupChatId: any) => {
-    try {
-        const res = await api.post("customer/cancelIndividualAppointment", { groupChatId });
         return res.data;
     } catch (err: any) {
         return checkForAuthorization(err);

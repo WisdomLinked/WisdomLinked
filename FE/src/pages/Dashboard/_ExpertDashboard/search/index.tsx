@@ -6,7 +6,7 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import EventDetail from "../eventDetail";
 import { useAppSelector } from "../../../../store";
 import { getAvatarTitle } from "../../../../actions/common";
-import {createEvent, profileImageFetch, createGroupChat} from "../../../../api/api";
+import { profileImageFetch, createGroupChat} from "../../../../api/api";
 import { useDispatch } from "react-redux";
 import { Swiper, SwiperSlide } from "swiper/react";
 import { Pagination, Navigation } from "swiper";
@@ -120,7 +120,7 @@ const Search = () => {
                         type: 'individual',
                         status: 'pending',
                         admin: userDetails._id,
-                        customer: selectedCustomer,
+                        customerId: selectedCustomer._id,
         })
         if (response) {
             console.log("response: ",response);

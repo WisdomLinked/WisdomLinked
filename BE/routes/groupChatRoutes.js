@@ -7,6 +7,7 @@ const {
     addMemberToPendingGroup,
     addMemberToGroup,
     acceptIndividualAppointment,
+    cancelIndividualAppointment,
     leaveGroup,
     deleteGroup,
     updateGroupChat,
@@ -32,7 +33,7 @@ router.post(
 // accept individual appointment
 router.post(
     "/accept-individual-appointment",
-    expertAuth(true),
+    requireAuth(true),
     acceptIndividualAppointment
 );
 
@@ -61,6 +62,12 @@ router.post(
     requireAuth(false),
     joinGeneralChat
 );
+
+router.post("/cancel-individual-appointment", 
+    requireAuth(false), 
+    cancelIndividualAppointment
+);
+
 
 // delete a group
 router.post(
