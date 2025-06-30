@@ -1,12 +1,14 @@
 import React, {useEffect, useRef, useState} from "react";
 import { useAppSelector } from "../../../store";
+import queryString from "query-string";
 import Avatar from "../../../components/Avatar";
+import Payment from "./payment";
 import { formatDateYYYY_MM_DD_h_m } from "../../../actions/common";
-import {doCancelEvent, doCancelPendingSeminar, doUpdateEvent, profileImageFetch} from "../../../api/api";
+import {doCancelEvent,cancelIndividualAppointment, doCancelPendingSeminar, doUpdateEvent, profileImageFetch,acceptIndividualAppointment} from "../../../api/api";
 import { updateMe } from "../../../actions/authActions";
 import { useDispatch } from "react-redux";
 import { SetLoadingStatus } from "../../../actions/appActions";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import CloseIcon from '@mui/icons-material/Close';
 import SelectDateTime from "../selectDateTime";
 import { showAlert } from "../../../actions/alertActions";
@@ -18,14 +20,18 @@ const Dashboard = () => {
     const { auth: { userDetails: { pendingGroupChats, events, groupChats:groupChat, status,_id:userId } }, friends: { groupChatList }} = useAppSelector(state => state)
     const dispatch = useDispatch()
     const navigate = useNavigate()
+    const location = useLocation()
 
     const [groupChats, set_groupChats] = useState<any>([])
     const [sessions, set_sessions] = useState<any>([])
+    const [pendingSessions, set_pendingSessions] = useState<any>([])
     const [acceptedSeminars, set_acceptedSeminars] = useState<any>([])
     const [editModalShow, set_editModalShow] = useState<boolean>(false)
     const [selectedEvent, set_selectedEvent] = useState<any>(null)
     const [base64Images, setBase64Images] = useState<Map<string, string>>(new Map());
     const fetchImagesRef = useRef(false); // Ref to track image fetch calls
+    const [showPayment, set_showPayment] = useState(false);
+    const [item, set_item] = useState<any>(null);
 
     const cancelSeminarAppointment = async (data: any) => {
         SetLoadingStatus(true)
@@ -36,6 +42,24 @@ const Dashboard = () => {
         }
         SetLoadingStatus(false)
     }
+
+    const cancelAppointment = async (data: any) => {
+        SetLoadingStatus(true)
+        const response = await cancelIndividualAppointment(data._id)
+        if (response) {
+            dispatch(updateMe())
+            dispatch(showAlert('Appointment Cancelled and your money refunded'))
+        }
+        SetLoadingStatus(false)
+    }
+
+    const acceptAppointment = async (data: any) => {
+            const response = await acceptIndividualAppointment(data)
+            if (response) {
+                dispatch(updateMe())
+            }
+            SetLoadingStatus(false)
+        }
 
     const cancelEvent = async (event: any) => {
         SetLoadingStatus(true)
@@ -98,17 +122,19 @@ const Dashboard = () => {
     // Batch state updates for sessions and groupChats
     useEffect(() => {
         const now = new Date().getTime();
+        console.log("Pending Group Chats:", pendingGroupChats);
 
-        const updatedSessions = events.filter((item: any) => new Date(item.end).getTime() >= now);
-        const updatedGroupChats = pendingGroupChats.filter((item: any) => new Date(item.groupChatId.end).getTime() >= now);
-        const updatedSeminars = groupChat.filter((item: any) => new Date(item.end).getTime() >= now);
-        // console.log("updatedSeminars: ", updatedSeminars);
-        // console.log("updatedgroupChats: ", updatedGroupChats);
-        // console.log("updatedSessions: ", updatedSessions);
-
+        const updatedSessions = groupChat.filter((item: any) => new Date(item.end).getTime() >= now && item.type === 'individual' && item.status === 'active');
+        // const pendingSessions = pendingGroupChats.filter((item: any) => new Date(item.groupChatId.end).getTime() >= now && item.groupChatId.type === 'individual');
+        const pendingSessions = groupChat.filter((item: any) => new Date(item.end).getTime() >= now && item.type === 'individual' && item.status === 'pending');
+        // pendingSessions.push(...otherpendingSessions);
+        const updatedGroupChats = pendingGroupChats.filter((item: any) => new Date(item.end).getTime() >= now && item.type === 'seminar');
+        const updatedSeminars = groupChat.filter((item: any) => new Date(item.end).getTime() >= now && item.type === 'seminar');
+    
         set_sessions(updatedSessions);
         set_groupChats(updatedGroupChats);
         set_acceptedSeminars(updatedSeminars);
+        set_pendingSessions(pendingSessions);
 
         // Trigger image fetch only once
         if (!fetchImagesRef.current) {
@@ -159,6 +185,28 @@ const Dashboard = () => {
     useEffect(() => {
         dispatch(updateMe());
         }, [dispatch]);
+
+     useEffect(() => {
+            let { redirect_status, payment_intent, price } = queryString.parse(location.search);
+            if (redirect_status === 'succeeded') {
+                const pendingDetails = window.localStorage.getItem('pendingDetails')
+                if (pendingDetails) {
+                    SetLoadingStatus(true)
+                    const details = JSON.parse(pendingDetails)
+                    window.localStorage.removeItem('pendingDetails')
+                    SetLoadingStatus(false)
+                    acceptAppointment({
+                        groupChatId: details.groupChatId,
+                        payment_intent: payment_intent,
+                    })
+                }
+            } else {
+                window.localStorage.removeItem('pendingDetails')
+                if (redirect_status) {
+                    set_showPayment(false);
+                }
+            }
+    }, [])
 
     return (
         <div className="w-full h-full mx-auto p-6 text-white overflow-y-auto relative">
@@ -248,107 +296,99 @@ const Dashboard = () => {
                     </div> :
                     <div className="text-center text-lightgrey my-10">No pending seminar sessions</div>
             }
-            <div className="text-center text-2xl my-6">Booked Individual Sessions</div>
+            <div className="text-center text-2xl mb-6">Booked Individual Sessions</div>
             {
                 sessions.length ?
                     <div className="flex flex-wrap justify-center gap-6">
                         {
                             sessions.map((item: any, index: number) => (
-                                item.status === 'accepted' ?
-                                    // <div key={index} className="w-fit p-4 bg-darkgrey">
+                                // <div key={index} className="w-fit p-4 bg-darkgrey">
                                     <div key={index} className="w-fit p-4 bg-darkgrey rounded-lg shadow-md transform transition-all duration-300 hover:scale-105 hover:shadow-lg overflow-hidden">
-                                        <div className="flex space-x-3 items-center">
-                                            <Avatar
-                                                username={item.expert.username}
-                                                image={base64Images.get(item.expert._id)}
-                                            />
-                                            <div>
-                                                <div className="text-lg">{item.expert.username}</div>
-                                                <div className="text-sm">{item.expert.email}</div>
-                                            </div>
+                                    <div className="flex space-x-3 items-center">
+                                        <Avatar
+                                            username={item.admin.username}
+                                            // image={item.customerId.image}
+                                            image={base64Images.get(item.admin._id)}
+                                        />
+                                        <div>
+                                            <div className="text-lg">{item.name}</div>
                                         </div>
-                                        <hr className="my-2" />
-                                        <div><span className="font-bold">Title  : </span> {item.title}</div>
-                                        <div><span className="font-bold">Starts at : </span> {formatDateYYYY_MM_DD_h_m(item.start)}</div>
-                                        <div><span className="font-bold">Duration  : </span> {item.duration} min</div>
-                                        <div><span className="font-bold">Price  : </span> ${item.price}</div>
-                                        <hr className="my-3" />
-                                        <div className="w-full flex justify-center space-x-4">
-                                            <button
-                                                className="py-1 w-full border border-lightgrey rounded-lg flex items-center justify-center disabled:opacity-50"
-                                                onClick={() => cancelEvent(item)}
-                                            >
-                                                Cancel
-                                            </button>
-                                            <button
-                                                className="py-1 w-full bg-green rounded-lg flex items-center justify-center disabled:opacity-50"
-                                                disabled={status === 'review'}
-                                                onClick={() => editEvent(item)}
-                                            >
-                                                Edit
-                                            </button>
-                                            <button
-                                                className="py-1 w-full bg-green rounded-lg flex items-center justify-center disabled:opacity-50"
-                                                onClick={() => navigateExpert(item.expert)}
-                                            >
-                                                Chat
-                                            </button>
-                                        </div>
-                                    </div> :
-                                    null
+                                    </div>
+                                    <hr className="my-2"/>
+                                    {/* <div><span className="font-bold">Title  : </span> {item.name}</div> */}
+                                    {/* <div><span className="font-bold">Description  : </span> {item.description}</div> */}
+                                    <div><span
+                                        className="font-bold">Starts at : </span> {formatDateYYYY_MM_DD_h_m(item.start)}
+                                    </div>
+                                    <div><span className="font-bold">Duration  : </span> {item.duration} min
+                                    </div>
+                                    <div><span className="font-bold">Price  : </span> ${item.price}</div>
+                                    <hr className="my-2"/>
+                                    <button
+                                        className="py-1 w-full bg-green rounded-lg flex items-center justify-center disabled:opacity-50"
+                                        onClick={() => navigateSeminar(item)}
+                                    >
+                                        Go To Session
+                                    </button>
+                                </div>
                             ))
                         }
                     </div> :
-                    <div className="text-center text-lightgrey my-10">No booked individual sessions</div>
+                    <div className="text-center text-lightgrey my-10">No Booked Individual sessions</div>
             }
+
+
             <div className="text-center text-2xl my-6">Pending Individual Sessions</div>
             {
-                sessions.length ?
+                pendingSessions.length ?
                     <div className="flex flex-wrap justify-center gap-6">
                         {
-                            sessions.map((item: any, index: number) => (
-                                item.status === 'pending' ?
-                                    // <div key={index} className="w-fit p-4 bg-darkgrey">
-                                    <div key={index} className="w-fit p-4 bg-darkgrey rounded-lg shadow-md transform transition-all duration-300 hover:scale-105 hover:shadow-lg overflow-hidden">
-                                        <div className="flex space-x-3 items-center">
-                                            <Avatar
-                                                username={item.expert.username}
-                                                image={base64Images.get(item.expert._id)}
-                                            />
-                                            <div>
-                                                <div className="text-lg">{item.expert.username}</div>
-                                                <div className="text-sm">{item.expert.email}</div>
-                                            </div>
+                            pendingSessions.map((item: any, index: number) => (
+                                // <div key={index} className="w-fit p-4 bg-darkgrey">
+                                <div key={index} className="w-fit p-4 bg-darkgrey rounded-lg shadow-md transform transition-all duration-300 hover:scale-105 hover:shadow-lg overflow-hidden">
+                                    <div className="flex space-x-3 items-center">
+                                        <Avatar
+                                            username={item.admin.username}
+                                            //image={item.groupChatId.admin.image}
+                                            image={base64Images.get(item.admin._id)}
+                                        />
+                                        <div>
+                                            <div className="text-lg">{item.admin.username}</div>
+                                            <div className="text-sm">{item.admin.email}</div>
                                         </div>
-                                        <hr className="my-2"/>
-                                        <div><span className="font-bold">Title  : </span> {item.title}</div>
-                                        <div><span
-                                            className="font-bold">Starts at : </span> {item.start ? formatDateYYYY_MM_DD_h_m(item.start) : 'undefined'}
-                                        </div>
-                                        <div><span
-                                            className="font-bold">Duration  : </span> {item.start ? `${item.duration} min` : 'undefined'}
-                                        </div>
-                                        <div><span className="font-bold">Price  : </span> ${item.price}</div>
-                                        <hr className="my-3"/>
-                                        {item.createdBy === userId ?
+                                    </div>
+                                    <hr className="my-2"/>
+                                    <div><span className="font-bold">Title  : </span> {item.name}</div>
+                                    <div><span
+                                        className="font-bold">Description  : </span> {item.description}
+                                    </div>
+                                    <div><span
+                                        className="font-bold">Starts at : </span> {formatDateYYYY_MM_DD_h_m(item.start)}
+                                    </div>
+                                    <div><span className="font-bold">Duration  : </span> {item.duration} min
+                                    </div>
+                                    <div><span className="font-bold">Price  : </span> ${item.price}</div>
+                                    <hr className="my-3"/>
+                                    {item.createdBy._id === userId ?
                                         <button
-                                                className="py-1 w-full border border-lightgrey rounded-lg flex items-center justify-center disabled:opacity-50"
-                                                onClick={() => cancelEvent(item)}
-                                            >
-                                                Cancel
-                                            </button>:
-                                            <button
+                                            className="py-1 w-full border border-lightgrey rounded-lg flex items-center justify-center disabled:opacity-50"
+                                            onClick={() => cancelAppointment(item)}
+                                        >
+                                            Cancel
+                                        </button>
+                                        : <button
                                             className="py-1 w-full bg-green rounded-lg flex items-center justify-center disabled:opacity-50"
-                                            onClick={() => acceptInvitation(item)}
+                                            disabled={status === 'review'}
+                                            onClick={() => { set_showPayment(true); set_item(item); }}
                                         >
                                             Accept
-                                        </button>}
-                                    </div> :
-                                   null
+                                        </button>
+                                    }
+                                </div>
                             ))
                         }
                     </div> :
-                    <div className="text-center text-lightgrey my-10">No pending individual session</div>
+                    <div className="text-center text-lightgrey my-10">No pending Individual sessions</div>
             }
             {
                 editModalShow ?
@@ -381,6 +421,35 @@ const Dashboard = () => {
                     </div> :
                     null
             }
+            {showPayment && (
+                                        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                                            <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4 relative">
+                                                {/* Close button */}
+                                                <button
+                                                    onClick={() => set_showPayment(false)}
+                                                    className="absolute top-4 right-4 text-gray-500 hover:text-gray-700 text-xl font-bold"
+                                                >
+                                                    ×
+                                                </button>
+
+                                                {/* Payment Component */}
+                                                <Payment
+                                                    type="Session"
+                                                    price={item.price}
+                                                    pendingDetails={{
+                                                        name: item.name,
+                                                        start: item.startTime,
+                                                        end: item.endTime,
+                                                        duration: item.duration,
+                                                        price: item.price,
+                                                        expert: item.admin,
+                                                        groupChatId: item._id,
+                                                    }}
+                                                    onClose={() => set_showPayment(true)} // Pass close function to Payment component if needed
+                                                />
+                                            </div>
+                                        </div>
+            )}
             <div
                 style={{
                     position: "fixed",

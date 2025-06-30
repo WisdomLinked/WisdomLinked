@@ -7,6 +7,8 @@ import {useAppSelector} from "../../../store"
 import ResizeRoomButton from "../ResizeRoomButton";
 import FlipCamera from "./FlipCamera";
 import ChatButton from "./ChatButton";
+import AddPersonButton from "./AddPersonButton";
+import { callRequest } from "../../../socket/socketConnection";
 
 
 const RoomButtons: React.FC<{
@@ -28,6 +30,18 @@ const RoomButtons: React.FC<{
     console.log("room", room);
     console.log("groupChatId", groupChatId);
 
+    const handleAddPerson = () => {
+        callRequest({
+            audioOnly: videoChat.audioOnly,
+            callerName: userDetails
+                ? userDetails.username
+                : "",
+            receiverUserId: '67ed431be4443b32614993f0',
+            eventId: eventId,
+            userRole: userDetails?.role,
+     });
+    };
+
     return (
         <div className={`w-[100%] h-[50px] bg-green flex items-center justify-center`}>
             {videoChat.localStream ? (
@@ -47,6 +61,9 @@ const RoomButtons: React.FC<{
                     )}
                     <Microphone localStream={videoChat.localStream} />
                     {!isRoomMinimized && (<ChatButton isChatOpen={isChatOpen} toggleChat={toggleChat} />)}
+                    <AddPersonButton 
+                        onAddPerson={handleAddPerson}
+                    />
                     <ResizeRoomButton
                         isRoomMinimized={isRoomMinimized}
                         handleRoomResize={handleRoomResize}

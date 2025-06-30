@@ -77,13 +77,20 @@ const joinGeneralChat = async (req, res) => {
     }
 };
 
-const createGroupChat = async (req, res) => {
+const createGroupChatByUser = async (req, res) => {
     try {
         const { userId } = req.user;
-        const { name, description, services, keywords, start, end, duration, price } = req.body;
+        const { name, description, services, keywords, start, end, duration, price, expert, payment_intent } = req.body;
 
+        
         if (checkTitleNameInvalid('Name', name)) {
             throw new Error(checkTitleNameInvalid('Name', name))
+        }
+
+        const paymentIntentSucceeded_test = await checkPaymentIntentSucceeded(payment_intent, 'test')
+        const paymentIntentSucceeded_live = await checkPaymentIntentSucceeded(payment_intent, 'live')
+        if (price && !paymentIntentSucceeded_test && !paymentIntentSucceeded_live) {
+            throw new Error("Payment intent not succeeded")
         }
 
         // create group
@@ -96,8 +103,75 @@ const createGroupChat = async (req, res) => {
             end: end,
             duration: duration,
             price: price,
-            participants: [userId],
+            participants: [userId,expert],
+            admin: expert,
+            type: 'individual',
+            status: 'pending',
+            createdBy: userId,
+        });
+
+        const currentUser = await User.findById(userId);
+        currentUser.groupChats.push(chat._id);
+        await currentUser.save();
+        currentUser.populate(['events', 'keywords', 'services', 'groupChats'])  
+
+        updateUsersGroupChatList(userId.toString());
+
+        const expertUser = await User.findById(expert);
+        expertUser.groupChats.push(chat._id);
+        await expertUser.save();
+        expertUser.populate(['events', 'keywords', 'services', 'groupChats'])
+        
+        updateUsersGroupChatList(expert.toString());
+
+        await appendPaymentHistory({
+            stripeMode: paymentIntentSucceeded_test ? 'test' : 'live',
+            paymentType: 'charge',
+            amount: paymentIntentSucceeded_test ? paymentIntentSucceeded_test.amount : paymentIntentSucceeded_live.amount,
+            currency: paymentIntentSucceeded_test ? paymentIntentSucceeded_test.currency : paymentIntentSucceeded_live.currency,
+            description: chat.name,
+            paymentIntent: payment_intent,
+            customer: userId.toString(),
+            expert: expert.toString(),
+            groupChat: chat._id.toString(),
+            // pendingAppointmentToGroup: newPendingGroup._id
+        })
+
+        return res.status(200).json({
+            result: currentUser,
+        });
+    } catch (err) {
+        console.log(err);
+        return res
+            .status(500)
+            .send(err.message);
+    }
+};
+
+const createGroupChat = async (req, res) => {
+    try {
+        const { userId } = req.user;
+        const { name, description, services, keywords, start, end, duration, price, type, status, customerId } = req.body;
+
+        if (checkTitleNameInvalid('Name', name)) {
+            throw new Error(checkTitleNameInvalid('Name', name))
+        }
+        
+        // create group
+        const chat = await GroupChat.create({
+            name: name,
+            description: description,
+            services: services,
+            keywords: keywords,
+            start: start,
+            end: end,
+            duration: duration,
+            price: price,
+            participants: type === 'individual' ? [customerId, userId] : [userId],
             admin: userId,
+            type : type,
+            status: status,
+            createdBy: userId,
         });
 
         const currentUser = await User.findById(userId);
@@ -106,6 +180,18 @@ const createGroupChat = async (req, res) => {
         currentUser.populate(['events', 'keywords', 'services', 'groupChats'])
 
         updateUsersGroupChatList(userId.toString());
+
+        if(type === 'individual' && customerId) {
+            const customer = await User.findById(customerId);
+            if (!customer) {
+                throw new Error("Customer not found");
+            }
+            customer.groupChats.push(chat._id);
+            await customer.save();
+            customer.populate(['events', 'keywords', 'services', 'groupChats'])
+
+            updateUsersGroupChatList(customerId.toString());
+        }
 
         return res.status(200).json({
             result: currentUser,
@@ -117,16 +203,113 @@ const createGroupChat = async (req, res) => {
     }
 };
 
+const getGroupChat = async (req, res) => {
+    try {   
+        const { groupChatId } = req.params;
+
+        //check if groupchatID is i in porper format 
+        if (!groupChatId || groupChatId.length !== 24) {
+            return res.status(400).send("Sorry, Invalid meeting ID");
+        }
+
+        // check if groupChat exists
+        const groupChat = await GroupChat.findOne({ _id: groupChatId })
+
+        if (!groupChat) {
+            return res.status(404).send("Sorry, Invalid meeting ID");
+        }
+
+        return res.status(200).json(groupChat);
+    } catch (err) {
+        console.log(err);
+        return res
+            .status(500)
+            .send(err.message);     
+    }
+}
+
+const joinGroupChat = async (req, res) => {
+    try {
+        const { userId } = req.user;
+        const { groupChatId, payment_intent } = req.body;
+
+        // check if groupChat exists    
+        console.log('[joinGroupChat]', groupChatId, userId)
+        const groupChat = await GroupChat.findOne({ _id: groupChatId });
+        if (!groupChat) {
+            return res.status(404).send("Sorry, Invalid meeting ID");
+        }
+
+        // if end < now cant join past chat
+        const now = new Date().getTime();
+        if(new Date(groupChat.end).getTime() < now) {
+            return res.status(400).send("Cannot join a past meeting");
+        }
+
+        if (groupChat.status !== 'active') {
+            return res.status(400).send("Sorry, the meeting is not active");
+        }
+
+        if (groupChat.participants.includes(userId)) {
+            return res.status(400).send("You are already a participant of this meeting");
+        }
+        
+        if (userId.role === 'customer') {
+            const paymentIntentSucceeded_test = await checkPaymentIntentSucceeded(payment_intent, 'test')
+            const paymentIntentSucceeded_live = await checkPaymentIntentSucceeded(payment_intent, 'live')
+            if (price && !paymentIntentSucceeded_test && !paymentIntentSucceeded_live) {
+                throw new Error("Payment intent not succeeded")
+            }
+
+            await appendPaymentHistory({
+                stripeMode: paymentIntentSucceeded_test ? 'test' : 'live',
+                paymentType: 'charge',
+                amount: paymentIntentSucceeded_test ? paymentIntentSucceeded_test.amount : paymentIntentSucceeded_live.amount,
+                currency: paymentIntentSucceeded_test ? paymentIntentSucceeded_test.currency : paymentIntentSucceeded_live.currency,
+                description: groupChat.name,
+                paymentIntent: payment_intent,
+                customer: userId.toString(),
+                expert: groupChat.admin.toString(),
+                groupChat: groupChatId.toString(),
+            })
+            
+        }
+
+        const currentUser = await User.findById(userId);
+        currentUser.groupChats.push(groupChatId);
+        await currentUser.save();
+        currentUser.populate(['events', 'keywords', 'services', 'groupChats'])  
+
+        updateUsersGroupChatList(userId.toString());
+
+        groupChat.participants = [...groupChat.participants,userId]
+        await groupChat.save();
+
+        // update the chat list of all participants
+        groupChat.participants.map(participantId => {
+            updateUsersGroupChatList(participantId.toString());
+        })
+
+    } catch (err) {
+        console.log(err);
+        return res
+            .status(500)
+            .send(err.message);     
+    }
+
+}
+
+
 const updateGroupChat = async (req, res) => {
     try {
         const { userId } = req.user;
-        const { groupId, name, description, services, keywords, start, end, duration, price, totalTimeSpent } = req.body;
+        const { groupId, name, description, services, keywords, start, end, duration, price, totalTimeSpent, type } = req.body;
 
         if (!groupId) {
             throw new Error("Group ID is required");
         }
 
-        console.log(groupId, name, description, services, keywords, start, end, duration, price);
+        console.log(groupId, name, description, services, keywords, start, end, duration, price, type);
 
         const groupChat = await GroupChat.findById(groupId);
 
@@ -144,6 +327,7 @@ const updateGroupChat = async (req, res) => {
         if (end !== undefined) updateFields.end = end;
         if (duration !== undefined) updateFields.duration = duration;
         if (price !== undefined) updateFields.price = price;
+        if (type !== undefined) updateFields.type = type;
         if (totalTimeSpent !== undefined){
             //updateFields.totalTimeSpend = totalTimeSpent;
             const existingTotalTimeSpent = groupChat.totalTimeSpent || 0;
@@ -251,6 +435,49 @@ const addMemberToPendingGroup = async (req, res) => {
             .send(err.message);
     }
 };
+
+const acceptIndividualAppointment = async (req,res) =>{
+    try {
+        const {email, userId} = req.user;
+        const {groupChatId,payment_intent} = req.body;
+
+        const groupChat = await GroupChat.findOne({ _id: groupChatId });
+
+        if (!groupChat) {
+            return res.status(404).send("Sorry, the group chat doesn't exist");
+        }
+
+        if (userId.role === 'customer') {
+            const paymentIntentSucceeded_test = await checkPaymentIntentSucceeded(payment_intent, 'test')
+            const paymentIntentSucceeded_live = await checkPaymentIntentSucceeded(payment_intent, 'live')
+            if (!paymentIntentSucceeded_test && !paymentIntentSucceeded_live) {
+                throw new Error("Payment intent not succeeded")
+            }
+
+            await appendPaymentHistory({
+                stripeMode: paymentIntentSucceeded_test ? 'test' : 'live',
+                paymentType: 'charge',
+                amount: paymentIntentSucceeded_test ? paymentIntentSucceeded_test.amount : paymentIntentSucceeded_live.amount,
+                currency: paymentIntentSucceeded_test ? paymentIntentSucceeded_test.currency : paymentIntentSucceeded_live.currency,
+                description: groupChat.name,
+                paymentIntent: payment_intent,
+                customer: userId.toString(),
+                expert: groupChat.admin.toString(),
+                groupChat: groupChatId,
+                // pendingAppointmentToGroup: newPendingGroup._id
+            })
+        }
+
+        groupChat.status = 'active';
+        await groupChat.save();
+
+        return res.status(200).send("Group chat accepted successfully!");
+        
+    } catch (err) {
+        console.log(err);
+        return res.status(500).send(err.message);
+    }
+}
 
 const addMemberToGroup = async (req, res) => {
     try {
@@ -411,6 +638,71 @@ const deleteGroup = async (req, res) => {
     }
 };
 
+const cancelIndividualAppointment = async (req, res) => {
+    try {
+        const { userId } = req.user;
+        const { groupChatId } = req.body;
+
+        // check if groupChat exists
+        const groupChat = await GroupChat.findOne({ _id: groupChatId });
+        if (!groupChat) {
+            throw new Error("Sorry, the group chat doesn't exist");
+        }
+        if (groupChat.status !== 'pending') {
+            throw new Error("Sorry, the group chat is not in pending status");
+        }
+
+        const currentUser = await User.findById(userId);
+        if (!currentUser) {
+            throw new Error("User not found");
+        }
+
+        groupChat.participants.forEach(async (participantId) => {
+            const participant = await User.findById(participantId);
+            if (participant) {
+                participant.groupChats = participant.groupChats.filter((chat) => chat.toString() !== groupChatId);
+                await participant.save();
+            }
+            // update the users group chat list
+            updateUsersGroupChatList(participantId.toString());
+        });
+
+        if (groupChat.admin.toString() !== userId) {
+
+            const payment = await PaymentHistory.findOne({ groupChat: groupChatId, customer: userId });
+
+            if (payment) {
+                const refund = await refundPaymentIntent(payment.paymentIntent, payment.amount, payment.stripeMode)
+                if (refund) {
+                    appendPaymentHistory({
+                        stripeMode: payment.stripeMode,
+                        amount: payment.amount,
+                        currency: payment.currency,
+                        description: payment.description,
+                        customer: payment.customer,
+                        expert: payment.expert,
+                        // pendingAppointmentToGroup: PaymentHistory.pendingAppointmentToGroup,
+                        groupChat: payment.groupChat,
+                        event: payment.event,
+                        paymentType: 'refund',
+                        paymentIntent: refund.payment_intent,
+                    })
+                }
+            }
+        }
+
+        groupChat.status = 'cancelled';
+        await groupChat.save();
+
+        return res.status(200).send("Your appointment has been canceled!");
+    } catch (err) {
+        console.log(err);
+        return res
+            .status(500)
+            .send(err.message);
+    }
+}
+
 const cancelPendingSeminar = async (req, res) => {
     try {
         const { userId } = req.user;
@@ -552,13 +844,18 @@ const leftSeminar = async (req, res) => {
 
 module.exports = {
     createGroupChat,
+    createGroupChatByUser,
+    getGroupChat,
+    joinGroupChat,
     updateGroupChat,
     addMemberToPendingGroup,
+    acceptIndividualAppointment,
     addMemberToGroup,
     leaveGroup,
     deleteGroup,
     createGeneralChatAndJoinGlobalChat,
     joinGeneralChat,
     cancelPendingSeminar,
+    cancelIndividualAppointment,
     leftSeminar
 };

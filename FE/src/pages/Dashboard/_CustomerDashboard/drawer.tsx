@@ -12,6 +12,7 @@ import DashboardIcon from '@mui/icons-material/Dashboard';
 import PersonSearchIcon from '@mui/icons-material/PersonSearch';
 import Calendar from "./calendar";
 import Dashboard from "./dashboard";
+import JoinMeeting from "../joinMeeting"
 import { useAppSelector } from "../../../store";
 import Search from "./search";
 import { doGetMyEvents } from "../../../api/api";
@@ -22,6 +23,7 @@ import { cancelCallRequest, notifyChatLeft } from "../../../socket/socketConnect
 import { clearVideoChat } from "../../../actions/videoChatActions";
 import CustomerProfile from "./profile";
 import ManageAccounts from "@mui/icons-material/ManageAccounts";
+import MeetingRoomIcon from "@mui/icons-material/MeetingRoom";
 import FriendsTitle from "../FriendsSideBar/FriendsTitle";
 import GroupChatList from "../FriendsSideBar/GroupChatList";
 import Seminars from "./seminars";
@@ -112,26 +114,6 @@ export default function CustomerDrawer(props: Props) {
         });
     }
 
-    // Close all call when session expires ----------
-
-    // useEffect(() => {
-    //     if (oldCurrentEvent && !currentEvent) {
-    //         closeAllCall()
-
-    //         // OPENING FEEDBACK POPUP -----------
-    //         if (oldCurrentEventWasOngoing) {
-    //             if (oldCurrentEvent.type === 'seminar') {
-    //                 openFeedbackModal(oldCurrentEvent.admin._id)
-    //             } else if (oldCurrentEvent.type === 'event') {
-    //                 openFeedbackModal(otherUserId)
-
-    //             }
-    //         }
-    //     }
-    // }, [currentEvent, oldCurrentEvent])
-
-    // Resetting current event --------------
-
     const [resetCurrentEventFlag, set_resetCurrentEventFlag] = useState(false)
 
     useEffect(() => {
@@ -195,6 +177,10 @@ export default function CustomerDrawer(props: Props) {
                         <CalendarMonthIcon fontSize="medium" />
                         <span className="text-[10px]">Calendar</span>
                     </Link>
+                    <Link to={`${process.env.REACT_APP_AUTH_URL}customerdashboard/joinMeeting`} className={`flex flex-col items-center ${location === 'joinmeeting' ? 'text-lightgrey' : 'text-grey hover:text-lightgrey'} ${userDetails.status === 'review' ? 'pointer-events-none' : ''}`}>
+                        <MeetingRoomIcon fontSize="medium" />
+                        <span className="text-[10px]">Join Meeting</span>
+                    </Link>
                     <Link to={`${process.env.REACT_APP_AUTH_URL}customerdashboard/profile`} className={`flex flex-col items-center ${location === 'customerprofile' ? 'text-lightgrey' : 'text-grey hover:text-lightgrey'}`}>
                         <ManageAccounts fontSize="medium" />
                         <span className="text-[10px]">Profile</span>
@@ -217,10 +203,17 @@ export default function CustomerDrawer(props: Props) {
                     <ActiveRooms /> */}
                     <div className="bg-black w-full h-[1px]" />
                     <div className="flex items-center mb-4">
+                        <FriendsTitle title="Individual Sessions" />
+                    </div>
+                    <div className="h-[250px] overflow-y-auto">
+                        <GroupChatList type = "individual"/>
+                    </div>
+                    <div className="bg-black w-full h-[1px]" />
+                    <div className="flex items-center mb-4">
                         <FriendsTitle title="Seminars" />
                     </div>
                     <div className="h-[250px] overflow-y-auto">
-                        <GroupChatList/>
+                        <GroupChatList type = "seminar"/>
                     </div>
                 </div>
             </div>
@@ -230,6 +223,7 @@ export default function CustomerDrawer(props: Props) {
                     <Route path="/chat" element={<Messenger videoChaton = {!!props.localStream}/>} />
                     <Route path="/search" element={<Search />} />
                     <Route path="/seminar" element={<Seminars />} />
+                    <Route path="/joinMeeting" element={<JoinMeeting />} />
                     <Route path="/profile" element={<CustomerProfile userDetails={userDetails} />} />
                     <Route path="/*" element={<Dashboard />} />
                 </Routes>

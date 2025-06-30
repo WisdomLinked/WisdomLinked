@@ -2,9 +2,14 @@ const express = require("express");
 const router = express.Router();
 
 const {
+    getGroupChat,
+    joinGroupChat,
     createGroupChat,
+    createGroupChatByUser,
     addMemberToPendingGroup,
     addMemberToGroup,
+    acceptIndividualAppointment,
+    cancelIndividualAppointment,
     leaveGroup,
     deleteGroup,
     updateGroupChat,
@@ -13,11 +18,38 @@ const {
 
 const { requireAuth, expertAuth } = require("../middlewares/requireAuth");
 
+
+router.get(
+    "/:groupChatId",
+    requireAuth(true),
+    getGroupChat
+);
+
+router.post(
+    "/join",
+    requireAuth(true),
+    joinGroupChat
+);
+
 // create a groupChat
 router.post(
     "/",
     expertAuth(true),
     createGroupChat
+);
+
+//create a groupChat by a user
+router.post(
+    "/create-by-user",
+    requireAuth(true),
+    createGroupChatByUser
+);
+
+// accept individual appointment
+router.post(
+    "/accept-individual-appointment",
+    requireAuth(true),
+    acceptIndividualAppointment
 );
 
 // update a groupChat
@@ -45,6 +77,12 @@ router.post(
     requireAuth(false),
     joinGeneralChat
 );
+
+router.post("/cancel-individual-appointment", 
+    requireAuth(false), 
+    cancelIndividualAppointment
+);
+
 
 // delete a group
 router.post(

@@ -129,11 +129,14 @@ const VideoChat = ({
     useEffect(() => {
         if (!isRoomMinimized) {
             updatePosition(0, 0);
-            dispatch(setChosenChatDetails({
-                userId: otherUserInfo._id,
-                username: otherUserInfo.username,
-                image: otherUserInfo.image,
-              }))
+            if (otherUserInfo)
+            {
+                dispatch(setChosenChatDetails({
+                    userId: otherUserInfo._id,
+                    username: otherUserInfo.username,
+                    image: otherUserInfo.image,
+                }))
+            }
             dispatch({ type: actionTypes.updateMissedChats, payload: { receiverId: otherUserId, count: 0 } })
             const response = role === "expert"
                     ? navigate(`${process.env.REACT_APP_AUTH_URL}expertdashboard/chat`)

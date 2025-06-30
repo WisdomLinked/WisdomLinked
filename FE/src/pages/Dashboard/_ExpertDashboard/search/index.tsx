@@ -6,7 +6,7 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import EventDetail from "../eventDetail";
 import { useAppSelector } from "../../../../store";
 import { getAvatarTitle } from "../../../../actions/common";
-import {createEvent, profileImageFetch} from "../../../../api/api";
+import { profileImageFetch, createGroupChat} from "../../../../api/api";
 import { useDispatch } from "react-redux";
 import { Swiper, SwiperSlide } from "swiper/react";
 import { Pagination, Navigation } from "swiper";
@@ -14,7 +14,6 @@ import { SetLoadingStatus } from "../../../../actions/appActions";
 import Customers from "./customers";
 import ShowFieldError from "../../../../components/ShowFieldError";
 import { showAlert } from "../../../../actions/alertActions";
-import {isEmptyObject} from "jquery";
 
 const Search = () => {
     const { auth: { userDetails } } = useAppSelector((state) => state);
@@ -94,21 +93,40 @@ const Search = () => {
 
     const submit = async () => {
         SetLoadingStatus(true)
-        const response = await createEvent({
-            title: eventTitle,
-            start: startTime,
-            end: endTime,
-            duration: duration,
-            price: price,
-            customer: selectedCustomer.email,
-            expert: userDetails.email,
-            createdBy: userDetails._id
+        // const response = await createEvent({
+        //     title: eventTitle,
+        //     start: startTime,
+        //     end: endTime,
+        //     duration: duration,
+        //     price: price,
+        //     customer: selectedCustomer.email,
+        //     expert: userDetails.email,
+        //     createdBy: userDetails._id
+        // })
+        
+        // if (response) {
+        //     dispatch({
+        //         type: 'updateUserDetails',
+        //         payload: response.userDetails
+        //     })
+        //     set_step(3)
+        // }
+        const response = await createGroupChat({
+                        name: eventTitle,
+                        start: startTime,
+                        end: endTime,
+                        duration: duration,
+                        price: price,
+                        type: 'individual',
+                        status: 'pending',
+                        admin: userDetails._id,
+                        customerId: selectedCustomer._id,
         })
         if (response) {
-            dispatch({
-                type: 'updateUserDetails',
-                payload: response.userDetails
-            })
+            console.log("response: ",response);
+
+            const groupChatId = response.result.groupChats[response.result.groupChats.length - 1];
+
             set_step(3)
         }
         SetLoadingStatus(false)

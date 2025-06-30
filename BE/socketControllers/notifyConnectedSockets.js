@@ -60,6 +60,14 @@ const updateUsersGroupChatList = async (userId) => {
         },
         {
             path: "groupChats",
+            populate: {
+                path: "createdBy",
+                model: "User",
+                select: "_id email username role status",
+            },
+        },
+        {
+            path: "groupChats",
             populate: ["keywords", "services"]
         }
     ]);
@@ -83,7 +91,8 @@ const updateUsersGroupChatList = async (userId) => {
                 participants: groupChat.participants,
                 admin: groupChat.admin,
                 lastChatDate: groupChat?.updatedAt,
-                missedChats: user.missedChats?.[groupChat._id] || 0
+                missedChats: user.missedChats?.[groupChat._id] || 0,
+                type: groupChat.type
             };
         })
         : [];

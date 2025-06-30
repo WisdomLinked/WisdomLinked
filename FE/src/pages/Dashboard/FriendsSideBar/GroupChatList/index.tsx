@@ -20,15 +20,15 @@ const SearchInput = styled("input")({
     },
 });
 
-const GroupChatList = () => {
+const GroupChatList = ({ type }: { type: string }) => {
     const { friends: { groupChatList }, auth: { userDetails } } = useAppSelector((state) => state);
     const [updatedGroupChats, set_updatedGroupChats] = useState<any>([])
     const [searchQuery, setSearchQuery] = useState<string>("");
 
     useEffect(() => {
         const now = new Date().getTime();
-        const upcomingChats = groupChatList.filter((chat: any) => new Date(chat.end).getTime() >= now);
-        const pastChats = groupChatList.filter((chat: any) => new Date(chat.end).getTime() < now);
+        const upcomingChats = groupChatList.filter((chat: any) => new Date(chat.end).getTime() >= now && chat.type === type);
+        const pastChats = groupChatList.filter((chat: any) => new Date(chat.end).getTime() < now && chat.type === type);
 
         // Sort upcoming chats in ascending order
         upcomingChats.sort((a: any, b: any) => new Date(a.start).getTime() - new Date(b.start).getTime());
@@ -54,7 +54,7 @@ const GroupChatList = () => {
             {/* Added Search Input */}
             <SearchInput
                 type="text"
-                placeholder="Search seminars..."
+                placeholder={type === "seminar" ? "Search seminars..." : "Search sessions..."}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
             />

@@ -68,9 +68,11 @@ const FilterSeminars = ({
     }
 
     useEffect(() => {
-        let temp: any = []
+        let temp: any = []        
         for (let i = 0; i < seminars.length; i++) {
             let available = true
+            if (seminars[i].type === 'individual')
+                continue
             for (let j = 0; j < myEvents.length; j++) {
                 const seminarStartTime = new Date(seminars[i].start).getTime()
                 const seminarEndTime = new Date(seminars[i].end).getTime()
