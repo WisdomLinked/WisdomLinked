@@ -261,6 +261,26 @@ export const createGroupChatByUser = async (details: any) => {
     }
 };
 
+export const getGroupChatById = async (groupChatId: string) => {
+    try {
+        const res = await api.get(`group-chat/${groupChatId}`);
+
+        return res.data;
+    } catch (err: any) {
+        return checkForAuthorization(err);
+    }
+};
+
+export const joinGroupChat = async (details: any) => {
+    try {
+        const res = await api.post("group-chat/join", details);
+
+        return res.data;
+    } catch (err: any) {
+        return checkForAuthorization(err);
+    }
+};
+
 export const updateGroupChat = async (details: any) => {
     try {
         const res = await api.post("group-chat/update", details);

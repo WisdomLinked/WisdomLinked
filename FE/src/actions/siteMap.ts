@@ -7,6 +7,7 @@ export const siteMap: any = {
     '/user/customerdashboard/search': 'customersearch',
     '/user/customerdashboard/seminar': 'customerseminar',
     '/user/customerdashboard/calendar': 'customercalendar',
+    '/user/customerdashboard/joinMeeting': 'customerjoinmeeting',
     '/user/customerdashboard/profile': 'customerprofile',
 
     '/user/expertdashboard': 'expertdashboard',
@@ -14,6 +15,7 @@ export const siteMap: any = {
     '/user/expertdashboard/calendar': 'expertcalendar',
     '/user/expertdashboard/timeslots': 'experttimeslots',
     '/user/expertdashboard/profile': 'expertprofile',
+    '/user/expertdashboard/joinMeeting': 'expertjoinmeeting',
     '/user/expertdashboard/seminar': 'expertseminar',
     '/user/expertdashboard/search': 'expertsearch',
 

@@ -11,6 +11,7 @@ import CalendarMonthIcon from '@mui/icons-material/CalendarMonth';
 import DashboardIcon from '@mui/icons-material/Dashboard';
 import ScheduleIcon from '@mui/icons-material/Schedule';
 import ManageAccountsIcon from '@mui/icons-material/ManageAccounts';
+import MeetingRoomIcon from '@mui/icons-material/MeetingRoom';
 import Calendar from "./calendar";
 import Dashboard from "./dashboard";
 import { useAppSelector } from "../../../store";
@@ -21,6 +22,7 @@ import { isTheEventGoingOn } from "../../../actions/common";
 import { cancelCallRequest, notifyChatLeft } from "../../../socket/socketConnection";
 import { clearVideoChat } from "../../../actions/videoChatActions";
 import ExpertProfile from "./profile";
+import JoinMeeting from "../joinMeeting"
 import FriendsTitle from "../FriendsSideBar/FriendsTitle";
 import GroupChatList from "../FriendsSideBar/GroupChatList";
 import CastForEducationIcon from '@mui/icons-material/CastForEducation';
@@ -188,6 +190,10 @@ export default function ExpertDrawer(props: Props) {
                         <CalendarMonthIcon fontSize="medium" />
                         <span className="text-[10px]">Calendar</span>
                     </Link>
+                    <Link to={`${process.env.REACT_APP_AUTH_URL}expertdashboard/joinMeeting`} className={`flex flex-col items-center ${location === 'expertjoinMeeting' ? 'text-lightgrey' : 'text-grey hover:text-lightgrey'} ${userDetails.status === 'review' ? 'pointer-events-none' : ''}`}>
+                        <MeetingRoomIcon fontSize="medium" />
+                        <span className="text-[10px]">Join Meeting</span>
+                    </Link>
                     <Link to={`${process.env.REACT_APP_AUTH_URL}expertdashboard/timeslots`} className={`flex flex-col items-center ${location === 'experttimeslots' ? 'text-lightgrey' : 'text-grey hover:text-lightgrey'}`}>
                         <ScheduleIcon fontSize="medium" />
                         <span className="text-[10px]">Availability</span>
@@ -243,6 +249,7 @@ export default function ExpertDrawer(props: Props) {
                     <Route path="/profile" element={<ExpertProfile userDetails={userDetails} />} />
                     <Route path="/seminar" element={<ExpertSeminar />} />
                     <Route path="/search" element={<Search />} />
+                    <Route path ="/joinMeeting" element={<JoinMeeting />} />
                     <Route path="/*" element={<Dashboard />} />
                 </Routes>
                 {props.localStream && <VideoChat role = {userDetails.role} otherUserId ={otherUserId}/>}

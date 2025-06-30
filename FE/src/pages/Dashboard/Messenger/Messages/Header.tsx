@@ -28,6 +28,8 @@ import { updateMe } from "../../../../actions/authActions";
 import { showAlert } from "../../../../actions/alertActions";
 import { resetChatAction, setChosenGroupChatDetails } from "../../../../actions/chatActions";
 import ProfileModal from "./ProfileModal";
+import { ShareIcon } from "lucide-react";
+import { set } from "date-fns";
 
 const MessagesHeader = ({ scrollPosition, events, openCalendarModal, openSeminarModal, openEditSeminarModal }: any) => {
 
@@ -53,6 +55,8 @@ const MessagesHeader = ({ scrollPosition, events, openCalendarModal, openSeminar
     const [joinPopupBlocked, set_joinPopupBlocked] = useState(userDetails.joinPopupBlocked)
     const [joinPopupShow, set_joinPopupShow] = useState(false)
     const [kickedFromSeminar, set_kickedFromSeminar] = useState(false)
+    const [show_meeting_id, set_show_meeting_id] = useState(false);
+    const [copied, setCopied] = useState(false);
 
     const checkEnabledEvent = () => {
         let event = events.find((event: any) => event?._id === currentEvent?._id)
@@ -396,6 +400,16 @@ const MessagesHeader = ({ scrollPosition, events, openCalendarModal, openSeminar
                                                 <>
                                                     <button
                                                         className="w-full mt-5 flex space-x-4 justify-between items-center hover:opacity-50 disabled:opacity-50"
+                                                        onClick={() => {
+                                                            set_buttonsModalShow(false)
+                                                            set_show_meeting_id(true)
+                                                        }}
+                                                    >
+                                                        <span>Share Meeting ID</span>
+                                                        <ShareIcon />
+                                                    </button>
+                                                    <button
+                                                        className="w-full mt-5 flex space-x-4 justify-between items-center hover:opacity-50 disabled:opacity-50"
                                                         disabled={chosenGroupChatDetails?.participants.length > 1}
                                                         onClick={() => {
                                                             set_buttonsModalShow(false)
@@ -413,6 +427,7 @@ const MessagesHeader = ({ scrollPosition, events, openCalendarModal, openSeminar
                                                         <span>Delete Seminar</span>
                                                         <ClearIcon />
                                                     </button>
+         
                                                 </> :
                                                 <button
                                                     className="mt-5 w-full flex space-x-4 justify-between items-center hover:opacity-50 disabled:opacity-50"
@@ -467,6 +482,53 @@ const MessagesHeader = ({ scrollPosition, events, openCalendarModal, openSeminar
                     </div> :
                     null
             }
+            {
+    show_meeting_id ?
+        <OverlayPortal closeModal={() => set_show_meeting_id(false)}>
+            <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 z-50">
+                <div className="bg-black rounded-lg shadow-md p-6 text-white max-w-sm w-full mx-4">
+                    <div className="text-lg mb-4 text-center">Meeting ID:</div>
+                    <div className="text-xl font-bold text-center mb-4">{chosenGroupChatDetails?.groupId}</div>
+                    
+                    <div className="flex space-x-3">
+                        <button
+                            className="flex-1 bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg transition-colors flex items-center justify-center space-x-2"
+                            onClick={() => {
+                                navigator.clipboard.writeText(chosenGroupChatDetails?.groupId);
+                                setCopied(true);
+                                setTimeout(() => setCopied(false), 1000);
+                            }}
+                        >
+                            {copied ? (
+                                <>
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                    </svg>
+                                    <span>Copied!</span>
+                                </>
+                            ) : (
+                                <>
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                                    </svg>
+                                    <span>Copy</span>
+                                </>
+                            )}
+                        </button>
+                        
+                        <button
+                            className="flex-1 bg-gray-600 hover:bg-gray-700 px-4 py-2 rounded-lg transition-colors flex items-center justify-center space-x-2"
+                            onClick={() => set_show_meeting_id(false)}
+                        >
+                            <CloseIcon />
+                            <span>Close</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </OverlayPortal> :
+        null
+}
         </div>
     );
 };

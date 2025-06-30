@@ -2,6 +2,8 @@ const express = require("express");
 const router = express.Router();
 
 const {
+    getGroupChat,
+    joinGroupChat,
     createGroupChat,
     createGroupChatByUser,
     addMemberToPendingGroup,
@@ -15,6 +17,19 @@ const {
 } = require("../controllers/groupChat.controller");
 
 const { requireAuth, expertAuth } = require("../middlewares/requireAuth");
+
+
+router.get(
+    "/:groupChatId",
+    requireAuth(true),
+    getGroupChat
+);
+
+router.post(
+    "/join",
+    requireAuth(true),
+    joinGroupChat
+);
 
 // create a groupChat
 router.post(
