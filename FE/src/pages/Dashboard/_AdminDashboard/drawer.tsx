@@ -20,6 +20,8 @@ import GeneralChatList from "../FriendsSideBar/GeneralChatList";
 import Feedback from "../../../components/getFeedback";
 import GetContactedUs from "../../../components/getContactedUs";
 import RegisterUserByAdmin from "../../../components/registerUserByAdmin";
+import ChatBotQA from "./chatBotQA";
+import { SmartToy } from "@mui/icons-material";
 
 
 interface Props {
@@ -93,6 +95,17 @@ export default function AdminDrawer(props: Props) {
                         <span className="material-icons"><GroupAddIcon fontSize="medium"/></span>
                         <span className="text-[10px]">Register User</span>
                     </Link>
+                    <Link
+                        to={`${process.env.REACT_APP_AUTH_URL}admindashboard/chatBotQA`}
+                        className={`flex flex-col items-center ${
+                            location === 'chatbotqa'
+                                ? 'text-lightgrey'
+                                : 'text-grey hover:text-lightgrey'
+                        }`}
+                    >
+                        <span className="material-icons"><SmartToy fontSize="medium"/></span>
+                        <span className="text-[10px]">Chat Bot QA</span>
+                    </Link>
                 </div>
                 <div className={`w-[300px] h-full bg-darkgrey overflow-y-auto px-[15px] pt-4 pb-[5px] ${location === 'adminchat' ? '' : 'hidden'}`}>
                     <FriendsTitle title="Shared Community Chats" />
@@ -107,7 +120,7 @@ export default function AdminDrawer(props: Props) {
                     <Route path="/feedbacks" element={<Feedback />} />
                     <Route path="/contactedus" element={<GetContactedUs />} />
                     <Route path="/registerUser" element={<RegisterUserByAdmin />} />
-
+                    <Route path="/chatBotQA" element={<ChatBotQA />} />
                     <Route path="/*" element={<Dashboard />} />
                 </Routes>
             </div>
