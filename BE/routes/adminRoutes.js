@@ -33,6 +33,13 @@ const {
     getFeedback
 } = require("../controllers/event.controller");
 
+const {
+    createChatBotQA,
+    getChatBotQA,
+    updateChatBotQA,
+    deleteChatBotQA
+} = require("../controllers/chatBotQA.controller")
+
 router.post("/setStripeMode", adminAuth, setStripeMode)
 router.post("/filterUsers", adminAuth, filterUsers)
 router.post("/filterPaymentHistories", adminAuth, filterPaymentHistories)
@@ -52,5 +59,9 @@ router.post("/deletePendingUser", adminAuth, deletePendingUser);
 router.post("/deletePendingLogin", adminAuth, deletePendingLogin);
 router.post("/convertPendingUserToUserByAdmin", adminAuth, convertPendingUserToUserByAdmin);
 router.post("/registerUserByAdmin", adminAuth, registerUserByAdmin);
+router.post("/createChatBotQA", adminAuth, createChatBotQA)
+router.get("/getChatBotQA", adminAuth, getChatBotQA)
+router.post("/updateChatBotQA/:id", adminAuth, updateChatBotQA)
+router.post("/deleteChatBotQA/:id", adminAuth, deleteChatBotQA)
 
 module.exports = router;

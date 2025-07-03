@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
+import { getChatBotAnswer } from "../api/api";
 
 const Chatbot = () => {
     const [isMinimized, setIsMinimized] = useState<boolean>(true);
@@ -8,38 +9,30 @@ const Chatbot = () => {
 
     const dashboardGreen = "#31b099";
 
-    const actions = [
-        { question: "How to initiate a meeting with an expert?", answer: "Go to the 'Chat' section, select an expert, and click 'Request Meeting'." },
-        { question: "How to accept a meeting?", answer: "Navigate to the 'Dashboard', locate pending invitations, and click 'Accept'." },
-        { question: "How to change my avatar image?", answer: "Go to the 'Profile' section and upload a new image." },
-        { question: "What does the calendar do?", answer: "The calendar helps you manage your appointments and availability." },
-        { question: "How to change availability (Experts only)?", answer: "Go to the 'Availability' section and update your schedule." },
-        { question: "What is the 'Seminar' section?", answer: "The 'Seminar' section lists all scheduled seminars you can join or host." },
-    ];
+    const faqs = [
+        "How to accept a meeting?",
+        "How to upload/change my avatar image?",
+        "What does the calendar do?"
+    ]
 
     const handleInput = (e: React.ChangeEvent<HTMLInputElement>) => {
         setInput(e.target.value);
     };
 
-    const handleChatSubmit = (e: React.FormEvent) => {
+    const handleChatSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!input.trim()) return;
-
-        const matchedAction = actions.find((action) =>
-            action.question.toLowerCase().includes(input.toLowerCase())
-        );
-
-        if (matchedAction) {
-            setChat([...chat, { question: input, answer: matchedAction.answer }]);
-        } else {
-            setChat([...chat, { question: input, answer: "Sorry, I don't understand the question. Please select an action or type a question." }]);
-        }
+        const response = await getChatBotAnswer({question: input})
+        setChat([...chat, { question: input, answer: response.answer }]);
 
         setInput("");
     };
 
-    const handleQuickAction = (action: { question: string; answer: string }) => {
-        setChat([...chat, { question: action.question, answer: action.answer }]);
+    const handleQuickAction = async (input : string) => {
+        const response = await getChatBotAnswer({question: input})
+        setChat([...chat, { question: input, answer: response.answer }]);
+
+        setInput("");
     };
 
     useEffect(() => {
@@ -109,13 +102,13 @@ const Chatbot = () => {
                     >
                         <h3 className="text-sm font-semibold text-green-400 mb-2">Frequently asked questions:</h3>
                         <div className="flex flex-col gap-2">
-                            {actions.slice(0, 3).map((action, index) => (
+                            {faqs.map((input,index) => (
                                 <button
                                     key={index}
-                                    onClick={() => handleQuickAction(action)}
+                                    onClick={() => handleQuickAction(input)}
                                     className="bg-gray-800 hover:bg-green-500 text-white px-3 py-2 rounded-lg text-sm shadow"
                                 >
-                                    {action.question}
+                                    {input}
                                 </button>
                             ))}
                         </div>

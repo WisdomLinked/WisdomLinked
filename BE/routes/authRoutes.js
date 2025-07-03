@@ -40,6 +40,10 @@ const {
     getStripeMode
 } = require('../controllers/stripe.controller')
 
+const {
+    getChatBotAnswer
+} = require('../controllers/chatBotQA.controller')
+
 router.post("/register", uploads, register);
 router.post("/updateResume", uploads, updateResume);
 router.post("/uploadChatFile", uploads, uploadChatFile);
@@ -64,4 +68,5 @@ router.get("/healthCheck", healthCheck)
 router.get("/getTimezone",getTimeZone)
 router.post("/contact-form", submitContactForm)
 router.post("/sendEmailToAdmin", sendEmailToAdmin)
+router.post("/getChatBotAnswer",requireAuth(true),getChatBotAnswer)
 module.exports = router;

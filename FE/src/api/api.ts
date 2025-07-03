@@ -858,6 +858,15 @@ export const sendEmailToAdmin = async (message: string) => {
     }
 };
 
+export const getChatBotAnswer = async (data: any) => {
+    try {
+        const res = await api.post(`auth/getChatBotAnswer`, data);
+        return res.data;
+    } catch (err: any) {
+        return checkForAuthorization(err);
+    }
+};
+
 export const doGetPendingUsers = async () => {
     try {
         const res = await api.get("admin/getPendingUsers");
@@ -907,6 +916,46 @@ export const registerUserByAdmin = async (userdata: any) => {
     try {
         // This uses the /registerUserByAdmin route
         const res = await api.post<any>("admin/registerUserByAdmin", userdata);
+        return res.data;
+    } catch (err: any) {
+        return checkForAuthorization(err);
+    }
+};
+
+export const createChatBotQA = async (data: any) => {
+    try {
+        const res = await api.post("admin/createChatBotQA", data);
+        return res.data;
+    } catch (err: any) {
+        return checkForAuthorization(err);
+    }
+};
+
+export const getChatBotQA = async (data: any) => {
+    try {
+        const {page,limit} =data;
+        const queryString = new URLSearchParams({
+            page: page.toString(),
+            limit: limit.toString()
+        }).toString();
+        const res = await api.get(`admin/getChatBotQA?${queryString}`, data);
+        return res.data;
+    } catch (err: any) {
+        return checkForAuthorization(err);
+    }
+};
+export const updateChatBotQA = async (data: any, id : any) => {
+    try {
+        const res = await api.post(`admin/updateChatBotQA/${id}`, data);
+        return res.data;
+    } catch (err: any) {
+        return checkForAuthorization(err);
+    }
+};
+
+export const deleteChatBotQA = async (id: any) => {
+    try {
+        const res = await api.post(`admin/deleteChatBotQA/${id}`);
         return res.data;
     } catch (err: any) {
         return checkForAuthorization(err);
