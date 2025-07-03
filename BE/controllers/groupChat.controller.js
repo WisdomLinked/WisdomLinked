@@ -5,12 +5,12 @@ const PaymentHistory = require("../models/PaymentHistory");
 const {
     updateUsersGroupChatList, updateRooms,
 } = require("../socketControllers/notifyConnectedSockets");
-const { getActiveRooms, updateActiveRoomsOfUsers } = require("../socket/activeRooms");
-const { getActiveConnections } = require("../socket/connectedUsers");
+const { updateActiveRoomsOfUsers } = require("../socket/activeRooms");
 const { checkPaymentIntentSucceeded, refundPaymentIntent } = require("./stripe.controller");
 const { appendPaymentHistory } = require("./payment.controller");
 const { getFullUserData } = require("../middlewares/requireAuth");
 const { checkTitleNameInvalid } = require('../services/global')
+const {scheduleEmailReminder, sendEmailMeetingRequestToCustomer, sendEmailMeetingRequestToExpert} = require('../services/notifications')
 
 const createGeneralChatAndJoinGlobalChat = async (expertId) => {
     try {
@@ -137,6 +137,8 @@ const createGroupChatByUser = async (req, res) => {
             // pendingAppointmentToGroup: newPendingGroup._id
         })
 
+        sendEmailMeetingRequestToExpert(expertUser.email, expertUser.username, name, start, duration, price, true, expert.timeZone)
+
         return res.status(200).json({
             result: currentUser,
         });
@@ -191,6 +193,9 @@ const createGroupChat = async (req, res) => {
             customer.populate(['events', 'keywords', 'services', 'groupChats'])
 
             updateUsersGroupChatList(customerId.toString());
+
+            sendEmailMeetingRequestToCustomer(customer.email, name, customer.username, start, duration, price, customer.timeZone)
+
         }
 
         return res.status(200).json({
@@ -289,6 +294,8 @@ const joinGroupChat = async (req, res) => {
         groupChat.participants.map(participantId => {
             updateUsersGroupChatList(participantId.toString());
         })
+
+        scheduleEmailReminder(currentUser.email, currentUser.username, groupChat.name, groupChat.start, groupChat.duration, currentUser.timeZone);
 
     } catch (err) {
         console.log(err);
@@ -438,7 +445,7 @@ const addMemberToPendingGroup = async (req, res) => {
 
 const acceptIndividualAppointment = async (req,res) =>{
     try {
-        const {email, userId} = req.user;
+        const {userId} = req.user;
         const {groupChatId,payment_intent} = req.body;
 
         const groupChat = await GroupChat.findOne({ _id: groupChatId });
@@ -446,6 +453,8 @@ const acceptIndividualAppointment = async (req,res) =>{
         if (!groupChat) {
             return res.status(404).send("Sorry, the group chat doesn't exist");
         }
+
+        let customer,expert;
 
         if (userId.role === 'customer') {
             const paymentIntentSucceeded_test = await checkPaymentIntentSucceeded(payment_intent, 'test')
@@ -470,6 +479,15 @@ const acceptIndividualAppointment = async (req,res) =>{
 
         groupChat.status = 'active';
         await groupChat.save();
+
+        user1 = await User.findById(userId);
+        user2 = await User.findById(groupChat.createdBy);
+
+        sendEmailMeetingAcceptance(user2.email, user2.username, groupChat.name, groupChat.start, groupChat.duration, user2.timeZone);
+
+
+        scheduleEmailReminder(user1.email, user1.username, groupChat.name, groupChat.start, groupChat.duration, user1.timeZone);
+        scheduleEmailReminder(user2.email, user2.username, groupChat.name, groupChat.start, groupChat.duration, user2.timeZone);
 
         return res.status(200).send("Group chat accepted successfully!");
         
