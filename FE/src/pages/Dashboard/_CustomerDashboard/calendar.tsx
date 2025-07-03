@@ -3,7 +3,7 @@ import { Calendar } from "react-big-calendar";
 import CloseIcon from '@mui/icons-material/Close';
 import EventDetail from "./eventDetail";
 import SelectDateTime from "../selectDateTime";
-import { doCancelEvent, doCancelPendingSeminar, doFilterExperts, doGetMyEvents, doUpdateEvent, doLeftSeminar } from "../../../api/api";
+import { doCancelEvent, doCancelPendingSeminar, doFilterExperts, doGetMyEvents, doUpdateEvent, doLeftSeminar, cancelIndividualAppointment } from "../../../api/api";
 import { useDispatch } from "react-redux";
 import SeminarDetails from "../seminarDetails";
 import { SetLoadingStatus } from "../../../actions/appActions";
@@ -137,14 +137,18 @@ const CustomerCalendar = () => {
                 }
             })
             response.result.groupChats.map((seminar: any) => {
-                temp.push({
-                    ...seminar,
-                    id: seminar._id,
-                    start: new Date(seminar.start),
-                    end: new Date(seminar.end),
-                    title: '(S)' + seminar.name,
-                    type: 'seminar'
-                })
+                const shouldPush = seminar.status !== 'pending' || seminar.createdBy._id === userDetails._id;
+                if (shouldPush) {
+                    temp.push({
+                        ...seminar,
+                        id: seminar._id,
+                        start: new Date(seminar.start),
+                        end: new Date(seminar.end),
+                        title: '(S)' + seminar.name,
+                        type: seminar.type,
+                        status: seminar.status,
+                    });
+                }
             })
             response.result.pendingGroupChats.map((item: any) => {
                 temp.push({
@@ -167,6 +171,19 @@ const CustomerCalendar = () => {
             dispatch(updateMe())
             getEvents()
             dispatch(showAlert('Seminar Appointment Cancelled and your money refunded'))
+        }
+        set_seminarModalShow(false)
+        set_selectedEvent(null)
+        SetLoadingStatus(false)
+    }
+
+    const cancelAppointment = async (id : string) => {
+        SetLoadingStatus(true)
+        const response = await cancelIndividualAppointment(id)
+        if (response) {
+            dispatch(updateMe())
+            getEvents()
+            dispatch(showAlert('Appointment Cancelled and your money refunded'))
         }
         set_seminarModalShow(false)
         set_selectedEvent(null)
@@ -382,7 +399,7 @@ const CustomerCalendar = () => {
                             }}
                         />
                         <div className="w-max max-w-[460px] bg-black rounded-lg text-white p-6 relative">
-                            <div className="text-center text-white text-2xl mb-2">Seminar Details</div>
+                            <div className="text-center text-white text-2xl mb-2"> {selectedEvent?.type === "seminar" ? "Seminar Details" : "Session Details"}</div>
                             <button
                                 className="absolute right-2 top-2 rounded-md hover:bg-grey"
                                 onClick={() => {
@@ -407,7 +424,9 @@ const CustomerCalendar = () => {
                                     onClick={() => {
                                         if (selectedEvent?.type === 'pending seminar') {
                                             cancelSeminarAppointment(selectedEvent)
-                                        } else {
+                                        } else if(selectedEvent?.type === 'individual' && selectedEvent?.status === 'pending'){
+                                            cancelAppointment(selectedEvent._id)
+                                        } else{
                                             navigateSeminar(selectedEvent)
                                         }
                                     }}
@@ -415,7 +434,10 @@ const CustomerCalendar = () => {
                                     {
                                         selectedEvent?.end > new Date() ?
                                             selectedEvent?.type === 'pending seminar' ?
-                                                'Cancel Request' :
+                                                'Cancel Request' : 
+                                            selectedEvent?.type === 'individual' ? 
+                                                (selectedEvent?.status === 'pending' ? 
+                                                    'Cancel request' : 'Enter Session') : 
                                                 'Enter Seminar' :
                                             'Chat History'
                                     }
@@ -458,7 +480,10 @@ const CustomerCalendar = () => {
                                     Session with {event.customer?.username || 'Unknown'}
                                     </div>
                                 ) : (
-                                    <div className="mt-2 text-sm">Seminar</div>
+                                    // <div className="mt-2 text-sm">Seminar</div>
+                                    event.type === 'individual'
+                                        ? <div className="mt-2 text-sm">Session </div>
+                                        : <div className="mt-2 text-sm">Seminar</div>
                                 )}
                                 </div>
                             ))}

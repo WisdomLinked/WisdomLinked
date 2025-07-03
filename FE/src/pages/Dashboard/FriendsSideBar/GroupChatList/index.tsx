@@ -27,8 +27,8 @@ const GroupChatList = ({ type }: { type: string }) => {
 
     useEffect(() => {
         const now = new Date().getTime();
-        const upcomingChats = groupChatList.filter((chat: any) => new Date(chat.end).getTime() >= now && chat.type === type);
-        const pastChats = groupChatList.filter((chat: any) => new Date(chat.end).getTime() < now && chat.type === type);
+        const upcomingChats = groupChatList.filter((chat: any) => new Date(chat.end).getTime() >= now && chat.type === type && chat.status == "active");
+        const pastChats = groupChatList.filter((chat: any) => new Date(chat.end).getTime() < now && chat.type === type && chat.status == "active");
 
         // Sort upcoming chats in ascending order
         upcomingChats.sort((a: any, b: any) => new Date(a.start).getTime() - new Date(b.start).getTime());
@@ -41,6 +41,7 @@ const GroupChatList = ({ type }: { type: string }) => {
             missedChats: userDetails.missedChats?.[item.groupId] || 0,
             isPast: new Date(item.end).getTime() < now,
         }));
+        console.log(sortedChats)
 
         set_updatedGroupChats(sortedChats);
     }, [groupChatList, userDetails]);

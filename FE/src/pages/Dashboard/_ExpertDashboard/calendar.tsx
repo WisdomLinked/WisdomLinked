@@ -6,7 +6,8 @@ import {
     doAcceptEvent,
     doCancelInvitation,
     doDeclineEvent,
-    doGetMyEvents
+    doGetMyEvents,
+    cancelIndividualAppointment
 } from "../../../api/api";
 import { useDispatch } from "react-redux";
 import { useAppSelector } from "../../../store";
@@ -14,12 +15,12 @@ import SeminarDetails from "../seminarDetails";
 import { SetLoadingStatus } from "../../../actions/appActions";
 import { localizer } from "../../../actions/common"
 import { updateMe } from "../../../actions/authActions";
-import {setChosenChatDetails} from "../../../actions/chatActions";
+import {setChosenChatDetails, setChosenGroupChatDetails} from "../../../actions/chatActions";
 import { useNavigate } from "react-router-dom";
 
 const ExpertCalendar = () => {
 
-    const { auth: { userDetails: { status } } } = useAppSelector(state => state)
+    const { auth: { userDetails },friends: { groupChatList } } = useAppSelector(state => state)
     const dispatch = useDispatch()
     const navigate = useNavigate()
     const [events, set_events] = useState<Array<any>>([])
@@ -129,14 +130,18 @@ const ExpertCalendar = () => {
                 }
             })
             response.result.groupChats.map((seminar: any) => {
-                temp.push({
-                    ...seminar,
-                    id: seminar._id,
-                    start: new Date(seminar.start),
-                    end: new Date(seminar.end),
-                    title: '(S)' + seminar.name,
-                    type: 'seminar'
-                })
+                const shouldPush = seminar.status !== 'pending' || seminar.createdBy._id === userDetails._id;
+                if (shouldPush) {
+                    temp.push({
+                        ...seminar,
+                        id: seminar._id,
+                        start: new Date(seminar.start),
+                        end: new Date(seminar.end),
+                        title: '(S)' + seminar.name,
+                        type: seminar.type,
+                        status: seminar.status,
+                    });
+                }
             })
             set_events([...temp])
         }
@@ -194,6 +199,25 @@ const ExpertCalendar = () => {
         }
         SetLoadingStatus(false)
     }
+
+    const cancelAppointment = async (id : string) => {
+            SetLoadingStatus(true)
+            const response = await cancelIndividualAppointment(id)
+            if (response) {
+                dispatch(updateMe())
+                getEvents()
+            }
+            set_seminarModalShow(false)
+            set_selectedEvent(null)
+            SetLoadingStatus(false)
+    }
+
+    const navigateSeminar = (item: any) => {
+                const selectedGroupChat:any = groupChatList.find((x: any) => x.groupId === item._id)
+                console.log("navigate events", item);
+                navigate(`${process.env.REACT_APP_AUTH_URL}expertdashboard/chat`);
+                dispatch(setChosenGroupChatDetails( selectedGroupChat ));
+        };
 
     useEffect(() => {
         getEvents()
@@ -287,7 +311,7 @@ const ExpertCalendar = () => {
                                                 </button>
                                                 <button
                                                     className="w-[calc(50%-8px)] bg-green rounded-lg flex items-center justify-center disabled:opacity-50"
-                                                    disabled={status === 'review'}
+                                                    disabled={userDetails.status === 'review'}
                                                     onClick={acceptEvent}
                                                 >
                                                     Accept
@@ -335,7 +359,7 @@ const ExpertCalendar = () => {
                             }}
                         />
                         <div className="w-max max-w-[460px] bg-black rounded-lg text-white p-6 relative">
-                            <div className="text-center text-white text-2xl mb-2">Seminar Details</div>
+                            <div className="text-center text-white text-2xl mb-2">{selectedEvent?.type === "seminar" ? "Seminar Details" : "Session Details"}</div>
                             <button
                                 className="absolute right-2 top-2 rounded-md hover:bg-grey"
                                 onClick={() => {
@@ -356,6 +380,29 @@ const ExpertCalendar = () => {
                                 keywords={selectedEvent?.keywords}
                                 services={selectedEvent?.services}
                             />
+                            <div className="w-full h-10 flex justify-center mt-6 space-x-4">
+                                <button
+                                    className="w-fit px-4 rounded-lg bg-green flex items-center justify-center"
+                                    onClick={() => {
+                                        if(selectedEvent?.type === 'individual' && selectedEvent?.status === 'pending'){
+                                            cancelAppointment(selectedEvent._id)
+                                        } else{
+                                            navigateSeminar(selectedEvent)
+                                        }
+                                    }}
+                                >
+                                    {
+                                        selectedEvent?.end > new Date() ?
+                                            selectedEvent?.type === 'pending seminar' ?
+                                                'Cancel Request' : 
+                                            selectedEvent?.type === 'individual' ? 
+                                                (selectedEvent?.status === 'pending' ? 
+                                                    'Cancel request' : 'Enter Session') : 
+                                                'Enter Seminar' :
+                                            'Chat History'
+                                    }
+                                </button>
+                            </div>
                         </div>
                     </div> :
                     null
