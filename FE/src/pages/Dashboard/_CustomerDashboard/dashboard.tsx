@@ -54,12 +54,12 @@ const Dashboard = () => {
     }
 
     const acceptAppointment = async (data: any) => {
-            const response = await acceptIndividualAppointment(data)
-            if (response) {
-                dispatch(updateMe())
-            }
-            SetLoadingStatus(false)
+        const response = await acceptIndividualAppointment(data)
+        if (response) {
+            dispatch(updateMe())
         }
+        SetLoadingStatus(false)
+    }
 
     const cancelEvent = async (event: any) => {
         SetLoadingStatus(true)
