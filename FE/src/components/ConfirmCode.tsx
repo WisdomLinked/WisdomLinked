@@ -34,7 +34,7 @@ const ConfirmCode = ({ email, password }: any) => {
         SetLoadingStatus(true);
         const response: any = await login({ email, password });
         if (response.status === "SUCCESS") {
-            console.log(response.code, "////");
+            // console.log(response.code, "////");
             dispatch(showAlert("Verification code is sent again."));
             clearAllIntervals();
             set_inputCode('')
