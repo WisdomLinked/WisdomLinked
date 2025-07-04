@@ -736,6 +736,15 @@ export const getCustomerById = async (id: any) => {
     }
 };
 
+export const shareMeetingViaEmail = async (data: any) => {
+    try {
+        const res = await api.post("expert/shareMeetingViaEmail", data);
+        return res.data;
+    } catch (err: any) {
+        return checkForAuthorization(err);
+    }
+};
+
 // ADMIN APIS ------------------
 export const doFilterUsers = async (filter: any) => {
     try {

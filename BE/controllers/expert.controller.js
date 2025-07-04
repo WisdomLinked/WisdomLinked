@@ -1,4 +1,6 @@
+const GroupChat = require("../models/GroupChat");
 const User = require("../models/User");
+const {shareMeetingId} = require("../services/notifications")
 
 const updateTimeSlots = async (req, res) => {
     try {
@@ -152,10 +154,29 @@ const filterCustomers = async (req, res) => {
     }
 }
 
+const shareMeetingViaEmail = async (req, res) => {
+    try{
+        const {email, groupchatId} = req.body;
+        const groupChat = await GroupChat.findById(groupchatId);
+
+        const user = await User.findOne({email:email.toLowerCase() })
+        const name = user?.username ?? "Guest"
+
+        shareMeetingId(email,name,groupchatId,groupChat.name)
+
+        return res.status(200).send("Shared meeting Id via email successfully!");
+
+    } catch (err) {
+        console.log(err)
+        return res.status(500).send(err.message);
+    }
+}
+
 module.exports = {
     updateTimeSlots,
     getDailyTimeSlots,
     updateDailyTimeSlots,
     filterCustomers,
-    getCustomerById
+    getCustomerById,
+    shareMeetingViaEmail
 }

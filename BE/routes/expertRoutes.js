@@ -7,6 +7,7 @@ const {
     updateDailyTimeSlots,
     filterCustomers,
     getCustomerById,
+    shareMeetingViaEmail
 } = require('../controllers/expert.controller')
 const {
     acceptEvent,
@@ -70,6 +71,8 @@ router.get("/getUser/:id",expertAuth(false),getCustomerById)
 router.post("/createEvent", expertAuth(true), createEventByExpert);
 
 router.post("/createEventFeedback", expertAuth(true), createFeedback);
+
+router.post("/shareMeetingViaEmail", expertAuth(true), shareMeetingViaEmail);
 
 
 module.exports = router;
