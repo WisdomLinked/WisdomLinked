@@ -82,90 +82,6 @@ const ChatBotQA = () => {
         SetLoadingStatus(false)
     }
 
-    const Modal: React.FC<{ show: boolean; onClose: () => void; title: string; children: React.ReactNode }> = ({ show, onClose, title, children }) => {
-        if (!show) return null
-        
-        return (
-            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-                <div className="bg-gray-800 rounded-lg p-6 w-full max-w-2xl mx-4 max-h-[90vh] overflow-y-auto">
-                    <div className="flex justify-between items-center mb-4">
-                        <h3 className="text-xl font-bold text-white">{title}</h3>
-                        <button onClick={onClose} className="text-gray-400 hover:text-white">
-                            <X size={24} />
-                        </button>
-                    </div>
-                    {children}
-                </div>
-            </div>
-        )
-    }
-
-    const QAForm: React.FC<{ onSubmit: () => void; submitText: string }> = ({ onSubmit, submitText }) => (
-        <div className="space-y-4">
-            <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">Role</label>
-                <select
-                    value={formData.role}
-                    onChange={(e) => setFormData({ ...formData, role: e.target.value })}
-                    className="w-full p-3 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                    <option value="user">User</option>
-                    <option value="expert">Expert</option>
-                    <option value="customer">Customer</option>
-                </select>
-            </div>
-            <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">Question</label>
-                <textarea
-                    value={formData.question}
-                    onChange={(e) => setFormData({ ...formData, question: e.target.value })}
-                    className="w-full p-3 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    rows={3}
-                    placeholder="Enter the question..."
-                />
-            </div>
-            <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">Answer</label>
-                <textarea
-                    value={formData.answer}
-                    onChange={(e) => setFormData({ ...formData, answer: e.target.value })}
-                    className="w-full p-3 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    rows={4}
-                    placeholder="Enter the answer..."
-                />
-            </div>
-            <div className="flex gap-3 pt-4">
-                <button
-                    onClick={onSubmit}
-                    className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
-                >
-                    <Save size={16} />
-                    {submitText}
-                </button>
-                <button
-                    onClick={() => {
-                        setShowCreateModal(false)
-                        setShowEditModal(false)
-                        setFormData({
-                            role: 'user',
-                            question: '',
-                            answer: ''
-                        })
-                    }}
-                    className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors"
-                >
-                    Cancel
-                </button>
-            </div>
-        </div>
-    )
-
-    // const filteredQA = qAndA.filter(item => 
-    //     item.question.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    //     item.answer.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    //     item.role.toLowerCase().includes(searchTerm.toLowerCase())
-    // )
-
     return (
         <div className="w-full h-full pt-10 overflow-y-auto text-white px-[18px]">
             <div className="w-full max-w-[1500px] mx-auto text-white">
@@ -324,22 +240,150 @@ const ChatBotQA = () => {
             </div>
 
             {/* Create Modal */}
-            <Modal
-                show={showCreateModal}
-                onClose={() => setShowCreateModal(false)}
-                title="Create New Q&A"
-            >
-                <QAForm onSubmit={handleCreate} submitText="Create" />
-            </Modal>
+            {showCreateModal && (
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                    <div className="bg-gray-800 rounded-lg p-6 w-full max-w-2xl mx-4 max-h-[90vh] overflow-y-auto">
+                        <div className="flex justify-between items-center mb-4">
+                            <h3 className="text-xl font-bold text-white">Create New Q&A</h3>
+                            <button 
+                                onClick={() => {
+                                    setShowCreateModal(false);
+                                    setFormData({ role: 'user', question: '', answer: '' });
+                                }} 
+                                className="text-gray-400 hover:text-white"
+                            >
+                                <X size={24} />
+                            </button>
+                        </div>
+                        
+                        <div className="space-y-4">
+                            <div>
+                                <label className="block text-sm font-medium text-gray-300 mb-2">Role</label>
+                                <select
+                                    value={formData.role}
+                                    onChange={(e) => setFormData({ ...formData, role: e.target.value })}
+                                    className="w-full p-3 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                >
+                                    <option value="user">User</option>
+                                    <option value="expert">Expert</option>
+                                    <option value="customer">Customer</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-300 mb-2">Question</label>
+                                <textarea
+                                    value={formData.question}
+                                    onChange={(e) => setFormData({ ...formData, question: e.target.value })}
+                                    className="w-full p-3 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                    rows={3}
+                                    placeholder="Enter the question..."
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-300 mb-2">Answer</label>
+                                <textarea
+                                    value={formData.answer}
+                                    onChange={(e) => setFormData({ ...formData, answer: e.target.value })}
+                                    className="w-full p-3 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                    rows={4}
+                                    placeholder="Enter the answer..."
+                                />
+                            </div>
+                            <div className="flex gap-3 pt-4">
+                                <button
+                                    onClick={handleCreate}
+                                    className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
+                                >
+                                    <Save size={16} />
+                                    Create
+                                </button>
+                                <button
+                                    onClick={() => {
+                                        setShowCreateModal(false);
+                                        setFormData({ role: 'user', question: '', answer: '' });
+                                    }}
+                                    className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors"
+                                >
+                                    Cancel
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* Edit Modal */}
-            <Modal
-                show={showEditModal}
-                onClose={() => setShowEditModal(false)}
-                title="Edit Q&A"
-            >
-                <QAForm onSubmit={handleUpdate} submitText="Update" />
-            </Modal>
+            {showEditModal && (
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                    <div className="bg-gray-800 rounded-lg p-6 w-full max-w-2xl mx-4 max-h-[90vh] overflow-y-auto">
+                        <div className="flex justify-between items-center mb-4">
+                            <h3 className="text-xl font-bold text-white">Edit Q&A</h3>
+                            <button 
+                                onClick={() => {
+                                    setShowEditModal(false);
+                                    setFormData({ role: 'user', question: '', answer: '' });
+                                }} 
+                                className="text-gray-400 hover:text-white"
+                            >
+                                <X size={24} />
+                            </button>
+                        </div>
+                        
+                        <div className="space-y-4">
+                            <div>
+                                <label className="block text-sm font-medium text-gray-300 mb-2">Role</label>
+                                <select
+                                    value={formData.role}
+                                    onChange={(e) => setFormData({ ...formData, role: e.target.value })}
+                                    className="w-full p-3 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                >
+                                    <option value="user">User</option>
+                                    <option value="expert">Expert</option>
+                                    <option value="customer">Customer</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-300 mb-2">Question</label>
+                                <textarea
+                                    value={formData.question}
+                                    onChange={(e) => setFormData({ ...formData, question: e.target.value })}
+                                    className="w-full p-3 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                    rows={3}
+                                    placeholder="Enter the question..."
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-300 mb-2">Answer</label>
+                                <textarea
+                                    value={formData.answer}
+                                    onChange={(e) => setFormData({ ...formData, answer: e.target.value })}
+                                    className="w-full p-3 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                    rows={4}
+                                    placeholder="Enter the answer..."
+                                />
+                            </div>
+                            <div className="flex gap-3 pt-4">
+                                <button
+                                    onClick={handleUpdate}
+                                    className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
+                                >
+                                    <Save size={16} />
+                                    Update
+                                </button>
+                                <button
+                                    onClick={() => {
+                                        setShowEditModal(false);
+                                        setFormData({ role: 'user', question: '', answer: '' });
+                                    }}
+                                    className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors"
+                                >
+                                    Cancel
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     )
 }
