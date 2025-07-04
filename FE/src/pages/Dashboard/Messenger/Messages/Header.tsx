@@ -22,7 +22,7 @@ import CastForEducationIcon from '@mui/icons-material/CastForEducation';
 import { createNewRoom, joinRoom } from "../../../../socket/roomHandler";
 import CloseIcon from '@mui/icons-material/Close';
 import EditIcon from '@mui/icons-material/Edit';
-import {doLeftSeminar, doUpdateProfile, getCustomerById, getExpertById, profileImageFetch} from "../../../../api/api";
+import {doLeftSeminar, doUpdateProfile, getCustomerById, getExpertById, shareMeetingViaEmail} from "../../../../api/api";
 import {SetLoadingStatus, SetTotalTimeSpent} from "../../../../actions/appActions";
 import { updateMe } from "../../../../actions/authActions";
 import { showAlert } from "../../../../actions/alertActions";
@@ -57,6 +57,9 @@ const MessagesHeader = ({ scrollPosition, events, openCalendarModal, openSeminar
     const [kickedFromSeminar, set_kickedFromSeminar] = useState(false)
     const [show_meeting_id, set_show_meeting_id] = useState(false);
     const [copied, setCopied] = useState(false);
+    const [showEmailInput, setShowEmailInput] = useState(false);
+    const [emailAddress, setEmailAddress] = useState('');
+    const [emailError, setEmailError] = useState('');
 
     const checkEnabledEvent = () => {
         let event = events.find((event: any) => event?._id === currentEvent?._id)
@@ -134,6 +137,12 @@ const MessagesHeader = ({ scrollPosition, events, openCalendarModal, openSeminar
                 joinPopupBlocked: true
             })
         }
+    }
+
+    const handleShareViaEmail = async (email: string, groupChatId: string) => {
+        SetLoadingStatus(true)
+        await shareMeetingViaEmail({email:email, groupchatId:groupChatId})
+        SetLoadingStatus(false)
     }
 
     useEffect(() => {
@@ -486,44 +495,111 @@ const MessagesHeader = ({ scrollPosition, events, openCalendarModal, openSeminar
     show_meeting_id ?
         <OverlayPortal closeModal={() => set_show_meeting_id(false)}>
             <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 z-50">
-                <div className="bg-black rounded-lg shadow-md p-6 text-white max-w-sm w-full mx-4">
+                <div className="bg-black rounded-lg shadow-md p-6 text-white max-w-sm w-full mx-4 relative">
+                    {/* Close button at top right */}
+                    <button
+                        className="absolute top-4 right-4 bg-gray-600 hover:bg-gray-700 p-2 rounded-full transition-colors flex items-center justify-center"
+                        onClick={() => set_show_meeting_id(false)}
+                    >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                    </button>
+
                     <div className="text-lg mb-4 text-center">Meeting ID:</div>
                     <div className="text-xl font-bold text-center mb-4">{chosenGroupChatDetails?.groupId}</div>
                     
-                    <div className="flex space-x-3">
-                        <button
-                            className="flex-1 bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg transition-colors flex items-center justify-center space-x-2"
-                            onClick={() => {
-                                navigator.clipboard.writeText(chosenGroupChatDetails?.groupId);
-                                setCopied(true);
-                                setTimeout(() => setCopied(false), 1000);
-                            }}
-                        >
-                            {copied ? (
-                                <>
+                    {!showEmailInput ? (
+                        <div className="flex space-x-3">
+                            <button
+                                className="flex-1 bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg transition-colors flex items-center justify-center space-x-2"
+                                onClick={() => {
+                                    navigator.clipboard.writeText(chosenGroupChatDetails?.groupId);
+                                    setCopied(true);
+                                    setTimeout(() => setCopied(false), 1000);
+                                }}
+                            >
+                                {copied ? (
+                                    <>
+                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                        </svg>
+                                        <span>Copied!</span>
+                                    </>
+                                ) : (
+                                    <>
+                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                                        </svg>
+                                        <span>Copy</span>
+                                    </>
+                                )}
+                            </button>
+
+                            <button
+                                className="flex-1 bg-green-600 hover:bg-green-700 px-4 py-2 rounded-lg transition-colors flex items-center justify-center space-x-2"
+                                onClick={() => setShowEmailInput(true)}
+                            >
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 4.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                                </svg>
+                                <span>Share via Email</span>
+                            </button>
+                        </div>
+                    ) : (
+                        <div className="space-y-4">
+                            <div>
+                                <input
+                                    type="email"
+                                    placeholder="Enter email address"
+                                    value={emailAddress}
+                                    onChange={(e) => {
+                                        setEmailAddress(e.target.value);
+                                        if (emailError) setEmailError('');
+                                    }}
+                                    className={`w-full px-4 py-2 bg-gray-700 text-white rounded-lg border ${emailError ? 'border-red-500' : 'border-gray-600'} focus:border-blue-500 focus:outline-none`}
+                                />
+                                {emailError && (
+                                    <div className="text-red-400 text-sm mt-1">{emailError}</div>
+                                )}
+                            </div>
+                            <div className="flex space-x-3">
+                                <button
+                                    className="flex-1 bg-green-600 hover:bg-green-700 px-4 py-2 rounded-lg transition-colors flex items-center justify-center space-x-2"
+                                    onClick={() => {
+                                        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+                                        if (!emailAddress.trim()) {
+                                            setEmailError('Please enter an email address');
+                                            return;
+                                        }
+                                        if (!emailRegex.test(emailAddress.trim())) {
+                                            setEmailError('Please enter a valid email address');
+                                            return;
+                                        }
+                                        handleShareViaEmail(emailAddress.trim(), chosenGroupChatDetails?.groupId);
+                                        setShowEmailInput(false);
+                                        setEmailAddress('');
+                                        setEmailError('');
+                                    }}
+                                >
                                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
                                     </svg>
-                                    <span>Copied!</span>
-                                </>
-                            ) : (
-                                <>
-                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                                    </svg>
-                                    <span>Copy</span>
-                                </>
-                            )}
-                        </button>
-                        
-                        <button
-                            className="flex-1 bg-gray-600 hover:bg-gray-700 px-4 py-2 rounded-lg transition-colors flex items-center justify-center space-x-2"
-                            onClick={() => set_show_meeting_id(false)}
-                        >
-                            <CloseIcon />
-                            <span>Close</span>
-                        </button>
-                    </div>
+                                    <span>Share</span>
+                                </button>
+                                <button
+                                    className="flex-1 bg-gray-600 hover:bg-gray-700 px-4 py-2 rounded-lg transition-colors"
+                                    onClick={() => {
+                                        setShowEmailInput(false);
+                                        setEmailAddress('');
+                                        setEmailError('');
+                                    }}
+                                >
+                                    Cancel
+                                </button>
+                            </div>
+                        </div>
+                    )}
                 </div>
             </div>
         </OverlayPortal> :
