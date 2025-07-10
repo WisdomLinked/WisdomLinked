@@ -137,7 +137,7 @@ const CustomerCalendar = () => {
                 }
             })
             response.result.groupChats.map((seminar: any) => {
-                const shouldPush = seminar.status !== 'pending' || seminar.createdBy._id === userDetails._id;
+                const shouldPush = seminar.status !== 'pending' || !seminar.createdBy || seminar.createdBy._id === userDetails._id;
                 if (shouldPush) {
                     temp.push({
                         ...seminar,

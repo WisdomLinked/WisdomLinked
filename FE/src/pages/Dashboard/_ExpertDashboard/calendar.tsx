@@ -130,7 +130,8 @@ const ExpertCalendar = () => {
                 }
             })
             response.result.groupChats.map((seminar: any) => {
-                const shouldPush = seminar.status !== 'pending' || seminar.createdBy._id === userDetails._id;
+                console.log(seminar)
+                const shouldPush = seminar.status !== 'pending' || !seminar.createdBy || seminar.createdBy._id === userDetails._id;
                 if (shouldPush) {
                     temp.push({
                         ...seminar,
