@@ -3,10 +3,12 @@ import {getGroupChatById, joinGroupChat} from "../../api/api"
 import { useAppSelector } from "../../store";
 import Payment from "./_CustomerDashboard/payment";
 import { SetLoadingStatus } from "../../actions/appActions";
+import { setChosenGroupChatDetails} from "../../actions/chatActions";
+import { updateMe } from "../../actions/authActions";
 import { useLocation } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
+import { useDispatch } from "react-redux";
 import queryString from "query-string";
-import { set } from "date-fns";
-import { group } from "console";
 
 
 
@@ -14,24 +16,22 @@ import { group } from "console";
 const JoinMeeting = () => {
 
     const [meetingId, setMeetingId] = useState<string>("");
-    const { auth: { userDetails } } = useAppSelector((state) => state);
+    const { auth: { userDetails },friends: { groupChatList } } = useAppSelector(state => state)   
     const [showPayment, set_showPayment] = useState(false);
     const location = useLocation();
+    const navigate = useNavigate();
+    const dispatch = useDispatch();
     const [item, set_item] = useState<any>(null);
     
 
     const handleJoinMeeting = async () => {
+        console.log("GroupChatList:", groupChatList);
         if (meetingId.trim() === "") {
             alert("Please enter a valid meeting ID.");
             return;
         }
-        // Logic to join the meeting using the meetingId
-        console.log(`Joining meeting with ID: ${meetingId}`);
-        // Here you would typically call an API or navigate to a meeting page
         try {
             const groupChat = await getGroupChatById(meetingId);
-
-            console.log("Group Chat Details:", groupChat);
 
             const now = new Date().getTime();
             if(new Date(groupChat.end).getTime() < now) {
@@ -56,24 +56,36 @@ const JoinMeeting = () => {
         
     };
 
+    const navigateSeminar = () => {
+        navigate(`${process.env.REACT_APP_AUTH_URL}customerdashboard/dashboard`);
+    };
+
     useEffect(() => {
-                let { redirect_status, payment_intent, price } = queryString.parse(location.search);
-                if (redirect_status === 'succeeded') {
-                    const pendingDetails = window.localStorage.getItem('pendingDetails')
-                    if (pendingDetails) {
-                        SetLoadingStatus(true)
-                        const details = JSON.parse(pendingDetails)
-                        window.localStorage.removeItem('pendingDetails')
-                        SetLoadingStatus(false)
-                        const res = joinGroupChat({groupChatId: details.groupChatId, payment_intent})
-                    }
-                } else {
+        const handleRedirect = async () => {
+            let { redirect_status, payment_intent } = queryString.parse(location.search);
+            if (redirect_status === 'succeeded') {
+                const pendingDetails = window.localStorage.getItem('pendingDetails')
+                if (pendingDetails) {
+                    SetLoadingStatus(true)
+                    const details = JSON.parse(pendingDetails)
                     window.localStorage.removeItem('pendingDetails')
-                    if (redirect_status) {
-                        set_showPayment(false);
+                    SetLoadingStatus(false)
+                    const res = await joinGroupChat({groupChatId: details.groupChatId, payment_intent});
+                    if(res.success)
+                    {
+                        alert("You have successfully joined the meeting.");
+                        navigateSeminar()
                     }
                 }
-        }, [])
+            } else {
+                window.localStorage.removeItem('pendingDetails')
+                if (redirect_status) {
+                    set_showPayment(false);
+                }
+            }
+        };
+        handleRedirect();
+    }, [])
 
     return (
         <div className="min-h-screen flex items-center justify-center bg-gray">

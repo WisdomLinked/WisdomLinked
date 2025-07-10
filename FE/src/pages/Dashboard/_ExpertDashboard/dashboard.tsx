@@ -104,10 +104,8 @@ const Dashboard = () => {
         // const updatedPendingInvitations = pendingGroupChats.filter((item: any) => new Date(item.groupChatId.end).getTime() >= now && item.groupChatId.type === 'individual');
         const updatedSessions = groupChat.filter((item: any) => new Date(item.end).getTime() >= now && item.type === 'individual' && item.status === 'active');
         const updatedPendingInvitations = groupChat.filter((item: any) => new Date(item.end).getTime() >= now && item.type === 'individual' && item.status === 'pending');
-        const updatedGroupChats = pendingGroupChats.filter((item: any) => new Date(item.end).getTime() >= now && item.type === 'seminar');
+        const updatedGroupChats = pendingGroupChats.filter((item: any) => new Date(item.groupChatId.end).getTime() >= now);
         const updatedSeminars = groupChat.filter((item: any) => new Date(item.end).getTime() >= now && item.type === 'seminar');
-
-        console.log("updatedSessions", groupChat);
 
         set_sessions(updatedSessions);
         set_pendingInvitations(updatedPendingInvitations);

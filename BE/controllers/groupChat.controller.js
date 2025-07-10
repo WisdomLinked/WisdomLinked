@@ -297,6 +297,11 @@ const joinGroupChat = async (req, res) => {
 
         scheduleEmailReminder(currentUser.email, currentUser.username, groupChat.name, groupChat.start, groupChat.duration, currentUser.timeZone);
 
+        return res.status(200).json({
+            success: true,
+            result: groupChat,
+        });
+
     } catch (err) {
         console.log(err);
         return res
