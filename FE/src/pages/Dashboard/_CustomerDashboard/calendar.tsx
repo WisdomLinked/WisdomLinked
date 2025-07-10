@@ -204,10 +204,10 @@ const CustomerCalendar = () => {
     }
 
     const navigateSeminar = (item: any) => {
-            const selectedGroupChat:any = groupChatList.find((x: any) => x.groupId === item._id)
-            console.log("navigate events", item);
-            navigate(`${process.env.REACT_APP_AUTH_URL}customerdashboard/chat`);
-            dispatch(setChosenGroupChatDetails( selectedGroupChat ));
+        const selectedGroupChat:any = groupChatList.find((x: any) => x.groupId === item._id)
+        console.log("navigate events", item);
+        navigate(`${process.env.REACT_APP_AUTH_URL}customerdashboard/chat`);
+        dispatch(setChosenGroupChatDetails( selectedGroupChat ));
     };
 
     const cancelEvent = async (event: any) => {

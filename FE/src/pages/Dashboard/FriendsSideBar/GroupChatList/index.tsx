@@ -41,7 +41,6 @@ const GroupChatList = ({ type }: { type: string }) => {
             missedChats: userDetails.missedChats?.[item.groupId] || 0,
             isPast: new Date(item.end).getTime() < now,
         }));
-        console.log(sortedChats)
 
         set_updatedGroupChats(sortedChats);
     }, [groupChatList, userDetails]);
