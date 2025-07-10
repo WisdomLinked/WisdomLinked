@@ -42,7 +42,7 @@ const JoinMeeting = () => {
             if(userDetails.role === "expert") {
                 await joinGroupChat({ groupChatId: meetingId });
                 alert("You have successfully joined the meeting.");
-                // Navigate to the meeting page or perform any other action needed after joining
+                navigate(`${process.env.REACT_APP_AUTH_URL}expertdashboard/chat`);
 
             } else {
                 set_item(groupChat);
@@ -54,10 +54,6 @@ const JoinMeeting = () => {
             return null; // Ensure null is returned in case of an error
         }
         
-    };
-
-    const navigateSeminar = () => {
-        navigate(`${process.env.REACT_APP_AUTH_URL}customerdashboard/dashboard`);
     };
 
     useEffect(() => {
@@ -74,7 +70,7 @@ const JoinMeeting = () => {
                     if(res.success)
                     {
                         alert("You have successfully joined the meeting.");
-                        navigateSeminar()
+                        navigate(`${process.env.REACT_APP_AUTH_URL}customerdashboard/chat`);
                     }
                 }
             } else {
