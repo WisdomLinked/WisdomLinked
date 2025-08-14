@@ -59,6 +59,8 @@ const RoomVideo = ({
         });
     };
 
+
+    
     useEffect(() => {
         const groupChat = groupChatList.find(
             (x) => x.groupId === roomDetails?.groupId
@@ -67,6 +69,7 @@ const RoomVideo = ({
             set_isExpert(groupChat?.admin?._id === stream?.userInfo?._id);
         }
     }, [roomDetails, stream, groupChatList]);
+
 
     return (
         <div
@@ -189,6 +192,8 @@ const VideosContainer = (props: any) => {
 
     const [callStartTime, setCallStartTime] = useState<number | null>(null);
     const [callDuration, setCallDuration] = useState<number>(0);
+
+    const [showPopup, setShowPopup] = useState(false);
 
     // Formats seconds into HH:MM:SS
     const formatTime = (duration: number) => {
@@ -330,6 +335,15 @@ const VideosContainer = (props: any) => {
             audioRef.current.pause();
             audioRef.current.currentTime = 0; // Reset audio playback
         }
+        let timeoutId: ReturnType<typeof setTimeout>;
+        if (remoteStreamsWithUserData.length === 0) {
+            timeoutId = setTimeout(() => {
+              setShowPopup(true); // show in-app popup
+            }, 10000); // 10s
+          } else {
+            setShowPopup(false); // hide if someone joins
+          }
+        return () => clearTimeout(timeoutId);
     }, [remoteStreamsWithUserData]);
 
    return (
@@ -420,6 +434,25 @@ const VideosContainer = (props: any) => {
                                 <div className="w-full h-full flex justify-center items-center overflow-clip text-white">
                                     Waiting for others to join
                                 </div>
+                            )}
+
+                            {showPopup && (
+                            <div className="fixed inset-0 bg-black/50 flex justify-center items-center z-[9999]">
+                                <div className="bg-white p-6 rounded-xl shadow-lg max-w-sm w-[90%] text-center">
+                                <h2 className="text-lg font-semibold mb-3">Still waiting...</h2>
+                                <p className="text-black mb-6">
+                                    If you have trouble joining, please refresh and rejoin.
+                                </p>
+                                <div className="flex justify-center">
+                                    <button
+                                    onClick={() => setShowPopup(false)}
+                                    className="px-6 py-2 bg-green-600 hover:bg-green-700 text-green font-semibold rounded-lg shadow-md transition-colors"
+                                    >
+                                    OK
+                                    </button>
+                                </div>
+                                </div>
+                            </div>
                             )}
                     </div>
 
