@@ -240,6 +240,15 @@ export const joinGeneralChat = async (adminId: string) => {
         return checkForAuthorization(err);
     }
 };
+export const joinPrivateChat = async (personId: string) => {
+    try {
+      const res = await api.post("group-chat/joinPrivateChat", { personId });
+      return res.data;
+    } catch (err: any) {
+      // Preserve existing authorization/error handling behavior in your codebase
+      return checkForAuthorization ? checkForAuthorization(err) : Promise.reject(err);
+    }
+  };
 
 export const createGroupChat = async (details: any) => {
     try {

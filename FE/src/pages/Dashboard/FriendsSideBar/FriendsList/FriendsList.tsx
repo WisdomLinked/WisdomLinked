@@ -32,32 +32,33 @@ const FriendsList = () => {
   const [modifiedFriends, setModifiedFriends] = useState<any[]>([]);
   const [searchQuery, setSearchQuery] = useState<string>("");
 
-  // Function to fetch and update friends with images
-  const updateFriendsWithImages = async (friends: any[], onlineUsers: any[]) => {
+  
+  const updateFriendsWithImages = async (friends: any[], onlineUsers: any[]): Promise<any[]> => {
     try {
       return await Promise.all(
-          friends.map(async (friend) => {
-            const isOnline = onlineUsers.find((user) => user.userId === friend.id);
-            let base64Image = "";
-
-            if (friend.image) {
-              try {
-                base64Image = await profileImageFetch(friend.image, "small");
-              } catch (error) {
-                console.error(`Error fetching image for friend ${friend.id}:`, error);
-              }
+        friends.map(async (friend): Promise<any> => {
+          const isOnline = onlineUsers.find((user) => user.userId === friend.id);
+          let base64Image: string | null = null;
+  
+          if (friend.image) {
+            try {
+              // Cast to string if profileImageFetch is not typed correctly yet
+              base64Image = (await profileImageFetch(friend.image, "small")) as string;
+            } catch (error) {
+              console.error(`Error fetching image for friend ${friend.id}:`, error);
             }
-
-            return {
-              ...friend,
-              isOnline: !!isOnline,
-              image: base64Image, // Update the .image property with Base64
-            };
-          })
+          }
+  
+          return {
+            ...friend,
+            isOnline: !!isOnline,
+            image: base64Image, // string | null
+          };
+        })
       );
     } catch (error) {
       console.error("Error updating friends with images:", error);
-      return friends; // Return original friends if something goes wrong
+      return friends;
     }
   };
 

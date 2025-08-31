@@ -30,6 +30,7 @@ import Seminars from "./seminars";
 import CastForEducationIcon from '@mui/icons-material/CastForEducation';
 import { leaveRoom } from "../../../socket/roomHandler";
 import GeneralChatList from "../FriendsSideBar/GeneralChatList";
+import CustomerPrivateExpertsList from "../FriendsSideBar/CustomerList/CustomerPrivateExpertsList";
 
 interface Props {
     window?: () => Window;
@@ -193,9 +194,12 @@ export default function CustomerDrawer(props: Props) {
                     </div>
                     <div className="bg-black w-full h-[1px] mb-4"/>
                     <FriendsTitle title="Private Chats" />
-                    <div className="h-[250  px] overflow-y-auto">
-                        <FriendsList/>
-                    </div>
+                    { /* render customer-only private-expert list, otherwise the normal friends list */ }
+                    {userDetails && String(userDetails.role).toLowerCase() === "customer" ? (
+                    <CustomerPrivateExpertsList />
+                    ) : (
+                    <FriendsList />
+                    )}
                     {/* <div className="flex items-center mt-2">
                         <FriendsTitle title="Active Rooms" />
                         <CreateRoomButton isUserInRoom={props.isUserInRoom} />

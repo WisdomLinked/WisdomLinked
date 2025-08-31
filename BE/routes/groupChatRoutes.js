@@ -13,7 +13,8 @@ const {
     leaveGroup,
     deleteGroup,
     updateGroupChat,
-    joinGeneralChat
+    joinGeneralChat,
+    joinPrivateChat
 } = require("../controllers/groupChat.controller");
 
 const { requireAuth, expertAuth } = require("../middlewares/requireAuth");
@@ -76,6 +77,12 @@ router.post(
     "/joinGeneralChat",
     requireAuth(false),
     joinGeneralChat
+);
+
+router.post(
+    "/joinPrivateChat",
+    requireAuth(false),
+    joinPrivateChat
 );
 
 router.post("/cancel-individual-appointment", 

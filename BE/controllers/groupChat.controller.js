@@ -77,6 +77,72 @@ const joinGeneralChat = async (req, res) => {
     }
 };
 
+const joinPrivateChat = async (req, res) => {
+    try {
+      const userId = req.user?.userId;
+      const { personId } = req.body; // <-- ID of the profile you clicked
+  
+      if (!userId) return res.status(401).send("Unauthorized");
+      if (!personId) return res.status(400).send("personId is required");
+      if (String(userId) === String(personId)) return res.status(400).send("Cannot open chat with yourself");
+  
+      // Ensure the clicked person exists
+      const otherUser = await User.findById(personId).select("username email").exec();
+      if (!otherUser) return res.status(404).send("User not found");
+  
+      // 1) Find existing individual chat shared by both users
+      let chat = await GroupChat.findOne({
+        type: "individual",
+        participants: { $all: [personId, userId] },
+      }).exec();
+  
+      if (chat) {
+        // Defensive: ensure both participants present (no-op if already present)
+        await GroupChat.updateOne(
+          { _id: chat._id },
+          { $addToSet: { participants: { $each: [personId, userId] } } }
+        ).exec();
+  
+        // reload canonical chat
+        chat = await GroupChat.findById(chat._id).exec();
+      } else {
+        // 2) Create a new individual chat between caller and clicked person
+        const createDoc = {
+          name: `Private Chat - ${otherUser.username || personId}`,
+          description: "",
+          participants: [personId, userId],
+          admin: personId,       // set admin to the profile user clicked (matches other create flows)
+          type: "individual",
+          status: "active",
+          createdBy: userId,     // the caller created the chat
+        };
+  
+        chat = await GroupChat.create(createDoc);
+      }
+  
+      // 3) Ensure both users reference this chat (no duplicates)
+      await User.updateOne({ _id: userId }, { $addToSet: { generalChats: chat._id } }).exec();
+      await User.updateOne({ _id: personId }, { $addToSet: { generalChats: chat._id } }).exec();
+  
+      // 4) Notify socket helpers so both users' chat lists update in real-time
+      try { updateUsersGroupChatList(userId.toString()); } catch (e) { console.warn("updateUsersGroupChatList(user) failed:", e?.message || e); }
+      try { updateUsersGroupChatList(personId.toString()); } catch (e) { console.warn("updateUsersGroupChatList(person) failed:", e?.message || e); }
+  
+      // 5) Return populated user and chat so frontend can open the conversation immediately
+      const userDoc = await User.findById(userId).select("email").exec();
+      const fullUser = await getFullUserData(userDoc.email);
+      if (fullUser) {
+        fullUser.token = null;
+        fullUser.password = null;
+      }
+  
+      return res.status(200).json({ user: fullUser, chat });
+    } catch (err) {
+      console.error("joinGeneralChat error:", err);
+      return res.status(500).send(err.message || "Server error");
+    }
+  };
+
 const createGroupChatByUser = async (req, res) => {
     try {
         const { userId } = req.user;
@@ -878,6 +944,7 @@ module.exports = {
     deleteGroup,
     createGeneralChatAndJoinGlobalChat,
     joinGeneralChat,
+    joinPrivateChat,
     cancelPendingSeminar,
     cancelIndividualAppointment,
     leftSeminar

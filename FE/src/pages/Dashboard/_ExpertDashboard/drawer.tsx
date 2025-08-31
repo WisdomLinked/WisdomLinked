@@ -33,6 +33,7 @@ import { leaveRoom } from "../../../socket/roomHandler";
 import GeneralChatList from "../FriendsSideBar/GeneralChatList";
 import PersonSearchIcon from '@mui/icons-material/PersonSearch';
 import Search from "./search";
+import CustomerList from "../FriendsSideBar/CustomerList";
 
 interface Props {
     window?: () => Window;
@@ -211,7 +212,7 @@ export default function ExpertDrawer(props: Props) {
                     <div className="bg-black w-full h-[1px] mb-4"/>
                     <FriendsTitle title="Private Chats" />
                     <div className="h-[250px] overflow-y-auto">
-                        <FriendsList/>
+                        <CustomerList/>
                     </div>
                     {/* <div className="flex items-center mt-2">
                         <FriendsTitle title="Active Rooms" />
