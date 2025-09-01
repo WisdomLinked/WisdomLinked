@@ -535,7 +535,16 @@ export const sendPaymentLinkToUser = async (data: any) => {
         const res = await api.post("admin/sendPaymentLinkToUser", data);
         return res.data;
     } catch (err: any) {
-        return checkForAuthorization(err);
+        // Handle authorization first
+        const authResult = checkForAuthorization(err);
+        if (authResult === false) {
+            // Return a proper error response format
+            return {
+                status: 'FAILED',
+                message: err?.response?.data?.message || err?.message || 'An error occurred'
+            };
+        }
+        return authResult;
     }
 }
 

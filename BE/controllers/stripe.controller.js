@@ -157,6 +157,25 @@ const sendPaymentLinkToUser = async (req, res) => {
                     quantity: 1,
                 },
             ],
+            allow_promotion_codes: false,
+            billing_address_collection: 'required',
+            phone_number_collection: {
+                enabled: true,
+            },
+            after_completion: {
+                type: 'hosted_confirmation',
+                hosted_confirmation: {
+                    custom_message: 'Thank you for your payment! You will receive a confirmation email shortly.',
+                },
+            },
+            metadata: {
+                originalPaymentHistoryId: paymentHistoryId,
+                paymentType: 'retry',
+                stripeMode: currentStripeMode,
+                authorizedCustomerEmail: customerEmail,
+                originalAmount: paymentHistory.amount.toString(),
+                createdAt: new Date().toISOString()
+            }
         });
         console.log("PAYMENT LINK ->", paymentLink.url)
         const html = `
@@ -196,6 +215,114 @@ const sendPaymentLinkToUser = async (req, res) => {
     }
 };
 
+const handleStripeWebhook = async (req, res) => {
+    const stripe = require('stripe');
+    const PaymentHistory = require("../models/PaymentHistory");
+    
+    try {
+        const sig = req.headers['stripe-signature'];
+        const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET;
+        
+        let event;
+        
+        try {
+            event = stripe.webhooks.constructEvent(req.body, sig, endpointSecret);
+        } catch (err) {
+            console.log(`Webhook signature verification failed.`, err.message);
+            return res.status(400).send(`Webhook Error: ${err.message}`);
+        }
+        
+        console.log('Received Stripe webhook event:', event.type);
+        
+        if (event.type === 'checkout.session.completed') {
+            const session = event.data.object;
+            
+            if (session.payment_link) {
+                const appState = await AppState.findOne();
+                const currentStripeMode = appState?.stripeMode || 'test';
+                const stripeInstance = require('stripe')(currentStripeMode === 'test' ? process.env.STRIPE_SECRET_KEY_TEST : process.env.STRIPE_SECRET_KEY_LIVE);
+                
+                const paymentLink = await stripeInstance.paymentLinks.retrieve(session.payment_link);
+                
+                if (paymentLink.metadata && paymentLink.metadata.originalPaymentHistoryId) {
+                    // Security validations
+                    const authorizedEmail = paymentLink.metadata.authorizedCustomerEmail;
+                    const originalAmount = parseInt(paymentLink.metadata.originalAmount);
+                    
+                    // Validate payment amount matches original
+                    if (session.amount_total !== originalAmount) {
+                        console.error('Security Alert: Payment amount mismatch!', {
+                            expected: originalAmount,
+                            received: session.amount_total,
+                            sessionId: session.id
+                        });
+                        return res.status(400).json({ error: 'Payment amount validation failed' });
+                    }
+                    
+                    // Validate customer email matches (if available in session)
+                    if (session.customer_details && session.customer_details.email) {
+                        if (session.customer_details.email.toLowerCase() !== authorizedEmail.toLowerCase()) {
+                            console.error('Security Alert: Unauthorized email used for payment!', {
+                                authorized: authorizedEmail,
+                                used: session.customer_details.email,
+                                sessionId: session.id
+                            });
+                            // Note: We could choose to reject this, but since payment was made, 
+                            // we'll log it and proceed, but flag for admin review
+                        }
+                    }
+                    
+                    // Additional security: Log the payment attempt
+                    console.log('Processing retry payment:', {
+                        sessionId: session.id,
+                        authorizedEmail: authorizedEmail,
+                        amount: session.amount_total,
+                        paymentHistoryId: paymentLink.metadata.originalPaymentHistoryId
+                    });
+                    
+                    const originalPaymentHistory = await PaymentHistory.findById(paymentLink.metadata.originalPaymentHistoryId);
+                    
+                    if (originalPaymentHistory) {
+                        const newPaymentHistory = new PaymentHistory({
+                            stripeMode: paymentLink.metadata.stripeMode || currentStripeMode,
+                            paymentType: 'retry',
+                            amount: session.amount_total,
+                            currency: session.currency,
+                            description: `Retry payment for: ${originalPaymentHistory.description}`,
+                            paymentIntent: session.payment_intent,
+                            customer: originalPaymentHistory.customer,
+                            expert: originalPaymentHistory.expert,
+                            pendingAppointmentToGroup: originalPaymentHistory.pendingAppointmentToGroup,
+                            groupChat: originalPaymentHistory.groupChat,
+                            event: originalPaymentHistory.event,
+                        });
+                        
+                        await newPaymentHistory.save();
+                        console.log('Created retry payment history:', newPaymentHistory._id);
+                        
+                        // Log successful security validation
+                        console.log('Payment security validation passed:', {
+                            paymentHistoryId: newPaymentHistory._id,
+                            sessionId: session.id,
+                            authorizedEmail: authorizedEmail,
+                            amount: session.amount_total
+                        });
+                    }
+                }
+            }
+        }
+        
+        res.json({received: true});
+        
+    } catch (err) {
+        console.log('[handleStripeWebhook]', err);
+        return res.status(500).json({
+            status: 'FAILED',
+            message: 'Webhook processing failed: ' + err.message
+        });
+    }
+};
+
 module.exports = {
     stripePay,
     createStripePaymentIntent,
@@ -203,5 +330,6 @@ module.exports = {
     checkPaymentIntentSucceeded,
     setStripeMode,
     refundPaymentIntent,
-    sendPaymentLinkToUser
+    sendPaymentLinkToUser,
+    handleStripeWebhook
 }

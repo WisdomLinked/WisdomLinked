@@ -216,11 +216,19 @@ const Payment = () => {
             if (response?.status === 'SUCCESS') {
                 alert('Payment link has been sent successfully to the customer!');
             } else {
-                alert('Failed to send payment link: ' + (response?.message || 'Unknown error'));
+                const errorMessage = typeof response?.message === 'string' 
+                    ? response.message 
+                    : 'Unknown error';
+                alert('Failed to send payment link: ' + errorMessage);
             }
         } catch (error: any) {
             console.error('Error sending payment link:', error);
-            alert('Failed to send payment link: ' + (error?.message || 'Unknown error'));
+            const errorMessage = typeof error?.message === 'string' 
+                ? error.message 
+                : typeof error === 'string'
+                ? error
+                : 'An unexpected error occurred';
+            alert('Failed to send payment link: ' + errorMessage);
         } finally {
             SetLoadingStatus(false);
         }
