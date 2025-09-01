@@ -4,7 +4,10 @@ const {
     adminAuth
 } = require("../middlewares/requireAuth");
 const {
-    setStripeMode
+    setStripeMode,
+    sendPaymentLinkToUser,
+    processRefund,
+    sendAdHocPaymentLink
 } = require("../controllers/stripe.controller");
 const { 
     filterUsers, 
@@ -41,6 +44,9 @@ const {
 } = require("../controllers/chatBotQA.controller")
 
 router.post("/setStripeMode", adminAuth, setStripeMode)
+router.post("/sendPaymentLinkToUser", adminAuth, sendPaymentLinkToUser)
+router.post("/processRefund", adminAuth, processRefund)
+router.post("/sendAdHocPaymentLink", adminAuth, sendAdHocPaymentLink)
 router.post("/filterUsers", adminAuth, filterUsers)
 router.post("/filterPaymentHistories", adminAuth, filterPaymentHistories)
 router.post("/getFullUserDataByEmail", adminAuth, getFullUserDataByEmail)

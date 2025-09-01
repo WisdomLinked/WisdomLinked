@@ -530,6 +530,60 @@ export const setStripeMode = async ({ stripeMode }: any) => {
     }
 }
 
+export const sendPaymentLinkToUser = async (data: any) => {
+    try {
+        const res = await api.post("admin/sendPaymentLinkToUser", data);
+        return res.data;
+    } catch (err: any) {
+        // Handle authorization first
+        const authResult = checkForAuthorization(err);
+        if (authResult === false) {
+            // Return a proper error response format
+            return {
+                status: 'FAILED',
+                message: err?.response?.data?.message || err?.message || 'An error occurred'
+            };
+        }
+        return authResult;
+    }
+}
+
+export const processRefund = async (data: any) => {
+    try {
+        const res = await api.post("admin/processRefund", data);
+        return res.data;
+    } catch (err: any) {
+        // Handle authorization first
+        const authResult = checkForAuthorization(err);
+        if (authResult === false) {
+            // Return a proper error response format
+            return {
+                status: 'FAILED',
+                message: err?.response?.data?.message || err?.message || 'An error occurred'
+            };
+        }
+        return authResult;
+    }
+}
+
+export const sendAdHocPaymentLink = async (data: any) => {
+    try {
+        const res = await api.post("admin/sendAdHocPaymentLink", data);
+        return res.data;
+    } catch (err: any) {
+        // Handle authorization first
+        const authResult = checkForAuthorization(err);
+        if (authResult === false) {
+            // Return a proper error response format
+            return {
+                status: 'FAILED',
+                message: err?.response?.data?.message || err?.message || 'An error occurred'
+            };
+        }
+        return authResult;
+    }
+}
+
 // CUSTOMER APIS ------------------
 export async function profileImageUpload(formData: FormData): Promise<any> {
     try {

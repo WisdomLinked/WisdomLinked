@@ -60,7 +60,7 @@ const filterUsers = async (req, res) => {
 
 const filterPaymentHistories = async (req, res) => {
     try {
-        const { email, sortBy, stripeMode, paymentType, dateFrom, dateTo, numPerPage, currentPage } = req.body
+        const { email, sortBy, stripeMode, paymentType, status, dateFrom, dateTo, numPerPage, currentPage } = req.body
         const query = PaymentHistory.find()
         const countQuery = PaymentHistory.count()
 
@@ -86,6 +86,11 @@ const filterPaymentHistories = async (req, res) => {
         if (paymentType) {
             query.where({ paymentType })
             countQuery.where({ paymentType })
+        }
+
+        if (status) {
+            query.where({ status })
+            countQuery.where({ status })
         }
 
         if (dateFrom) {

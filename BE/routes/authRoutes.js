@@ -69,4 +69,5 @@ router.get("/getTimezone",getTimeZone)
 router.post("/contact-form", submitContactForm)
 router.post("/sendEmailToAdmin", sendEmailToAdmin)
 router.post("/getChatBotAnswer",requireAuth(true),getChatBotAnswer)
+// Note: stripe-webhook is now handled directly in server.js before JSON parsing
 module.exports = router;
