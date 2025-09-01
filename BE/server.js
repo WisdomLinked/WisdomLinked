@@ -41,18 +41,25 @@
 
     const app = express();
     const maxRequestBodySize = process.env.MAX_REQUEST_BODY_SIZE || '1mb';
-    app.use(express.json({ limit: maxRequestBodySize }));
-    app.use(express.urlencoded({ limit: maxRequestBodySize }));
-    app.use(cookieParser());
-    app.use(express.json());
+    
     const corsOptions = {
-        origin: [process.env.FE_URL, "https://www.wisdomlinked.com" ],
+        origin: [process.env.FE_URL, "https://www.wisdomlinked.com", "http://localhost:3000"  ],
         methods: ['GET', 'POST', 'PUT', 'DELETE'],
         credentials: true,
 	allowedHeaders: ['Content-Type', 'Authorization']
     };
     app.use(cors(corsOptions));
     app.options('*', cors(corsOptions)); // Pre-flight handling
+
+    // Stripe webhook needs raw body - must come BEFORE express.json()
+    const { handleStripeWebhook } = require('./controllers/stripe.controller');
+    app.post("/api/auth/stripe-webhook", express.raw({type: 'application/json'}), handleStripeWebhook);
+
+    // Now apply JSON parsing for all other routes
+    app.use(express.json({ limit: maxRequestBodySize }));
+    app.use(express.urlencoded({ limit: maxRequestBodySize }));
+    app.use(cookieParser());
+    app.use(express.json());
 
     // register the routes
     app.use("/api/auth", authRoutes);
