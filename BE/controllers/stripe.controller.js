@@ -183,6 +183,25 @@ const sendPaymentLinkToUser = async (req, res) => {
             }
         });
         console.log("PAYMENT LINK ->", paymentLink.url)
+        
+        // Create immediate payment record with pending status
+        const immediatePaymentHistory = new PaymentHistory({
+            stripeMode: currentStripeMode,
+            paymentType: 'retry',
+            amount: finalAmount,
+            currency: paymentHistory.currency || 'usd',
+            description: finalDescription,
+            status: 'pending',
+            customer: paymentHistory.customer,
+            expert: paymentHistory.expert,
+            pendingAppointmentToGroup: paymentHistory.pendingAppointmentToGroup,
+            groupChat: paymentHistory.groupChat,
+            event: paymentHistory.event,
+        });
+        
+        await immediatePaymentHistory.save();
+        console.log('Created immediate pending payment record:', immediatePaymentHistory._id);
+        
         const html = `
         <p>Hello,</p>
         <p>You have a pending payment for our services. Please use the link below to complete your payment:</p>
@@ -289,26 +308,47 @@ const handleStripeWebhook = async (req, res) => {
                     const originalPaymentHistory = await PaymentHistory.findById(paymentLink.metadata.originalPaymentHistoryId);
                     
                     if (originalPaymentHistory) {
-                        const newPaymentHistory = new PaymentHistory({
-                            stripeMode: paymentLink.metadata.stripeMode || currentStripeMode,
-                            paymentType: 'retry',
-                            amount: session.amount_total,
-                            currency: session.currency,
-                            description: paymentLink.metadata.customDescription || `Retry payment for: ${originalPaymentHistory.description}`,
-                            paymentIntent: session.payment_intent,
+                        // Find the pending payment record we created when the link was sent
+                        const pendingPayment = await PaymentHistory.findOne({
                             customer: originalPaymentHistory.customer,
                             expert: originalPaymentHistory.expert,
-                            pendingAppointmentToGroup: originalPaymentHistory.pendingAppointmentToGroup,
-                            groupChat: originalPaymentHistory.groupChat,
-                            event: originalPaymentHistory.event,
-                        });
+                            paymentType: 'retry',
+                            status: 'pending',
+                            amount: session.amount_total,
+                            description: paymentLink.metadata.customDescription || `Retry payment for: ${originalPaymentHistory.description}`
+                        }).sort({ createdAt: -1 });
                         
-                        await newPaymentHistory.save();
-                        console.log('Created retry payment history:', newPaymentHistory._id);
+                        if (pendingPayment) {
+                            // Update the existing pending payment record
+                            pendingPayment.status = 'completed';
+                            pendingPayment.paymentIntent = session.payment_intent;
+                            await pendingPayment.save();
+                            console.log('Updated pending payment to completed:', pendingPayment._id);
+                        } else {
+                            // Fallback: create new payment record if pending not found
+                            const newPaymentHistory = new PaymentHistory({
+                                stripeMode: paymentLink.metadata.stripeMode || currentStripeMode,
+                                paymentType: 'retry',
+                                amount: session.amount_total,
+                                currency: session.currency,
+                                description: paymentLink.metadata.customDescription || `Retry payment for: ${originalPaymentHistory.description}`,
+                                paymentIntent: session.payment_intent,
+                                status: 'completed',
+                                customer: originalPaymentHistory.customer,
+                                expert: originalPaymentHistory.expert,
+                                pendingAppointmentToGroup: originalPaymentHistory.pendingAppointmentToGroup,
+                                groupChat: originalPaymentHistory.groupChat,
+                                event: originalPaymentHistory.event,
+                            });
+                            
+                            await newPaymentHistory.save();
+                            console.log('Created retry payment history (fallback):', newPaymentHistory._id);
+                        }
                         
                         // Log successful security validation
+                        const paymentRecordId = pendingPayment ? pendingPayment._id : newPaymentHistory._id;
                         console.log('Payment security validation passed:', {
-                            paymentHistoryId: newPaymentHistory._id,
+                            paymentHistoryId: paymentRecordId,
                             sessionId: session.id,
                             authorizedEmail: authorizedEmail,
                             amount: session.amount_total
