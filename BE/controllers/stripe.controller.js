@@ -117,7 +117,7 @@ const refundPaymentIntent = async (payment_intent, amount, stripeMode) => {
 
 const sendPaymentLinkToUser = async (req, res) => {
     try {
-        const { paymentHistoryId, customerEmail } = req.body;
+        const { paymentHistoryId, customerEmail, customAmount, customDescription } = req.body;
         
         if (!paymentHistoryId || !customerEmail) {
             return res.status(400).json({
@@ -144,15 +144,18 @@ const sendPaymentLinkToUser = async (req, res) => {
         
         const stripe = require('stripe')(currentStripeMode === 'test' ? process.env.STRIPE_SECRET_KEY_TEST : process.env.STRIPE_SECRET_KEY_LIVE);
         
+        const finalAmount = customAmount || paymentHistory.amount;
+        const finalDescription = customDescription || paymentHistory.description || 'Service Payment';
+        
         const paymentLink = await stripe.paymentLinks.create({
             line_items: [
                 {
                     price_data: {
                         currency: paymentHistory.currency || 'usd',
                         product_data: {
-                            name: paymentHistory.description || 'Service Payment',
+                            name: finalDescription,
                         },
-                        unit_amount: paymentHistory.amount,
+                        unit_amount: finalAmount,
                     },
                     quantity: 1,
                 },
@@ -174,6 +177,8 @@ const sendPaymentLinkToUser = async (req, res) => {
                 stripeMode: currentStripeMode,
                 authorizedCustomerEmail: customerEmail,
                 originalAmount: paymentHistory.amount.toString(),
+                customAmount: finalAmount.toString(),
+                customDescription: finalDescription,
                 createdAt: new Date().toISOString()
             }
         });
@@ -181,8 +186,8 @@ const sendPaymentLinkToUser = async (req, res) => {
         const html = `
         <p>Hello,</p>
         <p>You have a pending payment for our services. Please use the link below to complete your payment:</p>
-        <p><strong>Amount:</strong> $${(paymentHistory.amount / 100).toFixed(2)} ${(paymentHistory.currency || 'USD').toUpperCase()}</p>
-        <p><strong>Description:</strong> ${paymentHistory.description || 'Service Payment'}</p>
+        <p><strong>Amount:</strong> $${(finalAmount / 100).toFixed(2)} ${(paymentHistory.currency || 'USD').toUpperCase()}</p>
+        <p><strong>Description:</strong> ${finalDescription}</p>
         <p><a href="${paymentLink.url}" style="background-color: #31B099; color: white; padding: 12px 24px; text-decoration: none; border-radius: 5px; display: inline-block;">Complete Payment</a></p>
         <p>If you have any questions, please don't hesitate to contact us.</p>
         <p>Best Regards,<br>Team WisdomLinked</p>
@@ -249,10 +254,11 @@ const handleStripeWebhook = async (req, res) => {
                     const authorizedEmail = paymentLink.metadata.authorizedCustomerEmail;
                     const originalAmount = parseInt(paymentLink.metadata.originalAmount);
                     
-                    // Validate payment amount matches original
-                    if (session.amount_total !== originalAmount) {
+                    // Validate payment amount matches expected (original or custom)
+                    const expectedAmount = parseInt(paymentLink.metadata.customAmount) || originalAmount;
+                    if (session.amount_total !== expectedAmount) {
                         console.error('Security Alert: Payment amount mismatch!', {
-                            expected: originalAmount,
+                            expected: expectedAmount,
                             received: session.amount_total,
                             sessionId: session.id
                         });
@@ -288,7 +294,7 @@ const handleStripeWebhook = async (req, res) => {
                             paymentType: 'retry',
                             amount: session.amount_total,
                             currency: session.currency,
-                            description: `Retry payment for: ${originalPaymentHistory.description}`,
+                            description: paymentLink.metadata.customDescription || `Retry payment for: ${originalPaymentHistory.description}`,
                             paymentIntent: session.payment_intent,
                             customer: originalPaymentHistory.customer,
                             expert: originalPaymentHistory.expert,

@@ -7,6 +7,7 @@ import 'react-date-range/dist/styles.css';
 import 'react-date-range/dist/theme/default.css';
 import Pagination from "../../../components/Pagination";
 import { formatDateYYYY_MM_DD_h_m } from "../../../actions/common";
+import RetryPaymentModal from "../../../components/RetryPaymentModal";
 
 const currentYear = new Date().getFullYear();
 const currentMonth = new Date().getMonth() + 1;
@@ -57,6 +58,8 @@ const Payment = () => {
     const [totalPage, set_totalPage] = useState(0)
     const [histories, set_histories] = useState<Array<any>>([])
     const [isFirstLoad, set_isFirstLoad] = useState(true)
+    const [isRetryModalOpen, setIsRetryModalOpen] = useState(false)
+    const [selectedPaymentItem, setSelectedPaymentItem] = useState<any>(null)
 
     const customStaticRanges = [
         ...createStaticRanges([
@@ -198,23 +201,34 @@ const Payment = () => {
         filterHisotries(0)
     }, [])
 
-    const handleRetryPayment = async (paymentItem: any) => {
+    const handleRetryPaymentClick = (paymentItem: any) => {
+        setSelectedPaymentItem(paymentItem);
+        setIsRetryModalOpen(true);
+    };
+
+    const handleRetryModalClose = () => {
+        setIsRetryModalOpen(false);
+        setSelectedPaymentItem(null);
+    };
+
+    const handleRetryPaymentConfirm = async (customizedPayment: {
+        amount: number;
+        description: string;
+        customerEmail: string;
+    }) => {
         try {
             SetLoadingStatus(true);
             
-            const customerEmail = paymentItem.customer?.email;
-            if (!customerEmail) {
-                alert('Customer email not found. Cannot send payment link.');
-                return;
-            }
-            
             const response = await sendPaymentLinkToUser({
-                paymentHistoryId: paymentItem._id,
-                customerEmail: customerEmail
+                paymentHistoryId: selectedPaymentItem._id,
+                customerEmail: customizedPayment.customerEmail,
+                customAmount: Math.round(customizedPayment.amount * 100),
+                customDescription: customizedPayment.description
             });
             
             if (response?.status === 'SUCCESS') {
                 alert('Payment link has been sent successfully to the customer!');
+                handleRetryModalClose();
             } else {
                 const errorMessage = typeof response?.message === 'string' 
                     ? response.message 
@@ -439,9 +453,9 @@ const Payment = () => {
                                                 <td className='px-2'>{item.paymentIntent}</td>
                                                 <td className='px-2 text-center'>
                                                     <button
-                                                        onClick={() => handleRetryPayment(item)}
+                                                        onClick={() => handleRetryPaymentClick(item)}
                                                         className='bg-green hover:bg-green/80 text-white px-3 py-1 rounded text-sm font-medium transition-colors'
-                                                        title='Send new payment link'
+                                                        title='Customize and send new payment link'
                                                     >
                                                         Retry
                                                     </button>
@@ -478,6 +492,12 @@ const Payment = () => {
                     </div>
                 </div>
             </div>
+            <RetryPaymentModal
+                paymentItem={selectedPaymentItem}
+                isOpen={isRetryModalOpen}
+                onClose={handleRetryModalClose}
+                onConfirm={handleRetryPaymentConfirm}
+            />
         </div>
     );
 };
