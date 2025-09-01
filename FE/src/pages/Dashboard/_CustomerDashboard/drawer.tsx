@@ -30,6 +30,7 @@ import Seminars from "./seminars";
 import CastForEducationIcon from '@mui/icons-material/CastForEducation';
 import { leaveRoom } from "../../../socket/roomHandler";
 import GeneralChatList from "../FriendsSideBar/GeneralChatList";
+import Payment from "./payment";
 
 interface Props {
     window?: () => Window;
@@ -71,6 +72,13 @@ export default function CustomerDrawer(props: Props) {
         })
         set_events([...temp])
     }
+
+    const PaymentRoute = () => {
+        const params = new URLSearchParams(window.location.search);
+        const amount = parseFloat(params.get("amount") || "0");
+        const desc = params.get("desc") || "Ad-hoc payment";
+        return <Payment type={desc} price={isNaN(amount) ? 0 : amount} pendingDetails={null} />;
+      };      
 
     const closeAllCall = () => {
         if (otherUserId && remoteStream) { // Close the current video Call
@@ -219,12 +227,13 @@ export default function CustomerDrawer(props: Props) {
             </div>
             <div className={`w-full ${location === 'customerchat' ? 'lg:w-[calc(100%-370px)]' : 'lg:w-[calc(100%-70px)]'} h-full`}>
                 <Routes>
-                    <Route path="/calendar" element={<Calendar />} />
-                    <Route path="/chat" element={<Messenger videoChaton = {!!props.localStream}/>} />
-                    <Route path="/search" element={<Search />} />
-                    <Route path="/seminar" element={<Seminars />} />
-                    <Route path="/joinMeeting" element={<JoinMeeting />} />
-                    <Route path="/profile" element={<CustomerProfile userDetails={userDetails} />} />
+                    <Route path="payment" element={<PaymentRoute />} />
+                    <Route path="calendar" element={<Calendar />} />
+                    <Route path="chat" element={<Messenger videoChaton = {!!props.localStream}/>} />
+                    <Route path="search" element={<Search />} />
+                    <Route path="seminar" element={<Seminars />} />
+                    <Route path="joinMeeting" element={<JoinMeeting />} />
+                    <Route path="profile" element={<CustomerProfile userDetails={userDetails} />} />
                     <Route path="/*" element={<Dashboard />} />
                 </Routes>
             </div>

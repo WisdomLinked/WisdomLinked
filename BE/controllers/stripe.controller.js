@@ -103,10 +103,13 @@ const checkPaymentIntentSucceeded = async (payment_intent, stripeMode) => {
 
 const refundPaymentIntent = async (payment_intent, amount, stripeMode) => {
     try {
-        const stripe = require('stripe')(stripeMode === 'test' ? process.env.STRIPE_SECRET_KEY_TEST : process.env.STRIPE_SECRET_KEY_LIVE);
-        const refund = await stripe.refunds.create({
-            payment_intent: payment_intent,
-        });
+        const stripe = require('stripe')(stripeMode === 'test'
+            ? process.env.STRIPE_SECRET_KEY_TEST
+            : process.env.STRIPE_SECRET_KEY_LIVE);
+        const body = { payment_intent };
+        // amount in USD because Stripe wants cents
+        if (typeof amount === 'number' && amount > 0) body.amount = Math.round(amount * 100);
+        const refund = await stripe.refunds.create(body);
         console.log('Refund succeeded', refund);
         return refund
     } catch (err) {

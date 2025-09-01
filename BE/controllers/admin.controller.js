@@ -20,6 +20,8 @@ const { sendEmailUserAccountApproved } = require("../services/notifications");
 const path = require("path");
 const fs = require("fs");
 const bcrypt = require("bcryptjs");
+const { refundPaymentIntent, checkPaymentIntentSucceeded } = require("./stripe.controller");
+const { appendPaymentHistory } = require("./payment.controller");
 
 const filterUsers = async (req, res) => {
     try {
@@ -683,6 +685,44 @@ const registerUserByAdmin = async (req, res) => {
 };
 
 
+const refundPaymentByAdmin = async (req, res) => {
+  try {
+    const { payment_intent, stripeMode, amount, note } = req.body; 
+    if (!payment_intent || !stripeMode) return res.status(400).json({ message: "payment_intent and stripeMode are required" });
+    const refund = await refundPaymentIntent(payment_intent, amount, stripeMode);
+    if (!refund) return res.status(400).json({ message: "Refund failed" });
+
+    // Record as a refund in the history (negative amount)
+    await appendPaymentHistory({
+      stripeMode,
+      paymentType: 'refund',
+      amount: amount ? -Math.round(amount * 100) : 0, // 0 means full in Stripe record; amount optional
+      currency: 'usd',
+      description: `Admin refund for PI ${payment_intent}`,
+      paymentIntent: payment_intent,
+      refundId: refund.id,
+      adminNote: note || '',
+    });
+    return res.status(200).json({ ok: true, refundId: refund.id });
+  } catch (err) {
+    console.log(err);
+    return res.status(500).send(err.message);
+  }
+};
+
+const checkPaymentIntentStatus = async (req, res) => {
+  try {
+    const { payment_intent, stripeMode } = req.body;
+    if (!payment_intent || !stripeMode) return res.status(400).json({ message: "payment_intent and stripeMode are required" });
+    const pi = await checkPaymentIntentSucceeded(payment_intent, stripeMode);
+    return res.status(200).json({ succeeded: !!pi, paymentIntent: pi || null });
+  } catch (err) {
+    console.log(err);
+    return res.status(500).send(err.message);
+  }
+};
+
+
 module.exports = {
     filterUsers,
     getFullUserDataByEmail,
@@ -700,5 +740,7 @@ module.exports = {
     deletePendingUser,
     deletePendingLogin,
     convertPendingUserToUserByAdmin,
-    registerUserByAdmin
+    registerUserByAdmin,
+    refundPaymentByAdmin,
+    checkPaymentIntentStatus
 }

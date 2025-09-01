@@ -22,7 +22,9 @@ const {
     deletePendingLogin,
     deletePendingUser,
     convertPendingUserToUserByAdmin,
-    registerUserByAdmin
+    registerUserByAdmin,
+    refundPaymentByAdmin,
+    checkPaymentIntentStatus
 } = require("../controllers/admin.controller");
 
 const {
@@ -63,5 +65,7 @@ router.post("/createChatBotQA", adminAuth, createChatBotQA)
 router.get("/getChatBotQA", adminAuth, getChatBotQA)
 router.post("/updateChatBotQA/:id", adminAuth, updateChatBotQA)
 router.post("/deleteChatBotQA/:id", adminAuth, deleteChatBotQA)
+router.post("/refundPayment", adminAuth, refundPaymentByAdmin)
+router.post("/checkPaymentIntent", adminAuth, checkPaymentIntentStatus)
 
 module.exports = router;

@@ -7,6 +7,10 @@ import 'react-date-range/dist/styles.css';
 import 'react-date-range/dist/theme/default.css';
 import Pagination from "../../../components/Pagination";
 import { formatDateYYYY_MM_DD_h_m } from "../../../actions/common";
+import OverlayPortal from "../../../components/OverayPortal"; // adjust relative path if needed
+import CloseIcon from '@mui/icons-material/Close';
+import { adminRefundPayment, adminCheckPaymentIntent } from "../../../api/api";
+
 
 const currentYear = new Date().getFullYear();
 const currentMonth = new Date().getMonth() + 1;
@@ -57,6 +61,10 @@ const Payment = () => {
     const [totalPage, set_totalPage] = useState(0)
     const [histories, set_histories] = useState<Array<any>>([])
     const [isFirstLoad, set_isFirstLoad] = useState(true)
+    const [refundItem, set_refundItem] = useState<any>(null);
+    const openRefundModal = (item: any) => set_refundItem(item);
+    const closeRefundModal = () => set_refundItem(null);
+
 
     const customStaticRanges = [
         ...createStaticRanges([
@@ -197,6 +205,52 @@ const Payment = () => {
     useEffect(() => {
         filterHisotries(0)
     }, [])
+
+    {refundItem && (
+        <OverlayPortal closeModal={closeRefundModal}>
+          <div className="fixed inset-0 flex items-center justify-center">
+            <div className="bg-black border border-midgrey rounded-lg p-4 w-full max-w-md relative">
+              <button className="absolute top-2 right-2" onClick={closeRefundModal}>
+                <CloseIcon />
+              </button>
+              <div className="text-lg mb-2">Refund Payment</div>
+              <div className="text-sm mb-4 text-grey">
+                PI: {refundItem.paymentIntent} • Mode: {refundItem.stripeMode}
+              </div>
+              <label className="text-sm">Amount (USD, optional for partial):</label>
+              <input id="refund-amount" type="number" step="0.01"
+                     className="w-full bg-transparent border rounded px-2 py-1 mb-3" />
+              <label className="text-sm">Admin note (optional):</label>
+              <textarea id="refund-note"
+                        className="w-full bg-transparent border rounded px-2 py-1 mb-4" />
+              <div className="flex justify-end gap-2">
+                <button className="px-3 py-1 border rounded" onClick={closeRefundModal}>Cancel</button>
+                <button
+                  className="px-3 py-1 border rounded bg-green hover:opacity-80"
+                  onClick={async () => {
+                    const amountStr = (document.getElementById('refund-amount') as HTMLInputElement)?.value;
+                    const note = (document.getElementById('refund-note') as HTMLTextAreaElement)?.value;
+                    const amount = amountStr ? parseFloat(amountStr) : undefined;
+                    SetLoadingStatus(true);
+                    const res = await adminRefundPayment({
+                      payment_intent: refundItem.paymentIntent,
+                      stripeMode: refundItem.stripeMode,
+                      amount, // undefined = full refund
+                      note,
+                    });
+                    SetLoadingStatus(false);
+                    if (res?.ok) alert("Refund submitted");
+                    closeRefundModal();
+                  }}
+                >
+                  Submit
+                </button>
+              </div>
+            </div>
+          </div>
+        </OverlayPortal>
+      )}
+      
 
     return (
         <div className="w-full h-full pt-10 overflow-y-auto text-white px-[18px]">
@@ -380,6 +434,7 @@ const Payment = () => {
                                     <th scope="col" className="px-6 py-3">
                                         Payment Intent
                                     </th>
+                                    <th scope="col" className="px-6 py-3 text-center">Actions</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -393,11 +448,68 @@ const Payment = () => {
                                                 <td className='text-center px-2'>{item.currency}</td>
                                                 <td className='text-center px-2'>{item.expert?.email}</td>
                                                 <td className='text-center px-2'>{item.customer?.email}</td>
-                                                <td className='px-2 text-center'>{item.event ? 'Event' : 'Seminar'}</td>
+                                                <td className="px-2 text-center">
+                                                    {item.paymentType === 'adhoc' ? 'Ad-hoc' : (item.event ? 'Event' : 'Seminar')}
+                                            </td>
                                                 <td className='px-2 max-w-[200px] truncate'>{item.description}</td>
                                                 <td className='px-2 text-center'>{item.stripeMode}</td>
                                                 <td className='px-2 text-center'>{item.paymentType}</td>
                                                 <td className='px-2'>{item.paymentIntent}</td>
+                                                <td className="px-2 text-center">
+                                                    <div className="flex gap-2 justify-center">
+                                                        {/* Retry link */}
+                                                        <button
+                                                        className="px-2 py-1 border rounded hover:bg-midgrey"
+                                                        onClick={() => {
+                                                            const amountUSD = (item.amount || 0) / 100;
+                                                            const params = new URLSearchParams({
+                                                            amount: String(amountUSD),
+                                                            mode: item.stripeMode || 'test',
+                                                            desc: item.description || 'Payment',
+                                                            });
+                                                            const base = process.env.REACT_APP_AUTH_URL || '/user/';
+                                                            const url = `${window.location.origin}${base}customerdashboard/payment?${params.toString()}`;
+                                                            // const baseUrl = `${process.env.REACT_APP_AUTH_URL}customerdashboard/search`;
+                                                            // const params = new URLSearchParams({
+                                                            //     payment_intent: item.paymentIntent,
+                                                            //     mode: item.stripeMode,
+                                                            //     retry: 'true',
+                                                            //     amount: String(amountUSD),
+                                                            // });
+                                                            // const url = `${baseUrl}?${params.toString()}`;
+                                                            navigator.clipboard.writeText(url);
+                                                            alert("Retry link copied:\n" + url);
+                                                        }}
+                                                        >
+                                                        Retry (link)
+                                                        </button>
+
+                                                        {/* Check PaymentIntent status */}
+                                                        <button
+                                                        className="px-2 py-1 border rounded hover:bg-midgrey"
+                                                        onClick={async () => {
+                                                            const res = await adminCheckPaymentIntent({
+                                                            payment_intent: item.paymentIntent,
+                                                            stripeMode: item.stripeMode,
+                                                            });
+                                                            alert(res?.succeeded ? "Status: Succeeded" : "Status: Not succeeded");
+                                                        }}
+                                                        disabled={!item.paymentIntent}
+                                                        >
+                                                        Check
+                                                        </button>
+
+                                                        {/* Refund */}
+                                                        <button
+                                                        className="px-2 py-1 border rounded hover:bg-midgrey"
+                                                        onClick={() => openRefundModal(item)}
+                                                        disabled={!item.paymentIntent}
+                                                        >
+                                                        Refund
+                                                        </button>
+                                                    </div>
+                                                </td>
+
                                             </tr>
                                         )
                                     })

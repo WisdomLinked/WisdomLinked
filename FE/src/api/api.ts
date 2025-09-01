@@ -764,6 +764,20 @@ export const doFilterPaymentHistories = async (filter: any) => {
     }
 };
 
+export const appendPaymentHistoryByCustomer = async (payload: {
+    stripeMode: 'test'|'live';
+    amountUSD: number;            // e.g. 49.99
+    description: string;          // e.g. "Ad‑hoc payment"
+    paymentIntent: string;        // Stripe PI id
+  }) => {
+    try {
+      const res = await api.post("customer/appendPaymentHistory", payload);
+      return res.data;
+    } catch (err: any) {
+      return checkForAuthorization(err);
+    }
+  };  
+
 export const doGetFullUserDataByEmail = async (email: any) => {
     try {
         const res = await api.post("admin/getFullUserDataByEmail", { email });
@@ -970,3 +984,22 @@ export const deleteChatBotQA = async (id: any) => {
         return checkForAuthorization(err);
     }
 };
+
+export const adminRefundPayment = async (payload: { payment_intent: string, stripeMode: 'test'|'live', amount?: number, note?: string }) => {
+    try {
+        const res = await api.post("admin/refundPayfment", payload);
+        return res.data;
+    } catch (err: any) {
+        return checkForAuthorization(err);
+    }
+};
+    
+export const adminCheckPaymentIntent = async (payload: { payment_intent: string, stripeMode: 'test'|'live' }) => {
+    try {
+        const res = await api.post("admin/checkPaymentIntent", payload);
+        return res.data;
+    } catch (err: any) {
+        return checkForAuthorization(err);
+    }
+};
+    

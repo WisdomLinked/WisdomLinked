@@ -6,7 +6,7 @@ import {
     useStripe,
     useElements,
 } from '@stripe/react-stripe-js';
-import { createStripePaymentIntent, getStripeMode } from '../../../api/api';
+import { createStripePaymentIntent, getStripeMode, appendPaymentHistoryByCustomer } from '../../../api/api';
 import ShowFieldError from '../../../components/ShowFieldError';
 import { SetLoadingStatus } from '../../../actions/appActions';
 
@@ -116,7 +116,12 @@ const CheckoutForm = ({
                 amount: price, // Possibly 0
             });
             const { client_secret: clientSecret } = response;
-
+            if (!clientSecret) {
+                SetLoadingStatus(false);
+                set_errorMessage("Could not start payment. Please try again.");
+                console.error("[createStripePaymentIntent] No client_secret:", response);
+                return;
+            }
             checkStorageUsage();
             window.localStorage.setItem('pendingDetails', JSON.stringify(pendingDetails));
 
@@ -132,11 +137,24 @@ const CheckoutForm = ({
             SetLoadingStatus(false);
 
             if (paymentIntent?.status === 'succeeded') {
-                window.location.replace(`${window.location.href.split('?')[0]}?redirect_status=succeeded&payment_intent=${paymentIntent.id}`);
-            } else {
+                try {
+                  await appendPaymentHistoryByCustomer({
+                    stripeMode,
+                    amountUSD: price, // what we actually charged
+                    description: pendingDetails ? (pendingDetails?.type || 'Payment') : 'Ad-hoc payment',
+                    paymentIntent: paymentIntent.id,
+                  });
+                } catch (e) {
+                  console.warn('[appendPaymentHistoryByCustomer] failed', e);
+                }
+                window.location.replace(
+                  `${window.location.href.split('?')[0]}?redirect_status=succeeded&payment_intent=${paymentIntent.id}`
+                );
+              } else {
                 window.localStorage.removeItem('pendingDetails');
                 set_errorMessage('Payment failed, try again.');
-            }
+              }
+              
         } catch (err: any) {
             console.error("Error during handleSubmit", err);
             set_errorMessage(err.message || "Error while processing payment.");
@@ -182,7 +200,7 @@ const Payment = ({
     const options: any = {
         mode: 'payment',
         // amount: price * 1000,
-        amount: price > 0 ? price * 1000 : 1,
+        amount: price > 0 ? Math.round(price * 100) : 1,
         currency: 'usd',
         // Fully customizable with appearance API.
         appearance: {
@@ -201,42 +219,97 @@ const Payment = ({
     //     }
     // }
     const setStripeMode = async () => {
-        const response = await getStripeMode();
-        if (response) {
-            set_stripeMode(response.stripeMode || 'test');
-            set_stripePromise(
-                loadStripe(
-                    response.stripeMode === 'test'
-                        ? process.env.REACT_APP_STRIPE_PUBLISHABLE_KEY_TEST || ''
-                        : process.env.REACT_APP_STRIPE_PUBLISHABLE_KEY_LIVE || ''
-                )
-            );
+        try {
+            // First, try to get from URL
+            const urlParams = new URLSearchParams(window.location.search);
+            const modeFromUrl = urlParams.get('mode');
+            
+            let finalMode = 'test'; // default fallback
+            
+            if (modeFromUrl === 'test' || modeFromUrl === 'live') {
+                finalMode = modeFromUrl;
+            } else {
+                // Try server call
+                const response = await getStripeMode();
+                if (response && (response.stripeMode === 'test' || response.stripeMode === 'live')) {
+                    finalMode = response.stripeMode;
+                }
+            }
+            
+            set_stripeMode(finalMode);
+            
+            const publishableKey = finalMode === 'test' 
+                ? process.env.REACT_APP_STRIPE_PUBLISHABLE_KEY_TEST 
+                : process.env.REACT_APP_STRIPE_PUBLISHABLE_KEY_LIVE;
+                
+            if (publishableKey) {
+                const stripeInstance = loadStripe(publishableKey);
+                set_stripePromise(stripeInstance);
+                console.log('Stripe initialized with mode:', finalMode);
+            } else {
+                console.error('Missing Stripe publishable key for mode:', finalMode);
+            }
+        } catch (error) {
+            console.error('Error setting up Stripe:', error);
+            // Set default
+            set_stripeMode('test');
+            set_stripePromise(loadStripe(process.env.REACT_APP_STRIPE_PUBLISHABLE_KEY_TEST || ''));
         }
-    };
+    }
 
-    // useEffect(() => {
-    //     console.log("price:", price)
-    //         setStripeMode()
-    //
-    // },[])
     useEffect(() => {
-        setStripeMode();
+        // If URL has ?mode=test|live, prefer that. Otherwise, hit the server.
+        const params = new URLSearchParams(window.location.search);
+        const qMode = params.get('mode');
+        console.log("[mode effect] qMode =", qMode);
+      
+        if (qMode === 'test' || qMode === 'live') {
+          set_stripeMode(qMode);
+      
+          const pk = qMode === 'test'
+            ? (process.env.REACT_APP_STRIPE_PUBLISHABLE_KEY_TEST || '')
+            : (process.env.REACT_APP_STRIPE_PUBLISHABLE_KEY_LIVE || '');
+            console.log("[Stripe PK prefix]", pk.slice(0, 10)); 
+            
+            const p = loadStripe(pk);
+            set_stripePromise(p);
+            p.then((stripe) => {
+                console.log("[loadStripe resolved]", !!stripe);
+              });
+        } else {
+          // your existing function that fetches mode + sets stripePromise
+          console.log("I shouldnt be logged")
+          setStripeMode();
+        }
     }, []);
+      
+      
 
 
     useEffect(() => {
+        console.log("[Stripe init]", { stripeMode, stripePromise: !!stripePromise });
         if (stripeMode && stripePromise) {
             SetLoadingStatus(false)
         } else {
             SetLoadingStatus(true)
         }
     }, [stripeMode, stripePromise])
+    
+    useEffect(() => {
+        console.log('Stripe mode changed:', stripeMode);
+        console.log('Stripe promise:', stripePromise);
+    }, [stripeMode, stripePromise]);
+      
 
     return (
         stripeMode && stripePromise ?
             <Elements stripe={stripePromise} options={options}>
                 <div className='text-xl text-white text-center mb-6'>
                     Please pay ${price} for the {type} ({stripeMode})
+                </div>
+                <div style={{ opacity: 0.7, fontSize: 12, textAlign: 'center' }}>[Payment Element Mounting]</div>
+                <div style={{ position: 'relative', zIndex: 10 }}>
+                    <PaymentElement />
                 </div>
                 <CheckoutForm
                     pendingDetails={pendingDetails}
