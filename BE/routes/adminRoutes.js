@@ -5,7 +5,8 @@ const {
 } = require("../middlewares/requireAuth");
 const {
     setStripeMode,
-    sendPaymentLinkToUser
+    sendPaymentLinkToUser,
+    processRefund
 } = require("../controllers/stripe.controller");
 const { 
     filterUsers, 
@@ -43,6 +44,7 @@ const {
 
 router.post("/setStripeMode", adminAuth, setStripeMode)
 router.post("/sendPaymentLinkToUser", adminAuth, sendPaymentLinkToUser)
+router.post("/processRefund", adminAuth, processRefund)
 router.post("/filterUsers", adminAuth, filterUsers)
 router.post("/filterPaymentHistories", adminAuth, filterPaymentHistories)
 router.post("/getFullUserDataByEmail", adminAuth, getFullUserDataByEmail)
