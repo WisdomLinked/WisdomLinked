@@ -6,7 +6,8 @@ const {
 const {
     setStripeMode,
     sendPaymentLinkToUser,
-    processRefund
+    processRefund,
+    sendAdHocPaymentLink
 } = require("../controllers/stripe.controller");
 const { 
     filterUsers, 
@@ -45,6 +46,7 @@ const {
 router.post("/setStripeMode", adminAuth, setStripeMode)
 router.post("/sendPaymentLinkToUser", adminAuth, sendPaymentLinkToUser)
 router.post("/processRefund", adminAuth, processRefund)
+router.post("/sendAdHocPaymentLink", adminAuth, sendAdHocPaymentLink)
 router.post("/filterUsers", adminAuth, filterUsers)
 router.post("/filterPaymentHistories", adminAuth, filterPaymentHistories)
 router.post("/getFullUserDataByEmail", adminAuth, getFullUserDataByEmail)

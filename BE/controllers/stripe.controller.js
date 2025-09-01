@@ -377,69 +377,49 @@ const handleStripeWebhook = async (req, res) => {
                             }
                         }
                         
-                        // Send payment confirmation email for retry payments
-                        if (paymentLink.metadata.paymentType === 'retry' && authorizedEmail) {
-                            const sgMail = require("@sendgrid/mail");
-                            const adminEmail = "admin@wisdomlinked.com";
-                            sgMail.setApiKey(process.env.SENDGRID_API_KEY);
-                            
-                            const confirmationEmailHtml = `
-                            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-                                <div style="background-color: #f8f9fa; padding: 20px; border-radius: 8px; border-left: 4px solid #31B099;">
-                                    <h2 style="color: #31B099; margin-top: 0;">✅ Payment Confirmation</h2>
-                                    <p>Dear Valued Customer,</p>
-                                    
-                                    <p>Thank you! Your payment has been successfully processed.</p>
-                                    
-                                    <div style="background-color: white; padding: 15px; border-radius: 5px; margin: 15px 0;">
-                                        <h3 style="margin-top: 0; color: #333;">Payment Details</h3>
-                                        <p><strong>Amount:</strong> $${(session.amount_total / 100).toFixed(2)} ${session.currency.toUpperCase()}</p>
-                                        <p><strong>Description:</strong> ${paymentLink.metadata.customDescription || 'Service Payment'}</p>
-                                        <p><strong>Payment Date:</strong> ${new Date().toLocaleDateString()}</p>
-                                        <p><strong>Payment ID:</strong> ${session.payment_intent}</p>
-                                    </div>
-                                    
-                                    <p><strong>What's next?</strong></p>
-                                    <ul>
-                                        <li>You will receive a separate receipt from Stripe with detailed payment information</li>
-                                        <li>This payment confirms your service access as described</li>
-                                        <li>If you have any questions, please contact our support team</li>
-                                    </ul>
-                                    
-                                    <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;">
-                                    
-                                    <p style="color: #666; font-size: 14px;">
-                                        Thank you for choosing WisdomLinked!<br>
-                                        Best regards,<br>
-                                        <strong>WisdomLinked Team</strong>
-                                    </p>
-                                </div>
-                            </div>
-                            `;
-                            
-                            const confirmationEmailMsg = {
-                                to: authorizedEmail,
-                                from: {
-                                    name: "WisdomLinked",
-                                    email: adminEmail,
-                                },
-                                subject: `Payment Confirmation - $${(session.amount_total / 100).toFixed(2)} - WisdomLinked`,
-                                html: confirmationEmailHtml,
-                            };
-                            
-                            try {
-                                await sgMail.send(confirmationEmailMsg);
-                                console.log('Payment confirmation email sent to:', authorizedEmail);
-                            } catch (emailError) {
-                                console.error('Failed to send payment confirmation email:', emailError);
-                                // Don't fail the webhook if email fails
-                            }
-                        }
-                        
                         // Log successful security validation
                         const paymentRecordId = pendingPayment ? pendingPayment._id : newPaymentHistory._id;
                         console.log('Payment security validation passed:', {
                             paymentHistoryId: paymentRecordId,
+                            sessionId: session.id,
+                            authorizedEmail: authorizedEmail,
+                            amount: session.amount_total
+                        });
+                    }
+                } else if (paymentLink.metadata.paymentType === 'adhoc') {
+                    // Handle ad-hoc payment completion
+                    console.log('Processing ad-hoc payment completion');
+                    
+                    // Find the pending ad-hoc payment record
+                    const pendingAdHocPayment = await PaymentHistory.findOne({
+                        customer: paymentLink.metadata.customerId,
+                        paymentType: 'adhoc',
+                        status: 'pending',
+                        amount: session.amount_total,
+                        description: paymentLink.metadata.customDescription
+                    }).sort({ createdAt: -1 });
+                    
+                    if (pendingAdHocPayment) {
+                        // Update the existing pending payment record
+                        pendingAdHocPayment.status = 'completed';
+                        pendingAdHocPayment.paymentIntent = session.payment_intent;
+                        await pendingAdHocPayment.save();
+                        console.log('Updated pending ad-hoc payment to completed:', pendingAdHocPayment._id);
+                        
+                        // Update payment intent to send receipt
+                        try {
+                            const stripe = require('stripe')(paymentLink.metadata.stripeMode === 'test' ? process.env.STRIPE_SECRET_KEY_TEST : process.env.STRIPE_SECRET_KEY_LIVE);
+                            await stripe.paymentIntents.update(session.payment_intent, {
+                                receipt_email: authorizedEmail,
+                            });
+                            console.log('Updated ad-hoc payment intent with receipt email:', authorizedEmail);
+                        } catch (receiptError) {
+                            console.error('Failed to update ad-hoc payment intent with receipt email:', receiptError);
+                        }
+                        
+                        // Log successful validation
+                        console.log('Ad-hoc payment security validation passed:', {
+                            paymentHistoryId: pendingAdHocPayment._id,
                             sessionId: session.id,
                             authorizedEmail: authorizedEmail,
                             amount: session.amount_total
@@ -662,6 +642,196 @@ const processRefund = async (req, res) => {
     }
 };
 
+const sendAdHocPaymentLink = async (req, res) => {
+    try {
+        const { amount, description, customerEmail, customerName } = req.body;
+        
+        // Validation
+        if (!amount || amount <= 0) {
+            return res.status(400).json({
+                status: 'FAILED',
+                message: 'Valid payment amount is required.'
+            });
+        }
+        
+        if (!description || !description.trim()) {
+            return res.status(400).json({
+                status: 'FAILED',
+                message: 'Payment description is required.'
+            });
+        }
+        
+        if (!customerEmail || !customerEmail.trim()) {
+            return res.status(400).json({
+                status: 'FAILED',
+                message: 'Customer email is required.'
+            });
+        }
+        
+        // Basic email validation
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(customerEmail.trim())) {
+            return res.status(400).json({
+                status: 'FAILED',
+                message: 'Valid customer email is required.'
+            });
+        }
+        
+        const PaymentHistory = require("../models/PaymentHistory");
+        const User = require("../models/User");
+        const AppState = require("../models/AppState");
+        
+        // Get current stripe mode
+        const appState = await AppState.findOne();
+        const currentStripeMode = appState?.stripeMode || 'test';
+        
+        // Check if customer exists, create if needed
+        let customer = await User.findOne({ email: customerEmail.trim() });
+        if (!customer) {
+            // Create basic customer record for payment tracking
+            customer = new User({
+                email: customerEmail.trim(),
+                name: customerName?.trim() || 'Ad-hoc Customer',
+                role: 'customer',
+                isActive: false, // Mark as inactive since it's just for payment
+                isAdHocCustomer: true, // Flag to identify ad-hoc customers
+            });
+            await customer.save();
+            console.log('Created ad-hoc customer record:', customer._id);
+        }
+        
+        // Create Stripe payment link
+        const stripe = require('stripe')(currentStripeMode === 'test' ? process.env.STRIPE_SECRET_KEY_TEST : process.env.STRIPE_SECRET_KEY_LIVE);
+        
+        const finalAmount = Math.round(amount * 100); // Convert to cents
+        const finalDescription = description.trim();
+        
+        const paymentLink = await stripe.paymentLinks.create({
+            line_items: [
+                {
+                    price_data: {
+                        currency: 'usd',
+                        product_data: {
+                            name: finalDescription,
+                        },
+                        unit_amount: finalAmount,
+                    },
+                    quantity: 1,
+                },
+            ],
+            allow_promotion_codes: false,
+            billing_address_collection: 'required',
+            phone_number_collection: {
+                enabled: true,
+            },
+            after_completion: {
+                type: 'hosted_confirmation',
+                hosted_confirmation: {
+                    custom_message: 'Thank you for your payment! You will receive a confirmation email and receipt shortly.',
+                },
+            },
+            metadata: {
+                paymentType: 'adhoc',
+                stripeMode: currentStripeMode,
+                authorizedCustomerEmail: customerEmail.trim(),
+                customAmount: finalAmount.toString(),
+                customDescription: finalDescription,
+                createdAt: new Date().toISOString(),
+                customerId: customer._id.toString(),
+            }
+        });
+        
+        console.log("AD-HOC PAYMENT LINK ->", paymentLink.url);
+        
+        // Create immediate payment record with pending status
+        const immediatePaymentHistory = new PaymentHistory({
+            stripeMode: currentStripeMode,
+            paymentType: 'adhoc',
+            amount: finalAmount,
+            currency: 'usd',
+            description: finalDescription,
+            status: 'pending',
+            customer: customer._id,
+        });
+        
+        await immediatePaymentHistory.save();
+        console.log('Created immediate pending ad-hoc payment record:', immediatePaymentHistory._id);
+        
+        // Send payment link email
+        const sgMail = require("@sendgrid/mail");
+        const adminEmail = "admin@wisdomlinked.com";
+        sgMail.setApiKey(process.env.SENDGRID_API_KEY);
+        
+        const html = `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+            <div style="background-color: #f8f9fa; padding: 20px; border-radius: 8px; border-left: 4px solid #007bff;">
+                <h2 style="color: #007bff; margin-top: 0;">💳 Payment Request</h2>
+                <p>Hello${customerName ? ` ${customerName}` : ''},</p>
+                
+                <p>You have received a payment request from WisdomLinked. Please use the link below to complete your payment:</p>
+                
+                <div style="background-color: white; padding: 15px; border-radius: 5px; margin: 15px 0;">
+                    <h3 style="margin-top: 0; color: #333;">Payment Details</h3>
+                    <p><strong>Amount:</strong> $${(finalAmount / 100).toFixed(2)} USD</p>
+                    <p><strong>Description:</strong> ${finalDescription}</p>
+                </div>
+                
+                <div style="text-align: center; margin: 20px 0;">
+                    <a href="${paymentLink.url}" style="background-color: #007bff; color: white; padding: 12px 24px; text-decoration: none; border-radius: 5px; display: inline-block; font-weight: bold;">Complete Payment</a>
+                </div>
+                
+                <p><strong>Payment Process:</strong></p>
+                <ul>
+                    <li>Click the "Complete Payment" button above</li>
+                    <li>Enter your payment details securely through Stripe</li>
+                    <li>You will receive a confirmation email once payment is processed</li>
+                </ul>
+                
+                <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;">
+                
+                <p style="color: #666; font-size: 14px;">
+                    If you have any questions about this payment request, please contact our support team.<br><br>
+                    Best regards,<br>
+                    <strong>WisdomLinked Team</strong>
+                </p>
+            </div>
+        </div>
+        `;
+        
+        const emailMsg = {
+            to: customerEmail.trim(),
+            from: {
+                name: "WisdomLinked",
+                email: adminEmail,
+            },
+            subject: `Payment Request - $${(finalAmount / 100).toFixed(2)} - WisdomLinked`,
+            html: html,
+        };
+        
+        await sgMail.send(emailMsg);
+        console.log('Ad-hoc payment link email sent to:', customerEmail.trim());
+        
+        res.status(200).json({
+            status: 'SUCCESS',
+            message: 'Payment link sent successfully.',
+            paymentHistory: {
+                id: immediatePaymentHistory._id,
+                amount: finalAmount,
+                description: finalDescription,
+                customerEmail: customerEmail.trim(),
+                status: 'pending'
+            }
+        });
+        
+    } catch (err) {
+        console.log('[sendAdHocPaymentLink]', err);
+        return res.status(500).json({
+            status: 'FAILED',
+            message: 'Failed to send payment link: ' + err.message
+        });
+    }
+};
+
 module.exports = {
     stripePay,
     createStripePaymentIntent,
@@ -671,5 +841,6 @@ module.exports = {
     refundPaymentIntent,
     sendPaymentLinkToUser,
     handleStripeWebhook,
-    processRefund
+    processRefund,
+    sendAdHocPaymentLink
 }

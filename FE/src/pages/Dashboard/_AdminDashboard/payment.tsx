@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { doFilterPaymentHistories, getStripeMode, setStripeMode, sendPaymentLinkToUser, processRefund } from "../../../api/api";
+import { doFilterPaymentHistories, getStripeMode, setStripeMode, sendPaymentLinkToUser, processRefund, sendAdHocPaymentLink } from "../../../api/api";
 import { SetLoadingStatus } from "../../../actions/appActions";
 import SelectionWithCheckBox from "../../../components/SelectionWithCheckBox";
 import { DateRangePicker, createStaticRanges } from 'react-date-range';
@@ -9,6 +9,7 @@ import Pagination from "../../../components/Pagination";
 import { formatDateYYYY_MM_DD_h_m } from "../../../actions/common";
 import RetryPaymentModal from "../../../components/RetryPaymentModal";
 import RefundPaymentModal from "../../../components/RefundPaymentModal";
+import AdHocPaymentModal from "../../../components/AdHocPaymentModal";
 
 const currentYear = new Date().getFullYear();
 const currentMonth = new Date().getMonth() + 1;
@@ -86,6 +87,7 @@ const Payment = () => {
     const [selectedPaymentItem, setSelectedPaymentItem] = useState<any>(null)
     const [isRefundModalOpen, setIsRefundModalOpen] = useState(false)
     const [selectedRefundItem, setSelectedRefundItem] = useState<any>(null)
+    const [isAdHocModalOpen, setIsAdHocModalOpen] = useState(false)
 
     const customStaticRanges = [
         ...createStaticRanges([
@@ -248,6 +250,14 @@ const Payment = () => {
         setSelectedRefundItem(null);
     };
 
+    const handleAdHocPaymentClick = () => {
+        setIsAdHocModalOpen(true);
+    };
+
+    const handleAdHocModalClose = () => {
+        setIsAdHocModalOpen(false);
+    };
+
     const handleRetryPaymentConfirm = async (customizedPayment: {
         amount: number;
         description: string;
@@ -317,6 +327,46 @@ const Payment = () => {
                 ? error
                 : 'An unexpected error occurred';
             alert('Failed to process refund: ' + errorMessage);
+        } finally {
+            SetLoadingStatus(false);
+        }
+    };
+
+    const handleAdHocPaymentConfirm = async (paymentData: {
+        amount: number;
+        description: string;
+        customerEmail: string;
+        customerName?: string;
+    }) => {
+        try {
+            SetLoadingStatus(true);
+            
+            const response = await sendAdHocPaymentLink({
+                amount: paymentData.amount,
+                description: paymentData.description,
+                customerEmail: paymentData.customerEmail,
+                customerName: paymentData.customerName
+            });
+            
+            if (response?.status === 'SUCCESS') {
+                alert('Payment link sent successfully to customer!');
+                handleAdHocModalClose();
+                // Refresh the payment history to show the new pending payment
+                filterHisotries(currentPage);
+            } else {
+                const errorMessage = typeof response?.message === 'string' 
+                    ? response.message 
+                    : 'Unknown error';
+                alert('Failed to send payment link: ' + errorMessage);
+            }
+        } catch (error: any) {
+            console.error('Error sending ad-hoc payment link:', error);
+            const errorMessage = typeof error?.message === 'string' 
+                ? error.message 
+                : typeof error === 'string'
+                ? error
+                : 'An unexpected error occurred';
+            alert('Failed to send payment link: ' + errorMessage);
         } finally {
             SetLoadingStatus(false);
         }
@@ -479,6 +529,19 @@ const Payment = () => {
                             goLast={() => set_currentPage(totalPage)}
                         />
                     </div>
+                    
+                    {/* Ad-hoc Payment Button */}
+                    <div className="flex justify-end px-4 mb-4">
+                        <button
+                            onClick={handleAdHocPaymentClick}
+                            className="bg-blue-500 hover:bg-blue-600 text-white px-6 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2"
+                            title="Send custom payment request to any customer"
+                        >
+                            <span>💳</span>
+                            Send Ad-hoc Payment
+                        </button>
+                    </div>
+                    
                     <div className="relative overflow-x-auto w-full px-4">
                         <table className="w-full text-sm text-left">
                             <thead className="text-xs uppercase bg-darkgrey">
@@ -624,6 +687,11 @@ const Payment = () => {
                 isOpen={isRefundModalOpen}
                 onClose={handleRefundModalClose}
                 onConfirm={handleRefundConfirm}
+            />
+            <AdHocPaymentModal
+                isOpen={isAdHocModalOpen}
+                onClose={handleAdHocModalClose}
+                onConfirm={handleAdHocPaymentConfirm}
             />
         </div>
     );
