@@ -530,6 +530,15 @@ export const setStripeMode = async ({ stripeMode }: any) => {
     }
 }
 
+export const sendPaymentLinkToUser = async (data: any) => {
+    try {
+        const res = await api.post("admin/sendPaymentLinkToUser", data);
+        return res.data;
+    } catch (err: any) {
+        return checkForAuthorization(err);
+    }
+}
+
 // CUSTOMER APIS ------------------
 export async function profileImageUpload(formData: FormData): Promise<any> {
     try {

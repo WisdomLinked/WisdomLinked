@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { doFilterPaymentHistories, getStripeMode, setStripeMode } from "../../../api/api";
+import { doFilterPaymentHistories, getStripeMode, setStripeMode, sendPaymentLinkToUser } from "../../../api/api";
 import { SetLoadingStatus } from "../../../actions/appActions";
 import SelectionWithCheckBox from "../../../components/SelectionWithCheckBox";
 import { DateRangePicker, createStaticRanges } from 'react-date-range';
@@ -198,6 +198,34 @@ const Payment = () => {
         filterHisotries(0)
     }, [])
 
+    const handleRetryPayment = async (paymentItem: any) => {
+        try {
+            SetLoadingStatus(true);
+            
+            const customerEmail = paymentItem.customer?.email;
+            if (!customerEmail) {
+                alert('Customer email not found. Cannot send payment link.');
+                return;
+            }
+            
+            const response = await sendPaymentLinkToUser({
+                paymentHistoryId: paymentItem._id,
+                customerEmail: customerEmail
+            });
+            
+            if (response?.status === 'SUCCESS') {
+                alert('Payment link has been sent successfully to the customer!');
+            } else {
+                alert('Failed to send payment link: ' + (response?.message || 'Unknown error'));
+            }
+        } catch (error: any) {
+            console.error('Error sending payment link:', error);
+            alert('Failed to send payment link: ' + (error?.message || 'Unknown error'));
+        } finally {
+            SetLoadingStatus(false);
+        }
+    };
+
     return (
         <div className="w-full h-full pt-10 overflow-y-auto text-white px-[18px]">
             <div className="w-full max-w-[1500px] mx-auto text-white">
@@ -380,6 +408,9 @@ const Payment = () => {
                                     <th scope="col" className="px-6 py-3">
                                         Payment Intent
                                     </th>
+                                    <th scope="col" className="px-6 py-3 text-center">
+                                        Actions
+                                    </th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -398,6 +429,15 @@ const Payment = () => {
                                                 <td className='px-2 text-center'>{item.stripeMode}</td>
                                                 <td className='px-2 text-center'>{item.paymentType}</td>
                                                 <td className='px-2'>{item.paymentIntent}</td>
+                                                <td className='px-2 text-center'>
+                                                    <button
+                                                        onClick={() => handleRetryPayment(item)}
+                                                        className='bg-green hover:bg-green/80 text-white px-3 py-1 rounded text-sm font-medium transition-colors'
+                                                        title='Send new payment link'
+                                                    >
+                                                        Retry
+                                                    </button>
+                                                </td>
                                             </tr>
                                         )
                                     })
