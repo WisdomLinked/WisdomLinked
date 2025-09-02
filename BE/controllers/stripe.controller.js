@@ -136,7 +136,7 @@ const sendPaymentLinkToUser = async (req, res) => {
         
         const PaymentHistory = require("../models/PaymentHistory");
         const sgMail = require("@sendgrid/mail");
-        const adminEmail = "admin@wisdomlinked.com";
+        const adminEmail = "noreply@wisdomlinked.com";
         sgMail.setApiKey(process.env.SENDGRID_API_KEY);
         
         const paymentHistory = await PaymentHistory.findById(paymentHistoryId);
@@ -190,7 +190,6 @@ const sendPaymentLinkToUser = async (req, res) => {
                 createdAt: new Date().toISOString()
             }
         });
-        console.log("PAYMENT LINK ->", paymentLink.url)
         
         // Create immediate payment record with pending status
         const immediatePaymentHistory = new PaymentHistory({
@@ -208,17 +207,44 @@ const sendPaymentLinkToUser = async (req, res) => {
         });
         
         await immediatePaymentHistory.save();
-        console.log('Created immediate pending payment record:', immediatePaymentHistory._id);
-        
+        console.log('Created pending payment record:', immediatePaymentHistory._id);
+
         const html = `
-        <p>Hello,</p>
-        <p>You have a pending payment for our services. Please use the link below to complete your payment:</p>
-        <p><strong>Amount:</strong> $${(finalAmount / 100).toFixed(2)} ${(paymentHistory.currency || 'USD').toUpperCase()}</p>
-        <p><strong>Description:</strong> ${finalDescription}</p>
-        <p><a href="${paymentLink.url}" style="background-color: #31B099; color: white; padding: 12px 24px; text-decoration: none; border-radius: 5px; display: inline-block;">Complete Payment</a></p>
-        <p>If you have any questions, please don't hesitate to contact us.</p>
-        <p>Best Regards,<br>Team WisdomLinked</p>
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+            <div style="background-color: #f8f9fa; padding: 20px; border-radius: 8px; border-left: 4px solid #007bff;">
+                <h2 style="color: #007bff; margin-top: 0;">Pending Payment Request</h2>
+                <p>Hello,</p>
+                
+                <p>You have a pending payment for our services. Please use the link below to complete your payment:</p>
+                
+                <div style="background-color: white; padding: 15px; border-radius: 5px; margin: 15px 0;">
+                    <h3 style="margin-top: 0; color: #333;">Payment Details</h3>
+                    <p><strong>Amount:</strong> $${(finalAmount / 100).toFixed(2)} USD</p>
+                    <p><strong>Description:</strong> ${finalDescription}</p>
+                </div>
+                
+                <div style="text-align: center; margin: 20px 0;">
+                    <a href="${paymentLink.url}" style="background-color: #007bff; color: white; padding: 12px 24px; text-decoration: none; border-radius: 5px; display: inline-block; font-weight: bold;">Complete Payment</a>
+                </div>
+                
+                <p><strong>Payment Process:</strong></p>
+                <ul>
+                    <li>Click the "Complete Payment" button above</li>
+                    <li>Enter your payment details securely through Stripe</li>
+                    <li>You will receive a confirmation email once payment is processed</li>
+                </ul>
+                
+                <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;">
+                
+                <p style="color: #666; font-size: 14px;">
+                    If you have any questions about this payment request, please contact our support team.<br><br>
+                    Best regards,<br>
+                    <strong>WisdomLinked Team</strong>
+                </p>
+            </div>
+        </div>
         `;
+        
 
         const msg = {
             to: customerEmail,
@@ -226,7 +252,7 @@ const sendPaymentLinkToUser = async (req, res) => {
                 name: "WisdomLinked",
                 email: adminEmail,
             },
-            subject: "Payment Link - WisdomLinked",
+            subject: "Pending Payment - WisdomLinked",
             html,
         };
 
@@ -300,12 +326,10 @@ const handleStripeWebhook = async (req, res) => {
                                 used: session.customer_details.email,
                                 sessionId: session.id
                             });
-                            // Note: We could choose to reject this, but since payment was made, 
-                            // we'll log it and proceed, but flag for admin review
                         }
                     }
                     
-                    // Additional security: Log the payment attempt
+                    //Log the payment attempt
                     console.log('Processing retry payment:', {
                         sessionId: session.id,
                         authorizedEmail: authorizedEmail,
@@ -553,7 +577,7 @@ const processRefund = async (req, res) => {
         // Send refund notification email to customer
         if (paymentHistory.customer?.email) {
             const sgMail = require("@sendgrid/mail");
-            const adminEmail = "admin@wisdomlinked.com";
+            const adminEmail = "noreply@wisdomlinked.com";
             sgMail.setApiKey(process.env.SENDGRID_API_KEY);
             
             const isFullRefund = refundAmount === maxRefundAmount;
@@ -562,7 +586,7 @@ const processRefund = async (req, res) => {
             const refundEmailHtml = `
             <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
                 <div style="background-color: #f8f9fa; padding: 20px; border-radius: 8px; border-left: 4px solid #28a745;">
-                    <h2 style="color: #28a745; margin-top: 0;">✅ ${refundType} Processed</h2>
+                    <h2 style="color: #28a745; margin-top: 0;">${refundType} Processed - WisdomLinked</h2>
                     <p>Dear Valued Customer,</p>
                     
                     <p>We have processed a refund for your payment. Here are the details:</p>
@@ -741,8 +765,6 @@ const sendAdHocPaymentLink = async (req, res) => {
             }
         });
         
-        console.log("AD-HOC PAYMENT LINK ->", paymentLink.url);
-        
         // Create immediate payment record with pending status
         const immediatePaymentHistory = new PaymentHistory({
             stripeMode: currentStripeMode,
@@ -755,17 +777,17 @@ const sendAdHocPaymentLink = async (req, res) => {
         });
         
         await immediatePaymentHistory.save();
-        console.log('Created immediate pending ad-hoc payment record:', immediatePaymentHistory._id);
+        console.log('Created pending ad-hoc payment record:', immediatePaymentHistory._id);
         
         // Send payment link email
         const sgMail = require("@sendgrid/mail");
-        const adminEmail = "admin@wisdomlinked.com";
+        const adminEmail = "noreply@wisdomlinked.com";
         sgMail.setApiKey(process.env.SENDGRID_API_KEY);
         
         const html = `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
             <div style="background-color: #f8f9fa; padding: 20px; border-radius: 8px; border-left: 4px solid #007bff;">
-                <h2 style="color: #007bff; margin-top: 0;">💳 Payment Request</h2>
+                <h2 style="color: #007bff; margin-top: 0;">Payment Request - WisdomLinked</h2>
                 <p>Hello${customerName ? ` ${customerName}` : ''},</p>
                 
                 <p>You have received a payment request from WisdomLinked. Please use the link below to complete your payment:</p>

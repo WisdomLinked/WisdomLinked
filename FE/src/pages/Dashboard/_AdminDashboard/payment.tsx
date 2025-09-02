@@ -534,10 +534,9 @@ const Payment = () => {
                     <div className="flex justify-end px-4 mb-4">
                         <button
                             onClick={handleAdHocPaymentClick}
-                            className="bg-blue-500 hover:bg-blue-600 text-white px-6 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2"
+                            className="bg-blue hover:bg-blue/60 text-white px-6 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2"
                             title="Send custom payment request to any customer"
                         >
-                            <span>💳</span>
                             Send Ad-hoc Payment
                         </button>
                     </div>
@@ -617,7 +616,7 @@ const Payment = () => {
                                                 <td className='px-2 text-center'>
                                                     <div className="flex gap-2 justify-center">
                                                         {/* Show Retry button only for non-refunded payments and non-refund records */}
-                                                        {item.status !== 'refunded' && item.paymentType !== 'refund' && (
+                                                        {item.status !== 'refunded' && item.paymentType !== 'refund' && item.paymentType !== 'retry' && (
                                                             <button
                                                                 onClick={() => handleRetryPaymentClick(item)}
                                                                 className='bg-green hover:bg-green/80 text-white px-3 py-1 rounded text-sm font-medium transition-colors'
@@ -632,13 +631,12 @@ const Payment = () => {
                                                          item.paymentType !== 'refund' && (
                                                             <button
                                                                 onClick={() => handleRefundClick(item)}
-                                                                className='bg-red-500 hover:bg-red-600 text-white px-3 py-1 rounded text-sm font-medium transition-colors'
+                                                                className='bg-red hover:bg-red/80 text-white px-3 py-1 rounded text-sm font-medium transition-colors'
                                                                 title='Process refund for this payment'
                                                             >
                                                                 Refund
                                                             </button>
                                                         )}
-                                                        {/* Show message when no actions are available */}
                                                         {(item.status === 'refunded' || item.paymentType === 'refund') && (
                                                             <span className="text-grey text-sm italic">No actions available</span>
                                                         )}
