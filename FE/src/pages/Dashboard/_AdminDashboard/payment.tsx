@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { doFilterPaymentHistories, getStripeMode, setStripeMode, sendPaymentLinkToUser, processRefund, sendAdHocPaymentLink } from "../../../api/api";
+import { doFilterPaymentHistories, getStripeMode, setStripeMode, sendPaymentLinkToUser, processRefund, sendAdHocPaymentLink, exportPaymentHistories } from "../../../api/api";
 import { SetLoadingStatus } from "../../../actions/appActions";
 import SelectionWithCheckBox from "../../../components/SelectionWithCheckBox";
 import { DateRangePicker, createStaticRanges } from 'react-date-range';
@@ -372,6 +372,52 @@ const Payment = () => {
         }
     };
 
+    const handleExportPayments = async () => {
+        try {
+            SetLoadingStatus(true);
+            const filter: any = {
+                email: email || undefined,
+                stripeMode: selectedMode.value || undefined,
+                paymentType: selectedType.value || undefined,
+                status: selectedStatus.value || undefined,
+                dateFrom: dateRange.dateFrom || undefined,
+                dateTo: dateRange.dateTo || undefined,
+                sortBy: 'createdAt',
+                sortOrder: 'DESC'
+            };
+            const res: any = await exportPaymentHistories(filter);
+            if (!res || !res.data) {
+                alert('Failed to export payments');
+                return;
+            }
+            const blob = new Blob([res.data], { type: 'text/csv' });
+            const url = window.URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            // Try to extract filename from headers
+            const disposition = res.headers && res.headers['content-disposition'];
+            let filename = 'payments_export.csv';
+            if (disposition && typeof disposition === 'string') {
+                const match = disposition.match(/filename="?([^";]+)"?/);
+                if (match && match[1]) filename = match[1];
+            } else {
+                const safeEmail = (email || 'all').replace(/[^a-zA-Z0-9._-]/g, '_');
+                const range = (dateRange.dateFrom || '') + '_' + (dateRange.dateTo || '');
+                filename = `payments_${safeEmail}_${range}.csv`;
+            }
+            link.download = filename;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            window.URL.revokeObjectURL(url);
+        } catch (err) {
+            console.error('Export error', err);
+            alert('Failed to export payments');
+        } finally {
+            SetLoadingStatus(false);
+        }
+    };
+
     return (
         <div className="w-full h-full pt-10 overflow-y-auto text-white px-[18px]">
             <div className="w-full max-w-[1500px] mx-auto text-white">
@@ -530,8 +576,15 @@ const Payment = () => {
                         />
                     </div>
                     
-                    {/* Ad-hoc Payment Button */}
-                    <div className="flex justify-end px-4 mb-4">
+                    {/* Actions: Export + Ad-hoc Payment */}
+                    <div className="flex justify-end px-4 mb-4 gap-3">
+                        <button
+                            onClick={handleExportPayments}
+                            className="bg-grey hover:bg-grey/70 text-white px-6 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2"
+                            title="Export filtered payments as CSV"
+                        >
+                            Export CSV
+                        </button>
                         <button
                             onClick={handleAdHocPaymentClick}
                             className="bg-blue hover:bg-blue/60 text-white px-6 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2"

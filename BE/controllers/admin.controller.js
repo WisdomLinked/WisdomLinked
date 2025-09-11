@@ -60,7 +60,7 @@ const filterUsers = async (req, res) => {
 
 const filterPaymentHistories = async (req, res) => {
     try {
-        const { email, sortBy, stripeMode, paymentType, status, dateFrom, dateTo, numPerPage, currentPage } = req.body
+        const { email, sortBy, sort, stripeMode, paymentType, status, dateFrom, dateTo, numPerPage, currentPage } = req.body
         const query = PaymentHistory.find()
         const countQuery = PaymentHistory.count()
 
@@ -74,9 +74,10 @@ const filterPaymentHistories = async (req, res) => {
             }
             query.where({ [user.role]: user._id.toString() })
             countQuery.where({ [user.role]: user._id.toString() })
-        } else {
-            query.populate(['expert', 'customer'])
         }
+
+        // Always populate for consistent UI rendering
+        query.populate(['expert', 'customer'])
 
         if (stripeMode) {
             query.where({ stripeMode })
@@ -93,17 +94,28 @@ const filterPaymentHistories = async (req, res) => {
             countQuery.where({ status })
         }
 
-        if (dateFrom) {
-            query.where({ createdAt: { $gt: new Date(dateFrom) } })
-            countQuery.where({ createdAt: { $gt: new Date(dateFrom) } })
+        // Build inclusive date range filter once to avoid overwriting
+        if (dateFrom || dateTo) {
+            const createdAt = {}
+            if (dateFrom) {
+                // Inclusive start of day
+                const from = new Date(dateFrom);
+                createdAt['$gte'] = new Date(from.getFullYear(), from.getMonth(), from.getDate(), 0, 0, 0, 0)
+            }
+            if (dateTo) {
+                // Inclusive end of day
+                const to = new Date(dateTo);
+                createdAt['$lte'] = new Date(to.getFullYear(), to.getMonth(), to.getDate(), 23, 59, 59, 999)
+            }
+            query.where({ createdAt })
+            countQuery.where({ createdAt })
         }
 
-        if (dateTo) {
-            query.where({ createdAt: { $lt: new Date(dateTo) } })
-            countQuery.where({ createdAt: { $lt: new Date(dateTo) } })
-        }
+        // Dynamic sorting
+        const sortField = sortBy || 'createdAt'
+        const sortOrderValue = (String(sort).toUpperCase() === 'ASC') ? 1 : -1
+        query.sort({ [sortField]: sortOrderValue })
 
-        query.sort({ createdAt: -1 })
         query.skip(numPerPage * currentPage).limit(numPerPage)
         const totalCount = await countQuery.exec()
         const histories = await query.exec();
@@ -117,6 +129,139 @@ const filterPaymentHistories = async (req, res) => {
     }
 }
 
+// Export payment histories as CSV based on filters
+const exportPaymentHistories = async (req, res) => {
+    try {
+        // Accept filters via query params for a GET request
+        const { email, stripeMode, paymentType, status, dateFrom, dateTo, sortBy, sortOrder } = req.query;
+
+        const query = PaymentHistory.find();
+
+        if (email) {
+            const user = await User.findOne({ email: email });
+            if (!user) {
+                // Return empty CSV with headers
+                const headers = [
+                    'Date',
+                    'Amount',
+                    'Currency',
+                    'Expert Email',
+                    'Customer Email',
+                    'Payment Type',
+                    'Status',
+                    'Mode',
+                    'Payment Intent',
+                    'Description'
+                ].join(',') + '\n';
+                res.setHeader('Content-Type', 'text/csv');
+                res.setHeader('Content-Disposition', `attachment; filename="payments_export.csv"`);
+                return res.status(200).send(headers);
+            }
+            query.where({ [user.role]: user._id.toString() });
+        }
+
+        if (stripeMode) {
+            query.where({ stripeMode });
+        }
+
+        if (paymentType) {
+            query.where({ paymentType });
+        }
+
+        if (status) {
+            query.where({ status });
+        }
+
+        if (dateFrom || dateTo) {
+            const createdAt = {};
+            if (dateFrom) {
+                const from = new Date(dateFrom);
+                createdAt['$gte'] = new Date(from.getFullYear(), from.getMonth(), from.getDate(), 0, 0, 0, 0);
+            }
+            if (dateTo) {
+                const to = new Date(dateTo);
+                createdAt['$lte'] = new Date(to.getFullYear(), to.getMonth(), to.getDate(), 23, 59, 59, 999);
+            }
+            query.where({ createdAt });
+        }
+
+        // Sorting
+        const _sortField = (sortBy && typeof sortBy === 'string') ? sortBy : 'createdAt';
+        const _sortOrder = (sortOrder === 'ASC') ? 1 : -1;
+        query.sort({ [_sortField]: _sortOrder });
+
+        // Ensure related user emails are available
+        query.populate(['expert', 'customer']);
+
+        const histories = await query.exec();
+
+        // Build CSV
+        const headers = [
+            'Date',
+            'Amount',
+            'Currency',
+            'Expert Email',
+            'Customer Email',
+            'Payment Type',
+            'Status',
+            'Mode',
+            'Payment Intent',
+            'Description'
+        ];
+
+        const escapeCsv = (val) => {
+            if (val === undefined || val === null) return '';
+            const str = String(val).replace(/\r?\n|\r/g, ' ');
+            if (str.includes('"') || str.includes(',') || str.includes('\n')) {
+                return '"' + str.replace(/"/g, '""') + '"';
+            }
+            return str;
+        };
+
+        const rows = histories.map((h) => {
+            const date = h.createdAt ? new Date(h.createdAt).toISOString() : '';
+            const amount = (typeof h.amount === 'number') ? (h.amount / 100).toFixed(2) : '';
+            const currency = h.currency || '';
+            const expertEmail = (h.expert && h.expert.email) ? h.expert.email : '';
+            const customerEmail = (h.customer && h.customer.email) ? h.customer.email : '';
+            const paymentTypeVal = h.paymentType || '';
+            const statusVal = h.status || '';
+            const mode = h.stripeMode || '';
+            const paymentIntent = h.paymentIntent || '';
+            const description = h.description || '';
+            return [
+                date,
+                amount,
+                currency,
+                expertEmail,
+                customerEmail,
+                paymentTypeVal,
+                statusVal,
+                mode,
+                paymentIntent,
+                description
+            ].map(escapeCsv).join(',');
+        });
+
+        const csv = [headers.join(','), ...rows].join('\n') + '\n';
+
+        // Filename hint
+        const safeEmail = email ? String(email).replace(/[^a-zA-Z0-9._-]/g, '_') : 'all';
+        const safeFrom = dateFrom ? String(dateFrom).replace(/[^0-9-]/g, '') : '';
+        const safeTo = dateTo ? String(dateTo).replace(/[^0-9-]/g, '') : '';
+        const filenameParts = ['payments'];
+        if (safeEmail) filenameParts.push(safeEmail);
+        if (safeFrom || safeTo) filenameParts.push(`${safeFrom || 'from'}_${safeTo || 'to'}`);
+        const filename = filenameParts.join('_') + '.csv';
+
+        res.setHeader('Content-Type', 'text/csv');
+        res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+        return res.status(200).send(csv);
+    } catch (err) {
+        console.log(err);
+        return res.status(500).send(err.message);
+    }
+}
 const getFullUserDataByEmail = async (req, res) => {
     try {
         const { email } = req.body
@@ -693,6 +838,7 @@ module.exports = {
     getFullUserDataByEmail,
     updateProfileOfUser,
     filterPaymentHistories,
+    exportPaymentHistories,
     getDirectChatHistory,
     getGroupChatHistory,
     getUserFeedbacks,

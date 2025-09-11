@@ -827,6 +827,18 @@ export const doFilterPaymentHistories = async (filter: any) => {
     }
 };
 
+export const exportPaymentHistories = async (filter: any) => {
+    try {
+        const res = await api.get("admin/exportPaymentHistories", {
+            params: filter,
+            responseType: 'blob'
+        });
+        return res;
+    } catch (err: any) {
+        return checkForAuthorization(err);
+    }
+};
+
 export const doGetFullUserDataByEmail = async (email: any) => {
     try {
         const res = await api.post("admin/getFullUserDataByEmail", { email });

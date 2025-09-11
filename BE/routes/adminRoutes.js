@@ -14,6 +14,7 @@ const {
     getFullUserDataByEmail, 
     updateProfileOfUser, 
     filterPaymentHistories ,
+    exportPaymentHistories,
     getDirectChatHistory,
     getGroupChatHistory,
     getContactedUs,
@@ -49,6 +50,7 @@ router.post("/processRefund", adminAuth, processRefund)
 router.post("/sendAdHocPaymentLink", adminAuth, sendAdHocPaymentLink)
 router.post("/filterUsers", adminAuth, filterUsers)
 router.post("/filterPaymentHistories", adminAuth, filterPaymentHistories)
+router.get("/exportPaymentHistories", adminAuth, exportPaymentHistories)
 router.post("/getFullUserDataByEmail", adminAuth, getFullUserDataByEmail)
 router.post("/updateProfileOfUser", adminAuth, updateProfileOfUser)
 router.post("/getDirectChatHistory", adminAuth, getDirectChatHistory)
