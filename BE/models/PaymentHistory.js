@@ -8,6 +8,11 @@ const PaymentHistorySchema = new mongoose.Schema(
         currency: { type: String, default: 'usd' },
         description: { type: String },
         paymentIntent: { type: String },
+        status: { 
+            type: String, 
+            enum: ['pending', 'completed', 'failed', 'refunded'], 
+            default: 'completed' 
+        },
         customer: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
         expert: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
         pendingAppointmentToGroup: { type: mongoose.Schema.Types.ObjectId, ref: "PendingAppointmentToGroup" },

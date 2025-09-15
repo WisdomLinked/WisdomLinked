@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { doFilterPaymentHistories, getStripeMode, setStripeMode } from "../../../api/api";
+import { doFilterPaymentHistories, getStripeMode, setStripeMode, sendPaymentLinkToUser, processRefund, sendAdHocPaymentLink } from "../../../api/api";
 import { SetLoadingStatus } from "../../../actions/appActions";
 import SelectionWithCheckBox from "../../../components/SelectionWithCheckBox";
 import { DateRangePicker, createStaticRanges } from 'react-date-range';
@@ -7,6 +7,9 @@ import 'react-date-range/dist/styles.css';
 import 'react-date-range/dist/theme/default.css';
 import Pagination from "../../../components/Pagination";
 import { formatDateYYYY_MM_DD_h_m } from "../../../actions/common";
+import RetryPaymentModal from "../../../components/RetryPaymentModal";
+import RefundPaymentModal from "../../../components/RefundPaymentModal";
+import AdHocPaymentModal from "../../../components/AdHocPaymentModal";
 
 const currentYear = new Date().getFullYear();
 const currentMonth = new Date().getMonth() + 1;
@@ -41,10 +44,33 @@ const Payment = () => {
             label: "Refund"
         }
     ]
+    const statuses = [
+        {
+            value: "",
+            label: "All"
+        },
+        {
+            value: "pending",
+            label: "Pending"
+        },
+        {
+            value: "completed",
+            label: "Completed"
+        },
+        {
+            value: "failed",
+            label: "Failed"
+        },
+        {
+            value: "refunded",
+            label: "Refunded"
+        }
+    ]
     const [stripeMode, set_stripeMode] = useState('test');
     const [email, set_email] = useState('');
     const [selectedMode, set_selectedMode] = useState(modes[0]);
     const [selectedType, set_selectedType] = useState(types[0]);
+    const [selectedStatus, set_selectedStatus] = useState(statuses[0]);
     const [dateRange, set_dateRange] = useState({
         dateFrom: '',
         dateTo: '',
@@ -57,6 +83,11 @@ const Payment = () => {
     const [totalPage, set_totalPage] = useState(0)
     const [histories, set_histories] = useState<Array<any>>([])
     const [isFirstLoad, set_isFirstLoad] = useState(true)
+    const [isRetryModalOpen, setIsRetryModalOpen] = useState(false)
+    const [selectedPaymentItem, setSelectedPaymentItem] = useState<any>(null)
+    const [isRefundModalOpen, setIsRefundModalOpen] = useState(false)
+    const [selectedRefundItem, setSelectedRefundItem] = useState<any>(null)
+    const [isAdHocModalOpen, setIsAdHocModalOpen] = useState(false)
 
     const customStaticRanges = [
         ...createStaticRanges([
@@ -158,6 +189,7 @@ const Payment = () => {
             email: email,
             stripeMode: selectedMode.value,
             paymentType: selectedType.value,
+            status: selectedStatus.value,
             dateFrom: dateRange.dateFrom,
             dateTo: dateRange.dateTo,
             sortBy: 'createdAt',
@@ -180,7 +212,7 @@ const Payment = () => {
             }, 500)
             return (() => clearTimeout(timer))
         }
-    }, [dateRange, email, selectedMode, selectedType])
+    }, [dateRange, email, selectedMode, selectedType, selectedStatus])
 
     useEffect(() => {
         if (!isFirstLoad) {
@@ -197,6 +229,148 @@ const Payment = () => {
     useEffect(() => {
         filterHisotries(0)
     }, [])
+
+    const handleRetryPaymentClick = (paymentItem: any) => {
+        setSelectedPaymentItem(paymentItem);
+        setIsRetryModalOpen(true);
+    };
+
+    const handleRetryModalClose = () => {
+        setIsRetryModalOpen(false);
+        setSelectedPaymentItem(null);
+    };
+
+    const handleRefundClick = (paymentItem: any) => {
+        setSelectedRefundItem(paymentItem);
+        setIsRefundModalOpen(true);
+    };
+
+    const handleRefundModalClose = () => {
+        setIsRefundModalOpen(false);
+        setSelectedRefundItem(null);
+    };
+
+    const handleAdHocPaymentClick = () => {
+        setIsAdHocModalOpen(true);
+    };
+
+    const handleAdHocModalClose = () => {
+        setIsAdHocModalOpen(false);
+    };
+
+    const handleRetryPaymentConfirm = async (customizedPayment: {
+        amount: number;
+        description: string;
+        customerEmail: string;
+    }) => {
+        try {
+            SetLoadingStatus(true);
+            
+            const response = await sendPaymentLinkToUser({
+                paymentHistoryId: selectedPaymentItem._id,
+                customerEmail: customizedPayment.customerEmail,
+                customAmount: Math.round(customizedPayment.amount * 100),
+                customDescription: customizedPayment.description
+            });
+            
+            if (response?.status === 'SUCCESS') {
+                alert('Payment link has been sent successfully to the customer!');
+                handleRetryModalClose();
+            } else {
+                const errorMessage = typeof response?.message === 'string' 
+                    ? response.message 
+                    : 'Unknown error';
+                alert('Failed to send payment link: ' + errorMessage);
+            }
+        } catch (error: any) {
+            console.error('Error sending payment link:', error);
+            const errorMessage = typeof error?.message === 'string' 
+                ? error.message 
+                : typeof error === 'string'
+                ? error
+                : 'An unexpected error occurred';
+            alert('Failed to send payment link: ' + errorMessage);
+        } finally {
+            SetLoadingStatus(false);
+        }
+    };
+
+    const handleRefundConfirm = async (refundData: {
+        amount: number;
+        reason: string;
+    }) => {
+        try {
+            SetLoadingStatus(true);
+            
+            const response = await processRefund({
+                paymentHistoryId: selectedRefundItem._id,
+                refundAmount: refundData.amount,
+                refundReason: refundData.reason
+            });
+            
+            if (response?.status === 'SUCCESS') {
+                alert('Refund processed successfully!');
+                handleRefundModalClose();
+                // Refresh the payment history to show the refund
+                filterHisotries(currentPage);
+            } else {
+                const errorMessage = typeof response?.message === 'string' 
+                    ? response.message 
+                    : 'Unknown error';
+                alert('Failed to process refund: ' + errorMessage);
+            }
+        } catch (error: any) {
+            console.error('Error processing refund:', error);
+            const errorMessage = typeof error?.message === 'string' 
+                ? error.message 
+                : typeof error === 'string'
+                ? error
+                : 'An unexpected error occurred';
+            alert('Failed to process refund: ' + errorMessage);
+        } finally {
+            SetLoadingStatus(false);
+        }
+    };
+
+    const handleAdHocPaymentConfirm = async (paymentData: {
+        amount: number;
+        description: string;
+        customerEmail: string;
+        customerName?: string;
+    }) => {
+        try {
+            SetLoadingStatus(true);
+            
+            const response = await sendAdHocPaymentLink({
+                amount: paymentData.amount,
+                description: paymentData.description,
+                customerEmail: paymentData.customerEmail,
+                customerName: paymentData.customerName
+            });
+            
+            if (response?.status === 'SUCCESS') {
+                alert('Payment link sent successfully to customer!');
+                handleAdHocModalClose();
+                // Refresh the payment history to show the new pending payment
+                filterHisotries(currentPage);
+            } else {
+                const errorMessage = typeof response?.message === 'string' 
+                    ? response.message 
+                    : 'Unknown error';
+                alert('Failed to send payment link: ' + errorMessage);
+            }
+        } catch (error: any) {
+            console.error('Error sending ad-hoc payment link:', error);
+            const errorMessage = typeof error?.message === 'string' 
+                ? error.message 
+                : typeof error === 'string'
+                ? error
+                : 'An unexpected error occurred';
+            alert('Failed to send payment link: ' + errorMessage);
+        } finally {
+            SetLoadingStatus(false);
+        }
+    };
 
     return (
         <div className="w-full h-full pt-10 overflow-y-auto text-white px-[18px]">
@@ -239,6 +413,28 @@ const Payment = () => {
                                 selectedOptions={selectedMode}
                                 set_selectedOptions={set_selectedMode}
                                 placeholder="Filter by mode"
+                                isMulti={false}
+                            />
+                        </div>
+                    </div>
+                    <div className="flex justify-between mt-2">
+                        <div className="w-[calc(100%-174px)] sm:w-[calc(100%-324px)] relative">
+                            <div className="text-grey mb-0.5 text-[12px] leading-[19px]">Filter by status</div>
+                            <SelectionWithCheckBox
+                                options={statuses}
+                                selectedOptions={selectedStatus}
+                                set_selectedOptions={set_selectedStatus}
+                                placeholder="Filter by status"
+                                isMulti={false}
+                            />
+                        </div>
+                        <div className="w-[150px] sm:w-[300px]">
+                            <div className="text-grey mb-0.5 text-[12px] leading-[19px]">Filter by payment type</div>
+                            <SelectionWithCheckBox
+                                options={types}
+                                selectedOptions={selectedType}
+                                set_selectedOptions={set_selectedType}
+                                placeholder="Filter by type"
                                 isMulti={false}
                             />
                         </div>
@@ -317,16 +513,6 @@ const Payment = () => {
                                 </>
                             ) : null}
                         </div>
-                        <div className="w-[150px] sm:w-[300px]">
-                            <div className="text-grey mb-0.5 text-[12px] leading-[19px]">Filter by payment type</div>
-                            <SelectionWithCheckBox
-                                options={types}
-                                selectedOptions={selectedType}
-                                set_selectedOptions={set_selectedType}
-                                placeholder="Filter by type"
-                                isMulti={false}
-                            />
-                        </div>
                     </div>
                 </div>
                 <div className="w-full rounded-[16px]">
@@ -343,6 +529,18 @@ const Payment = () => {
                             goLast={() => set_currentPage(totalPage)}
                         />
                     </div>
+                    
+                    {/* Ad-hoc Payment Button */}
+                    <div className="flex justify-end px-4 mb-4">
+                        <button
+                            onClick={handleAdHocPaymentClick}
+                            className="bg-blue hover:bg-blue/60 text-white px-6 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2"
+                            title="Send custom payment request to any customer"
+                        >
+                            Send Ad-hoc Payment
+                        </button>
+                    </div>
+                    
                     <div className="relative overflow-x-auto w-full px-4">
                         <table className="w-full text-sm text-left">
                             <thead className="text-xs uppercase bg-darkgrey">
@@ -377,8 +575,14 @@ const Payment = () => {
                                     <th scope="col" className="px-6 py-3 text-center">
                                         Payment Type
                                     </th>
+                                    <th scope="col" className="px-6 py-3 text-center">
+                                        Status
+                                    </th>
                                     <th scope="col" className="px-6 py-3">
                                         Payment Intent
+                                    </th>
+                                    <th scope="col" className="px-6 py-3 text-center">
+                                        Actions
                                     </th>
                                 </tr>
                             </thead>
@@ -397,7 +601,47 @@ const Payment = () => {
                                                 <td className='px-2 max-w-[200px] truncate'>{item.description}</td>
                                                 <td className='px-2 text-center'>{item.stripeMode}</td>
                                                 <td className='px-2 text-center'>{item.paymentType}</td>
-                                                <td className='px-2'>{item.paymentIntent}</td>
+                                                <td className='px-2 text-center'>
+                                                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                                                        item.status === 'completed' ? 'bg-green/20 text-green' :
+                                                        item.status === 'pending' ? 'bg-yellow-500/20 text-yellow-500' :
+                                                        item.status === 'failed' ? 'bg-red-500/20 text-red-500' :
+                                                        item.status === 'refunded' ? 'bg-blue-500/20 text-blue-500' :
+                                                        'bg-grey/20 text-grey'
+                                                    }`}>
+                                                        {item.status || 'completed'}
+                                                    </span>
+                                                </td>
+                                                <td className='px-2'>{item.paymentIntent || 'N/A'}</td>
+                                                <td className='px-2 text-center'>
+                                                    <div className="flex gap-2 justify-center">
+                                                        {/* Show Retry button only for non-refunded payments and non-refund records */}
+                                                        {item.status !== 'refunded' && item.paymentType !== 'refund' && item.paymentType !== 'retry' && (
+                                                            <button
+                                                                onClick={() => handleRetryPaymentClick(item)}
+                                                                className='bg-green hover:bg-green/80 text-white px-3 py-1 rounded text-sm font-medium transition-colors'
+                                                                title='Customize and send new payment link'
+                                                            >
+                                                                Retry
+                                                            </button>
+                                                        )}
+                                                        {/* Show Refund button only for completed payments that are not refund records */}
+                                                        {item.status === 'completed' && 
+                                                         item.paymentIntent && 
+                                                         item.paymentType !== 'refund' && (
+                                                            <button
+                                                                onClick={() => handleRefundClick(item)}
+                                                                className='bg-red hover:bg-red/80 text-white px-3 py-1 rounded text-sm font-medium transition-colors'
+                                                                title='Process refund for this payment'
+                                                            >
+                                                                Refund
+                                                            </button>
+                                                        )}
+                                                        {(item.status === 'refunded' || item.paymentType === 'refund') && (
+                                                            <span className="text-grey text-sm italic">No actions available</span>
+                                                        )}
+                                                    </div>
+                                                </td>
                                             </tr>
                                         )
                                     })
@@ -430,6 +674,23 @@ const Payment = () => {
                     </div>
                 </div>
             </div>
+            <RetryPaymentModal
+                paymentItem={selectedPaymentItem}
+                isOpen={isRetryModalOpen}
+                onClose={handleRetryModalClose}
+                onConfirm={handleRetryPaymentConfirm}
+            />
+            <RefundPaymentModal
+                paymentItem={selectedRefundItem}
+                isOpen={isRefundModalOpen}
+                onClose={handleRefundModalClose}
+                onConfirm={handleRefundConfirm}
+            />
+            <AdHocPaymentModal
+                isOpen={isAdHocModalOpen}
+                onClose={handleAdHocModalClose}
+                onConfirm={handleAdHocPaymentConfirm}
+            />
         </div>
     );
 };
