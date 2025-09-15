@@ -269,12 +269,21 @@ const ExpertRegister = () => {
 
                         <div className="mt-6 text-grey text-[12px] leading-[19px]">Email *</div>
                         <input
-                            className="w-full rounded-[15px] h-[50px] mt-0.5 border text-[14px] leading-[21px] px-[24px] border-lightgrey"
+                            className="w-full rounded-[15px] h-[62px] mt-0.5 border text-darkgrey text-[14px] leading-[21px] px-[24px] border-lightgrey"
                             placeholder="Input your email address"
-                            type='email'
+                            type="email"
                             value={email}
-                            onChange={(e) => set_email(e.target.value)}
-                            onBlur={() => setEmailTouched(true)}
+                            onChange={(e) => {
+                                set_email(e.target.value);
+                                setEmailTouched(false); // Hide error while editing
+                            }}
+                            onKeyDown={(e) => {
+                                if (e.key === "Enter") {
+                                    e.preventDefault();
+                                    setEmailTouched(true);
+                                    set_isValidEmail(validateEmail(email)); // validateEmail must return boolean
+                                }
+                            }}
                         />
                         <ShowFieldError
                             show={emailTouched && !isValidEmail}
