@@ -224,14 +224,11 @@ const CustomerRegister = () => {
                             value={email}
                             onChange={(e) => {
                                 set_email(e.target.value);
-                                setEmailTouched(false); // Hide error while editing
+                                setEmailTouched(false); // Hide error while typing
                             }}
-                            onKeyDown={(e) => {
-                                if (e.key === "Enter") {
-                                    e.preventDefault();
-                                    setEmailTouched(true);
-                                    set_isValidEmail(validateEmail(email)); // validateEmail must return boolean
-                                }
+                            onBlur={() => {
+                                setEmailTouched(true); // Show error after leaving field
+                                set_isValidEmail(validateEmail(email)); // Validate on blur only
                             }}
                         />
                         <ShowFieldError
