@@ -46,10 +46,6 @@ const Payment = () => {
     ]
     const statuses = [
         {
-            value: "",
-            label: "All"
-        },
-        {
             value: "pending",
             label: "Pending"
         },
@@ -70,7 +66,7 @@ const Payment = () => {
     const [email, set_email] = useState('');
     const [selectedMode, set_selectedMode] = useState(modes[0]);
     const [selectedType, set_selectedType] = useState(types[0]);
-    const [selectedStatus, set_selectedStatus] = useState(statuses[0]);
+    const [selectedStatus, set_selectedStatus] = useState<any[]>([]);
     const [dateRange, set_dateRange] = useState({
         dateFrom: '',
         dateTo: '',
@@ -189,7 +185,7 @@ const Payment = () => {
             email: email,
             stripeMode: selectedMode.value,
             paymentType: selectedType.value,
-            status: selectedStatus.value,
+            status: Array.isArray(selectedStatus) && selectedStatus.length ? selectedStatus.map((s:any)=> s.value).filter(Boolean) : undefined,
             dateFrom: dateRange.dateFrom,
             dateTo: dateRange.dateTo,
             sortBy: 'createdAt',
@@ -379,7 +375,7 @@ const Payment = () => {
                 email: email || undefined,
                 stripeMode: selectedMode.value || undefined,
                 paymentType: selectedType.value || undefined,
-                status: selectedStatus.value || undefined,
+                status: (Array.isArray(selectedStatus) && selectedStatus.length ? selectedStatus.map((s:any)=> s.value).filter(Boolean).join(',') : undefined),
                 dateFrom: dateRange.dateFrom || undefined,
                 dateTo: dateRange.dateTo || undefined,
                 sortBy: 'createdAt',
@@ -465,13 +461,13 @@ const Payment = () => {
                     </div>
                     <div className="flex justify-between mt-2">
                         <div className="w-[calc(100%-174px)] sm:w-[calc(100%-324px)] relative">
-                            <div className="text-grey mb-0.5 text-[12px] leading-[19px]">Filter by status</div>
+                            <div className="text-grey mb-0.5 text-[12px] leading-[19px]">Filter by status (multi)</div>
                             <SelectionWithCheckBox
                                 options={statuses}
                                 selectedOptions={selectedStatus}
                                 set_selectedOptions={set_selectedStatus}
                                 placeholder="Filter by status"
-                                isMulti={false}
+                                isMulti={true}
                             />
                         </div>
                         <div className="w-[150px] sm:w-[300px]">

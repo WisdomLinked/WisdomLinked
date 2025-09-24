@@ -65,15 +65,30 @@ const filterPaymentHistories = async (req, res) => {
         const countQuery = PaymentHistory.count()
 
         if (email) {
-            const user = await User.findOne({ email: email })
-            if (!user) {
-                return res.status(200).json({
-                    result: [],
-                    totalCount: 0
-                })
+            const emailFilter = String(email).trim();
+            const users = await User.find({ email: { $regex: emailFilter, $options: 'i' } })
+            if (!users || users.length === 0) {
+                return res.status(200).json({ result: [], totalCount: 0 })
             }
-            query.where({ [user.role]: user._id.toString() })
-            countQuery.where({ [user.role]: user._id.toString() })
+            const expertIds = []
+            const customerIds = []
+            for (const u of users) {
+                if (u.role === 'expert') expertIds.push(u._id.toString())
+                if (u.role === 'customer') customerIds.push(u._id.toString())
+            }
+            if (expertIds.length && customerIds.length) {
+                query.where({ $or: [{ expert: { $in: expertIds } }, { customer: { $in: customerIds } }] })
+                countQuery.where({ $or: [{ expert: { $in: expertIds } }, { customer: { $in: customerIds } }] })
+            } else if (expertIds.length) {
+                query.where({ expert: { $in: expertIds } })
+                countQuery.where({ expert: { $in: expertIds } })
+            } else if (customerIds.length) {
+                query.where({ customer: { $in: customerIds } })
+                countQuery.where({ customer: { $in: customerIds } })
+            } else {
+                // No matching roles found
+                return res.status(200).json({ result: [], totalCount: 0 })
+            }
         }
 
         // Always populate for consistent UI rendering
@@ -90,8 +105,13 @@ const filterPaymentHistories = async (req, res) => {
         }
 
         if (status) {
-            query.where({ status })
-            countQuery.where({ status })
+            if (Array.isArray(status) && status.length) {
+                query.where({ status: { $in: status } })
+                countQuery.where({ status: { $in: status } })
+            } else if (typeof status === 'string' && status) {
+                query.where({ status })
+                countQuery.where({ status })
+            }
         }
 
         // Build inclusive date range filter once to avoid overwriting
@@ -138,8 +158,9 @@ const exportPaymentHistories = async (req, res) => {
         const query = PaymentHistory.find();
 
         if (email) {
-            const user = await User.findOne({ email: email });
-            if (!user) {
+            const emailFilter = String(email).trim();
+            const users = await User.find({ email: { $regex: emailFilter, $options: 'i' } });
+            if (!users || users.length === 0) {
                 // Return empty CSV with headers
                 const headers = [
                     'Date',
@@ -157,7 +178,35 @@ const exportPaymentHistories = async (req, res) => {
                 res.setHeader('Content-Disposition', `attachment; filename="payments_export.csv"`);
                 return res.status(200).send(headers);
             }
-            query.where({ [user.role]: user._id.toString() });
+            const expertIds = [];
+            const customerIds = [];
+            for (const u of users) {
+                if (u.role === 'expert') expertIds.push(u._id.toString());
+                if (u.role === 'customer') customerIds.push(u._id.toString());
+            }
+            if (expertIds.length && customerIds.length) {
+                query.where({ $or: [{ expert: { $in: expertIds } }, { customer: { $in: customerIds } }] });
+            } else if (expertIds.length) {
+                query.where({ expert: { $in: expertIds } });
+            } else if (customerIds.length) {
+                query.where({ customer: { $in: customerIds } });
+            } else {
+                const headers = [
+                    'Date',
+                    'Amount',
+                    'Currency',
+                    'Expert Email',
+                    'Customer Email',
+                    'Payment Type',
+                    'Status',
+                    'Mode',
+                    'Payment Intent',
+                    'Description'
+                ].join(',') + '\n';
+                res.setHeader('Content-Type', 'text/csv');
+                res.setHeader('Content-Disposition', `attachment; filename="payments_export.csv"`);
+                return res.status(200).send(headers);
+            }
         }
 
         if (stripeMode) {
@@ -169,7 +218,16 @@ const exportPaymentHistories = async (req, res) => {
         }
 
         if (status) {
-            query.where({ status });
+            let statuses = status;
+            if (typeof statuses === 'string') {
+                // Support comma-separated list
+                statuses = statuses.includes(',') ? statuses.split(',') : [statuses];
+            }
+            if (Array.isArray(statuses) && statuses.length) {
+                query.where({ status: { $in: statuses } });
+            } else if (typeof statuses === 'string' && statuses) {
+                query.where({ status: statuses });
+            }
         }
 
         if (dateFrom || dateTo) {
