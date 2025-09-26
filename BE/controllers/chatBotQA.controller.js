@@ -32,25 +32,49 @@ const createChatBotQA = async (req, res) => {
 
 const getChatBotAnswer = async (req, res) => {
     try {
-        const { role } = req.user;
+        const { role } = req.user || {};
         const { question } = req.body;
-        const chatBotQAItem = await chatBotQA.findOne({ question: question })
-        console.log(chatBotQAItem)
-        if (!chatBotQAItem || (chatBotQAItem.role !=="user" && chatBotQAItem.role !== role)) {
+
+        const results = await chatBotQA.find(
+            { $text: { $search: question } },
+            { score: { $meta: "textScore" } }
+        ).sort({ score: { $meta: "textScore" } });
+
+        const filteredResults = role
+            ? results.filter(item => item.role === "user" || item.role === role)
+            : results;
+        const mainMatch = filteredResults[0];
+
+        const similarQuestions = filteredResults
+            .slice(1)
+            .filter(item =>
+                item.question.trim().toLowerCase() !== mainMatch?.question.trim().toLowerCase()
+            )
+            .slice(0, 4)
+            .map(item => ({
+                id: item._id,
+                question: item.question
+            }));
+
+        if (!mainMatch) {
             return res.status(200).json({
                 success: true,
-                answer: "Sorry, I don't understand the question. Please select an action or type a question."
+                answer: "Sorry, I don't understand the question.",
+                similarQuestions: []
             });
-        } 
+        }
+
         return res.status(200).json({
             success: true,
-            answer: chatBotQAItem.answer
+            answer: mainMatch.answer,
+            similarQuestions
         });
     } catch (err) {
         console.error(err);
         return res.status(500).send(err.message);
     }
 };
+
 
 const getChatBotQA = async (req, res) => {
     try {
