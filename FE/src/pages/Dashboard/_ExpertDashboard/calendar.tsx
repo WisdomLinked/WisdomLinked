@@ -131,7 +131,11 @@ const ExpertCalendar = () => {
             })
             response.result.groupChats.map((seminar: any) => {
                 console.log(seminar)
-                const shouldPush = seminar.status !== 'pending' || !seminar.createdBy || seminar.createdBy._id === userDetails._id;
+                // Show all non-pending items. Also show pending individual sessions created by customers for this expert.
+                const isPending = seminar.status === 'pending';
+                const createdByCurrentUser = seminar.createdBy && seminar.createdBy._id === userDetails._id;
+                const isExpertAdmin = seminar.admin && (seminar.admin._id === userDetails._id || seminar.admin === userDetails._id);
+                const shouldPush = !isPending || !seminar.createdBy || createdByCurrentUser || (seminar.type === 'individual' && isPending && isExpertAdmin);
                 if (shouldPush) {
                     temp.push({
                         ...seminar,

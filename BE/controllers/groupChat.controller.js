@@ -10,7 +10,7 @@ const { checkPaymentIntentSucceeded, refundPaymentIntent } = require("./stripe.c
 const { appendPaymentHistory } = require("./payment.controller");
 const { getFullUserData } = require("../middlewares/requireAuth");
 const { checkTitleNameInvalid } = require('../services/global')
-const {scheduleEmailReminder, sendEmailMeetingRequestToCustomer, sendEmailMeetingRequestToExpert} = require('../services/notifications')
+const {scheduleEmailReminder, sendEmailMeetingRequestToCustomer, sendEmailMeetingRequestToExpert, sendEmailMeetingAcceptance} = require('../services/notifications')
 
 const createGeneralChatAndJoinGlobalChat = async (expertId) => {
     try {
@@ -325,18 +325,18 @@ const joinGroupChat = async (req, res) => {
             return res.status(400).send("You are already a participant of this meeting");
         }
         
-        if (userId.role === 'customer') {
+        if (req.user.role === 'customer') {
             const paymentIntentSucceeded_test = await checkPaymentIntentSucceeded(payment_intent, 'test')
             const paymentIntentSucceeded_live = await checkPaymentIntentSucceeded(payment_intent, 'live')
-            if (price && !paymentIntentSucceeded_test && !paymentIntentSucceeded_live) {
-                throw new Error("Payment intent not succeeded")
+            if (groupChat.price && groupChat.price > 0 && !paymentIntentSucceeded_test && !paymentIntentSucceeded_live) {
+                return res.status(400).send("Payment not completed. Your session was not booked.");
             }
 
             await appendPaymentHistory({
                 stripeMode: paymentIntentSucceeded_test ? 'test' : 'live',
                 paymentType: 'charge',
-                amount: paymentIntentSucceeded_test ? paymentIntentSucceeded_test.amount : paymentIntentSucceeded_live.amount,
-                currency: paymentIntentSucceeded_test ? paymentIntentSucceeded_test.currency : paymentIntentSucceeded_live.currency,
+                amount: (paymentIntentSucceeded_test ? paymentIntentSucceeded_test.amount : paymentIntentSucceeded_live?.amount) || 0,
+                currency: (paymentIntentSucceeded_test ? paymentIntentSucceeded_test.currency : paymentIntentSucceeded_live?.currency) || 'usd',
                 description: groupChat.name,
                 paymentIntent: payment_intent,
                 customer: userId.toString(),
@@ -516,8 +516,8 @@ const addMemberToPendingGroup = async (req, res) => {
 
 const acceptIndividualAppointment = async (req,res) =>{
     try {
-        const {userId} = req.user;
-        const {groupChatId,payment_intent} = req.body;
+        const {userId, role} = req.user;
+        const {groupChatId, payment_intent} = req.body;
 
         const groupChat = await GroupChat.findOne({ _id: groupChatId });
 
@@ -525,20 +525,19 @@ const acceptIndividualAppointment = async (req,res) =>{
             return res.status(404).send("Sorry, the group chat doesn't exist");
         }
 
-        let customer,expert;
-
-        if (userId.role === 'customer') {
+        // If this appointment requires payment, validate the intent when accepted by a customer
+        if (role === 'customer') {
             const paymentIntentSucceeded_test = await checkPaymentIntentSucceeded(payment_intent, 'test')
             const paymentIntentSucceeded_live = await checkPaymentIntentSucceeded(payment_intent, 'live')
-            if (!paymentIntentSucceeded_test && !paymentIntentSucceeded_live) {
-                throw new Error("Payment intent not succeeded")
+            if (groupChat.price && groupChat.price > 0 && (!paymentIntentSucceeded_test && !paymentIntentSucceeded_live)) {
+                return res.status(400).send("Payment not completed. Your session was not booked.");
             }
 
             await appendPaymentHistory({
                 stripeMode: paymentIntentSucceeded_test ? 'test' : 'live',
                 paymentType: 'charge',
-                amount: paymentIntentSucceeded_test ? paymentIntentSucceeded_test.amount : paymentIntentSucceeded_live.amount,
-                currency: paymentIntentSucceeded_test ? paymentIntentSucceeded_test.currency : paymentIntentSucceeded_live.currency,
+                amount: (paymentIntentSucceeded_test ? paymentIntentSucceeded_test.amount : paymentIntentSucceeded_live?.amount) || 0,
+                currency: (paymentIntentSucceeded_test ? paymentIntentSucceeded_test.currency : paymentIntentSucceeded_live?.currency) || 'usd',
                 description: groupChat.name,
                 paymentIntent: payment_intent,
                 customer: userId.toString(),
@@ -551,16 +550,20 @@ const acceptIndividualAppointment = async (req,res) =>{
         groupChat.status = 'active';
         await groupChat.save();
 
-        user1 = await User.findById(userId);
-        user2 = await User.findById(groupChat.createdBy);
+        const user1 = await User.findById(userId);
+        const user2 = await User.findById(groupChat.createdBy);
 
-        sendEmailMeetingAcceptance(user2.email, user2.username, groupChat.name, groupChat.start, groupChat.duration, user2.timeZone);
+        try {
+            sendEmailMeetingAcceptance(user2.email, user2.username, groupChat.name, groupChat.start, groupChat.duration, user2.timeZone);
+        } catch (e) {
+            console.warn('[acceptIndividualAppointment] email acceptance error:', e?.message || e);
+        }
 
 
         scheduleEmailReminder(user1.email, user1.username, groupChat.name, groupChat.start, groupChat.duration, user1.timeZone);
         scheduleEmailReminder(user2.email, user2.username, groupChat.name, groupChat.start, groupChat.duration, user2.timeZone);
 
-        return res.status(200).send("Group chat accepted successfully!");
+        return res.status(200).send("Session accepted successfully.");
         
     } catch (err) {
         console.log(err);

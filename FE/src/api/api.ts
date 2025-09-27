@@ -345,6 +345,7 @@ export const acceptIndividualAppointment = async (data: any) => {
     try {
         const res = await api.post("group-chat/accept-individual-appointment", {
             groupChatId: data.groupChatId,
+            payment_intent: data.payment_intent,
         });
 
         return res.data;
