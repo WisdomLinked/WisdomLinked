@@ -6,7 +6,8 @@
   "scripts": {
     "start": "node server.js",
     "start-stg": "env-cmd -f .env.stg nodemon server.js",
-    "dev": "nodemon server.js"
+    "dev": "nodemon server.js",
+    "turn": "node turn.js"
   },
   "author": "Jin Wang",
   "license": "ISC",

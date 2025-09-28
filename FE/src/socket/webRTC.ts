@@ -86,33 +86,37 @@ export const getLocalStreamPreview = async (audioOnly: boolean, callback?: () =>
 }
 
 const peerConfiguration = () => {
-    if (process.env.REACT_APP_TURN_URL) {
+    const turnUrl = process.env.REACT_APP_TURN_URL;
+    const turnUsername = process.env.REACT_APP_TURN_USERNAME;
+    const turnCredential = process.env.REACT_APP_TURN_CREDENTIAL;
+
+    if (turnUrl && turnUsername && turnCredential) {
         console.log("Using STUN + TURN servers");
         return {
             iceServers: [
-                {
-                    urls: "stun:stun.l.google.com:19302"
-                },
+                { urls: "stun:stun.l.google.com:19302" },
                 {
                     urls: [
-                        `turn:${process.env.REACT_APP_TURN_URL}:3478?transport=udp`,
-                        `turn:${process.env.REACT_APP_TURN_URL}:3478?transport=tcp`
+                        `turn:${turnUrl}:3478?transport=udp`,
+                        `turn:${turnUrl}:3478?transport=tcp`,
                     ],
-                    username: "efRXSXFPE63R9RIO40",
-                    credential: "mfC08YbrsCacihuc"
-                }
-            ]
-        };
-    } else {
-        console.log("Using only STUN server");
-        return {
-            iceServers: [
-                {
-                    urls: "stun:stun.l.google.com:19302"
-                }
-            ]
+                    username: turnUsername,
+                    credential: turnCredential,
+                },
+            ],
         };
     }
+
+    if (turnUrl && (!turnUsername || !turnCredential)) {
+        console.warn(
+            "REACT_APP_TURN_URL is set but TURN credentials are missing. Falling back to STUN only."
+        );
+    }
+
+    console.log("Using only STUN server");
+    return {
+        iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
+    };
 };
 
 
@@ -160,6 +164,7 @@ export const prepareNewPeerConnection = (connUserSocketId: string, isInitiator: 
 
     peers[connUserSocketId] = new Peer({
         initiator: isInitiator,
+        trickle: false,
         config: peerConfiguration(),
         stream: localStream,
     });
