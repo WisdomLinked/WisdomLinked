@@ -1,19 +1,27 @@
 import React, { useState, useRef, useEffect } from "react";
 import { getChatBotAnswer } from "../api/api";
 
+interface ChatItem {
+    question: string;
+    answer: string;
+    similarQuestions?: { id: string; question: string }[];
+}
+
 const Chatbot = () => {
     const [isMinimized, setIsMinimized] = useState<boolean>(true);
     const [input, setInput] = useState<string>("");
-    const [chat, setChat] = useState<{ question: string; answer: string }[]>([]);
+    const [chat, setChat] = useState<ChatItem[]>([]);
+    const [similarQuestions, setSimilarQuestions] = useState<{ id: string; question: string }[]>([]);
     const chatHistoryRef = useRef<HTMLDivElement | null>(null);
 
     const dashboardGreen = "#31b099";
 
-    const faqs = [
+    // Initial static FAQs for first load
+    const staticFaqs = [
         "How to accept a meeting?",
         "How to upload/change my avatar image?",
         "What does the calendar do?"
-    ]
+    ];
 
     const handleInput = (e: React.ChangeEvent<HTMLInputElement>) => {
         setInput(e.target.value);
@@ -22,16 +30,22 @@ const Chatbot = () => {
     const handleChatSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!input.trim()) return;
-        const response = await getChatBotAnswer({question: input})
-        setChat([...chat, { question: input, answer: response.answer }]);
-
+        const response = await getChatBotAnswer({ question: input });
+        setChat([
+            ...chat,
+            { question: input, answer: response.answer, similarQuestions: response.similarQuestions }
+        ]);
+        setSimilarQuestions(response.similarQuestions || []);
         setInput("");
     };
 
-    const handleQuickAction = async (input : string) => {
-        const response = await getChatBotAnswer({question: input})
-        setChat([...chat, { question: input, answer: response.answer }]);
-
+    const handleQuickAction = async (faqInput: string) => {
+        const response = await getChatBotAnswer({ question: faqInput });
+        setChat([
+            ...chat,
+            { question: faqInput, answer: response.answer, similarQuestions: response.similarQuestions }
+        ]);
+        setSimilarQuestions(response.similarQuestions || []);
         setInput("");
     };
 
@@ -93,24 +107,39 @@ const Chatbot = () => {
                         )}
                     </div>
 
-                    {/* Quick Actions */}
+                    {/* Similar Questions / Quick Actions */}
                     <div
                         className="p-4 bg-black overflow-y-auto"
                         style={{
-                            maxHeight: "120px", // Adjusted for 2-3 quick actions
+                            maxHeight: "120px",
                         }}
                     >
-                        <h3 className="text-sm font-semibold text-green-400 mb-2">Frequently asked questions:</h3>
+                        <h3 className="text-sm font-semibold text-green-400 mb-2">
+                            {chat.length === 0 ? "Frequently asked questions:" : "Similar questions:"}
+                        </h3>
                         <div className="flex flex-col gap-2">
-                            {faqs.map((input,index) => (
-                                <button
-                                    key={index}
-                                    onClick={() => handleQuickAction(input)}
-                                    className="bg-gray-800 hover:bg-green-500 text-white px-3 py-2 rounded-lg text-sm shadow"
-                                >
-                                    {input}
-                                </button>
-                            ))}
+                            {chat.length === 0
+                                ? staticFaqs.map((q: string, index: number) => (
+                                    <button
+                                        key={q}
+                                        onClick={() => handleQuickAction(q)}
+                                        className="bg-gray-800 hover:bg-green-500 text-white px-3 py-2 rounded-lg text-sm shadow"
+                                    >
+                                        {q}
+                                    </button>
+                                ))
+                                : similarQuestions.length > 0
+                                  ? similarQuestions.map((q: { id: string; question: string }, index: number) => (
+                                        <button
+                                            key={q.id}
+                                            onClick={() => handleQuickAction(q.question)}
+                                            className="bg-gray-800 hover:bg-green-500 text-white px-3 py-2 rounded-lg text-sm shadow"
+                                        >
+                                            {q.question}
+                                        </button>
+                                    ))
+                                  : <p className="text-gray-500 text-sm">No similar questions found.</p>
+                            }
                         </div>
                     </div>
 
