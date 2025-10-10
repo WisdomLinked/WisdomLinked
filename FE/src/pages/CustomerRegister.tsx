@@ -220,16 +220,10 @@ const CustomerRegister = () => {
                         <input
                             className="w-full rounded-[15px] h-[62px] mt-0.5 border text-darkgrey text-[14px] leading-[21px] px-[24px] border-lightgrey"
                             placeholder="Input your email address"
-                            type="email"
+                            type='email'
                             value={email}
-                            onChange={(e) => {
-                                set_email(e.target.value);
-                                setEmailTouched(false); // Hide error while typing
-                            }}
-                            onBlur={() => {
-                                setEmailTouched(true); // Show error after leaving field
-                                set_isValidEmail(validateEmail(email)); // Validate on blur only
-                            }}
+                            onChange={(e) => set_email(e.target.value)}
+                            onBlur={() => setEmailTouched(true)}
                         />
                         <ShowFieldError
                             show={emailTouched && !isValidEmail}
