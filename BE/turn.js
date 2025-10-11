@@ -1,11 +1,11 @@
 var Turn = require('node-turn');
 var server = new Turn({
   // Set options
-  listeningPort: 3478,
+  listeningPort: 3480,
   listeningIps: ['0.0.0.0'],
   authMech: 'long-term',
   credentials: {
-    "efRXSXFPE63R9RIO40": "mfC08YbrsCacihuc", // Updated username and password
+    "000000002075501639": "a4WZn18nHzQTRErUj4cwYpHYR3A=", // Updated username and password
   }
 });
 
@@ -15,4 +15,4 @@ server.on('error', (error) => {
 });
 
 server.start();
-console.log("TURN server started on port 3478.");
+console.log("TURN server started on port 3480.");
