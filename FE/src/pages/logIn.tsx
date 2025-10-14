@@ -5,7 +5,7 @@ import { useDispatch } from "react-redux";
 import { useAppSelector } from "../store";
 import ShowFieldError from "../components/ShowFieldError";
 import { SetLoadingStatus } from "../actions/appActions";
-import { validateEmail } from "../actions/common";
+import { validateEmail, validEmail } from "../actions/common";
 import { login } from "../api/api";
 import { showAlert } from "../actions/alertActions";
 import ConfirmCode from "../components/ConfirmCode";
@@ -16,7 +16,7 @@ const LogIn = () => {
     const navigate = useNavigate()
     const [email, set_email] = useState('')
     const [pwd, set_pwd] = useState('')
-    const [isValidEmail, set_isValidEmail] = useState(false)
+    const [isValidEmail, set_isValidEmail] = useState(true)
     const [emailTouched, setEmailTouched] = useState(false)
     const [pwdTouched, setpwdTouched] = useState(false)
     const [type, set_type] = useState('password')
@@ -46,7 +46,7 @@ const LogIn = () => {
     const checkAutofill = () => {
         if (emailRef.current && emailRef.current.value && !email) {
             set_email(emailRef.current.value)
-            setEmailTouched(true)
+            // setEmailTouched(true)
         }
         if (passwordRef.current && passwordRef.current.value && !pwd) {
             set_pwd(passwordRef.current.value)
@@ -55,11 +55,11 @@ const LogIn = () => {
     }
 
 
-    useEffect(() => {
-        if (emailTouched) {
-            set_isValidEmail(!email ? true : validateEmail(email) ? true : false)
-        }
-    }, [email,emailTouched])
+    // useEffect(() => {
+    //     if (emailTouched) {
+    //         set_isValidEmail(!email ? true : validateEmail(email) ? true : false)
+    //     }
+    // }, [email,emailTouched])
 
     useEffect(() => {
         if (userDetails?.email) {
@@ -132,16 +132,24 @@ const LogIn = () => {
                             ref={emailRef}
                             className="w-full rounded-[15px] h-[62px] mt-0.5 border text-darkgrey text-[14px] leading-[21px] px-[24px] border-lightgrey"
                             placeholder="Input your email address"
-                            type='email'
+                            type="email"
                             value={email}
-                            onChange={(e) => set_email(e.target.value)}
-                            onBlur={() => setEmailTouched(true)}
+                            onChange={(e) => {
+                                set_email(e.target.value);
+                                setEmailTouched(false); // hide error while typing
+                            }}
+                            onBlur={() => {
+                                setEmailTouched(true);              // mark as touched
+                                set_isValidEmail(validEmail(email)); // validate only after leaving field
+                            }}
                             onFocus={checkAutofill}
-                        />
+                            />
+
                         <ShowFieldError
                             show={emailTouched && !isValidEmail}
                             label="Invalid email address"
                         />
+
                         <div className="mt-8 w-full relative">
                             <div className="text-grey text-[12px] leading-[19px]">Password</div>
                             <input

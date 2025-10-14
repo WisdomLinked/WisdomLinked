@@ -102,6 +102,11 @@ export const validateEmail = (email: any) => {
         );
     }
 
+export const validEmail = (email: any): boolean => {
+        return /^(([^<>()[\]\\.,;:\s@"]+(\.[^<>()[\]\\.,;:\s@"]+)*)|(".+"))@((\[[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\])|(([a-zA-Z\-0-9]+\.)+[a-zA-Z]{2,}))$/
+            .test(String(email).toLowerCase());
+};
+
 export const formatDateHH_MM_AMPM = (date: Date) => {
     let hours = date.getHours();
     let minutes: string | number = date.getMinutes();
