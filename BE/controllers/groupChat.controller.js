@@ -203,7 +203,7 @@ const createGroupChatByUser = async (req, res) => {
             // pendingAppointmentToGroup: newPendingGroup._id
         })
 
-        sendEmailMeetingRequestToExpert(expertUser.email, expertUser.username, name, start, duration, price, true, expert.timeZone)
+        sendEmailMeetingRequestToExpert(expertUser.email, expertUser.username, name, chat.start, duration, price, true, expertUser.timeZone)
 
         return res.status(200).json({
             result: currentUser,
