@@ -43,8 +43,25 @@ const getChatBotAnswer = async (req, res) => {
         const filteredResults = role
             ? results.filter(item => item.role === "user" || item.role === role)
             : results;
+
         const mainMatch = filteredResults[0];
 
+        if (!mainMatch) {
+            const newChatBotQA = new chatBotQA({
+                question,
+                answer: "Pending answer...",
+                role: role || "user"
+            });
+            await newChatBotQA.save();
+
+            return res.status(200).json({
+                success: true,
+                answer: "I’ve saved your question for review - please check back later.",
+                similarQuestions: [],
+                saved: true,
+                newChatBotQA
+            });
+        }
         const similarQuestions = filteredResults
             .slice(1)
             .filter(item =>
@@ -56,24 +73,18 @@ const getChatBotAnswer = async (req, res) => {
                 question: item.question
             }));
 
-        if (!mainMatch) {
-            return res.status(200).json({
-                success: true,
-                answer: "Sorry, I don't understand the question.",
-                similarQuestions: []
-            });
-        }
-
         return res.status(200).json({
             success: true,
             answer: mainMatch.answer,
-            similarQuestions
+            similarQuestions,
+            saved: false
         });
     } catch (err) {
         console.error(err);
         return res.status(500).send(err.message);
     }
 };
+
 
 
 const getChatBotQA = async (req, res) => {
