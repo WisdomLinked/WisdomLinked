@@ -5,7 +5,7 @@ var server = new Turn({
   listeningIps: ['0.0.0.0'],
   authMech: 'long-term',
   credentials: {
-    "000000002075501639": "a4WZn18nHzQTRErUj4cwYpHYR3A=", // Updated username and password
+    "000000002077044058": "Yg0YtBV+8QIW0Jw8ZfNVz961Mk0=", // Updated username and password
   }
 });
 

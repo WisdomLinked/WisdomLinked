@@ -95,11 +95,15 @@ const peerConfiguration = () => {
                 },
                 {
                     urls: [
-                        `turn:${process.env.REACT_APP_TURN_URL}:3480?transport=udp`,
-                        `turn:${process.env.REACT_APP_TURN_URL}:3480?transport=tcp`
+                        "turn:relay1.expressturn.com:3478?transport=udp",
+                        "turn:relay1.expressturn.com:3478?transport=tcp",
+                        "turn:relay1.expressturn.com:80?transport=tcp",
+                        "turn:relay1.expressturn.com:443?transport=tcp",
+                        "turn:relay2.expressturn.com:3478?transport=udp",
+                        "turn:relay3.expressturn.com:3478?transport=udp"
                     ],
-                    username: "000000002075501639",
-                    credential: "a4WZn18nHzQTRErUj4cwYpHYR3A="
+                    username: "000000002077044058",
+                    credential: "Yg0YtBV+8QIW0Jw8ZfNVz961Mk0="
                 }
             ]
         };
