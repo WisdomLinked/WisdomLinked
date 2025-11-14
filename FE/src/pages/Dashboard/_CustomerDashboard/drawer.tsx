@@ -30,6 +30,7 @@ import Seminars from "./seminars";
 import CastForEducationIcon from '@mui/icons-material/CastForEducation';
 import { leaveRoom } from "../../../socket/roomHandler";
 import GeneralChatList from "../FriendsSideBar/GeneralChatList";
+import CommunityChatList from "../FriendsSideBar/CommunityChatList";
 import CustomerPrivateExpertsList from "../FriendsSideBar/CustomerList/CustomerPrivateExpertsList";
 
 interface Props {
@@ -190,7 +191,7 @@ export default function CustomerDrawer(props: Props) {
                 <div className={`w-[300px] h-full bg-darkgrey overflow-y-auto px-[15px] pt-4 pb-[5px] ${location === 'customerchat' ? '' : 'hidden'}`}>
                     <FriendsTitle title="Shared Community Chats" />
                     <div className="h-[220px] overflow-y-auto">
-                        <GeneralChatList/>
+                        <CommunityChatList/>
                     </div>
                     <div className="bg-black w-full h-[1px] mb-4"/>
                     <FriendsTitle title="Private Chats" />

@@ -11,6 +11,7 @@ import { formatDateHH_MM_AMPM, isTheEventGoingOn } from "../../../../actions/com
 import MessageCalendar from "./calendar";
 import CloseIcon from '@mui/icons-material/Close';
 import SeminarDetails from "../../seminarDetails";
+import { deleteGroupAction } from "../../../../actions/groupChatActions";
 import ExpertSeminar from "../../_ExpertDashboard/seminar";
 
 const Messages = () => {
@@ -31,6 +32,16 @@ const Messages = () => {
     const [editSeminarModalShow, set_editSeminarModalShow] = useState(false)
     const [profiles, setProfiles] = useState(new Map<string, any>()); // Map to store unique user profiles
     const [profileImages, setProfileImages] = useState(new Map<string, string>()); // Map to store profile images in Base64
+
+    const handleDeleteCommunityChat = () => {
+        if (!chosenGroupChatDetails?.groupId) return;
+        if (!window.confirm("Are you sure you want to delete this community chat?")) return;
+        dispatch(deleteGroupAction({
+            groupChatId: chosenGroupChatDetails.groupId,
+            groupChatName: chosenGroupChatDetails.groupName
+        }));
+        set_seminarDetailsModalShow(false);
+    };
 
     useEffect(() => {
         const processMessages = async () => {
@@ -290,7 +301,9 @@ const Messages = () => {
                             onClick={() => set_seminarDetailsModalShow(false)}
                         />
                         <div className="w-max max-w-[460px] bg-black rounded-lg text-white p-6 relative">
-                            <div className="text-center text-white text-2xl mb-6">Seminar Details</div>
+                            <div className="text-center text-white text-2xl mb-6">
+                                {chosenGroupChatDetails?.type === "community" ? "Chat Details" : "Seminar Details"}
+                            </div>
                             <button
                                 className="absolute right-2 top-2 rounded-md hover:bg-grey"
                                 onClick={() => set_seminarDetailsModalShow(false)}
@@ -307,6 +320,13 @@ const Messages = () => {
                                 participants={chosenGroupChatDetails?.participants}
                                 keywords={chosenGroupChatDetails?.keywords}
                                 services={chosenGroupChatDetails?.services}
+                                type={chosenGroupChatDetails?.type}
+                                createdAt={chosenGroupChatDetails?.createdAt}
+                                canDeleteCommunityChat={
+                                    chosenGroupChatDetails?.type === "community" &&
+                                    chosenGroupChatDetails?.admin?._id === userDetails?._id
+                                }
+                                onDeleteCommunityChat={handleDeleteCommunityChat}
                             />
                         </div>
                     </div> :

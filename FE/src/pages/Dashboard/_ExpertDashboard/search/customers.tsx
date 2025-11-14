@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import {doFilterCustomers, doGetKeywordsAndServices, joinGeneralChat, profileImageFetch} from "../../../../api/api";
+import {doFilterCustomers, doGetKeywordsAndServices, joinGeneralChat, joinPrivateChat, profileImageFetch} from "../../../../api/api";
 import { getAvatarTitle } from "../../../../actions/common";
 import { Rating } from "@mui/material";
 import FilterListIcon from '@mui/icons-material/FilterList';
@@ -111,6 +111,39 @@ const Customers = ({
         SetLoadingStatus(false)
     }
 
+    const joinPrivateChatOfCustomer = async (customerId: string) => {
+        SetLoadingStatus(true);
+        try {
+          const response = await joinPrivateChat(customerId);
+      
+          if (response) {
+            const { user, chat } = response;
+      
+            // Update logged-in expert's details (includes new chat)
+            dispatch({
+              type: "updateUserDetails",
+              payload: user,
+            });
+      
+            // Prepare chat details for opening
+            dispatch(
+              setChosenGroupChatDetails({
+                ...chat,
+                groupId: chat._id,
+                groupName: chat.name,
+              })
+            );
+      
+            // Navigate to expert's chat page
+            navigate(`${process.env.REACT_APP_AUTH_URL}expertdashboard/chat`);
+          }
+        } catch (err) {
+          console.error("joinPrivateChatOfCustomer error:", err);
+        }
+        SetLoadingStatus(false);
+      };
+      
+      
     useEffect(() => {
         let timer = setTimeout(() => {
             filterCustomers()
@@ -217,10 +250,10 @@ const Customers = ({
                                 <Rating name="read-only" className="mt-2" value={customer.rating || 0} readOnly />
                                 <div className="w-full flex space-x-4 mt-4">
                                     <button
-                                        className="w-[calc(50%-8px)] rounded-lg border text-lightgrey border-lightgrey flex items-center justify-center"
-                                        onClick={() => joinGeneralChatOfCustomer(customer._id)}
+                                    onClick={() => joinPrivateChatOfCustomer(customer._id)}
+                                    className="w-[calc(50%-8px)] rounded-lg border text-lightgrey border-lightgrey flex items-center justify-center"
                                     >
-                                        General Chat
+                                    Private Chat
                                     </button>
                                     <button
                                         className="w-[calc(50%-8px)] p-2 mx-auto rounded-[14px] flex items-center justify-center bg-green text-white text-[16px] leading-[24px] disabled:opacity-50"

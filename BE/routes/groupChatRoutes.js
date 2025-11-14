@@ -14,7 +14,10 @@ const {
     deleteGroup,
     updateGroupChat,
     joinGeneralChat,
-    joinPrivateChat
+    joinPrivateChat,
+    createCommunityChat,
+    joinCommunityChat,
+    addParticipantsToCommunityChat
 } = require("../controllers/groupChat.controller");
 
 const { requireAuth, expertAuth } = require("../middlewares/requireAuth");
@@ -83,6 +86,24 @@ router.post(
     "/joinPrivateChat",
     requireAuth(false),
     joinPrivateChat
+);
+
+router.post(
+    "/create-community-chat",
+    requireAuth(false),
+    createCommunityChat
+);
+
+router.post(
+    "/join-community-chat",
+    requireAuth(false),
+    joinCommunityChat
+);
+
+router.post(
+    "/add-participants-to-community-chat",
+    requireAuth(false),
+    addParticipantsToCommunityChat
 );
 
 router.post("/cancel-individual-appointment", 

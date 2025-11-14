@@ -356,6 +356,13 @@ const MessagesHeader = ({ scrollPosition, events, openCalendarModal, openSeminar
                         </> :
                         null
                 }
+                {
+                    chosenGroupChatDetails && !chosenGroupChatDetails?.duration ? (
+                        <button className="text-white" onClick={() => set_buttonsModalShow(true)}>
+                            <MoreVertIcon />
+                        </button>
+                    ) : null
+                }
             </div>
             {
                 buttonsModalShow ?
@@ -406,38 +413,44 @@ const MessagesHeader = ({ scrollPosition, events, openCalendarModal, openSeminar
                                         </button>
                                         {
                                             chosenGroupChatDetails?.admin?._id === userDetails?._id ?
-                                                <>
-                                                    <button
-                                                        className="w-full mt-5 flex space-x-4 justify-between items-center hover:opacity-50 disabled:opacity-50"
-                                                        onClick={() => {
-                                                            set_buttonsModalShow(false)
-                                                            set_show_meeting_id(true)
-                                                        }}
-                                                    >
-                                                        <span>Share Meeting ID</span>
-                                                        <ShareIcon />
-                                                    </button>
-                                                    <button
-                                                        className="w-full mt-5 flex space-x-4 justify-between items-center hover:opacity-50 disabled:opacity-50"
-                                                        disabled={chosenGroupChatDetails?.participants.length > 1}
-                                                        onClick={() => {
-                                                            set_buttonsModalShow(false)
-                                                            openEditSeminarModal()
-                                                        }}
-                                                    >
-                                                        <span>Edit Details</span>
-                                                        <EditIcon />
-                                                    </button>
-                                                    <button
-                                                        className="mt-5 w-full flex space-x-4 justify-between items-center hover:opacity-50 disabled:opacity-50"
-                                                        disabled={chosenGroupChatDetails?.participants.length > 1}
-                                                        onClick={handleDeleteGroup}
-                                                    >
-                                                        <span>Delete Seminar</span>
-                                                        <ClearIcon />
-                                                    </button>
-         
-                                                </> :
+                                                (() => {
+                                                    const isCommunityChat = chosenGroupChatDetails?.type === "community";
+                                                    return (
+                                                        <>
+                                                            <button
+                                                                className="w-full mt-5 flex space-x-4 justify-between items-center hover:opacity-50 disabled:opacity-50"
+                                                                onClick={() => {
+                                                                    set_buttonsModalShow(false)
+                                                                    set_show_meeting_id(true)
+                                                                }}
+                                                            >
+                                                                <span>Share Meeting ID</span>
+                                                                <ShareIcon />
+                                                            </button>
+                                                            {!isCommunityChat && (
+                                                                <button
+                                                                    className="w-full mt-5 flex space-x-4 justify-between items-center hover:opacity-50 disabled:opacity-50"
+                                                                    disabled={chosenGroupChatDetails?.participants.length > 1}
+                                                                    onClick={() => {
+                                                                        set_buttonsModalShow(false)
+                                                                        openEditSeminarModal()
+                                                                    }}
+                                                                >
+                                                                    <span>Edit Details</span>
+                                                                    <EditIcon />
+                                                                </button>
+                                                            )}
+                                                            <button
+                                                                className="mt-5 w-full flex space-x-4 justify-between items-center hover:opacity-50 disabled:opacity-50"
+                                                                disabled={!isCommunityChat && chosenGroupChatDetails?.participants.length > 1}
+                                                                onClick={handleDeleteGroup}
+                                                            >
+                                                                <span>{isCommunityChat ? "Delete Community Chat" : "Delete Seminar"}</span>
+                                                                <ClearIcon />
+                                                            </button>
+                                                        </>
+                                                    );
+                                                })() :
                                                 <button
                                                     className="mt-5 w-full flex space-x-4 justify-between items-center hover:opacity-50 disabled:opacity-50"
                                                     onClick={handleLeaveGroup}

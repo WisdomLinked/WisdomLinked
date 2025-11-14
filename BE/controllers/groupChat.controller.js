@@ -16,30 +16,263 @@ const createGeneralChatAndJoinGlobalChat = async (expertId) => {
     try {
         const currentUser = await User.findById(expertId);
 
-        // Join global chat
-        let globalChat = await GroupChat.findOne({ name: 'Global Chat' })
-        globalChat.participants.push(expertId);
-        currentUser.generalChats.push(globalChat._id);
-        await globalChat.save();
-
-        // Create a general chat
-        const generalChat = await GroupChat.create({
-            name: currentUser.username,
-            description: 'General Chat',
-            start: 0,
-            end: 0,
-            duration: 0,
-            price: 0,
-            participants: [expertId],
-            admin: expertId,
-        });
-
-        currentUser.generalChats.push(generalChat._id);
-        await currentUser.save();
+        // Join global chat (now replaced with community chat concept)
+        // This function can be deprecated but kept for backward compatibility
+        // New users should join community chats instead
+        
         return true;
     } catch (err) {
         console.log('[createGeneralChatAndJoinGlobalChat]', err.message)
         return false;
+    }
+}
+
+const createCommunityChat = async (req, res) => {
+    try {
+        const { userId } = req.user;
+        const { name, description, participants } = req.body;
+
+        // Validate name
+        if (!name || !name.trim()) {
+            return res.status(400).json({
+                status: 'FAIL',
+                error: 'Community chat name is required'
+            });
+        }
+
+        if (checkTitleNameInvalid('Name', name)) {
+            return res.status(400).json({
+                status: 'FAIL',
+                error: checkTitleNameInvalid('Name', name)
+            });
+        }
+
+        // Check if community chat with same name already exists for this user
+        const existingChat = await GroupChat.findOne({
+            name: name.trim(),
+            type: 'community',
+            admin: userId
+        });
+
+        if (existingChat) {
+            return res.status(400).json({
+                status: 'FAIL',
+                error: 'Community chat with this name already exists'
+            });
+        }
+
+        // Prepare participants array - always include the creator (admin)
+        const participantsArray = Array.isArray(participants) ? participants : [];
+        const uniqueParticipants = [...new Set([userId, ...participantsArray])];
+
+        // Validate that all participant IDs exist
+        const validParticipants = await User.find({
+            _id: { $in: uniqueParticipants }
+        }).select('_id');
+
+        const validParticipantIds = validParticipants.map(p => p._id.toString());
+        const finalParticipants = uniqueParticipants.filter(id => validParticipantIds.includes(id.toString()));
+
+        // Create community chat
+        const communityChat = await GroupChat.create({
+            name: name.trim(),
+            description: description || '',
+            type: 'community',
+            status: 'active',
+            start: 0,
+            end: 0,
+            duration: 0,
+            price: 0,
+            participants: finalParticipants,
+            admin: userId,
+            createdBy: userId,
+        });
+
+        // Add chat to all participants' generalChats arrays
+        const participantsToUpdate = finalParticipants;
+        await User.updateMany(
+            { _id: { $in: participantsToUpdate } },
+            { $addToSet: { generalChats: communityChat._id } }
+        );
+
+        // Update all participants' chat lists via socket
+        participantsToUpdate.forEach(participantId => {
+            updateUsersGroupChatList(participantId.toString());
+        });
+
+        // Get full user data
+        const currentUser = await User.findById(userId);
+        const fullUser = await getFullUserData(currentUser.email);
+        fullUser.token = null;
+        fullUser.password = null;
+
+        return res.status(200).json({
+            status: 'SUCCESS',
+            chat: communityChat,
+            user: fullUser
+        });
+    } catch (err) {
+        console.log('[createCommunityChat]', err.message);
+        return res.status(500).json({
+            status: 'FAIL',
+            error: err.message
+        });
+    }
+}
+
+const addParticipantsToCommunityChat = async (req, res) => {
+    try {
+        const { userId } = req.user;
+        const { communityChatId, participantIds } = req.body;
+
+        if (!communityChatId) {
+            return res.status(400).json({
+                status: 'FAIL',
+                error: 'Community chat ID is required'
+            });
+        }
+
+        if (!Array.isArray(participantIds) || participantIds.length === 0) {
+            return res.status(400).json({
+                status: 'FAIL',
+                error: 'At least one participant ID is required'
+            });
+        }
+
+        // Find the community chat
+        const communityChat = await GroupChat.findOne({
+            _id: communityChatId,
+            type: 'community'
+        });
+
+        if (!communityChat) {
+            return res.status(404).json({
+                status: 'FAIL',
+                error: 'Community chat not found'
+            });
+        }
+
+        // Only admin can add participants
+        if (communityChat.admin.toString() !== userId) {
+            return res.status(403).json({
+                status: 'FAIL',
+                error: 'Only the admin can add participants to this community chat'
+            });
+        }
+
+        // Validate that all participant IDs exist
+        const validParticipants = await User.find({
+            _id: { $in: participantIds }
+        }).select('_id');
+
+        const validParticipantIds = validParticipants.map(p => p._id.toString());
+        const newParticipantIds = participantIds.filter(id => 
+            validParticipantIds.includes(id.toString()) && 
+            !communityChat.participants.map(p => p.toString()).includes(id.toString())
+        );
+
+        if (newParticipantIds.length === 0) {
+            return res.status(400).json({
+                status: 'FAIL',
+                error: 'No new valid participants to add'
+            });
+        }
+
+        // Add new participants
+        communityChat.participants = [...communityChat.participants, ...newParticipantIds];
+        await communityChat.save();
+
+        // Add chat to new participants' generalChats arrays
+        await User.updateMany(
+            { _id: { $in: newParticipantIds } },
+            { $addToSet: { generalChats: communityChat._id } }
+        );
+
+        // Update all participants' chat lists via socket
+        newParticipantIds.forEach(participantId => {
+            updateUsersGroupChatList(participantId.toString());
+        });
+
+        // Also update the admin's list
+        updateUsersGroupChatList(userId.toString());
+
+        // Get full user data
+        const currentUser = await User.findById(userId);
+        const fullUser = await getFullUserData(currentUser.email);
+        fullUser.token = null;
+        fullUser.password = null;
+
+        return res.status(200).json({
+            status: 'SUCCESS',
+            chat: communityChat,
+            user: fullUser
+        });
+    } catch (err) {
+        console.log('[addParticipantsToCommunityChat]', err.message);
+        return res.status(500).json({
+            status: 'FAIL',
+            error: err.message
+        });
+    }
+}
+
+const joinCommunityChat = async (req, res) => {
+    try {
+        const { userId } = req.user;
+        const { communityChatId } = req.body;
+
+        if (!communityChatId) {
+            return res.status(400).json({
+                status: 'FAIL',
+                error: 'Community chat ID is required'
+            });
+        }
+
+        // Find the community chat
+        const communityChat = await GroupChat.findOne({
+            _id: communityChatId,
+            type: 'community'
+        });
+
+        if (!communityChat) {
+            return res.status(404).json({
+                status: 'FAIL',
+                error: 'Community chat not found'
+            });
+        }
+
+        // Add user to participants if not already present
+        if (!communityChat.participants.includes(userId)) {
+            communityChat.participants.push(userId);
+            await communityChat.save();
+        }
+
+        // Add to user's generalChats array
+        const currentUser = await User.findById(userId);
+        if (!currentUser.generalChats.includes(communityChat._id)) {
+            currentUser.generalChats.push(communityChat._id);
+            await currentUser.save();
+        }
+
+        // Update user's chat list via socket
+        updateUsersGroupChatList(userId.toString());
+
+        // Get full user data
+        const fullUser = await getFullUserData(currentUser.email);
+        fullUser.token = null;
+        fullUser.password = null;
+
+        return res.status(200).json({
+            status: 'SUCCESS',
+            chat: communityChat,
+            user: fullUser
+        });
+    } catch (err) {
+        console.log('[joinCommunityChat]', err.message);
+        return res.status(500).json({
+            status: 'FAIL',
+            error: err.message
+        });
     }
 }
 
@@ -947,5 +1180,8 @@ module.exports = {
     joinPrivateChat,
     cancelPendingSeminar,
     cancelIndividualAppointment,
+    createCommunityChat,
+    joinCommunityChat,
+    addParticipantsToCommunityChat,
     leftSeminar
 };
