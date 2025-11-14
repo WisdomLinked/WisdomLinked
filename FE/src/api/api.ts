@@ -250,6 +250,33 @@ export const joinPrivateChat = async (personId: string) => {
     }
   };
 
+export const createCommunityChat = async (data: { name: string; description?: string; participants?: string[] }) => {
+    try {
+        const res = await api.post("group-chat/create-community-chat", data);
+        return res.data;
+    } catch (err: any) {
+        return checkForAuthorization(err);
+    }
+};
+
+export const joinCommunityChat = async (communityChatId: string) => {
+    try {
+        const res = await api.post("group-chat/join-community-chat", { communityChatId });
+        return res.data;
+    } catch (err: any) {
+        return checkForAuthorization(err);
+    }
+};
+
+export const addParticipantsToCommunityChat = async (data: { communityChatId: string; participantIds: string[] }) => {
+    try {
+        const res = await api.post("group-chat/add-participants-to-community-chat", data);
+        return res.data;
+    } catch (err: any) {
+        return checkForAuthorization(err);
+    }
+};
+
 export const createGroupChat = async (details: any) => {
     try {
         const res = await api.post("group-chat", details);

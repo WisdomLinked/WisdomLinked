@@ -4,6 +4,22 @@ import Avatar from "../../components/Avatar";
 import GroupParticipantsDialog from "./Messenger/Messages/GroupParticipantsDialog";
 import { useAppSelector } from "../../store";
 
+interface SeminarDetailsProps {
+    title: string;
+    description?: string;
+    start?: string;
+    duration?: number;
+    price?: number;
+    admin: any;
+    participants: any[];
+    keywords?: any[];
+    services?: any[];
+    type?: string;
+    createdAt?: string;
+    canDeleteCommunityChat?: boolean;
+    onDeleteCommunityChat?: () => void;
+}
+
 const SeminarDetails = ({
     title,
     description,
@@ -13,38 +29,59 @@ const SeminarDetails = ({
     admin,
     participants,
     keywords,
-    services
-}:any) => {
+    services,
+    type,
+    createdAt,
+    canDeleteCommunityChat = false,
+    onDeleteCommunityChat
+}: SeminarDetailsProps) => {
 
     const [showParticipants, set_showParticipants] = useState(false);
     const { auth: { userDetails } } = useAppSelector((state) => state);
+    const isCommunityChat = type === "community";
 
     return (
         <div className="w-full text-white">
             <div className="text-2xl font-bold  text-center">{title}</div>
             <div className="text-base text-center">{description}</div>
             <hr className="my-2"/>
-            {
-                keywords?.length &&
-                <div className="flex flex-wrap gap-1">
-                    <span className="font-bold">Majors : </span>
+            { !isCommunityChat ? (
+                <>
                     {
-                        keywords?.map((keyword:any) => <span className="bg-grey text-lightgrey rounded-sm py-0.5 px-1" key={keyword._id}>{keyword.value}</span>)
+                        keywords?.length &&
+                        <div className="flex flex-wrap gap-1">
+                            <span className="font-bold">Majors : </span>
+                            {
+                                keywords?.map((keyword:any) => <span className="bg-grey text-lightgrey rounded-sm py-0.5 px-1" key={keyword._id}>{keyword.value}</span>)
+                            }
+                        </div>
                     }
-                </div>
-            }
-            {
-                services?.length &&
-                <div className="flex flex-wrap gap-1 mt-0.5">
-                    <span className="font-bold">Services : </span>
                     {
-                        services?.map((service:any) => <span className="bg-grey text-lightgrey rounded-sm py-0.5 px-1" key={service._id}>{service.value}</span>)
+                        services?.length &&
+                        <div className="flex flex-wrap gap-1 mt-0.5">
+                            <span className="font-bold">Services : </span>
+                            {
+                                services?.map((service:any) => <span className="bg-grey text-lightgrey rounded-sm py-0.5 px-1" key={service._id}>{service.value}</span>)
+                            }
+                        </div>
                     }
-                </div>
-            }
-            <div><span className="font-bold">Starts at : </span> {formatDateYYYY_MM_DD_h_m(start)}</div>
-            <div><span className="font-bold">Duration  : </span> {duration} min</div>
-            <div><span className="font-bold">Price  : </span> ${price}</div>
+                    <div><span className="font-bold">Starts at : </span> {start ? formatDateYYYY_MM_DD_h_m(start) : "N/A"}</div>
+                    <div><span className="font-bold">Duration  : </span> {duration ?? 0} min</div>
+                    <div><span className="font-bold">Price  : </span> ${price ?? 0}</div>
+                </>
+            ) : (
+                <>
+                    <div><span className="font-bold">Created on : </span> {createdAt ? formatDateYYYY_MM_DD_h_m(createdAt) : "N/A"}</div>
+                    {canDeleteCommunityChat && onDeleteCommunityChat && (
+                        <button
+                            className="mt-4 w-full bg-red text-white font-semibold py-2 rounded-md hover:bg-red/80 transition"
+                            onClick={onDeleteCommunityChat}
+                        >
+                            Delete Community Chat
+                        </button>
+                    )}
+                </>
+            )}
             <hr className="my-2"/>
             <div className="font-bold">Admin</div>
             <div className="flex space-x-3 items-center">

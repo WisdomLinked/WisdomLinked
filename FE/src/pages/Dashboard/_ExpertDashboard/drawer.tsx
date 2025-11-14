@@ -31,6 +31,7 @@ import AddToPhotosIcon from '@mui/icons-material/AddToPhotos';
 import { actionTypes } from "../../../actions/types";
 import { leaveRoom } from "../../../socket/roomHandler";
 import GeneralChatList from "../FriendsSideBar/GeneralChatList";
+import CommunityChatList from "../FriendsSideBar/CommunityChatList";
 import PersonSearchIcon from '@mui/icons-material/PersonSearch';
 import Search from "./search";
 import CustomerList from "../FriendsSideBar/CustomerList";
@@ -207,7 +208,7 @@ export default function ExpertDrawer(props: Props) {
                 <div className={`w-[300px] h-full bg-darkgrey overflow-y-auto px-[15px] pt-4 pb-[5px] ${location === 'expertchat' ? '' : 'hidden'}`}>
                     <FriendsTitle title="Shared Community Chats" />
                     <div className="h-[220px] overflow-y-auto">
-                        <GeneralChatList/>
+                        <CommunityChatList/>
                     </div>
                     <div className="bg-black w-full h-[1px] mb-4"/>
                     <FriendsTitle title="Private Chats" />

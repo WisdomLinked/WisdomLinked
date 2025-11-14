@@ -19,7 +19,7 @@ const groupChatSchema = new mongoose.Schema(
         paidBy: { type: String },
         type: {
             type: String,
-            enum: ["seminar", "individual"],
+            enum: ["seminar", "individual", "community"],
             default: "seminar",
         },
         status: {type: String, enum: ["pending", "active", "cancelled"], default: 'pending'},
