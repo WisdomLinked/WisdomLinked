@@ -412,7 +412,14 @@ const MessagesHeader = ({ scrollPosition, events, openCalendarModal, openSeminar
                                             <CastForEducationIcon />
                                         </button>
                                         {
-                                            chosenGroupChatDetails?.admin?._id === userDetails?._id ?
+                                            (() => {
+                                                // Handle both populated and unpopulated admin field
+                                                const adminId = typeof chosenGroupChatDetails?.admin === 'string' 
+                                                    ? chosenGroupChatDetails?.admin 
+                                                    : chosenGroupChatDetails?.admin?._id || chosenGroupChatDetails?.admin?.id;
+                                                const isAdmin = adminId && adminId.toString() === userDetails?._id?.toString();
+                                                return isAdmin;
+                                            })() ?
                                                 (() => {
                                                     const isCommunityChat = chosenGroupChatDetails?.type === "community";
                                                     return (

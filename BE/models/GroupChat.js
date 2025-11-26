@@ -43,6 +43,10 @@ const groupChatSchema = new mongoose.Schema(
             ref: "User",
             required: true,
         },
+        isOpenToAll: {
+            type: Boolean,
+            default: false,
+        },
 
         messages: [
             {
