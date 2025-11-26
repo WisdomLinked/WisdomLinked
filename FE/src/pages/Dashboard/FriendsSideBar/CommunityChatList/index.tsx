@@ -576,6 +576,7 @@ const CommunityChatList = () => {
                                     <>
                                         <MenuItem
                                             onClick={(e) => {
+                                                e.preventDefault();
                                                 e.stopPropagation();
                                                 const allSelected = availableUsers.length > 0 && 
                                                     availableUsers.every(user => selectedParticipants.includes(user.id));
@@ -596,12 +597,27 @@ const CommunityChatList = () => {
                                             />
                                             <ListItemText primary="Select All" />
                                         </MenuItem>
-                                        {availableUsers.map((user) => (
-                                            <MenuItem key={user.id} value={user.id}>
-                                                <Checkbox checked={selectedParticipants.indexOf(user.id) > -1} />
-                                                <ListItemText primary={user.username || user.email} />
-                                            </MenuItem>
-                                        ))}
+                                        {availableUsers.map((user) => {
+                                            const isSelected = selectedParticipants.includes(user.id);
+                                            return (
+                                                <MenuItem 
+                                                    key={user.id} 
+                                                    value={user.id}
+                                                    onClick={(e) => {
+                                                        e.preventDefault();
+                                                        e.stopPropagation();
+                                                        if (isSelected) {
+                                                            setSelectedParticipants(selectedParticipants.filter(id => id !== user.id));
+                                                        } else {
+                                                            setSelectedParticipants([...selectedParticipants, user.id]);
+                                                        }
+                                                    }}
+                                                >
+                                                    <Checkbox checked={isSelected} />
+                                                    <ListItemText primary={user.username || user.email} />
+                                                </MenuItem>
+                                            );
+                                        })}
                                     </>
                                 )}
                             </Select>
@@ -679,6 +695,7 @@ const CommunityChatList = () => {
                                 <>
                                     <MenuItem
                                         onClick={(e) => {
+                                            e.preventDefault();
                                             e.stopPropagation();
                                             const allSelected = availableUsers.length > 0 && 
                                                 availableUsers.every(user => selectedParticipantsForAdd.includes(user.id));
@@ -699,12 +716,27 @@ const CommunityChatList = () => {
                                         />
                                         <ListItemText primary="Select All" />
                                     </MenuItem>
-                                    {availableUsers.map((user) => (
-                                        <MenuItem key={user.id} value={user.id}>
-                                            <Checkbox checked={selectedParticipantsForAdd.indexOf(user.id) > -1} />
-                                            <ListItemText primary={user.username || user.email} />
-                                        </MenuItem>
-                                    ))}
+                                    {availableUsers.map((user) => {
+                                        const isSelected = selectedParticipantsForAdd.includes(user.id);
+                                        return (
+                                            <MenuItem 
+                                                key={user.id} 
+                                                value={user.id}
+                                                onClick={(e) => {
+                                                    e.preventDefault();
+                                                    e.stopPropagation();
+                                                    if (isSelected) {
+                                                        setSelectedParticipantsForAdd(selectedParticipantsForAdd.filter(id => id !== user.id));
+                                                    } else {
+                                                        setSelectedParticipantsForAdd([...selectedParticipantsForAdd, user.id]);
+                                                    }
+                                                }}
+                                            >
+                                                <Checkbox checked={isSelected} />
+                                                <ListItemText primary={user.username || user.email} />
+                                            </MenuItem>
+                                        );
+                                    })}
                                 </>
                             )}
                         </Select>
