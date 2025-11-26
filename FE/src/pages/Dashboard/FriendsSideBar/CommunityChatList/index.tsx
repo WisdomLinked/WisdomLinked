@@ -4,8 +4,9 @@ import GeneralChatListItem from "../GeneralChatList/GeneralChatListItem";
 import { styled } from "@mui/system";
 import AddIcon from "@mui/icons-material/Add";
 import PersonAddIcon from "@mui/icons-material/PersonAdd";
+import GroupAddIcon from "@mui/icons-material/GroupAdd";
 import { Button, Dialog, DialogTitle, DialogContent, DialogActions, TextField, FormControl, InputLabel, Select, MenuItem, Checkbox, ListItemText, OutlinedInput } from "@mui/material";
-import { createCommunityChat, addParticipantsToCommunityChat, doFilterCustomers } from "../../../../api/api";
+import { createCommunityChat, addParticipantsToCommunityChat, doFilterCustomers, getAllCommunityChats, joinCommunityChat } from "../../../../api/api";
 import { showAlert } from "../../../../actions/alertActions";
 import { updateMe } from "../../../../actions/authActions";
 
@@ -63,12 +64,15 @@ const CommunityChatList = () => {
     const [selectedChatForAddParticipants, setSelectedChatForAddParticipants] = useState<any>(null);
     const [newChatName, setNewChatName] = useState("");
     const [newChatDescription, setNewChatDescription] = useState("");
+    const [isOpenToAll, setIsOpenToAll] = useState(false);
     const [selectedParticipants, setSelectedParticipants] = useState<string[]>([]);
     const [selectedParticipantsForAdd, setSelectedParticipantsForAdd] = useState<string[]>([]);
     const [availableUsers, setAvailableUsers] = useState<any[]>([]);
     const [isCreating, setIsCreating] = useState(false);
     const [isAddingParticipants, setIsAddingParticipants] = useState(false);
     const [loadingUsers, setLoadingUsers] = useState(false);
+    const [loadingChats, setLoadingChats] = useState(false);
+    const [joiningChatId, setJoiningChatId] = useState<string | null>(null);
 
     const isExpert = userDetails?.role === 'expert';
     const isCustomer = userDetails?.role === 'customer';
@@ -114,59 +118,46 @@ const CommunityChatList = () => {
         }
     };
 
-    // Fetch and filter community chats
+    // Fetch all community chats
     useEffect(() => {
-        if (!userDetails?.generalChats) return;
-        
-        let temp: any = [];
-        userDetails.generalChats?.forEach((item: any) => {
-            // Skip old Global Chat and Admin Chat
-            if (item.name === 'Global Chat' || item.name === 'Admin') {
-                return;
-            }
+        const fetchAllCommunityChats = async () => {
+            if (!userDetails?.userId) return;
             
-            // Include community chats only
-            const isCommunityChat = item.type === 'community';
-            
-            if (isCommunityChat) {
-                // For customers: only show chats they're participants in
-                if (isCustomer) {
-                    const participantIds = item.participants?.map((p: any) => {
-                        // Handle different participant formats
-                        if (typeof p === 'string') return p;
-                        if (p && p._id) return p._id.toString();
-                        if (p && p.toString) return p.toString();
-                        return null;
-                    }).filter(Boolean) || [];
-                    
-                    const userIdStr = userDetails.userId?.toString();
-                    const isParticipant = participantIds.some((pid: any) => 
-                        pid.toString() === userIdStr
-                    );
-                    
-                    if (!isParticipant) {
-                        return; // Skip if customer is not a participant
-                    }
+            setLoadingChats(true);
+            try {
+                const response = await getAllCommunityChats();
+                // Handle case where checkForAuthorization returns false
+                if (response === false) {
+                    console.error('Authorization failed or error occurred');
+                    return;
                 }
-                
-                const chat = {
-                    ...item,
-                    missedChats: userDetails?.missedChats?.[item?._id] || 0,
-                    type: 'community'
-                };
-                temp.push(chat);
+                if (response && response.status === 'SUCCESS' && response.chats) {
+                    // Add missedChats from userDetails for chats user has joined
+                    const chatsWithMissed = response.chats.map((chat: any) => {
+                        const missedChats = userDetails?.missedChats?.[chat._id] || 0;
+                        return {
+                            ...chat,
+                            missedChats,
+                            type: 'community'
+                        };
+                    });
+                    
+                    setCommunityChats(chatsWithMissed);
+                } else {
+                    const errorMsg = response?.error || response?.message || "Failed to fetch community chats";
+                    console.error('Failed to fetch community chats:', response);
+                    dispatch(showAlert(errorMsg));
+                }
+            } catch (error: any) {
+                console.error('Error fetching community chats:', error);
+                dispatch(showAlert(error?.message || "Failed to fetch community chats"));
+            } finally {
+                setLoadingChats(false);
             }
-        });
-        
-        // Sort by updatedAt (most recent first)
-        temp.sort((a: any, b: any) => {
-            const dateA = new Date(a.updatedAt || 0).getTime();
-            const dateB = new Date(b.updatedAt || 0).getTime();
-            return dateB - dateA;
-        });
-        
-        setCommunityChats(temp);
-    }, [userDetails, isCustomer]);
+        };
+
+        fetchAllCommunityChats();
+    }, [userDetails?.userId, userDetails?.missedChats, dispatch]);
 
     // Search filter
     const filteredChats = communityChats.filter((chat: any) =>
@@ -185,15 +176,30 @@ const CommunityChatList = () => {
             const response = await createCommunityChat({
                 name: newChatName.trim(),
                 description: newChatDescription.trim() || undefined,
-                participants: isExpert ? selectedParticipants : [] // Only experts can select participants
+                participants: isExpert ? selectedParticipants : [], // Only experts can select participants
+                isOpenToAll: isOpenToAll
             });
 
             if (response.status === 'SUCCESS') {
                 dispatch(showAlert("Community chat created successfully!"));
                 // Update user details to refresh the list
                 dispatch(updateMe());
+                // Refresh the community chats list
+                const refreshResponse = await getAllCommunityChats();
+                if (refreshResponse.status === 'SUCCESS' && refreshResponse.chats) {
+                    const chatsWithMissed = refreshResponse.chats.map((c: any) => {
+                        const missedChats = userDetails?.missedChats?.[c._id] || 0;
+                        return {
+                            ...c,
+                            missedChats,
+                            type: 'community'
+                        };
+                    });
+                    setCommunityChats(chatsWithMissed);
+                }
                 setNewChatName("");
                 setNewChatDescription("");
+                setIsOpenToAll(false);
                 setSelectedParticipants([]);
                 setOpenDialog(false);
             } else {
@@ -223,6 +229,19 @@ const CommunityChatList = () => {
             if (response.status === 'SUCCESS') {
                 dispatch(showAlert("Participants added successfully!"));
                 dispatch(updateMe());
+                // Refresh the community chats list
+                const refreshResponse = await getAllCommunityChats();
+                if (refreshResponse.status === 'SUCCESS' && refreshResponse.chats) {
+                    const chatsWithMissed = refreshResponse.chats.map((c: any) => {
+                        const missedChats = userDetails?.missedChats?.[c._id] || 0;
+                        return {
+                            ...c,
+                            missedChats,
+                            type: 'community'
+                        };
+                    });
+                    setCommunityChats(chatsWithMissed);
+                }
                 setSelectedParticipantsForAdd([]);
                 setSelectedChatForAddParticipants(null);
                 setOpenAddParticipantsDialog(false);
@@ -233,6 +252,38 @@ const CommunityChatList = () => {
             dispatch(showAlert(error?.message || "Failed to add participants"));
         } finally {
             setIsAddingParticipants(false);
+        }
+    };
+
+    // Handle join community chat
+    const handleJoinChat = async (chat: any) => {
+        setJoiningChatId(chat._id);
+        try {
+            const response = await joinCommunityChat(chat._id);
+            if (response.status === 'SUCCESS') {
+                dispatch(showAlert("Successfully joined the community chat!"));
+                // Update user details to refresh the list
+                dispatch(updateMe());
+                // Refresh the community chats list
+                const refreshResponse = await getAllCommunityChats();
+                if (refreshResponse.status === 'SUCCESS' && refreshResponse.chats) {
+                    const chatsWithMissed = refreshResponse.chats.map((c: any) => {
+                        const missedChats = userDetails?.missedChats?.[c._id] || 0;
+                        return {
+                            ...c,
+                            missedChats,
+                            type: 'community'
+                        };
+                    });
+                    setCommunityChats(chatsWithMissed);
+                }
+            } else {
+                dispatch(showAlert(response.error || "Failed to join community chat"));
+            }
+        } catch (error: any) {
+            dispatch(showAlert(error?.message || "Failed to join community chat"));
+        } finally {
+            setJoiningChatId(null);
         }
     };
 
@@ -309,6 +360,7 @@ const CommunityChatList = () => {
                         startIcon={<AddIcon />}
                         onClick={() => {
                             setSelectedParticipants([]);
+                            setIsOpenToAll(false);
                             setOpenDialog(true);
                         }}
                         sx={{
@@ -336,47 +388,103 @@ const CommunityChatList = () => {
                 onChange={(e) => setSearchQuery(e.target.value)}
             />
 
-            {filteredChats.map((chat: any) => (
-                <div key={chat._id} className="relative group">
-                    <GeneralChatListItem
-                        chat={chat}
-                        missedChats={chat.missedChats}
-                        lastChatDate={chat.updatedAt}
-                    />
-                    {/* Add Participants button (experts only, and only if they're admin) */}
-                    {isExpert && chat.admin?._id === userDetails.userId && (
-                        <Button
-                            size="small"
-                            startIcon={<PersonAddIcon />}
-                            onClick={(e) => {
-                                e.stopPropagation();
-                                handleOpenAddParticipants(chat);
-                            }}
-                            sx={{
-                                position: 'absolute',
-                                right: '8px',
-                                top: '50%',
-                                transform: 'translateY(-50%)',
-                                minWidth: 'auto',
-                                padding: '4px 8px',
-                                fontSize: '10px',
-                                color: '#00ffff',
-                                opacity: 0,
-                                transition: 'opacity 0.2s',
-                                '.group:hover &': {
-                                    opacity: 1
-                                },
-                                '&:hover': {
-                                    backgroundColor: 'rgba(0, 255, 255, 0.1)'
-                                }
-                            }}
-                            title="Add Participants"
-                        >
-                            Add
-                        </Button>
-                    )}
+            {loadingChats ? (
+                <div style={{ padding: '20px', textAlign: 'center', color: '#888' }}>
+                    Loading community chats...
                 </div>
-            ))}
+            ) : filteredChats.length === 0 ? (
+                <div style={{ padding: '20px', textAlign: 'center', color: '#888' }}>
+                    No community chats found
+                </div>
+            ) : (
+                filteredChats.map((chat: any) => {
+                    const isJoined = chat.isJoined || false;
+                    // Handle both populated and unpopulated admin field
+                    const adminId = typeof chat.admin === 'string' 
+                        ? chat.admin 
+                        : chat.admin?._id || chat.admin?.id;
+                    const isAdmin = adminId && adminId.toString() === userDetails.userId?.toString();
+                    const rightOffset = isExpert && isAdmin ? '60px' : '8px';
+                    
+                    return (
+                        <div key={chat._id} className="relative group">
+                            <GeneralChatListItem
+                                chat={chat}
+                                missedChats={chat.missedChats}
+                                lastChatDate={chat.updatedAt}
+                            />
+                            {/* Join button - show for users who haven't joined */}
+                            {!isJoined && (
+                                <Button
+                                    size="small"
+                                    startIcon={<GroupAddIcon />}
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleJoinChat(chat);
+                                    }}
+                                    disabled={joiningChatId === chat._id}
+                                    sx={{
+                                        position: 'absolute',
+                                        right: rightOffset,
+                                        top: '50%',
+                                        transform: 'translateY(-50%)',
+                                        minWidth: 'auto',
+                                        padding: '4px 8px',
+                                        fontSize: '10px',
+                                        color: '#00ffff',
+                                        opacity: 0,
+                                        transition: 'opacity 0.2s',
+                                        '.group:hover &': {
+                                            opacity: 1
+                                        },
+                                        '&:hover': {
+                                            backgroundColor: 'rgba(0, 255, 255, 0.1)'
+                                        },
+                                        '&:disabled': {
+                                            opacity: 0.5
+                                        }
+                                    }}
+                                    title="Join Community Chat"
+                                >
+                                    {joiningChatId === chat._id ? 'Joining...' : 'Join'}
+                                </Button>
+                            )}
+                            {/* Add Participants button (experts only, and only if they're admin) */}
+                            {isExpert && isAdmin && (
+                                <Button
+                                    size="small"
+                                    startIcon={<PersonAddIcon />}
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleOpenAddParticipants(chat);
+                                    }}
+                                    sx={{
+                                        position: 'absolute',
+                                        right: '8px',
+                                        top: '50%',
+                                        transform: 'translateY(-50%)',
+                                        minWidth: 'auto',
+                                        padding: '4px 8px',
+                                        fontSize: '10px',
+                                        color: '#00ffff',
+                                        opacity: 0,
+                                        transition: 'opacity 0.2s',
+                                        '.group:hover &': {
+                                            opacity: 1
+                                        },
+                                        '&:hover': {
+                                            backgroundColor: 'rgba(0, 255, 255, 0.1)'
+                                        }
+                                    }}
+                                    title="Add Participants"
+                                >
+                                    Add
+                                </Button>
+                            )}
+                        </div>
+                    );
+                })
+            )}
 
             {/* Dialog for creating new community chat */}
             <Dialog 
@@ -415,6 +523,26 @@ const CommunityChatList = () => {
                         sx={{ mb: 2 }}
                     />
                     
+                    {/* Available to All option (experts only) */}
+                    {isExpert && (
+                        <FormControl fullWidth sx={{ mt: 2, mb: 2 }}>
+                            <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', color: '#000' }}>
+                                <Checkbox
+                                    checked={isOpenToAll}
+                                    onChange={(e) => setIsOpenToAll(e.target.checked)}
+                                    disabled={isCreating}
+                                    sx={{
+                                        color: '#00ffff',
+                                        '&.Mui-checked': {
+                                            color: '#00ffff',
+                                        },
+                                    }}
+                                />
+                                <span>Make this chat visible to all members.</span>
+                            </label>
+                        </FormControl>
+                    )}
+                    
                     {/* Participant selection (experts only) */}
                     {isExpert && (
                         <FormControl fullWidth sx={{ mt: 2 }}>
@@ -445,12 +573,36 @@ const CommunityChatList = () => {
                                 ) : availableUsers.length === 0 ? (
                                     <MenuItem disabled>No users available</MenuItem>
                                 ) : (
-                                    availableUsers.map((user) => (
-                                        <MenuItem key={user.id} value={user.id}>
-                                            <Checkbox checked={selectedParticipants.indexOf(user.id) > -1} />
-                                            <ListItemText primary={user.username || user.email} />
+                                    <>
+                                        <MenuItem
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                const allSelected = availableUsers.length > 0 && 
+                                                    availableUsers.every(user => selectedParticipants.includes(user.id));
+                                                if (allSelected) {
+                                                    setSelectedParticipants([]);
+                                                } else {
+                                                    setSelectedParticipants(availableUsers.map(user => user.id));
+                                                }
+                                            }}
+                                        >
+                                            <Checkbox
+                                                checked={availableUsers.length > 0 && 
+                                                    availableUsers.every(user => selectedParticipants.includes(user.id))}
+                                                indeterminate={
+                                                    selectedParticipants.length > 0 && 
+                                                    selectedParticipants.length < availableUsers.length
+                                                }
+                                            />
+                                            <ListItemText primary="Select All" />
                                         </MenuItem>
-                                    ))
+                                        {availableUsers.map((user) => (
+                                            <MenuItem key={user.id} value={user.id}>
+                                                <Checkbox checked={selectedParticipants.indexOf(user.id) > -1} />
+                                                <ListItemText primary={user.username || user.email} />
+                                            </MenuItem>
+                                        ))}
+                                    </>
                                 )}
                             </Select>
                         </FormControl>
@@ -463,6 +615,7 @@ const CommunityChatList = () => {
                                 setOpenDialog(false);
                                 setNewChatName("");
                                 setNewChatDescription("");
+                                setIsOpenToAll(false);
                                 setSelectedParticipants([]);
                             }
                         }}
@@ -523,12 +676,36 @@ const CommunityChatList = () => {
                             ) : availableUsers.length === 0 ? (
                                 <MenuItem disabled>No users available to add</MenuItem>
                             ) : (
-                                availableUsers.map((user) => (
-                                    <MenuItem key={user.id} value={user.id}>
-                                        <Checkbox checked={selectedParticipantsForAdd.indexOf(user.id) > -1} />
-                                        <ListItemText primary={user.username || user.email} />
+                                <>
+                                    <MenuItem
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            const allSelected = availableUsers.length > 0 && 
+                                                availableUsers.every(user => selectedParticipantsForAdd.includes(user.id));
+                                            if (allSelected) {
+                                                setSelectedParticipantsForAdd([]);
+                                            } else {
+                                                setSelectedParticipantsForAdd(availableUsers.map(user => user.id));
+                                            }
+                                        }}
+                                    >
+                                        <Checkbox
+                                            checked={availableUsers.length > 0 && 
+                                                availableUsers.every(user => selectedParticipantsForAdd.includes(user.id))}
+                                            indeterminate={
+                                                selectedParticipantsForAdd.length > 0 && 
+                                                selectedParticipantsForAdd.length < availableUsers.length
+                                            }
+                                        />
+                                        <ListItemText primary="Select All" />
                                     </MenuItem>
-                                ))
+                                    {availableUsers.map((user) => (
+                                        <MenuItem key={user.id} value={user.id}>
+                                            <Checkbox checked={selectedParticipantsForAdd.indexOf(user.id) > -1} />
+                                            <ListItemText primary={user.username || user.email} />
+                                        </MenuItem>
+                                    ))}
+                                </>
                             )}
                         </Select>
                     </FormControl>

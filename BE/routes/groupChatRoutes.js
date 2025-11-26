@@ -17,11 +17,18 @@ const {
     joinPrivateChat,
     createCommunityChat,
     joinCommunityChat,
-    addParticipantsToCommunityChat
+    addParticipantsToCommunityChat,
+    getAllCommunityChats
 } = require("../controllers/groupChat.controller");
 
 const { requireAuth, expertAuth } = require("../middlewares/requireAuth");
 
+// IMPORTANT: Specific routes must come before parameterized routes
+router.get(
+    "/get-all-community-chats",
+    requireAuth(false),
+    getAllCommunityChats
+);
 
 router.get(
     "/:groupChatId",

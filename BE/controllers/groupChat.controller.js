@@ -1,3 +1,4 @@
+const mongoose = require("mongoose");
 const User = require("../models/User");
 const GroupChat = require("../models/GroupChat");
 const PendingAppointmentToGroup = require("../models/PendingAppointmentToGroup");
@@ -30,7 +31,7 @@ const createGeneralChatAndJoinGlobalChat = async (expertId) => {
 const createCommunityChat = async (req, res) => {
     try {
         const { userId } = req.user;
-        const { name, description, participants } = req.body;
+        const { name, description, participants, isOpenToAll } = req.body;
 
         // Validate name
         if (!name || !name.trim()) {
@@ -86,6 +87,7 @@ const createCommunityChat = async (req, res) => {
             participants: finalParticipants,
             admin: userId,
             createdBy: userId,
+            isOpenToAll: isOpenToAll === true,
         });
 
         // Add chat to all participants' generalChats arrays
@@ -272,6 +274,73 @@ const joinCommunityChat = async (req, res) => {
         return res.status(500).json({
             status: 'FAIL',
             error: err.message
+        });
+    }
+}
+
+const getAllCommunityChats = async (req, res) => {
+    try {
+        const { userId } = req.user;
+
+        if (!userId) {
+            return res.status(400).json({
+                status: 'FAIL',
+                error: 'User ID is required'
+            });
+        }
+
+        // Find community chats that are either open to all OR the user is a participant
+        const userObjectId = new mongoose.Types.ObjectId(userId);
+        const communityChats = await GroupChat.find({
+            type: 'community',
+            status: 'active',
+            $or: [
+                { isOpenToAll: true },
+                { participants: userObjectId }
+            ]
+        })
+        .populate('admin', '_id email username role')
+        .populate('participants', '_id email username')
+        .populate('createdBy', '_id email username')
+        .sort({ updatedAt: -1 })
+        .lean();
+
+        // Get current user to check which chats they're already in
+        const currentUser = await User.findById(userId).select('generalChats').lean();
+        if (!currentUser) {
+            return res.status(404).json({
+                status: 'FAIL',
+                error: 'User not found'
+            });
+        }
+
+        const userChatIds = (currentUser.generalChats || []).map(id => id.toString());
+
+        // Add isJoined flag to each chat
+        const chatsWithJoinStatus = communityChats.map(chat => {
+            const chatId = chat._id.toString();
+            const participantIds = (chat.participants || []).map((p) => {
+                if (typeof p === 'string') return p;
+                if (p && p._id) return p._id.toString();
+                return null;
+            }).filter(Boolean);
+
+            return {
+                ...chat,
+                isJoined: userChatIds.includes(chatId) || participantIds.includes(userId.toString()),
+                participantCount: participantIds.length
+            };
+        });
+
+        return res.status(200).json({
+            status: 'SUCCESS',
+            chats: chatsWithJoinStatus
+        });
+    } catch (err) {
+        console.log('[getAllCommunityChats] Error:', err);
+        return res.status(500).json({
+            status: 'FAIL',
+            error: err.message || 'Internal server error'
         });
     }
 }
@@ -938,9 +1007,18 @@ const deleteGroup = async (req, res) => {
             const participant = await User.findById(friendId);
 
             if (participant) {
+                // Remove from groupChats array
                 participant.groupChats = participant.groupChats.filter(
                     (chat) => chat.toString() !== groupChat._id.toString()
                 );
+                
+                // For community chats, also remove from generalChats array
+                if (groupChat.type === 'community') {
+                    participant.generalChats = participant.generalChats.filter(
+                        (chat) => chat.toString() !== groupChat._id.toString()
+                    );
+                }
+                
                 await participant.save();
 
                 // update the users group chat list
@@ -1183,5 +1261,6 @@ module.exports = {
     createCommunityChat,
     joinCommunityChat,
     addParticipantsToCommunityChat,
+    getAllCommunityChats,
     leftSeminar
 };

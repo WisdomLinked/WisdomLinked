@@ -323,8 +323,14 @@ const Messages = () => {
                                 type={chosenGroupChatDetails?.type}
                                 createdAt={chosenGroupChatDetails?.createdAt}
                                 canDeleteCommunityChat={
-                                    chosenGroupChatDetails?.type === "community" &&
-                                    chosenGroupChatDetails?.admin?._id === userDetails?._id
+                                    (() => {
+                                        if (chosenGroupChatDetails?.type !== "community") return false;
+                                        // Handle both populated and unpopulated admin field
+                                        const adminId = typeof chosenGroupChatDetails?.admin === 'string' 
+                                            ? chosenGroupChatDetails?.admin 
+                                            : chosenGroupChatDetails?.admin?._id || chosenGroupChatDetails?.admin?.id;
+                                        return adminId && adminId.toString() === userDetails?._id?.toString();
+                                    })()
                                 }
                                 onDeleteCommunityChat={handleDeleteCommunityChat}
                             />
