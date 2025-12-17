@@ -18,7 +18,7 @@ const LandingFooter = () => {
                     </div>
                 </div>
                 <div className="w-full lg:w-[calc(100%-400px)] flex flex-wrap gap-[30px] lg:gap-[60px] md:flex-nowrap lg:flex-row justify-between mt-[30px] lg:mt-0">
-                        <div className="w-full sm:w-auto flex flex-col space-y-3 lg:space-y-8">
+                        <div className="w-full sm:w-auto flex flex-col space-y-3">
                             <div className="font-bold text-white text-[20px] leading-[30px]">Product</div>
                             <div className="text-lightgrey text-[16px] leading-[24px]">Overview</div>
                             <div className="text-lightgrey text-[16px] leading-[24px]">Business Account</div>
@@ -26,7 +26,7 @@ const LandingFooter = () => {
                             <div className="text-lightgrey text-[16px] leading-[24px]">Financial Modelling</div>
                             <div className="text-lightgrey text-[16px] leading-[24px]">Spend Management</div>
                         </div>
-                        <div className="w-full sm:w-auto flex flex-col space-y-3 lg:space-y-8">
+                        <div className="w-full sm:w-auto flex flex-col space-y-3">
                             <div className="font-bold text-white text-[20px] leading-[30px]">Resources</div>
                             <div className="text-lightgrey text-[16px] leading-[24px]">Help</div>
                             <div className="text-lightgrey text-[16px] leading-[24px]">Status</div>
@@ -34,7 +34,7 @@ const LandingFooter = () => {
                             <div className="text-lightgrey text-[16px] leading-[24px]">Legal Agreement</div>
                             <div className="text-lightgrey text-[16px] leading-[24px]">Cookie Preferences</div>
                         </div>
-                        <div className="w-full sm:w-auto flex flex-col space-y-3 lg:space-y-8">
+                        <div className="w-full sm:w-auto flex flex-col space-y-3">
                             <div className="font-bold text-white text-[20px] leading-[30px]">Company</div>
                             <div className="text-lightgrey text-[16px] leading-[24px]">About TOE</div>
                             <div className="text-lightgrey text-[16px] leading-[24px]">Careers</div>
@@ -42,7 +42,7 @@ const LandingFooter = () => {
                             <div className="text-lightgrey text-[16px] leading-[24px]">Press</div>
                             <div className="text-lightgrey text-[16px] leading-[24px]">Blog</div>
                         </div>
-                        <div className="w-full sm:w-auto flex flex-col space-y-3 lg:space-y-8">
+                        <div className="w-full sm:w-auto flex flex-col space-y-3">
                             <div className="font-bold text-white text-[20px] leading-[30px]">Social media</div>
                             <div className="flex space-x-2 text-lightgrey">
                                 <div className="w-10 h-10 rounded-full border border-lightgrey flex justify-center items-center">
