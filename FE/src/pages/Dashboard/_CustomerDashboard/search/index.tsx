@@ -604,7 +604,7 @@ const Search = () => {
 //                                     //expert={selectedExpert}
 //                                 />
 //                                 <Link
-//                                     to={`${process.env.REACT_APP_AUTH_URL}customerdashboard/calendar`}
+//                                     to={`${import.meta.env.VITE_AUTH_URL}customerdashboard/calendar`}
 //                                     className="w-[200px] h-10 bg-green rounded-lg flex items-center justify-center disabled:opacity-50"
 //                                 >
 //                                     Go to calendar
@@ -783,7 +783,7 @@ const Search = () => {
                             paidBy={paidBy}
                         />
                         <Link
-                            to={`${process.env.REACT_APP_AUTH_URL}customerdashboard/calendar`}
+                            to={`${import.meta.env.VITE_AUTH_URL}customerdashboard/calendar`}
                             className="w-[200px] h-10 bg-green rounded-lg flex items-center justify-center"
                         >
                             Go to calendar

@@ -168,31 +168,31 @@ export default function ExpertDrawer(props: Props) {
             </button>
             <div className={`fixed ${userDetails.status === 'review' ? 'top-[112px] h-[calc(100vh-112px)]' : 'top-[63px] h-[calc(100vh-63px)]'} left-0 w-fit lg:top-0 lg:relative lg:h-full shadow-md ${leftNavActive ? 'leftnav_active' : 'leftnav'} flex z-[100]`}>
                 <div className="w-[70px] h-full bg-black flex flex-col items-center space-y-5 py-4">
-                    <Link to={`${process.env.REACT_APP_AUTH_URL}expertdashboard`} className={`flex flex-col items-center ${location === 'expertdashboard' ? 'text-lightgrey' : 'text-grey hover:text-lightgrey'}`}>
+                    <Link to={`${import.meta.env.VITE_AUTH_URL}expertdashboard`} className={`flex flex-col items-center ${location === 'expertdashboard' ? 'text-lightgrey' : 'text-grey hover:text-lightgrey'}`}>
                         <DashboardIcon fontSize="medium" />
                         <span className="text-[10px]">Dashboard</span>
                     </Link>
-                    <Link to={`${process.env.REACT_APP_AUTH_URL}expertdashboard/chat`} className={`flex flex-col items-center ${location === 'expertchat' ? 'text-lightgrey' : 'text-grey hover:text-lightgrey'}`}>
+                    <Link to={`${import.meta.env.VITE_AUTH_URL}expertdashboard/chat`} className={`flex flex-col items-center ${location === 'expertchat' ? 'text-lightgrey' : 'text-grey hover:text-lightgrey'}`}>
                         <ChatIcon fontSize="medium" />
                         <span className="text-[10px]">Chat</span>
                     </Link>
-                    <Link to={`${process.env.REACT_APP_AUTH_URL}expertdashboard/search`} className={`flex flex-col items-center ${location === 'expertsearch' ? 'text-lightgrey' : 'text-grey hover:text-lightgrey'} ${userDetails.status === 'review' ? 'pointer-events-none' : ''}`}>
+                    <Link to={`${import.meta.env.VITE_AUTH_URL}expertdashboard/search`} className={`flex flex-col items-center ${location === 'expertsearch' ? 'text-lightgrey' : 'text-grey hover:text-lightgrey'} ${userDetails.status === 'review' ? 'pointer-events-none' : ''}`}>
                         <PersonSearchIcon fontSize="medium" />
                         <span className="text-[10px]">Customers</span>
                     </Link>
-                    <Link to={`${process.env.REACT_APP_AUTH_URL}expertdashboard/seminar`} className={`flex flex-col items-center ${location === 'expertseminar' ? 'text-lightgrey' : 'text-grey hover:text-lightgrey'} ${userDetails.status === 'review' ? 'pointer-events-none' : ''}`}>
+                    <Link to={`${import.meta.env.VITE_AUTH_URL}expertdashboard/seminar`} className={`flex flex-col items-center ${location === 'expertseminar' ? 'text-lightgrey' : 'text-grey hover:text-lightgrey'} ${userDetails.status === 'review' ? 'pointer-events-none' : ''}`}>
                         <CastForEducationIcon fontSize="medium" />
                         <span className="text-[10px]">New Seminar</span>
                     </Link>
-                    <Link to={`${process.env.REACT_APP_AUTH_URL}expertdashboard/calendar`} className={`flex flex-col items-center ${location === 'expertcalendar' ? 'text-lightgrey' : 'text-grey hover:text-lightgrey'}`}>
+                    <Link to={`${import.meta.env.VITE_AUTH_URL}expertdashboard/calendar`} className={`flex flex-col items-center ${location === 'expertcalendar' ? 'text-lightgrey' : 'text-grey hover:text-lightgrey'}`}>
                         <CalendarMonthIcon fontSize="medium" />
                         <span className="text-[10px]">Calendar</span>
                     </Link>
-                    <Link to={`${process.env.REACT_APP_AUTH_URL}expertdashboard/timeslots`} className={`flex flex-col items-center ${location === 'experttimeslots' ? 'text-lightgrey' : 'text-grey hover:text-lightgrey'}`}>
+                    <Link to={`${import.meta.env.VITE_AUTH_URL}expertdashboard/timeslots`} className={`flex flex-col items-center ${location === 'experttimeslots' ? 'text-lightgrey' : 'text-grey hover:text-lightgrey'}`}>
                         <ScheduleIcon fontSize="medium" />
                         <span className="text-[10px]">Availability</span>
                     </Link>
-                    <Link to={`${process.env.REACT_APP_AUTH_URL}expertdashboard/profile`} className={`flex flex-col items-center ${location === 'expertprofile' ? 'text-lightgrey' : 'text-grey hover:text-lightgrey'}`}>
+                    <Link to={`${import.meta.env.VITE_AUTH_URL}expertdashboard/profile`} className={`flex flex-col items-center ${location === 'expertprofile' ? 'text-lightgrey' : 'text-grey hover:text-lightgrey'}`}>
                         <ManageAccountsIcon fontSize="medium" />
                         <span className="text-[10px]">Profile</span>
                     </Link>
@@ -217,7 +217,7 @@ export default function ExpertDrawer(props: Props) {
                         <FriendsTitle title="Seminars" />
                         <Link
                             title="Create New Seminar"
-                            to={`${process.env.REACT_APP_AUTH_URL}expertdashboard/seminar`}
+                            to={`${import.meta.env.VITE_AUTH_URL}expertdashboard/seminar`}
                             className="block text-grey p-1 rounded-md hover:bg-midgrey hover:text-white"
                         >
                             <AddToPhotosIcon />

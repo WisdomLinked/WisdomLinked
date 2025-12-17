@@ -18,7 +18,7 @@ import { showAlert } from "../actions/alertActions";
 import { logoutUser } from "../actions/authActions";
 import { SetLoadingStatus } from "../actions/appActions";
 
-const BASE_URL = process.env.REACT_APP_API_BASE_URL;
+const BASE_URL = import.meta.env.VITE_API_BASE_URL;
 
 const api = axios.create({
     withCredentials: true,
@@ -45,7 +45,7 @@ const api = axios.create({
 const logOut = () => {
     // emitLogOut()
     // localStorage.clear();
-    // window.location.pathname = `${process.env.REACT_APP_BASE_URL}`;
+    // window.location.pathname = `${import.meta.env.VITE_BASE_URL}`;
     store.dispatch(logoutUser())
 };
 

@@ -42,9 +42,9 @@ const Message = ({ content, sameAuthor, hiddenDropDown, disableBookButton, hideD
 
     const book = async () => {
         if (myRole === 'customer') {
-            navigate(`${process.env.REACT_APP_AUTH_URL}${myRole}dashboard/search?_id=${userId}`)
+            navigate(`${import.meta.env.VITE_AUTH_URL}${myRole}dashboard/search?_id=${userId}`)
         } else {
-            navigate(`${process.env.REACT_APP_AUTH_URL}${myRole}dashboard/search?_id=${userId}`)
+            navigate(`${import.meta.env.VITE_AUTH_URL}${myRole}dashboard/search?_id=${userId}`)
         }
     }
 

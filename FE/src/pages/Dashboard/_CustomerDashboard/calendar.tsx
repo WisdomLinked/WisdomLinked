@@ -94,7 +94,7 @@ const CustomerCalendar = () => {
     }
 
     // const acceptInvitation = async (event: any) => {
-    //     navigate(`${process.env.REACT_APP_AUTH_URL}customerdashboard/search?_id=${selectedEvent.expert._id}&_duration=${selectedEvent.duration}&_start=${selectedEvent.start ? new Date(selectedEvent.start).getTime() : ''}&_end=${selectedEvent.end ? new Date(selectedEvent.end).getTime() : ''}`)
+    //     navigate(`${import.meta.env.VITE_AUTH_URL}customerdashboard/search?_id=${selectedEvent.expert._id}&_duration=${selectedEvent.duration}&_start=${selectedEvent.start ? new Date(selectedEvent.start).getTime() : ''}&_end=${selectedEvent.end ? new Date(selectedEvent.end).getTime() : ''}`)
     // }
 
     const handleDayClick = (date: Date) => {
@@ -114,7 +114,7 @@ const CustomerCalendar = () => {
       };
 
     const acceptInvitation = async (event: any) => {
-        navigate(`${process.env.REACT_APP_AUTH_URL}customerdashboard/search?_id=${selectedEvent.expert._id}&_duration=${selectedEvent.duration}&_start=${selectedEvent.start ? new Date(selectedEvent.start).getTime() : ''}&_end=${selectedEvent.end ? new Date(selectedEvent.end).getTime() : ''}&_price=${selectedEvent.price}`)
+        navigate(`${import.meta.env.VITE_AUTH_URL}customerdashboard/search?_id=${selectedEvent.expert._id}&_duration=${selectedEvent.duration}&_start=${selectedEvent.start ? new Date(selectedEvent.start).getTime() : ''}&_end=${selectedEvent.end ? new Date(selectedEvent.end).getTime() : ''}&_price=${selectedEvent.price}`)
     }
 
     const getEvents = async () => {
@@ -188,7 +188,7 @@ const CustomerCalendar = () => {
     const navigateSeminar = (item: any) => {
             const selectedGroupChat:any = groupChatList.find((x: any) => x.groupId === item._id)
             console.log("navigate events", item);
-            navigate(`${process.env.REACT_APP_AUTH_URL}customerdashboard/chat`);
+            navigate(`${import.meta.env.VITE_AUTH_URL}customerdashboard/chat`);
             dispatch(setChosenGroupChatDetails( selectedGroupChat ));
     };
 
@@ -208,7 +208,7 @@ const CustomerCalendar = () => {
 
     const setToChat = (item: any) => {
         console.log("navigate events", item); // Use item here instead of event
-        navigate(`${process.env.REACT_APP_AUTH_URL}customerdashboard/chat`);
+        navigate(`${import.meta.env.VITE_AUTH_URL}customerdashboard/chat`);
         // Assuming item contains customer details, you can use item directly
         dispatch(setChosenChatDetails({ userId: item._id, username: item.username, image: item.image }));
     };

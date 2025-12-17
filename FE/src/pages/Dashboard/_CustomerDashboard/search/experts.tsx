@@ -113,7 +113,7 @@ const Experts = ({
                 groupId: currentGeneralChat._id,
                 groupName: currentGeneralChat.name,
             }))
-            navigate(`${process.env.REACT_APP_AUTH_URL}customerdashboard/chat`)
+            navigate(`${import.meta.env.VITE_AUTH_URL}customerdashboard/chat`)
         }
         SetLoadingStatus(false)
     }
@@ -213,7 +213,7 @@ const Experts = ({
                                 {
                                     expert.image ?
 
-                                        // <img src={`${process.env.REACT_APP_SERVER_URL}/${expert.image}`} className="w-full h-full object-cover object-center" /> :
+                                        // <img src={`${import.meta.env.VITE_SERVER_URL}/${expert.image}`} className="w-full h-full object-cover object-center" /> :
                                         <img src={expertsImage[i]} className="w-full h-full object-cover object-center" /> :
                                         <div className="w-[100px] h-[100px] rounded-full border-2 border-lightgrey text-4xl text-white font-bold !flex items-center justify-center">
                                             {getAvatarTitle(expert.username)}

@@ -177,7 +177,7 @@ const Search = () => {
                             paidBy={'Pending payment'}
                         />
                         <Link
-                            to={`${process.env.REACT_APP_AUTH_URL}expertdashboard/calendar`}
+                            to={`${import.meta.env.VITE_AUTH_URL}expertdashboard/calendar`}
                             className="w-[200px] h-10 bg-green rounded-lg flex items-center justify-center disabled:opacity-50"
                         >
                             Go to calendar

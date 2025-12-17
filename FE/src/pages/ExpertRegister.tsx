@@ -130,7 +130,7 @@ const ExpertRegister = () => {
     // useEffect(() => {
     //     if (userDetails?.email) {
     //         localStorage.setItem("isLoginRemembered", 'true')
-    //         navigate(process.env.REACT_APP_AUTH_URL + "expertdashboard")
+    //         navigate(import.meta.env.VITE_AUTH_URL + "expertdashboard")
     //         SetLoadingStatus(false)
     //     }
     // }, [userDetails, navigate])
@@ -342,7 +342,7 @@ const ExpertRegister = () => {
                             </button>
                             <div className="text-[14px] leading-[21px] lg:text-[16px] lg:leading-[24px] font-semibold">
                                 I've agreed with the &nbsp;
-                                <a href={`${process.env.REACT_APP_BASE_URL}rules`} className="text-green underline" target="_blank">
+                                <a href={`${import.meta.env.VITE_BASE_URL}rules`} className="text-green underline" target="_blank">
                                     Terms & Policy
                                 </a>
                             </div>

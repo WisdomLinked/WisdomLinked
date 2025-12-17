@@ -1,8 +1,30 @@
 # TOE
 
-Project Overview
+## 🚀 Quick Start
 
-This project is a web application with a React-based frontend and a Node.js backend. The backend uses Express.js and MongoDB for handling requests and data storage, while the frontend is built using React TypeScript for a seamless user interface.
+**Automated Start (macOS):**
+```bash
+./START.sh
+```
+
+**Manual Start:**
+```bash
+# Terminal 1 - Backend (Port 5555)
+cd BE && npm run dev
+
+# Terminal 2 - Frontend (Port 5173)
+cd FE && npm start
+```
+
+**Access:** Frontend at http://localhost:5173, Backend at http://localhost:5555
+
+📚 **See [SETUP.md](./SETUP.md) for detailed instructions** | **[MIGRATION_SUMMARY.md](./MIGRATION_SUMMARY.md) for migration details**
+
+---
+
+## Project Overview
+
+This project is a web application with a React-based frontend and a Node.js backend. The backend uses Express.js and MongoDB for handling requests and data storage, while the frontend is built using **React 18 + Vite + TypeScript** for a modern, fast development experience.
 
 
 Features
@@ -68,11 +90,17 @@ MAX_REQUEST_BODY_SIZE=1mb
 
 Frontend (.env)
 
-REACT_APP_API_BASE_URL=http://localhost:5555/api/
-REACT_APP_SERVER_URL=http://localhost:5555
-REACT_APP_BASE_URL=/
+VITE_API_BASE_URL=http://localhost:5555/api/
+VITE_SERVER_URL=http://localhost:5555
+VITE_HOST_URL=http://localhost:5173
+VITE_BASE_URL=/
+VITE_AUTH_URL=/user/
+# Plus payment gateway keys (Stripe, PayPal)
 
-Note: Port 5555 is used to avoid conflicts with macOS ControlCenter which uses port 5000.
+Note: 
+- Backend port 5555 is used to avoid conflicts with macOS ControlCenter (port 5000)
+- Frontend uses Vite (port 5173) instead of Create React App (port 8080)
+- Environment variables use `VITE_*` prefix (Vite standard) instead of `REACT_APP_*`
 
 Running the Application
 
@@ -96,17 +124,23 @@ Frontend
 
 Development Mode
 
-To start the frontend development server:
+To start the frontend development server (Vite):
 
-cd frontend
+cd FE
 npm start
+# or
+npm run dev
 
 Production Mode
 
-To build and serve the frontend for production:
+To build the frontend for production:
 
-cd frontend
-npm run build-stg
+cd FE
+npm run build
+
+To preview the production build:
+
+npm run preview
 
 
 

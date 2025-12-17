@@ -197,7 +197,7 @@ const Payment = ({
     //     const response = await getStripeMode()
     //     if (response) {
     //         set_stripeMode(response.stripeMode || 'test')
-    //         set_stripePromise(loadStripe((response.stripeMode === 'test' ? process.env.REACT_APP_STRIPE_PUBLISHABLE_KEY_TEST : process.env.REACT_APP_STRIPE_PUBLISHABLE_KEY_LIVE) || ''))
+    //         set_stripePromise(loadStripe((response.stripeMode === 'test' ? import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY_TEST : import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY_LIVE) || ''))
     //     }
     // }
     const setStripeMode = async () => {
@@ -207,8 +207,8 @@ const Payment = ({
             set_stripePromise(
                 loadStripe(
                     response.stripeMode === 'test'
-                        ? process.env.REACT_APP_STRIPE_PUBLISHABLE_KEY_TEST || ''
-                        : process.env.REACT_APP_STRIPE_PUBLISHABLE_KEY_LIVE || ''
+                        ? import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY_TEST || ''
+                        : import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY_LIVE || ''
                 )
             );
         }

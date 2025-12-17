@@ -78,7 +78,7 @@ const DashboardHeader = ({ userDetails }: any) => {
                             {
                                 userDetails.role !== "admin" ?
                                     <Link
-                                        to={`${process.env.REACT_APP_AUTH_URL}${userDetails?.role}dashboard/profile`}
+                                        to={`${import.meta.env.VITE_AUTH_URL}${userDetails?.role}dashboard/profile`}
                                         className="mt-5 w-full flex space-x-4 justify-between hover:opacity-50"
                                     >
                                         <span>Manage Account</span>

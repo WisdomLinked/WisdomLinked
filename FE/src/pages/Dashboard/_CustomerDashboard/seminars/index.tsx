@@ -128,7 +128,7 @@ const Seminars = () => {
                         <div className="w-full h-full max-w-[400px] sm:max-w-[846px] mx-auto flex flex-col items-center justify-center space-y-8 text-lightgrey px-6">
                             <div className="text-2xl text-white text-center">Successfully joined to the seminar.</div>
                             <Link
-                                to={`${process.env.REACT_APP_AUTH_URL}customerdashboard/calendar`}
+                                to={`${import.meta.env.VITE_AUTH_URL}customerdashboard/calendar`}
                                 className="w-[200px] h-10 bg-green rounded-lg flex items-center justify-center disabled:opacity-50"
                             >
                                 Go to calendar

@@ -56,7 +56,7 @@ const Dashboard = () => {
     }
 
     const acceptInvitation = async (event: any) => {
-        navigate(`${process.env.REACT_APP_AUTH_URL}customerdashboard/search?_id=${event.expert._id}&_duration=${event.duration}&_start=${event.start ? new Date(event.start).getTime() : ''}&_end=${event.end ? new Date(event.end).getTime() : ''}&_eventId=${event._id}&_price=${event.price}`)
+        navigate(`${import.meta.env.VITE_AUTH_URL}customerdashboard/search?_id=${event.expert._id}&_duration=${event.duration}&_start=${event.start ? new Date(event.start).getTime() : ''}&_end=${event.end ? new Date(event.end).getTime() : ''}&_eventId=${event._id}&_price=${event.price}`)
     }
 
     const updateEventStartEndTime = async (start: any, end: any, price: any) => {
@@ -83,7 +83,7 @@ const Dashboard = () => {
 
     const navigateExpert = (item: any) => {
         console.log("navigate events", item); // Use item here instead of event
-        navigate(`${process.env.REACT_APP_AUTH_URL}customerdashboard/chat`);
+        navigate(`${import.meta.env.VITE_AUTH_URL}customerdashboard/chat`);
         // Assuming item contains customer details, you can use item directly
         dispatch(setChosenChatDetails({ userId: item._id, username: item.username, image: item.image }));
     };
@@ -91,7 +91,7 @@ const Dashboard = () => {
     const navigateSeminar = (item: any) => {
         const selectedGroupChat:any = groupChatList.find((x: any) => x.groupId === item._id)
         console.log("navigate events", item);
-        navigate(`${process.env.REACT_APP_AUTH_URL}customerdashboard/chat`);
+        navigate(`${import.meta.env.VITE_AUTH_URL}customerdashboard/chat`);
         dispatch(setChosenGroupChatDetails( selectedGroupChat ));
     };
 

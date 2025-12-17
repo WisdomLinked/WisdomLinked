@@ -48,7 +48,7 @@ const LogIn = () => {
             } else {
                 localStorage.setItem("isLoginRemembered", 'false')
             }
-            navigate(process.env.REACT_APP_AUTH_URL + userDetails?.role + "dashboard")
+            navigate(import.meta.env.VITE_AUTH_URL + userDetails?.role + "dashboard")
             SetLoadingStatus(false)
         }
     }, [userDetails, navigate])

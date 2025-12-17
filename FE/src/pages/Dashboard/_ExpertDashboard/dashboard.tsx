@@ -54,14 +54,14 @@ const Dashboard = () => {
 
     const navigateCustomer = (item: any) => {
         console.log("navigate events", item); // Use item here instead of event
-        navigate(`${process.env.REACT_APP_AUTH_URL}expertdashboard/chat`);
+        navigate(`${import.meta.env.VITE_AUTH_URL}expertdashboard/chat`);
         dispatch(setChosenChatDetails({ userId: item._id, username: item.username, image: item.image }));
     };
 
     const navigateSeminar = (item: any) => {
         const selectedGroupChat:any = groupChatList.find((x: any) => x.groupId === item._id)
         console.log("navigate events", item);
-        navigate(`${process.env.REACT_APP_AUTH_URL}expertdashboard/chat`);
+        navigate(`${import.meta.env.VITE_AUTH_URL}expertdashboard/chat`);
         dispatch(setChosenGroupChatDetails( selectedGroupChat ));
     };
 

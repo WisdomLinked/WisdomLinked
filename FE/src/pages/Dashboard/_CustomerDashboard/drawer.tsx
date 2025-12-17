@@ -169,33 +169,33 @@ export default function CustomerDrawer(props: Props) {
             </button>
             <div className={`fixed ${userDetails.status === 'review' ? 'top-[112px] h-[calc(100vh-112px)]' : 'top-[63px] h-[calc(100vh-63px)]'} left-0 w-fit lg:top-0 lg:relative lg:h-full shadow-md ${leftNavActive ? 'leftnav_active' : 'leftnav'} flex z-[100]`}>
                 <div className="w-[70px] h-full bg-black flex flex-col items-center space-y-5 py-4">
-                    <Link to={`${process.env.REACT_APP_AUTH_URL}customerdashboard`} className={`flex flex-col items-center ${location === 'customerdashboard' ? 'text-lightgrey' : 'text-grey hover:text-lightgrey'}`}>
+                    <Link to={`${import.meta.env.VITE_AUTH_URL}customerdashboard`} className={`flex flex-col items-center ${location === 'customerdashboard' ? 'text-lightgrey' : 'text-grey hover:text-lightgrey'}`}>
                         <DashboardIcon fontSize="medium" />
                         <span className="text-[10px]">Dashboard</span>
                     </Link>
-                    <Link to={`${process.env.REACT_APP_AUTH_URL}customerdashboard/chat`} className={`flex flex-col items-center ${location === 'customerchat' ? 'text-lightgrey' : 'text-grey hover:text-lightgrey'}`}>
+                    <Link to={`${import.meta.env.VITE_AUTH_URL}customerdashboard/chat`} className={`flex flex-col items-center ${location === 'customerchat' ? 'text-lightgrey' : 'text-grey hover:text-lightgrey'}`}>
                         <ChatIcon fontSize="medium" />
                         <span className="text-[10px]">Chat</span>
                     </Link>
                     <Link
-                        to={`${process.env.REACT_APP_AUTH_URL}customerdashboard/search`}
+                        to={`${import.meta.env.VITE_AUTH_URL}customerdashboard/search`}
                         className={`flex flex-col items-center ${location === 'customersearch' ? 'text-lightgrey' : 'text-grey hover:text-lightgrey'} ${userDetails.status === 'review' ? 'pointer-events-none' : ''}`}
                     >
                         <PersonSearchIcon fontSize="medium" />
                         <span className="text-[10px]">Experts</span>
                     </Link>
                     <Link
-                        to={`${process.env.REACT_APP_AUTH_URL}customerdashboard/seminar`}
+                        to={`${import.meta.env.VITE_AUTH_URL}customerdashboard/seminar`}
                         className={`flex flex-col items-center ${location === 'customerseminar' ? 'text-lightgrey' : 'text-grey hover:text-lightgrey'} ${userDetails.status === 'review' ? 'pointer-events-none' : ''}`}
                     >
                         <CastForEducationIcon fontSize="medium" />
                         <span className="text-[10px]">Seminars</span>
                     </Link>
-                    <Link to={`${process.env.REACT_APP_AUTH_URL}customerdashboard/calendar`} className={`flex flex-col items-center ${location === 'customercalendar' ? 'text-lightgrey' : 'text-grey hover:text-lightgrey'}`}>
+                    <Link to={`${import.meta.env.VITE_AUTH_URL}customerdashboard/calendar`} className={`flex flex-col items-center ${location === 'customercalendar' ? 'text-lightgrey' : 'text-grey hover:text-lightgrey'}`}>
                         <CalendarMonthIcon fontSize="medium" />
                         <span className="text-[10px]">Calendar</span>
                     </Link>
-                    <Link to={`${process.env.REACT_APP_AUTH_URL}customerdashboard/profile`} className={`flex flex-col items-center ${location === 'customerprofile' ? 'text-lightgrey' : 'text-grey hover:text-lightgrey'}`}>
+                    <Link to={`${import.meta.env.VITE_AUTH_URL}customerdashboard/profile`} className={`flex flex-col items-center ${location === 'customerprofile' ? 'text-lightgrey' : 'text-grey hover:text-lightgrey'}`}>
                         <ManageAccounts fontSize="medium" />
                         <span className="text-[10px]">Profile</span>
                     </Link>

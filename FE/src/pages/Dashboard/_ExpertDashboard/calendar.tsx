@@ -103,7 +103,7 @@ const ExpertCalendar = () => {
 
     const navigateCustomer = (item: any) => {
         console.log("navigate events", item); // Use item here instead of event
-        navigate(`${process.env.REACT_APP_AUTH_URL}expertdashboard/chat`);
+        navigate(`${import.meta.env.VITE_AUTH_URL}expertdashboard/chat`);
         // Assuming item contains customer details, you can use item directly
         dispatch(setChosenChatDetails({ userId: item._id, username: item.username, image: item.image }));
     };

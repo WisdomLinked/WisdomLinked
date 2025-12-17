@@ -86,7 +86,7 @@ export const getLocalStreamPreview = async (audioOnly: boolean, callback?: () =>
 }
 
 const peerConfiguration = () => {
-    if (process.env.REACT_APP_TURN_URL) {
+    if (import.meta.env.VITE_TURN_URL) {
         console.log("Using STUN + TURN servers");
         return {
             iceServers: [
@@ -95,8 +95,8 @@ const peerConfiguration = () => {
                 },
                 {
                     urls: [
-                        `turn:${process.env.REACT_APP_TURN_URL}:3478?transport=udp`,
-                        `turn:${process.env.REACT_APP_TURN_URL}:3478?transport=tcp`
+                        `turn:${import.meta.env.VITE_TURN_URL}:3478?transport=udp`,
+                        `turn:${import.meta.env.VITE_TURN_URL}:3478?transport=tcp`
                     ],
                     username: "efRXSXFPE63R9RIO40",
                     credential: "mfC08YbrsCacihuc"

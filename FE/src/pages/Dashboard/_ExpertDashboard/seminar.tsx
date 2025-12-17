@@ -166,7 +166,7 @@ const ExpertSeminar = ({
             <div className="w-full h-full flex flex-col justify-center items-center">
                 <div className="text-center text-white text-2xl">Successfully created a new seminar</div>
                 <Link
-                    to={`${process.env.REACT_APP_AUTH_URL}expertdashboard/calendar`}
+                    to={`${import.meta.env.VITE_AUTH_URL}expertdashboard/calendar`}
                     className="w-[200px] mt-6 h-10 bg-green text-white rounded-lg flex items-center justify-center"
                 >
                     Go to calendar

@@ -387,7 +387,7 @@ const UserMgmt = () => {
                                             <td className="text-center px-2">
                                                 {u.resume ? (
                                                     <a
-                                                        href={`${process.env.REACT_APP_SERVER_URL}/${u.resume}`}
+                                                        href={`${import.meta.env.VITE_SERVER_URL}/${u.resume}`}
                                                         target="_blank"
                                                         rel="noreferrer"
                                                         className="text-blue underline"

@@ -119,7 +119,7 @@ const PrivateRoute = ({ children }: any) => {
 
   return (
     !currentUser?.email ?
-      <Navigate to={process.env.REACT_APP_BASE_URL + 'login'} replace /> :
+      <Navigate to={import.meta.env.VITE_BASE_URL + 'login'} replace /> :
       userDetails?.email ?
         children :
         null
@@ -158,7 +158,7 @@ function App() {
       if (locationUrl) {
         navigate(locationUrl)
       } else {
-        navigate(process.env.REACT_APP_AUTH_URL + userDetails?.role + "dashboard")
+        navigate(import.meta.env.VITE_AUTH_URL + userDetails?.role + "dashboard")
       }
     }
   }, [userDetails, navigate])
@@ -188,8 +188,8 @@ function App() {
     <>
     <VideoChatProvider>
       <Routes>
-        <Route path={process.env.REACT_APP_AUTH_URL + '*'} element={<AuthenticatedRoutes />} />
-        <Route path={process.env.REACT_APP_BASE_URL + '*'} element={<UnauthenticatedRoutes />} />
+        <Route path={import.meta.env.VITE_AUTH_URL + '*'} element={<AuthenticatedRoutes />} />
+        <Route path={import.meta.env.VITE_BASE_URL + '*'} element={<UnauthenticatedRoutes />} />
       </Routes>
       <AlertNotification />
       <LeaveFeedback />

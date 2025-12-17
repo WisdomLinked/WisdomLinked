@@ -55,7 +55,7 @@ const setCurrentPeerConnection = (peerConnection: any) => {
 
 let socket: Socket<any, any>;
 
-const SERVER_URL: any = process.env.REACT_APP_SERVER_URL;
+const SERVER_URL: any = import.meta.env.VITE_SERVER_URL;
 
 const connectWithSocketServer = (userDetails: UserDetails) => {
     socket = io(SERVER_URL, {

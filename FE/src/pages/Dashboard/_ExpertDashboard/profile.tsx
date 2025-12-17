@@ -347,7 +347,7 @@ const ExpertProfile = ({
                         />
 
                         <div className="mt-6 text-grey text-[12px] leading-[19px]">Current resume</div>
-                        <a href={`${process.env.REACT_APP_SERVER_URL}/${resume}`} target='_blank' className="text-blue underline">Resume</a>
+                        <a href={`${import.meta.env.VITE_SERVER_URL}/${resume}`} target='_blank' className="text-blue underline">Resume</a>
                         <div className="mt-6 text-grey text-[12px] leading-[19px]">Update resume</div>
                         <FileBrowser
                             file={file}

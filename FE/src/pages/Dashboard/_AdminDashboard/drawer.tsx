@@ -44,24 +44,24 @@ export default function AdminDrawer(props: Props) {
             </button>
             <div className={`fixed top-[63px] left-0 w-fit h-[calc(100vh-63px)] lg:top-0 lg:relative lg:h-full shadow-md ${leftNavActive ? 'leftnav_active' : 'leftnav'} flex z-[100]`}>
                 <div className="w-[70px] h-full bg-black flex flex-col items-center space-y-5 py-4">
-                    <Link to={`${process.env.REACT_APP_AUTH_URL}admindashboard`} className={`flex flex-col items-center ${location === 'admindashboard' ? 'text-lightgrey' : 'text-grey hover:text-lightgrey'}`}>
+                    <Link to={`${import.meta.env.VITE_AUTH_URL}admindashboard`} className={`flex flex-col items-center ${location === 'admindashboard' ? 'text-lightgrey' : 'text-grey hover:text-lightgrey'}`}>
                         <DashboardIcon fontSize="medium" />
                         <span className="text-[10px]">Dashboard</span>
                     </Link>
-                    <Link to={`${process.env.REACT_APP_AUTH_URL}admindashboard/usermgmt`} className={`flex flex-col items-center ${location === 'adminusermgmt' ? 'text-lightgrey' : 'text-grey hover:text-lightgrey'}`}>
+                    <Link to={`${import.meta.env.VITE_AUTH_URL}admindashboard/usermgmt`} className={`flex flex-col items-center ${location === 'adminusermgmt' ? 'text-lightgrey' : 'text-grey hover:text-lightgrey'}`}>
                         <ManageAccountsIcon fontSize="medium" />
                         <span className="text-[10px]">User Mgmt</span>
                     </Link>
-                    <Link to={`${process.env.REACT_APP_AUTH_URL}admindashboard/payment`} className={`flex flex-col items-center ${location === 'adminpayment' ? 'text-lightgrey' : 'text-grey hover:text-lightgrey'}`}>
+                    <Link to={`${import.meta.env.VITE_AUTH_URL}admindashboard/payment`} className={`flex flex-col items-center ${location === 'adminpayment' ? 'text-lightgrey' : 'text-grey hover:text-lightgrey'}`}>
                         <PaidIcon fontSize="medium" />
                         <span className="text-[10px]">Payment</span>
                     </Link>
-                    <Link to={`${process.env.REACT_APP_AUTH_URL}admindashboard/chat`} className={`flex flex-col items-center ${location === 'adminchat' ? 'text-lightgrey' : 'text-grey hover:text-lightgrey'}`}>
+                    <Link to={`${import.meta.env.VITE_AUTH_URL}admindashboard/chat`} className={`flex flex-col items-center ${location === 'adminchat' ? 'text-lightgrey' : 'text-grey hover:text-lightgrey'}`}>
                         <ChatIcon fontSize="medium" />
                         <span className="text-[10px]">Chat</span>
                     </Link>
                     <Link
-                        to={`${process.env.REACT_APP_AUTH_URL}admindashboard/feedbacks`}
+                        to={`${import.meta.env.VITE_AUTH_URL}admindashboard/feedbacks`}
                         className={`flex flex-col items-center ${
                             location === "adminfeedbacks"
                                 ? "text-lightgrey"
@@ -72,7 +72,7 @@ export default function AdminDrawer(props: Props) {
                         <span className="text-[10px] mt-1">Feedback</span>
                     </Link>
                     <Link
-                        to={`${process.env.REACT_APP_AUTH_URL}admindashboard/contactedus`}
+                        to={`${import.meta.env.VITE_AUTH_URL}admindashboard/contactedus`}
                         className={`flex flex-col items-center ${
                             location === 'admincontactedus'
                                 ? 'text-lightgrey'
@@ -83,7 +83,7 @@ export default function AdminDrawer(props: Props) {
                         <span className="text-[10px]">ContactedUs</span>
                     </Link>
                     <Link
-                        to={`${process.env.REACT_APP_AUTH_URL}admindashboard/registerUser`}
+                        to={`${import.meta.env.VITE_AUTH_URL}admindashboard/registerUser`}
                         className={`flex flex-col items-center ${
                             location === 'adminregisteruser'
                                 ? 'text-lightgrey'

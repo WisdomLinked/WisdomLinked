@@ -106,7 +106,7 @@ const Customers = ({
                 groupId: currentGeneralChat._id,
                 groupName: currentGeneralChat.name,
             }))
-            navigate(`${process.env.REACT_APP_AUTH_URL}expertdashboard/chat`)
+            navigate(`${import.meta.env.VITE_AUTH_URL}expertdashboard/chat`)
         }
         SetLoadingStatus(false)
     }
