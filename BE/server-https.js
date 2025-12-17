@@ -16,7 +16,7 @@ const { appendDefaultServices, appendAdminUser, initAppStates } = require('./ini
 
 const { createSocketServer } = require("./socket/socketServer");
 
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 5555;
 
 const MONGO_URI = process.env.MONGO_URI
 

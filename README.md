@@ -55,6 +55,25 @@ pip install -r requirements.txt
 
 Set up the environment variables by creating a .env file in the backend directory and frontend directory.
 
+Environment Variables Configuration
+
+Backend (.env)
+
+The backend runs on port 5555 by default (changed from 5000 to avoid conflicts with macOS ControlCenter).
+
+PORT=5555
+MONGO_URI=mongodb://localhost:27017/your-database-name
+FE_URL=http://localhost:8080
+MAX_REQUEST_BODY_SIZE=1mb
+
+Frontend (.env)
+
+REACT_APP_API_BASE_URL=http://localhost:5555/api/
+REACT_APP_SERVER_URL=http://localhost:5555
+REACT_APP_BASE_URL=/
+
+Note: Port 5555 is used to avoid conflicts with macOS ControlCenter which uses port 5000.
+
 Running the Application
 
 Backend
