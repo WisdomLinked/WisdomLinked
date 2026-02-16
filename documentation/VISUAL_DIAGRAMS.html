@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WisdomLinked System Diagrams</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            padding: 20px;
+            max-width: 1200px;
+            margin: 0 auto;
+            background: #f4f4f9;
+        }
+
+        h1,
+        h2 {
+            color: #333;
+        }
+
+        .diagram-container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+            margin-bottom: 40px;
+        }
+
+        .mermaid {
+            display: flex;
+            justify-content: center;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>WisdomLinked Technical Diagrams (Develop Branch)</h1>
+    <p>This file renders the system architecture and database schema dynamically using Mermaid.js.</p>
+
+    <h2>1. Database Schema (Entity Relationship Diagram)</h2>
+    <div class="diagram-container">
+        <div class="mermaid">
+            %%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#ffcc00', 'edgeLabelBackground':'#ffffff',
+            'tertiaryColor': '#fff'}}}%%
+            erDiagram
+            %% Core Users
+            User ||--o{ Conversation : "participants"
+            User ||--o{ GroupChat : "joins"
+            User ||--o{ GroupChat : "admin"
+            User ||--o{ Event : "expert/customer"
+            User ||--o{ FriendInvitation : "sender/receiver"
+            User ||--o{ PaymentHistory : "payments"
+            User {
+            string _id PK
+            string email
+            string username
+            string role "expert|customer|admin"
+            string password
+            boolean isVerified
+            }
+
+            %% Authentication Temp Tables
+            PendingUser {
+            string email
+            string verificationCode
+            }
+            PendingLogin {
+            string email
+            string otpCode
+            }
+
+            %% Chat System
+            Conversation ||--o{ Message : "contains"
+            GroupChat ||--o{ Message : "contains"
+            Conversation {
+            string _id PK
+            ObjectId[] participants
+            }
+            GroupChat {
+            string _id PK
+            string name
+            string description
+            string type "seminar|individual|community"
+            boolean isOpenToAll
+            number price
+            }
+            ChatBotQA {
+            string _id PK
+            string question
+            string answer
+            string role "user|expert|customer"
+            }
+            Message {
+            string _id PK
+            string content
+            string type "DIRECT|GROUP"
+            ObjectId author
+            Date createdAt
+            }
+
+            %% Scheduling & Events
+            Event ||--o{ MeetingAnalytics : "has"
+            Event {
+            string _id PK
+            string title
+            ObjectId expert
+            ObjectId customer
+            Date start
+            Date end
+            number duration
+            number price
+            string status
+            }
+
+            %% Finances
+            PaymentHistory {
+            string _id PK
+            ObjectId userId
+            number amount
+            string stripeMode
+            string status
+            string paymentType
+            }
+        </div>
+    </div>
+
+    <h2>2. System Architecture</h2>
+    <div class="diagram-container">
+        <div class="mermaid">
+            graph TD
+            subgraph Client ["Frontend (React + Redux)"]
+            UI[User Interface] --> Redux[Redux Store]
+            Redux --> SocketClient[Socket.io Client]
+            Redux --> WebRTC[WebRTC Peer]
+            end
+
+            subgraph Server ["Backend (Node.js + Express)"]
+            API[REST API Handlers]
+            SocketServer[Socket.io Server]
+            Auth[Auth Middleware]
+            ChatBot[ChatBot Controller]
+            end
+
+            subgraph Database ["MongoDB Atlas"]
+            DB[(Primary DB)]
+            end
+
+            subgraph External ["External Services"]
+            Stripe[Stripe Payments]
+            Email["SendGrid/SMTP"]
+            AWS[AWS S3 Images]
+            end
+
+            SocketClient -- "WebSocket (Events)" --> SocketServer
+            UI -- "REST (JSON)" --> API
+            API --> Auth
+            Auth --> DB
+            API --> ChatBot
+            ChatBot --> DB
+            SocketServer --> DB
+            API --> Stripe
+            API --> Email
+            API --> AWS
+            WebRTC -. "P2P Video/Audio" .-> WebRTC
+            SocketClient -. "Signaling (SDP)" .-> SocketServer
+        </div>
+    </div>
+
+    <script type="module">
+        import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs';
+        mermaid.initialize({ startOnLoad: true });
+    </script>
+</body>
+
+</html>
