@@ -20,8 +20,20 @@ const PORT = process.env.PORT || 5000;
 
 const MONGO_URI = process.env.MONGO_URI
 
+if (!MONGO_URI) {
+    console.error("MONGO_URI is not defined in environment variables");
+    process.exit(1);
+}
+
 mongoose
-    .connect(MONGO_URI)
+    .connect(MONGO_URI, {
+        serverSelectionTimeoutMS: 30000, // 30 seconds
+        socketTimeoutMS: 45000, // 45 seconds
+        connectTimeoutMS: 30000, // 30 seconds
+        maxPoolSize: 10,
+        retryWrites: true,
+        w: 'majority'
+    })
     .then(() => {
         console.log("Connected to MongoDB Server");
         appendDefaultServices()
@@ -30,7 +42,9 @@ mongoose
     })
     .catch((err) => {
         console.log("database connection failed. Server not started");
-        console.error(err);
+        console.error("MongoDB Connection Error:", err.message);
+        console.error("Connection URI (masked):", MONGO_URI ? MONGO_URI.replace(/\/\/[^:]+:[^@]+@/, '//***:***@') : 'undefined');
+        process.exit(1);
     });
 
 // const httpApp = express();

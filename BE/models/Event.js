@@ -14,6 +14,17 @@ const eventSchema = new mongoose.Schema(
             price: {type: Number},
             createdBy: {type: mongoose.Schema.Types.ObjectId, ref: "User"},
             feedbacks: [{ type: mongoose.Schema.Types.Mixed }],
+            // Zoom meeting details (only one meeting per event)
+            zoomMeeting: {
+                meetingId: { type: String },
+                meetingNumber: { type: String },
+                joinUrl: { type: String },
+                startUrl: { type: String }, // Host URL (for first person to join)
+                password: { type: String },
+                hostUserId: { type: mongoose.Schema.Types.ObjectId, ref: "User" }, // First person to click becomes host
+                createdAt: { type: Date },
+                expiresAt: { type: Date }, // Meeting expiration (typically 24 hours after creation)
+            },
     },
     {timestamps: true}
 );

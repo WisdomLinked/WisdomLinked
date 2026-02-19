@@ -9,6 +9,7 @@ import { chatReducer } from "../reducers/chatReducer";
 import videoChatReducer from "../reducers/videoChatReducer";
 import { roomReducer } from "../reducers/roomReducer";
 import { appReducer } from "../reducers/appReducer";
+import callQualityReducer from "../reducers/callQualityReducer";
 
 const rootReducer = combineReducers({
     app: appReducer,
@@ -17,7 +18,8 @@ const rootReducer = combineReducers({
     friends: friendsReducer,
     chat: chatReducer,
     videoChat: videoChatReducer,
-    room: roomReducer
+    room: roomReducer,
+    callQuality: callQualityReducer
 });
 
 const store = createStore(

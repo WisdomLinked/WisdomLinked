@@ -3,12 +3,14 @@ import Camera from "./Camera";
 import Microphone from "./Microphone";
 import CloseRoom from "./CloseRoom";
 import ScreenShare from "./ScreenShare";
+import ZoomButton from "./ZoomButton";
 import {useAppSelector} from "../../../store"
 import ResizeRoomButton from "../ResizeRoomButton";
 import FlipCamera from "./FlipCamera";
 import ChatButton from "./ChatButton";
 import AddPersonButton from "./AddPersonButton";
 import { callRequest } from "../../../socket/socketConnection";
+import { useDispatch } from "react-redux";
 
 
 const RoomButtons: React.FC<{
@@ -17,6 +19,7 @@ const RoomButtons: React.FC<{
     isChatOpen: boolean;
     toggleChat: () => void;
 }> = ({ isRoomMinimized, handleRoomResize, isChatOpen, toggleChat}) => {
+    const dispatch = useDispatch();
     const {videoChat, room, chat: { currentEvent }, auth: { userDetails }} = useAppSelector((state) => state);
     // const [isChatOpen, setIsChatOpen] = useState(false);
     const eventId = videoChat.localStream && currentEvent?._id !== undefined ? currentEvent._id : null;
@@ -52,6 +55,7 @@ const RoomButtons: React.FC<{
                                 videoChat={videoChat}
                                 type="DIRECT CALL"
                             />
+                            <ZoomButton />
                             <Camera localStream={videoChat.localStream} />
                             <FlipCamera
                                 localStream={videoChat.localStream}
@@ -78,6 +82,7 @@ const RoomButtons: React.FC<{
                         // <ScreenShare room={room} type="ROOM" />
                         <>
                             <ScreenShare room={room} type="ROOM" />
+                            <ZoomButton />
                             <Camera localStream={room.localStreamRoom} />
                             <FlipCamera
                                 localStream={room.localStreamRoom}

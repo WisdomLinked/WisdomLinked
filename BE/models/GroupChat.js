@@ -55,6 +55,17 @@ const groupChatSchema = new mongoose.Schema(
                 required: true,
             },
         ],
+        // Zoom meeting details (only one meeting per group chat)
+        zoomMeeting: {
+            meetingId: { type: String },
+            meetingNumber: { type: String },
+            joinUrl: { type: String },
+            startUrl: { type: String }, // Host URL (for first person to join)
+            password: { type: String },
+            hostUserId: { type: mongoose.Schema.Types.ObjectId, ref: "User" }, // First person to click becomes host
+            createdAt: { type: Date },
+            expiresAt: { type: Date }, // Meeting expiration (typically 24 hours after creation)
+        },
     },
     { timestamps: true }
 );

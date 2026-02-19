@@ -1069,3 +1069,42 @@ export const deleteChatBotQA = async (id: any) => {
         return checkForAuthorization(err);
     }
 };
+
+// Day 5: Zoom API Functions
+export const createZoomMeetingForEvent = async (data: {
+    eventId: string;
+    startTime?: string;
+    duration?: number;
+}) => {
+    try {
+        const res = await api.post("zoom/create-for-event", data);
+        return res.data;
+    } catch (err: any) {
+        return checkForAuthorization(err);
+    }
+};
+
+export const createZoomMeetingForGroupChat = async (data: {
+    groupChatId: string;
+    startTime?: string;
+    duration?: number;
+}) => {
+    try {
+        const res = await api.post("zoom/create-for-group-chat", data);
+        return res.data;
+    } catch (err: any) {
+        return checkForAuthorization(err);
+    }
+};
+
+export const getZoomSDKSignature = async (data: {
+    meetingNumber: string;
+    role?: number;
+}) => {
+    try {
+        const res = await api.post("zoom/sdk-signature", data);
+        return res.data;
+    } catch (err: any) {
+        return checkForAuthorization(err);
+    }
+};

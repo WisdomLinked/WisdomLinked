@@ -51,7 +51,15 @@ export enum actionTypes {
     setIsUserJoinedWithAudioOnly,
 
     setLocation,
-    setLocalStreamAvailability
+    setLocalStreamAvailability,
+
+    // Call Quality Monitoring
+    setCallQualityStatus,
+    setCallQualityMetrics,
+    setCallInstability,
+    showZoomFallbackDialog,
+    hideZoomFallbackDialog,
+    setZoomMeetingDetails
 }
 
 export interface CurrentUser {

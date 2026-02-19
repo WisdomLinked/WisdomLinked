@@ -1,6 +1,8 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import VideosContainer from "./VideosContainer";
 import RoomButtons from "./RoomButtons";
+import ZoomFallbackDialog from "./ZoomFallbackDialog";
+import CallQualityMonitorWrapper from "./CallQualityMonitorWrapper";
 import { useAppSelector } from "../../store";
 import VisibilityOffIcon from "@mui/icons-material/VisibilityOff";
 import VisibilityIcon from "@mui/icons-material/Visibility";
@@ -11,13 +13,16 @@ import { setChosenChatDetails } from "../../actions/chatActions";
 import { useDispatch } from "react-redux";
 import { useNavigate } from "react-router-dom";
 import { actionTypes } from "../../actions/types";
+import { hideZoomFallbackDialog, showZoomFallbackDialog } from "../../actions/callQualityActions";
+import { clearVideoChat } from "../../actions/videoChatActions";
+import { store } from "../../store";
 
 const VideoChat = ({
     role,
     otherUserId
   }: any) => {
     const {isRoomMinimized, setIsRoomMinimized} = useVideoChatContext();
-    const { videoChat, app: { feedbackModalShow } } = useAppSelector((state) => state);
+    const { videoChat, app: { feedbackModalShow }, chat: { currentEvent }, callQuality, room } = useAppSelector((state) => state);
     const [hidden, set_hidden] = useState(false);
     const [isMicMuted, setIsMicMuted] = useState(false);
     const positionRef = useRef({ x: window.innerWidth - 300, y: 63 });
@@ -147,6 +152,7 @@ const VideoChat = ({
         }
     }, [isRoomMinimized, updatePosition]);
 
+
     return (
         <React.Fragment>
             {hidden ? (
@@ -199,6 +205,67 @@ const VideoChat = ({
                     toggleChat={toggleChat}
                 />
             </div>
+
+            {/* Day 4-5: Call Quality Monitoring */}
+            <CallQualityMonitorWrapper
+                isCallActive={videoChat.callStatus === 'accepted' || !!videoChat.localStream || !!room.localStreamRoom}
+                eventId={currentEvent?.type === 'event' ? currentEvent?._id : undefined}
+                groupChatId={currentEvent?.type === 'seminar' ? currentEvent?._id : undefined}
+                otherUserId={otherUserId}
+                onLeaveMeeting={() => {
+                    dispatch(clearVideoChat('Call ended'));
+                }}
+            />
+
+            {/* Day 4: Zoom Fallback Dialog - Always render, let component decide */}
+            <ZoomFallbackDialog
+                isOpen={!!callQuality?.showZoomFallbackDialog}
+                    onJoinZoom={async () => {
+                        console.log('[VideoChat] Join Zoom clicked');
+                        // Day 5: Wire to backend - handled in CallQualityMonitorWrapper
+                        if (currentEvent?._id) {
+                            try {
+                                const { createZoomMeetingForEvent, createZoomMeetingForGroupChat } = await import('../../api/api');
+                                let response;
+                                
+                                // Check if it's an event or group chat
+                                if (currentEvent.type === 'event') {
+                                    response = await createZoomMeetingForEvent({ eventId: currentEvent._id });
+                                } else if (currentEvent.type === 'seminar') {
+                                    response = await createZoomMeetingForGroupChat({ groupChatId: currentEvent._id });
+                                }
+                                
+                                if (response?.status === 'SUCCESS' && response.meeting?.joinUrl) {
+                                    if (response.reused) {
+                                        console.log('[VideoChat] Reusing existing Zoom meeting');
+                                    }
+                                    // Convert to web client URL to join in browser instead of desktop app
+                                    // Replace /j/ with /wc/join/ to force web client
+                                    let webJoinUrl = response.meeting.joinUrl;
+                                    if (webJoinUrl.includes('/j/')) {
+                                        webJoinUrl = webJoinUrl.replace('/j/', '/wc/join/');
+                                    }
+                                    // Add web parameter if not already present
+                                    if (!webJoinUrl.includes('?web=') && !webJoinUrl.includes('&web=')) {
+                                        webJoinUrl += webJoinUrl.includes('?') ? '&web=true' : '?web=true';
+                                    }
+                                    window.open(webJoinUrl, '_blank');
+                                    dispatch(clearVideoChat('Switching to Zoom'));
+                                }
+                            } catch (error) {
+                                console.error('Error creating Zoom meeting:', error);
+                            }
+                        }
+                        dispatch(hideZoomFallbackDialog());
+                    }}
+                    onLeaveMeeting={() => {
+                        console.log('[VideoChat] Leave Meeting clicked');
+                        dispatch(clearVideoChat('Call ended'));
+                        dispatch(hideZoomFallbackDialog());
+                    }}
+                    isCreatingMeeting={false}
+                />
+            
         </React.Fragment>
     );
 };

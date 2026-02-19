@@ -17,6 +17,7 @@
     const adminRoutes = require("./routes/adminRoutes")
     const contactRoutes = require("./routes/contactRoutes")
     const meetingAnalyticsRoutes = require("./routes/meetingAnalyticsRoutes");
+    const zoomRoutes = require("./routes/zoomRoutes");
 
     const { appendDefaultServices, appendAdminUserAndGroupChat, initAppStates } = require('./initDB')
 
@@ -26,8 +27,20 @@
 
     const MONGO_URI = process.env.MONGO_URI
 
+    if (!MONGO_URI) {
+        console.error("MONGO_URI is not defined in environment variables");
+        process.exit(1);
+    }
+
     mongoose
-        .connect(MONGO_URI)
+        .connect(MONGO_URI, {
+            serverSelectionTimeoutMS: 30000, // 30 seconds
+            socketTimeoutMS: 45000, // 45 seconds
+            connectTimeoutMS: 30000, // 30 seconds
+            maxPoolSize: 10,
+            retryWrites: true,
+            w: 'majority'
+        })
         .then(() => {
             console.log("Connected to MongoDB Server");
             appendDefaultServices()
@@ -36,7 +49,9 @@
         })
         .catch((err) => {
             console.log("database connection failed. Server not started");
-            console.error(err);
+            console.error("MongoDB Connection Error:", err.message);
+            console.error("Connection URI (masked):", MONGO_URI ? MONGO_URI.replace(/\/\/[^:]+:[^@]+@/, '//***:***@') : 'undefined');
+            process.exit(1);
         });
 
     const app = express();
@@ -72,6 +87,7 @@
     app.use("/api/image-fetch", fetchImageRoute);
     app.use("/api", contactRoutes);
     app.use("/api/meeting-analytics", meetingAnalyticsRoutes);
+    app.use("/api/zoom", zoomRoutes);
 
     app.use(express.static('./uploads'));
     app.get('/uploads/*', (req, res) => {

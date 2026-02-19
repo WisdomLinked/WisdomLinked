@@ -97,8 +97,8 @@ const peerConfiguration = () => {
                     urls: [
                         "turn:relay1.expressturn.com:3478?transport=udp",
                         "turn:relay1.expressturn.com:3478?transport=tcp",
-                        "turn:relay1.expressturn.com:80?transport=tcp",
-                        "turn:relay1.expressturn.com:443?transport=tcp",
+                        // "turn:relay1.expressturn.com:80?transport=tcp",
+                        // "turn:relay1.expressturn.com:443?transport=tcp",
                         "turn:relay2.expressturn.com:3478?transport=udp",
                         "turn:relay3.expressturn.com:3478?transport=udp"
                     ],
@@ -151,6 +151,32 @@ export const newPeerConnection = (initiator: boolean) => {
 
 let peers: any = {};
 
+// Export function to get first available peer connection for room calls
+export const getFirstRoomPeerConnection = (): Peer.Instance | null => {
+    const peerKeys = Object.keys(peers);
+    console.log('[getFirstRoomPeerConnection] Checking peers object:', {
+        peerCount: peerKeys.length,
+        peerKeys: peerKeys,
+        hasPeers: peerKeys.length > 0
+    });
+    if (peerKeys.length > 0) {
+        const firstPeer = peers[peerKeys[0]] as Peer.Instance;
+        // Check if peer has internal RTCPeerConnection ready
+        if (firstPeer && (firstPeer as any)._pc) {
+            console.log('[getFirstRoomPeerConnection] Found peer with RTCPeerConnection');
+            return firstPeer;
+        } else {
+            console.log('[getFirstRoomPeerConnection] Peer found but RTCPeerConnection not ready yet');
+        }
+    }
+    return null;
+};
+
+// Export function to get all room peer connections
+export const getAllRoomPeerConnections = (): Peer.Instance[] => {
+    return Object.values(peers) as Peer.Instance[];
+};
+
 export const prepareNewPeerConnection = (connUserSocketId: string, isInitiator: boolean) => {
     const localStream = store.getState().room.localStreamRoom;
 
@@ -166,6 +192,11 @@ export const prepareNewPeerConnection = (connUserSocketId: string, isInitiator: 
         initiator: isInitiator,
         config: peerConfiguration(),
         stream: localStream,
+    });
+
+    console.log('[prepareNewPeerConnection] Created peer connection for', connUserSocketId, {
+        peerCount: Object.keys(peers).length,
+        allPeerKeys: Object.keys(peers),
     });
 
     peers[connUserSocketId].on("signal", (data: Peer.SignalData) => {
