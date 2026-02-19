@@ -100,7 +100,14 @@ const peerConfiguration = () => {
                         // "turn:relay1.expressturn.com:80?transport=tcp",
                         // "turn:relay1.expressturn.com:443?transport=tcp",
                         "turn:relay2.expressturn.com:3478?transport=udp",
-                        "turn:relay3.expressturn.com:3478?transport=udp"
+                        "turn:relay3.expressturn.com:3478?transport=udp",
+                        "turn:relay4.expressturn.com:3478?transport=udp",
+                        "turn:relay5.expressturn.com:3478?transport=udp",
+                        "turn:relay6.expressturn.com:3478?transport=tcp",
+                        "turn:relay7.expressturn.com:3478?transport=udp",
+                        "turn:relay8.expressturn.com:3478?transport=udp",
+                        "turn:relay9.expressturn.com:3478?transport=udp",
+                        "turn:relay9.expressturn.com:3478?transport=udp"
                     ],
                     username: "000000002077044058",
                     credential: "Yg0YtBV+8QIW0Jw8ZfNVz961Mk0="
