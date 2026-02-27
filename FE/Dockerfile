@@ -13,6 +13,7 @@ RUN npm install --legacy-peer-deps
 COPY . .
 
 # Build the static React application
+# This automatically reads the .env.production file injected by GitHub Actions
 RUN npm run build
 
 # Stage 2: Serve the application with Nginx

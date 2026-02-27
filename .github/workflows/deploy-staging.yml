@@ -1,3 +1,4 @@
+# Deploy to Staging - v2
 name: Deploy to Staging
 
 on:
@@ -12,6 +13,7 @@ env:
 jobs:
   build-and-push-images:
     runs-on: ubuntu-latest
+    environment: staging
     permissions:
       contents: read
       packages: write
@@ -19,6 +21,19 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Generate Frontend .env file from secrets
+        run: |
+          cat << EOF > ./FE/.env.production
+          REACT_APP_SERVER_URL=https://staging.wisdomlinked.com
+          REACT_APP_API_BASE_URL=https://staging.wisdomlinked.com/api
+          REACT_APP_HOST_URL=https://staging.wisdomlinked.com
+          REACT_APP_TURN_URL=${{ secrets.REACT_APP_TURN_URL }}
+          REACT_APP_BASE_URL=/
+          REACT_APP_AUTH_URL=https://staging.wisdomlinked.com/api/user
+          REACT_APP_PAYPAL_TEST_CLIENT_ID=${{ secrets.REACT_APP_PAYPAL_TEST_CLIENT_ID }}
+          REACT_APP_STRIPE_PUBLISHABLE_KEY_TEST=${{ secrets.REACT_APP_STRIPE_PUBLISHABLE_KEY_TEST }}
+          EOF
 
       - name: Log in to the Container registry
         uses: docker/login-action@v3
@@ -30,15 +45,16 @@ jobs:
       - name: Build and push Backend Image
         uses: docker/build-push-action@v5
         with:
-          context: ./chat/BE
+          context: ./BE
           push: true
           tags: ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE }}:staging
 
       - name: Build and push Frontend Image
         uses: docker/build-push-action@v5
         with:
-          context: ./chat/FE
+          context: ./FE
           push: true
+          no-cache: true
           tags: ${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE }}:staging
           build-args: |
             REACT_APP_SERVER_URL=${{ secrets.REACT_APP_SERVER_URL }}
@@ -82,10 +98,11 @@ jobs:
             # Run the Backend Staging Container
             docker run -d \
               --name wisdomlinked_backend_staging \
+              --restart unless-stopped \
               --network chat_custom_network \
               -p 5001:5000 \
               -e NODE_ENV="staging" \
-              -e FE_URL="${{ secrets.FE_URL }}" \
+              -e FE_URL="https://staging.wisdomlinked.com" \
               -e DO_SPACES_ENDPOINT="${{ secrets.DO_SPACES_ENDPOINT }}" \
               -e DO_SPACES_KEY="${{ secrets.DO_SPACES_KEY }}" \
               -e DO_SPACES_SECRET="${{ secrets.DO_SPACES_SECRET }}" \
@@ -106,6 +123,7 @@ jobs:
             # Run the Frontend Staging Container
             docker run -d \
               --name wisdomlinked_frontend_staging \
+              --restart unless-stopped \
               --network chat_custom_network \
               -p 3001:80 \
               ${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE }}:staging
