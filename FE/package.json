@@ -24,6 +24,8 @@
     "axios": "^0.26.1",
     "buffer": "^6.0.3",
     "country-state-city": "^3.2.1",
+    "date-fns": "^2.30.0",
+    "emoji-mart": "^5.5.2",
     "env-cmd": "^10.1.0",
     "html-react-parser": "^4.2.2",
     "jquery": "^3.7.1",
