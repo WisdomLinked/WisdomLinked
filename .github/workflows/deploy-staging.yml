@@ -1,0 +1,111 @@
+name: Deploy to Staging
+
+on:
+  push:
+    branches: [ "staging" ]
+
+env:
+  REGISTRY: ghcr.io
+  BACKEND_IMAGE: ${{ github.repository }}/chat-backend
+  FRONTEND_IMAGE: ${{ github.repository }}/chat-frontend
+
+jobs:
+  build-and-push-images:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Log in to the Container registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push Backend Image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./chat/BE
+          push: true
+          tags: ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE }}:staging
+
+      - name: Build and push Frontend Image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./chat/FE
+          push: true
+          tags: ${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE }}:staging
+          build-args: |
+            REACT_APP_SERVER_URL=${{ secrets.REACT_APP_SERVER_URL }}
+            REACT_APP_API_BASE_URL=${{ secrets.REACT_APP_API_BASE_URL }}
+            REACT_APP_HOST_URL=${{ secrets.REACT_APP_HOST_URL }}
+            REACT_APP_TURN_URL=${{ secrets.REACT_APP_TURN_URL }}
+            REACT_APP_BASE_URL=${{ secrets.REACT_APP_BASE_URL }}
+            REACT_APP_AUTH_URL=${{ secrets.REACT_APP_AUTH_URL }}
+            REACT_APP_PAYPAL_TEST_CLIENT_ID=${{ secrets.REACT_APP_PAYPAL_TEST_CLIENT_ID }}
+            REACT_APP_STRIPE_PUBLISHABLE_KEY_TEST=${{ secrets.REACT_APP_STRIPE_PUBLISHABLE_KEY_TEST }}
+
+  deploy:
+    needs: build-and-push-images
+    runs-on: ubuntu-latest
+    environment: staging
+    
+    steps:
+      - name: Deploy to DigitalOcean
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.DO_HOST_IP }}
+          username: root
+          key: ${{ secrets.DO_SSH_KEY }}
+          script: |
+            # Login to GitHub Container Registry on the server
+            echo ${{ secrets.GITHUB_TOKEN }} | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+            
+            # Pull the freshest images
+            docker pull ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE }}:staging
+            docker pull ${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE }}:staging
+            
+            # Stop any currently running staging containers
+            docker stop wisdomlinked_backend_staging || true
+            docker rm wisdomlinked_backend_staging || true
+            docker stop wisdomlinked_frontend_staging || true
+            docker rm wisdomlinked_frontend_staging || true
+            
+            # Create the custom docker network if it doesn't already exist
+            docker network create chat_custom_network || true
+            
+            # Run the Backend Staging Container
+            docker run -d \
+              --name wisdomlinked_backend_staging \
+              --network chat_custom_network \
+              -p 5001:5000 \
+              -e NODE_ENV="staging" \
+              -e FE_URL="${{ secrets.FE_URL }}" \
+              -e DO_SPACES_ENDPOINT="${{ secrets.DO_SPACES_ENDPOINT }}" \
+              -e DO_SPACES_KEY="${{ secrets.DO_SPACES_KEY }}" \
+              -e DO_SPACES_SECRET="${{ secrets.DO_SPACES_SECRET }}" \
+              -e DO_SPACES_BUCKET="${{ secrets.DO_SPACES_BUCKET }}" \
+              -e MONGO_URI="${{ secrets.MONGO_URI }}" \
+              -e JWT_SECRET="${{ secrets.JWT_SECRET }}" \
+              -e STRIPE_SECRET_KEY_TEST="${{ secrets.STRIPE_SECRET_KEY_TEST }}" \
+              -e STRIPE_WEBHOOK_SECRET="${{ secrets.STRIPE_WEBHOOK_SECRET }}" \
+              -e SENDGRID_API_KEY="${{ secrets.SENDGRID_API_KEY }}" \
+              -e GOOGLE_EMAIL="${{ secrets.GOOGLE_EMAIL }}" \
+              -e GOOGLE_PASSWORD="${{ secrets.GOOGLE_PASSWORD }}" \
+              -e ZOHONOREPLY_USER="${{ secrets.ZOHONOREPLY_USER }}" \
+              -e ZOHONOREPLY_PASS="${{ secrets.ZOHONOREPLY_PASS }}" \
+              -e ZOHOADMIN_USER="${{ secrets.ZOHOADMIN_USER }}" \
+              -e ZOHOADMIN_PASS="${{ secrets.ZOHOADMIN_PASS }}" \
+              ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE }}:staging
+
+            # Run the Frontend Staging Container
+            docker run -d \
+              --name wisdomlinked_frontend_staging \
+              --network chat_custom_network \
+              -p 3001:80 \
+              ${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE }}:staging
