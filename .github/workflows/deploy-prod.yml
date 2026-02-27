@@ -111,4 +111,3 @@ jobs:
               --network chat_custom_network \
               -p 3000:80 \
               ${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE }}:latest
-              
