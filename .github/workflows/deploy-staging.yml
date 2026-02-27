@@ -39,6 +39,7 @@ jobs:
         with:
           context: ./FE
           push: true
+          no-cache: true
           tags: ${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE }}:staging
           build-args: |
             REACT_APP_SERVER_URL=${{ secrets.REACT_APP_SERVER_URL }}
