@@ -1,0 +1,32 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: ./BE
+    container_name: wisdomlinked_backend
+    ports:
+      - "5000:5000"
+    env_file:
+      - ./BE/.env
+    restart: unless-stopped
+    networks:
+      - custom_network
+
+  frontend:
+    build:
+      context: ./FE
+    container_name: wisdomlinked_frontend
+    ports:
+      - "3000:80"
+    env_file:
+      - ./FE/.env
+    depends_on:
+      - backend
+    restart: unless-stopped
+    networks:
+      - custom_network
+
+networks:
+  custom_network:
+    driver: bridge
