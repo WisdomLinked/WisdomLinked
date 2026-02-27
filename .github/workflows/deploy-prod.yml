@@ -6,8 +6,8 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  BACKEND_IMAGE: ${{ github.repository }}/chat-backend
-  FRONTEND_IMAGE: ${{ github.repository }}/chat-frontend
+  BACKEND_IMAGE: wisdomlinked/wisdomlinked/chat-backend
+  FRONTEND_IMAGE: wisdomlinked/wisdomlinked/chat-frontend
 
 jobs:
   build-and-push-images:
