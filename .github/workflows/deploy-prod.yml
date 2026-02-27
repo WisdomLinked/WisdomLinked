@@ -82,6 +82,7 @@ jobs:
             # Run the Backend Production Container
             docker run -d \
               --name wisdomlinked_backend_prod \
+              --restart unless-stopped \
               --network chat_custom_network \
               -p 5000:5000 \
               -e NODE_ENV="production" \
@@ -106,6 +107,7 @@ jobs:
             # Run the Frontend Production Container
             docker run -d \
               --name wisdomlinked_frontend_prod \
+              --restart unless-stopped \
               --network chat_custom_network \
               -p 3000:80 \
               ${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE }}:latest

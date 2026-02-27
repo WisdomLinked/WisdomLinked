@@ -82,6 +82,7 @@ jobs:
             # Run the Backend Staging Container
             docker run -d \
               --name wisdomlinked_backend_staging \
+              --restart unless-stopped \
               --network chat_custom_network \
               -p 5001:5000 \
               -e NODE_ENV="staging" \
@@ -106,6 +107,7 @@ jobs:
             # Run the Frontend Staging Container
             docker run -d \
               --name wisdomlinked_frontend_staging \
+              --restart unless-stopped \
               --network chat_custom_network \
               -p 3001:80 \
               ${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE }}:staging
