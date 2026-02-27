@@ -61,11 +61,11 @@ const checkForAuthorization = (error: any) => {
         type: actionTypes.authError,
         payload: error.message
     })
-    if(responseCode == 413){
+    if (responseCode == 413) {
         store.dispatch(showAlert('payload size too large'));
     }
     else
-    store.dispatch(showAlert(error.response?.data || error.message));
+        store.dispatch(showAlert(error.response?.data || error.message));
     SetLoadingStatus(false)
     return false
 };
@@ -242,13 +242,13 @@ export const joinGeneralChat = async (adminId: string) => {
 };
 export const joinPrivateChat = async (personId: string) => {
     try {
-      const res = await api.post("group-chat/joinPrivateChat", { personId });
-      return res.data;
+        const res = await api.post("group-chat/joinPrivateChat", { personId });
+        return res.data;
     } catch (err: any) {
-      // Preserve existing authorization/error handling behavior in your codebase
-      return checkForAuthorization ? checkForAuthorization(err) : Promise.reject(err);
+        // Preserve existing authorization/error handling behavior in your codebase
+        return checkForAuthorization ? checkForAuthorization(err) : Promise.reject(err);
     }
-  };
+};
 
 export const createCommunityChat = async (data: { name: string; description?: string; participants?: string[]; isOpenToAll?: boolean }) => {
     try {
@@ -462,7 +462,13 @@ export const callApi = async (method: string, url: string, data: any, file?: any
 
         const formData = new FormData()
         for (const x in data) {
-            formData.append(x, JSON.stringify(data[x]))
+            // Only stringify if the target is an object/array (like keywords or services)
+            // Otherwise, append primitive strings, booleans, and numbers directly
+            if (typeof data[x] === 'object' && data[x] !== null) {
+                formData.append(x, JSON.stringify(data[x]))
+            } else {
+                formData.append(x, data[x])
+            }
         }
 
         if (file) {
@@ -681,9 +687,9 @@ export const doFilterSeminars = async (filter: any) => {
     }
 };
 
-export const doAppendEvent = async ({ title, start, end, duration, price, paidBy, expert, customer, payment_intent, eventId ,createdBy }: any) => {
+export const doAppendEvent = async ({ title, start, end, duration, price, paidBy, expert, customer, payment_intent, eventId, createdBy }: any) => {
     try {
-        const res = await api.post("customer/appendEvent", { title, start, end, duration, price, paidBy, expert, customer, payment_intent, eventId,createdBy });
+        const res = await api.post("customer/appendEvent", { title, start, end, duration, price, paidBy, expert, customer, payment_intent, eventId, createdBy });
         return res.data;
     } catch (err: any) {
         return checkForAuthorization(err);
@@ -773,7 +779,7 @@ export const doUpdateTimeSlots = async (timeSlots: any) => {
 
 export const createEvent = async ({ title, start, end, duration, price, expert, customer, createdBy }: any) => {
     try {
-        const res = await api.post("expert/createEvent", { title, start, end, duration, price, expert, customer ,createdBy });
+        const res = await api.post("expert/createEvent", { title, start, end, duration, price, expert, customer, createdBy });
         return res.data;
     } catch (err: any) {
         return checkForAuthorization(err);
@@ -1041,7 +1047,7 @@ export const createChatBotQA = async (data: any) => {
 
 export const getChatBotQA = async (data: any) => {
     try {
-        const {page,limit} =data;
+        const { page, limit } = data;
         const queryString = new URLSearchParams({
             page: page.toString(),
             limit: limit.toString()
@@ -1052,7 +1058,7 @@ export const getChatBotQA = async (data: any) => {
         return checkForAuthorization(err);
     }
 };
-export const updateChatBotQA = async (data: any, id : any) => {
+export const updateChatBotQA = async (data: any, id: any) => {
     try {
         const res = await api.post(`admin/updateChatBotQA/${id}`, data);
         return res.data;
