@@ -25,27 +25,14 @@ jobs:
       - name: Generate Frontend .env file from secrets
         run: |
           cat << EOF > ./FE/.env.production
-          REACT_APP_SERVER_URL=${{ secrets.REACT_APP_SERVER_URL }}
-          REACT_APP_API_BASE_URL=${{ secrets.REACT_APP_API_BASE_URL }}
-          REACT_APP_HOST_URL=${{ secrets.REACT_APP_HOST_URL }}
+          REACT_APP_SERVER_URL=https://staging.wisdomlinked.com
+          REACT_APP_API_BASE_URL=https://staging.wisdomlinked.com/api
+          REACT_APP_HOST_URL=https://staging.wisdomlinked.com
           REACT_APP_TURN_URL=${{ secrets.REACT_APP_TURN_URL }}
-          REACT_APP_BASE_URL=${{ secrets.REACT_APP_BASE_URL }}
-          REACT_APP_AUTH_URL=${{ secrets.REACT_APP_AUTH_URL }}
-          REACT_APP_PAYPAL_REAL_CLIENT_ID=${{ secrets.REACT_APP_PAYPAL_REAL_CLIENT_ID }}
-          REACT_APP_STRIPE_PUBLISHABLE_KEY_LIVE=${{ secrets.REACT_APP_STRIPE_PUBLISHABLE_KEY_LIVE }}
-          EOF
-
-      - name: Generate Frontend .env file from secrets
-        run: |
-          cat << EOF > ./FE/.env.production
-          REACT_APP_SERVER_URL=${{ secrets.REACT_APP_SERVER_URL }}
-          REACT_APP_API_BASE_URL=${{ secrets.REACT_APP_API_BASE_URL }}
-          REACT_APP_HOST_URL=${{ secrets.REACT_APP_HOST_URL }}
-          REACT_APP_TURN_URL=${{ secrets.REACT_APP_TURN_URL }}
-          REACT_APP_BASE_URL=${{ secrets.REACT_APP_BASE_URL }}
-          REACT_APP_AUTH_URL=${{ secrets.REACT_APP_AUTH_URL }}
-          REACT_APP_PAYPAL_REAL_CLIENT_ID=${{ secrets.REACT_APP_PAYPAL_REAL_CLIENT_ID }}
-          REACT_APP_STRIPE_PUBLISHABLE_KEY_LIVE=${{ secrets.REACT_APP_STRIPE_PUBLISHABLE_KEY_LIVE }}
+          REACT_APP_BASE_URL=/
+          REACT_APP_AUTH_URL=https://staging.wisdomlinked.com/api/user
+          REACT_APP_PAYPAL_TEST_CLIENT_ID=${{ secrets.REACT_APP_PAYPAL_TEST_CLIENT_ID }}
+          REACT_APP_STRIPE_PUBLISHABLE_KEY_TEST=${{ secrets.REACT_APP_STRIPE_PUBLISHABLE_KEY_TEST }}
           EOF
 
       - name: Log in to the Container registry
@@ -115,7 +102,7 @@ jobs:
               --network chat_custom_network \
               -p 5001:5000 \
               -e NODE_ENV="staging" \
-              -e FE_URL="${{ secrets.FE_URL }}" \
+              -e FE_URL="https://staging.wisdomlinked.com" \
               -e DO_SPACES_ENDPOINT="${{ secrets.DO_SPACES_ENDPOINT }}" \
               -e DO_SPACES_KEY="${{ secrets.DO_SPACES_KEY }}" \
               -e DO_SPACES_SECRET="${{ secrets.DO_SPACES_SECRET }}" \
