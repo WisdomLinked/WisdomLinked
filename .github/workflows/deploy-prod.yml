@@ -32,6 +32,7 @@ jobs:
           REACT_APP_AUTH_URL=/user/
           REACT_APP_PAYPAL_REAL_CLIENT_ID=${{ secrets.REACT_APP_PAYPAL_REAL_CLIENT_ID }}
           REACT_APP_STRIPE_PUBLISHABLE_KEY_LIVE=${{ secrets.REACT_APP_STRIPE_PUBLISHABLE_KEY_LIVE }}
+          REACT_APP_STRIPE_PUBLISHABLE_KEY_TEST=${{ secrets.REACT_APP_STRIPE_PUBLISHABLE_KEY_TEST }}
           EOF
 
       - name: Log in to the Container registry
@@ -64,6 +65,7 @@ jobs:
             REACT_APP_AUTH_URL=${{ secrets.REACT_APP_AUTH_URL }}
             REACT_APP_PAYPAL_REAL_CLIENT_ID=${{ secrets.REACT_APP_PAYPAL_REAL_CLIENT_ID }}
             REACT_APP_STRIPE_PUBLISHABLE_KEY_LIVE=${{ secrets.REACT_APP_STRIPE_PUBLISHABLE_KEY_LIVE }}
+            REACT_APP_STRIPE_PUBLISHABLE_KEY_TEST=${{ secrets.REACT_APP_STRIPE_PUBLISHABLE_KEY_TEST }}
 
   deploy:
     needs: build-and-push-images
@@ -109,6 +111,7 @@ jobs:
               -e MONGO_URI="${{ secrets.MONGO_URI }}" \
               -e JWT_SECRET="${{ secrets.JWT_SECRET }}" \
               -e STRIPE_SECRET_KEY_LIVE="${{ secrets.STRIPE_SECRET_KEY_LIVE }}" \
+              -e STRIPE_SECRET_KEY_TEST="${{ secrets.STRIPE_SECRET_KEY_TEST }}" \
               -e STRIPE_WEBHOOK_SECRET="${{ secrets.STRIPE_WEBHOOK_SECRET }}" \
               -e SENDGRID_API_KEY="${{ secrets.SENDGRID_API_KEY }}" \
               -e GOOGLE_EMAIL="${{ secrets.GOOGLE_EMAIL }}" \
