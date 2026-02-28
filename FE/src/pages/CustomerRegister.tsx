@@ -32,8 +32,8 @@ const CustomerRegister = () => {
     const [email, set_email] = useState('')
     const [pwd, set_pwd] = useState('')
     const [confirmPwd, set_confirmPwd] = useState('')
-    const [isValidEmail, set_isValidEmail] = useState(false)
-    const [isValidConfirmPwd, set_isValidConfirmPwd] = useState(false)
+    const isValidEmail = email ? (validateEmail(email) ? true : false) : false;
+    const isValidConfirmPwd = pwd && confirmPwd ? pwd === confirmPwd : false;
     const [emailTouched, setEmailTouched] = useState(false)
     const [pwdTouched, setpwdTouched] = useState(false)
     const [confirmPwdTouched, setConfirmPwdTouched] = useState(false)
@@ -82,17 +82,7 @@ const CustomerRegister = () => {
         }
     }
 
-    useEffect(() => {
-            if (emailTouched) {
-                set_isValidEmail(!email ? true : validateEmail(email) ? true : false);
-            }
-        }, [email, emailTouched]);
-
-    useEffect(() => {
-        if (confirmPwdTouched) {
-            set_isValidConfirmPwd(!pwd && !confirmPwd ? true : pwd === confirmPwd ? true : false)
-        }
-    }, [pwd, confirmPwd, confirmPwdTouched])
+    // Removed asynchronous email and password validation hooks as they caused the form to be permanently invalid on autofill.
 
     // useEffect(() => {
     //     if (userDetails?.email) {
@@ -111,17 +101,19 @@ const CustomerRegister = () => {
     }, [country])
 
     useEffect(() => {
-        if (
-            name.length >= 3 && !checkTitleNameInvalid('Username', name) &&
-            country &&
-            (!stateAvailable || (stateAvailable && state)) &&
-            (!cityAvailable || (cityAvailable && city)) &&
-            !(phoneNumber.length < 8) &&
-            isValidEmail &&
-            pwd.length >= 6 &&
-            isValidConfirmPwd &&
-            haveRead
-        ) {
+        const isNameValid = name.length >= 3 && !checkTitleNameInvalid('Username', name);
+        const isCountryValid = !!country;
+        const isStateValid = !!(!stateAvailable || (stateAvailable && state));
+        const isCityValid = !!(!cityAvailable || (cityAvailable && city));
+        const isPhoneValid = !(phoneNumber?.length < 8);
+        const isEmailValid = isValidEmail;
+        const isPwdValid = pwd?.length >= 6;
+        const isConfirmPwdValid = isValidConfirmPwd;
+        const isHaveReadValid = haveRead;
+
+        const isValid = isNameValid && isCountryValid && isStateValid && isCityValid && isPhoneValid && isEmailValid && isPwdValid && isConfirmPwdValid && isHaveReadValid;
+
+        if (isValid) {
             set_enableToRegister(true)
             set_showError(false)
         } else {
@@ -226,7 +218,7 @@ const CustomerRegister = () => {
                             onBlur={() => setEmailTouched(true)}
                         />
                         <ShowFieldError
-                            show={emailTouched && !isValidEmail}
+                            show={(emailTouched || showError) && !isValidEmail}
                             label="Invalid email address."
                         />
 
@@ -252,7 +244,7 @@ const CustomerRegister = () => {
                             </button>
                         </div>
                         <ShowFieldError
-                            show={pwdTouched && !(pwd.length >= 6 || !pwd)}
+                            show={(pwdTouched || showError) && !(pwd.length >= 6)}
                             label="Password must be longer than 6 characters."
                         />
 
@@ -278,19 +270,17 @@ const CustomerRegister = () => {
                             </button>
                         </div>
                         <ShowFieldError
-                            show={confirmPwdTouched && !isValidConfirmPwd}
-                            label="Invalid confirm password."
+                            show={(confirmPwdTouched || showError) && !isValidConfirmPwd}
+                            label="Passwords do not match."
                         />
 
                         <div className="flex items-center space-x-2 mt-6">
-                            <button
-                                className={`w-3 h-3 lg:w-4 lg:h-4 rounded-[4px] ${haveRead ? 'text-green' : 'border border-green'}`}
-                                onClick={() => set_haveRead(!haveRead)}
-                            >
-                                <svg className="w-[14px] h-[14px] lg:w-[18px] lg:h-[18px] -mt-[1px] -ml-[1px]" style={{ display: haveRead ? 'block' : 'none' }} viewBox="0 0 12 13" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                    <path d="M8.44352 0.666748H3.55518C1.43185 0.666748 0.166016 1.93258 0.166016 4.05591V8.93841C0.166016 11.0676 1.43185 12.3334 3.55518 12.3334H8.43768C10.561 12.3334 11.8268 11.0676 11.8268 8.94425V4.05591C11.8327 1.93258 10.5668 0.666748 8.44352 0.666748ZM8.78768 5.15841L5.48018 8.46591C5.39852 8.54758 5.28768 8.59425 5.17102 8.59425C5.05435 8.59425 4.94352 8.54758 4.86185 8.46591L3.21102 6.81508C3.04185 6.64591 3.04185 6.36591 3.21102 6.19675C3.38018 6.02758 3.66018 6.02758 3.82935 6.19675L5.17102 7.53841L8.16935 4.54008C8.33852 4.37091 8.61852 4.37091 8.78768 4.54008C8.95685 4.70925 8.95685 4.98341 8.78768 5.15841Z" fill="currentColor" />
-                                </svg>
-                            </button>
+                            <input
+                                type="checkbox"
+                                className="w-4 h-4 rounded text-green border-green focus:ring-green cursor-pointer"
+                                checked={haveRead}
+                                onChange={(e) => set_haveRead(e.target.checked)}
+                            />
                             <div className="text-[14px] leading-[21px] lg:text-[16px] lg:leading-[24px] font-semibold">
                                 I've agreed with the &nbsp;
                                 <a href={`${process.env.REACT_APP_BASE_URL}rules`} className="text-green underline" target="_blank">
@@ -304,8 +294,7 @@ const CustomerRegister = () => {
                         />
 
                         <button
-                            className="mt-8 w-full rounded-[14px] h-12 flex items-center justify-center bg-green text-white text-[16px] leading-[24px] disabled:opacity-50"
-                            disabled={!email || email?.length < 3 || !pwd || pwd?.length < 6 || !confirmPwd || !isValidEmail || !isValidConfirmPwd}
+                            className="mt-8 w-full rounded-[14px] h-12 flex items-center justify-center bg-green text-white text-[16px] leading-[24px] hover:opacity-80 transition-opacity"
                             onClick={register}
                         >
                             Register
