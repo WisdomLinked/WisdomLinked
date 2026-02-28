@@ -243,7 +243,7 @@ const verifyRegistration = async (req, res) => {
 
         const user = await newUser.save()
         await createGeneralChatAndJoinGlobalChat(user._id)
-        await pendingUser.delete()
+        await pendingUser.deleteOne()
 
         //
         sendEmailNewUserAccountApproval(user.username)
@@ -345,7 +345,7 @@ const confirmLoginByCode = async (req, res) => {
             return res.status(200).json({ status: 'FAIL', error: "User is blocked" });
         }
 
-        await loginRequest.delete()
+        await loginRequest.deleteOne()
 
         if (user.timeZone !== timeZone) {
             user.timeZone = timeZone
@@ -451,7 +451,7 @@ const confirmPasswordResetByCode = async (req, res) => {
         user.password = request.password
         await user.save()
 
-        await request.delete()
+        await request.deleteOne()
 
         return res.status(200).json({
             status: "SUCCESS"

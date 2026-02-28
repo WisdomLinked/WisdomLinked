@@ -11,7 +11,7 @@ const { sendEmailMeetingRequestToExpert, sendEmailMeetingRequestToCustomer, sche
 
 const createEventByExpert = async (req, res) => {
     try {
-        const { title, start, end, duration, price, expert, customer ,createdBy} = req.body
+        const { title, start, end, duration, price, expert, customer, createdBy } = req.body
 
         if (checkTitleNameInvalid('Title', title)) {
             throw new Error(checkTitleNameInvalid('Title', title))
@@ -38,7 +38,7 @@ const createEventByExpert = async (req, res) => {
             expert: expertUser._id,
             customer: customerUser._id,
             status: 'pending',
-            createdBy:createdBy
+            createdBy: createdBy
         })
 
         const event = await newEvent.save()
@@ -105,10 +105,10 @@ const createEventByExpert = async (req, res) => {
 
 const appendEvent = async (req, res) => {
     try {
-        const { title, start, end, duration, price, paidBy, expert, customer, payment_intent, eventId ,createdBy } = req.body
+        const { title, start, end, duration, price, paidBy, expert, customer, payment_intent, eventId, createdBy } = req.body
 
 
-        console.log("append event ",createdBy)
+        console.log("append event ", createdBy)
         if (checkTitleNameInvalid('Title', title)) {
             throw new Error(checkTitleNameInvalid('Title', title))
         }
@@ -209,9 +209,9 @@ const appendEvent = async (req, res) => {
                 expert: expertUser._id,
                 customer: customerUser._id,
                 status: 'pending',
-                createdBy:createdBy
+                createdBy: createdBy
             })
-            console.log("append event inside else",newEvent,createdBy)
+            console.log("append event inside else", newEvent, createdBy)
 
             const event = await newEvent.save()
 
@@ -380,7 +380,7 @@ const acceptEvent = async (req, res) => {
             );
 
             // update friends list of both users in the database
-            
+
             sender.friends.push(receiver._id);
             receiver.friends.push(sender._id);
 
@@ -454,7 +454,7 @@ const cancelInvitation = async (req, res) => {
             receiverId: event.expert,
         });
 
-        await event.delete()
+        await event.deleteOne()
 
         if (invitationExists) {
             // reject the invitation
