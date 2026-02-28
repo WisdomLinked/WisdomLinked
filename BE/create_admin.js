@@ -57,6 +57,7 @@ const createAdmin = async () => {
                 price: 0,
                 participants: [admin._id],
                 admin: admin._id,
+                createdBy: admin._id,
             });
             console.log('Global Chat created.');
         }
@@ -76,6 +77,7 @@ const createAdmin = async () => {
                 price: 0,
                 participants: [admin._id],
                 admin: admin._id,
+                createdBy: admin._id,
             });
             console.log('Admin Chat created.');
         }
