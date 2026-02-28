@@ -295,8 +295,6 @@ const login = async (req, res) => {
         }
 
         let text = `<div>Verify your login to TOE by the code <br/><b>${code}</b></div>`
-        console.log("Sending OTP for login confirmation to: ", email)
-
         await utils.sendOTP(
             email,
             utils.getCurrentDateString(),

@@ -14,29 +14,29 @@ exports.getCurrentDateString = () => {
 };
 
 exports.sendOTP = async (targetEmail, todays_date_str, smurf_details_str) => {
-    const msg = {
-      to: targetEmail,
-      from: {
-        name: "WisdomLinked Support",
-        email: noReplyEmail,
-      },
-      subject: "Your One-Time Passcode (OTP)",
-      html: `
+  const msg = {
+    to: targetEmail,
+    from: {
+      name: "WisdomLinked Support",
+      email: noReplyEmail,
+    },
+    subject: "Your One-Time Passcode (OTP)",
+    html: `
         <p>Date: <strong>${todays_date_str}</strong></p>
         ${smurf_details_str}
       `,
-    };
-    try {
-      const response = await sgMail.send(msg);
-      console.log("OTP email sent via SendGrid:", response[0].statusCode);
-    } catch (error) {
-      console.error("Error sending OTP email via SendGrid:", error.message);
-      console.error("Error details:", error.response ? error.response.body : error);
-    }
   };
+  try {
+    const response = await sgMail.send(msg);
+
+  } catch (error) {
+    console.error("Error sending OTP email via SendGrid:", error.message);
+    console.error("Error details:", error.response ? error.response.body : error);
+  }
+};
 
 exports.sendContactDetails = async (targetEmail, name, email, demand) => {
-    const html = `
+  const html = `
       <h3>New Contact Request</h3>
       <ul>
         <li><strong>Name:</strong> ${name || "N/A"}</li>
@@ -44,23 +44,23 @@ exports.sendContactDetails = async (targetEmail, name, email, demand) => {
         <li><strong>Demand:</strong> ${demand || "N/A"}</li>
       </ul>
     `;
-  
-    const msg = {
-      to: targetEmail,
-      from: {
-        name: "WisdomLinked Admin",
-        email: adminEmail, 
-      },
-      subject: "New Contact Form Submission",
-      html,
-      replyTo: email, 
-    };
-  
-    try {
-      const response = await sgMail.send(msg);
-      console.log("Contact email sent via SendGrid:", response[0].statusCode);
-    } catch (error) {
-      console.error("Error sending contact email via SendGrid:", error.message);
-      throw error;
-    }
+
+  const msg = {
+    to: targetEmail,
+    from: {
+      name: "WisdomLinked Admin",
+      email: adminEmail,
+    },
+    subject: "New Contact Form Submission",
+    html,
+    replyTo: email,
   };
+
+  try {
+    const response = await sgMail.send(msg);
+    console.log("Contact email sent via SendGrid:", response[0].statusCode);
+  } catch (error) {
+    console.error("Error sending contact email via SendGrid:", error.message);
+    throw error;
+  }
+};
