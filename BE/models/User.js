@@ -48,7 +48,7 @@ const userSchema = new mongoose.Schema(
 userSchema.methods.generateAuthToken = async function () {
     const user = this;
     const token = jwt.sign({ email: user.email.toString() }, process.env.JWT_SECRET, {
-        expiresIn: process.env.COOKIE_EXPIRED_TIME,
+        expiresIn: process.env.COOKIE_EXPIRED_TIME ? process.env.COOKIE_EXPIRED_TIME : '24h',
     });
     user.token = token;
     await user.save();

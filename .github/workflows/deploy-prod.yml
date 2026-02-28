@@ -113,6 +113,7 @@ jobs:
               -e STRIPE_SECRET_KEY_LIVE="${{ secrets.STRIPE_SECRET_KEY_LIVE }}" \
               -e STRIPE_SECRET_KEY_TEST="${{ secrets.STRIPE_SECRET_KEY_TEST }}" \
               -e STRIPE_WEBHOOK_SECRET="${{ secrets.STRIPE_WEBHOOK_SECRET }}" \
+              -e COOKIE_EXPIRED_TIME="86400000" \
               -e SENDGRID_API_KEY="${{ secrets.SENDGRID_API_KEY }}" \
               -e GOOGLE_EMAIL="${{ secrets.GOOGLE_EMAIL }}" \
               -e GOOGLE_PASSWORD="${{ secrets.GOOGLE_PASSWORD }}" \
