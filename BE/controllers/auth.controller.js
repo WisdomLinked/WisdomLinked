@@ -25,10 +25,10 @@ const AWS = require('aws-sdk');
 sgMail.setApiKey(process.env.SENDGRID_API_KEY);
 
 const s3 = new AWS.S3({
-  endpoint: process.env.DO_SPACES_ENDPOINT,
-  accessKeyId: process.env.DO_SPACES_KEY,
-  secretAccessKey: process.env.DO_SPACES_SECRET,
-  region: 'us-east-1',
+    endpoint: process.env.DO_SPACES_ENDPOINT,
+    accessKeyId: process.env.DO_SPACES_KEY,
+    secretAccessKey: process.env.DO_SPACES_SECRET,
+    region: 'us-east-1',
 });
 
 const getUniqueConfirmCode = async () => {
@@ -61,19 +61,24 @@ const getKeywordsAndServices = async (req, res) => {
 const register = async (req, res) => {
 
     try {
-        const role = !req.body.role ? null : JSON.parse(req.body.role)
-        const username = !req.body.username ? null : JSON.parse(req.body.username)
-        const title = !req.body.title ? null : JSON.parse(req.body.title)
-        const description = !req.body.description ? null : JSON.parse(req.body.description)
-        const keywords = !req.body.keywords ? null : JSON.parse(req.body.keywords)
-        const services = !req.body.services ? null : JSON.parse(req.body.services)
-        const country = !req.body.country ? null : JSON.parse(req.body.country)
-        const state = !req.body.state ? null : JSON.parse(req.body.state)
-        const city = !req.body.city ? null : JSON.parse(req.body.city)
-        const phoneNumber = !req.body.phoneNumber ? null : JSON.parse(req.body.phoneNumber)
-        const email = !req.body.email ? null : JSON.parse(req.body.email)
-        const password = !req.body.password ? null : JSON.parse(req.body.password)
-        const timeSlots = !req.body.timeSlots ? null : JSON.parse(req.body.timeSlots)
+        const safeParse = (val) => {
+            if (!val) return null;
+            try { return JSON.parse(val); } catch (e) { return val; }
+        };
+
+        const role = safeParse(req.body.role)
+        const username = safeParse(req.body.username)
+        const title = safeParse(req.body.title)
+        const description = safeParse(req.body.description)
+        const keywords = safeParse(req.body.keywords)
+        const services = safeParse(req.body.services)
+        const country = safeParse(req.body.country)
+        const state = safeParse(req.body.state)
+        const city = safeParse(req.body.city)
+        const phoneNumber = safeParse(req.body.phoneNumber)
+        const email = safeParse(req.body.email)
+        const password = safeParse(req.body.password)
+        const timeSlots = safeParse(req.body.timeSlots)
 
         if (checkTitleNameInvalid('Username', username)) {
             return res.status(200).json({ status: 'FAIL', error: checkTitleNameInvalid('Username', username) });
@@ -238,11 +243,11 @@ const verifyRegistration = async (req, res) => {
 
         const user = await newUser.save()
         await createGeneralChatAndJoinGlobalChat(user._id)
-        await pendingUser.delete()
+        await pendingUser.deleteOne()
 
         //
         sendEmailNewUserAccountApproval(user.username)
-        
+
         res.status(200).json({
             status: 'SUCCESS'
         });
@@ -311,7 +316,7 @@ const login = async (req, res) => {
 const confirmLoginByCode = async (req, res) => {
     try {
 
-        const { email, password, code, timeZone} = req.body;
+        const { email, password, code, timeZone } = req.body;
         const loginRequest = await PendingLogin.findOne({ email: email })
         if (!loginRequest) {
             return res.status(200).json({ status: 'FAIL', error: "Login request not found or expired. Please request a new code" });
@@ -340,7 +345,7 @@ const confirmLoginByCode = async (req, res) => {
             return res.status(200).json({ status: 'FAIL', error: "User is blocked" });
         }
 
-        await loginRequest.delete()
+        await loginRequest.deleteOne()
 
         if (user.timeZone !== timeZone) {
             user.timeZone = timeZone
@@ -446,7 +451,7 @@ const confirmPasswordResetByCode = async (req, res) => {
         user.password = request.password
         await user.save()
 
-        await request.delete()
+        await request.deleteOne()
 
         return res.status(200).json({
             status: "SUCCESS"
@@ -639,8 +644,8 @@ const deleteFileFromS3 = async (key) => {
     try {
         await s3
             .deleteObject({
-            Bucket: process.env.DO_SPACES_BUCKET,
-            Key: key,
+                Bucket: process.env.DO_SPACES_BUCKET,
+                Key: key,
             })
             .promise();
     } catch (err) {
