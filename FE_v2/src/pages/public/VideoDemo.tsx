@@ -1,15 +1,5 @@
-/**
- * VideoDemo — public, unauthenticated video call demo page.
- *
- * Route: /demo/video
- *
- * Behaviour:
- *  1. Pre-join form: enter name + room name, then click "Join Room".
- *  2. Token is fetched from POST /api/v1/demo/video-token (no auth required).
- *  3. On success: renders a LiveKit room with video/audio controls.
- *  4. "Leave" button returns to the pre-join form.
- *  5. Errors (including 503 if LiveKit is not configured) are shown inline.
- */
+/** VideoDemo — public video call demo page. Route: /demo/video */
+import "@livekit/components-styles";
 
 import { useState } from "react";
 
@@ -22,30 +12,24 @@ import {
   useParticipants,
   useTracks,
 } from "@livekit/components-react";
-import { ArrowLeft, Video } from "lucide-react";
+import { ArrowLeft, Check, Copy, Link, Loader2, UserRound, Video } from "lucide-react";
 import { Track } from "livekit-client";
 
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { getFrontendEnvironmentConfig } from "@/config/env";
 
-// ── Constants ─────────────────────────────────────────────────────────────────
-
 const LIVEKIT_SERVER_URL = "wss://livekit.authentive.io";
-
-// ── Types ─────────────────────────────────────────────────────────────────────
 
 type Phase =
   | { kind: "prejoin"; error: string | null }
   | { kind: "joining" }
   | { kind: "incall"; token: string };
 
-// ── Pure helpers ──────────────────────────────────────────────────────────────
-
-function generateDefaultRoomName(): string {
-  return `demo-${Math.random().toString(36).slice(2, 8)}`;
+function getInitialRoomName(): string {
+  const p = new URLSearchParams(window.location.search).get("room");
+  return p !== null && p.trim().length > 0 ? p.trim() : `demo-${Math.random().toString(36).slice(2, 8)}`;
 }
 
 function extractToken(raw: unknown): string | null {
@@ -53,38 +37,27 @@ function extractToken(raw: unknown): string | null {
   const obj = raw as Record<string, unknown>;
   return typeof obj["token"] === "string" ? obj["token"] : null;
 }
-
 async function fetchDemoToken(
   apiBaseUrl: string,
   roomName: string,
   participantName: string,
 ): Promise<{ token: string } | { error: string }> {
   try {
-    const response = await fetch(`${apiBaseUrl}/api/v1/demo/video-token`, {
+    const res = await fetch(`${apiBaseUrl}/api/v1/demo/video-token`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ roomName, participantName }),
     });
-
-    if (response.status === 503) {
-      return { error: "Video service is not configured on the server." };
-    }
-    if (!response.ok) {
-      return { error: `Failed to connect (HTTP ${response.status}). Please try again.` };
-    }
-
-    const raw: unknown = await response.json();
+    if (res.status === 503) return { error: "Video service is not configured on the server." };
+    if (!res.ok) return { error: `Failed to connect (HTTP ${res.status}). Please try again.` };
+    const raw: unknown = await res.json();
     const token = extractToken(raw);
-    if (token === null) {
-      return { error: "Unexpected response from video server." };
-    }
+    if (token === null) return { error: "Unexpected response from video server." };
     return { token };
   } catch {
     return { error: "Network error — could not reach the video service. Please try again." };
   }
 }
-
-// ── VideoConference — renders the participant grid (must be inside LiveKitRoom) ─
 
 function VideoConference() {
   const tracks = useTracks(
@@ -94,30 +67,19 @@ function VideoConference() {
     ],
     { onlySubscribed: false },
   );
-
   return (
-    <div className="flex-1 overflow-hidden bg-background">
-      <GridLayout tracks={tracks} className="h-full">
-        <ParticipantTile />
-      </GridLayout>
+    <div className="flex-1 overflow-hidden">
+      <GridLayout tracks={tracks} className="h-full"><ParticipantTile /></GridLayout>
     </div>
   );
 }
 
-// ── RoomStatusBar — top bar rendered inside LiveKitRoom context ───────────────
-
-interface RoomStatusBarProps {
-  roomName: string;
-  onLeave: () => void;
-}
-
-function RoomStatusBar({ roomName, onLeave }: RoomStatusBarProps) {
+function RoomStatusBar({ roomName, onLeave }: { roomName: string; onLeave: () => void }) {
   const participants = useParticipants();
-
   return (
-    <div className="flex items-center justify-between px-4 h-14 border-b bg-card flex-shrink-0">
+    <div className="flex flex-shrink-0 items-center justify-between border-b bg-card px-4 h-14">
       <Button variant="ghost" size="sm" onClick={onLeave}>
-        <ArrowLeft className="h-4 w-4 mr-1.5" />
+        <ArrowLeft className="mr-1.5 h-4 w-4" />
         Leave
       </Button>
       <div className="flex items-center gap-3 text-sm">
@@ -129,22 +91,14 @@ function RoomStatusBar({ roomName, onLeave }: RoomStatusBarProps) {
   );
 }
 
-// ── InCallView — the full-screen LiveKit room ─────────────────────────────────
-
-interface InCallViewProps {
-  token: string;
-  roomName: string;
-  onLeave: () => void;
-}
-
-function InCallView({ token, roomName, onLeave }: InCallViewProps) {
+function InCallView({ token, roomName, onLeave }: { token: string; roomName: string; onLeave: () => void }) {
   return (
-    <div className="flex flex-col" style={{ minHeight: "calc(100vh - 8rem)" }}>
+    <div className="flex flex-col" style={{ height: "100dvh" }}>
       <LiveKitRoom
         serverUrl={LIVEKIT_SERVER_URL}
         token={token}
         onDisconnected={onLeave}
-        className="flex flex-col flex-1 overflow-hidden"
+        className="flex flex-1 flex-col overflow-hidden"
       >
         <RoomStatusBar roomName={roomName} onLeave={onLeave} />
         <VideoConference />
@@ -155,7 +109,51 @@ function InCallView({ token, roomName, onLeave }: InCallViewProps) {
   );
 }
 
-// ── PrejoinForm ───────────────────────────────────────────────────────────────
+function CopyLinkRow({ roomName }: { roomName: string }) {
+  const [copied, setCopied] = useState(false);
+  const trimmed = roomName.trim();
+  if (trimmed.length === 0) return null;
+
+  const url = `${window.location.origin}/demo/video?room=${encodeURIComponent(trimmed)}`;
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // Clipboard API unavailable in this context — noop
+    }
+  };
+
+  return (
+    <div className="mt-2 flex items-center gap-2 rounded-lg border bg-muted/50 px-3 py-2">
+      <Link className="h-3.5 w-3.5 flex-shrink-0 text-muted-foreground" />
+      <span className="flex-1 truncate text-xs text-muted-foreground">{url}</span>
+      <button
+        type="button"
+        onClick={handleCopy}
+        className="flex flex-shrink-0 items-center gap-1 text-xs text-primary transition-colors hover:text-primary/80"
+        aria-label="Copy shareable link"
+      >
+        {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+        <span>{copied ? "Copied!" : "Copy"}</span>
+      </button>
+    </div>
+  );
+}
+
+function HowItWorks() {
+  return (
+    <div className="mt-10 flex items-center gap-2 text-sm text-muted-foreground">
+      <UserRound className="h-4 w-4 text-primary" /><span>Enter your name</span>
+      <span className="mx-2 opacity-30">→</span>
+      <Link className="h-4 w-4 text-primary" /><span>Share the link</span>
+      <span className="mx-2 opacity-30">→</span>
+      <Video className="h-4 w-4 text-primary" /><span>Start your call</span>
+    </div>
+  );
+}
 
 interface PrejoinFormProps {
   participantName: string;
@@ -183,67 +181,76 @@ function PrejoinForm({
   };
 
   return (
-    <div className="flex items-center justify-center min-h-[calc(100vh-10rem)] px-4">
-      <Card className="w-full max-w-md">
-        <CardHeader className="space-y-2 pb-4">
-          <CardTitle className="flex items-center gap-2 text-2xl">
-            <Video className="h-6 w-6 text-primary" />
-            Video Call Demo
-          </CardTitle>
-          <CardDescription>No account required — just enter your name and join.</CardDescription>
-        </CardHeader>
+    <div
+      className="flex min-h-screen flex-col items-center justify-center px-4 py-16"
+      style={{
+        background:
+          "radial-gradient(ellipse 80% 40% at 50% -10%, hsl(var(--primary) / 0.18) 0%, transparent 70%)",
+      }}
+    >
+      <div className="mb-10 space-y-3 text-center">
+        <div className="mb-2 inline-flex h-16 w-16 items-center justify-center rounded-2xl border border-primary/20 bg-primary/10">
+          <Video className="h-8 w-8 text-primary" />
+        </div>
+        <h1 className="text-4xl font-bold tracking-tight">Try a Live Video Call</h1>
+        <p className="mx-auto max-w-xs text-base leading-relaxed text-muted-foreground">No account needed. Enter your name, share the room link, and start talking.</p>
+      </div>
 
-        <CardContent className="space-y-5">
-          <div className="space-y-1.5">
-            <Label htmlFor="participant-name">Your Name</Label>
-            <Input
-              id="participant-name"
-              placeholder="e.g. Alice"
-              value={participantName}
-              onChange={(e) => onParticipantNameChange(e.target.value)}
-              onKeyDown={handleKeyDown}
-              disabled={isJoining}
-              maxLength={64}
-              autoFocus
-            />
+      <div className="glass w-full max-w-md space-y-5 rounded-2xl border border-border/60 bg-card/80 p-7 shadow-2xl">
+        <div className="space-y-1.5">
+          <Label htmlFor="participant-name">Your Name</Label>
+          <Input
+            id="participant-name"
+            placeholder="e.g. Alice"
+            value={participantName}
+            onChange={(e) => onParticipantNameChange(e.target.value)}
+            onKeyDown={handleKeyDown}
+            disabled={isJoining}
+            maxLength={64}
+            autoFocus
+          />
+        </div>
+
+        <div className="space-y-1.5">
+          <Label htmlFor="room-name">Room Name</Label>
+          <Input
+            id="room-name"
+            placeholder="e.g. demo-abc123"
+            value={roomName}
+            onChange={(e) => onRoomNameChange(e.target.value)}
+            onKeyDown={handleKeyDown}
+            disabled={isJoining}
+            maxLength={64}
+          />
+          <CopyLinkRow roomName={roomName} />
+        </div>
+
+        {error !== null && (
+          <div className="rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+            {error}
           </div>
+        )}
 
-          <div className="space-y-1.5">
-            <Label htmlFor="room-name">Room Name</Label>
-            <Input
-              id="room-name"
-              placeholder="e.g. demo-abc123"
-              value={roomName}
-              onChange={(e) => onRoomNameChange(e.target.value)}
-              onKeyDown={handleKeyDown}
-              disabled={isJoining}
-              maxLength={64}
-            />
-            <p className="text-xs text-muted-foreground">
-              Share this room name with others to join the same call.
-            </p>
-          </div>
-
-          {error !== null && (
-            <div className="rounded-md border border-destructive/50 bg-destructive/10 px-4 py-3 text-sm text-destructive">
-              {error}
-            </div>
+        <Button className="w-full" size="lg" onClick={onJoin} disabled={!canJoin}>
+          {isJoining ? (
+            <>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              Connecting…
+            </>
+          ) : (
+            "Join Room →"
           )}
+        </Button>
+      </div>
 
-          <Button className="w-full" onClick={onJoin} disabled={!canJoin}>
-            {isJoining ? "Connecting…" : "Join Room"}
-          </Button>
-        </CardContent>
-      </Card>
+      <HowItWorks />
     </div>
   );
 }
 
-// ── Main VideoDemo page ───────────────────────────────────────────────────────
-
 export default function VideoDemo() {
   const [participantName, setParticipantName] = useState("");
-  const [roomName, setRoomName] = useState<string>(generateDefaultRoomName);
+  const [roomName, setRoomName] = useState<string>(getInitialRoomName);
   const [phase, setPhase] = useState<Phase>({ kind: "prejoin", error: null });
 
   const handleJoin = async () => {
@@ -252,7 +259,6 @@ export default function VideoDemo() {
     if (!name || !room) return;
 
     setPhase({ kind: "joining" });
-
     const { apiBaseUrl } = getFrontendEnvironmentConfig();
     const result = await fetchDemoToken(apiBaseUrl, room, name);
 
@@ -263,14 +269,10 @@ export default function VideoDemo() {
     }
   };
 
-  const handleLeave = () => {
-    setPhase({ kind: "prejoin", error: null });
-  };
+  const handleLeave = () => setPhase({ kind: "prejoin", error: null });
 
   if (phase.kind === "incall") {
-    return (
-      <InCallView token={phase.token} roomName={roomName.trim()} onLeave={handleLeave} />
-    );
+    return <InCallView token={phase.token} roomName={roomName.trim()} onLeave={handleLeave} />;
   }
 
   return (
