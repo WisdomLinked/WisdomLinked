@@ -1,0 +1,7 @@
+[test]
+# Timeout for tests (10 seconds)
+timeout = 10000
+# Preload sets default env-var stubs for external services so bun test
+# works without a .env file (real credentials stay in .env, gitignored).
+preload = ["./test/env-setup.ts"]
+

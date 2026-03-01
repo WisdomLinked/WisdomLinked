@@ -1,0 +1,53 @@
+{
+  "name": "wisdomlinked-frontend",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "dev:safe": "vite --force",
+    "build": "vite build",
+    "preview": "vite preview",
+    "format": "prettier --write .",
+    "lint": "eslint . --report-unused-disable-directives --max-warnings 0 && tsc --noEmit"
+  },
+  "dependencies": {
+    "@radix-ui/react-dialog": "^1.1.15",
+    "@radix-ui/react-popover": "^1.1.15",
+    "@radix-ui/react-scroll-area": "^1.2.10",
+    "@radix-ui/react-slot": "^1.2.4",
+    "@radix-ui/react-tabs": "^1.1.13",
+    "@radix-ui/react-toast": "^1.2.15",
+    "@livekit/components-react": "^2.9.10",
+    "axios": "^1.13.2",
+    "clsx": "^2.1.1",
+    "date-fns": "^4.1.0",
+    "jotai": "^2.16.0",
+    "livekit-client": "^2.13.4",
+    "socket.io-client": "^4.8.1",
+    "lucide-react": "^0.562.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-router-dom": "^7.11.0",
+    "tailwind-merge": "^3.4.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.2",
+    "@tailwindcss/vite": "^4.1.18",
+    "@types/node": "^20.19.27",
+    "@types/react": "^18.3.27",
+    "@types/react-dom": "^18.3.7",
+    "@vitejs/plugin-react": "^4.7.0",
+    "class-variance-authority": "^0.7.1",
+    "eslint": "^9.39.2",
+    "eslint-plugin-react-hooks": "^7.0.1",
+    "eslint-plugin-react-refresh": "^0.4.26",
+    "prettier": "^3.7.4",
+    "prettier-plugin-organize-imports": "^4.3.0",
+    "prettier-plugin-tailwindcss": "^0.7.2",
+    "tailwindcss": "^4.1.18",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.50.1",
+    "vite": "^7.3.1"
+  }
+}

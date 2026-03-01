@@ -1,0 +1,50 @@
+#!/bin/sh
+
+echo "🔍 Pre-push checks starting..."
+
+# ── BE_v2 ──────────────────────────────────────────
+echo ""
+echo "══════════════════════════════════════"
+echo "  Backend (BE_v2)"
+echo "══════════════════════════════════════"
+
+cd BE_v2
+
+echo "→ Lint + Typecheck..."
+bun run lint || { echo "❌ BE_v2 lint failed"; exit 1; }
+
+echo "→ Tests..."
+NODE_ENV=test \
+EPHEMERAL_TEST_DB_NAME=wisdomlinked_test \
+TEST_DB_CARE_WIPED_EVERY_TEST_RUN=I_UNDERSTAND_THIS_TEST_DB_IS_WIPED_EVERY_TEST_RUN \
+SENDGRID_API_KEY=test-sendgrid-key \
+SENDGRID_FROM_EMAIL=test@wisdomlinked.com \
+S3_ENDPOINT=https://s3.amazonaws.com \
+S3_REGION=us-east-1 \
+S3_BUCKET=test-bucket \
+S3_ACCESS_KEY=test-access-key \
+S3_SECRET_KEY=test-secret-key \
+STRIPE_SECRET_KEY=sk_test_stub_key \
+STRIPE_WEBHOOK_SECRET=whsec_test_stub_secret \
+bun test --bail --timeout 10000 || { echo "❌ BE_v2 tests failed"; exit 1; }
+
+cd ..
+
+# ── FE_v2 ──────────────────────────────────────────
+echo ""
+echo "══════════════════════════════════════"
+echo "  Frontend (FE_v2)"
+echo "══════════════════════════════════════"
+
+cd FE_v2
+
+echo "→ Lint + Typecheck..."
+bun run lint || { echo "❌ FE_v2 lint failed"; exit 1; }
+
+echo "→ Build..."
+bun run build || { echo "❌ FE_v2 build failed"; exit 1; }
+
+cd ..
+
+echo ""
+echo "✅ All pre-push checks passed!"

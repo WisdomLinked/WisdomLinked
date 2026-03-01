@@ -1,0 +1,84 @@
+name: CI
+
+on:
+  push:
+    branches: [main, rewrite-v2]
+  pull_request:
+    branches: [main, rewrite-v2]
+
+jobs:
+  backend-lint:
+    name: "BE — Lint + Typecheck"
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: BE_v2
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - run: bun install --frozen-lockfile
+      - run: bun run lint
+
+  backend-test:
+    name: "BE — Tests"
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: BE_v2
+    services:
+      mongodb:
+        image: mongo:8
+        ports:
+          - 27017:27017
+    env:
+      NODE_ENV: test
+      MONGO_URI: mongodb://localhost:27017/wisdomlinked_test
+      EPHEMERAL_TEST_DB_NAME: wisdomlinked_test
+      TEST_DB_CARE_WIPED_EVERY_TEST_RUN: I_UNDERSTAND_THIS_TEST_DB_IS_WIPED_EVERY_TEST_RUN
+      SENDGRID_API_KEY: test-sendgrid-key
+      SENDGRID_FROM_EMAIL: test@wisdomlinked.com
+      S3_ENDPOINT: https://s3.amazonaws.com
+      S3_REGION: us-east-1
+      S3_BUCKET: test-bucket
+      S3_ACCESS_KEY: test-access-key
+      S3_SECRET_KEY: test-secret-key
+      STRIPE_SECRET_KEY: sk_test_stub_key
+      STRIPE_WEBHOOK_SECRET: whsec_test_stub_secret
+      JWT_SECRET: test-jwt-secret-for-ci
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - run: bun install --frozen-lockfile
+      - run: bun test --bail --timeout 10000
+
+  frontend-lint:
+    name: "FE — Lint + Typecheck"
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: FE_v2
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - run: bun install --frozen-lockfile
+      - run: bun run lint
+
+  frontend-build:
+    name: "FE — Build"
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: FE_v2
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - run: bun install --frozen-lockfile
+      - run: bun run build
