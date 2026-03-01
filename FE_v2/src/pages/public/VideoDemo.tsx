@@ -184,7 +184,7 @@ function PrejoinForm({
     <div
       className="flex flex-col items-center justify-center px-4 py-6 overflow-y-auto"
       style={{
-        height: "calc(100dvh - 140px)",
+        height: "100dvh",
         background:
           "radial-gradient(ellipse 80% 40% at 50% -10%, hsl(var(--primary) / 0.18) 0%, transparent 70%)",
       }}

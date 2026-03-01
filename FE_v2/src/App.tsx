@@ -89,7 +89,7 @@ export function App() {
         {/* ── Demo routes (public, no auth required) ── */}
         <Route
           path="/demo/video"
-          element={<MainLayout><VideoDemo /></MainLayout>}
+          element={<VideoDemo />}
         />
 
         {/* ── Auth routes ── */}
