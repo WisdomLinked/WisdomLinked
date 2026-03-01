@@ -14,6 +14,8 @@
  */
 import { Server } from "socket.io";
 
+import { registerDmHandlers } from "./dmHandlers";
+import { registerGroupHandlers } from "./groupHandlers";
 import { registerPresenceHandlers } from "./presenceHandlers";
 import { socketAuthMiddleware } from "./socketAuth";
 import type {
@@ -79,6 +81,8 @@ export function initializeSocketServer(httpServer: unknown): TypedServer {
     );
 
     registerPresenceHandlers(io, socket);
+    registerDmHandlers(io, socket);
+    registerGroupHandlers(io, socket);
 
     socket.on("disconnect", (reason) => {
       console.log(
