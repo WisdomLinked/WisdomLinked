@@ -1,30 +1,60 @@
+/* ─────────────────────────────────────────────────────────────────────────
+ * WisdomLinked — FE_v2 Global Styles
+ *
+ * Structure:
+ *   1. Tailwind v4 import
+ *   2. Per-theme CSS files (supply [data-theme] variable overrides)
+ *   3. :root fallback (midnight values — identical to midnight.css so the
+ *      app renders correctly even before JS sets data-theme)
+ *   4. @theme inline block (UNCHANGED — maps CSS vars → Tailwind tokens)
+ *   5. @layer base   — global element defaults
+ *   6. @layer utilities — WisdomLinked utility classes
+ * ───────────────────────────────────────────────────────────────────────── */
+
 @import 'tailwindcss';
+@import './themes/midnight.css';
+@import './themes/ocean.css';
 
 @custom-variant dark (&:is(.dark *));
 
+/*
+ * :root fallback — mirrors midnight theme values so the app renders correctly
+ * before ThemeProvider has mounted and set data-theme on <html>.
+ * The [data-theme="midnight"] selector in midnight.css always wins once JS
+ * applies the attribute, so there is no conflict.
+ */
 :root {
-  --background: 240 10% 3.9%;
-  --foreground: 0 0% 98%;
-  --card: 240 10% 3.9%;
-  --card-foreground: 0 0% 98%;
-  --popover: 240 10% 3.9%;
-  --popover-foreground: 0 0% 98%;
-  --primary: 0 0% 98%;
-  --primary-foreground: 240 5.9% 10%;
-  --secondary: 240 3.7% 15.9%;
-  --secondary-foreground: 0 0% 98%;
-  --muted: 240 3.7% 15.9%;
-  --muted-foreground: 240 5% 64.9%;
-  --accent: 240 3.7% 15.9%;
-  --accent-foreground: 0 0% 98%;
-  --destructive: 0 62.8% 30.6%;
-  --destructive-foreground: 0 0% 98%;
-  --border: 240 3.7% 15.9%;
-  --input: 240 3.7% 15.9%;
-  --ring: 240 4.9% 83.9%;
-  --radius: 0.75rem;
+  --background: 0 0% 0%;
+  --foreground: 0 0% 100%;
+  --card: 0 0% 7.8%;
+  --card-foreground: 0 0% 100%;
+  --popover: 0 0% 12.2%;
+  --popover-foreground: 0 0% 100%;
+  --primary: 166 56% 44%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 0 0% 12.2%;
+  --secondary-foreground: 0 0% 100%;
+  --muted: 0 0% 13.7%;
+  --muted-foreground: 195 14% 84%;
+  --accent: 0 0% 13.7%;
+  --accent-foreground: 0 0% 100%;
+  --destructive: 0 84% 60%;
+  --destructive-foreground: 0 0% 100%;
+  --border: 0 0% 100% / 0.1;
+  --input: 0 0% 13.7%;
+  --ring: 166 56% 44%;
+  --radius: 0.875rem;
+  --wl-glass-bg: rgba(0, 0, 0, 0.5);
+  --wl-glass-blur: 12px;
+  --wl-text-subtle: #6c7278;
+  --wl-shadow-card: 0 4px 24px rgba(0, 0, 0, 0.3);
+  --wl-hover-scale: 1.03;
+  --wl-transition: 200ms ease;
+  --wl-scrollbar-thumb: #31b099;
+  --wl-scrollbar-track: #141414;
 }
 
+/* ── @theme inline (UNCHANGED — do not modify) ─────────────────────────── */
 @theme inline {
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
@@ -51,6 +81,7 @@
   --color-ring: hsl(var(--ring));
 }
 
+/* ── Base layer ─────────────────────────────────────────────────────────── */
 @layer base {
   * {
     @apply border-border outline-ring/50;
@@ -58,18 +89,71 @@
   body {
     @apply bg-background text-foreground antialiased;
   }
+
+  /* Global scrollbar styling — themed via CSS variables */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--wl-scrollbar-thumb) var(--wl-scrollbar-track);
+  }
+  *::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  *::-webkit-scrollbar-track {
+    background: var(--wl-scrollbar-track);
+  }
+  *::-webkit-scrollbar-thumb {
+    background: var(--wl-scrollbar-thumb);
+    border-radius: 9999px;
+  }
+  *::-webkit-scrollbar-thumb:hover {
+    opacity: 0.8;
+  }
 }
 
+/* ── Utilities layer ────────────────────────────────────────────────────── */
 @layer utilities {
+  /**
+   * .glass — frosted-glass surface.
+   * Applies the theme's glass background + backdrop blur.
+   * Pair with a z-index and position to ensure backdrop-filter works.
+   */
+  .glass {
+    background: var(--wl-glass-bg);
+    backdrop-filter: blur(var(--wl-glass-blur));
+    -webkit-backdrop-filter: blur(var(--wl-glass-blur));
+  }
+
+  /**
+   * .card-hover — lift-on-hover animation for interactive cards.
+   * Uses theme transition speed and hover scale from CSS variables.
+   */
+  .card-hover {
+    transition: transform var(--wl-transition), box-shadow var(--wl-transition);
+    &:hover {
+      transform: scale(var(--wl-hover-scale));
+      box-shadow: var(--wl-shadow-card);
+    }
+  }
+
+  /**
+   * .custom-scrollbar — scoped scrollbar styling for elements that need
+   * explicit opt-in (e.g. overflow containers inside glass panels).
+   * Global scrollbar is styled in @layer base above.
+   */
   .custom-scrollbar::-webkit-scrollbar {
     width: 6px;
     height: 6px;
   }
   .custom-scrollbar::-webkit-scrollbar-track {
-    @apply bg-transparent;
+    background: var(--wl-scrollbar-track);
   }
   .custom-scrollbar::-webkit-scrollbar-thumb {
-    @apply bg-muted-foreground/10 rounded-full hover:bg-muted-foreground/20 transition-colors;
+    background: var(--wl-scrollbar-thumb);
+    border-radius: 9999px;
+  }
+  .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+    opacity: 0.8;
   }
 }
 

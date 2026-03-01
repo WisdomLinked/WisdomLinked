@@ -4,6 +4,34 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>WisdomLinked</title>
+    <!--
+      FOUC prevention: apply the persisted theme before React renders so the
+      page never flickers from the :root fallback to the stored theme.
+      Reads the same versioned envelope written by src/atoms/persistence.ts.
+      Key: "app:prefs:theme:v1"  Envelope: { v: number, data: string, writtenAt: number }
+      Falls back to "midnight" when nothing is stored or parsing fails.
+    -->
+    <script>
+      (function () {
+        var theme = "midnight";
+        try {
+          var raw = localStorage.getItem("app:prefs:theme:v1");
+          if (raw) {
+            var envelope = JSON.parse(raw);
+            if (
+              envelope &&
+              typeof envelope.v === "number" &&
+              (envelope.data === "midnight" || envelope.data === "ocean")
+            ) {
+              theme = envelope.data;
+            }
+          }
+        } catch (_e) {
+          // storage unavailable or corrupted — fall through to default
+        }
+        document.documentElement.setAttribute("data-theme", theme);
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

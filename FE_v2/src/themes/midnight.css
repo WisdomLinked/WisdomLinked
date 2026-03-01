@@ -1,0 +1,52 @@
+/*
+ * Midnight Theme — WisdomLinked's signature dark theme.
+ * Pure black backgrounds, teal primary (#31B099), heavily rounded corners.
+ * Applied via [data-theme="midnight"] on document.documentElement.
+ *
+ * Variable names MUST match the shadcn system consumed by @theme inline in index.css.
+ * WisdomLinked-specific vars are prefixed with --wl- to prevent shadcn collisions.
+ */
+
+[data-theme="midnight"] {
+  /* ── Core surfaces ─────────────────────────────────────────── */
+  --background: 0 0% 0%;               /* #000000 — pure black */
+  --foreground: 0 0% 100%;             /* #ffffff */
+  --card: 0 0% 7.8%;                   /* #141414 — dark card surface */
+  --card-foreground: 0 0% 100%;
+  --popover: 0 0% 12.2%;               /* #1f1f1f */
+  --popover-foreground: 0 0% 100%;
+
+  /* ── Brand — teal/emerald primary ──────────────────────────── */
+  --primary: 166 56% 44%;              /* #31B099 — THE WisdomLinked teal */
+  --primary-foreground: 0 0% 100%;
+
+  /* ── Secondary surfaces ─────────────────────────────────────── */
+  --secondary: 0 0% 12.2%;             /* #1f1f1f */
+  --secondary-foreground: 0 0% 100%;
+  --muted: 0 0% 13.7%;                 /* #232323 */
+  --muted-foreground: 195 14% 84%;     /* #DCE4E8 — light grey text */
+  --accent: 0 0% 13.7%;
+  --accent-foreground: 0 0% 100%;
+
+  /* ── Destructive ────────────────────────────────────────────── */
+  --destructive: 0 84% 60%;
+  --destructive-foreground: 0 0% 100%;
+
+  /* ── Borders & inputs ───────────────────────────────────────── */
+  --border: 0 0% 100% / 0.1;           /* rgba(255,255,255,0.1) — subtle white */
+  --input: 0 0% 13.7%;
+  --ring: 166 56% 44%;                 /* Teal ring matches primary */
+
+  /* ── Radius — heavily rounded per old site ──────────────────── */
+  --radius: 0.875rem;                  /* 14px base; sm/md/lg derive from this */
+
+  /* ── WisdomLinked-specific custom properties ────────────────── */
+  --wl-glass-bg: rgba(0, 0, 0, 0.5);
+  --wl-glass-blur: 12px;
+  --wl-text-subtle: #6c7278;
+  --wl-shadow-card: 0 4px 24px rgba(0, 0, 0, 0.3);
+  --wl-hover-scale: 1.03;
+  --wl-transition: 200ms ease;
+  --wl-scrollbar-thumb: #31b099;
+  --wl-scrollbar-track: #141414;
+}

@@ -1,0 +1,52 @@
+/*
+ * Ocean Theme — blue-toned alternative to Midnight.
+ * Deep navy backgrounds, bright blue primary (#4f8ff7), rounded corners.
+ * Applied via [data-theme="ocean"] on document.documentElement.
+ *
+ * Variable names MUST match the shadcn system consumed by @theme inline in index.css.
+ * WisdomLinked-specific vars are prefixed with --wl- to prevent shadcn collisions.
+ */
+
+[data-theme="ocean"] {
+  /* ── Core surfaces ─────────────────────────────────────────── */
+  --background: 220 55% 8%;            /* #0a1628 — deep navy */
+  --foreground: 210 40% 96%;           /* #f0f4f8 — near-white with blue tint */
+  --card: 220 50% 13%;                 /* #112038 — deep card surface */
+  --card-foreground: 210 40% 96%;
+  --popover: 220 48% 17%;              /* #17284a — popover surface */
+  --popover-foreground: 210 40% 96%;
+
+  /* ── Brand — ocean blue primary ─────────────────────────────── */
+  --primary: 217 90% 64%;              /* #4f8ff7 — bright ocean blue */
+  --primary-foreground: 220 55% 8%;    /* dark navy on blue */
+
+  /* ── Secondary surfaces ─────────────────────────────────────── */
+  --secondary: 220 48% 17%;            /* #17284a */
+  --secondary-foreground: 210 40% 96%;
+  --muted: 220 46% 15%;                /* #142244 */
+  --muted-foreground: 210 35% 72%;     /* #9ab4cc — muted blue-grey text */
+  --accent: 220 46% 15%;
+  --accent-foreground: 210 40% 96%;
+
+  /* ── Destructive ────────────────────────────────────────────── */
+  --destructive: 0 84% 60%;
+  --destructive-foreground: 0 0% 100%;
+
+  /* ── Borders & inputs ───────────────────────────────────────── */
+  --border: 217 70% 80% / 0.12;        /* blue-tinted subtle border */
+  --input: 220 46% 15%;
+  --ring: 217 90% 64%;                 /* Ocean blue ring matches primary */
+
+  /* ── Radius — matches midnight for design consistency ───────── */
+  --radius: 0.875rem;
+
+  /* ── WisdomLinked-specific custom properties ────────────────── */
+  --wl-glass-bg: rgba(10, 22, 40, 0.65);
+  --wl-glass-blur: 12px;
+  --wl-text-subtle: #2a5a8c;
+  --wl-shadow-card: 0 4px 24px rgba(0, 0, 0, 0.4);
+  --wl-hover-scale: 1.03;
+  --wl-transition: 200ms ease;
+  --wl-scrollbar-thumb: #4f8ff7;
+  --wl-scrollbar-track: #112038;
+}
