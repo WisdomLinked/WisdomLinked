@@ -100,3 +100,170 @@ export const oauthApi = {
   },
 };
 
+// ── Shared paginated response envelope ──────────────────────────────────────
+
+export interface PaginatedResponse<T> {
+  items: T[];
+  pagination: {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+  };
+}
+
+// ── Chatbot Q&A types ────────────────────────────────────────────────────────
+
+export interface ChatBotQA {
+  id: string;
+  question: string;
+  answer: string;
+  category: string;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// ── Contact submission types ─────────────────────────────────────────────────
+
+export interface Contact {
+  id: string;
+  name: string;
+  email: string;
+  message: string;
+  isRead: boolean;
+  createdAt: string;
+}
+
+// ── Event feedback types ─────────────────────────────────────────────────────
+
+export interface FeedbackEntry {
+  id: string;
+  rating: number;
+  comment: string;
+  authorUsername: string;
+  createdAt: string;
+}
+
+export interface EventWithFeedback {
+  id: string;
+  title: string;
+  expertName: string;
+  customerName: string;
+  completedAt: string;
+  feedbacks: FeedbackEntry[];
+}
+
+// ── Admin chat types ─────────────────────────────────────────────────────────
+
+export interface AdminConversation {
+  id: string;
+  participants: string[];
+  lastMessagePreview: string;
+  lastMessageAt: string;
+  messageCount: number;
+}
+
+export interface AdminMessage {
+  id: string;
+  authorUsername: string;
+  content: string;
+  type: "text" | "file" | "system";
+  createdAt: string;
+}
+
+// ── Chatbot API ──────────────────────────────────────────────────────────────
+
+export const chatbotApi = {
+  async list(params: {
+    page?: number;
+    limit?: number;
+    search?: string;
+    isActive?: boolean;
+  }): Promise<PaginatedResponse<ChatBotQA>> {
+    const response = await apiClient.get("/api/v1/chatbot", { params });
+    return response.data;
+  },
+
+  async create(data: {
+    question: string;
+    answer: string;
+    category?: string;
+  }): Promise<ChatBotQA> {
+    const response = await apiClient.post("/api/v1/chatbot", data);
+    return response.data;
+  },
+
+  async update(
+    id: string,
+    data: Partial<{ question: string; answer: string; category: string; isActive: boolean }>,
+  ): Promise<ChatBotQA> {
+    const response = await apiClient.put(`/api/v1/chatbot/${id}`, data);
+    return response.data;
+  },
+
+  async delete(id: string): Promise<void> {
+    await apiClient.delete(`/api/v1/chatbot/${id}`);
+  },
+};
+
+// ── Contacts API ─────────────────────────────────────────────────────────────
+
+export const contactsApi = {
+  async list(params: {
+    page?: number;
+    limit?: number;
+    search?: string;
+    isRead?: boolean;
+  }): Promise<PaginatedResponse<Contact>> {
+    const response = await apiClient.get("/api/v1/contacts", { params });
+    return response.data;
+  },
+
+  async markRead(id: string): Promise<Contact> {
+    const response = await apiClient.put(`/api/v1/contacts/${id}/read`);
+    return response.data;
+  },
+
+  async delete(id: string): Promise<void> {
+    await apiClient.delete(`/api/v1/contacts/${id}`);
+  },
+};
+
+// ── Feedback API ─────────────────────────────────────────────────────────────
+
+export const feedbackApi = {
+  async list(params: {
+    page?: number;
+    limit?: number;
+    expertId?: string;
+  }): Promise<PaginatedResponse<EventWithFeedback>> {
+    const response = await apiClient.get("/api/v1/feedback", { params });
+    return response.data;
+  },
+};
+
+// ── Admin Chats API ───────────────────────────────────────────────────────────
+
+export const adminChatsApi = {
+  async listConversations(params: {
+    page?: number;
+    limit?: number;
+    search?: string;
+  }): Promise<PaginatedResponse<AdminConversation>> {
+    const response = await apiClient.get("/api/v1/admin/chats", { params });
+    return response.data;
+  },
+
+  async getMessages(
+    conversationId: string,
+    params: { page?: number; limit?: number },
+  ): Promise<PaginatedResponse<AdminMessage>> {
+    const response = await apiClient.get(
+      `/api/v1/admin/chats/${conversationId}/messages`,
+      { params },
+    );
+    return response.data;
+  },
+};
+

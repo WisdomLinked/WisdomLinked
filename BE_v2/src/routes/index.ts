@@ -14,6 +14,10 @@ import { eventRoutes } from "./v1/events";
 import { friendRoutes } from "./v1/friends";
 import { conversationRoutes } from "./v1/conversations";
 import { groupChatRoutes } from "./v1/groupChats";
+import { chatbotRoutes } from "./v1/chatbot";
+import { contactsRoutes } from "./v1/contacts";
+import { feedbackRoutes } from "./v1/feedback";
+import { adminChatsRoutes } from "./v1/adminChats";
 
 export const routes = new Elysia()
   // Auth routes (public + protected)
@@ -41,4 +45,6 @@ export const routes = new Elysia()
   .use(logsRoutes)
   .use(metricsRoutes)
   .use(userManagementRoutes)
-  .use(settingsRoutes);
+  .use(settingsRoutes)
+  // Admin content management routes (grouped to keep type inference tractable)
+  .use(new Elysia().use(chatbotRoutes).use(contactsRoutes).use(feedbackRoutes).use(adminChatsRoutes));

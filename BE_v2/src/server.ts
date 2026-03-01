@@ -5,6 +5,7 @@ import { getBackendEnvironmentConfig } from "./config/env";
 import { seedAdminUser } from "./models/User";
 import { routes } from "./routes";
 import { logError } from "./middlewares/logger";
+import { initializeSocketServer } from "./services/socket";
 
 const { port: PORT } = getBackendEnvironmentConfig();
 
@@ -73,6 +74,14 @@ async function startServer() {
     console.log(`✅ Backend server running at http://${app.server?.hostname}:${app.server?.port}`);
     console.log(`📊 Health check: http://localhost:${PORT}/health`);
     console.log(`🔐 API endpoints: http://localhost:${PORT}/api/v1/...`);
+
+    // Attach Socket.IO to the running Bun server handle.
+    // Bun.Server is compatible with socket.io ≥ 4.7.5 at runtime.
+    const server = app.server;
+    if (server) {
+      initializeSocketServer(server);
+      console.log("🔌 Socket.IO server initialized");
+    }
   } catch (error) {
     console.error("❌ Failed to start server:", error);
     process.exit(1);
