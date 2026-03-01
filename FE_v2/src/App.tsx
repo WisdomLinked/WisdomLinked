@@ -45,6 +45,9 @@ import VideoRoom from "./pages/shared/VideoRoom";
 import Friends from "./pages/shared/Friends";
 import SharedSettings from "./pages/shared/Settings";
 
+// Dev pages
+import DesignSystem from "./pages/dev/DesignSystem";
+
 // Admin pages
 import { AdminOverview } from "./pages/Admin/Overview";
 import { UserManagement } from "./pages/Admin/UserManagement";
@@ -201,6 +204,9 @@ export function App() {
           <Route path="feedbacks" element={<AdminFeedbacks />} />
           <Route path="settings" element={<AdminSettings />} />
         </Route>
+
+        {/* ── Dev routes ── */}
+        <Route path="/design-system" element={<DesignSystem />} />
 
         {/* ── Legacy /dashboard redirect — send users to role-appropriate home ── */}
         <Route path="/dashboard" element={<Navigate to="/login" replace />} />
