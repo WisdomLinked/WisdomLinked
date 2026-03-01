@@ -35,7 +35,7 @@ export function Login() {
     e.preventDefault();
     try {
       await login({ username, password });
-    } catch (error) {
+    } catch {
       // Error handled by API interceptor
     }
   };

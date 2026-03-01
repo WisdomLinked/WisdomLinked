@@ -71,12 +71,11 @@ const Select = React.forwardRef<
         >
           <div className="max-h-[300px] overflow-y-auto">
             {React.Children.map(children, (child) => {
-              if (React.isValidElement(child)) {
+              if (React.isValidElement<{ value: string; selected?: boolean; onSelect?: () => void }>(child)) {
                 return React.cloneElement(child, {
-                  ...child.props,
                   selected: child.props.value === selectedValue,
                   onSelect: () => handleSelect(child.props.value),
-                } as any)
+                })
               }
               return child
             })}
@@ -97,7 +96,7 @@ const SelectItem = React.forwardRef<
     selected?: boolean
     onSelect?: () => void
   }
->(({ value, children, disabled, selected, onSelect }, ref) => {
+>(({ value: _value, children, disabled, selected, onSelect }, ref) => {
   return (
     <div
       ref={ref}

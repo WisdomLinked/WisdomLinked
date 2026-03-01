@@ -67,7 +67,7 @@ export function Register() {
 
     try {
       await register({ username, email, password });
-    } catch (error) {
+    } catch {
       // Error handled by API interceptor
     }
   };

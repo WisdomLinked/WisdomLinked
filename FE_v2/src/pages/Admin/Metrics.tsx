@@ -7,7 +7,7 @@ import { Trash2 } from "lucide-react";
 
 export function MetricsPage() {
   const { metrics, summary, topEndpoints, isLoading, fetchSummary, clearMetrics } = useMetrics();
-  const [page, setPage] = useState(1);
+  const [page, _setPage] = useState(1);
 
   const loadSummary = useCallback(() => {
     fetchSummary().catch(console.error);

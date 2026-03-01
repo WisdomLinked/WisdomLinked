@@ -36,7 +36,7 @@ export function useAuth() {
       }
 
       navigate("/dashboard");
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Login error:", error);
       throw error;
     } finally {
@@ -60,7 +60,7 @@ export function useAuth() {
       }
 
       navigate("/dashboard");
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Register error:", error);
       throw error;
     } finally {

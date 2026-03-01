@@ -2,25 +2,11 @@ import { useState, useEffect, useCallback } from "react";
 import { useAtom } from "jotai";
 import { sessionsAtom } from "@/atoms/authAtoms";
 import { sessionApi } from "@/api/sessionApi";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { LoadingSpinner } from "@/components/LoadingSpinner";
 import { Monitor, Smartphone, Tablet, MapPin, Clock, XCircle, AlertTriangle, Calendar } from "lucide-react";
 import { formatRelativeTime } from "@/utils/timeUtils";
-
-interface Session {
-  id: string;
-  ipAddress: string;
-  deviceInfo: {
-    browser?: string;
-    os?: string;
-    device?: string;
-  };
-  lastActivity: string;
-  createdAt: string;
-  expiresAt: string;
-  isCurrent: boolean;
-}
 
 export function SessionManagement() {
   const [sessions, setSessions] = useAtom(sessionsAtom);
