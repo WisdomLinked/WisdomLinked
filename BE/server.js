@@ -40,7 +40,7 @@
         });
 
     const app = express();
-    const maxRequestBodySize = process.env.MAX_REQUEST_BODY_SIZE || '1mb';
+    const maxRequestBodySize = process.env.MAX_REQUEST_BODY_SIZE || '50mb';
     
     const corsOptions = {
         origin: [process.env.FE_URL, "https://www.wisdomlinked.com", "http://localhost:3000"  ],
@@ -59,7 +59,6 @@
     app.use(express.json({ limit: maxRequestBodySize }));
     app.use(express.urlencoded({ limit: maxRequestBodySize }));
     app.use(cookieParser());
-    app.use(express.json());
 
     // register the routes
     app.use("/api/auth", authRoutes);

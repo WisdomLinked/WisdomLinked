@@ -8,7 +8,7 @@ const bcrypt = require("bcryptjs");
 const fs = require('fs')
 const path = require('path');
 const { updateActiveRoomsOfUsers } = require("../socket/activeRooms");
-const { getFullUserData } = require("../middlewares/requireAuth");
+const { getFullUserData, getUserData } = require("../middlewares/requireAuth");
 const { createGeneralChatAndJoinGlobalChat } = require("./groupChat.controller");
 const { checkTitleNameInvalid } = require('../services/global')
 const { sendEmailNewUserAccountApproval } = require('../services/notifications')
@@ -261,7 +261,8 @@ const login = async (req, res) => {
     try {
         const { email, password } = req.body;
 
-        const user = await getFullUserData(email)
+        // HIGH-02: login only needs password + status — no social graph population needed.
+        const user = await User.findOne({ email }).select('+password')
         if (!user) {
             return res.status(200).json({ status: 'FAIL', error: "Invalid credentials. Please try again" });
         }
@@ -430,7 +431,8 @@ const confirmPasswordResetByCode = async (req, res) => {
             return res.status(200).json({ status: 'FAIL', error: "Code was expired." });
         }
 
-        const user = await getFullUserData(email)
+        // HIGH-02: confirmPasswordResetByCode only needs password + status — no population needed.
+        const user = await User.findOne({ email }).select('+password')
 
         if (!user) {
             return res.status(200).json({ status: 'FAIL', error: "Invalid credentials. Please try again" });
@@ -707,10 +709,11 @@ const leaveFeedback = async (req, res) => {
 
         let userRating = 0
         for (let i = 0; i < otherUser.feedbacks.length; i++) {
-            console.log(otherUser.feedbacks[i])
             userRating += otherUser.feedbacks[i].rating
         }
-        userRating = (rating / otherUser.feedbacks.length).toFixed(2)
+        // HIGH-05 FIX: was (rating / ...) which used only the new single rating value instead
+        // of userRating (the accumulated sum of ALL ratings), making the average wrong.
+        userRating = (userRating / otherUser.feedbacks.length).toFixed(2)
         console.log(userRating)
         otherUser.rating = userRating
 
