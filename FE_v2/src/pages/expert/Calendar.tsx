@@ -133,32 +133,25 @@ export default function ExpertCalendar() {
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [selectedDay, setSelectedDay] = useState<number | null>(null);
 
-  const fetchCalendar = useCallback(async () => {
-    try {
-      setLoadState("loading");
-      const startDate = new Date(viewYear, viewMonth, 1).toISOString();
-      const endDate = new Date(
-        viewYear,
-        viewMonth + 1,
-        0,
-        23,
-        59,
-        59
-      ).toISOString();
-      const res = await eventsApi.getCalendar(startDate, endDate);
-      setEvents(res.events);
-      setLoadState("success");
-    } catch (err) {
-      console.error("Failed to load calendar:", err);
-      setLoadState("error");
-    }
-  }, [viewYear, viewMonth]);
+  const fetchCalendar = useCallback((year: number, month: number) => {
+    const startDate = new Date(year, month, 1).toISOString();
+    const endDate = new Date(year, month + 1, 0, 23, 59, 59).toISOString();
+    eventsApi.getCalendar(startDate, endDate)
+      .then((res) => {
+        setEvents(res.events);
+        setLoadState("success");
+      })
+      .catch(() => {
+        setLoadState("error");
+      });
+  }, []);
 
   useEffect(() => {
-    fetchCalendar();
-  }, [fetchCalendar]);
+    fetchCalendar(viewYear, viewMonth);
+  }, [fetchCalendar, viewYear, viewMonth]);
 
   const handlePrevMonth = () => {
+    setLoadState("loading");
     if (viewMonth === 0) {
       setViewMonth(11);
       setViewYear((y) => y - 1);
@@ -169,6 +162,7 @@ export default function ExpertCalendar() {
   };
 
   const handleNextMonth = () => {
+    setLoadState("loading");
     if (viewMonth === 11) {
       setViewMonth(0);
       setViewYear((y) => y + 1);
@@ -247,7 +241,7 @@ export default function ExpertCalendar() {
               <Button
                 variant="outline"
                 className="mt-4"
-                onClick={fetchCalendar}
+                onClick={() => { setLoadState("loading"); fetchCalendar(viewYear, viewMonth); }}
               >
                 Retry
               </Button>

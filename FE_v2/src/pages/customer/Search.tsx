@@ -271,11 +271,11 @@ export default function CustomerSearch() {
     null,
   );
 
-  const loadExperts = useCallback(
-    async (params: SearchExpertsParams) => {
-      setPageState({ status: "loading" });
-      try {
-        const { experts, pagination } = await searchApi.searchExperts(params);
+  // No synchronous setState before async call — avoids react-hooks/set-state-in-effect.
+  const loadExperts = useCallback((params: SearchExpertsParams) => {
+    searchApi
+      .searchExperts(params)
+      .then(({ experts, pagination }) => {
         setPageState({
           status: "ready",
           experts,
@@ -283,12 +283,11 @@ export default function CustomerSearch() {
           totalPages: pagination.totalPages,
           page: pagination.page,
         });
-      } catch {
+      })
+      .catch(() => {
         setPageState({ status: "error", message: "Failed to load experts." });
-      }
-    },
-    [],
-  );
+      });
+  }, []);
 
   useEffect(() => {
     const params: SearchExpertsParams = {
@@ -397,6 +396,7 @@ export default function CustomerSearch() {
               variant="outline"
               className="mt-4"
               onClick={() => {
+                setPageState({ status: "loading" });
                 const params: SearchExpertsParams = {
                   page: currentPage,
                   limit: PAGE_SIZE,

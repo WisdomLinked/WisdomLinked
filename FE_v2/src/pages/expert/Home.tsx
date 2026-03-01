@@ -103,25 +103,23 @@ export default function ExpertHome() {
   const [completedTotal, setCompletedTotal] = useState(0);
   const [loadState, setLoadState] = useState<LoadState>("loading");
 
-  const loadData = useCallback(async () => {
-    try {
-      setLoadState("loading");
-      const [profileRes, upcomingRes, pendingRes, completedRes] =
-        await Promise.all([
-          profileApi.getProfile(),
-          eventsApi.listEvents({ role: "as-expert", status: "accepted", limit: 5 }),
-          eventsApi.listEvents({ role: "as-expert", status: "pending", limit: 5 }),
-          eventsApi.listEvents({ role: "as-expert", status: "completed", limit: 1 }),
-        ]);
-      setProfile(profileRes.user);
-      setUpcoming(upcomingRes.events);
-      setPending(pendingRes.events);
-      setCompletedTotal(completedRes.total);
-      setLoadState("success");
-    } catch (err) {
-      console.error("Failed to load expert home data:", err);
-      setLoadState("error");
-    }
+  const loadData = useCallback(() => {
+    Promise.all([
+      profileApi.getProfile(),
+      eventsApi.listEvents({ role: "as-expert", status: "accepted", limit: 5 }),
+      eventsApi.listEvents({ role: "as-expert", status: "pending", limit: 5 }),
+      eventsApi.listEvents({ role: "as-expert", status: "completed", limit: 1 }),
+    ])
+      .then(([profileRes, upcomingRes, pendingRes, completedRes]) => {
+        setProfile(profileRes.user);
+        setUpcoming(upcomingRes.events);
+        setPending(pendingRes.events);
+        setCompletedTotal(completedRes.total);
+        setLoadState("success");
+      })
+      .catch(() => {
+        setLoadState("error");
+      });
   }, []);
 
   useEffect(() => {
@@ -151,7 +149,7 @@ export default function ExpertHome() {
       <div className="p-6">
         <div className="text-center py-16 text-muted-foreground">
           <p>Failed to load dashboard. Please try again.</p>
-          <Button variant="outline" className="mt-4" onClick={loadData}>
+          <Button variant="outline" className="mt-4" onClick={() => { setLoadState("loading"); loadData(); }}>
             Retry
           </Button>
         </div>

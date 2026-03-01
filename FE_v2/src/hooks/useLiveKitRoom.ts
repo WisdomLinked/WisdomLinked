@@ -37,15 +37,17 @@ function extractToken(raw: unknown): string | null {
 export function useLiveKitRoom(roomName: string): LiveKitRoomState {
   const authToken = useAtomValue(tokenAtom);
 
+  // Compute initial state eagerly so the empty-roomName case is handled
+  // without a synchronous setState inside the effect body.
   const [state, setState] = useState<LiveKitRoomState>({
     token: null,
     loading: roomName !== "",
-    error: null,
+    error: roomName === "" ? "No room name provided" : null,
   });
 
   useEffect(() => {
     if (roomName === "") {
-      setState({ token: null, loading: false, error: "No room name provided" });
+      // Initial state already reflects the empty case — no setState needed here.
       return;
     }
 

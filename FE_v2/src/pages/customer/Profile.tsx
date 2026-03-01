@@ -61,15 +61,17 @@ export default function CustomerProfile() {
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const loadProfile = useCallback(async () => {
-    setPageState({ status: "loading" });
-    try {
-      const { user } = await profileApi.getProfile();
-      setPageState({ status: "ready", profile: user });
-      setForm(profileToForm(user));
-    } catch {
-      setPageState({ status: "error", message: "Failed to load profile." });
-    }
+  // No synchronous setState before async call — avoids react-hooks/set-state-in-effect.
+  const loadProfile = useCallback(() => {
+    profileApi
+      .getProfile()
+      .then(({ user }) => {
+        setPageState({ status: "ready", profile: user });
+        setForm(profileToForm(user));
+      })
+      .catch(() => {
+        setPageState({ status: "error", message: "Failed to load profile." });
+      });
   }, []);
 
   useEffect(() => {
@@ -166,7 +168,14 @@ export default function CustomerProfile() {
         <Card>
           <CardContent className="py-8 text-center">
             <p className="text-destructive">{pageState.message}</p>
-            <Button variant="outline" className="mt-4" onClick={loadProfile}>
+            <Button
+              variant="outline"
+              className="mt-4"
+              onClick={() => {
+                setPageState({ status: "loading" });
+                loadProfile();
+              }}
+            >
               Retry
             </Button>
           </CardContent>

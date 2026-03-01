@@ -174,26 +174,22 @@ export default function CustomerSeminars() {
   const [currentPage, setCurrentPage] = useState(1);
   const [joiningState, setJoiningState] = useState<JoiningState>({});
 
-  const loadSeminars = useCallback(
-    async (params: GroupChatListParams) => {
-      setPageState({ status: "loading" });
-      try {
-        const data = await groupChatsApi.listGroupChats(params);
+  // No synchronous setState before async call — avoids react-hooks/set-state-in-effect.
+  const loadSeminars = useCallback((params: GroupChatListParams) => {
+    groupChatsApi
+      .listGroupChats(params)
+      .then((data) => {
         setPageState({
           status: "ready",
           seminars: data.groupChats,
           total: data.total,
           totalPages: data.totalPages,
         });
-      } catch {
-        setPageState({
-          status: "error",
-          message: "Failed to load seminars.",
-        });
-      }
-    },
-    [],
-  );
+      })
+      .catch(() => {
+        setPageState({ status: "error", message: "Failed to load seminars." });
+      });
+  }, []);
 
   useEffect(() => {
     const params: GroupChatListParams = {
@@ -292,6 +288,7 @@ export default function CustomerSeminars() {
               variant="outline"
               className="mt-4"
               onClick={() => {
+                setPageState({ status: "loading" });
                 const params: GroupChatListParams = {
                   type: "seminar",
                   page: currentPage,

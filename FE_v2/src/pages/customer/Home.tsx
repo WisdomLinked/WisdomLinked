@@ -82,34 +82,31 @@ export default function CustomerHome() {
     status: "loading",
   });
 
-  const loadUpcoming = useCallback(async () => {
-    setUpcomingState({ status: "loading" });
-    try {
-      const data = await eventsApi.listEvents({
-        role: "as-customer",
-        status: "accepted",
-        limit: 5,
+  // Load functions use .then/.catch so no synchronous setState happens
+  // before an async boundary — avoids react-hooks/set-state-in-effect.
+  const loadUpcoming = useCallback(() => {
+    eventsApi
+      .listEvents({ role: "as-customer", status: "accepted", limit: 5 })
+      .then((data) => {
+        setUpcomingState({ status: "ready", events: data.events });
+      })
+      .catch(() => {
+        setUpcomingState({
+          status: "error",
+          message: "Failed to load upcoming events.",
+        });
       });
-      setUpcomingState({ status: "ready", events: data.events });
-    } catch {
-      setUpcomingState({
-        status: "error",
-        message: "Failed to load upcoming events.",
-      });
-    }
   }, []);
 
-  const loadActivity = useCallback(async () => {
-    setActivityState({ status: "loading" });
-    try {
-      const data = await eventsApi.listEvents({
-        role: "as-customer",
-        limit: 5,
+  const loadActivity = useCallback(() => {
+    eventsApi
+      .listEvents({ role: "as-customer", limit: 5 })
+      .then((data) => {
+        setActivityState({ status: "ready", events: data.events });
+      })
+      .catch(() => {
+        setActivityState({ status: "error" });
       });
-      setActivityState({ status: "ready", events: data.events });
-    } catch {
-      setActivityState({ status: "error" });
-    }
   }, []);
 
   useEffect(() => {
@@ -188,7 +185,10 @@ export default function CustomerHome() {
               <Button
                 variant="outline"
                 className="mt-4"
-                onClick={loadUpcoming}
+                onClick={() => {
+                  setUpcomingState({ status: "loading" });
+                  loadUpcoming();
+                }}
               >
                 Retry
               </Button>

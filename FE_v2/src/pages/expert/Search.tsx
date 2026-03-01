@@ -175,54 +175,54 @@ export default function ExpertSearch() {
   const [customerTotalPages, setCustomerTotalPages] = useState(1);
   const [customerLoad, setCustomerLoad] = useState<LoadState>("loading");
 
-  const fetchExperts = useCallback(async () => {
-    try {
-      setExpertLoad("loading");
-      const res = await searchApi.searchExperts({
-        name: expertSearch || undefined,
-        page: expertPage,
-        limit: PAGE_LIMIT,
+  const fetchExperts = useCallback((search: string, page: number) => {
+    searchApi.searchExperts({
+      name: search || undefined,
+      page,
+      limit: PAGE_LIMIT,
+    })
+      .then((res) => {
+        setExperts(res.experts);
+        setExpertTotalPages(res.pagination.totalPages);
+        setExpertLoad("success");
+      })
+      .catch(() => {
+        setExpertLoad("error");
       });
-      setExperts(res.experts);
-      setExpertTotalPages(res.pagination.totalPages);
-      setExpertLoad("success");
-    } catch (err) {
-      console.error("Failed to fetch experts:", err);
-      setExpertLoad("error");
-    }
-  }, [expertSearch, expertPage]);
+  }, []);
 
-  const fetchCustomers = useCallback(async () => {
-    try {
-      setCustomerLoad("loading");
-      const res = await searchApi.searchCustomers({
-        name: customerSearch || undefined,
-        page: customerPage,
-        limit: PAGE_LIMIT,
+  const fetchCustomers = useCallback((search: string, page: number) => {
+    searchApi.searchCustomers({
+      name: search || undefined,
+      page,
+      limit: PAGE_LIMIT,
+    })
+      .then((res) => {
+        setCustomers(res.customers);
+        setCustomerTotalPages(res.pagination.totalPages);
+        setCustomerLoad("success");
+      })
+      .catch(() => {
+        setCustomerLoad("error");
       });
-      setCustomers(res.customers);
-      setCustomerTotalPages(res.pagination.totalPages);
-      setCustomerLoad("success");
-    } catch (err) {
-      console.error("Failed to fetch customers:", err);
-      setCustomerLoad("error");
-    }
-  }, [customerSearch, customerPage]);
+  }, []);
 
   useEffect(() => {
-    fetchExperts();
-  }, [fetchExperts]);
+    fetchExperts(expertSearch, expertPage);
+  }, [fetchExperts, expertSearch, expertPage]);
 
   useEffect(() => {
-    fetchCustomers();
-  }, [fetchCustomers]);
+    fetchCustomers(customerSearch, customerPage);
+  }, [fetchCustomers, customerSearch, customerPage]);
 
   const handleExpertSearch = (val: string) => {
+    setExpertLoad("loading");
     setExpertSearch(val);
     setExpertPage(1);
   };
 
   const handleCustomerSearch = (val: string) => {
+    setCustomerLoad("loading");
     setCustomerSearch(val);
     setCustomerPage(1);
   };
@@ -264,7 +264,7 @@ export default function ExpertSearch() {
               <Button
                 variant="outline"
                 className="mt-4"
-                onClick={fetchExperts}
+                onClick={() => { setExpertLoad("loading"); fetchExperts(expertSearch, expertPage); }}
               >
                 Retry
               </Button>
@@ -281,8 +281,8 @@ export default function ExpertSearch() {
               <PageControls
                 page={expertPage}
                 totalPages={expertTotalPages}
-                onPrev={() => setExpertPage((p) => p - 1)}
-                onNext={() => setExpertPage((p) => p + 1)}
+                onPrev={() => { setExpertLoad("loading"); setExpertPage((p) => p - 1); }}
+                onNext={() => { setExpertLoad("loading"); setExpertPage((p) => p + 1); }}
               />
             </>
           )}
@@ -304,7 +304,7 @@ export default function ExpertSearch() {
               <Button
                 variant="outline"
                 className="mt-4"
-                onClick={fetchCustomers}
+                onClick={() => { setCustomerLoad("loading"); fetchCustomers(customerSearch, customerPage); }}
               >
                 Retry
               </Button>
@@ -321,8 +321,8 @@ export default function ExpertSearch() {
               <PageControls
                 page={customerPage}
                 totalPages={customerTotalPages}
-                onPrev={() => setCustomerPage((p) => p - 1)}
-                onNext={() => setCustomerPage((p) => p + 1)}
+                onPrev={() => { setCustomerLoad("loading"); setCustomerPage((p) => p - 1); }}
+                onNext={() => { setCustomerLoad("loading"); setCustomerPage((p) => p + 1); }}
               />
             </>
           )}
