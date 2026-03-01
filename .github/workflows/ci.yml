@@ -34,8 +34,12 @@ jobs:
           - 27017:27017
     env:
       NODE_ENV: test
-      MONGO_URI: mongodb://localhost:27017/wisdomlinked_test
+      MONGO_URI: mongodb://localhost:27017
+      DEV_DB_NAME: wisdomlinked_dev
+      PROD_DB_NAME: wisdomlinked_prod
       EPHEMERAL_TEST_DB_NAME: wisdomlinked_test
+      JWT_SECRET: test-jwt-secret-for-ci
+      JWT_EXPIRES_IN: 7d
       TEST_DB_CARE_WIPED_EVERY_TEST_RUN: I_UNDERSTAND_THIS_TEST_DB_IS_WIPED_EVERY_TEST_RUN
       SENDGRID_API_KEY: test-sendgrid-key
       SENDGRID_FROM_EMAIL: test@wisdomlinked.com
@@ -46,7 +50,6 @@ jobs:
       S3_SECRET_KEY: test-secret-key
       STRIPE_SECRET_KEY: sk_test_stub_key
       STRIPE_WEBHOOK_SECRET: whsec_test_stub_secret
-      JWT_SECRET: test-jwt-secret-for-ci
     steps:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
