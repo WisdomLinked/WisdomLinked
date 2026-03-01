@@ -14,9 +14,11 @@
 // database, any file's wipeTestDatabase() destroys another file's mid-test
 // data — causing non-deterministic failures (IndexBuildAborted, missing docs,
 // unique constraint collisions). Fix: each worker gets its own database.
-// TEMPORARILY DISABLED for debugging — see if login test passes without this.
-// const fileTestId = crypto.randomUUID().slice(0, 8);
-// process.env["EPHEMERAL_TEST_DB_NAME"] = `wisdomlinked_test_${fileTestId}`;
+// Each Bun worker (test file) gets its own ephemeral database so
+// wipeTestDatabase() in one file cannot destroy another file's mid-test data.
+// This assignment overrides the EPHEMERAL_TEST_DB_NAME set by the npm test script.
+const fileTestId = crypto.randomUUID().slice(0, 8);
+process.env["EPHEMERAL_TEST_DB_NAME"] = `wisdomlinked_test_${fileTestId}`;
 
 // Database test-mode acknowledgment — required by database-env.ts when
 // NODE_ENV=test.  This stub satisfies the interlock when running bun test

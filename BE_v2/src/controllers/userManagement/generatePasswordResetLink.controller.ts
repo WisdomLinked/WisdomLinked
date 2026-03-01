@@ -31,9 +31,13 @@ export const generatePasswordResetLinkController = new Elysia()
       }
 
       const resetToken = generateResetToken();
-      targetUser.passwordResetToken = resetToken;
-      targetUser.passwordResetExpires = generatePasswordResetExpiry();
-      await targetUser.save();
+      const passwordResetExpires = generatePasswordResetExpiry();
+      // Use targeted updateOne to avoid Mongoose save() issues with
+      // select:false Map fields (missedChats) on partially-loaded documents.
+      await UserModel.updateOne(
+        { _id: targetUser._id },
+        { $set: { passwordResetToken: resetToken, passwordResetExpires } }
+      );
 
       await logInfo(`Password reset link generated for user ${targetUser.username}`, {
         userId: id,
@@ -43,7 +47,7 @@ export const generatePasswordResetLinkController = new Elysia()
       return {
         message: "Password reset link generated",
         resetToken,
-        expiresAt: targetUser.passwordResetExpires,
+        expiresAt: passwordResetExpires,
         resetLink: `${frontendUrl}/reset-password/${resetToken}`,
       };
     } catch (error) {

@@ -22,20 +22,22 @@ export const toggleUserStatusController = new Elysia()
         return { error: "User not found" };
       }
 
-      targetUser.isActive = !targetUser.isActive;
-      await targetUser.save();
+      // Compute toggled value and persist with targeted updateOne to avoid
+      // Mongoose save() issues with select:false Map fields on partially-loaded documents.
+      const newIsActive = !targetUser.isActive;
+      await UserModel.updateOne({ _id: targetUser._id }, { $set: { isActive: newIsActive } });
 
-      await logInfo(`User ${targetUser.username} status changed to ${targetUser.isActive ? "active" : "inactive"}`, {
+      await logInfo(`User ${targetUser.username} status changed to ${newIsActive ? "active" : "inactive"}`, {
         userId: id,
         adminId: user.userId,
       });
 
       return {
-        message: `User ${targetUser.isActive ? "enabled" : "disabled"} successfully`,
+        message: `User ${newIsActive ? "enabled" : "disabled"} successfully`,
         user: {
           id: targetUser._id.toString(),
           username: targetUser.username,
-          isActive: targetUser.isActive,
+          isActive: newIsActive,
         },
       };
     } catch (error) {

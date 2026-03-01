@@ -23,9 +23,8 @@ describe("Delete User Controller", () => {
     const admin = await createTestUser("du-admin", "du-admin@test.com", UserRole.ADMIN);
     const target = await createTestUser("du-target", "du-target@test.com");
 
-    // Route is /:id/:id (prefix + controller both have /:id) — repeat id in both segments
     const response = await app.handle(
-      new Request(`http://localhost/api/v1/users/${target.id}/${target.id}`, {
+      new Request(`http://localhost/api/v1/users/${target.id}`, {
         method: "DELETE",
         headers: authHeader(admin.token),
       })
@@ -41,7 +40,7 @@ describe("Delete User Controller", () => {
     const fakeId = "000000000000000000000001";
 
     const response = await app.handle(
-      new Request(`http://localhost/api/v1/users/${fakeId}/${fakeId}`, {
+      new Request(`http://localhost/api/v1/users/${fakeId}`, {
         method: "DELETE",
         headers: authHeader(admin.token),
       })
@@ -57,7 +56,7 @@ describe("Delete User Controller", () => {
     const target = await createTestUser("du-target2", "du-target2@test.com");
 
     const response = await app.handle(
-      new Request(`http://localhost/api/v1/users/${target.id}/${target.id}`, {
+      new Request(`http://localhost/api/v1/users/${target.id}`, {
         method: "DELETE",
         headers: authHeader(customer.token),
       })
@@ -70,9 +69,8 @@ describe("Delete User Controller", () => {
     const admin = await createTestUser("du-admin3", "du-admin3@test.com", UserRole.ADMIN);
     const target = await createTestUser("du-session-user", "du-session@test.com");
 
-    // Delete the user — route is /:id/:id
     const deleteResponse = await app.handle(
-      new Request(`http://localhost/api/v1/users/${target.id}/${target.id}`, {
+      new Request(`http://localhost/api/v1/users/${target.id}`, {
         method: "DELETE",
         headers: authHeader(admin.token),
       })

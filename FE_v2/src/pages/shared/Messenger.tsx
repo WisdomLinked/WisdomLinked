@@ -9,7 +9,6 @@ import {
   normalizeDmMessage,
   type ChatMessage,
   type Conversation,
-  type ConversationParticipant,
 } from "@/atoms/chatAtoms";
 import { userAtom } from "@/atoms/authAtoms";
 import {
@@ -24,7 +23,13 @@ import { useSocket } from "@/hooks/useSocket";
 import { usePresence } from "@/hooks/usePresence";
 import { useTypingIndicator, type TypingContext } from "@/hooks/useTypingIndicator";
 import { getSocket } from "@/services/socket";
-import { formatRelativeTime } from "@/utils/timeUtils";
+
+import {
+  ConversationItem,
+  OnlineDot,
+  getOtherParticipant,
+} from "./ConversationItem";
+import { MessageBubble } from "./MessageBubble";
 
 // ── Boundary normalizers (REST → canonical ChatMessage) ───────────────────────
 // These pure functions are the only place where REST API shapes are converted
@@ -62,138 +67,6 @@ function normalizeRestMessage(apiMsg: ApiMessage): ChatMessage {
     fileUrl: apiMsg.fileUrl ?? null,
     createdAt: apiMsg.createdAt,
   };
-}
-
-// ── Helper: get the "other" participant in a 1-on-1 conversation ─────────────
-
-function getOtherParticipant(
-  conv: Conversation,
-  currentUserId: string,
-): ConversationParticipant | null {
-  return conv.participants.find((p) => p.userId !== currentUserId) ?? null;
-}
-
-// ── Sub-components ────────────────────────────────────────────────────────────
-
-interface OnlineDotProps {
-  online: boolean;
-}
-function OnlineDot({ online }: OnlineDotProps) {
-  return (
-    <span
-      className={cn(
-        "inline-block h-2 w-2 rounded-full flex-shrink-0",
-        online ? "bg-green-500" : "bg-muted-foreground/40",
-      )}
-      aria-label={online ? "Online" : "Offline"}
-    />
-  );
-}
-
-interface ConversationItemProps {
-  conv: Conversation;
-  currentUserId: string;
-  isActive: boolean;
-  isOnline: (userId: string) => boolean;
-  onSelect: (id: string) => void;
-}
-function ConversationItem({
-  conv,
-  currentUserId,
-  isActive,
-  isOnline,
-  onSelect,
-}: ConversationItemProps) {
-  const other = getOtherParticipant(conv, currentUserId);
-  const displayName = other?.username ?? "Unknown";
-  const online = other !== null ? isOnline(other.userId) : false;
-
-  return (
-    <button
-      type="button"
-      className={cn(
-        "w-full text-left px-4 py-3 hover:bg-accent/50 transition-colors border-b border-border/50 last:border-b-0",
-        isActive && "bg-accent",
-      )}
-      onClick={() => {
-        onSelect(conv.id);
-      }}
-    >
-      <div className="flex items-center gap-3 min-w-0">
-        {/* Avatar placeholder */}
-        <div className="relative flex-shrink-0">
-          <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center text-sm font-semibold text-primary">
-            {displayName.charAt(0).toUpperCase()}
-          </div>
-          <span className="absolute bottom-0 right-0">
-            <OnlineDot online={online} />
-          </span>
-        </div>
-
-        {/* Name + last message */}
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center justify-between gap-2">
-            <span className="text-sm font-medium truncate">{displayName}</span>
-            {conv.lastMessageAt !== null && (
-              <span className="text-xs text-muted-foreground flex-shrink-0">
-                {formatRelativeTime(conv.lastMessageAt)}
-              </span>
-            )}
-          </div>
-          {conv.lastMessage !== null && (
-            <p className="text-xs text-muted-foreground truncate mt-0.5">
-              {conv.lastMessage}
-            </p>
-          )}
-        </div>
-      </div>
-    </button>
-  );
-}
-
-interface MessageBubbleProps {
-  msg: ChatMessage;
-  isSelf: boolean;
-}
-function MessageBubble({ msg, isSelf }: MessageBubbleProps) {
-  return (
-    <div className={cn("flex gap-2 mb-3", isSelf ? "flex-row-reverse" : "flex-row")}>
-      {/* Avatar */}
-      <div className="h-7 w-7 rounded-full bg-primary/10 flex items-center justify-center text-xs font-semibold text-primary flex-shrink-0 mt-1">
-        {msg.authorId.charAt(0).toUpperCase()}
-      </div>
-
-      {/* Bubble */}
-      <div
-        className={cn(
-          "max-w-[70%] rounded-2xl px-4 py-2 text-sm break-words",
-          isSelf
-            ? "bg-primary text-primary-foreground rounded-tr-sm"
-            : "bg-muted text-foreground rounded-tl-sm",
-        )}
-      >
-        <p>{msg.content}</p>
-        {msg.fileUrl !== null && (
-          <a
-            href={msg.fileUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-xs underline mt-1 block opacity-80"
-          >
-            Attachment
-          </a>
-        )}
-        <span
-          className={cn(
-            "text-xs mt-1 block",
-            isSelf ? "text-primary-foreground/70" : "text-muted-foreground",
-          )}
-        >
-          {formatRelativeTime(msg.createdAt)}
-        </span>
-      </div>
-    </div>
-  );
 }
 
 // ── Main page component ───────────────────────────────────────────────────────

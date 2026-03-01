@@ -1,3 +1,4 @@
+import { afterAll } from "bun:test";
 import { UserModel } from "../src/models/User";
 import { SessionModel } from "../src/models/Session";
 import { generateToken } from "../src/utils/jwt";
@@ -9,6 +10,31 @@ import { profileRoutes } from "../src/routes/v1/profile";
 import { searchRoutes } from "../src/routes/v1/search";
 import mongoose from "mongoose";
 import { getDatabaseEnvironmentConfig } from "../src/config/database-env";
+
+/**
+ * Per-file ephemeral database cleanup.
+ * Runs after all tests in any file that imports helpers.ts.
+ * Drops the isolated test database created by env-setup.ts for this worker.
+ * Does NOT disconnect Mongoose — disconnecting races with other workers.
+ */
+afterAll(async () => {
+  const db = mongoose.connection.db;
+  if (!db) {
+    return; // No connection established in this file — nothing to clean up.
+  }
+  const dbName = db.databaseName;
+  // Only drop per-file isolated databases (those with the UUID suffix added by env-setup.ts).
+  // The shared fallback name "wisdomlinked_test" (no trailing underscore+UUID) is intentionally skipped.
+  if (!dbName.startsWith("wisdomlinked_test_")) {
+    return;
+  }
+  try {
+    await db.dropDatabase();
+  } catch (err) {
+    // Log cleanup failures — they do not affect test results but should be visible.
+    console.error(`[helpers] afterAll: failed to drop test database "${dbName}":`, err);
+  }
+});
 
 /**
  * Create a test app instance with proper type inference.

@@ -37,10 +37,15 @@ export const resetUserPasswordController = new Elysia()
       }
 
       const hashedPassword = await hashPassword(newPassword);
-      targetUser.password = hashedPassword;
-      targetUser.passwordResetToken = undefined;
-      targetUser.passwordResetExpires = undefined;
-      await targetUser.save();
+      // Use targeted updateOne to avoid Mongoose save() issues with
+      // select:false Map fields on partially-loaded documents.
+      await UserModel.updateOne(
+        { _id: targetUser._id },
+        {
+          $set: { password: hashedPassword },
+          $unset: { passwordResetToken: 1, passwordResetExpires: 1 },
+        }
+      );
 
       // Invalidate all sessions for this user (local auth only)
       if (targetUser.authMethods.includes(AuthMethod.LOCAL)) {

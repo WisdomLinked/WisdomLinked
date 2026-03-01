@@ -10,6 +10,6 @@ import {
 export const userRoutes = new Elysia({ prefix: "/api/v1/users" })
   .use(getAllUsersController)
   .use(createUserController)
-  .use(new Elysia({ prefix: "/:id" }).use(getUserByIdController))
-  .use(new Elysia({ prefix: "/:id" }).use(updateUserController))
-  .use(new Elysia({ prefix: "/:id" }).use(deleteUserController));
+  .use(getUserByIdController)
+  .use(updateUserController)
+  .use(deleteUserController);

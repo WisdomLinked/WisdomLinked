@@ -46,9 +46,9 @@ export const loginController = new Elysia()
         return { error: "Invalid credentials" };
       }
 
-      // Update last login
-      user.lastLogin = new Date();
-      await user.save();
+      // Update last login — use targeted updateOne to avoid Mongoose save() issues
+      // with select:false Map fields (missedChats) on partially-loaded documents.
+      await UserModel.updateOne({ _id: user._id }, { $set: { lastLogin: new Date() } });
 
       // Generate token
       const token = generateToken({

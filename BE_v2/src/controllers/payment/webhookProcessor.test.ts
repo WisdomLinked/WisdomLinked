@@ -14,44 +14,16 @@ import {
 } from "./webhookProcessor";
 import { SubscriptionModel, SubscriptionStatus } from "../../models/Subscription";
 import { PaymentModel, PaymentStatus, PaymentType } from "../../models/Payment";
-import { LogModel } from "../../models/Log";
-import { UserModel } from "../../models/User";
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
-
-/**
- * Re-initialize every model that processWebhookPayload touches after a
- * wipeTestDatabase() call.  dropDatabase() removes all collections AND their
- * indexes.  Mongoose marks models as "initialized" only once at connection
- * time (autoIndex) and will NOT automatically recreate indexes after an
- * external drop.  Without explicit re-init, the very first write to each
- * collection triggers lazy index creation inside the test itself, which can
- * push any test over the 10 s timeout — especially those that call
- * processWebhookPayload() more than once (e.g. the subscription update test).
- *
- * Running four Model.init() calls in parallel on empty collections is
- * near-instant (milliseconds), so this does not bloat beforeEach time.
- */
-async function initAllModels(): Promise<void> {
-  await Promise.all([
-    UserModel.init(),          // createTestUser → User + Session
-    LogModel.init(),           // logInfo called inside every handler
-    SubscriptionModel.init(),  // subscription_upsert / subscription_delete
-    PaymentModel.init(),       // payment_succeeded / payment_failed / invoice
-  ]);
-}
 
 beforeAll(async () => {
   await connectToDatabase();
   await wipeTestDatabase();
-  await initAllModels();
 });
 
 beforeEach(async () => {
   await wipeTestDatabase();
-  // Re-warm indexes after every drop so the first DB write in each test is
-  // never delayed by lazy index creation.
-  await initAllModels();
 });
 
 describe("Webhook Processor — processWebhookPayload", () => {

@@ -23,9 +23,8 @@ describe("Get User By ID Controller", () => {
     const admin = await createTestUser("gub-admin", "gub-admin@test.com", UserRole.ADMIN);
     const target = await createTestUser("gub-target", "gub-target@test.com");
 
-    // Route is /:id/:id (prefix + controller both have /:id) — repeat id in both segments
     const response = await app.handle(
-      new Request(`http://localhost/api/v1/users/${target.id}/${target.id}`, {
+      new Request(`http://localhost/api/v1/users/${target.id}`, {
         method: "GET",
         headers: authHeader(admin.token),
       })
@@ -42,7 +41,7 @@ describe("Get User By ID Controller", () => {
     const fakeId = "000000000000000000000001";
 
     const response = await app.handle(
-      new Request(`http://localhost/api/v1/users/${fakeId}/${fakeId}`, {
+      new Request(`http://localhost/api/v1/users/${fakeId}`, {
         method: "GET",
         headers: authHeader(admin.token),
       })
@@ -58,7 +57,7 @@ describe("Get User By ID Controller", () => {
     const target = await createTestUser("gub-target2", "gub-target2@test.com");
 
     const response = await app.handle(
-      new Request(`http://localhost/api/v1/users/${target.id}/${target.id}`, {
+      new Request(`http://localhost/api/v1/users/${target.id}`, {
         method: "GET",
         headers: authHeader(customer.token),
       })

@@ -1,34 +1,27 @@
-import { useEffect, useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Star, MapPin, MessageSquare } from "lucide-react";
 
 import {
   searchApi,
   type ExpertResult,
   type SearchExpertsParams,
 } from "@/api/searchApi";
-import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Skeleton } from "@/components/ui/skeleton";
-import { SearchInput } from "@/components/ui/search-input";
-import { Select, SelectItem } from "@/components/ui/select";
+import { Card, CardContent } from "@/components/ui/card";
 import {
   Pagination,
   PaginationContent,
   PaginationItem,
-  PaginationPrevious,
-  PaginationNext,
   PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
 } from "@/components/ui/pagination";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Separator } from "@/components/ui/separator";
+import { SearchInput } from "@/components/ui/search-input";
+import { Select, SelectItem } from "@/components/ui/select";
+import { Skeleton } from "@/components/ui/skeleton";
+
+import { ExpertCard } from "./ExpertCard";
+import { ExpertDetailDialog } from "./ExpertDetailDialog";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -63,198 +56,6 @@ function buildPageRange(current: number, total: number): number[] {
   if (end < total - 1) pages.push(-2); // ellipsis sentinel
   pages.push(total);
   return pages;
-}
-
-// ── Expert Detail Dialog ───────────────────────────────────────────────────
-
-interface ExpertDialogProps {
-  expert: ExpertResult | null;
-  onClose: () => void;
-  onMessage: () => void;
-}
-
-function ExpertDialog({ expert, onClose, onMessage }: ExpertDialogProps) {
-  return (
-    <Dialog open={expert !== null} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-w-md">
-        {expert !== null && (
-          <>
-            <DialogHeader>
-              <DialogTitle>Expert Profile</DialogTitle>
-            </DialogHeader>
-            <div className="space-y-4">
-              <div className="flex items-center gap-4">
-                <Avatar className="h-16 w-16">
-                  {expert.image ? (
-                    <AvatarImage src={expert.image} alt={expert.username} />
-                  ) : null}
-                  <AvatarFallback className="text-xl">
-                    {expert.username.charAt(0).toUpperCase()}
-                  </AvatarFallback>
-                </Avatar>
-                <div>
-                  <p className="text-lg font-semibold">{expert.username}</p>
-                  {expert.title && (
-                    <p className="text-sm text-muted-foreground">
-                      {expert.title}
-                    </p>
-                  )}
-                  <div className="mt-1 flex items-center gap-1">
-                    <Star className="h-3.5 w-3.5 fill-primary text-primary" />
-                    <span className="text-sm text-muted-foreground">
-                      {expert.rating.toFixed(1)} rating
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              {expert.description && (
-                <>
-                  <Separator />
-                  <p className="text-sm text-muted-foreground">
-                    {expert.description}
-                  </p>
-                </>
-              )}
-
-              {expert.services.length > 0 && (
-                <>
-                  <Separator />
-                  <div>
-                    <p className="mb-2 text-sm font-medium">Specializations</p>
-                    <div className="flex flex-wrap gap-1.5">
-                      {expert.services.map((s) => (
-                        <Badge key={s._id} variant="secondary">
-                          {s.name ?? s._id}
-                        </Badge>
-                      ))}
-                    </div>
-                  </div>
-                </>
-              )}
-
-              {(expert.city ?? expert.country) && (
-                <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
-                  <MapPin className="h-4 w-4" />
-                  {[expert.city, expert.country].filter(Boolean).join(", ")}
-                </div>
-              )}
-
-              {expert.price.length > 0 && (
-                <p className="text-sm font-medium text-primary">
-                  From ${Math.min(...expert.price)}/hr
-                </p>
-              )}
-
-              <Button className="w-full" onClick={onMessage}>
-                <MessageSquare className="mr-2 h-4 w-4" />
-                Message Expert to Book
-              </Button>
-            </div>
-          </>
-        )}
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-// ── Expert Card ────────────────────────────────────────────────────────────
-
-interface ExpertCardProps {
-  expert: ExpertResult;
-  onView: () => void;
-  onBook: () => void;
-}
-
-function ExpertCard({ expert, onView, onBook }: ExpertCardProps) {
-  const minPrice =
-    expert.price.length > 0 ? Math.min(...expert.price) : null;
-
-  return (
-    <Card className="flex flex-col">
-      <CardContent className="flex flex-1 flex-col space-y-3 py-4">
-        {/* Header */}
-        <div className="flex items-start gap-3">
-          <Avatar className="h-12 w-12 shrink-0">
-            {expert.image ? (
-              <AvatarImage src={expert.image} alt={expert.username} />
-            ) : null}
-            <AvatarFallback>
-              {expert.username.charAt(0).toUpperCase()}
-            </AvatarFallback>
-          </Avatar>
-          <div className="min-w-0 flex-1">
-            <p className="truncate font-semibold">{expert.username}</p>
-            {expert.title && (
-              <p className="truncate text-sm text-muted-foreground">
-                {expert.title}
-              </p>
-            )}
-            <div className="mt-0.5 flex items-center gap-1">
-              <Star className="h-3.5 w-3.5 fill-primary text-primary" />
-              <span className="text-xs text-muted-foreground">
-                {expert.rating.toFixed(1)}
-              </span>
-              {expert.city && (
-                <>
-                  <span className="text-xs text-muted-foreground">•</span>
-                  <MapPin className="h-3 w-3 text-muted-foreground" />
-                  <span className="truncate text-xs text-muted-foreground">
-                    {expert.city}
-                  </span>
-                </>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* Bio excerpt */}
-        {expert.description && (
-          <p className="line-clamp-2 text-sm text-muted-foreground">
-            {expert.description}
-          </p>
-        )}
-
-        {/* Service badges */}
-        {expert.services.length > 0 && (
-          <div className="flex flex-wrap gap-1">
-            {expert.services.slice(0, 3).map((s) => (
-              <Badge key={s._id} variant="secondary" className="text-xs">
-                {s.name ?? s._id}
-              </Badge>
-            ))}
-            {expert.services.length > 3 && (
-              <Badge variant="outline" className="text-xs">
-                +{expert.services.length - 3}
-              </Badge>
-            )}
-          </div>
-        )}
-
-        {/* Price */}
-        {minPrice !== null && (
-          <p className="text-sm font-medium text-primary">
-            From ${minPrice}/hr
-          </p>
-        )}
-
-        {/* CTAs */}
-        <div className="mt-auto flex gap-2 pt-2">
-          <Button
-            variant="outline"
-            size="sm"
-            className="flex-1"
-            onClick={onView}
-          >
-            View Profile
-          </Button>
-          <Button size="sm" className="flex-1" onClick={onBook}>
-            Book Session
-          </Button>
-        </div>
-      </CardContent>
-    </Card>
-  );
 }
 
 // ── Page Component ─────────────────────────────────────────────────────────
@@ -317,6 +118,14 @@ export default function CustomerSearch() {
     });
     navigate("/dashboard/messenger");
   }, [navigate]);
+
+  const buildParams = (): SearchExpertsParams => {
+    const params: SearchExpertsParams = { page: currentPage, limit: PAGE_SIZE };
+    if (filters.name !== "") params.name = filters.name;
+    const rating = parseFloat(filters.minRating);
+    if (!isNaN(rating) && rating > 0) params.rating = rating;
+    return params;
+  };
 
   const totalPages =
     pageState.status === "ready" ? pageState.totalPages : 1;
@@ -397,14 +206,7 @@ export default function CustomerSearch() {
               className="mt-4"
               onClick={() => {
                 setPageState({ status: "loading" });
-                const params: SearchExpertsParams = {
-                  page: currentPage,
-                  limit: PAGE_SIZE,
-                };
-                if (filters.name !== "") params.name = filters.name;
-                const rating = parseFloat(filters.minRating);
-                if (!isNaN(rating) && rating > 0) params.rating = rating;
-                loadExperts(params);
+                loadExperts(buildParams());
               }}
             >
               Retry
@@ -515,7 +317,7 @@ export default function CustomerSearch() {
       )}
 
       {/* Expert Detail Dialog */}
-      <ExpertDialog
+      <ExpertDetailDialog
         expert={selectedExpert}
         onClose={() => setSelectedExpert(null)}
         onMessage={handleBookSession}

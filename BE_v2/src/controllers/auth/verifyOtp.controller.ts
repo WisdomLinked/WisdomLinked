@@ -52,9 +52,9 @@ export const verifyOtpController = new Elysia().post(
       // Delete the pending login — consumed
       await PendingLoginModel.deleteOne({ email: normalizedEmail });
 
-      // Update last login
-      user.lastLogin = new Date();
-      await user.save();
+      // Update last login — use targeted updateOne to avoid Mongoose save() issues
+      // with select:false Map fields (missedChats) on partially-loaded documents.
+      await UserModel.updateOne({ _id: user._id }, { $set: { lastLogin: new Date() } });
 
       // Generate JWT
       const token = generateToken({

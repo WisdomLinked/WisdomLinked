@@ -1,57 +1,31 @@
 import { useCallback, useEffect, useState } from "react";
-import { Clock, DollarSign, Star } from "lucide-react";
 
 import {
   eventsApi,
-  type EventListItem,
   type EventStatus,
   type FeedbackData,
 } from "@/api/eventsApi";
-import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Textarea } from "@/components/ui/textarea";
-import { Label } from "@/components/ui/label";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/components/ui/alert-dialog";
 import {
   Dialog,
   DialogContent,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogFooter,
 } from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Textarea } from "@/components/ui/textarea";
+
+import { StarRating, type TabKey } from "./EventCard";
 import {
-  Pagination,
-  PaginationContent,
-  PaginationItem,
-  PaginationPrevious,
-  PaginationNext,
-} from "@/components/ui/pagination";
-import { cn } from "@/lib/utils";
+  TabPanel,
+  type TabConfig,
+  type TabState,
+  type TabsData,
+} from "./EventTabPanel";
 
 // ── Types ──────────────────────────────────────────────────────────────────
-
-type TabKey = "upcoming" | "pending" | "past";
-
-type TabState =
-  | { status: "idle" }
-  | { status: "loading" }
-  | { status: "error"; message: string }
-  | { status: "ready"; events: EventListItem[]; total: number; totalPages: number; page: number };
-
-type TabsData = Record<TabKey, TabState>;
 
 interface FeedbackDialog {
   eventId: string;
@@ -60,298 +34,15 @@ interface FeedbackDialog {
   submitting: boolean;
 }
 
-// ── Helpers ────────────────────────────────────────────────────────────────
+// ── Constants ──────────────────────────────────────────────────────────────
 
 const PAGE_SIZE = 10;
 
-const TAB_CONFIG: Array<{ key: TabKey; label: string; status: EventStatus }> = [
-  { key: "upcoming", label: "Upcoming", status: "accepted" },
-  { key: "pending", label: "Pending", status: "pending" },
-  { key: "past", label: "Past", status: "completed" },
+const TAB_CONFIG: Array<TabConfig> = [
+  { key: "upcoming", label: "Upcoming", status: "accepted" as EventStatus },
+  { key: "pending", label: "Pending", status: "pending" as EventStatus },
+  { key: "past", label: "Past", status: "completed" as EventStatus },
 ];
-
-function formatDate(dateStr: string | undefined): string {
-  if (!dateStr) return "Date TBD";
-  return new Date(dateStr).toLocaleDateString(undefined, {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
-
-function formatDuration(minutes: number | undefined): string {
-  if (!minutes) return "";
-  if (minutes < 60) return `${minutes}m`;
-  const h = Math.floor(minutes / 60);
-  const m = minutes % 60;
-  return m > 0 ? `${h}h ${m}m` : `${h}h`;
-}
-
-function statusVariant(
-  status: EventStatus,
-): "default" | "secondary" | "destructive" | "outline" {
-  if (status === "accepted") return "default";
-  if (status === "completed") return "secondary";
-  if (status === "cancelled" || status === "declined") return "destructive";
-  return "outline";
-}
-
-// ── Star Rating ────────────────────────────────────────────────────────────
-
-interface StarRatingProps {
-  value: number;
-  onChange: (rating: number) => void;
-}
-
-function StarRating({ value, onChange }: StarRatingProps) {
-  return (
-    <div className="flex gap-1" role="group" aria-label="Rating">
-      {[1, 2, 3, 4, 5].map((star) => (
-        <button
-          key={star}
-          type="button"
-          onClick={() => onChange(star)}
-          className={cn(
-            "rounded p-0.5 transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
-            star <= value ? "text-primary" : "text-muted-foreground",
-          )}
-          aria-label={`${star} star${star !== 1 ? "s" : ""}`}
-        >
-          <Star
-            className={cn(
-              "h-6 w-6",
-              star <= value && "fill-primary",
-            )}
-          />
-        </button>
-      ))}
-    </div>
-  );
-}
-
-// ── Event Card ─────────────────────────────────────────────────────────────
-
-interface EventCardProps {
-  event: EventListItem;
-  tabKey: TabKey;
-  onCancel: (eventId: string) => void;
-  onFeedback: (eventId: string) => void;
-  cancelling: boolean;
-}
-
-function EventCard({ event, tabKey, onCancel, onFeedback, cancelling }: EventCardProps) {
-  return (
-    <Card>
-      <CardContent className="py-4">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-          <div className="space-y-1.5">
-            <div className="flex items-center gap-2">
-              <p className="font-semibold">{event.title ?? "Session"}</p>
-              <Badge variant={statusVariant(event.status)} className="text-xs">
-                {event.status}
-              </Badge>
-            </div>
-            <p className="text-sm text-muted-foreground">
-              with {event.expert.username}
-            </p>
-            <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
-              <span>{formatDate(event.start)}</span>
-              {event.duration && (
-                <span className="flex items-center gap-1">
-                  <Clock className="h-3 w-3" />
-                  {formatDuration(event.duration)}
-                </span>
-              )}
-              {event.price !== undefined && event.price > 0 && (
-                <span className="flex items-center gap-1">
-                  <DollarSign className="h-3 w-3" />
-                  {event.price}
-                </span>
-              )}
-            </div>
-          </div>
-
-          {/* Actions */}
-          <div className="flex shrink-0 gap-2">
-            {(tabKey === "upcoming" || tabKey === "pending") && (
-              <AlertDialog>
-                <AlertDialogTrigger asChild>
-                  <Button
-                    variant="destructive"
-                    size="sm"
-                    disabled={cancelling}
-                  >
-                    {cancelling ? "Cancelling..." : "Cancel"}
-                  </Button>
-                </AlertDialogTrigger>
-                <AlertDialogContent>
-                  <AlertDialogHeader>
-                    <AlertDialogTitle>Cancel Event</AlertDialogTitle>
-                    <AlertDialogDescription>
-                      Are you sure you want to cancel this event? This action
-                      cannot be undone.
-                    </AlertDialogDescription>
-                  </AlertDialogHeader>
-                  <AlertDialogFooter>
-                    <AlertDialogCancel>Keep Event</AlertDialogCancel>
-                    <AlertDialogAction
-                      onClick={() => onCancel(event.id)}
-                      className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                    >
-                      Yes, Cancel
-                    </AlertDialogAction>
-                  </AlertDialogFooter>
-                </AlertDialogContent>
-              </AlertDialog>
-            )}
-            {tabKey === "past" && event.status === "completed" && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => onFeedback(event.id)}
-              >
-                <Star className="mr-1.5 h-3.5 w-3.5" />
-                Submit Feedback
-              </Button>
-            )}
-          </div>
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
-// ── Tab Content ────────────────────────────────────────────────────────────
-
-interface TabPanelProps {
-  tabKey: TabKey;
-  state: TabState;
-  onLoad: (tabKey: TabKey, page: number) => void;
-  cancellingId: string | null;
-  onCancel: (eventId: string) => void;
-  onFeedback: (eventId: string) => void;
-}
-
-function TabPanel({ tabKey, state, onLoad, cancellingId, onCancel, onFeedback }: TabPanelProps) {
-  const currentPage = state.status === "ready" ? state.page : 1;
-  const totalPages = state.status === "ready" ? state.totalPages : 1;
-
-  return (
-    <div className="space-y-4">
-      {state.status === "idle" && (
-        <Card>
-          <CardContent className="py-8 text-center text-muted-foreground">
-            <Button variant="outline" onClick={() => onLoad(tabKey, 1)}>
-              Load events
-            </Button>
-          </CardContent>
-        </Card>
-      )}
-
-      {state.status === "loading" && (
-        <div className="space-y-3">
-          {[1, 2, 3].map((i) => (
-            <Card key={i}>
-              <CardContent className="py-4">
-                <div className="flex justify-between gap-4">
-                  <div className="flex-1 space-y-2">
-                    <Skeleton className="h-5 w-1/3" />
-                    <Skeleton className="h-4 w-1/4" />
-                    <Skeleton className="h-3 w-1/2" />
-                  </div>
-                  <Skeleton className="h-8 w-20" />
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      )}
-
-      {state.status === "error" && (
-        <Card>
-          <CardContent className="py-8 text-center">
-            <p className="text-destructive">{state.message}</p>
-            <Button
-              variant="outline"
-              className="mt-4"
-              onClick={() => onLoad(tabKey, 1)}
-            >
-              Retry
-            </Button>
-          </CardContent>
-        </Card>
-      )}
-
-      {state.status === "ready" && state.events.length === 0 && (
-        <Card>
-          <CardContent className="py-12 text-center text-muted-foreground">
-            No {tabKey} events found.
-          </CardContent>
-        </Card>
-      )}
-
-      {state.status === "ready" && state.events.length > 0 && (
-        <>
-          <div className="space-y-3">
-            {state.events.map((event) => (
-              <EventCard
-                key={event.id}
-                event={event}
-                tabKey={tabKey}
-                onCancel={onCancel}
-                onFeedback={onFeedback}
-                cancelling={cancellingId === event.id}
-              />
-            ))}
-          </div>
-
-          {totalPages > 1 && (
-            <Pagination>
-              <PaginationContent>
-                <PaginationItem>
-                  <PaginationPrevious
-                    href="#"
-                    onClick={(e) => {
-                      e.preventDefault();
-                      if (currentPage > 1) onLoad(tabKey, currentPage - 1);
-                    }}
-                    aria-disabled={currentPage === 1}
-                    className={
-                      currentPage === 1 ? "pointer-events-none opacity-50" : ""
-                    }
-                  />
-                </PaginationItem>
-                <PaginationItem>
-                  <span className="flex h-9 items-center px-3 text-sm text-muted-foreground">
-                    Page {currentPage} of {totalPages}
-                  </span>
-                </PaginationItem>
-                <PaginationItem>
-                  <PaginationNext
-                    href="#"
-                    onClick={(e) => {
-                      e.preventDefault();
-                      if (currentPage < totalPages)
-                        onLoad(tabKey, currentPage + 1);
-                    }}
-                    aria-disabled={currentPage === totalPages}
-                    className={
-                      currentPage === totalPages
-                        ? "pointer-events-none opacity-50"
-                        : ""
-                    }
-                  />
-                </PaginationItem>
-              </PaginationContent>
-            </Pagination>
-          )}
-        </>
-      )}
-    </div>
-  );
-}
 
 // ── Page Component ─────────────────────────────────────────────────────────
 
@@ -388,7 +79,7 @@ export default function CustomerEvents() {
             total: data.total,
             totalPages: data.totalPages,
             page: data.page,
-          },
+          } satisfies TabState,
         }));
       })
       .catch(() => {
@@ -397,7 +88,7 @@ export default function CustomerEvents() {
           [tabKey]: {
             status: "error",
             message: `Failed to load ${tabKey} events.`,
-          },
+          } satisfies TabState,
         }));
       });
   }, []);
@@ -407,7 +98,7 @@ export default function CustomerEvents() {
     (tabKey: TabKey, page: number) => {
       setTabsData((prev) => ({
         ...prev,
-        [tabKey]: { status: "loading" },
+        [tabKey]: { status: "loading" } satisfies TabState,
       }));
       loadTab(tabKey, page);
     },

@@ -23,9 +23,8 @@ describe("Update User Controller", () => {
     const admin = await createTestUser("uu-admin", "uu-admin@test.com", UserRole.ADMIN);
     const target = await createTestUser("uu-target", "uu-target@test.com");
 
-    // Route is /:id/:id (prefix + controller both have /:id) — repeat id in both segments
     const response = await app.handle(
-      new Request(`http://localhost/api/v1/users/${target.id}/${target.id}`, {
+      new Request(`http://localhost/api/v1/users/${target.id}`, {
         method: "PUT",
         headers: jsonHeaders(admin.token),
         body: JSON.stringify({ username: "uu-updated" }),
@@ -43,7 +42,7 @@ describe("Update User Controller", () => {
     const fakeId = "000000000000000000000001";
 
     const response = await app.handle(
-      new Request(`http://localhost/api/v1/users/${fakeId}/${fakeId}`, {
+      new Request(`http://localhost/api/v1/users/${fakeId}`, {
         method: "PUT",
         headers: jsonHeaders(admin.token),
         body: JSON.stringify({ username: "updated" }),
@@ -60,7 +59,7 @@ describe("Update User Controller", () => {
     const target = await createTestUser("uu-target2", "uu-target2@test.com");
 
     const response = await app.handle(
-      new Request(`http://localhost/api/v1/users/${target.id}/${target.id}`, {
+      new Request(`http://localhost/api/v1/users/${target.id}`, {
         method: "PUT",
         headers: jsonHeaders(customer.token),
         body: JSON.stringify({ username: "should-fail" }),

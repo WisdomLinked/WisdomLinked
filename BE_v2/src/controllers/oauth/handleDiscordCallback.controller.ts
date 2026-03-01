@@ -107,11 +107,12 @@ export const handleDiscordCallbackController = new Elysia()
       const guildIds = discordGuilds.map((guild) => guild.id);
       const guildCount = guildIds.length;
 
-      // Find or create user
+      // Find or create user — explicitly select oauthConnections so we can read
+      // the connection array for the existing-user update path.
       let user = await UserModel.findOne({
         "oauthConnections.provider": "discord",
         "oauthConnections.providerId": discordUser.id,
-      });
+      }).select("+oauthConnections");
 
       if (!user) {
         // Check if registration is enabled
@@ -152,20 +153,26 @@ export const handleDiscordCallbackController = new Elysia()
           username: user.username,
         });
       } else {
-        // Update OAuth tokens
-        const connection = user.oauthConnections.find((c) => c.provider === "discord");
-        if (connection) {
-          connection.accessToken = tokenData.access_token;
-          connection.refreshToken = tokenData.refresh_token;
-          connection.expiresAt = new Date(Date.now() + tokenData.expires_in * 1000);
-          connection.guildIds = guildIds;
-          connection.guildCount = guildCount;
-          connection.accountCreatedAt = accountCreatedAt ?? undefined;
-          connection.accountAgeDays = accountAgeDays;
-          connection.lastVerifiedAt = new Date();
+        // Update OAuth tokens and lastLogin with a targeted atomic update.
+        // Positional operator ($) updates the matched connection in-place.
+        // Using updateOne avoids Mongoose save() issues with select:false Map fields.
+        const connectionSetFields: Record<string, unknown> = {
+          "oauthConnections.$.accessToken": tokenData.access_token,
+          "oauthConnections.$.refreshToken": tokenData.refresh_token,
+          "oauthConnections.$.expiresAt": new Date(Date.now() + tokenData.expires_in * 1000),
+          "oauthConnections.$.guildIds": guildIds,
+          "oauthConnections.$.guildCount": guildCount,
+          "oauthConnections.$.accountAgeDays": accountAgeDays,
+          "oauthConnections.$.lastVerifiedAt": new Date(),
+          lastLogin: new Date(),
+        };
+        if (accountCreatedAt !== null) {
+          connectionSetFields["oauthConnections.$.accountCreatedAt"] = accountCreatedAt;
         }
-        user.lastLogin = new Date();
-        await user.save();
+        await UserModel.updateOne(
+          { _id: user._id, "oauthConnections.providerId": discordUser.id },
+          { $set: connectionSetFields }
+        );
 
         await logInfo("User logged in via Discord", {
           userId: user._id.toString(),

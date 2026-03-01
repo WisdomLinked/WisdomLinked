@@ -44,10 +44,10 @@ export const resetPasswordController = new Elysia().post(
         return { error: "Invalid or expired reset code" };
       }
 
-      // Hash the new password and update the user
+      // Hash the new password and persist with targeted updateOne to avoid
+      // Mongoose save() issues with select:false Map fields on partially-loaded documents.
       const hashedPassword = await hashPassword(newPassword);
-      user.password = hashedPassword;
-      await user.save();
+      await UserModel.updateOne({ _id: user._id }, { $set: { password: hashedPassword } });
 
       // Invalidate all existing sessions — force re-login everywhere
       await SessionModel.deleteMany({ userId: user._id });
