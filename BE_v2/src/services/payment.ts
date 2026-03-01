@@ -1,8 +1,11 @@
 /**
  * Payment Service — Stripe integration for WisdomLinked payments.
  *
- * The Stripe client is initialised once at module load from the typed env
+ * The Stripe client is initialised lazily on first use from the typed env
  * config (Law 2 — single ingress, Law 3 — explicit effect handler).
+ *
+ * Config is read lazily on first use rather than at module-load time so that
+ * the module can be imported before the test-runner preload has run.
  *
  * All exported functions are standalone (not a class) and return typed Stripe
  * objects so callers depend only on well-typed internal representations, never
@@ -18,8 +21,6 @@ import { getBackendEnvironmentConfig } from "../config/env";
 
 // ── Bootstrap ──────────────────────────────────────────────────────────────
 
-const _env = getBackendEnvironmentConfig();
-
 // Bundle both Stripe credentials so the null check is a single guard that
 // also narrows webhookSecret to string in the non-null branch.
 interface StripeBundle {
@@ -27,8 +28,12 @@ interface StripeBundle {
   webhookSecret: string;
 }
 
+// Lazy-initialised Stripe state: undefined = not yet resolved,
+// null = resolved to disabled, StripeBundle = resolved to enabled.
+let _stripeBundleState: StripeBundle | null | undefined = undefined;
+
 function _buildStripeBundle(): StripeBundle | null {
-  const { stripeSecretKey, stripeWebhookSecret } = _env;
+  const { stripeSecretKey, stripeWebhookSecret } = getBackendEnvironmentConfig();
   if (stripeSecretKey === undefined || stripeWebhookSecret === undefined) {
     return null;
   }
@@ -38,21 +43,20 @@ function _buildStripeBundle(): StripeBundle | null {
   };
 }
 
-// null → Stripe not configured; exported functions throw a typed error message.
-const _stripeBundle: StripeBundle | null = _buildStripeBundle();
-
-if (_stripeBundle === null) {
-  console.log("[payment] Stripe not configured — payment endpoints will return 503");
-}
-
 function _requireStripe(): StripeBundle {
-  if (_stripeBundle === null) {
+  if (_stripeBundleState === undefined) {
+    _stripeBundleState = _buildStripeBundle();
+    if (_stripeBundleState === null) {
+      console.log("[payment] Stripe not configured — payment endpoints will return 503");
+    }
+  }
+  if (_stripeBundleState === null) {
     throw new Error(
       "Stripe is not configured. " +
         "Set STRIPE_SECRET_KEY and STRIPE_WEBHOOK_SECRET environment variables."
     );
   }
-  return _stripeBundle;
+  return _stripeBundleState;
 }
 
 // ── Public API ─────────────────────────────────────────────────────────────

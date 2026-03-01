@@ -8,6 +8,9 @@
  * Env vars consumed (via getBackendEnvironmentConfig — both optional):
  *   SENDGRID_API_KEY    — absent → sendgridEnabled=false, all sends are no-ops
  *   SENDGRID_FROM_EMAIL — absent → sendgridEnabled=false, all sends are no-ops
+ *
+ * Config is read lazily on first use rather than at module-load time so that
+ * the module can be imported before the test-runner preload has run.
  */
 
 import sgMail from "@sendgrid/mail";
@@ -15,23 +18,35 @@ import { getBackendEnvironmentConfig } from "../config/env";
 
 // ── Bootstrap ──────────────────────────────────────────────────────────────
 
-const _env = getBackendEnvironmentConfig();
-
-// Initialise SendGrid only when both credentials are present.
-// When sendgridEnabled is false all send functions are no-ops that log a warning
-// (Law 9 — explicit failure semantics; fire-and-forget email must not crash).
-const _sendgridApiKey = _env.sendgridApiKey;
-if (_sendgridApiKey !== undefined) {
-  sgMail.setApiKey(_sendgridApiKey);
+// Lazy-initialised SendGrid state.  Computed once on the first _dispatch call
+// so that the module can be safely imported before env vars are set.
+interface EmailState {
+  fromAddress: { email: string; name: string } | null;
 }
 
-// FROM_ADDRESS is null when SendGrid is not configured.  All _dispatch calls
-// guard on this value so the send path is never reached without credentials.
-const _sendgridFromEmail = _env.sendgridFromEmail;
-const FROM_ADDRESS: { email: string; name: string } | null =
-  _sendgridFromEmail !== undefined
-    ? { email: _sendgridFromEmail, name: "WisdomLinked" }
-    : null;
+let _emailState: EmailState | null = null;
+
+function _getEmailState(): EmailState {
+  if (_emailState !== null) {
+    return _emailState;
+  }
+
+  const env = getBackendEnvironmentConfig();
+
+  // Initialise SendGrid only when both credentials are present.
+  // When sendgridEnabled is false all send functions are no-ops.
+  if (env.sendgridApiKey !== undefined) {
+    sgMail.setApiKey(env.sendgridApiKey);
+  }
+
+  const fromAddress: { email: string; name: string } | null =
+    env.sendgridFromEmail !== undefined
+      ? { email: env.sendgridFromEmail, name: "WisdomLinked" }
+      : null;
+
+  _emailState = { fromAddress };
+  return _emailState;
+}
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -51,7 +66,9 @@ export interface PaymentConfirmationDetails {
 // ── Internal helper ────────────────────────────────────────────────────────
 
 async function _dispatch(to: string, subject: string, html: string): Promise<void> {
-  if (FROM_ADDRESS === null) {
+  const { fromAddress } = _getEmailState();
+
+  if (fromAddress === null) {
     // SendGrid not configured — log and skip silently so callers are unaffected.
     console.warn("[email] SendGrid not configured — skipping email send", { to, subject });
     return;
@@ -60,7 +77,7 @@ async function _dispatch(to: string, subject: string, html: string): Promise<voi
   try {
     await sgMail.send({
       to,
-      from: FROM_ADDRESS,
+      from: fromAddress,
       subject,
       html,
     });
@@ -195,11 +212,12 @@ export async function sendPaymentConfirmation(
  * address env var is configured.
  */
 export async function sendAdminAlert(subject: string, body: string): Promise<void> {
-  if (FROM_ADDRESS === null) {
+  const { fromAddress } = _getEmailState();
+  if (fromAddress === null) {
     console.warn("[email] SendGrid not configured — skipping admin alert", { subject });
     return;
   }
-  const adminTo = FROM_ADDRESS.email;
+  const adminTo = fromAddress.email;
   const html = `
     <div style="font-family:monospace;max-width:700px;margin:0 auto;">
       <h2 style="color:#c0392b;">⚠ Admin Alert</h2>

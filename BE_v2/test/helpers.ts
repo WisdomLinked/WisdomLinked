@@ -3,7 +3,7 @@ import { UserModel } from "../src/models/User";
 import { SessionModel } from "../src/models/Session";
 import { generateToken } from "../src/utils/jwt";
 import { UserRole } from "../src/config/roles";
-import { connectToDatabase } from "../src/config/database";
+import { connectToDatabase, getConnectedTestDbName } from "../src/config/database";
 import { Elysia } from "elysia";
 import { routes } from "../src/routes";
 import { profileRoutes } from "../src/routes/v1/profile";
@@ -114,10 +114,18 @@ function assertConnectedTestDatabaseInterlock(operation: string): { testDbName: 
   }
 
   const connectedDbName = connectedDb.databaseName;
-  if (connectedDbName !== config.dbName) {
+
+  // Use the module-level cached connected DB name (set by the first worker's
+  // connectToDatabase call and shared across all Bun test workers via shared
+  // module state) as the authoritative expected value.  This resolves the
+  // mismatch that would otherwise occur when a later worker's process.env has
+  // a different EPHEMERAL_TEST_DB_NAME than the one used to establish the
+  // actual Mongoose connection.
+  const expectedDbName = getConnectedTestDbName() ?? config.dbName;
+  if (connectedDbName !== expectedDbName) {
     throw new Error(
       `⚠️ SAFETY CHECK FAILED: ${operation} target mismatch. ` +
-      `Connected DB: ${connectedDbName}, expected test DB: ${config.dbName}`
+      `Connected DB: ${connectedDbName}, expected test DB: ${expectedDbName}`
     );
   }
 

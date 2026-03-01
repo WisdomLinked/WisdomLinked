@@ -1,9 +1,13 @@
 /**
  * Test environment defaults — loaded via bunfig.toml [test.preload].
  *
- * Only sets stub values that are NOT already present in the environment.
- * Real credentials (MONGO_URI, JWT_SECRET, etc.) must be supplied via .env
- * or the `bun run test` npm script; they are never overridden here.
+ * This file is the single authoritative source for test-mode env stubs.
+ * Real credentials (MONGO_URI, JWT_SECRET, etc.) must be supplied via .env;
+ * they are never overridden here (??= guards).
+ *
+ * Test-specific constants (acknowledgements, per-file DB names) are set
+ * unconditionally — their values are always the same in test mode, and we must
+ * not let an empty-string or stale value from a .env comment slip through.
  *
  * Law 3 / R11: env vars are provided by the test runner configuration
  * (bunfig.toml → preload), not mutated ad-hoc inside test files.
@@ -21,9 +25,10 @@ const fileTestId = crypto.randomUUID().slice(0, 8);
 process.env["EPHEMERAL_TEST_DB_NAME"] = `wisdomlinked_test_${fileTestId}`;
 
 // Database test-mode acknowledgment — required by database-env.ts when
-// NODE_ENV=test.  This stub satisfies the interlock when running bun test
-// directly (i.e. without the full npm test script that sets it inline).
-process.env["TEST_DB_CARE_WIPED_EVERY_TEST_RUN"] ??=
+// NODE_ENV=test.  Set unconditionally (not ??=) so that a stale empty string
+// left by an .env comment parser or a missing env-inheritance path never
+// silently passes the ??= guard and causes the interlock to fail.
+process.env["TEST_DB_CARE_WIPED_EVERY_TEST_RUN"] =
   "I_UNDERSTAND_THIS_TEST_DB_IS_WIPED_EVERY_TEST_RUN";
 
 // Service credentials — external services are not exercised in unit/integration

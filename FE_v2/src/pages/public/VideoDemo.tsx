@@ -145,7 +145,7 @@ function CopyLinkRow({ roomName }: { roomName: string }) {
 
 function HowItWorks() {
   return (
-    <div className="mt-10 flex items-center gap-2 text-sm text-muted-foreground">
+    <div className="mt-4 flex items-center gap-2 text-sm text-muted-foreground">
       <UserRound className="h-4 w-4 text-primary" /><span>Enter your name</span>
       <span className="mx-2 opacity-30">→</span>
       <Link className="h-4 w-4 text-primary" /><span>Share the link</span>
@@ -182,21 +182,22 @@ function PrejoinForm({
 
   return (
     <div
-      className="flex min-h-screen flex-col items-center justify-center px-4 py-16"
+      className="flex flex-col items-center justify-center px-4 py-6 overflow-y-auto"
       style={{
+        height: "calc(100dvh - 140px)",
         background:
           "radial-gradient(ellipse 80% 40% at 50% -10%, hsl(var(--primary) / 0.18) 0%, transparent 70%)",
       }}
     >
-      <div className="mb-10 space-y-3 text-center">
-        <div className="mb-2 inline-flex h-16 w-16 items-center justify-center rounded-2xl border border-primary/20 bg-primary/10">
-          <Video className="h-8 w-8 text-primary" />
+      <div className="mb-4 space-y-2 text-center">
+        <div className="mb-2 inline-flex h-14 w-14 items-center justify-center rounded-2xl border border-primary/20 bg-primary/10">
+          <Video className="h-7 w-7 text-primary" />
         </div>
-        <h1 className="text-4xl font-bold tracking-tight">Try a Live Video Call</h1>
-        <p className="mx-auto max-w-xs text-base leading-relaxed text-muted-foreground">No account needed. Enter your name, share the room link, and start talking.</p>
+        <h1 className="text-3xl font-bold tracking-tight">Try a Live Video Call</h1>
+        <p className="mx-auto max-w-xs text-sm leading-relaxed text-muted-foreground">No account needed. Enter your name, share the room link, and start talking.</p>
       </div>
 
-      <div className="glass w-full max-w-md space-y-5 rounded-2xl border border-border/60 bg-card/80 p-7 shadow-2xl">
+      <div className="glass w-full max-w-md space-y-4 rounded-2xl border border-border/60 bg-card/80 p-5 shadow-2xl">
         <div className="space-y-1.5">
           <Label htmlFor="participant-name">Your Name</Label>
           <Input

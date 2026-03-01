@@ -1,7 +1,7 @@
 /**
  * Storage Service — S3-compatible object storage with MongoDB GridFS fallback.
  *
- * Behaviour is determined at module load by the presence of S3 environment
+ * Behaviour is determined at first use by the presence of S3 environment
  * variables (Law 2 — single ingress, Law 3 — explicit effect handlers):
  *
  *   S3 mode  (s3Enabled = true):
@@ -17,6 +17,9 @@
  * The exported function signatures are IDENTICAL in both modes so that
  * callers (uploadAvatar, uploadResume, uploadChatFile controllers) require
  * zero changes.
+ *
+ * Config is read lazily on first use rather than at module-load time so that
+ * the module can be imported before the test-runner preload has run.
  *
  * S3 env vars consumed (all optional — absence activates GridFS fallback):
  *   S3_ENDPOINT   — e.g. https://nyc3.digitaloceanspaces.com
@@ -34,8 +37,6 @@ import { gridfsDelete, gridfsGetFileId, gridfsUpload } from "./gridfsStorage";
 
 // ── Bootstrap ──────────────────────────────────────────────────────────────
 
-const _env = getBackendEnvironmentConfig();
-
 // Bundle the S3 client together with the bucket/endpoint strings so that all
 // S3 operations receive typed non-nullable values (no conditional checks after
 // the null guard at the function entry point).
@@ -45,8 +46,13 @@ interface S3Bundle {
   endpoint: string;
 }
 
+// Lazy-initialised S3 state: undefined = not yet resolved,
+// null = resolved to GridFS mode, S3Bundle = resolved to S3 mode.
+let _s3State: S3Bundle | null | undefined = undefined;
+
 function _buildS3Bundle(): S3Bundle | null {
-  const { s3Endpoint, s3Region, s3Bucket, s3AccessKey, s3SecretKey } = _env;
+  const { s3Endpoint, s3Region, s3Bucket, s3AccessKey, s3SecretKey } =
+    getBackendEnvironmentConfig();
 
   // All five vars must be present for S3 mode to activate.
   if (
@@ -76,13 +82,18 @@ function _buildS3Bundle(): S3Bundle | null {
   };
 }
 
-// Evaluated once at startup — null → GridFS mode, non-null → S3 mode.
-const _s3: S3Bundle | null = _buildS3Bundle();
-
-if (_s3 === null) {
-  console.log("[storage] S3 not configured — using MongoDB GridFS fallback");
-} else {
-  console.log(`[storage] S3 enabled — bucket: ${_s3.bucket}`);
+// Resolved once on first use — null → GridFS mode, non-null → S3 mode.
+function _getS3(): S3Bundle | null {
+  if (_s3State !== undefined) {
+    return _s3State;
+  }
+  _s3State = _buildS3Bundle();
+  if (_s3State === null) {
+    console.log("[storage] S3 not configured — using MongoDB GridFS fallback");
+  } else {
+    console.log(`[storage] S3 enabled — bucket: ${_s3State.bucket}`);
+  }
+  return _s3State;
 }
 
 // ── Internal helpers ───────────────────────────────────────────────────────
@@ -105,11 +116,12 @@ export async function uploadFile(
   key: string,
   contentType: string
 ): Promise<string> {
-  if (_s3 !== null) {
+  const s3 = _getS3();
+  if (s3 !== null) {
     const upload = new Upload({
-      client: _s3.client,
+      client: s3.client,
       params: {
-        Bucket: _s3.bucket,
+        Bucket: s3.bucket,
         Key: key,
         Body: buffer,
         ContentType: contentType,
@@ -117,7 +129,7 @@ export async function uploadFile(
       },
     });
     await upload.done();
-    return _s3PublicUrl(_s3, key);
+    return _s3PublicUrl(s3, key);
   }
 
   // GridFS fallback
@@ -132,9 +144,10 @@ export async function uploadFile(
  * GridFS mode: deletes all GridFS files with matching filename.
  */
 export async function deleteFile(key: string): Promise<void> {
-  if (_s3 !== null) {
-    await _s3.client.send(
-      new DeleteObjectCommand({ Bucket: _s3.bucket, Key: key })
+  const s3 = _getS3();
+  if (s3 !== null) {
+    await s3.client.send(
+      new DeleteObjectCommand({ Bucket: s3.bucket, Key: key })
     );
     return;
   }
@@ -154,9 +167,10 @@ export async function deleteFile(key: string): Promise<void> {
  * @param expiresIn Lifetime in seconds (S3 mode only; default 3600).
  */
 export async function getSignedUrl(key: string, expiresIn: number = 3600): Promise<string> {
-  if (_s3 !== null) {
-    const command = new PutObjectCommand({ Bucket: _s3.bucket, Key: key });
-    return awsGetSignedUrl(_s3.client, command, { expiresIn });
+  const s3 = _getS3();
+  if (s3 !== null) {
+    const command = new PutObjectCommand({ Bucket: s3.bucket, Key: key });
+    return awsGetSignedUrl(s3.client, command, { expiresIn });
   }
 
   // GridFS: resolve the stored ObjectId for this key so the URL matches

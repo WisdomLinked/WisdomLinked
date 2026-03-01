@@ -7,7 +7,6 @@ import { getBackendEnvironmentConfig } from "../../config/env";
 
 type AuthenticatedContext = Context & { user: AuthUser };
 type UserIdParams = { id: string };
-const { frontendUrl } = getBackendEnvironmentConfig();
 
 // Generate password reset link
 export const generatePasswordResetLinkController = new Elysia()
@@ -17,6 +16,8 @@ export const generatePasswordResetLinkController = new Elysia()
 
     try {
       const { id } = params;
+      // Read config lazily inside the handler to avoid module-level caching.
+      const { frontendUrl } = getBackendEnvironmentConfig();
 
       const targetUser = await UserModel.findById(id).select("+passwordResetToken +passwordResetExpires");
 

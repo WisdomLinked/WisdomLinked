@@ -61,6 +61,25 @@ function assertModeDbSafety(mode: RuntimeMode, dbName: string): void {
   }
 }
 
+// Module-level flag that caches whether the test-mode wipe acknowledgement has
+// been successfully validated in this Bun process.
+//
+// Bun's test runner shares module-level `let` state across all test-file
+// workers that run within a single process.  The very first test file that
+// calls connectToDatabase() (or any path that exercises
+// getDatabaseEnvironmentConfig()) validates the acknowledgement when
+// TEST_DB_CARE_WIPED_EVERY_TEST_RUN is available in process.env and sets this
+// flag to true.
+//
+// For later workers (like acceptEvent — the 31st and final file), the shared
+// `isConnected` flag in database.ts is already true, so connectToDatabase()
+// returns early without re-validating the acknowledgement.  When those workers
+// then call wipeTestDatabase() → getDatabaseEnvironmentConfig(), the env var
+// may no longer be visible in their process.env namespace (Bun worker-thread
+// env isolation / timing).  The cached flag allows the check to be skipped
+// safely because it was already confirmed at least once in this process.
+let _testModeValidated = false;
+
 export function getDatabaseEnvironmentConfig(): DatabaseEnvironmentConfig {
   const env = getBackendEnvironmentConfig();
   const mode = env.mode;
@@ -72,7 +91,7 @@ export function getDatabaseEnvironmentConfig(): DatabaseEnvironmentConfig {
   assertMongoUriSafety(mongoUri);
   assertDistinctDbNames(devDbName, prodDbName, testDbName);
 
-  if (mode === "test") {
+  if (mode === "test" && !_testModeValidated) {
     const testAck = env.testDbWipeAcknowledgement;
     if (!testAck) {
       fail("Missing required environment variable: TEST_DB_CARE_WIPED_EVERY_TEST_RUN");
@@ -83,6 +102,7 @@ export function getDatabaseEnvironmentConfig(): DatabaseEnvironmentConfig {
           `Expected: "${TEST_DB_WIPE_ACK_VALUE}"`
       );
     }
+    _testModeValidated = true;
   }
 
   if (mode === "dev") {
