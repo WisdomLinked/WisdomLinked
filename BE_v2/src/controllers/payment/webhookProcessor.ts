@@ -228,7 +228,8 @@ export async function processWebhookPayload(payload: WebhookEventPayload): Promi
       break;
 
     case "unhandled":
-      await logInfo(`Unhandled webhook event: ${payload.originalType}`);
+      // Logging is a fire-and-forget side effect — must not block the handler.
+      void logInfo(`Unhandled webhook event: ${payload.originalType}`);
       break;
   }
 }
@@ -249,7 +250,15 @@ export async function processStripeEvent(event: Stripe.Event): Promise<void> {
 async function handleCheckoutCompleted(data: CheckoutCompletedPayload): Promise<void> {
   if (!data.userId) return;
 
-  await logInfo("Checkout completed", {
+  // Logging is a fire-and-forget observability side effect (Law 3: effects must
+  // not block the pure core). Awaiting logInfo() ties processWebhookPayload's
+  // resolution to LogModel.create() — a DB write that is unrelated to the
+  // business outcome.  When the Mongoose connection is under load the write can
+  // buffer for up to bufferTimeoutMS (default 10 s), which races against the
+  // test/request timeout.  Using void makes the intent explicit and removes the
+  // blocking.  createLog() already has an internal try/catch so failures are
+  // never propagated.
+  void logInfo("Checkout completed", {
     userId: data.userId,
     sessionId: data.sessionId,
     mode: data.mode,
@@ -285,7 +294,7 @@ async function handleSubscriptionUpsert(data: SubscriptionUpsertPayload): Promis
     );
   }
 
-  await logInfo("Subscription upserted", {
+  void logInfo("Subscription upserted", {
     userId: data.userId,
     subscriptionId: data.stripeSubscriptionId,
     status: data.normalized.status,
@@ -309,7 +318,7 @@ async function handleSubscriptionDelete(data: SubscriptionDeletePayload): Promis
     );
   }
 
-  await logInfo("Subscription deleted", { subscriptionId: data.stripeSubscriptionId });
+  void logInfo("Subscription deleted", { subscriptionId: data.stripeSubscriptionId });
 }
 
 async function handlePaymentSucceeded(data: PaymentSucceededPayload): Promise<void> {
@@ -327,7 +336,7 @@ async function handlePaymentSucceeded(data: PaymentSucceededPayload): Promise<vo
     metadata: data.metadata,
   });
 
-  await logInfo("Payment succeeded", {
+  void logInfo("Payment succeeded", {
     userId: data.userId,
     paymentIntentId: data.paymentIntentId,
     amount: data.amount,
@@ -350,7 +359,7 @@ async function handlePaymentFailed(data: PaymentFailedPayload): Promise<void> {
     failureReason: data.failureReason ?? undefined,
   });
 
-  await logInfo("Payment failed", {
+  void logInfo("Payment failed", {
     userId: data.userId,
     paymentIntentId: data.paymentIntentId,
     reason: data.failureReason,
