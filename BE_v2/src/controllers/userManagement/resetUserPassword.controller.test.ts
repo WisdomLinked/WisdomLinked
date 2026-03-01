@@ -8,6 +8,9 @@ import {
   authHeader,
 } from "../../../test/helpers";
 import { UserRole } from "../../config/roles";
+import { UserModel, AuthMethod } from "../../models/User";
+import { generateToken } from "../../utils/jwt";
+import { SessionModel } from "../../models/Session";
 
 describe("Reset User Password Controller", () => {
   let app: TestApp;
@@ -22,11 +25,20 @@ describe("Reset User Password Controller", () => {
 
   it("should reset user password for admin", async () => {
     const admin = await createTestUser("rup-admin", "rup-admin@test.com", UserRole.ADMIN);
-    const target = await createTestUser("rup-target", "rup-target@test.com");
+    // Must explicitly set authMethods — createTestUser default may not include LOCAL
+    const targetDoc = await UserModel.create({
+      username: "rup-target",
+      email: "rup-target@test.com",
+      password: "hashedpassword123",
+      role: UserRole.CUSTOMER,
+      isActive: true,
+      authMethods: [AuthMethod.LOCAL],
+    });
+    const targetId = targetDoc._id.toString();
 
     const response = await app.handle(
       new Request(
-        `http://localhost/api/v1/user-management/users/${target.id}/reset-password`,
+        `http://localhost/api/v1/user-management/users/${targetId}/reset-password`,
         {
           method: "POST",
           headers: jsonHeaders(admin.token),
@@ -38,7 +50,7 @@ describe("Reset User Password Controller", () => {
     expect(response.status).toBe(200);
     const data = await response.json();
     expect(data.message).toBeDefined();
-    expect(data.user.id).toBe(target.id);
+    expect(data.user.id).toBe(targetId);
   });
 
   it("should reject invalid password (too short)", async () => {
@@ -62,13 +74,38 @@ describe("Reset User Password Controller", () => {
 
   it("should invalidate sessions after reset", async () => {
     const admin = await createTestUser("rup-admin3", "rup-admin3@test.com", UserRole.ADMIN);
-    const target = await createTestUser("rup-session", "rup-session@test.com");
-    const oldToken = target.token;
+
+    // Must explicitly set authMethods so password reset succeeds
+    const targetDoc = await UserModel.create({
+      username: "rup-session",
+      email: "rup-session@test.com",
+      password: "hashedpassword123",
+      role: UserRole.CUSTOMER,
+      isActive: true,
+      authMethods: [AuthMethod.LOCAL],
+    });
+    const targetId = targetDoc._id.toString();
+
+    // Create a session for this user
+    const targetToken = generateToken({
+      userId: targetId,
+      username: "rup-session",
+      email: "rup-session@test.com",
+      role: UserRole.CUSTOMER,
+    });
+    await SessionModel.create({
+      userId: targetId,
+      token: targetToken,
+      ipAddress: "127.0.0.1",
+      userAgent: "test-agent",
+      expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+      isActive: true,
+    });
 
     // Reset the password — invalidates all sessions for that user
-    await app.handle(
+    const resetResponse = await app.handle(
       new Request(
-        `http://localhost/api/v1/user-management/users/${target.id}/reset-password`,
+        `http://localhost/api/v1/user-management/users/${targetId}/reset-password`,
         {
           method: "POST",
           headers: jsonHeaders(admin.token),
@@ -76,12 +113,13 @@ describe("Reset User Password Controller", () => {
         }
       )
     );
+    expect(resetResponse.status).toBe(200);
 
     // Old session token should now be rejected
     const meResponse = await app.handle(
       new Request("http://localhost/api/v1/auth/me", {
         method: "GET",
-        headers: authHeader(oldToken),
+        headers: authHeader(targetToken),
       })
     );
 

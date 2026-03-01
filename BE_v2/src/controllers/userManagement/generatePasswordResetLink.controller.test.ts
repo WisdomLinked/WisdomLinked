@@ -7,6 +7,7 @@ import {
   authHeader,
 } from "../../../test/helpers";
 import { UserRole } from "../../config/roles";
+import { UserModel, AuthMethod } from "../../models/User";
 
 describe("Generate Password Reset Link Controller", () => {
   let app: TestApp;
@@ -21,11 +22,20 @@ describe("Generate Password Reset Link Controller", () => {
 
   it("should generate password reset link for admin", async () => {
     const admin = await createTestUser("gprl-admin", "gprl-admin@test.com", UserRole.ADMIN);
-    const target = await createTestUser("gprl-target", "gprl-target@test.com");
+    // Must explicitly set authMethods — createTestUser default may not include LOCAL
+    const targetDoc = await UserModel.create({
+      username: "gprl-target",
+      email: "gprl-target@test.com",
+      password: "hashedpassword123",
+      role: UserRole.CUSTOMER,
+      isActive: true,
+      authMethods: [AuthMethod.LOCAL],
+    });
+    const targetId = targetDoc._id.toString();
 
     const response = await app.handle(
       new Request(
-        `http://localhost/api/v1/user-management/users/${target.id}/generate-reset-link`,
+        `http://localhost/api/v1/user-management/users/${targetId}/generate-reset-link`,
         {
           method: "POST",
           headers: authHeader(admin.token),
