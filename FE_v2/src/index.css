@@ -18,12 +18,13 @@
 @custom-variant dark (&:is(.dark *));
 
 /*
- * :root fallback — mirrors midnight theme values so the app renders correctly
+ * Fallback — mirrors midnight theme values so the app renders correctly
  * before ThemeProvider has mounted and set data-theme on <html>.
- * The [data-theme="midnight"] selector in midnight.css always wins once JS
- * applies the attribute, so there is no conflict.
+ * Uses html:not([data-theme]) so the fallback STOPS matching once JS sets
+ * the attribute — avoiding specificity ties with the [data-theme] selectors
+ * in midnight.css / ocean.css (both are (0,1,0) — same as :root).
  */
-:root {
+html:not([data-theme]) {
   --background: 0 0% 0%;
   --foreground: 0 0% 100%;
   --card: 0 0% 7.8%;
