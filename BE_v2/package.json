@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "bun run --watch src/server.ts",
     "start": "bun run src/server.ts",
-    "test": "NODE_ENV=test EPHEMERAL_TEST_DB_NAME=wisdomlinked_test TEST_DB_CARE_WIPED_EVERY_TEST_RUN=I_UNDERSTAND_THIS_TEST_DB_IS_WIPED_EVERY_TEST_RUN SENDGRID_API_KEY=test-sendgrid-key SENDGRID_FROM_EMAIL=test@wisdomlinked.com S3_ENDPOINT=https://s3.amazonaws.com S3_REGION=us-east-1 S3_BUCKET=test-bucket S3_ACCESS_KEY=test-access-key S3_SECRET_KEY=test-secret-key STRIPE_SECRET_KEY=sk_test_stub_key STRIPE_WEBHOOK_SECRET=whsec_test_stub_secret bun test --bail --timeout 10000",
+    "test": "NODE_ENV=test EPHEMERAL_TEST_DB_NAME=wisdomlinked_test TEST_DB_CARE_WIPED_EVERY_TEST_RUN=I_UNDERSTAND_THIS_TEST_DB_IS_WIPED_EVERY_TEST_RUN SENDGRID_API_KEY=test-sendgrid-key SENDGRID_FROM_EMAIL=test@wisdomlinked.com S3_ENDPOINT=https://s3.amazonaws.com S3_REGION=us-east-1 S3_BUCKET=test-bucket S3_ACCESS_KEY=test-access-key S3_SECRET_KEY=test-secret-key STRIPE_SECRET_KEY=sk_test_stub_key STRIPE_WEBHOOK_SECRET=whsec_test_stub_secret bun test --bail --timeout 10000 --coverage",
     "format": "prettier --write .",
     "lint": "eslint . --report-unused-disable-directives --max-warnings 0 && tsc --noEmit",
     "typecheck": "tsc --noEmit",

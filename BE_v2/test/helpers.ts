@@ -75,11 +75,13 @@ function assertConnectedTestDatabaseInterlock(operation: string): { testDbName: 
 }
 
 /**
- * Wipe all test data from the database
- * This should be called between tests or in beforeEach hooks
+ * Wipe all test data from the database.
+ * Uses collection-level deleteMany instead of dropDatabase to avoid
+ * destroying indexes — dropDatabase + parallel test files causes
+ * IndexBuildAborted race conditions when one file's dropDatabase kills
+ * another file's in-flight index rebuild.
  */
 export async function wipeTestDatabase() {
-  // Safety gate is enforced at wipe-time so test files cannot bypass it by call ordering.
   ensureTestDatabase();
   const { testDbName } = assertConnectedTestDatabaseInterlock("wipeTestDatabase");
 
@@ -89,8 +91,10 @@ export async function wipeTestDatabase() {
       throw new Error("Database connection is not available");
     }
 
-    // Single-command drop after interlock checks to avoid partial wipes.
-    await db.dropDatabase();
+    const collections = await db.listCollections().toArray();
+    await Promise.all(
+      collections.map((c) => db.collection(c.name).deleteMany({}))
+    );
   } catch (error) {
     console.error(`Error wiping test database (${testDbName}):`, error);
     throw error;
