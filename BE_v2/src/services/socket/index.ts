@@ -36,12 +36,18 @@ import type {
 function isSocketIoCompatibleServer(
   value: unknown,
 ): value is import("node:http").Server {
-  return (
-    value !== null &&
-    typeof value === "object" &&
-    "on" in (value as object) &&
-    typeof (value as Record<string, unknown>)["on"] === "function"
-  );
+  if (value === null || typeof value !== "object") return false;
+  const obj = value as Record<string, unknown>;
+
+  // Node http.Server — has .on() event emitter method
+  const isNodeServer = typeof obj["on"] === "function";
+
+  // Bun.Server — has .fetch(), .port, .hostname (socket.io ≥ 4.7.5 supports this)
+  const isBunServer =
+    typeof obj["fetch"] === "function" &&
+    typeof obj["port"] === "number";
+
+  return isNodeServer || isBunServer;
 }
 
 /**

@@ -54,9 +54,11 @@ export interface BackendEnvironmentConfig {
   stripeSecretKey?: string;
   stripeWebhookSecret?: string;
   stripeEnabled: boolean;
+  // LiveKit — optional; livekitEnabled is true only when both keys are present
   livekitApiKey?: string;
   livekitApiSecret?: string;
   livekitUrl?: string;
+  livekitEnabled: boolean;
   adminDefaultEmail?: string;
   adminDefaultPassword?: string;
 }
@@ -165,6 +167,7 @@ export function getBackendEnvironmentConfig(): BackendEnvironmentConfig {
   const livekitApiKey = optionalEnv("LIVEKIT_API_KEY");
   const livekitApiSecret = optionalEnv("LIVEKIT_API_SECRET");
   const livekitUrl = optionalEnv("LIVEKIT_URL");
+  const livekitEnabled = livekitApiKey !== undefined && livekitApiSecret !== undefined;
   const adminDefaultEmail = optionalEnv("ADMIN_DEFAULT_EMAIL");
   const adminDefaultPassword = optionalEnv("ADMIN_DEFAULT_PASSWORD");
 
@@ -194,6 +197,7 @@ export function getBackendEnvironmentConfig(): BackendEnvironmentConfig {
     livekitApiKey,
     livekitApiSecret,
     livekitUrl,
+    livekitEnabled,
     adminDefaultEmail,
     adminDefaultPassword,
   };

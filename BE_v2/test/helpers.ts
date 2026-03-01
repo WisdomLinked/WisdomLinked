@@ -16,6 +16,14 @@ import { getDatabaseEnvironmentConfig } from "../src/config/database-env";
  * Runs after all tests in any file that imports helpers.ts.
  * Drops the isolated test database created by env-setup.ts for this worker.
  * Does NOT disconnect Mongoose — disconnecting races with other workers.
+ *
+ * Safety: Before calling dropDatabase(), we attach .catch() handlers to every
+ * model's init() promise. Dropping the DB while Mongoose's background index
+ * builds are still in flight causes those builds to reject with
+ * IndexBuildAborted (code 276). Without explicit handlers these propagate as
+ * unhandled rejections in Bun's worker-thread model and get incorrectly
+ * attributed to an unrelated test running in a parallel worker.
+ * By pre-attaching handlers we ensure those rejections are always handled.
  */
 afterAll(async () => {
   const db = mongoose.connection.db;
@@ -24,16 +32,39 @@ afterAll(async () => {
   }
   const dbName = db.databaseName;
   // Only drop per-file isolated databases (those with the UUID suffix added by env-setup.ts).
-  // The shared fallback name "wisdomlinked_test" (no trailing underscore+UUID) is intentionally skipped.
+  // The shared fallback name "wisdomlinked_test" (no trailing underscore+UUID) is skipped.
   if (!dbName.startsWith("wisdomlinked_test_")) {
     return;
   }
+
+  // Attach rejection handlers to every model's init() promise so that
+  // IndexBuildAborted errors from aborted background index builds are caught
+  // rather than surfacing as unhandled rejections.
+  const modelInits = mongoose.modelNames().map((name) =>
+    mongoose.model(name).init().catch((err: unknown) => {
+      const isIndexBuildAborted =
+        err !== null &&
+        typeof err === "object" &&
+        "code" in err &&
+        (err as Record<string, unknown>).code === 276;
+      if (!isIndexBuildAborted) {
+        // Unexpected error — log it so it is not silently swallowed.
+        console.error(`[helpers] afterAll: model "${name}" init error:`, err);
+      }
+      // IndexBuildAborted (code 276) is expected during database cleanup.
+    })
+  );
+
   try {
     await db.dropDatabase();
   } catch (err) {
-    // Log cleanup failures — they do not affect test results but should be visible.
+    // Cleanup failures are best-effort; they do not affect test results.
     console.error(`[helpers] afterAll: failed to drop test database "${dbName}":`, err);
   }
+
+  // Wait for all model init promises to settle so no pending rejections
+  // remain when this worker exits.
+  await Promise.allSettled(modelInits);
 });
 
 /**
