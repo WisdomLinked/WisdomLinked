@@ -4,7 +4,6 @@ import {
   type TestApp,
   wipeTestDatabase,
   createTestUser,
-  authHeader,
   jsonHeaders,
 } from "../../../test/helpers";
 import { UserRole } from "../../config/roles";
