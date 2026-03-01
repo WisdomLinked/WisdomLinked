@@ -45,8 +45,8 @@ const {
 } = require('../controllers/chatBotQA.controller')
 
 router.post("/register", uploads, register);
-router.post("/updateResume", uploads, updateResume);
-router.post("/uploadChatFile", uploads, uploadChatFile);
+router.post("/updateResume", requireAuth(false), uploads, updateResume);
+router.post("/uploadChatFile", requireAuth(false), uploads, uploadChatFile);
 router.post("/resendConfirmEmail", resendConfirmEmail);
 router.post("/verifyRegistration", verifyRegistration);
 router.post("/login", validateLoginSchema, login);
@@ -59,7 +59,7 @@ router.post("/updateProfile", requireAuth(false), updateProfile);
 router.post("/getEventsBetweenCustomerAndExpert", requireAuth(false), getEventsBetweenCustomerAndExpert);
 router.get("/me", requireAuth(false), getMe);
 router.get("/getMyEvents", requireAuth(false), getMyEvents);
-router.post("/submit", uploads, handleSubmit)
+router.post("/submit", requireAuth(false), uploads, handleSubmit)
 router.post("/leaveFeedback", requireAuth(false), leaveFeedback)
 router.post("/stripePay", requireAuth(false), stripePay)
 router.post("/createStripePaymentIntent", requireAuth(false), createStripePaymentIntent)

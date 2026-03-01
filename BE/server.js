@@ -75,8 +75,17 @@
 
     app.use(express.static('./uploads'));
     app.get('/uploads/*', (req, res) => {
-        const fileName = path.basename(req.path);
-        res.sendFile(decodeURI(fileName), { root: path.join(__dirname, `.${req.path.replace(fileName, '')}`) });
+        // Decode URI and resolve the full path
+        const requestedPath = decodeURI(req.path);
+        const safePath = path.resolve(path.join(__dirname, '.', requestedPath));
+        const uploadsRoot = path.resolve(path.join(__dirname, './uploads'));
+
+        // CRITICAL: Ensure resolved path is within uploads directory
+        if (!safePath.startsWith(uploadsRoot + path.sep) && safePath !== uploadsRoot) {
+            return res.status(403).json({ error: 'Access denied' });
+        }
+
+        res.sendFile(safePath);
     });
 
 

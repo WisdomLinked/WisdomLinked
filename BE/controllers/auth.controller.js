@@ -619,7 +619,8 @@ const uploadChatFile = async (req, res) => {
 const uploadFileToS3 = async (file, folder) => {
     try {
         const timestamp = Date.now();
-        const key = `${folder}/${timestamp}_${file.originalname}`;
+        const sanitizedName = path.basename(file.originalname).replace(/[^a-zA-Z0-9._-]/g, '_');
+        const key = `${folder}/${timestamp}_${sanitizedName}`;
         // Upload the file to DigitalOcean Spaces
         const params = {
             Bucket: process.env.DO_SPACES_BUCKET,
@@ -665,7 +666,8 @@ const handleSubmit = async (req, res) => {
             // If the directory doesn't exist, create it
             fs.mkdirSync(directory, { recursive: true });
         }
-        const filePath = path.join(__dirname, '../uploads/docs', `${new Date().getTime()}_${file.originalname}`);
+        const sanitizedName = path.basename(file.originalname).replace(/[^a-zA-Z0-9._-]/g, '_');
+        const filePath = path.join(__dirname, '../uploads/docs', `${new Date().getTime()}_${sanitizedName}`);
         fs.writeFileSync(filePath, file.buffer);
 
         res.status(200).send('SUCCESS')
