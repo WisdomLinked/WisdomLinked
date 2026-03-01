@@ -8,9 +8,9 @@
  * objects so callers depend only on well-typed internal representations, never
  * on raw Stripe response shapes.
  *
- * Env vars consumed (via getBackendEnvironmentConfig):
- *   STRIPE_SECRET_KEY      — required
- *   STRIPE_WEBHOOK_SECRET  — required
+ * Env vars consumed (via getBackendEnvironmentConfig — both optional):
+ *   STRIPE_SECRET_KEY      — absent → Stripe disabled, functions throw on call
+ *   STRIPE_WEBHOOK_SECRET  — absent → Stripe disabled, functions throw on call
  */
 
 import Stripe from "stripe";
@@ -20,9 +20,40 @@ import { getBackendEnvironmentConfig } from "../config/env";
 
 const _env = getBackendEnvironmentConfig();
 
-const _stripe = new Stripe(_env.stripeSecretKey, {
-  apiVersion: "2026-02-25.clover",
-});
+// Bundle both Stripe credentials so the null check is a single guard that
+// also narrows webhookSecret to string in the non-null branch.
+interface StripeBundle {
+  client: Stripe;
+  webhookSecret: string;
+}
+
+function _buildStripeBundle(): StripeBundle | null {
+  const { stripeSecretKey, stripeWebhookSecret } = _env;
+  if (stripeSecretKey === undefined || stripeWebhookSecret === undefined) {
+    return null;
+  }
+  return {
+    client: new Stripe(stripeSecretKey, { apiVersion: "2026-02-25.clover" }),
+    webhookSecret: stripeWebhookSecret,
+  };
+}
+
+// null → Stripe not configured; exported functions throw a typed error message.
+const _stripeBundle: StripeBundle | null = _buildStripeBundle();
+
+if (_stripeBundle === null) {
+  console.log("[payment] Stripe not configured — payment endpoints will return 503");
+}
+
+function _requireStripe(): StripeBundle {
+  if (_stripeBundle === null) {
+    throw new Error(
+      "Stripe is not configured. " +
+        "Set STRIPE_SECRET_KEY and STRIPE_WEBHOOK_SECRET environment variables."
+    );
+  }
+  return _stripeBundle;
+}
 
 // ── Public API ─────────────────────────────────────────────────────────────
 
@@ -38,7 +69,8 @@ export async function createPaymentIntent(
   currency: string,
   metadata: Record<string, string>
 ): Promise<Stripe.PaymentIntent> {
-  return _stripe.paymentIntents.create({
+  const { client } = _requireStripe();
+  return client.paymentIntents.create({
     amount,
     currency,
     metadata,
@@ -54,7 +86,8 @@ export async function createPaymentIntent(
 export async function confirmPaymentIntent(
   paymentIntentId: string
 ): Promise<Stripe.PaymentIntent> {
-  return _stripe.paymentIntents.confirm(paymentIntentId);
+  const { client } = _requireStripe();
+  return client.paymentIntents.confirm(paymentIntentId);
 }
 
 /**
@@ -68,11 +101,12 @@ export async function refundPayment(
   paymentIntentId: string,
   amount?: number
 ): Promise<Stripe.Refund> {
+  const { client } = _requireStripe();
   const params: Stripe.RefundCreateParams = {
     payment_intent: paymentIntentId,
     ...(amount !== undefined ? { amount } : {}),
   };
-  return _stripe.refunds.create(params);
+  return client.refunds.create(params);
 }
 
 /**
@@ -86,7 +120,8 @@ export async function refundPayment(
  * @param signature Value of the `Stripe-Signature` header.
  */
 export function constructWebhookEvent(body: string, signature: string): Stripe.Event {
-  return _stripe.webhooks.constructEvent(body, signature, _env.stripeWebhookSecret);
+  const { client, webhookSecret } = _requireStripe();
+  return client.webhooks.constructEvent(body, signature, webhookSecret);
 }
 
 /**
@@ -95,7 +130,8 @@ export function constructWebhookEvent(body: string, signature: string): Stripe.E
  * @param paymentIntentId The `pi_…` identifier.
  */
 export async function getPaymentIntent(paymentIntentId: string): Promise<Stripe.PaymentIntent> {
-  return _stripe.paymentIntents.retrieve(paymentIntentId);
+  const { client } = _requireStripe();
+  return client.paymentIntents.retrieve(paymentIntentId);
 }
 
 /**
@@ -105,7 +141,8 @@ export async function getPaymentIntent(paymentIntentId: string): Promise<Stripe.
  * @param name  Customer display name.
  */
 export async function createCustomer(email: string, name: string): Promise<Stripe.Customer> {
-  return _stripe.customers.create({ email, name });
+  const { client } = _requireStripe();
+  return client.customers.create({ email, name });
 }
 
 /**
@@ -118,7 +155,8 @@ export async function listPaymentsByCustomer(
   customerId: string,
   limit: number = 10
 ): Promise<Stripe.PaymentIntent[]> {
-  const response = await _stripe.paymentIntents.list({
+  const { client } = _requireStripe();
+  const response = await client.paymentIntents.list({
     customer: customerId,
     limit,
   });

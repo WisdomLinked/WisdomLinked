@@ -5,9 +5,9 @@
  * Email is a notification mechanism — a failed send MUST NOT crash the calling
  * request.  Callers that need to know about delivery status should check logs.
  *
- * Env vars consumed (via getBackendEnvironmentConfig):
- *   SENDGRID_API_KEY    — required
- *   SENDGRID_FROM_EMAIL — required
+ * Env vars consumed (via getBackendEnvironmentConfig — both optional):
+ *   SENDGRID_API_KEY    — absent → sendgridEnabled=false, all sends are no-ops
+ *   SENDGRID_FROM_EMAIL — absent → sendgridEnabled=false, all sends are no-ops
  */
 
 import sgMail from "@sendgrid/mail";
@@ -16,9 +16,22 @@ import { getBackendEnvironmentConfig } from "../config/env";
 // ── Bootstrap ──────────────────────────────────────────────────────────────
 
 const _env = getBackendEnvironmentConfig();
-sgMail.setApiKey(_env.sendgridApiKey);
 
-const FROM_ADDRESS = { email: _env.sendgridFromEmail, name: "WisdomLinked" };
+// Initialise SendGrid only when both credentials are present.
+// When sendgridEnabled is false all send functions are no-ops that log a warning
+// (Law 9 — explicit failure semantics; fire-and-forget email must not crash).
+const _sendgridApiKey = _env.sendgridApiKey;
+if (_sendgridApiKey !== undefined) {
+  sgMail.setApiKey(_sendgridApiKey);
+}
+
+// FROM_ADDRESS is null when SendGrid is not configured.  All _dispatch calls
+// guard on this value so the send path is never reached without credentials.
+const _sendgridFromEmail = _env.sendgridFromEmail;
+const FROM_ADDRESS: { email: string; name: string } | null =
+  _sendgridFromEmail !== undefined
+    ? { email: _sendgridFromEmail, name: "WisdomLinked" }
+    : null;
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -38,6 +51,12 @@ export interface PaymentConfirmationDetails {
 // ── Internal helper ────────────────────────────────────────────────────────
 
 async function _dispatch(to: string, subject: string, html: string): Promise<void> {
+  if (FROM_ADDRESS === null) {
+    // SendGrid not configured — log and skip silently so callers are unaffected.
+    console.warn("[email] SendGrid not configured — skipping email send", { to, subject });
+    return;
+  }
+
   try {
     await sgMail.send({
       to,
@@ -176,7 +195,11 @@ export async function sendPaymentConfirmation(
  * address env var is configured.
  */
 export async function sendAdminAlert(subject: string, body: string): Promise<void> {
-  const adminTo = _env.sendgridFromEmail;
+  if (FROM_ADDRESS === null) {
+    console.warn("[email] SendGrid not configured — skipping admin alert", { subject });
+    return;
+  }
+  const adminTo = FROM_ADDRESS.email;
   const html = `
     <div style="font-family:monospace;max-width:700px;margin:0 auto;">
       <h2 style="color:#c0392b;">⚠ Admin Alert</h2>

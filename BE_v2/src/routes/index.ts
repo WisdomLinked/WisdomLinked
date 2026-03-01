@@ -1,5 +1,6 @@
 import { Elysia } from "elysia";
 import { authRoutes } from "./v1/auth";
+import { filesRoutes } from "./v1/files";
 import { logsRoutes } from "./v1/logs";
 import { metricsRoutes } from "./v1/metrics";
 import { userRoutes } from "./v1/users";
@@ -22,6 +23,8 @@ import { adminChatsRoutes } from "./v1/adminChats";
 export const routes = new Elysia()
   // Auth routes (public + protected)
   .use(authRoutes)
+  // GridFS file-serving route (active in GridFS storage mode)
+  .use(filesRoutes)
   // OAuth routes
   .use(oauthRoutes)
   // Payment routes (public + protected + admin)

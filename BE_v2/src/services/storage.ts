@@ -1,108 +1,173 @@
 /**
- * Storage Service — S3-compatible object storage (DigitalOcean Spaces / AWS S3).
+ * Storage Service — S3-compatible object storage with MongoDB GridFS fallback.
  *
- * All operations use the AWS SDK v3.  The S3 client is initialised once at
- * module load from the typed env config so there is a single ingress point
- * for credentials (Law 2, Law 3).
+ * Behaviour is determined at module load by the presence of S3 environment
+ * variables (Law 2 — single ingress, Law 3 — explicit effect handlers):
  *
- * Public URL format: {S3_ENDPOINT}/{S3_BUCKET}/{key}
+ *   S3 mode  (s3Enabled = true):
+ *     All five S3 env vars are present.  Files are stored in the configured
+ *     S3-compatible bucket and public URLs are returned as
+ *     {S3_ENDPOINT}/{S3_BUCKET}/{key}.
  *
- * Env vars consumed (via getBackendEnvironmentConfig):
- *   S3_ENDPOINT   — required (e.g. https://nyc3.digitaloceanspaces.com)
- *   S3_REGION     — required
- *   S3_BUCKET     — required
- *   S3_ACCESS_KEY — required
- *   S3_SECRET_KEY — required
+ *   GridFS mode (s3Enabled = false):
+ *     One or more S3 env vars are absent.  Files are stored in the MongoDB
+ *     "uploads" GridFS bucket and URLs are returned as /api/v1/files/{objectId}.
+ *     The GET /api/v1/files/:id route (routes/v1/files.ts) serves these files.
+ *
+ * The exported function signatures are IDENTICAL in both modes so that
+ * callers (uploadAvatar, uploadResume, uploadChatFile controllers) require
+ * zero changes.
+ *
+ * S3 env vars consumed (all optional — absence activates GridFS fallback):
+ *   S3_ENDPOINT   — e.g. https://nyc3.digitaloceanspaces.com
+ *   S3_REGION
+ *   S3_BUCKET
+ *   S3_ACCESS_KEY
+ *   S3_SECRET_KEY
  */
 
 import { DeleteObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { Upload } from "@aws-sdk/lib-storage";
 import { getSignedUrl as awsGetSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { getBackendEnvironmentConfig } from "../config/env";
+import { gridfsDelete, gridfsGetFileId, gridfsUpload } from "./gridfsStorage";
 
 // ── Bootstrap ──────────────────────────────────────────────────────────────
 
 const _env = getBackendEnvironmentConfig();
 
-const _s3 = new S3Client({
-  endpoint: _env.s3Endpoint,
-  region: _env.s3Region,
-  credentials: {
-    accessKeyId: _env.s3AccessKey,
-    secretAccessKey: _env.s3SecretKey,
-  },
-  // Path-style addressing is required for DigitalOcean Spaces and some
-  // other S3-compatible providers.
-  forcePathStyle: true,
-});
+// Bundle the S3 client together with the bucket/endpoint strings so that all
+// S3 operations receive typed non-nullable values (no conditional checks after
+// the null guard at the function entry point).
+interface S3Bundle {
+  client: S3Client;
+  bucket: string;
+  endpoint: string;
+}
+
+function _buildS3Bundle(): S3Bundle | null {
+  const { s3Endpoint, s3Region, s3Bucket, s3AccessKey, s3SecretKey } = _env;
+
+  // All five vars must be present for S3 mode to activate.
+  if (
+    s3Endpoint === undefined ||
+    s3Region === undefined ||
+    s3Bucket === undefined ||
+    s3AccessKey === undefined ||
+    s3SecretKey === undefined
+  ) {
+    return null;
+  }
+
+  return {
+    client: new S3Client({
+      endpoint: s3Endpoint,
+      region: s3Region,
+      credentials: {
+        accessKeyId: s3AccessKey,
+        secretAccessKey: s3SecretKey,
+      },
+      // Path-style addressing is required for DigitalOcean Spaces and other
+      // S3-compatible providers.
+      forcePathStyle: true,
+    }),
+    bucket: s3Bucket,
+    endpoint: s3Endpoint,
+  };
+}
+
+// Evaluated once at startup — null → GridFS mode, non-null → S3 mode.
+const _s3: S3Bundle | null = _buildS3Bundle();
+
+if (_s3 === null) {
+  console.log("[storage] S3 not configured — using MongoDB GridFS fallback");
+} else {
+  console.log(`[storage] S3 enabled — bucket: ${_s3.bucket}`);
+}
 
 // ── Internal helpers ───────────────────────────────────────────────────────
 
-/**
- * Derive the public HTTPS URL for an object key without making a network call.
- * Format: {endpoint}/{bucket}/{key}
- */
-function _publicUrl(key: string): string {
-  const base = _env.s3Endpoint.replace(/\/$/, "");
-  return `${base}/${_env.s3Bucket}/${key}`;
+function _s3PublicUrl(bundle: S3Bundle, key: string): string {
+  const base = bundle.endpoint.replace(/\/$/, "");
+  return `${base}/${bundle.bucket}/${key}`;
 }
 
 // ── Public API ─────────────────────────────────────────────────────────────
 
 /**
- * Upload a buffer to the given key and return its public URL.
+ * Upload a buffer and return its public URL.
  *
- * Uses the multipart Upload helper from `@aws-sdk/lib-storage` so that large
- * files are handled correctly.  Small buffers are sent as a single part.
+ * S3 mode:    uploads to the configured bucket, returns the public HTTPS URL.
+ * GridFS mode: writes to GridFS, returns /api/v1/files/{objectId}.
  */
 export async function uploadFile(
   buffer: Buffer,
   key: string,
   contentType: string
 ): Promise<string> {
-  const upload = new Upload({
-    client: _s3,
-    params: {
-      Bucket: _env.s3Bucket,
-      Key: key,
-      Body: buffer,
-      ContentType: contentType,
-      ACL: "public-read",
-    },
-  });
+  if (_s3 !== null) {
+    const upload = new Upload({
+      client: _s3.client,
+      params: {
+        Bucket: _s3.bucket,
+        Key: key,
+        Body: buffer,
+        ContentType: contentType,
+        ACL: "public-read",
+      },
+    });
+    await upload.done();
+    return _s3PublicUrl(_s3, key);
+  }
 
-  await upload.done();
-  return _publicUrl(key);
+  // GridFS fallback
+  const fileId = await gridfsUpload(buffer, key, contentType);
+  return `/api/v1/files/${fileId}`;
 }
 
 /**
- * Delete an object by key.  Resolves without error even if the key does not
- * exist (S3 DeleteObject is idempotent).
+ * Delete an object by key.
+ *
+ * S3 mode:    sends DeleteObjectCommand (idempotent — no error if missing).
+ * GridFS mode: deletes all GridFS files with matching filename.
  */
 export async function deleteFile(key: string): Promise<void> {
-  await _s3.send(
-    new DeleteObjectCommand({
-      Bucket: _env.s3Bucket,
-      Key: key,
-    })
-  );
+  if (_s3 !== null) {
+    await _s3.client.send(
+      new DeleteObjectCommand({ Bucket: _s3.bucket, Key: key })
+    );
+    return;
+  }
+
+  // GridFS fallback
+  await gridfsDelete(key);
 }
 
 /**
- * Generate a presigned download URL for a private object.
+ * Generate a presigned download URL for an object.
  *
- * @param key       Object key in the bucket.
- * @param expiresIn Lifetime in seconds (default 3600 — 1 hour).
+ * S3 mode:    returns an AWS presigned URL valid for `expiresIn` seconds.
+ * GridFS mode: returns the static /api/v1/files/{objectId} URL (no signing
+ *              needed — access control is handled by the route middleware).
+ *
+ * @param key       Object key / GridFS filename.
+ * @param expiresIn Lifetime in seconds (S3 mode only; default 3600).
  */
 export async function getSignedUrl(key: string, expiresIn: number = 3600): Promise<string> {
-  const command = new PutObjectCommand({
-    Bucket: _env.s3Bucket,
-    Key: key,
-  });
+  if (_s3 !== null) {
+    const command = new PutObjectCommand({ Bucket: _s3.bucket, Key: key });
+    return awsGetSignedUrl(_s3.client, command, { expiresIn });
+  }
 
-  // The presigner accepts any S3 command; using PutObjectCommand here gives a
-  // GET-compatible URL because the SDK rewrites the method for presigned GETs.
-  return awsGetSignedUrl(_s3, command, { expiresIn });
+  // GridFS: resolve the stored ObjectId for this key so the URL matches
+  // the one returned by uploadFile.
+  const fileId = await gridfsGetFileId(key);
+  if (fileId !== null) {
+    return `/api/v1/files/${fileId}`;
+  }
+
+  // File not yet uploaded — return a forward-looking URL using the encoded key.
+  return `/api/v1/files/${encodeURIComponent(key)}`;
 }
 
 /**

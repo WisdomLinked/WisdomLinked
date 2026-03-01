@@ -7,16 +7,7 @@ type RequiredBackendEnvKey =
   | "PROD_DB_NAME"
   | "EPHEMERAL_TEST_DB_NAME"
   | "JWT_SECRET"
-  | "JWT_EXPIRES_IN"
-  | "SENDGRID_API_KEY"
-  | "SENDGRID_FROM_EMAIL"
-  | "S3_ENDPOINT"
-  | "S3_REGION"
-  | "S3_BUCKET"
-  | "S3_ACCESS_KEY"
-  | "S3_SECRET_KEY"
-  | "STRIPE_SECRET_KEY"
-  | "STRIPE_WEBHOOK_SECRET";
+  | "JWT_EXPIRES_IN";
 
 type OptionalBackendEnvKey =
   | "PORT"
@@ -26,7 +17,16 @@ type OptionalBackendEnvKey =
   | "LIVEKIT_API_SECRET"
   | "LIVEKIT_URL"
   | "ADMIN_DEFAULT_EMAIL"
-  | "ADMIN_DEFAULT_PASSWORD";
+  | "ADMIN_DEFAULT_PASSWORD"
+  | "SENDGRID_API_KEY"
+  | "SENDGRID_FROM_EMAIL"
+  | "S3_ENDPOINT"
+  | "S3_REGION"
+  | "S3_BUCKET"
+  | "S3_ACCESS_KEY"
+  | "S3_SECRET_KEY"
+  | "STRIPE_SECRET_KEY"
+  | "STRIPE_WEBHOOK_SECRET";
 
 export interface BackendEnvironmentConfig {
   mode: RuntimeMode;
@@ -39,15 +39,21 @@ export interface BackendEnvironmentConfig {
   port: number;
   frontendUrl: string;
   testDbWipeAcknowledgement?: string;
-  sendgridApiKey: string;
-  sendgridFromEmail: string;
-  s3Endpoint: string;
-  s3Region: string;
-  s3Bucket: string;
-  s3AccessKey: string;
-  s3SecretKey: string;
-  stripeSecretKey: string;
-  stripeWebhookSecret: string;
+  // SendGrid — optional; sendgridEnabled is true only when both keys are present
+  sendgridApiKey?: string;
+  sendgridFromEmail?: string;
+  sendgridEnabled: boolean;
+  // S3 — optional; s3Enabled is true only when all five keys are present
+  s3Endpoint?: string;
+  s3Region?: string;
+  s3Bucket?: string;
+  s3AccessKey?: string;
+  s3SecretKey?: string;
+  s3Enabled: boolean;
+  // Stripe — optional; stripeEnabled is true only when both keys are present
+  stripeSecretKey?: string;
+  stripeWebhookSecret?: string;
+  stripeEnabled: boolean;
   livekitApiKey?: string;
   livekitApiSecret?: string;
   livekitUrl?: string;
@@ -136,15 +142,25 @@ export function getBackendEnvironmentConfig(): BackendEnvironmentConfig {
   const frontendUrl = parseUrlOrFail(optionalEnv("FRONTEND_URL") ?? "http://localhost:5173", "FRONTEND_URL");
   const testDbWipeAcknowledgement = optionalEnv("TEST_DB_CARE_WIPED_EVERY_TEST_RUN");
 
-  const sendgridApiKey = requireEnv("SENDGRID_API_KEY");
-  const sendgridFromEmail = requireEnv("SENDGRID_FROM_EMAIL");
-  const s3Endpoint = requireEnv("S3_ENDPOINT");
-  const s3Region = requireEnv("S3_REGION");
-  const s3Bucket = requireEnv("S3_BUCKET");
-  const s3AccessKey = requireEnv("S3_ACCESS_KEY");
-  const s3SecretKey = requireEnv("S3_SECRET_KEY");
-  const stripeSecretKey = requireEnv("STRIPE_SECRET_KEY");
-  const stripeWebhookSecret = requireEnv("STRIPE_WEBHOOK_SECRET");
+  const sendgridApiKey = optionalEnv("SENDGRID_API_KEY");
+  const sendgridFromEmail = optionalEnv("SENDGRID_FROM_EMAIL");
+  const sendgridEnabled = sendgridApiKey !== undefined && sendgridFromEmail !== undefined;
+
+  const s3Endpoint = optionalEnv("S3_ENDPOINT");
+  const s3Region = optionalEnv("S3_REGION");
+  const s3Bucket = optionalEnv("S3_BUCKET");
+  const s3AccessKey = optionalEnv("S3_ACCESS_KEY");
+  const s3SecretKey = optionalEnv("S3_SECRET_KEY");
+  const s3Enabled =
+    s3Endpoint !== undefined &&
+    s3Region !== undefined &&
+    s3Bucket !== undefined &&
+    s3AccessKey !== undefined &&
+    s3SecretKey !== undefined;
+
+  const stripeSecretKey = optionalEnv("STRIPE_SECRET_KEY");
+  const stripeWebhookSecret = optionalEnv("STRIPE_WEBHOOK_SECRET");
+  const stripeEnabled = stripeSecretKey !== undefined && stripeWebhookSecret !== undefined;
 
   const livekitApiKey = optionalEnv("LIVEKIT_API_KEY");
   const livekitApiSecret = optionalEnv("LIVEKIT_API_SECRET");
@@ -165,13 +181,16 @@ export function getBackendEnvironmentConfig(): BackendEnvironmentConfig {
     testDbWipeAcknowledgement,
     sendgridApiKey,
     sendgridFromEmail,
+    sendgridEnabled,
     s3Endpoint,
     s3Region,
     s3Bucket,
     s3AccessKey,
     s3SecretKey,
+    s3Enabled,
     stripeSecretKey,
     stripeWebhookSecret,
+    stripeEnabled,
     livekitApiKey,
     livekitApiSecret,
     livekitUrl,
