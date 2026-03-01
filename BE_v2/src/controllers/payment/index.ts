@@ -7,3 +7,6 @@ export { getPricingPlansController } from "./getPricingPlans.controller";
 export { getStripeConfigController } from "./getStripeConfig.controller";
 export { updateStripeConfigController } from "./updateStripeConfig.controller";
 export { updatePricingPlansController } from "./updatePricingPlans.controller";
+export { refundPaymentController } from "./refundPayment.controller";
+export { createEventPaymentController } from "./createEventPayment.controller";
+export { getAdminPaymentsController } from "./getAdminPayments.controller";

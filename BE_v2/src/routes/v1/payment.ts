@@ -9,6 +9,9 @@ import {
   getStripeConfigController,
   updateStripeConfigController,
   updatePricingPlansController,
+  refundPaymentController,
+  createEventPaymentController,
+  getAdminPaymentsController,
 } from "../../controllers/payment";
 
 export const paymentRoutes = new Elysia({ prefix: "/api/v1/payment" })
@@ -23,10 +26,13 @@ export const paymentRoutes = new Elysia({ prefix: "/api/v1/payment" })
     .use(new Elysia({ prefix: "/cancel" }).use(cancelSubscriptionController))
   )
   .use(new Elysia({ prefix: "/history" }).use(getUserPaymentsController))
+  .use(new Elysia({ prefix: "/event" }).use(createEventPaymentController))
 
   // Admin routes
   .use(new Elysia({ prefix: "/config" })
     .use(getStripeConfigController)
     .use(updateStripeConfigController)
   )
-  .use(new Elysia({ prefix: "/plans" }).use(updatePricingPlansController));
+  .use(new Elysia({ prefix: "/plans" }).use(updatePricingPlansController))
+  .use(new Elysia({ prefix: "/refund" }).use(refundPaymentController))
+  .use(new Elysia({ prefix: "/admin/all" }).use(getAdminPaymentsController));
