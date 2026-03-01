@@ -215,7 +215,7 @@ export function App() {
         <Route path="/design-system" element={<DesignSystem />} />
 
         {/* ── Legacy /dashboard redirect — send users to role-appropriate home ── */}
-        <Route path="/dashboard" element={<Navigate to="/login" replace />} />
+        <Route path="/dashboard" element={<Navigate to="/" replace />} />
 
         {/* ── Catch-all ── */}
         <Route path="*" element={<Navigate to="/" replace />} />

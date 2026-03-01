@@ -1,6 +1,7 @@
 import { useAtom } from "jotai";
 import { isLoadingAuthAtom, tokenAtom, userAtom, sessionsAtom } from "@/atoms/authAtoms";
 import { authApi, LoginCredentials, RegisterData } from "@/api/authApi";
+import { dashboardPathForRole } from "@/utils/dashboardPath";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
 
@@ -35,7 +36,7 @@ export function useAuth() {
         });
       }
 
-      navigate("/dashboard");
+      navigate(dashboardPathForRole(response.user.role));
     } catch (error: unknown) {
       console.error("Login error:", error);
       throw error;
@@ -59,7 +60,7 @@ export function useAuth() {
         });
       }
 
-      navigate("/dashboard");
+      navigate(dashboardPathForRole(response.user.role));
     } catch (error: unknown) {
       console.error("Register error:", error);
       throw error;

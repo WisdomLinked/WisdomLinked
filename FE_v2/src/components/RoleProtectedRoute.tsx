@@ -2,19 +2,14 @@ import { useEffect, useRef, useState } from "react";
 import { Navigate, useLocation } from "react-router-dom";
 import { useAtomValue } from "jotai";
 import { userAtom } from "@/atoms/authAtoms";
-import type { UserRole } from "@/atoms/authAtoms";
+import type { UserRole } from "@/api/authApi";
 import { useAuth } from "@/hooks/useAuth";
+import { dashboardPathForRole } from "@/utils/dashboardPath";
 import { LoadingSpinner } from "./LoadingSpinner";
 
 interface RoleProtectedRouteProps {
   children: React.ReactNode;
   allowedRoles: ReadonlyArray<UserRole>;
-}
-
-function roleDashboard(role: UserRole): string {
-  if (role === "customer") return "/dashboard/customer";
-  if (role === "expert") return "/dashboard/expert";
-  return "/admin";
 }
 
 export function RoleProtectedRoute({ children, allowedRoles }: RoleProtectedRouteProps) {
@@ -69,7 +64,7 @@ export function RoleProtectedRoute({ children, allowedRoles }: RoleProtectedRout
   }
 
   if (!allowedRoles.includes(user.role)) {
-    return <Navigate to={roleDashboard(user.role)} replace />;
+    return <Navigate to={dashboardPathForRole(user.role)} replace />;
   }
 
   return <>{children}</>;

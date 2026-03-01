@@ -2,8 +2,8 @@ import { useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { useAtomValue } from "jotai";
 import { isAdminAtom, userAtom } from "@/atoms/authAtoms";
-import type { UserRole } from "@/atoms/authAtoms";
 import { useAuth } from "@/hooks/useAuth";
+import { dashboardPathForRole } from "@/utils/dashboardPath";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
@@ -20,12 +20,6 @@ import { cn } from "@/lib/utils";
 
 interface MainLayoutProps {
   children: React.ReactNode;
-}
-
-function dashboardPathForRole(role: UserRole): string {
-  if (role === "expert") return "/dashboard/expert";
-  if (role === "admin") return "/admin";
-  return "/dashboard/customer";
 }
 
 export function MainLayout({ children }: MainLayoutProps) {
