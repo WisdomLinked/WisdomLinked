@@ -82,6 +82,11 @@ export interface GetMessagesParams {
   limit?: number;
 }
 
+export interface UploadChatFileResponse {
+  fileUrl: string;
+  filename: string;
+}
+
 // ──────────────────────────────────────────────────────────────────────────────
 // API client
 // ──────────────────────────────────────────────────────────────────────────────
@@ -115,6 +120,25 @@ export const conversationsApi = {
     const response = await apiClient.get(
       `/api/v1/conversations/${conversationId}/messages`,
       { params }
+    );
+    return response.data;
+  },
+
+  async uploadChatFile(
+    conversationId: string,
+    file: File
+  ): Promise<UploadChatFileResponse> {
+    const formData = new FormData();
+    formData.append("file", file);
+
+    const response = await apiClient.post(
+      `/api/v1/conversations/${conversationId}/upload`,
+      formData,
+      {
+        headers: {
+          "Content-Type": "multipart/form-data",
+        },
+      }
     );
     return response.data;
   },

@@ -6,3 +6,4 @@ export { listConversationsController } from "./listConversations.controller";
 export { getConversationController } from "./getConversation.controller";
 export { sendMessageController } from "./sendMessage.controller";
 export { getMessagesController } from "./getMessages.controller";
+export { uploadChatFileController } from "./uploadChatFile.controller";

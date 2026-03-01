@@ -6,6 +6,7 @@ import { hashPassword } from "../../utils/hash";
 import { UserRole } from "../../config/roles";
 import { logInfo } from "../../middlewares/logger";
 import { createSession } from "./shared";
+import { sendWelcomeEmail } from "../../services/email";
 
 export const registerController = new Elysia()
   .post("/", async ({ body, set, ...context }) => {
@@ -60,6 +61,9 @@ export const registerController = new Elysia()
       await createSession(user._id.toString(), token, { ...context, body, set } as Context);
 
       await logInfo("User registered", { username, email });
+
+      // Send welcome email — fire-and-forget (email service swallows delivery errors internally)
+      void sendWelcomeEmail(email, username);
 
       return {
         token,
