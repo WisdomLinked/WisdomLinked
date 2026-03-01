@@ -13,6 +13,7 @@ import About from "./pages/public/About";
 import Services from "./pages/public/Services";
 import Rules from "./pages/public/Rules";
 import Contact from "./pages/public/Contact";
+import VideoDemo from "./pages/public/VideoDemo";
 
 // Auth pages
 import LoginPage from "./pages/auth/Login";
@@ -84,6 +85,11 @@ export function App() {
         <Route
           path="/contact"
           element={<MainLayout><Contact /></MainLayout>}
+        />
+        {/* ── Demo routes (public, no auth required) ── */}
+        <Route
+          path="/demo/video"
+          element={<MainLayout><VideoDemo /></MainLayout>}
         />
 
         {/* ── Auth routes ── */}
