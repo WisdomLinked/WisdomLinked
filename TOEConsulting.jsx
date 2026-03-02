@@ -1451,7 +1451,6 @@ export default function TOEConsulting() {
   ];
 
   const footerLinks = {
-    Product: ["Overview", "Business Account", "Credit Card", "Financial Modelling", "Spend Management"],
     Resources: ["Help", "Status", "Privacy", "Legal Agreement", "Cookie Preferences"],
     Company: ["About TOE", "Careers", "Contact", "Press", "Blog"],
     Social: ["Twitter", "LinkedIn", "Facebook", "Instagram", "YouTube"],
@@ -1560,14 +1559,16 @@ export default function TOEConsulting() {
       {view === 'home' && (
       <>
       {/* ── HERO ─────────────────────────────────────────────── */}
-      <section className="relative min-h-screen flex items-center overflow-hidden page-dots" style={{ backgroundColor: '#F8FAFC' }}>
+      <section className="relative min-h-screen flex items-center overflow-hidden" style={{ backgroundColor: '#F8FAFC' }}>
+
+        <div className="page-dots-layer page-dots-layer--animated" aria-hidden="true" />
 
         <div className="absolute -top-40 right-0 w-[700px] h-[700px] rounded-full pointer-events-none"
           style={{ background: 'radial-gradient(ellipse, rgba(156,173,189,0.32) 0%, transparent 65%)', filter: 'blur(70px)' }}></div>
         <div className="absolute -bottom-20 -left-10 w-[450px] h-[450px] rounded-full pointer-events-none"
           style={{ background: 'radial-gradient(ellipse, rgba(26,53,72,0.28) 0%, transparent 65%)', filter: 'blur(55px)' }}></div>
 
-        <div className="max-w-7xl mx-auto px-6 w-full pt-28 pb-20 grid lg:grid-cols-[1fr_1fr] gap-0 items-center min-h-screen">
+        <div className="relative z-10 max-w-7xl mx-auto px-6 w-full pt-28 pb-20 grid lg:grid-cols-[1fr_1fr] gap-0 items-center min-h-screen">
 
           {/* ── LEFT: Copy column ── */}
           <div className={`relative z-10 lg:pr-14 transition-all duration-1000 ${isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-10'}`}>
