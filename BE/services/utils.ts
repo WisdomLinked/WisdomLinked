@@ -57,10 +57,14 @@ exports.sendContactDetails = async (targetEmail, name, email, demand) => {
   };
 
   try {
+    console.log(`[sendContactDetails] Attempting to send from ${adminEmail} to ${targetEmail}...`);
     const response = await sgMail.send(msg);
-    console.log("Contact email sent via SendGrid:", response[0].statusCode);
+    console.log("Contact email sent via SendGrid. Status:", response[0].statusCode);
   } catch (error) {
     console.error("Error sending contact email via SendGrid:", error.message);
+    if (error.response) {
+      console.error("SendGrid Error Details:", JSON.stringify(error.response.body, null, 2));
+    }
     throw error;
   }
 };

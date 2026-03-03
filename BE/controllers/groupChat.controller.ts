@@ -1,3 +1,4 @@
+import { Request, Response } from 'express';
 const mongoose = require("mongoose");
 const User = require("../models/User");
 const GroupChat = require("../models/GroupChat");
@@ -11,7 +12,7 @@ const { checkPaymentIntentSucceeded, refundPaymentIntent } = require("./stripe.c
 const { appendPaymentHistory } = require("./payment.controller");
 const { getFullUserData } = require("../middlewares/requireAuth");
 const { checkTitleNameInvalid } = require('../services/global')
-const {scheduleEmailReminder, sendEmailMeetingRequestToCustomer, sendEmailMeetingRequestToExpert} = require('../services/notifications')
+const { scheduleEmailReminder, sendEmailMeetingRequestToCustomer, sendEmailMeetingRequestToExpert, sendEmailMeetingAcceptance } = require('../services/notifications')
 
 const createGeneralChatAndJoinGlobalChat = async (expertId) => {
     try {
@@ -20,7 +21,7 @@ const createGeneralChatAndJoinGlobalChat = async (expertId) => {
         // Join global chat (now replaced with community chat concept)
         // This function can be deprecated but kept for backward compatibility
         // New users should join community chats instead
-        
+
         return true;
     } catch (err) {
         console.log('[createGeneralChatAndJoinGlobalChat]', err.message)
@@ -168,8 +169,8 @@ const addParticipantsToCommunityChat = async (req, res) => {
         }).select('_id');
 
         const validParticipantIds = validParticipants.map(p => p._id.toString());
-        const newParticipantIds = participantIds.filter(id => 
-            validParticipantIds.includes(id.toString()) && 
+        const newParticipantIds = participantIds.filter(id =>
+            validParticipantIds.includes(id.toString()) &&
             !communityChat.participants.map(p => p.toString()).includes(id.toString())
         );
 
@@ -299,11 +300,11 @@ const getAllCommunityChats = async (req, res) => {
                 { participants: userObjectId }
             ]
         })
-        .populate('admin', '_id email username role')
-        .populate('participants', '_id email username')
-        .populate('createdBy', '_id email username')
-        .sort({ updatedAt: -1 })
-        .lean();
+            .populate('admin', '_id email username role')
+            .populate('participants', '_id email username')
+            .populate('createdBy', '_id email username')
+            .sort({ updatedAt: -1 })
+            .lean();
 
         // Get current user to check which chats they're already in
         const currentUser = await User.findById(userId).select('generalChats').lean();
@@ -381,76 +382,76 @@ const joinGeneralChat = async (req, res) => {
 
 const joinPrivateChat = async (req, res) => {
     try {
-      const userId = req.user?.userId;
-      const { personId } = req.body; // <-- ID of the profile you clicked
-  
-      if (!userId) return res.status(401).send("Unauthorized");
-      if (!personId) return res.status(400).send("personId is required");
-      if (String(userId) === String(personId)) return res.status(400).send("Cannot open chat with yourself");
-  
-      // Ensure the clicked person exists
-      const otherUser = await User.findById(personId).select("username email").exec();
-      if (!otherUser) return res.status(404).send("User not found");
-  
-      // 1) Find existing individual chat shared by both users
-      let chat = await GroupChat.findOne({
-        type: "individual",
-        participants: { $all: [personId, userId] },
-      }).exec();
-  
-      if (chat) {
-        // Defensive: ensure both participants present (no-op if already present)
-        await GroupChat.updateOne(
-          { _id: chat._id },
-          { $addToSet: { participants: { $each: [personId, userId] } } }
-        ).exec();
-  
-        // reload canonical chat
-        chat = await GroupChat.findById(chat._id).exec();
-      } else {
-        // 2) Create a new individual chat between caller and clicked person
-        const createDoc = {
-          name: `Private Chat - ${otherUser.username || personId}`,
-          description: "",
-          participants: [personId, userId],
-          admin: personId,       // set admin to the profile user clicked (matches other create flows)
-          type: "individual",
-          status: "active",
-          createdBy: userId,     // the caller created the chat
-        };
-  
-        chat = await GroupChat.create(createDoc);
-      }
-  
-      // 3) Ensure both users reference this chat (no duplicates)
-      await User.updateOne({ _id: userId }, { $addToSet: { generalChats: chat._id } }).exec();
-      await User.updateOne({ _id: personId }, { $addToSet: { generalChats: chat._id } }).exec();
-  
-      // 4) Notify socket helpers so both users' chat lists update in real-time
-      try { updateUsersGroupChatList(userId.toString()); } catch (e) { console.warn("updateUsersGroupChatList(user) failed:", e?.message || e); }
-      try { updateUsersGroupChatList(personId.toString()); } catch (e) { console.warn("updateUsersGroupChatList(person) failed:", e?.message || e); }
-  
-      // 5) Return populated user and chat so frontend can open the conversation immediately
-      const userDoc = await User.findById(userId).select("email").exec();
-      const fullUser = await getFullUserData(userDoc.email);
-      if (fullUser) {
-        fullUser.token = null;
-        fullUser.password = null;
-      }
-  
-      return res.status(200).json({ user: fullUser, chat });
+        const userId = req.user?.userId;
+        const { personId } = req.body; // <-- ID of the profile you clicked
+
+        if (!userId) return res.status(401).send("Unauthorized");
+        if (!personId) return res.status(400).send("personId is required");
+        if (String(userId) === String(personId)) return res.status(400).send("Cannot open chat with yourself");
+
+        // Ensure the clicked person exists
+        const otherUser = await User.findById(personId).select("username email").exec();
+        if (!otherUser) return res.status(404).send("User not found");
+
+        // 1) Find existing individual chat shared by both users
+        let chat = await GroupChat.findOne({
+            type: "individual",
+            participants: { $all: [personId, userId] },
+        }).exec();
+
+        if (chat) {
+            // Defensive: ensure both participants present (no-op if already present)
+            await GroupChat.updateOne(
+                { _id: chat._id },
+                { $addToSet: { participants: { $each: [personId, userId] } } }
+            ).exec();
+
+            // reload canonical chat
+            chat = await GroupChat.findById(chat._id).exec();
+        } else {
+            // 2) Create a new individual chat between caller and clicked person
+            const createDoc = {
+                name: `Private Chat - ${otherUser.username || personId}`,
+                description: "",
+                participants: [personId, userId],
+                admin: personId,       // set admin to the profile user clicked (matches other create flows)
+                type: "individual",
+                status: "active",
+                createdBy: userId,     // the caller created the chat
+            };
+
+            chat = await GroupChat.create(createDoc);
+        }
+
+        // 3) Ensure both users reference this chat (no duplicates)
+        await User.updateOne({ _id: userId }, { $addToSet: { generalChats: chat._id } }).exec();
+        await User.updateOne({ _id: personId }, { $addToSet: { generalChats: chat._id } }).exec();
+
+        // 4) Notify socket helpers so both users' chat lists update in real-time
+        try { updateUsersGroupChatList(userId.toString()); } catch (e) { console.warn("updateUsersGroupChatList(user) failed:", e?.message || e); }
+        try { updateUsersGroupChatList(personId.toString()); } catch (e) { console.warn("updateUsersGroupChatList(person) failed:", e?.message || e); }
+
+        // 5) Return populated user and chat so frontend can open the conversation immediately
+        const userDoc = await User.findById(userId).select("email").exec();
+        const fullUser = await getFullUserData(userDoc.email);
+        if (fullUser) {
+            fullUser.token = null;
+            fullUser.password = null;
+        }
+
+        return res.status(200).json({ user: fullUser, chat });
     } catch (err) {
-      console.error("joinGeneralChat error:", err);
-      return res.status(500).send(err.message || "Server error");
+        console.error("joinGeneralChat error:", err);
+        return res.status(500).send(err.message || "Server error");
     }
-  };
+};
 
 const createGroupChatByUser = async (req, res) => {
     try {
         const { userId } = req.user;
         const { name, description, services, keywords, start, end, duration, price, expert, payment_intent } = req.body;
 
-        
+
         if (checkTitleNameInvalid('Name', name)) {
             throw new Error(checkTitleNameInvalid('Name', name))
         }
@@ -471,7 +472,7 @@ const createGroupChatByUser = async (req, res) => {
             end: end,
             duration: duration,
             price: price,
-            participants: [userId,expert],
+            participants: [userId, expert],
             admin: expert,
             type: 'individual',
             status: 'pending',
@@ -481,7 +482,7 @@ const createGroupChatByUser = async (req, res) => {
         const currentUser = await User.findById(userId);
         currentUser.groupChats.push(chat._id);
         await currentUser.save();
-        currentUser.populate(['events', 'keywords', 'services', 'groupChats'])  
+        currentUser.populate(['events', 'keywords', 'services', 'groupChats'])
 
         updateUsersGroupChatList(userId.toString());
 
@@ -489,7 +490,7 @@ const createGroupChatByUser = async (req, res) => {
         expertUser.groupChats.push(chat._id);
         await expertUser.save();
         expertUser.populate(['events', 'keywords', 'services', 'groupChats'])
-        
+
         updateUsersGroupChatList(expert.toString());
 
         await appendPaymentHistory({
@@ -526,7 +527,7 @@ const createGroupChat = async (req, res) => {
         if (checkTitleNameInvalid('Name', name)) {
             throw new Error(checkTitleNameInvalid('Name', name))
         }
-        
+
         // create group
         const chat = await GroupChat.create({
             name: name,
@@ -539,7 +540,7 @@ const createGroupChat = async (req, res) => {
             price: price,
             participants: type === 'individual' ? [customerId, userId] : [userId],
             admin: userId,
-            type : type,
+            type: type,
             status: status,
             createdBy: userId,
         });
@@ -551,7 +552,7 @@ const createGroupChat = async (req, res) => {
 
         updateUsersGroupChatList(userId.toString());
 
-        if(type === 'individual' && customerId) {
+        if (type === 'individual' && customerId) {
             const customer = await User.findById(customerId);
             if (!customer) {
                 throw new Error("Customer not found");
@@ -577,7 +578,7 @@ const createGroupChat = async (req, res) => {
 };
 
 const getGroupChat = async (req, res) => {
-    try {   
+    try {
         const { groupChatId } = req.params;
 
         //check if groupchatID is i in porper format 
@@ -597,7 +598,7 @@ const getGroupChat = async (req, res) => {
         console.log(err);
         return res
             .status(500)
-            .send(err.message);     
+            .send(err.message);
     }
 }
 
@@ -615,7 +616,7 @@ const joinGroupChat = async (req, res) => {
 
         // if end < now cant join past chat
         const now = new Date().getTime();
-        if(new Date(groupChat.end).getTime() < now) {
+        if (new Date(groupChat.end).getTime() < now) {
             return res.status(400).send("Cannot join a past meeting");
         }
 
@@ -626,11 +627,11 @@ const joinGroupChat = async (req, res) => {
         if (groupChat.participants.includes(userId)) {
             return res.status(400).send("You are already a participant of this meeting");
         }
-        
+
         if (userId.role === 'customer') {
             const paymentIntentSucceeded_test = await checkPaymentIntentSucceeded(payment_intent, 'test')
             const paymentIntentSucceeded_live = await checkPaymentIntentSucceeded(payment_intent, 'live')
-            if (price && !paymentIntentSucceeded_test && !paymentIntentSucceeded_live) {
+            if (groupChat.price && !paymentIntentSucceeded_test && !paymentIntentSucceeded_live) {
                 throw new Error("Payment intent not succeeded")
             }
 
@@ -645,17 +646,17 @@ const joinGroupChat = async (req, res) => {
                 expert: groupChat.admin.toString(),
                 groupChat: groupChatId.toString(),
             })
-            
+
         }
 
         const currentUser = await User.findById(userId);
         currentUser.groupChats.push(groupChatId);
         await currentUser.save();
-        currentUser.populate(['events', 'keywords', 'services', 'groupChats'])  
+        currentUser.populate(['events', 'keywords', 'services', 'groupChats'])
 
         updateUsersGroupChatList(userId.toString());
 
-        groupChat.participants = [...groupChat.participants,userId]
+        groupChat.participants = [...groupChat.participants, userId]
         await groupChat.save();
 
         // update the chat list of all participants
@@ -674,7 +675,7 @@ const joinGroupChat = async (req, res) => {
         console.log(err);
         return res
             .status(500)
-            .send(err.message);     
+            .send(err.message);
     }
 
 }
@@ -698,7 +699,7 @@ const updateGroupChat = async (req, res) => {
         }
 
         // Construct dynamic update object
-        const updateFields = {};
+        const updateFields: Record<string, any> = {};
         if (name !== undefined) updateFields.name = name;
         if (description !== undefined) updateFields.description = description;
         if (services !== undefined) updateFields.services = services;
@@ -708,10 +709,10 @@ const updateGroupChat = async (req, res) => {
         if (duration !== undefined) updateFields.duration = duration;
         if (price !== undefined) updateFields.price = price;
         if (type !== undefined) updateFields.type = type;
-        if (totalTimeSpent !== undefined){
+        if (totalTimeSpent !== undefined) {
             //updateFields.totalTimeSpend = totalTimeSpent;
             const existingTotalTimeSpent = groupChat.totalTimeSpent || 0;
-            updateFields.totalTimeSpent = existingTotalTimeSpent+ totalTimeSpent;
+            updateFields.totalTimeSpent = existingTotalTimeSpent + totalTimeSpent;
         }
 
         // Ensure admin is always updated
@@ -816,10 +817,10 @@ const addMemberToPendingGroup = async (req, res) => {
     }
 };
 
-const acceptIndividualAppointment = async (req,res) =>{
+const acceptIndividualAppointment = async (req, res) => {
     try {
-        const {userId} = req.user;
-        const {groupChatId,payment_intent} = req.body;
+        const { userId } = req.user;
+        const { groupChatId, payment_intent } = req.body;
 
         const groupChat = await GroupChat.findOne({ _id: groupChatId });
 
@@ -827,7 +828,7 @@ const acceptIndividualAppointment = async (req,res) =>{
             return res.status(404).send("Sorry, the group chat doesn't exist");
         }
 
-        let customer,expert;
+        let customer, expert;
 
         if (userId.role === 'customer') {
             const paymentIntentSucceeded_test = await checkPaymentIntentSucceeded(payment_intent, 'test')
@@ -853,8 +854,8 @@ const acceptIndividualAppointment = async (req,res) =>{
         groupChat.status = 'active';
         await groupChat.save();
 
-        user1 = await User.findById(userId);
-        user2 = await User.findById(groupChat.createdBy);
+        let user1 = await User.findById(userId);
+        let user2 = await User.findById(groupChat.createdBy);
 
         sendEmailMeetingAcceptance(user2.email, user2.username, groupChat.name, groupChat.start, groupChat.duration, user2.timeZone);
 
@@ -863,7 +864,7 @@ const acceptIndividualAppointment = async (req,res) =>{
         scheduleEmailReminder(user2.email, user2.username, groupChat.name, groupChat.start, groupChat.duration, user2.timeZone);
 
         return res.status(200).send("Group chat accepted successfully!");
-        
+
     } catch (err) {
         console.log(err);
         return res.status(500).send(err.message);
@@ -1011,14 +1012,14 @@ const deleteGroup = async (req, res) => {
                 participant.groupChats = participant.groupChats.filter(
                     (chat) => chat.toString() !== groupChat._id.toString()
                 );
-                
+
                 // For community chats, also remove from generalChats array
                 if (groupChat.type === 'community') {
                     participant.generalChats = participant.generalChats.filter(
                         (chat) => chat.toString() !== groupChat._id.toString()
                     );
                 }
-                
+
                 await participant.save();
 
                 // update the users group chat list

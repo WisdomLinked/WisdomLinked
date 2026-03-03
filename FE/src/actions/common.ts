@@ -1,8 +1,15 @@
-import { momentLocalizer } from "react-big-calendar";
-import moment from "moment";
-moment.locale("en-GB");
+import { dateFnsLocalizer } from "react-big-calendar";
+import { format, parse, startOfWeek, getDay } from "date-fns";
+import { enGB } from "date-fns/locale";
 
-export const localizer = momentLocalizer(moment);
+const locales = { 'en-GB': enGB };
+export const localizer = dateFnsLocalizer({
+    format,
+    parse,
+    startOfWeek,
+    getDay,
+    locales,
+});
 
 export const makeAnOffsetToAvailableTimeSlots = (slots: Array<any>, offset: number) => {
     if (!slots?.length) {
@@ -100,11 +107,11 @@ export const validateEmail = (email: any) => {
         .match(
             /^(([^<>()[\]\\.,;:\s@"]+(\.[^<>()[\]\\.,;:\s@"]+)*)|(".+"))@((\[[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\])|(([a-zA-Z\-0-9]+\.)+[a-zA-Z]{2,}))$/
         );
-    }
+}
 
 export const validEmail = (email: any): boolean => {
-        return /^(([^<>()[\]\\.,;:\s@"]+(\.[^<>()[\]\\.,;:\s@"]+)*)|(".+"))@((\[[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\])|(([a-zA-Z\-0-9]+\.)+[a-zA-Z]{2,}))$/
-            .test(String(email).toLowerCase());
+    return /^(([^<>()[\]\\.,;:\s@"]+(\.[^<>()[\]\\.,;:\s@"]+)*)|(".+"))@((\[[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\])|(([a-zA-Z\-0-9]+\.)+[a-zA-Z]{2,}))$/
+        .test(String(email).toLowerCase());
 };
 
 export const formatDateHH_MM_AMPM = (date: Date) => {

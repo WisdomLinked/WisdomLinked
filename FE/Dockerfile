@@ -1,27 +1,26 @@
-FROM node:20-alpine as build
-
+# Stage 1: Build the React app
+FROM node:22-alpine AS build
 WORKDIR /app
 
-# Copy dependency files
+# Copy dependency files first (cached layer)
 COPY package*.json ./
 
-# Install dependencies (using legacy peer deps for older React 17 compatibility just in case)
-RUN npm install --legacy-peer-deps
+# Install all dependencies (including devDependencies for build)
+RUN npm ci --legacy-peer-deps
 
 # Copy the full frontend source code
 COPY . .
 
 # Build the static React application
-# This automatically reads the .env.production file injected by GitHub Actions
 RUN npm run build
 
-# Stage 2: Serve the application with Nginx
+# Stage 2: Serve with Nginx
 FROM nginx:alpine
 
-# Copy the custom Nginx configuration to support React Router
+# Copy the custom Nginx configuration
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 
-# Copy the built React static files from Stage 1 into the Nginx html directory
+# Copy built files from Stage 1
 COPY --from=build /app/dist /usr/share/nginx/html
 
 # Expose HTTP port

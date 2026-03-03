@@ -1,6 +1,6 @@
 {
-  "name": "TOE-client",
-  "version": "0.1.0",
+  "name": "wisdomlinked-frontend",
+  "version": "2.0.0",
   "private": true,
   "dependencies": {
     "@emoji-mart/data": "^1.2.1",

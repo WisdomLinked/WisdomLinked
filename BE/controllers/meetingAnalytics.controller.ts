@@ -1,3 +1,4 @@
+import { Request, Response } from 'express';
 const MeetingAnalytics = require("../models/MeetingAnalytics");
 
 // Create a new MeetingAnalytics document if it doesn't exist

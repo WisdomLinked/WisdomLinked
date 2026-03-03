@@ -1,3 +1,4 @@
+import { Request, Response } from 'express';
 const stripeTest = require('stripe')(process.env.STRIPE_SECRET_KEY_TEST);
 const stripeLive = require('stripe')(process.env.STRIPE_SECRET_KEY_LIVE);
 const AppState = require("../models/AppState");
@@ -104,16 +105,16 @@ const checkPaymentIntentSucceeded = async (payment_intent, stripeMode) => {
 const refundPaymentIntent = async (payment_intent, amount, stripeMode) => {
     try {
         const stripe = require('stripe')(stripeMode === 'test' ? process.env.STRIPE_SECRET_KEY_TEST : process.env.STRIPE_SECRET_KEY_LIVE);
-        
-        const refundData = {
+
+        const refundData: Record<string, any> = {
             payment_intent: payment_intent,
         };
-        
+
         // Add amount if specified (for partial refunds)
         if (amount) {
             refundData.amount = Math.round(amount * 100); // Convert to cents
         }
-        
+
         const refund = await stripe.refunds.create(refundData);
         console.log('Refund succeeded', refund);
         return refund
@@ -126,19 +127,19 @@ const refundPaymentIntent = async (payment_intent, amount, stripeMode) => {
 const sendPaymentLinkToUser = async (req, res) => {
     try {
         const { paymentHistoryId, customerEmail, customAmount, customDescription } = req.body;
-        
+
         if (!paymentHistoryId || !customerEmail) {
             return res.status(400).json({
                 status: 'FAILED',
                 message: 'Payment history ID and customer email are required.'
             });
         }
-        
+
         const PaymentHistory = require("../models/PaymentHistory");
         const sgMail = require("@sendgrid/mail");
         const adminEmail = "noreply@wisdomlinked.com";
         sgMail.setApiKey(process.env.SENDGRID_API_KEY);
-        
+
         const paymentHistory = await PaymentHistory.findById(paymentHistoryId);
         if (!paymentHistory) {
             return res.status(404).json({
@@ -146,15 +147,15 @@ const sendPaymentLinkToUser = async (req, res) => {
                 message: 'Payment history not found.'
             });
         }
-        
+
         const appState = await AppState.findOne();
         const currentStripeMode = appState?.stripeMode || 'test';
-        
+
         const stripe = require('stripe')(currentStripeMode === 'test' ? process.env.STRIPE_SECRET_KEY_TEST : process.env.STRIPE_SECRET_KEY_LIVE);
-        
+
         const finalAmount = customAmount || paymentHistory.amount;
         const finalDescription = customDescription || paymentHistory.description || 'Service Payment';
-        
+
         const paymentLink = await stripe.paymentLinks.create({
             line_items: [
                 {
@@ -190,7 +191,7 @@ const sendPaymentLinkToUser = async (req, res) => {
                 createdAt: new Date().toISOString()
             }
         });
-        
+
         // Create immediate payment record with pending status
         const immediatePaymentHistory = new PaymentHistory({
             stripeMode: currentStripeMode,
@@ -205,7 +206,7 @@ const sendPaymentLinkToUser = async (req, res) => {
             groupChat: paymentHistory.groupChat,
             event: paymentHistory.event,
         });
-        
+
         await immediatePaymentHistory.save();
         console.log('Created pending payment record:', immediatePaymentHistory._id);
 
@@ -244,7 +245,7 @@ const sendPaymentLinkToUser = async (req, res) => {
             </div>
         </div>
         `;
-        
+
 
         const msg = {
             to: customerEmail,
@@ -263,7 +264,7 @@ const sendPaymentLinkToUser = async (req, res) => {
             message: 'Payment link sent successfully to the customer.',
             paymentLinkUrl: paymentLink.url
         });
-        
+
     } catch (err) {
         console.log('[sendPaymentLinkToUser]', err);
         return res.status(500).json({
@@ -276,37 +277,37 @@ const sendPaymentLinkToUser = async (req, res) => {
 const handleStripeWebhook = async (req, res) => {
     const stripe = require('stripe');
     const PaymentHistory = require("../models/PaymentHistory");
-    
+
     try {
         const sig = req.headers['stripe-signature'];
         const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET;
-        
+
         let event;
-        
+
         try {
             event = stripe.webhooks.constructEvent(req.body, sig, endpointSecret);
         } catch (err) {
             console.log(`Webhook signature verification failed.`, err.message);
             return res.status(400).send(`Webhook Error: ${err.message}`);
         }
-        
+
         console.log('Received Stripe webhook event:', event.type);
-        
+
         if (event.type === 'checkout.session.completed') {
             const session = event.data.object;
-            
+
             if (session.payment_link) {
                 const appState = await AppState.findOne();
                 const currentStripeMode = appState?.stripeMode || 'test';
                 const stripeInstance = require('stripe')(currentStripeMode === 'test' ? process.env.STRIPE_SECRET_KEY_TEST : process.env.STRIPE_SECRET_KEY_LIVE);
-                
+
                 const paymentLink = await stripeInstance.paymentLinks.retrieve(session.payment_link);
-                
+
                 if (paymentLink.metadata && paymentLink.metadata.originalPaymentHistoryId) {
                     // Security validations
                     const authorizedEmail = paymentLink.metadata.authorizedCustomerEmail;
                     const originalAmount = parseInt(paymentLink.metadata.originalAmount);
-                    
+
                     // Validate payment amount matches expected (original or custom)
                     const expectedAmount = parseInt(paymentLink.metadata.customAmount) || originalAmount;
                     if (session.amount_total !== expectedAmount) {
@@ -317,7 +318,7 @@ const handleStripeWebhook = async (req, res) => {
                         });
                         return res.status(400).json({ error: 'Payment amount validation failed' });
                     }
-                    
+
                     // Validate customer email matches (if available in session)
                     if (session.customer_details && session.customer_details.email) {
                         if (session.customer_details.email.toLowerCase() !== authorizedEmail.toLowerCase()) {
@@ -328,7 +329,7 @@ const handleStripeWebhook = async (req, res) => {
                             });
                         }
                     }
-                    
+
                     //Log the payment attempt
                     console.log('Processing retry payment:', {
                         sessionId: session.id,
@@ -336,9 +337,9 @@ const handleStripeWebhook = async (req, res) => {
                         amount: session.amount_total,
                         paymentHistoryId: paymentLink.metadata.originalPaymentHistoryId
                     });
-                    
+
                     const originalPaymentHistory = await PaymentHistory.findById(paymentLink.metadata.originalPaymentHistoryId);
-                    
+
                     if (originalPaymentHistory) {
                         // Find the pending payment record we created when the link was sent
                         const pendingPayment = await PaymentHistory.findOne({
@@ -349,14 +350,14 @@ const handleStripeWebhook = async (req, res) => {
                             amount: session.amount_total,
                             description: paymentLink.metadata.customDescription || `Retry payment for: ${originalPaymentHistory.description}`
                         }).sort({ createdAt: -1 });
-                        
+
                         if (pendingPayment) {
                             // Update the existing pending payment record
                             pendingPayment.status = 'completed';
                             pendingPayment.paymentIntent = session.payment_intent;
                             await pendingPayment.save();
                             console.log('Updated pending payment to completed:', pendingPayment._id);
-                            
+
                             // Update payment intent to send receipt
                             try {
                                 const stripe = require('stripe')(paymentLink.metadata.stripeMode === 'test' ? process.env.STRIPE_SECRET_KEY_TEST : process.env.STRIPE_SECRET_KEY_LIVE);
@@ -384,10 +385,10 @@ const handleStripeWebhook = async (req, res) => {
                                 groupChat: originalPaymentHistory.groupChat,
                                 event: originalPaymentHistory.event,
                             });
-                            
+
                             await newPaymentHistory.save();
                             console.log('Created retry payment history (fallback):', newPaymentHistory._id);
-                            
+
                             // Update payment intent to send receipt
                             try {
                                 const stripe = require('stripe')(paymentLink.metadata.stripeMode === 'test' ? process.env.STRIPE_SECRET_KEY_TEST : process.env.STRIPE_SECRET_KEY_LIVE);
@@ -399,21 +400,30 @@ const handleStripeWebhook = async (req, res) => {
                                 console.error('Failed to update payment intent with receipt email (fallback):', receiptError);
                                 // Don't fail the payment if receipt email update fails
                             }
+
+                            // Log successful security validation
+                            console.log('Payment security validation passed:', {
+                                paymentHistoryId: newPaymentHistory._id,
+                                sessionId: session.id,
+                                authorizedEmail: authorizedEmail,
+                                amount: session.amount_total
+                            });
                         }
-                        
-                        // Log successful security validation
-                        const paymentRecordId = pendingPayment ? pendingPayment._id : newPaymentHistory._id;
-                        console.log('Payment security validation passed:', {
-                            paymentHistoryId: paymentRecordId,
-                            sessionId: session.id,
-                            authorizedEmail: authorizedEmail,
-                            amount: session.amount_total
-                        });
+
+                        // Log successful security validation (if pending payment was found)
+                        if (pendingPayment) {
+                            console.log('Payment security validation passed:', {
+                                paymentHistoryId: pendingPayment._id,
+                                sessionId: session.id,
+                                authorizedEmail: authorizedEmail,
+                                amount: session.amount_total
+                            });
+                        }
                     }
                 } else if (paymentLink.metadata.paymentType === 'adhoc') {
                     // Handle ad-hoc payment completion
                     console.log('Processing ad-hoc payment completion');
-                    
+
                     // Find the pending ad-hoc payment record
                     const pendingAdHocPayment = await PaymentHistory.findOne({
                         customer: paymentLink.metadata.customerId,
@@ -422,39 +432,39 @@ const handleStripeWebhook = async (req, res) => {
                         amount: session.amount_total,
                         description: paymentLink.metadata.customDescription
                     }).sort({ createdAt: -1 });
-                    
+
                     if (pendingAdHocPayment) {
                         // Update the existing pending payment record
                         pendingAdHocPayment.status = 'completed';
                         pendingAdHocPayment.paymentIntent = session.payment_intent;
                         await pendingAdHocPayment.save();
                         console.log('Updated pending ad-hoc payment to completed:', pendingAdHocPayment._id);
-                        
+
                         // Update payment intent to send receipt
                         try {
                             const stripe = require('stripe')(paymentLink.metadata.stripeMode === 'test' ? process.env.STRIPE_SECRET_KEY_TEST : process.env.STRIPE_SECRET_KEY_LIVE);
                             await stripe.paymentIntents.update(session.payment_intent, {
-                                receipt_email: authorizedEmail,
+                                receipt_email: paymentLink.metadata.authorizedCustomerEmail,
                             });
-                            console.log('Updated ad-hoc payment intent with receipt email:', authorizedEmail);
+                            console.log('Updated ad-hoc payment intent with receipt email:', paymentLink.metadata.authorizedCustomerEmail);
                         } catch (receiptError) {
                             console.error('Failed to update ad-hoc payment intent with receipt email:', receiptError);
                         }
-                        
+
                         // Log successful validation
                         console.log('Ad-hoc payment security validation passed:', {
                             paymentHistoryId: pendingAdHocPayment._id,
                             sessionId: session.id,
-                            authorizedEmail: authorizedEmail,
+                            authorizedEmail: paymentLink.metadata.authorizedCustomerEmail,
                             amount: session.amount_total
                         });
                     }
                 }
             }
         }
-        
-        res.json({received: true});
-        
+
+        res.json({ received: true });
+
     } catch (err) {
         console.log('[handleStripeWebhook]', err);
         return res.status(500).json({
@@ -467,31 +477,31 @@ const handleStripeWebhook = async (req, res) => {
 const processRefund = async (req, res) => {
     try {
         const { paymentHistoryId, refundAmount, refundReason } = req.body;
-        
+
         if (!paymentHistoryId) {
             return res.status(400).json({
                 status: 'FAILED',
                 message: 'Payment history ID is required.'
             });
         }
-        
+
         if (!refundAmount || refundAmount <= 0) {
             return res.status(400).json({
                 status: 'FAILED',
                 message: 'Valid refund amount is required.'
             });
         }
-        
+
         if (!refundReason || !refundReason.trim()) {
             return res.status(400).json({
                 status: 'FAILED',
                 message: 'Refund reason is required.'
             });
         }
-        
+
         const PaymentHistory = require("../models/PaymentHistory");
         const AppState = require("../models/AppState");
-        
+
         // Get the payment history record
         const paymentHistory = await PaymentHistory.findById(paymentHistoryId).populate(['customer', 'expert']);
         if (!paymentHistory) {
@@ -500,7 +510,7 @@ const processRefund = async (req, res) => {
                 message: 'Payment history not found.'
             });
         }
-        
+
         // Check if payment can be refunded
         if (paymentHistory.status === 'refunded') {
             return res.status(400).json({
@@ -508,21 +518,21 @@ const processRefund = async (req, res) => {
                 message: 'This payment has already been refunded.'
             });
         }
-        
+
         if (paymentHistory.status === 'pending') {
             return res.status(400).json({
                 status: 'FAILED',
                 message: 'Cannot refund a pending payment.'
             });
         }
-        
+
         if (!paymentHistory.paymentIntent) {
             return res.status(400).json({
                 status: 'FAILED',
                 message: 'No payment intent found for this payment.'
             });
         }
-        
+
         // Validate refund amount doesn't exceed original payment
         const maxRefundAmount = paymentHistory.amount / 100;
         if (refundAmount > maxRefundAmount) {
@@ -531,25 +541,25 @@ const processRefund = async (req, res) => {
                 message: `Refund amount cannot exceed original payment amount of $${maxRefundAmount.toFixed(2)}`
             });
         }
-        
+
         // Get current stripe mode
         const appState = await AppState.findOne();
         const currentStripeMode = paymentHistory.stripeMode || appState?.stripeMode || 'test';
-        
+
         // Process the refund with Stripe
         const refundResult = await refundPaymentIntent(
             paymentHistory.paymentIntent,
             refundAmount,
             currentStripeMode
         );
-        
+
         if (!refundResult) {
             return res.status(500).json({
                 status: 'FAILED',
                 message: 'Failed to process refund with Stripe.'
             });
         }
-        
+
         // Create a refund record
         const refundHistory = new PaymentHistory({
             stripeMode: currentStripeMode,
@@ -565,24 +575,24 @@ const processRefund = async (req, res) => {
             groupChat: paymentHistory.groupChat,
             event: paymentHistory.event,
         });
-        
+
         await refundHistory.save();
-        
+
         // Update the original payment status if it's a full refund
         if (refundAmount === maxRefundAmount) {
             paymentHistory.status = 'refunded';
             await paymentHistory.save();
         }
-        
+
         // Send refund notification email to customer
         if (paymentHistory.customer?.email) {
             const sgMail = require("@sendgrid/mail");
             const adminEmail = "noreply@wisdomlinked.com";
             sgMail.setApiKey(process.env.SENDGRID_API_KEY);
-            
+
             const isFullRefund = refundAmount === maxRefundAmount;
             const refundType = isFullRefund ? 'Full Refund' : 'Partial Refund';
-            
+
             const refundEmailHtml = `
             <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
                 <div style="background-color: #f8f9fa; padding: 20px; border-radius: 8px; border-left: 4px solid #28a745;">
@@ -620,7 +630,7 @@ const processRefund = async (req, res) => {
                 </div>
             </div>
             `;
-            
+
             const refundEmailMsg = {
                 to: paymentHistory.customer.email,
                 from: {
@@ -630,7 +640,7 @@ const processRefund = async (req, res) => {
                 subject: `${refundType} Confirmation - WisdomLinked`,
                 html: refundEmailHtml,
             };
-            
+
             try {
                 await sgMail.send(refundEmailMsg);
                 console.log('Refund notification email sent to:', paymentHistory.customer.email);
@@ -639,13 +649,13 @@ const processRefund = async (req, res) => {
                 // Don't fail the refund if email fails
             }
         }
-        
+
         console.log('Refund processed successfully:', {
             refundId: refundResult.id,
             paymentHistoryId: refundHistory._id,
             amount: refundAmount
         });
-        
+
         res.status(200).json({
             status: 'SUCCESS',
             message: 'Refund processed successfully.',
@@ -656,7 +666,7 @@ const processRefund = async (req, res) => {
                 reason: refundReason
             }
         });
-        
+
     } catch (err) {
         console.log('[processRefund]', err);
         return res.status(500).json({
@@ -669,7 +679,7 @@ const processRefund = async (req, res) => {
 const sendAdHocPaymentLink = async (req, res) => {
     try {
         const { amount, description, customerEmail, customerName } = req.body;
-        
+
         // Validation
         if (!amount || amount <= 0) {
             return res.status(400).json({
@@ -677,21 +687,21 @@ const sendAdHocPaymentLink = async (req, res) => {
                 message: 'Valid payment amount is required.'
             });
         }
-        
+
         if (!description || !description.trim()) {
             return res.status(400).json({
                 status: 'FAILED',
                 message: 'Payment description is required.'
             });
         }
-        
+
         if (!customerEmail || !customerEmail.trim()) {
             return res.status(400).json({
                 status: 'FAILED',
                 message: 'Customer email is required.'
             });
         }
-        
+
         // Basic email validation
         const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
         if (!emailRegex.test(customerEmail.trim())) {
@@ -700,15 +710,15 @@ const sendAdHocPaymentLink = async (req, res) => {
                 message: 'Valid customer email is required.'
             });
         }
-        
+
         const PaymentHistory = require("../models/PaymentHistory");
         const User = require("../models/User");
         const AppState = require("../models/AppState");
-        
+
         // Get current stripe mode
         const appState = await AppState.findOne();
         const currentStripeMode = appState?.stripeMode || 'test';
-        
+
         // Check if customer exists, create if needed
         let customer = await User.findOne({ email: customerEmail.trim() });
         if (!customer) {
@@ -723,13 +733,13 @@ const sendAdHocPaymentLink = async (req, res) => {
             await customer.save();
             console.log('Created ad-hoc customer record:', customer._id);
         }
-        
+
         // Create Stripe payment link
         const stripe = require('stripe')(currentStripeMode === 'test' ? process.env.STRIPE_SECRET_KEY_TEST : process.env.STRIPE_SECRET_KEY_LIVE);
-        
+
         const finalAmount = Math.round(amount * 100); // Convert to cents
         const finalDescription = description.trim();
-        
+
         const paymentLink = await stripe.paymentLinks.create({
             line_items: [
                 {
@@ -764,7 +774,7 @@ const sendAdHocPaymentLink = async (req, res) => {
                 customerId: customer._id.toString(),
             }
         });
-        
+
         // Create immediate payment record with pending status
         const immediatePaymentHistory = new PaymentHistory({
             stripeMode: currentStripeMode,
@@ -775,15 +785,15 @@ const sendAdHocPaymentLink = async (req, res) => {
             status: 'pending',
             customer: customer._id,
         });
-        
+
         await immediatePaymentHistory.save();
         console.log('Created pending ad-hoc payment record:', immediatePaymentHistory._id);
-        
+
         // Send payment link email
         const sgMail = require("@sendgrid/mail");
         const adminEmail = "noreply@wisdomlinked.com";
         sgMail.setApiKey(process.env.SENDGRID_API_KEY);
-        
+
         const html = `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
             <div style="background-color: #f8f9fa; padding: 20px; border-radius: 8px; border-left: 4px solid #007bff;">
@@ -819,7 +829,7 @@ const sendAdHocPaymentLink = async (req, res) => {
             </div>
         </div>
         `;
-        
+
         const emailMsg = {
             to: customerEmail.trim(),
             from: {
@@ -829,10 +839,10 @@ const sendAdHocPaymentLink = async (req, res) => {
             subject: `Payment Request - $${(finalAmount / 100).toFixed(2)} - WisdomLinked`,
             html: html,
         };
-        
+
         await sgMail.send(emailMsg);
         console.log('Ad-hoc payment link email sent to:', customerEmail.trim());
-        
+
         res.status(200).json({
             status: 'SUCCESS',
             message: 'Payment link sent successfully.',
@@ -844,7 +854,7 @@ const sendAdHocPaymentLink = async (req, res) => {
                 status: 'pending'
             }
         });
-        
+
     } catch (err) {
         console.log('[sendAdHocPaymentLink]', err);
         return res.status(500).json({

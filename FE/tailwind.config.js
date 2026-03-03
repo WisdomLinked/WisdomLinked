@@ -5,6 +5,10 @@ module.exports = {
   darkMode: ["class", '[data-theme="dark"]'],
   theme: {
     extend: {
+      fontFamily: {
+        'cormorant': ['"Cormorant Garamond"', 'Georgia', 'serif'],
+        'crimson': ['"Crimson Pro"', 'Georgia', 'serif'],
+      },
       colors: {
         "green": "#31B099",
         "blue": "#03a9f4",

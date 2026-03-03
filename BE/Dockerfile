@@ -1,20 +1,23 @@
-# Use a lightweight Node.js Alpine base image
-FROM node:18-alpine
+# Stage 1: Install dependencies
+FROM node:22-alpine AS deps
+WORKDIR /app
+COPY package*.json ./
+# tsx is in devDependencies but needed at runtime, so install all deps
+# then prune in a later stage if needed
+RUN npm ci
 
-# Set the working directory inside the container
+# Stage 2: Production image
+FROM node:22-alpine
 WORKDIR /app
 
-# Copy package.json and package-lock.json first to cache dependencies
-COPY package*.json ./
+# Copy dependencies from deps stage
+COPY --from=deps /app/node_modules ./node_modules
 
-# Install application dependencies
-RUN npm install
-
-# Copy the rest of the backend source code
+# Copy application source code
 COPY . .
 
-# Expose the backend port (defaulting to 5000 based on standard setup)
+# Expose the backend port
 EXPOSE 5000
 
-# Start the Node.js server
+# Start the Node.js server via tsx
 CMD ["npm", "start"]

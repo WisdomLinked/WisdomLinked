@@ -1,3 +1,4 @@
+# Deploy to Production - v3 (Optimized)
 name: Deploy to Production
 
 on:
@@ -10,13 +11,62 @@ env:
   FRONTEND_IMAGE: wisdomlinked/wisdomlinked/chat-frontend
 
 jobs:
-  build-and-push-images:
+  # Detect which directories changed
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      backend: ${{ steps.filter.outputs.backend }}
+      frontend: ${{ steps.filter.outputs.frontend }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            backend:
+              - 'BE/**'
+            frontend:
+              - 'FE/**'
+
+  build-and-push-backend:
+    needs: changes
+    if: needs.changes.outputs.backend == 'true'
     runs-on: ubuntu-latest
     environment: production
     permissions:
       contents: read
       packages: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to the Container registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push Backend Image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./BE
+          push: true
+          tags: ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  build-and-push-frontend:
+    needs: changes
+    if: needs.changes.outputs.frontend == 'true'
+    runs-on: ubuntu-latest
+    environment: production
+    permissions:
+      contents: read
+      packages: write
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -35,6 +85,9 @@ jobs:
           REACT_APP_STRIPE_PUBLISHABLE_KEY_TEST=${{ secrets.REACT_APP_STRIPE_PUBLISHABLE_KEY_TEST }}
           EOF
 
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
       - name: Log in to the Container registry
         uses: docker/login-action@v3
         with:
@@ -42,20 +95,14 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and push Backend Image
-        uses: docker/build-push-action@v5
-        with:
-          context: ./BE
-          push: true
-          tags: ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE }}:latest
-
       - name: Build and push Frontend Image
         uses: docker/build-push-action@v5
         with:
           context: ./FE
           push: true
-          no-cache: true
           tags: ${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
           build-args: |
             REACT_APP_SERVER_URL=${{ secrets.REACT_APP_SERVER_URL }}
             REACT_APP_API_BASE_URL=${{ secrets.REACT_APP_API_BASE_URL }}
@@ -68,7 +115,8 @@ jobs:
             REACT_APP_STRIPE_PUBLISHABLE_KEY_TEST=${{ secrets.REACT_APP_STRIPE_PUBLISHABLE_KEY_TEST }}
 
   deploy:
-    needs: build-and-push-images
+    needs: [changes, build-and-push-backend, build-and-push-frontend]
+    if: always() && (needs.build-and-push-backend.result == 'success' || needs.build-and-push-backend.result == 'skipped') && (needs.build-and-push-frontend.result == 'success' || needs.build-and-push-frontend.result == 'skipped') && (needs.changes.outputs.backend == 'true' || needs.changes.outputs.frontend == 'true')
     runs-on: ubuntu-latest
     environment: production
     
