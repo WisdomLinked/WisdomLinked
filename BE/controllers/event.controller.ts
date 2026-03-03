@@ -1,3 +1,4 @@
+import { Request, Response } from 'express';
 const Event = require("../models/Event");
 const User = require("../models/User");
 const FriendInvitation = require("../models/FriendInvitation");
@@ -306,7 +307,7 @@ const updateEvent = async (req, res) => {
         }
 
         // Prepare the updated data
-        const newEventData = {};
+        const newEventData: Record<string, any> = {};
 
         if (updates.title) {
             newEventData.title = updates.title;
@@ -543,7 +544,7 @@ const getEventsBetweenCustomerAndExpert = async (req, res) => {
     try {
         const { expertId, customerId, isOngoing } = req.body
 
-        const query = { expert: expertId, customer: customerId }
+        const query: Record<string, any> = { expert: expertId, customer: customerId }
         if (isOngoing) {
             query.start = { $lte: new Date() }
             query.end = { $gt: new Date() }

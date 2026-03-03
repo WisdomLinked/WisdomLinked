@@ -6,7 +6,7 @@ const bcrypt = require("bcryptjs");
 
 const appendDefaultServices = async () => {
     try {
-        const count = await Service.count()
+        const count = await Service.countDocuments()
         const services = [
             {
                 value: "Study abroad consultation",
@@ -28,7 +28,7 @@ const appendDefaultServices = async () => {
         if (!count) {
             await Service.insertMany(services)
         }
-    } catch (err) {
+    } catch (err: any) {
         console.log('[appendDefaultServices]', err.message)
     }
 }
@@ -62,6 +62,7 @@ const appendAdminUserAndGroupChat = async () => {
                 price: 0,
                 participants: [admin._id],
                 admin: admin._id,
+                createdBy: admin._id,
             });
         }
         if (admin.generalChats.indexOf(globalChat._id) === -1) {
@@ -79,13 +80,14 @@ const appendAdminUserAndGroupChat = async () => {
                 price: 0,
                 participants: [admin._id],
                 admin: admin._id,
+                createdBy: admin._id,
             });
         }
         if (admin.generalChats.indexOf(generalChat._id) === -1) {
             admin.generalChats.push(generalChat._id);
         }
         await admin.save();
-    } catch (err) {
+    } catch (err: any) {
         console.log('[appendAdminUserAndGroupChat]', err.message)
         return
     }

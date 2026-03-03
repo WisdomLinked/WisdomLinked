@@ -1,3 +1,4 @@
+import { Request, Response } from 'express';
 const FriendInvitation = require("../models/FriendInvitation");
 const User = require("../models/User");
 const {

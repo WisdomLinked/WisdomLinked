@@ -1,3 +1,4 @@
+import { Request, Response } from 'express';
 const chatBotQA = require('../models/chatBotQA');
 
 const createChatBotQA = async (req, res) => {
@@ -89,7 +90,7 @@ const getChatBotAnswer = async (req, res) => {
 
 const getChatBotQA = async (req, res) => {
     try {
-        const {page , limit } = req.query;
+        const { page, limit } = req.query;
         const skip = (page) * limit;
         const total = await chatBotQA.countDocuments();
         const chatBotQAs = await chatBotQA.find().skip(skip).limit(limit);

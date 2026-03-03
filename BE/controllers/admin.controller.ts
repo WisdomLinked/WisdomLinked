@@ -1,4 +1,5 @@
-const { uploadFileToS3} = require("./auth.controller")
+import { Request, Response } from 'express';
+const { uploadFileToS3 } = require("./auth.controller")
 const User = require("../models/User");
 const Event = require("../models/Event");
 const PaymentHistory = require("../models/PaymentHistory");
@@ -15,7 +16,7 @@ sgMail.setApiKey(process.env.SENDGRID_API_KEY);
 // const nodemailer = require("nodemailer");
 
 const { getFullUserData } = require('../middlewares/requireAuth')
-const {checkTitleNameInvalid} = require("../services/global");
+const { checkTitleNameInvalid } = require("../services/global");
 const { sendEmailUserAccountApproved } = require("../services/notifications");
 const path = require("path");
 const fs = require("fs");
@@ -25,7 +26,7 @@ const filterUsers = async (req, res) => {
     try {
         const { username, email, role, sortBy, sortOrder, numPerPage, currentPage } = req.body
         let query = User.find({ role: { $ne: 'admin' } })
-        let countQuery = User.count({ role: { $ne: 'admin' } })
+        let countQuery = User.countDocuments({ role: { $ne: 'admin' } })
 
         if (username) {
             query.where({ username: { '$regex': username, '$options': 'i' } })
@@ -62,7 +63,7 @@ const filterPaymentHistories = async (req, res) => {
     try {
         const { email, sortBy, stripeMode, paymentType, status, dateFrom, dateTo, numPerPage, currentPage } = req.body
         const query = PaymentHistory.find()
-        const countQuery = PaymentHistory.count()
+        const countQuery = PaymentHistory.countDocuments()
 
         if (email) {
             const user = await User.findOne({ email: email })
@@ -133,7 +134,7 @@ const getFullUserDataByEmail = async (req, res) => {
 const updateProfileOfUser = async (req, res) => {
     try {
         const { email, username, title, description, image, keywords, services, country, state, city, phoneNumber, price, joinPopupBlocked, status } = req.body;
-        const updates = {}
+        const updates: Record<string, any> = {}
         if (username) {
             updates.username = username
         }
@@ -192,7 +193,7 @@ const updateProfileOfUser = async (req, res) => {
 
         await User.findOneAndUpdate({ email: email }, updates, { new: true })
         const result = await getFullUserData(email)
-        if (status &&  status === 'active') {
+        if (status && status === 'active') {
             // If the user is activated, send an email notification
             await sendEmailUserAccountApproved(result.email, result.username);
         }
@@ -308,12 +309,12 @@ const getUserFeedbacks = async (req, res) => {
             }
 
             let eventData = null;
-            if(feedback.eventId){
+            if (feedback.eventId) {
                 eventData = await Event.findById(feedback.eventId).select("title");
             }
 
             let groupChatData = null;
-            if(feedback.groupChatId){
+            if (feedback.groupChatId) {
                 groupChatData = await GroupChat.findById(feedback.groupChatId).select("name");
             }
 
@@ -432,12 +433,12 @@ const sendWelcomeEmail = async (req, res) => {
         const msg = {
             to: email,
             from: {
-              name: "WisdomLinked Admin",
-              email: adminEmail, 
+                name: "WisdomLinked Admin",
+                email: adminEmail,
             },
             subject: "Welcome to WisdomLinked",
             html,
-          };
+        };
 
         try {
             const response = await sgMail.send(msg);
@@ -483,13 +484,13 @@ const sendEmailToUser = async (req, res) => {
         const msg = {
             to: email,
             from: {
-              name: "WisdomLinked Admin",
-              email: adminEmail, 
+                name: "WisdomLinked Admin",
+                email: adminEmail,
             },
             subject: "Message from WisdomLink.io",
             html,
-            replyTo: email, 
-          };
+            replyTo: email,
+        };
 
         try {
             const response = await sgMail.send(msg);
@@ -632,7 +633,7 @@ const registerUserByAdmin = async (req, res) => {
 
         // Handle uploading a resume if file is present
         const file = req.file
-        resumeUrl = file ? await uploadFileToS3(file, 'resumes') : '';
+        let resumeUrl = file ? await uploadFileToS3(file, 'resumes') : '';
 
         let _keywords = []
         if (keywords?.length) {

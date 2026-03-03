@@ -1,8 +1,10 @@
+import { Request, Response } from 'express';
 const GroupChat = require("../models/GroupChat");
 const User = require("../models/User");
-const {shareMeetingId} = require("../services/notifications")
+const Keyword = require("../models/Keyword");
+const { shareMeetingId } = require("../services/notifications")
 
-const updateTimeSlots = async (req, res) => {
+const updateTimeSlots = async (req: any, res: Response) => {
     try {
         const { email } = req.user
         const { timeSlots } = req.body
@@ -68,17 +70,17 @@ const updateDailyTimeSlots = async (req, res) => {
     }
 }
 
-const  getCustomerById =async (req,res) =>{
-    try{
+const getCustomerById = async (req, res) => {
+    try {
         console.log("inside getCustomerByid")
-        const {id} = req.params
+        const { id } = req.params
         let query = await User.findById(id)
-        console.log("inside getCustomerByid",query)
+        console.log("inside getCustomerByid", query)
         return res.status(200).json({
             result: query
         })
     }
-    catch(err){
+    catch (err) {
         console.log(err)
         return res.status(500).send(err.message);
     }
@@ -155,14 +157,14 @@ const filterCustomers = async (req, res) => {
 }
 
 const shareMeetingViaEmail = async (req, res) => {
-    try{
-        const {email, groupchatId} = req.body;
+    try {
+        const { email, groupchatId } = req.body;
         const groupChat = await GroupChat.findById(groupchatId);
 
-        const user = await User.findOne({email:email.toLowerCase() })
+        const user = await User.findOne({ email: email.toLowerCase() })
         const name = user?.username ?? "Guest"
 
-        shareMeetingId(email,name,groupchatId,groupChat.name)
+        shareMeetingId(email, name, groupchatId, groupChat.name)
 
         return res.status(200).send("Shared meeting Id via email successfully!");
 

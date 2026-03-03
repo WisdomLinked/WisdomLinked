@@ -9,23 +9,27 @@ import * as serviceWorker from './serviceWorker';
 import process from 'process';
 import { Buffer } from 'buffer';
 
+import { createRoot } from 'react-dom/client';
+
 if (!window.Buffer) {
-    window.Buffer = Buffer;
+  window.Buffer = Buffer;
 }
 
 if (!window.process) {
-    window.process = process;
+  window.process = process;
 }
 
-ReactDOM.render(
+const container = document.getElementById('root');
+const root = createRoot(container!);
+
+root.render(
   <React.StrictMode>
     <Provider store={store}>
       <BrowserRouter>
         <App />
       </BrowserRouter>
     </Provider>
-  </React.StrictMode>,
-  document.getElementById('root')
+  </React.StrictMode>
 );
 
 // If you want your app to work offline and load faster, you can change

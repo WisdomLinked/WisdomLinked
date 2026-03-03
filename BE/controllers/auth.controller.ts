@@ -1,3 +1,4 @@
+import { Request, Response } from 'express';
 const User = require("../models/User");
 const PendingUser = require("../models/PendingUser");
 const PendingLogin = require("../models/PendingLogin");
@@ -12,39 +13,50 @@ const { getFullUserData } = require("../middlewares/requireAuth");
 const { createGeneralChatAndJoinGlobalChat } = require("./groupChat.controller");
 const { checkTitleNameInvalid } = require('../services/global')
 const { sendEmailNewUserAccountApproval } = require('../services/notifications')
-const { v4: uuidv4 } = require('uuid');
+import { v4 as uuidv4 } from 'uuid';
 const utils = require('../services/utils')
 const randomize = require('randomatic');
 const Event = require("../models/Event");
 const ContactedUs = require("../models/ContactedUs");
 const nodemailer = require("nodemailer");
 const sgMail = require("@sendgrid/mail");
-const AWS = require('aws-sdk');
+const { S3Client, PutObjectCommand, DeleteObjectCommand } = require('@aws-sdk/client-s3');
 
 
 sgMail.setApiKey(process.env.SENDGRID_API_KEY);
 
-const s3 = new AWS.S3({
+const s3 = new S3Client({
     endpoint: process.env.DO_SPACES_ENDPOINT,
-    accessKeyId: process.env.DO_SPACES_KEY,
-    secretAccessKey: process.env.DO_SPACES_SECRET,
     region: 'us-east-1',
+    credentials: {
+        accessKeyId: process.env.DO_SPACES_KEY || '',
+        secretAccessKey: process.env.DO_SPACES_SECRET || '',
+    },
+    forcePathStyle: false,
 });
 
 const getUniqueConfirmCode = async () => {
     try {
-        let isDuplicated = true, confirmCode
+        let isDuplicated = true, confirmCode;
+        console.log('[getUniqueConfirmCode] Generating unique code...');
         while (isDuplicated) {
-            confirmCode = uuidv4()
-            isDuplicated = await PendingUser.findOne({ 'confirmCode': { '$regex': `^${confirmCode}$`, $options: 'i' } })
+            confirmCode = uuidv4();
+            if (!confirmCode) {
+                console.error('[getUniqueConfirmCode] uuidv4() returned undefined, using fallback!');
+                confirmCode = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+            }
+            isDuplicated = await PendingUser.findOne({ 'confirmCode': { '$regex': `^${confirmCode}$`, $options: 'i' } });
         }
-        return confirmCode
+        console.log('[getUniqueConfirmCode] Generated:', confirmCode);
+        return confirmCode;
     } catch (error) {
-        console.log('[getUniqueConfirmCode]', error.message)
+        console.error('[getUniqueConfirmCode] CRITICAL ERROR:', error.message);
+        // Return a random string as last resort if Mongo fails or uuid fails
+        return Math.random().toString(36).substring(2, 15);
     }
 }
 
-const getKeywordsAndServices = async (req, res) => {
+const getKeywordsAndServices = async (req: Request, res: Response) => {
     try {
         const keywords = await Keyword.find()
         const services = await Service.find()
@@ -58,12 +70,32 @@ const getKeywordsAndServices = async (req, res) => {
     }
 }
 
-const register = async (req, res) => {
+const register = async (req: Request, res: Response) => {
 
     try {
         const safeParse = (val) => {
             if (!val) return null;
-            try { return JSON.parse(val); } catch (e) { return val; }
+            try {
+                // Attempt to parse standard JSON
+                return JSON.parse(val);
+            } catch (e) {
+                // If it fails, check if it's a string looking like an array (common with multipart form data) e.g. "['Study abroad']" or "[1, 2]"
+                if (typeof val === 'string' && val.trim().startsWith('[') && val.trim().endsWith(']')) {
+                    try {
+                        // Very naive approach to extract items inside the brackets.
+                        // Ideally the frontend should send proper JSON stringified arrays or multiple form fields.
+                        // Here we remove the brackets, split by comma, and clean up quotes.
+                        const innerString = val.slice(1, -1);
+                        // This regex handles single or double quotes, and trims whitespace
+                        const items = innerString.split(',').map(item => item.trim().replace(/^['"]|['"]$/g, ''));
+                        // Filter out empty items in case it was "[]"
+                        return items.filter(i => i.length > 0);
+                    } catch (innerError) {
+                        return val;
+                    }
+                }
+                return val;
+            }
         };
 
         const role = safeParse(req.body.role)
@@ -97,22 +129,40 @@ const register = async (req, res) => {
         }
 
         const file = req.file
-        resumeUrl = file ? await uploadFileToS3(file, 'resumes') : '';
+        let resumeUrl = file ? await uploadFileToS3(file, 'resumes') : '';
 
-        let _keywords = []
-        if (keywords?.length) {
+        let _keywords = [];
+        if (keywords && Array.isArray(keywords)) {
             for (let i = 0; i < keywords.length; i++) {
-                if (keywords[i].new) {
-                    const sameKeywordExist = await Keyword.find({ value: keywords[i].value })
-                    if (sameKeywordExist.length) {
-                        _keywords.push(sameKeywordExist[0]._id)
-                    } else {
-                        const temp = new Keyword(keywords[i])
-                        const newKeyword = await temp.save()
-                        _keywords.push(newKeyword._id)
-                    }
+                // The new frontend passes an array of strings, while the old one passed objects. 
+                // We handle both gracefully to prevent Mongoose 8 CastErrors.
+                const keywordValue = typeof keywords[i] === 'string' ? keywords[i] : keywords[i].value;
+                if (!keywordValue) continue;
+
+                const existingKeyword = await Keyword.findOne({ value: { $regex: new RegExp(`^${keywordValue}$`, 'i') } });
+                if (existingKeyword) {
+                    _keywords.push(existingKeyword._id);
                 } else {
-                    _keywords.push(keywords[i]._id)
+                    const newKeyword = await Keyword.create({ value: keywordValue, label: keywordValue });
+                    _keywords.push(newKeyword._id);
+                }
+            }
+        }
+
+        let _services = [];
+        if (services && Array.isArray(services)) {
+            for (let i = 0; i < services.length; i++) {
+                const serviceValue = typeof services[i] === 'string' ? services[i] : services[i].value;
+                if (!serviceValue) continue;
+
+                // Match dynamically, because the frontend might send "Study abroad" 
+                // but the DB has "Study abroad consultation"
+                const existingService = await Service.findOne({ value: { $regex: new RegExp(`^${serviceValue}`, 'i') } });
+                if (existingService) {
+                    _services.push(existingService._id);
+                } else {
+                    const newService = await Service.create({ value: serviceValue, label: serviceValue });
+                    _services.push(newService._id);
                 }
             }
         }
@@ -126,7 +176,7 @@ const register = async (req, res) => {
             username,
             title,
             description,
-            services,
+            services: _services,
             keywords: _keywords,
             country,
             state,
@@ -152,6 +202,10 @@ const register = async (req, res) => {
         // res.cookie('accessToken', token, { maxAge: process.env.COOKIE_EXPIRED_TIME, httpOnly: true })
 
         // SEND EMAIL TO CUSTOMER
+        console.log('[register] Email:', email);
+        console.log('[register] confirmCode:', confirmCode);
+        console.log('[register] FE_URL:', process.env.FE_URL);
+
         let confirmLink = `<div>Verify your registration to TOE by the confirmation Link <br/>${process.env.FE_URL}/verification/${email}/${confirmCode}</div>`
         await utils.sendOTP(
             // process.env.NODE_ENV === 'development' ? 'varunsahni10134@gmail.com' : email,
@@ -169,7 +223,7 @@ const register = async (req, res) => {
     }
 };
 
-const healthCheck = async (req, res) => {
+const healthCheck = async (req: Request, res: Response) => {
     try {
         console.log("health check")
         res.status(200).send("OK Ready")
@@ -179,7 +233,7 @@ const healthCheck = async (req, res) => {
     }
 }
 
-const resendConfirmEmail = async (req, res) => {
+const resendConfirmEmail = async (req: Request, res: Response) => {
     try {
         const { email } = req.body
 
@@ -207,7 +261,7 @@ const resendConfirmEmail = async (req, res) => {
     }
 };
 
-const verifyRegistration = async (req, res) => {
+const verifyRegistration = async (req: Request, res: Response) => {
     try {
         const { email, confirmCode } = req.body
 
@@ -257,7 +311,7 @@ const verifyRegistration = async (req, res) => {
     }
 };
 
-const login = async (req, res) => {
+const login = async (req: Request, res: Response) => {
     try {
         const { email, password } = req.body;
 
@@ -311,7 +365,7 @@ const login = async (req, res) => {
     }
 };
 
-const confirmLoginByCode = async (req, res) => {
+const confirmLoginByCode = async (req: Request, res: Response) => {
     try {
 
         const { email, password, code, timeZone } = req.body;
@@ -353,7 +407,7 @@ const confirmLoginByCode = async (req, res) => {
         const token = await user.generateAuthToken()
         user.token = null
         user.password = null
-        res.cookie('accessToken', token, { maxAge: process.env.COOKIE_EXPIRED_TIME, httpOnly: true })
+        res.cookie('accessToken', token, { maxAge: Number(process.env.COOKIE_EXPIRED_TIME) || 86400000, httpOnly: true })
 
         updateActiveRoomsOfUsers(user._id.toString(), user.groupChats)
 
@@ -367,7 +421,7 @@ const confirmLoginByCode = async (req, res) => {
     }
 };
 
-const passwordResetRequest = async (req, res) => {
+const passwordResetRequest = async (req: Request, res: Response) => {
     try {
         const { email, password } = req.body
 
@@ -413,7 +467,7 @@ const passwordResetRequest = async (req, res) => {
     }
 };
 
-const confirmPasswordResetByCode = async (req, res) => {
+const confirmPasswordResetByCode = async (req: Request, res: Response) => {
     try {
         const { email, password, code } = req.body;
 
@@ -460,7 +514,7 @@ const confirmPasswordResetByCode = async (req, res) => {
     }
 };
 
-const getMe = async (req, res) => {
+const getMe = async (req: any, res: Response) => {
     try {
         const { userId, email } = req.user
         const user = await getFullUserData(email)
@@ -478,7 +532,7 @@ const getMe = async (req, res) => {
     }
 }
 
-const updateMissedChats = async (req, res) => {
+const updateMissedChats = async (req: any, res: Response) => {
     try {
         const { email } = req.user
         const { id, count } = req.body
@@ -494,7 +548,7 @@ const updateMissedChats = async (req, res) => {
     }
 }
 
-const updateProfile = async (req, res) => {
+const updateProfile = async (req: any, res: Response) => {
     try {
         const { email } = req.user
         const { username, title, description, image, keywords, services, country, state, city, phoneNumber, price, joinPopupBlocked } = req.body;
@@ -503,7 +557,7 @@ const updateProfile = async (req, res) => {
             throw new Error(checkTitleNameInvalid('Username', username))
         }
 
-        const updates = {}
+        const updates: Record<string, any> = {}
         if (username) {
             updates.username = username
         }
@@ -569,7 +623,7 @@ const updateProfile = async (req, res) => {
     }
 }
 
-const updateResume = async (req, res) => {
+const updateResume = async (req: Request, res: Response) => {
     try {
         const email = !req.body.email ? null : JSON.parse(req.body.email)
         // check if user exists
@@ -601,7 +655,7 @@ const updateResume = async (req, res) => {
     }
 }
 
-const uploadChatFile = async (req, res) => {
+const uploadChatFile = async (req: Request, res: Response) => {
     try {
         const file = req.file;
         const chatFileUrl = await uploadFileToS3(file, 'chatFiles');
@@ -616,42 +670,38 @@ const uploadChatFile = async (req, res) => {
     }
 }
 
-const uploadFileToS3 = async (file, folder) => {
+const uploadFileToS3 = async (file: any, folder: string) => {
     try {
         const timestamp = Date.now();
         const key = `${folder}/${timestamp}_${file.originalname}`;
-        // Upload the file to DigitalOcean Spaces
-        const params = {
+
+        await s3.send(new PutObjectCommand({
             Bucket: process.env.DO_SPACES_BUCKET,
             Key: key,
             Body: file.buffer,
             ACL: 'public-read',
             ContentType: file.mimetype,
-        };
+        }));
 
-        await s3.upload(params).promise();
-
-        const fileUrl = `https://${process.env.DO_SPACES_BUCKET}.${process.env.DO_SPACES_ENDPOINT.replace('https://', '')}/${key}`;
+        const fileUrl = `https://${process.env.DO_SPACES_BUCKET}.${(process.env.DO_SPACES_ENDPOINT || '').replace('https://', '')}/${key}`;
         return fileUrl;
-    } catch (err) {
+    } catch (err: any) {
         console.log('Error uploading file', err.message);
     }
 }
 
-const deleteFileFromS3 = async (key) => {
+const deleteFileFromS3 = async (key: string) => {
     try {
-        await s3
-            .deleteObject({
-                Bucket: process.env.DO_SPACES_BUCKET,
-                Key: key,
-            })
-            .promise();
-    } catch (err) {
+        await s3.send(new DeleteObjectCommand({
+            Bucket: process.env.DO_SPACES_BUCKET,
+            Key: key,
+        }));
+    } catch (err: any) {
         console.log('Error deleting file', err.message);
     }
 }
 
-const handleSubmit = async (req, res) => {
+const handleSubmit = async (req: Request, res: Response) => {
     try {
         const email = !req.body.email ? null : JSON.parse(req.body.email)
         const name = !req.body.name ? null : JSON.parse(req.body.name)
@@ -675,7 +725,7 @@ const handleSubmit = async (req, res) => {
     }
 }
 
-const leaveFeedback = async (req, res) => {
+const leaveFeedback = async (req: any, res: Response) => {
     try {
         const { userId, role } = req.user
         const { eventId = null, groupChatId = null, eventType, start, end, totalTimeSpent, otherUserId, description, rating } = req.body
@@ -708,7 +758,7 @@ const leaveFeedback = async (req, res) => {
             console.log(otherUser.feedbacks[i])
             userRating += otherUser.feedbacks[i].rating
         }
-        userRating = (rating / otherUser.feedbacks.length).toFixed(2)
+        userRating = parseFloat((rating / otherUser.feedbacks.length).toFixed(2))
         console.log(userRating)
         otherUser.rating = userRating
 
@@ -722,7 +772,7 @@ const leaveFeedback = async (req, res) => {
 }
 
 
-const getTimeZone = async (req, res) => {
+const getTimeZone = async (req: Request, res: Response) => {
     const { lat, lng } = req.query
     const apiKey = process.env.TIMEZONE_API_KEY;
     console.log("inside gettimezone", req.body)
@@ -755,7 +805,7 @@ const getTimeZone = async (req, res) => {
 };
 
 
-const submitContactForm = async (req, res) => {
+const submitContactForm = async (req: Request, res: Response) => {
     try {
         const { name, email, countryCode, contactNumber, issue } = req.body;
 
@@ -782,7 +832,7 @@ const submitContactForm = async (req, res) => {
 };
 
 
-const sendEmailToAdmin = async (req, res) => {
+const sendEmailToAdmin = async (req: Request, res: Response) => {
     try {
         const { message } = req.body;
 

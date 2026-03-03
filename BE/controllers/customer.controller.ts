@@ -1,8 +1,9 @@
+import { Request, Response } from 'express';
 const User = require("../models/User");
 const GroupChat = require("../models/GroupChat");
 const Keyword = require("../models/Keyword")
 
-const filterExperts = async (req, res) => {
+const filterExperts = async (req: any, res: Response) => {
     try {
         const { email } = req.user
         const { _id, username, keywords, services, sortBy } = req.body
@@ -161,17 +162,17 @@ const filterSeminars = async (req, res) => {
 }
 
 
-const  getExpertById =async (req,res) =>{
-    try{
+const getExpertById = async (req, res) => {
+    try {
         console.log("inside getExpertById")
-        const {id} = req.params
+        const { id } = req.params
         let query = await User.findById(id)
-        console.log("inside getExpertById",query)
+        console.log("inside getExpertById", query)
         return res.status(200).json({
             result: query
         })
     }
-    catch(err){
+    catch (err) {
         console.log(err)
         return res.status(500).send(err.message);
     }
