@@ -48,6 +48,7 @@ const UnauthenticatedRoutes = () => {
         <Route path="/customerregister" element={<WLCustomerRegister />} />
         <Route path="/expertregister" element={<WLExpertRegister />} />
         <Route path="/forgotpassword" element={<ForgotPassword />} />
+        <Route path="/verification/:email/:confirmCode" element={<VerifyEmail />} />
         <Route path="/login" element={<WLLogin />} />
         <Route path="/aboutus" element={
           <React.Fragment>

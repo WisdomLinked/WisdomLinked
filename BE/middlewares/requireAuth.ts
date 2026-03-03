@@ -6,7 +6,7 @@ const config = process.env;
 
 const getFullUserData = async (email) => {
     return await UserModel.findOne({
-        email: email
+        email: { $regex: new RegExp(`^${email}$`, 'i') }
     })
         .select("+password")
         .populate([

@@ -168,7 +168,7 @@ const register = async (req: Request, res: Response) => {
         }
 
         // encrypt password
-        const encryptedPassword = await bcrypt.hash(password, 10);
+        const encryptedPassword = await bcrypt.hash(String(password), 10);
 
         const confirmCode = await getUniqueConfirmCode()
 
@@ -287,7 +287,7 @@ const verifyRegistration = async (req: Request, res: Response) => {
             state: pendingUser.state,
             city: pendingUser.city,
             phoneNumber: pendingUser.phoneNumber,
-            email: email,
+            email: email.toLowerCase(),
             password: pendingUser.password,
             resume: pendingUser.resume,
             role: pendingUser.role,
@@ -319,7 +319,7 @@ const login = async (req: Request, res: Response) => {
         if (!user) {
             return res.status(200).json({ status: 'FAIL', error: "Invalid credentials. Please try again" });
         }
-        const passwordsMatch = await bcrypt.compare(password, user.password);
+        const passwordsMatch = await bcrypt.compare(String(password), user.password);
 
         if (!passwordsMatch) {
             return res.status(200).json({ status: 'FAIL', error: "Invalid credentials. Please try again" });
@@ -332,7 +332,7 @@ const login = async (req: Request, res: Response) => {
         // const code = randomize('0', 6)
         const code = "123456"
 
-        let loginRequest = await PendingLogin.findOne({ email: email })
+        let loginRequest = await PendingLogin.findOne({ email: { $regex: new RegExp(`^${email}$`, 'i') } })
         if (!loginRequest) {
             loginRequest = new PendingLogin({
                 email,
@@ -369,7 +369,7 @@ const confirmLoginByCode = async (req: Request, res: Response) => {
     try {
 
         const { email, password, code, timeZone } = req.body;
-        const loginRequest = await PendingLogin.findOne({ email: email })
+        const loginRequest = await PendingLogin.findOne({ email: { $regex: new RegExp(`^${email}$`, 'i') } })
         if (!loginRequest) {
             return res.status(200).json({ status: 'FAIL', error: "Login request not found or expired. Please request a new code" });
         }
@@ -387,7 +387,7 @@ const confirmLoginByCode = async (req: Request, res: Response) => {
         if (!user) {
             return res.status(200).json({ status: 'FAIL', error: "Invalid credentials. Please try again" });
         }
-        const passwordsMatch = await bcrypt.compare(password, user.password);
+        const passwordsMatch = await bcrypt.compare(String(password), user.password);
 
         if (!passwordsMatch) {
             return res.status(200).json({ status: 'FAIL', error: "Invalid credentials. Please try again" });
@@ -425,7 +425,7 @@ const passwordResetRequest = async (req: Request, res: Response) => {
     try {
         const { email, password } = req.body
 
-        const user = await User.findOne({ email: email }).select('+password')
+        const user = await User.findOne({ email: { $regex: new RegExp(`^${email}$`, 'i') } }).select('+password')
 
         if (!user) {
             return res.status(200).json({ status: 'FAIL', error: "Provided email not found." });
@@ -434,9 +434,9 @@ const passwordResetRequest = async (req: Request, res: Response) => {
         // const code = randomize('0', 6)
         const code = "123456"
 
-        const encryptedPassword = await bcrypt.hash(password, 10);
+        const encryptedPassword = await bcrypt.hash(String(password), 10);
 
-        const pwdRequest = await PendingPasswordReset.findOne({ email: email })
+        const pwdRequest = await PendingPasswordReset.findOne({ email: { $regex: new RegExp(`^${email}$`, 'i') } })
         if (!pwdRequest) {
             const newRequest = new PendingPasswordReset({
                 email,
@@ -471,7 +471,7 @@ const confirmPasswordResetByCode = async (req: Request, res: Response) => {
     try {
         const { email, password, code } = req.body;
 
-        const request = await PendingPasswordReset.findOne({ email: email })
+        const request = await PendingPasswordReset.findOne({ email: { $regex: new RegExp(`^${email}$`, 'i') } })
         if (!request) {
             return res.status(200).json({ status: 'FAIL', error: "Password reset request not found" });
         }
@@ -494,7 +494,7 @@ const confirmPasswordResetByCode = async (req: Request, res: Response) => {
             return res.status(200).json({ status: 'FAIL', error: "User is blocked" });
         }
 
-        const passwordsMatch = await bcrypt.compare(password, request.password);
+        const passwordsMatch = await bcrypt.compare(String(password), request.password);
 
         if (!passwordsMatch) {
             return res.status(200).json({ status: 'FAIL', error: "Invalid password. Please try again" });
