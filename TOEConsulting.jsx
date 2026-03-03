@@ -235,7 +235,9 @@ function SignupPage({ onClose, onGoLogin }) {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-6" style={{ backgroundColor: '#F8FAFC' }}>
+    <div className="relative min-h-screen" style={{ backgroundColor: '#F8FAFC' }}>
+      <div className="auth-dots-layer auth-dots-layer--animate" aria-hidden="true" />
+      <div className="relative z-10 flex items-center justify-center p-6 min-h-screen">
       <div className="w-full max-w-lg">
         <div className="text-center mb-8">
           <h1 className="font-display text-3xl font-bold text-slate-900 mb-2">Create your account</h1>
@@ -267,6 +269,7 @@ function SignupPage({ onClose, onGoLogin }) {
           Already have an account? <button type="button" onClick={onGoLogin} className="font-semibold text-[#234C6A] hover:underline">Log in</button>
         </p>
         <button onClick={onClose} className="mt-4 w-full py-2.5 rounded-xl border border-slate-200 text-slate-600 font-semibold text-sm hover:bg-slate-50">Cancel</button>
+      </div>
       </div>
     </div>
   );
@@ -332,7 +335,9 @@ function StudentSignupForm({ onBack, onClose, onGoLogin, inputNormal, inputError
 
   if (submitted) {
     return (
-      <div className="min-h-screen flex items-center justify-center p-6" style={{ backgroundColor: '#F8FAFC' }}>
+      <div className="relative min-h-screen" style={{ backgroundColor: '#F8FAFC' }}>
+        <div className="auth-dots-layer auth-dots-layer--animate" aria-hidden="true" />
+        <div className="relative z-10 flex items-center justify-center p-6 min-h-screen">
         <div className="w-full max-w-md rounded-3xl p-8 text-center shadow-xl border border-slate-200" style={{ background: 'linear-gradient(135deg, #ffffff 0%, #f0f7fc 100%)' }}>
           <div className="w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-5" style={{ backgroundColor: '#D9EAFD' }}>
             <CheckCircle size={40} style={{ color: '#234C6A' }} />
@@ -341,13 +346,15 @@ function StudentSignupForm({ onBack, onClose, onGoLogin, inputNormal, inputError
           <p className="text-slate-500 text-sm mb-6">Welcome, {form.fullName}. We've received your registration.</p>
           <button onClick={onClose} className="px-8 py-3 rounded-2xl text-sm font-semibold text-white shadow-md" style={BTN_PRIMARY_STYLE}>Go to Home</button>
         </div>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen py-12 px-4" style={{ backgroundColor: '#F8FAFC' }}>
-      <div className="max-w-xl mx-auto">
+    <div className="relative min-h-screen py-12 px-4" style={{ backgroundColor: '#F8FAFC' }}>
+      <div className="auth-dots-layer auth-dots-layer--animate" aria-hidden="true" />
+      <div className="relative z-10 max-w-xl mx-auto">
         <button onClick={onBack} className="flex items-center gap-2 text-slate-500 hover:text-[#234C6A] text-sm font-semibold mb-6">
           <ArrowRight className="w-4 h-4 rotate-180" /> Back
         </button>
@@ -569,7 +576,9 @@ function ExpertSignupForm({ onBack, onClose, onGoLogin, inputNormal, inputError 
 
   if (submitted) {
     return (
-      <div className="min-h-screen flex items-center justify-center p-6" style={{ backgroundColor: '#F8FAFC' }}>
+      <div className="relative min-h-screen" style={{ backgroundColor: '#F8FAFC' }}>
+        <div className="auth-dots-layer auth-dots-layer--animate" aria-hidden="true" />
+        <div className="relative z-10 flex items-center justify-center p-6 min-h-screen">
         <div className="w-full max-w-md rounded-3xl p-8 text-center shadow-xl border border-slate-200" style={{ background: 'linear-gradient(135deg, #ffffff 0%, #f0f7fc 100%)' }}>
           <div className="w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-5" style={{ backgroundColor: '#D9EAFD' }}>
             <CheckCircle size={40} style={{ color: '#234C6A' }} />
@@ -578,13 +587,15 @@ function ExpertSignupForm({ onBack, onClose, onGoLogin, inputNormal, inputError 
           <p className="text-slate-500 text-sm mb-6">Thanks, {form.fullName}. We'll review your expert profile and get back to you soon.</p>
           <button onClick={onClose} className="px-8 py-3 rounded-2xl text-sm font-semibold text-white shadow-md" style={BTN_PRIMARY_STYLE}>Go to Home</button>
         </div>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen py-12 px-4" style={{ backgroundColor: '#F8FAFC' }}>
-      <div className="max-w-xl mx-auto">
+    <div className="relative min-h-screen py-12 px-4" style={{ backgroundColor: '#F8FAFC' }}>
+      <div className="auth-dots-layer auth-dots-layer--animate" aria-hidden="true" />
+      <div className="relative z-10 max-w-xl mx-auto">
         <button onClick={onBack} className="flex items-center gap-2 text-slate-500 hover:text-[#234C6A] text-sm font-semibold mb-6">
           <ArrowRight className="w-4 h-4 rotate-180" /> Back
         </button>
@@ -790,7 +801,9 @@ function LoginPage({ onClose, onGoSignup }) {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-6" style={{ backgroundColor: '#F8FAFC' }}>
+    <div className="relative min-h-screen" style={{ backgroundColor: '#F8FAFC' }}>
+      <div className="auth-dots-layer auth-dots-layer--animate" aria-hidden="true" />
+      <div className="relative z-10 flex items-center justify-center p-6 min-h-screen">
       <div className="w-full max-w-md rounded-3xl border border-slate-200 shadow-xl overflow-hidden" style={{ background: 'linear-gradient(135deg, #ffffff 0%, #f8fafc 100%)' }}>
         <div className="h-1 w-full" style={{ background: 'linear-gradient(90deg, #234C6A, #456882)' }} />
         <div className="p-8">
@@ -822,6 +835,7 @@ function LoginPage({ onClose, onGoSignup }) {
           </p>
           <button onClick={onClose} className="mt-4 w-full py-2.5 rounded-xl border border-slate-200 text-slate-600 font-semibold text-sm hover:bg-slate-50">Back to Home</button>
         </div>
+      </div>
       </div>
     </div>
   );
@@ -1503,6 +1517,21 @@ export default function TOEConsulting() {
         @keyframes dotsFade {
           0%, 100% { opacity: 0.10; }
           50% { opacity: 0.65; }
+        }
+        .auth-dots-layer {
+          position: absolute;
+          inset: 0;
+          pointer-events: none;
+          background-color: #F8FAFC;
+          background-image: radial-gradient(circle, rgba(188,204,220,0.45) 1.8px, transparent 1.8px);
+          background-size: 28px 28px;
+        }
+        .auth-dots-layer--animate {
+          animation: authDotsDrift 35s linear infinite;
+        }
+        @keyframes authDotsDrift {
+          0% { background-position: 0 0; }
+          100% { background-position: 28px 28px; }
         }
         .nav-link { position: relative; }
         .nav-link::after { content: ''; position: absolute; bottom: -2px; left: 0; width: 0; height: 2px; background: #9AA6B2; transition: width 0.3s ease; }
