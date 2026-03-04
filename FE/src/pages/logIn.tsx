@@ -77,10 +77,10 @@ const LogIn = () => {
     useEffect(() => {
         const timer = setTimeout(checkAutofill, 100)
         const interval = setInterval(checkAutofill, 500)
-        
+
         // Also check on focus events
         const handleFocus = () => setTimeout(checkAutofill, 50)
-        
+
         if (emailRef.current) {
             emailRef.current.addEventListener('focus', handleFocus)
         }
@@ -143,7 +143,7 @@ const LogIn = () => {
                                 set_isValidEmail(validEmail(email)); // validate only after leaving field
                             }}
                             onFocus={checkAutofill}
-                            />
+                        />
 
                         <ShowFieldError
                             show={emailTouched && !isValidEmail}
@@ -177,11 +177,11 @@ const LogIn = () => {
                                 onClick={() => set_type(type === 'password' ? 'text' : 'password')}
                             >
                                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
-                                     stroke="currentColor">
+                                    stroke="currentColor">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                                          d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+                                        d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                                          d="M2.458 12C3.732 7.943 7.522 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.478 0-8.268-2.943-9.542-7z"/>
+                                        d="M2.458 12C3.732 7.943 7.522 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.478 0-8.268-2.943-9.542-7z" />
                                 </svg>
                             </button>
 
@@ -205,8 +205,7 @@ const LogIn = () => {
                             <Link to='/forgotPassword' className="text-green text-[14px] leading-[21px] lg:text-[16px] lg:leading-[24px] font-semibold">Forgot Password</Link>
                         </div>
                         <button
-                            className="mt-8 w-full rounded-[14px] h-12 flex items-center justify-center bg-green text-white text-[16px] leading-[24px] disabled:opacity-50"
-                            disabled={!email || !pwd || pwd.length < 6 || !isValidEmail}
+                            className="mt-8 w-full rounded-[14px] h-12 flex items-center justify-center bg-green text-white text-[16px] leading-[24px]"
                             onClick={handleLogin}
                         >
                             Login

@@ -289,7 +289,7 @@ const ExpertRegister = () => {
                                 type={type}
                                 value={pwd}
                                 onChange={(e) => set_pwd(e.target.value)}
-                                onBlur = {() => setpwdTouched(true)}
+                                onBlur={() => setpwdTouched(true)}
                             />
                             <button className="absolute bottom-[13px] right-[24px] w-6 h-6" onMouseDown={() => set_type('')} onMouseUp={() => set_type('password')} onMouseLeave={() => set_type('password')}>
                                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -315,7 +315,7 @@ const ExpertRegister = () => {
                                 type={type1}
                                 value={confirmPwd}
                                 onChange={(e) => set_confirmPwd(e.target.value)}
-                                onBlur = {() => setConfirmPwdTouched(true)}
+                                onBlur={() => setConfirmPwdTouched(true)}
                             />
                             <button className="absolute bottom-[13px] right-[24px] w-6 h-6" onMouseDown={() => set_type1('')} onMouseUp={() => set_type1('password')} onMouseLeave={() => set_type('password')}>
                                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
