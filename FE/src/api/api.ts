@@ -913,6 +913,7 @@ export const doContactUs = async (data: {
     email: string;
     countryCode?: string;
     contactNumber?: string;
+    subject?: string;
     issue?: string;
 }) => {
     try {

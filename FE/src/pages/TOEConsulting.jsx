@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Star, Users, Briefcase, GraduationCap, TrendingUp, MessageCircle, CheckCircle,
-  ArrowRight, Sparkles, Menu, X, BookOpen, Globe, ChevronDown, Phone, Mail, User,
+  ArrowRight, Sparkles, Menu, X, BookOpen, Globe, ChevronDown, ChevronUp, Phone, Mail, User,
   FileText, Send, AlertCircle, Lock, Upload
 } from 'lucide-react';
 
@@ -47,7 +47,7 @@ const COUNTRIES = [
 ];
 
 function ContactFormModal({ onClose }) {
-  const [form, setForm] = useState({ name: '', email: '', countryCode: '+1', phone: '', description: '' });
+  const [form, setForm] = useState({ name: '', email: '', countryCode: '+1', phone: '', subject: '', description: '' });
   const [errors, setErrors] = useState({});
   const [submitted, setSubmitted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -75,8 +75,9 @@ function ContactFormModal({ onClose }) {
     else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) e.email = 'Enter a valid email';
     if (!form.phone.trim()) e.phone = 'Phone number is required';
     else if (!/^\d{6,15}$/.test(form.phone.replace(/\s/g, ''))) e.phone = 'Enter a valid phone number';
-    if (!form.description.trim()) e.description = 'Please describe how we can help';
-    else if (form.description.trim().length < 20) e.description = 'Please provide at least 20 characters';
+    if (!form.subject.trim()) e.subject = 'Subject is required';
+    if (!form.description.trim()) e.description = 'Main message is required';
+    else if (form.description.trim().length > 50) e.description = 'Main message must be 50 characters or less';
     return e;
   };
 
@@ -174,15 +175,25 @@ function ContactFormModal({ onClose }) {
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-slate-600 mb-1.5">
-                    <span className="flex items-center gap-1.5"><FileText size={12} /> How can we help you?</span>
+                    <span className="flex items-center gap-1.5"><FileText size={12} /> Subject</span>
                   </label>
-                  <textarea rows={4} placeholder="Tell us about your goals — graduate school applications, research guidance, career advice..."
+                  <input type="text" placeholder="e.g. Graduate school application" value={form.subject}
+                    onChange={e => { setForm(f => ({ ...f, subject: e.target.value })); setErrors(er => ({ ...er, subject: '' })); }}
+                    className={errors.subject ? inputError : inputNormal} />
+                  {errors.subject && <p className="mt-1 text-xs text-red-500 flex items-center gap-1"><AlertCircle size={11} />{errors.subject}</p>}
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1.5">
+                    <span className="flex items-center gap-1.5"><FileText size={12} /> Main message</span>
+                  </label>
+                  <textarea rows={3} placeholder="Brief message (max 50 characters)"
                     value={form.description}
+                    maxLength={50}
                     onChange={e => { setForm(f => ({ ...f, description: e.target.value })); setErrors(er => ({ ...er, description: '' })); }}
                     className={`${errors.description ? inputError : inputNormal} resize-none`} style={{ lineHeight: 1.6 }} />
                   <div className="flex items-center justify-between mt-1">
                     {errors.description ? <p className="text-xs text-red-500 flex items-center gap-1"><AlertCircle size={11} />{errors.description}</p> : <span />}
-                    <span className={`text-xs ml-auto ${form.description.length < 20 ? 'text-slate-400' : 'text-emerald-500'}`}>{form.description.length} / 20 min</span>
+                    <span className={`text-xs ml-auto ${form.description.length >= 50 ? 'text-amber-600' : form.description.length > 0 ? 'text-emerald-500' : 'text-slate-400'}`}>{form.description.length} / 50</span>
                   </div>
                 </div>
               </div>
@@ -191,7 +202,7 @@ function ContactFormModal({ onClose }) {
                 style={{ background: submitting ? '#9AA6B2' : 'linear-gradient(135deg, #234C6A 0%, #456882 100%)' }}>
                 {submitting ? (
                   <><svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" /></svg>Sending...</>
-                ) : (<><Send size={15} />Send Message</>)}
+                ) : (<><Send size={15} />Send</>)}
               </button>
               <p className="text-center text-xs text-slate-400 mt-3">We typically respond within 24 hours</p>
             </>
@@ -1397,10 +1408,65 @@ export default function TOEConsulting() {
     PILL_STARTS.map(startIdx => ({ uniIdx: startIdx, shown: false, fading: false }))
   );
 
+  const statsRef = useRef(null);
   const aboutRef = useRef(null);
   const servicesRef = useRef(null);
   const guidelinesRef = useRef(null);
+  const successRef = useRef(null);
+  const expertsRef = useRef(null);
   const pricingRef = useRef(null);
+
+  const sectionRefs = [statsRef, aboutRef, servicesRef, guidelinesRef, successRef, expertsRef, pricingRef];
+
+  const getCurrentSectionIndex = () => {
+    const viewportTop = window.scrollY + 100;
+    let current = -1;
+    sectionRefs.forEach((ref, i) => {
+      const el = ref.current;
+      if (el && el.getBoundingClientRect) {
+        const top = el.getBoundingClientRect().top + window.scrollY;
+        if (top <= viewportTop) current = i;
+      }
+    });
+    return current;
+  };
+
+  const scrollToNextSection = () => {
+    const idx = getCurrentSectionIndex();
+    const next = Math.min(idx + 1, sectionRefs.length - 1);
+    sectionRefs[next].current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+
+  const scrollToPrevSection = () => {
+    const idx = getCurrentSectionIndex();
+    if (idx <= 0) {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      return;
+    }
+    sectionRefs[idx - 1].current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+
+  const [showScrollDown, setShowScrollDown] = useState(true);
+  const [showScrollUp, setShowScrollUp] = useState(false);
+  useEffect(() => {
+    const onScroll = () => {
+      const y = window.scrollY;
+      const docHeight = document.documentElement.scrollHeight - window.innerHeight;
+      setShowScrollDown(docHeight <= 100 || y < docHeight - 150);
+      setShowScrollUp(y > window.innerHeight * 0.5);
+    };
+    window.addEventListener('scroll', onScroll, { passive: true });
+    window.addEventListener('resize', onScroll);
+    onScroll();
+    const t = setTimeout(onScroll, 400);
+    const t2 = setTimeout(onScroll, 1200);
+    return () => {
+      window.removeEventListener('scroll', onScroll);
+      window.removeEventListener('resize', onScroll);
+      clearTimeout(t);
+      clearTimeout(t2);
+    };
+  }, []);
 
   useEffect(() => {
     setIsVisible(true);
@@ -1472,7 +1538,7 @@ export default function TOEConsulting() {
   };
 
   return (
-    <div className="min-h-screen text-slate-900" style={{ fontFamily: "'DM Sans', sans-serif", backgroundColor: '#F8FAFC' }}>
+    <div className="min-h-screen text-slate-900 overflow-x-hidden" style={{ fontFamily: "'DM Sans', sans-serif", backgroundColor: '#F8FAFC' }}>
       {showContactModal && <ContactFormModal onClose={() => setShowContactModal(false)} />}
 
       <style>{`
@@ -1549,7 +1615,7 @@ export default function TOEConsulting() {
 
       {/* NAV */}
       <header className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${scrolled ? 'bg-[#F8FAFC]/95 backdrop-blur-md shadow-sm border-b border-[#BCCCDC]' : 'bg-[#F8FAFC]/80 backdrop-blur-sm'}`}>
-        <div className="max-w-7xl mx-auto px-6 flex items-center justify-between h-18 py-4">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 flex items-center justify-between h-16 sm:h-[4.5rem] py-3 sm:py-4">
           <button type="button" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })} className="flex items-center gap-3 group">
             <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-[#1B3C53] to-[#456882] flex items-center justify-center shadow-md shadow-[#D9EAFD] group-hover:shadow-[#9AA6B2] transition-shadow">
               <BookOpen className="h-5 w-5 text-white" strokeWidth={2.2} />
@@ -1572,7 +1638,7 @@ export default function TOEConsulting() {
           </button>
         </div>
         {mobileMenuOpen && (
-          <div className="lg:hidden border-t border-[#BCCCDC] bg-[#F8FAFC] px-6 py-4 space-y-3">
+          <div className="lg:hidden border-t border-[#BCCCDC] bg-[#F8FAFC] px-4 sm:px-6 py-4 space-y-3">
             {[["About Us", () => scrollTo(aboutRef)], ["Services", () => scrollTo(servicesRef)], ["Guidelines", () => scrollTo(guidelinesRef)], ["Pricing", () => scrollTo(pricingRef)], ["Contact Us", openContact]].map(([label, action]) => (
               <button key={label} onClick={action} className="block w-full text-left text-slate-700 hover:text-[#234C6A] font-semibold py-1 transition-colors">{label}</button>
             ))}
@@ -1583,6 +1649,30 @@ export default function TOEConsulting() {
           </div>
         )}
       </header>
+
+      {/* Scroll down — right bottom, next section */}
+      {showScrollDown && (
+        <button
+          type="button"
+          onClick={scrollToNextSection}
+          className="fixed bottom-6 right-5 z-[60] w-11 h-11 rounded-full bg-white border-2 border-slate-200 shadow-xl flex items-center justify-center text-[#234C6A] hover:bg-[#E8EEF4] hover:border-[#456882] transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-[#234C6A]/50"
+          aria-label="Scroll to next section"
+        >
+          <ChevronDown className="w-6 h-6" strokeWidth={2.5} />
+        </button>
+      )}
+
+      {/* Scroll up — right bottom, above scroll down */}
+      {showScrollUp && (
+        <button
+          type="button"
+          onClick={scrollToPrevSection}
+          className="fixed bottom-20 right-5 z-[60] w-11 h-11 rounded-full bg-white border-2 border-slate-200 shadow-xl flex items-center justify-center text-[#234C6A] hover:bg-[#E8EEF4] hover:border-[#456882] transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-[#234C6A]/50"
+          aria-label="Scroll up"
+        >
+          <ChevronUp className="w-6 h-6" strokeWidth={2.5} />
+        </button>
+      )}
 
       <>
         {/* ── HERO ─────────────────────────────────────────────── */}
@@ -1595,7 +1685,7 @@ export default function TOEConsulting() {
           <div className="absolute -bottom-20 -left-10 w-[450px] h-[450px] rounded-full pointer-events-none"
             style={{ background: 'radial-gradient(ellipse, rgba(26,53,72,0.28) 0%, transparent 65%)', filter: 'blur(55px)' }}></div>
 
-          <div className="relative z-10 max-w-7xl mx-auto px-6 w-full pt-28 pb-20 grid lg:grid-cols-[1fr_1fr] gap-0 items-center min-h-screen">
+          <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 w-full pt-24 sm:pt-28 pb-12 sm:pb-20 grid lg:grid-cols-[1fr_1fr] gap-8 lg:gap-0 items-center min-h-screen">
 
             {/* ── LEFT: Copy column ── */}
             <div className={`relative z-10 lg:pr-14 transition-all duration-1000 ${isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-10'}`}>
@@ -1614,7 +1704,7 @@ export default function TOEConsulting() {
                 <span className="text-slate-900 relative">Linked</span>
               </h1>
 
-              <p className="text-slate-500 leading-relaxed mb-9 max-w-[480px] animate-fade-up" style={{ animationDelay: '0.28s', fontSize: '1.0625rem' }}>
+              <p className="text-slate-500 leading-relaxed mb-6 sm:mb-9 max-w-[480px] animate-fade-up text-sm sm:text-base" style={{ animationDelay: '0.28s' }}>
                 Connect directly with world-leading professors, scientists, and senior engineers. Get personalized guidance on graduate studies, research, and career advancement from PhDs who've mastered their craft.
               </p>
 
@@ -1655,31 +1745,31 @@ export default function TOEConsulting() {
             </div>
 
             {/* ── RIGHT: Visual panel ── */}
-            <div className={`relative flex items-center justify-center transition-all duration-1200 delay-150 ${isVisible ? 'opacity-100 scale-100' : 'opacity-0 scale-95'}`} style={{ minHeight: '820px' }}>
+            <div className={`relative flex items-center justify-center transition-all duration-1200 delay-150 min-h-[min(70vh,520px)] sm:min-h-[600px] lg:min-h-[820px] ${isVisible ? 'opacity-100 scale-100' : 'opacity-0 scale-95'}`}>
 
               <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                <div className="w-[500px] h-[500px] rounded-full"
+                <div className="w-[280px] h-[280px] sm:w-[400px] sm:h-[400px] lg:w-[500px] lg:h-[500px] rounded-full"
                   style={{ background: 'radial-gradient(ellipse, rgba(35,60,82,0.18) 0%, rgba(69,104,130,0.08) 45%, transparent 70%)', filter: 'blur(32px)' }}></div>
               </div>
 
-              <div className="relative w-[660px] h-[660px] max-w-full drop-shadow-2xl">
+              <div className="relative w-full max-w-[min(660px,95vw)] aspect-square drop-shadow-2xl">
                 <GlobeCanvas />
               </div>
 
 
 
               {/* Drag hint */}
-              <div className="absolute bottom-5 left-1/2 -translate-x-1/2 flex items-center gap-1.5 bg-white/85 backdrop-blur-sm border border-slate-200 rounded-full px-4 py-1.5 z-20 pointer-events-none select-none shadow-sm">
+              <div className="absolute bottom-2 sm:bottom-5 left-1/2 -translate-x-1/2 flex items-center gap-1.5 bg-white/85 backdrop-blur-sm border border-slate-200 rounded-full px-3 sm:px-4 py-1.5 z-20 pointer-events-none select-none shadow-sm">
                 <svg className="w-3 h-3 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M5 9l7-7 7 7M5 15l7 7 7-7" /></svg>
-                <span className="text-[11px] text-slate-400 font-semibold">Drag to rotate</span>
+                <span className="text-[10px] sm:text-[11px] text-slate-400 font-semibold">Drag to rotate</span>
               </div>
 
-              {/* Floating university pills — pool of 27, cycling independently */}
+              {/* Floating university pills — pool of 27, cycling independently; hidden on very small screens to avoid clutter */}
               {PILL_POSITIONS.map((cls, i) => {
                 const { uniIdx, shown, fading } = pills[i];
                 const uni = UNIVERSITIES[uniIdx];
                 return (
-                  <div key={i} className={`absolute ${cls} z-10`}
+                  <div key={i} className={`absolute ${cls} z-10 hidden sm:block`}
                     style={{
                       opacity: shown ? 1 : 0,
                       transform: shown ? 'scale(1) translateY(0)' : 'scale(0.78) translateY(14px)',
@@ -1708,14 +1798,14 @@ export default function TOEConsulting() {
         </section>
 
         {/* STATS */}
-        <section className="relative py-16 px-6 border-y border-slate-200" style={{ backgroundColor: '#F0F4F8' }}>
+        <section ref={statsRef} className="relative py-16 px-6 border-y border-slate-200 scroll-mt-20" style={{ backgroundColor: '#F0F4F8' }}>
           <div className="page-dots-layer page-dots-layer--animated" aria-hidden="true" />
           <div className="relative z-10 max-w-7xl mx-auto">
             <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
               {stats.map((stat, index) => (
-                <div key={index} className="text-center card-hover p-6 rounded-2xl border border-slate-200" style={{ backgroundColor: '#F8FAFC' }}>
-                  <div className={`inline-flex items-center justify-center w-12 h-12 mb-3 rounded-xl ${stat.color}`}>{stat.icon}</div>
-                  <div className="text-3xl md:text-4xl font-extrabold tracking-tight text-slate-900 mb-1 font-stat-inter tabular-nums">{stat.number}</div>
+                <div key={index} className="text-center card-hover p-4 sm:p-6 rounded-2xl border border-slate-200" style={{ backgroundColor: '#F8FAFC' }}>
+                  <div className={`inline-flex items-center justify-center w-10 h-10 sm:w-12 sm:h-12 mb-2 sm:mb-3 rounded-xl ${stat.color}`}>{stat.icon}</div>
+                  <div className="text-2xl sm:text-3xl md:text-4xl font-extrabold tracking-tight text-slate-900 mb-1 font-stat-inter tabular-nums">{stat.number}</div>
                   <div className="text-slate-500 text-sm font-medium">{stat.label}</div>
                 </div>
               ))}
@@ -1724,32 +1814,34 @@ export default function TOEConsulting() {
         </section>
 
         {/* ABOUT */}
-        <section ref={aboutRef} className="relative py-28 px-6 scroll-mt-20" style={{ backgroundColor: '#F8FAFC' }}>
+        <section ref={aboutRef} className="relative py-16 sm:py-20 md:py-28 px-4 sm:px-6 scroll-mt-20" style={{ backgroundColor: '#F8FAFC' }}>
           <div className="page-dots-layer page-dots-layer--animated" aria-hidden="true" />
           <div className="relative z-10 max-w-7xl mx-auto">
-            <div className="grid lg:grid-cols-2 gap-16 items-start">
+            <div className="grid lg:grid-cols-2 gap-10 lg:gap-16 items-start">
               <div>
                 <div className="inline-block section-label text-[#234C6A] mb-4">About Us</div>
-                <h2 className="font-display text-4xl md:text-5xl font-bold text-slate-900 mb-6 leading-tight">Connected to Knowledge <span className="gradient-text">Across the Globe</span></h2>
+                <h2 className="font-display text-3xl sm:text-4xl md:text-5xl font-bold text-slate-900 mb-4 sm:mb-6 leading-tight">Connect to Knowledge <span style={{ color: '#234C6A' }}>Across the Globe</span></h2>
                 <p className="text-slate-600 text-lg leading-relaxed mb-4">Starting from Study and Work Abroad — WisdomLinked is a global consulting service company backed by professors in top universities in the U.S. and other countries.</p>
-                <p className="text-slate-600 leading-relaxed mb-6">The business draws on the talents of elite professionals — mostly top-notch professors, scientists, researchers and other successful professionals. These elite professionals all have their graduate degrees, mostly Ph.D., with decades of successful experiences.</p>
+                <p className="text-slate-600 text-lg leading-relaxed mb-6">The business draws on the talents of elite professionals — mostly top-notch professors, scientists, researchers and other successful professionals. These elite professionals all have their graduate degrees, mostly Ph.D., with decades of successful experiences.</p>
                 <div className="about-highlight rounded-r-xl p-5 mb-6">
-                  <p className="text-slate-700 font-medium leading-relaxed">A 30-minute conversation with an authoritative expert through this platform could save clients years or months of effort — or countless dollars that could otherwise be wasted in darkness.</p>
+                  <p className="text-slate-600 text-lg leading-relaxed">A 30-minute conversation with an authoritative expert through this platform could save clients years or months of effort — or countless dollars that could otherwise be wasted in darkness.</p>
                 </div>
                 <button onClick={openContact} className="px-6 py-3 rounded-full btn-primary text-white font-semibold text-sm shadow-md shadow-[#BCCCDC]">Contact Us</button>
               </div>
-              <div className="space-y-5 lg:pt-12">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 lg:pt-12">
                 {[
                   { emoji: "🎓", title: "Who are our clients?", text: "People planning to go abroad for graduate studies, people looking for a job in the western world, and researchers seeking insightful advice with their research efforts.", color: "border-slate-200", bg: "#F8FAFC" },
                   { emoji: "🏆", title: "How do our experts join?", text: "Talents sign on a volunteer basis, providing available time slots for consulting at an asking price of their choice. It's flexible, impactful, and community-driven.", color: "border-slate-200", bg: "#F8FAFC" },
                   { emoji: "📅", title: "How does booking work?", text: "Clients prepay for a time slot at the asking price plus a client-determined tip (zero or more) before an appointment is made.", color: "border-slate-200", bg: "#F8FAFC" },
                   { emoji: "🎥", title: "How do sessions run?", text: "At the time of an appointment, the expert and client converse via video or audio depending on agreed choices. Conversations may be recorded for quality control.", color: "border-slate-200", bg: "#F8FAFC" },
+                  { emoji: "💬", title: "Forms of communication", text: "Customers may propose or accept a 1-1 appointment with an expert or join an expert-led seminar.", color: "border-slate-200", bg: "#F8FAFC" },
+                  { emoji: "📖", title: "User's Guide", text: "The HelpBot after login can answer FAQs like 'How to initiate a 1-1 appointment with an expert'.", color: "border-slate-200", bg: "#F8FAFC" },
                 ].map((item, i) => (
-                  <div key={i} className={`card-hover p-5 rounded-2xl border ${item.color} flex gap-4 items-start`} style={{ backgroundColor: item.bg }}>
-                    <span className="text-2xl mt-0.5">{item.emoji}</span>
-                    <div>
-                      <div className="font-semibold text-slate-800 mb-1">{item.title}</div>
-                      <p className="text-slate-500 text-sm leading-relaxed">{item.text}</p>
+                  <div key={i} className={`card-hover p-5 rounded-2xl border ${item.color} flex gap-4 items-start`} style={{ background: 'linear-gradient(135deg, rgba(69,104,130,0.06) 0%, rgba(69,104,130,0.04) 100%), #F0F4F8' }}>
+                    <span className="text-2xl mt-0.5 shrink-0">{item.emoji}</span>
+                    <div className="min-w-0">
+                      <div className="font-semibold text-slate-900 mb-1">{item.title}</div>
+                      <p className="text-slate-700 text-sm leading-relaxed">{item.text}</p>
                     </div>
                   </div>
                 ))}
@@ -1764,24 +1856,26 @@ export default function TOEConsulting() {
           <div className="relative z-10 max-w-7xl mx-auto">
             <div className="text-center mb-16">
               <div className="inline-block section-label text-[#234C6A] mb-4">Our Services</div>
-              <h2 className="font-display text-4xl md:text-5xl font-bold text-slate-900 mb-4">Expert Consulting Services</h2>
-              <p className="text-slate-600 text-lg max-w-2xl mx-auto">Get personalized, one-on-one guidance from the elites of the elite</p>
+              <h2 className="font-display text-4xl md:text-5xl font-bold text-slate-900 mb-4">Expert's advice</h2>
+              <p className="text-slate-600 text-lg max-w-2xl mx-auto">Get personalized, one-on-one guidance from the elites of the elite or join a speacialized seminar</p>
             </div>
-            <div className="grid md:grid-cols-4 gap-8">
+            <div className="grid md:grid-cols-4 gap-8 items-stretch">
               {services.map((service, index) => (
-                <div key={index} className={`card-hover p-8 rounded-3xl border ${service.border} group cursor-pointer`} style={{ background: 'linear-gradient(135deg, rgba(69,104,130,0.05) 0%, rgba(69,104,130,0.10) 100%), #F0F4F8' }}>
-                  <div className="inline-flex items-center justify-center w-14 h-14 mb-6 rounded-2xl group-hover:scale-110 transition-transform duration-300 text-[#234C6A]" style={{ backgroundColor: 'rgba(69,104,130,0.12)' }}>{service.icon}</div>
-                  <h3 className="font-display text-xl font-bold text-slate-900 mb-3">{service.title}</h3>
-                  <p className="text-slate-500 mb-5 leading-relaxed text-sm">{service.description}</p>
-                  <div className="space-y-2">
-                    {service.topics.map((topic, i) => (
-                      <div key={i} className="flex items-center gap-2 text-sm text-slate-600 font-medium">
-                        <CheckCircle className={`w-4 h-4 flex-shrink-0 ${service.accent}`} />{topic}
-                      </div>
-                    ))}
+                <div key={index} className={`card-hover p-6 sm:p-8 rounded-2xl sm:rounded-3xl border ${service.border} group cursor-pointer flex flex-col min-h-0`} style={{ background: 'linear-gradient(135deg, rgba(69,104,130,0.05) 0%, rgba(69,104,130,0.10) 100%), #F0F4F8' }}>
+                  <div className="flex-1 flex flex-col min-h-0">
+                    <div className="inline-flex items-center justify-center w-12 h-12 sm:w-14 sm:h-14 mb-4 sm:mb-6 rounded-xl sm:rounded-2xl group-hover:scale-110 transition-transform duration-300 text-[#234C6A]" style={{ backgroundColor: 'rgba(69,104,130,0.12)' }}>{service.icon}</div>
+                    <h3 className="font-display text-lg sm:text-xl font-bold text-slate-900 mb-2 sm:mb-3">{service.title}</h3>
+                    <p className="text-slate-500 mb-5 leading-relaxed text-sm">{service.description}</p>
+                    <div className="space-y-2">
+                      {service.topics.map((topic, i) => (
+                        <div key={i} className="flex items-center gap-2 text-sm text-slate-600 font-medium">
+                          <CheckCircle className={`w-4 h-4 flex-shrink-0 ${service.accent}`} />{topic}
+                        </div>
+                      ))}
+                    </div>
                   </div>
-                  <button onClick={openContact} className={`mt-6 flex items-center gap-1 text-sm font-semibold ${service.accent} group-hover:gap-2 transition-all`}>
-                    Contact to book <ArrowRight className="w-4 h-4" />
+                  <button onClick={() => navigate('/customerregister')} className="mt-6 w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl text-sm font-semibold text-white transition-all group-hover:gap-2.5 shrink-0" style={{ background: 'linear-gradient(135deg, #234C6A 0%, #456882 100%)' }}>
+                    Start now <ArrowRight className="w-4 h-4" />
                   </button>
                 </div>
               ))}
@@ -1790,20 +1884,21 @@ export default function TOEConsulting() {
         </section>
 
         {/* GUIDELINES */}
-        <section ref={guidelinesRef} className="relative py-28 px-6 scroll-mt-20" style={{ backgroundColor: '#F8FAFC' }}>
+        <section ref={guidelinesRef} className="relative py-16 sm:py-20 md:py-28 px-4 sm:px-6 scroll-mt-20" style={{ backgroundColor: '#F8FAFC' }}>
           <div className="page-dots-layer page-dots-layer--animated" aria-hidden="true" />
           <div className="relative z-10 max-w-4xl mx-auto">
-            <div className="text-left mb-10">
+            <div className="text-left mb-8 sm:mb-10">
               <div className="inline-block section-label text-[#234C6A] mb-4">Guidelines</div>
-              <h2 className="font-display text-4xl md:text-5xl font-bold text-slate-900 mb-4">
-                Guidelines for Experts and Clients
+              <h2 className="font-display text-3xl sm:text-4xl md:text-5xl font-bold text-slate-900 mb-4">
+                Guidelines for Quality
               </h2>
               <p className="text-slate-600 text-lg leading-relaxed">
-                The following guidelines apply to all services provided through our platform.
+                Integrity, Respect, and Truth
               </p>
             </div>
             <div className="space-y-6">
               {[
+                { emoji: "📜", title: "Basic rule", text: "Users must comply with all applicable laws, provide truthful information, and agree to WisdomLinked's rules and agreements.", color: "border-[#BCCCDC]" },
                 { emoji: "💳", title: "Appointments & Payments", text: "Our platform operates on an appointment-only basis and does not offer on-demand or real-time services. An appointment is confirmed once the client has submitted payment at the expert's listed rate, plus any applicable gratuity. If the client fails to attend the scheduled appointment, the payment is non-refundable. If the expert fails to attend, the client is entitled to a full refund.", color: "border-[#BCCCDC]" },
                 { emoji: "📋", title: "Complaints & Resolution", text: "Clients may submit a complaint in the event of service-related issues, including but not limited to expert tardiness, platform technical difficulties, or unsatisfactory service quality. Our team will review each complaint and make every effort to respond within five (5) business days.", color: "border-[#BCCCDC]" },
               ].map((item, i) => (
@@ -1820,22 +1915,22 @@ export default function TOEConsulting() {
         </section>
 
         {/* TESTIMONIALS */}
-        <section className="relative py-28 px-6" style={{ backgroundColor: '#F8FAFC' }}>
+        <section ref={successRef} className="relative py-16 sm:py-20 md:py-28 px-4 sm:px-6 scroll-mt-20" style={{ backgroundColor: '#F8FAFC' }}>
           <div className="page-dots-layer page-dots-layer--animated" aria-hidden="true" />
           <div className="relative z-10 max-w-4xl mx-auto">
-            <div className="text-center mb-16">
+            <div className="text-center mb-10 sm:mb-16">
               <div className="inline-block section-label text-[#234C6A] mb-4">Success Stories</div>
-              <h2 className="font-display text-4xl md:text-5xl font-bold text-slate-900 mb-4">Hear From Our Community</h2>
-              <p className="text-slate-600 text-lg">Clients and experts who've transformed their journeys</p>
+              <h2 className="font-display text-3xl sm:text-4xl md:text-5xl font-bold text-slate-900 mb-4">Hear From Our Community</h2>
+              <p className="text-slate-600 text-base sm:text-lg">Clients and experts who've transformed their journeys</p>
             </div>
-            <div className="relative rounded-3xl border border-slate-200 p-10 md:p-16 overflow-hidden min-h-[320px] flex items-center" style={{ background: 'linear-gradient(135deg, #F0F4F8 0%, #E8EEF4 100%)' }}>
+            <div className="relative rounded-2xl sm:rounded-3xl border border-slate-200 p-6 sm:p-10 md:p-16 overflow-hidden min-h-[280px] sm:min-h-[320px] flex items-center" style={{ background: 'linear-gradient(135deg, #F0F4F8 0%, #E8EEF4 100%)' }}>
               <div className="absolute top-0 right-0 w-64 h-64 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 opacity-60" style={{ background: 'radial-gradient(circle, rgba(35,60,82,0.12) 0%, transparent 70%)' }}></div>
               {testimonials.map((testimonial, index) => (
-                <div key={index} className={`absolute inset-0 p-10 md:p-16 flex items-center transition-all duration-700 ${index === activeTestimonial ? 'opacity-100 translate-x-0' : index < activeTestimonial ? 'opacity-0 -translate-x-full' : 'opacity-0 translate-x-full'}`}>
+                <div key={index} className={`absolute inset-0 p-6 sm:p-10 md:p-16 flex items-center transition-all duration-700 ${index === activeTestimonial ? 'opacity-100 translate-x-0' : index < activeTestimonial ? 'opacity-0 -translate-x-full' : 'opacity-0 translate-x-full'}`}>
                   <div className="text-center w-full">
-                    <div className={`inline-flex items-center justify-center w-16 h-16 mb-5 rounded-2xl ${testimonial.color} text-lg font-bold`}>{testimonial.image}</div>
-                    <div className="flex justify-center gap-1 mb-5">{[...Array(testimonial.rating)].map((_, i) => <Star key={i} className="w-5 h-5 fill-amber-400 text-amber-400" />)}</div>
-                    <p className="font-display text-xl md:text-2xl text-slate-700 mb-6 leading-relaxed italic max-w-2xl mx-auto">"{testimonial.content}"</p>
+                    <div className={`inline-flex items-center justify-center w-14 h-14 sm:w-16 sm:h-16 mb-4 sm:mb-5 rounded-xl sm:rounded-2xl ${testimonial.color} text-base sm:text-lg font-bold`}>{testimonial.image}</div>
+                    <div className="flex justify-center gap-1 mb-4 sm:mb-5">{[...Array(testimonial.rating)].map((_, i) => <Star key={i} className="w-4 h-4 sm:w-5 sm:h-5 fill-amber-400 text-amber-400" />)}</div>
+                    <p className="font-display text-lg sm:text-xl md:text-2xl text-slate-700 mb-4 sm:mb-6 leading-relaxed italic max-w-2xl mx-auto px-1">"{testimonial.content}"</p>
                     <div><div className="font-bold text-slate-900">{testimonial.name}</div><div className="text-slate-500 text-sm mt-1">{testimonial.role}</div></div>
                   </div>
                 </div>
@@ -1851,13 +1946,13 @@ export default function TOEConsulting() {
         </section>
 
         {/* JOIN AS EXPERT */}
-        <section className="relative py-28 px-6" style={{ backgroundColor: '#F0F4F8' }}>
+        <section ref={expertsRef} className="relative py-16 sm:py-20 md:py-28 px-4 sm:px-6 scroll-mt-20" style={{ backgroundColor: '#F0F4F8' }}>
           <div className="page-dots-layer page-dots-layer--animated" aria-hidden="true" />
           <div className="relative z-10 max-w-7xl mx-auto">
-            <div className="grid md:grid-cols-2 gap-16 items-center">
+            <div className="grid md:grid-cols-2 gap-10 lg:gap-16 items-center">
               <div>
                 <div className="inline-block section-label text-[#234C6A] mb-4">For Experts</div>
-                <h2 className="font-display text-4xl md:text-5xl font-bold text-slate-900 mb-6 leading-tight">Share Your Expertise, <span className="gradient-text">Make an Impact</span></h2>
+                <h2 className="font-display text-3xl sm:text-4xl md:text-5xl font-bold text-slate-900 mb-4 sm:mb-6 leading-tight">Share Your Expertise, <span style={{ color: '#234C6A' }}>Make an Impact</span></h2>
                 <p className="text-slate-600 text-lg mb-8 leading-relaxed">Share your decades of experience with the next generation. Make a meaningful impact while building your global network and earning for your expertise.</p>
                 <div className="space-y-3 mb-8">
                   {expertBenefits.map((benefit, index) => (
@@ -1871,17 +1966,17 @@ export default function TOEConsulting() {
                   Apply to Become an Expert <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
                 </button>
               </div>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-2 gap-3 sm:gap-4">
                 {[
-                  { icon: <GraduationCap className="w-8 h-8" style={{ color: '#234C6A' }} />, title: "PhD+", sub: "Required Credential", border: "border-slate-200" },
-                  { icon: <Globe className="w-8 h-8" style={{ color: '#234C6A' }} />, title: "Global", sub: "Network Reach", border: "border-slate-200" },
-                  { icon: <TrendingUp className="w-8 h-8" style={{ color: '#234C6A' }} />, title: "Flexible", sub: "Your Schedule", border: "border-slate-200" },
-                  { icon: <Sparkles className="w-8 h-8" style={{ color: '#234C6A' }} />, title: "Impact", sub: "Make a Difference", border: "border-slate-200" },
+                  { icon: <GraduationCap className="w-6 h-6 sm:w-8 sm:h-8" style={{ color: '#234C6A' }} />, title: "PhD+", sub: "Required Credential", border: "border-slate-200" },
+                  { icon: <Globe className="w-6 h-6 sm:w-8 sm:h-8" style={{ color: '#234C6A' }} />, title: "Global", sub: "Network Reach", border: "border-slate-200" },
+                  { icon: <TrendingUp className="w-6 h-6 sm:w-8 sm:h-8" style={{ color: '#234C6A' }} />, title: "Flexible", sub: "Your Schedule", border: "border-slate-200" },
+                  { icon: <Sparkles className="w-6 h-6 sm:w-8 sm:h-8" style={{ color: '#234C6A' }} />, title: "Impact", sub: "Make a Difference", border: "border-slate-200" },
                 ].map((item, i) => (
-                  <div key={i} className={`card-hover p-6 rounded-2xl border ${item.border}`} style={{ background: 'linear-gradient(rgba(69,104,130,0.06), rgba(69,104,130,0.06)), #F0F4F8' }}>
+                  <div key={i} className={`card-hover p-4 sm:p-6 rounded-xl sm:rounded-2xl border ${item.border}`} style={{ background: 'linear-gradient(rgba(69,104,130,0.06), rgba(69,104,130,0.06)), #F0F4F8' }}>
                     {item.icon}
-                    <div className="text-2xl font-bold text-slate-900 mt-3 mb-1 font-display">{item.title}</div>
-                    <div className="text-slate-500 text-sm">{item.sub}</div>
+                    <div className="text-xl sm:text-2xl font-bold text-slate-900 mt-2 sm:mt-3 mb-1 font-display">{item.title}</div>
+                    <div className="text-slate-500 text-xs sm:text-sm">{item.sub}</div>
                   </div>
                 ))}
               </div>
@@ -1890,17 +1985,17 @@ export default function TOEConsulting() {
         </section>
 
         {/* CTA BANNER */}
-        <section ref={pricingRef} className="relative py-24 px-6 scroll-mt-20" style={{ backgroundColor: '#F8FAFC' }}>
+        <section ref={pricingRef} className="relative py-16 sm:py-20 md:py-24 px-4 sm:px-6 scroll-mt-20" style={{ backgroundColor: '#F8FAFC' }}>
           <div className="page-dots-layer page-dots-layer--animated" aria-hidden="true" />
           <div className="relative z-10 max-w-4xl mx-auto">
-            <div className="relative overflow-hidden rounded-3xl p-12 md:p-16 text-center" style={{ background: 'linear-gradient(135deg, #1B3C53 0%, #234C6A 40%, #456882 70%, #D9EAFD 100%)' }}>
+            <div className="relative overflow-hidden rounded-2xl sm:rounded-3xl p-8 sm:p-12 md:p-16 text-center" style={{ backgroundColor: '#234C6A' }}>
               <div className="absolute inset-0 hero-grid opacity-10"></div>
-              <div className="absolute top-0 right-0 w-80 h-80 bg-white/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2"></div>
+              <div className="absolute top-0 right-0 w-48 sm:w-80 h-48 sm:h-80 bg-white/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2"></div>
               <div className="relative">
                 <div className="inline-block section-label text-[#D9EAFD] mb-4">Get Started</div>
-                <h2 className="font-display text-4xl md:text-5xl font-bold text-white mb-4">Ready to Connect?</h2>
-                <p className="text-[#D9EAFD] text-lg mb-8 max-w-xl mx-auto">Whether you're seeking guidance or ready to share your expertise, start your journey with WisdomLinked today.</p>
-                <div className="flex flex-col sm:flex-row gap-4 justify-center">
+                <h2 className="font-display text-3xl sm:text-4xl md:text-5xl font-bold text-white mb-3 sm:mb-4">Ready to Connect?</h2>
+                <p className="text-[#D9EAFD] text-base sm:text-lg mb-6 sm:mb-8 max-w-xl mx-auto px-1">Whether you're seeking guidance or ready to share your expertise, start your journey with WisdomLinked today.</p>
+                <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 justify-center">
                   <button onClick={() => navigate('/customerregister')} className="group px-8 py-4 bg-white rounded-full font-bold text-[#234C6A] text-base hover:bg-[#D9EAFD] transition-all shadow-xl flex items-center gap-2 justify-center">
                     Get Started Now <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
                   </button>
@@ -1912,9 +2007,9 @@ export default function TOEConsulting() {
         </section>
 
         {/* FOOTER */}
-        <footer className="footer-bg text-white">
-          <div className="max-w-7xl mx-auto px-6 pt-16 pb-8">
-            <div className="grid grid-cols-1 md:grid-cols-5 gap-12 mb-12">
+        <footer className="footer-bg text-white overflow-x-hidden">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 pt-12 sm:pt-16 pb-6 sm:pb-8">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-8 sm:gap-12 mb-8 sm:mb-12">
               <div className="md:col-span-1">
                 <div className="flex items-center gap-3 mb-4">
                   <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-[#1B3C53]/40 to-[#456882]/40 border border-[#BCCCDC]/40 flex items-center justify-center">
@@ -1936,7 +2031,7 @@ export default function TOEConsulting() {
                 </div>
               ))}
             </div>
-            <div className="pt-8 border-t border-white/10 flex flex-col md:flex-row items-center justify-between gap-4">
+            <div className="pt-6 sm:pt-8 border-t border-white/10 flex flex-col md:flex-row items-center justify-between gap-4 text-center md:text-left">
               <div className="text-slate-500 text-sm">© 2026 WisdomLinked. All rights reserved.</div>
               <div className="flex gap-6">
                 {["Privacy", "Terms", "Cookie Preferences"].map(item => (<a key={item} href="#" className="text-slate-500 hover:text-white text-sm transition-colors">{item}</a>))}

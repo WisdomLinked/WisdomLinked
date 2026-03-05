@@ -3,11 +3,12 @@ import { useNavigate } from 'react-router-dom';
 import { useDispatch } from 'react-redux';
 import {
     User, Mail, Lock, Phone, AlertCircle, CheckCircle, ChevronDown,
-    ArrowRight, Upload, BookOpen
+    ArrowRight, Upload, BookOpen, Eye, EyeOff
 } from 'lucide-react';
 import { callApi } from '../api/api';
 import { showAlert } from '../actions/alertActions';
 import ConfirmEmail from '../components/ConfirmEmail';
+import SocialAuthBlock from '../components/SocialAuthBlock';
 
 const BTN_PRIMARY_STYLE = { background: 'linear-gradient(135deg, #234C6A 0%, #456882 100%)' };
 const FOCUS_RING = 'focus:ring-2 focus:ring-[#234C6A]/60 focus:border-[#234C6A]';
@@ -45,11 +46,13 @@ export default function WLExpertRegister() {
     const navigate = useNavigate();
     const dispatch = useDispatch();
     const [form, setForm] = useState({
-        fullName: '', title: '', bio: '', majors: [], servicesOffered: [], country: '', countryCode: '+1', phone: '', email: '', password: '', confirmPassword: '', resumeFile: null, terms: false
+        fullName: '', title: '', bio: '', majors: [], servicesOffered: [], country: '', countryCode: '+1', phone: '', email: '', password: '', confirmPassword: '', specialNote: '', resumeFile: null, terms: false
     });
     const [errors, setErrors] = useState({});
     const [submitting, setSubmitting] = useState(false);
     const [confirmEmailSent, setConfirmEmailSent] = useState(false);
+    const [showPassword, setShowPassword] = useState(false);
+    const [showConfirmPassword, setShowConfirmPassword] = useState(false);
     const [showMajorDrop, setShowMajorDrop] = useState(false);
     const [showServicesDrop, setShowServicesDrop] = useState(false);
     const [showCountryDrop, setShowCountryDrop] = useState(false);
@@ -96,6 +99,7 @@ export default function WLExpertRegister() {
         if (!form.password) e.password = 'Password is required';
         else if (form.password.length < 8) e.password = 'Password must be at least 8 characters';
         if (form.password !== form.confirmPassword) e.confirmPassword = 'Passwords do not match';
+        if (form.specialNote.trim().length > 50) e.specialNote = 'Special note must be 50 characters or less';
         if (!form.terms) e.terms = 'You must accept the terms and conditions';
         return e;
     };
@@ -118,7 +122,8 @@ export default function WLExpertRegister() {
                 phoneNumber: form.countryCode + form.phone,
                 email: form.email,
                 password: form.password,
-                timeSlots: []
+                timeSlots: [],
+                ...(form.specialNote.trim() && { specialNote: form.specialNote.trim() })
             };
             const response = await callApi('POST', 'auth/register', data, form.resumeFile || undefined);
             if (response.status === 'SUCCESS') {
@@ -156,10 +161,10 @@ export default function WLExpertRegister() {
       `}</style>
 
             <div className="auth-dots-layer auth-dots-layer--animate" aria-hidden="true" />
-            <div className="relative z-10 max-w-xl mx-auto">
-                <button onClick={() => navigate('/')} className="flex items-center gap-2 text-slate-500 hover:text-[#234C6A] text-sm font-semibold mb-6">
-                    <ArrowRight className="w-4 h-4 rotate-180" /> Back to Home
-                </button>
+            <button onClick={() => navigate('/')} className="fixed top-4 left-4 z-20 flex items-center gap-2 text-slate-500 hover:text-[#234C6A] text-sm font-semibold px-4 py-2 rounded-xl bg-white/90 backdrop-blur-sm border border-slate-200 shadow-sm hover:border-[#456882] transition-colors">
+                <ArrowRight className="w-4 h-4 rotate-180" /> Back to Home
+            </button>
+            <div className="relative z-10 max-w-xl mx-auto pt-2">
                 <div className="rounded-3xl border border-slate-200 shadow-xl overflow-hidden" style={{ background: 'linear-gradient(135deg, #ffffff 0%, #f8fafc 100%)' }}>
                     <div className="h-1 w-full" style={{ background: 'linear-gradient(90deg, #234C6A, #456882)' }} />
                     <div className="p-6 sm:p-8">
@@ -295,18 +300,39 @@ export default function WLExpertRegister() {
 
                             <div>
                                 <label className="block text-xs font-semibold text-slate-600 mb-1.5"><span className="flex items-center gap-1.5"><Lock size={12} /> Password</span></label>
-                                <input type="password" placeholder="Min. 8 characters" value={form.password}
-                                    onChange={e => { setForm(f => ({ ...f, password: e.target.value })); setErrors(er => ({ ...er, password: '', confirmPassword: '' })); }}
-                                    className={errors.password ? inputError : inputNormal} />
+                                <div className="relative">
+                                    <input type={showPassword ? 'text' : 'password'} placeholder="Min. 8 characters" value={form.password}
+                                        onChange={e => { setForm(f => ({ ...f, password: e.target.value })); setErrors(er => ({ ...er, password: '', confirmPassword: '' })); }}
+                                        className={`${errors.password ? inputError : inputNormal} pr-10`} />
+                                    <button type="button" onClick={() => setShowPassword(p => !p)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600" aria-label={showPassword ? 'Hide password' : 'Show password'}>
+                                        {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                                    </button>
+                                </div>
                                 {errors.password && <p className="mt-1 text-xs text-red-500 flex items-center gap-1"><AlertCircle size={11} />{errors.password}</p>}
                             </div>
 
                             <div>
                                 <label className="block text-xs font-semibold text-slate-600 mb-1.5">Confirm password</label>
-                                <input type="password" placeholder="Re-enter password" value={form.confirmPassword}
-                                    onChange={e => { setForm(f => ({ ...f, confirmPassword: e.target.value })); setErrors(er => ({ ...er, confirmPassword: '' })); }}
-                                    className={errors.confirmPassword ? inputError : inputNormal} />
+                                <div className="relative">
+                                    <input type={showConfirmPassword ? 'text' : 'password'} placeholder="Re-enter password" value={form.confirmPassword}
+                                        onChange={e => { setForm(f => ({ ...f, confirmPassword: e.target.value })); setErrors(er => ({ ...er, confirmPassword: '' })); }}
+                                        className={`${errors.confirmPassword ? inputError : inputNormal} pr-10`} />
+                                    <button type="button" onClick={() => setShowConfirmPassword(p => !p)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600" aria-label={showConfirmPassword ? 'Hide password' : 'Show password'}>
+                                        {showConfirmPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                                    </button>
+                                </div>
                                 {errors.confirmPassword && <p className="mt-1 text-xs text-red-500 flex items-center gap-1"><AlertCircle size={11} />{errors.confirmPassword}</p>}
+                            </div>
+
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-600 mb-1.5">Special note</label>
+                                <input type="text" placeholder="Optional, max 50 characters" value={form.specialNote} maxLength={50}
+                                    onChange={e => { setForm(f => ({ ...f, specialNote: e.target.value })); setErrors(er => ({ ...er, specialNote: '' })); }}
+                                    className={errors.specialNote ? inputError : inputNormal} />
+                                <div className="flex items-center justify-between mt-1">
+                                    {errors.specialNote && <p className="text-xs text-red-500 flex items-center gap-1"><AlertCircle size={11} />{errors.specialNote}</p>}
+                                    <span className={`text-xs ml-auto ${form.specialNote.length >= 50 ? 'text-amber-600' : 'text-slate-400'}`}>{form.specialNote.length} / 50</span>
+                                </div>
                             </div>
 
                             <div>
@@ -335,6 +361,7 @@ export default function WLExpertRegister() {
                             style={submitting ? { background: '#9AA6B2' } : BTN_PRIMARY_STYLE}>
                             {submitting ? (<><svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" /></svg>Registering...</>) : 'Register'}
                         </button>
+                        <SocialAuthBlock />
                         <p className="text-center text-slate-500 text-sm mt-4">
                             Already have an account? <button type="button" onClick={() => navigate('/login')} className="font-semibold hover:underline" style={{ color: '#234C6A' }}>Log in</button>
                         </p>

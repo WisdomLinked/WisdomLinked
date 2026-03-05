@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useDispatch } from 'react-redux';
-import { Mail, Lock, AlertCircle, BookOpen } from 'lucide-react';
+import { Mail, Lock, AlertCircle, BookOpen, Eye, EyeOff } from 'lucide-react';
 import { login } from '../api/api';
 import { showAlert } from '../actions/alertActions';
 import ConfirmCode from '../components/ConfirmCode';
+import SocialAuthBlock from '../components/SocialAuthBlock';
 
 const BTN_PRIMARY_STYLE = { background: 'linear-gradient(135deg, #234C6A 0%, #456882 100%)' };
 const FOCUS_RING = 'focus:ring-2 focus:ring-[#234C6A]/60 focus:border-[#234C6A]';
@@ -16,6 +17,7 @@ export default function WLLogin() {
     const [errors, setErrors] = useState({});
     const [submitting, setSubmitting] = useState(false);
     const [codeSent, setCodeSent] = useState(false);
+    const [showPassword, setShowPassword] = useState(false);
 
     const inputBase = `w-full rounded-xl border bg-white px-4 py-3 text-sm text-slate-800 placeholder-slate-400 outline-none transition-all duration-200 ${FOCUS_RING}`;
     const inputNormal = `${inputBase} border-slate-200`;
@@ -91,10 +93,15 @@ export default function WLLogin() {
                             </div>
                             <div>
                                 <label className="block text-xs font-semibold text-slate-600 mb-1.5"><span className="flex items-center gap-1.5"><Lock size={12} /> Password</span></label>
-                                <input type="password" placeholder="Your password" value={form.password}
-                                    onChange={e => { setForm(f => ({ ...f, password: e.target.value })); setErrors(er => ({ ...er, password: '' })); }}
-                                    onKeyDown={e => e.key === 'Enter' && handleSubmit()}
-                                    className={errors.password ? inputError : inputNormal} />
+                                <div className="relative">
+                                    <input type={showPassword ? 'text' : 'password'} placeholder="Your password" value={form.password}
+                                        onChange={e => { setForm(f => ({ ...f, password: e.target.value })); setErrors(er => ({ ...er, password: '' })); }}
+                                        onKeyDown={e => e.key === 'Enter' && handleSubmit()}
+                                        className={`${errors.password ? inputError : inputNormal} pr-10`} />
+                                    <button type="button" onClick={() => setShowPassword(p => !p)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600" aria-label={showPassword ? 'Hide password' : 'Show password'}>
+                                        {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                                    </button>
+                                </div>
                                 {errors.password && <p className="mt-1 text-xs text-red-500 flex items-center gap-1"><AlertCircle size={11} />{errors.password}</p>}
                             </div>
                         </div>
@@ -106,6 +113,7 @@ export default function WLLogin() {
                             style={submitting ? { background: '#9AA6B2' } : BTN_PRIMARY_STYLE}>
                             {submitting ? (<><svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" /></svg>Signing in...</>) : 'Sign in'}
                         </button>
+                        <SocialAuthBlock />
                         <p className="text-center text-slate-500 text-sm mt-4">
                             Don't have an account? <button type="button" onClick={() => navigate('/customerregister')} className="font-semibold hover:underline" style={{ color: '#234C6A' }}>Sign up</button>
                         </p>
