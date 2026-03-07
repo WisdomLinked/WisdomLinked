@@ -41,7 +41,7 @@ const CustomerPrivateExpertsList: React.FC = () => {
   const privateChats = useMemo(() => {
     if (!userDetails) return [];
 
-    const chats = userDetails.generalChats ?? userDetails.groupChats ?? userDetails.privateChats ?? [];
+    const chats = [...(userDetails.generalChats || []), ...(userDetails.groupChats || []), ...(userDetails.privateChats || [])];
     const results: Array<{ chat: any; other: any; otherId: string; otherName: string }> = [];
 
     for (const g of chats) {
@@ -104,7 +104,7 @@ const CustomerPrivateExpertsList: React.FC = () => {
 
   return (
     <MainContainer>
-      <SearchInput type="text" placeholder="Search your private chats..." onChange={() => {}} />
+      <SearchInput type="text" placeholder="Search your private chats..." onChange={() => { }} />
       {privateChats.map((p) => (
         <div
           key={p.chat._id ?? p.chat.groupId ?? p.otherId}
