@@ -8,7 +8,29 @@ const roomCreateHandler = async (socket, data) => {
   const socketId = socket.id;
   const { userId, username } = socket.user;
 
-  const roomDetails = addNewActiveRoom(userId, username, socketId, data.groupId);
+  const { getActiveRoom, joinActiveRoom } = require("../../socket/activeRooms");
+  let roomDetails = getActiveRoom(null, data.groupId);
+
+  if (roomDetails) {
+    console.log("Room already exists, converting create request to join request");
+    const participantDetails = { userId, socketId, username };
+
+    const alreadyInRoom = roomDetails.participants.find(p => p.socketId === socketId);
+    if (!alreadyInRoom) {
+      joinActiveRoom(roomDetails.roomId, participantDetails);
+
+      roomDetails.participants.forEach((participant) => {
+        if (participant.socketId !== socketId) {
+          socket.to(participant.socketId).emit("conn-prepare", {
+            connUserSocketId: socketId,
+          });
+        }
+      });
+    }
+  } else {
+    roomDetails = addNewActiveRoom(userId, username, socketId, data.groupId);
+  }
+
   socket.emit("room-create", {
     roomDetails
   });
