@@ -1,4 +1,4 @@
-import React, {useEffect, useRef, useState} from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { useAppSelector } from "../../../store";
 import { useNavigate } from "react-router-dom";
 import Avatar from "../../../components/Avatar";
@@ -14,7 +14,7 @@ import {
 import { updateMe } from "../../../actions/authActions";
 import { useDispatch } from "react-redux";
 import { SetLoadingStatus } from "../../../actions/appActions";
-import {setChosenChatDetails, setChosenGroupChatDetails} from "../../../actions/chatActions";
+import { setChosenChatDetails, setChosenGroupChatDetails } from "../../../actions/chatActions";
 import Chatbot from "../../../components/chatbot";
 
 const Dashboard = () => {
@@ -72,10 +72,17 @@ const Dashboard = () => {
     };
 
     const navigateSeminar = (item: any) => {
-        const selectedGroupChat:any = groupChatList.find((x: any) => x.groupId === item._id)
+        let selectedGroupChat: any = groupChatList.find((x: any) => x.groupId === item._id);
+        if (!selectedGroupChat) {
+            selectedGroupChat = {
+                ...item,
+                groupId: item._id,
+                groupName: item.customerId?.username ?? item.customer?.username ?? item.admin?.username ?? item.name,
+            };
+        }
         console.log("navigate events", item);
         navigate(`${process.env.REACT_APP_AUTH_URL}expertdashboard/chat`);
-        dispatch(setChosenGroupChatDetails( selectedGroupChat ));
+        dispatch(setChosenGroupChatDetails(selectedGroupChat));
     };
 
     const cancelAppointment = async (data: any) => {
@@ -180,7 +187,7 @@ const Dashboard = () => {
                                             {/*<div className="text-sm">{item.description}</div>*/}
                                         </div>
                                     </div>
-                                    <hr className="my-2"/>
+                                    <hr className="my-2" />
                                     {/*<div><span className="font-bold">Expert  : </span> {item.admin.username}</div>*/}
                                     {/*<div><span className="font-bold">Email  : </span> {item.admin.email}</div>*/}
                                     <div><span className="font-bold">Description  : </span> {item.description}</div>
@@ -190,7 +197,7 @@ const Dashboard = () => {
                                     <div><span className="font-bold">Duration  : </span> {item.duration} min
                                     </div>
                                     <div><span className="font-bold">Price  : </span> ${item.price}</div>
-                                    <hr className="my-2"/>
+                                    <hr className="my-2" />
                                     <button
                                         className="py-1 w-full bg-green rounded-lg flex items-center justify-center disabled:opacity-50"
                                         onClick={() => navigateSeminar(item)}
@@ -222,7 +229,7 @@ const Dashboard = () => {
                                             <div className="text-sm">{item.customerId.email}</div>
                                         </div>
                                     </div>
-                                    <hr className="my-2"/>
+                                    <hr className="my-2" />
                                     <div><span className="font-bold">Title  : </span> {item.groupChatId.name}</div>
                                     <div><span className="font-bold">Description  : </span> {item.groupChatId.description}</div>
                                     <div><span
@@ -231,7 +238,7 @@ const Dashboard = () => {
                                     <div><span className="font-bold">Duration  : </span> {item.groupChatId.duration} min
                                     </div>
                                     <div><span className="font-bold">Price  : </span> ${item.groupChatId.price}</div>
-                                    <hr className="my-2"/>
+                                    <hr className="my-2" />
                                     <button
                                         className="py-1 w-full bg-green rounded-lg flex items-center justify-center disabled:opacity-50"
                                         disabled={status === 'review'}
@@ -264,7 +271,7 @@ const Dashboard = () => {
                                             {/*<div className="text-sm">{item.description}</div>*/}
                                         </div>
                                     </div>
-                                    <hr className="my-2"/>
+                                    <hr className="my-2" />
                                     {/*<div><span className="font-bold">Expert  : </span> {item.admin.username}</div>*/}
                                     {/*<div><span className="font-bold">Email  : </span> {item.admin.email}</div>*/}
                                     {/* <div><span className="font-bold">Description  : </span> {item.description}</div> */}
@@ -274,7 +281,7 @@ const Dashboard = () => {
                                     <div><span className="font-bold">Duration  : </span> {item.duration} min
                                     </div>
                                     <div><span className="font-bold">Price  : </span> ${item.price}</div>
-                                    <hr className="my-2"/>
+                                    <hr className="my-2" />
                                     <button
                                         className="py-1 w-full bg-green rounded-lg flex items-center justify-center disabled:opacity-50"
                                         onClick={() => navigateSeminar(item)}
@@ -305,7 +312,7 @@ const Dashboard = () => {
                                             <div className="text-sm">{item.createdBy.email}</div>
                                         </div>
                                     </div>
-                                    <hr className="my-2"/>
+                                    <hr className="my-2" />
                                     <div><span className="font-bold">Title  : </span> {item.name}</div>
                                     {/* <div><span className="font-bold">Description  : </span> {item.groupChatId.description}</div> */}
                                     <div><span
@@ -314,7 +321,7 @@ const Dashboard = () => {
                                     <div><span className="font-bold">Duration  : </span> {item.duration} min
                                     </div>
                                     <div><span className="font-bold">Price  : </span> ${item.price}</div>
-                                    <hr className="my-2"/>
+                                    <hr className="my-2" />
                                     {item.createdBy._id === _id ?
                                         <button
                                             className="py-1 w-full border border-lightgrey rounded-lg flex items-center justify-center disabled:opacity-50"
@@ -344,7 +351,7 @@ const Dashboard = () => {
                     zIndex: 1000,
                 }}
             >
-                <Chatbot/>
+                <Chatbot />
             </div>
         </div>
     );

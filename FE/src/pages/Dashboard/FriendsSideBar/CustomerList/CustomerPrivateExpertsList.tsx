@@ -2,7 +2,7 @@ import React, { useMemo } from "react";
 import { styled } from "@mui/system";
 import { useNavigate } from "react-router-dom";
 import { useDispatch } from "react-redux";
-import { setChosenGroupChatDetails } from "../../../../actions/chatActions";
+import { setChosenGroupChatDetails, setChosenChatDetails } from "../../../../actions/chatActions";
 import { useAppSelector } from "../../../../store";
 
 const MainContainer = styled("div")({
@@ -82,12 +82,22 @@ const CustomerPrivateExpertsList: React.FC = () => {
   if (!userDetails) return null;
 
   const openChat = (chatObj: any) => {
-    const chosen = {
-      ...chatObj.chat,
-      groupId: chatObj.chat._id ?? chatObj.chat.groupId,
-      groupName: chatObj.otherName ?? chatObj.chat.name ?? chatObj.chat.groupName,
-    };
-    dispatch(setChosenGroupChatDetails(chosen));
+    if (chatObj.chat?.type === "general") {
+      dispatch(
+        setChosenChatDetails({
+          userId: chatObj.otherId,
+          username: chatObj.otherName,
+          image: chatObj.other?.image || null,
+        })
+      );
+    } else {
+      const chosen = {
+        ...chatObj.chat,
+        groupId: chatObj.chat._id ?? chatObj.chat.groupId,
+        groupName: chatObj.otherName ?? chatObj.chat.name ?? chatObj.chat.groupName,
+      };
+      dispatch(setChosenGroupChatDetails(chosen));
+    }
     navigate(`${process.env.REACT_APP_AUTH_URL}customerdashboard/chat`);
   };
 

@@ -113,7 +113,14 @@ const Dashboard = () => {
     };
 
     const navigateSeminar = (item: any) => {
-        const selectedGroupChat: any = groupChatList.find((x: any) => x.groupId === item._id)
+        let selectedGroupChat: any = groupChatList.find((x: any) => x.groupId === item._id);
+        if (!selectedGroupChat) {
+            selectedGroupChat = {
+                ...item,
+                groupId: item._id,
+                groupName: item.customerId?.username ?? item.customer?.username ?? item.admin?.username ?? item.name,
+            };
+        }
         console.log("navigate events", item);
         navigate(`${process.env.REACT_APP_AUTH_URL}customerdashboard/chat`);
         dispatch(setChosenGroupChatDetails(selectedGroupChat));
