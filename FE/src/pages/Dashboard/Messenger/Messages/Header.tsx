@@ -283,7 +283,7 @@ const MessagesHeader = ({ scrollPosition, events, openCalendarModal, openSeminar
                         <IconButton
                             style={{ color: "white" }}
                             className="disabled:opacity-50"
-                            disabled={(!isOnline(chosenChatDetails.userId) || !enabledEvent) && userDetails.role === "customer"}
+                            disabled={false && (!isOnline(chosenChatDetails.userId) || !enabledEvent) && userDetails.role === "customer"}
                             onClick={() => {
                                 if (enabledEvent) {
                                     SetTotalTimeSpent(Date.now());
@@ -306,7 +306,7 @@ const MessagesHeader = ({ scrollPosition, events, openCalendarModal, openSeminar
                         <IconButton
                             style={{ color: "white" }}
                             className="disabled:opacity-50"
-                            disabled={(!isOnline(chosenChatDetails.userId) || !enabledEvent) && userDetails.role === "customer"}
+                            disabled={false && (!isOnline(chosenChatDetails.userId) || !enabledEvent) && userDetails.role === "customer"}
                             onClick={() => {
                                 console.log("Video call button clicked:", {
                                     receiverUserId: chosenChatDetails?.userId,
@@ -348,9 +348,9 @@ const MessagesHeader = ({ scrollPosition, events, openCalendarModal, openSeminar
                                         className="bg-green rounded-md mr-4 py-0.5 px-4 text-lg text-white font-bold disabled:opacity-50"
                                         title={!enabledEvent ? 'Seminar not started' : isUserInRoom ? 'You are already in the seminar' : kickedFromSeminar ? 'You are blocked from this seminar by the expert' : 'Join a seminar'}
                                         disabled={
-                                            !enabledEvent ||
-                                            isUserInRoom ||
-                                            kickedFromSeminar
+                                            false && (!enabledEvent ||
+                                                isUserInRoom ||
+                                                kickedFromSeminar)
                                             // activeRooms?.kickedParticipants?.find(x => x === userDetails.userId)
                                             // !(
                                             //     userDetails?.userId === chosenGroupChatDetails?.admin?._id ||
