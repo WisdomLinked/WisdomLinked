@@ -32,7 +32,7 @@ const getLocalStream = async () => {
 }
 
 export const checkLocalAudioVideoStreams = async () => {
-    const {videoStream, audioStream} = await getLocalStream()
+    const { videoStream, audioStream } = await getLocalStream()
     store.dispatch({
         type: actionTypes.setLocalStreamAvailability,
         payload: {
@@ -44,9 +44,9 @@ export const checkLocalAudioVideoStreams = async () => {
 
 export const getLocalStreamPreview = async (audioOnly: boolean, callback?: () => void, room?: boolean, failedCallback?: (err: any) => any) => {
 
-    const {videoStream, audioStream} = await getLocalStream()
+    const { videoStream, audioStream } = await getLocalStream()
     const constraints = room ?
-        { audio: audioStream ? true : false, video: videoStream ? true : false} :
+        { audio: audioStream ? true : false, video: videoStream ? true : false } :
         { audio: true, video: audioOnly ? false : true };
 
     console.log("constraints", constraints);
@@ -107,8 +107,8 @@ const peerConfiguration = () => {
                         "turn:relay9.expressturn.com:3478?transport=udp",
                         "turn:relay9.expressturn.com:3478?transport=udp"
                     ],
-                    username: "000000002077044058",
-                    credential: "Yg0YtBV+8QIW0Jw8ZfNVz961Mk0="
+                    username: process.env.REACT_APP_TURN_USERNAME || "000000002086321408",
+                    credential: process.env.REACT_APP_TURN_PASSWORD || "7D3h0/Ogol8Eql3n4d4WB9bs0Cg="
                 }
             ]
         };

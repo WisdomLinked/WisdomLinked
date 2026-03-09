@@ -28,6 +28,8 @@ jobs:
           REACT_APP_API_BASE_URL=https://api.wisdomlinked.com/api
           REACT_APP_HOST_URL=https://wisdomlinked.com
           REACT_APP_TURN_URL=${{ secrets.REACT_APP_TURN_URL }}
+          REACT_APP_TURN_USERNAME=${{ secrets.REACT_APP_TURN_USERNAME }}
+          REACT_APP_TURN_PASSWORD=${{ secrets.REACT_APP_TURN_PASSWORD }}
           REACT_APP_BASE_URL=/
           REACT_APP_AUTH_URL=/user/
           REACT_APP_PAYPAL_REAL_CLIENT_ID=${{ secrets.REACT_APP_PAYPAL_REAL_CLIENT_ID }}
@@ -61,6 +63,8 @@ jobs:
             REACT_APP_API_BASE_URL=${{ secrets.REACT_APP_API_BASE_URL }}
             REACT_APP_HOST_URL=${{ secrets.REACT_APP_HOST_URL }}
             REACT_APP_TURN_URL=${{ secrets.REACT_APP_TURN_URL }}
+            REACT_APP_TURN_USERNAME=${{ secrets.REACT_APP_TURN_USERNAME }}
+            REACT_APP_TURN_PASSWORD=${{ secrets.REACT_APP_TURN_PASSWORD }}
             REACT_APP_BASE_URL=${{ secrets.REACT_APP_BASE_URL }}
             REACT_APP_AUTH_URL=${{ secrets.REACT_APP_AUTH_URL }}
             REACT_APP_PAYPAL_REAL_CLIENT_ID=${{ secrets.REACT_APP_PAYPAL_REAL_CLIENT_ID }}
