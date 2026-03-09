@@ -74,11 +74,13 @@ const VideoChat = ({
                     <div style={{ width: '100%', height: '100%', position: 'relative' }}>
                         {roomDetails?.roomId && (
                             <JitsiMeeting
-                                roomName={roomDetails.roomId}
+                                domain="8x8.vc"
+                                roomName={`vpaas-magic-cookie-f7096641d023478fac5fe1684d0bea4c/${roomDetails.roomId}`}
                                 getIFrameRef={(iframeRef) => { iframeRef.style.height = '100%'; iframeRef.style.width = '100%'; }}
                                 configOverwrite={{
                                     startWithAudioMuted: false,
                                     startWithVideoMuted: false,
+                                    prejoinPageEnabled: false,
                                 }}
                                 userInfo={{
                                     displayName: userDetails?.username || "Guest",
@@ -86,7 +88,6 @@ const VideoChat = ({
                                 }}
                                 onApiReady={(externalApi) => {
                                     externalApi.addListener('videoConferenceLeft', () => {
-                                        // Automatically hide/close the component when the user hangs up inside Jitsi
                                         set_hidden(true);
                                     });
                                 }}
