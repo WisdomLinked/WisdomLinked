@@ -191,15 +191,15 @@ export default function CustomerDrawer(props: Props) {
                 <div className={`w-[300px] h-full bg-darkgrey overflow-y-auto px-[15px] pt-4 pb-[5px] ${location === 'customerchat' ? '' : 'hidden'}`}>
                     <FriendsTitle title="Shared Community Chats" />
                     <div className="h-[220px] overflow-y-auto">
-                        <CommunityChatList/>
+                        <CommunityChatList />
                     </div>
-                    <div className="bg-black w-full h-[1px] mb-4"/>
+                    <div className="bg-black w-full h-[1px] mb-4" />
                     <FriendsTitle title="Private Chats" />
-                    { /* render customer-only private-expert list, otherwise the normal friends list */ }
+                    { /* render customer-only private-expert list, otherwise the normal friends list */}
                     {userDetails && String(userDetails.role).toLowerCase() === "customer" ? (
-                    <CustomerPrivateExpertsList />
+                        <CustomerPrivateExpertsList />
                     ) : (
-                    <FriendsList />
+                        <FriendsList />
                     )}
                     {/* <div className="flex items-center mt-2">
                         <FriendsTitle title="Active Rooms" />
@@ -211,21 +211,21 @@ export default function CustomerDrawer(props: Props) {
                         <FriendsTitle title="Individual Sessions" />
                     </div>
                     <div className="h-[250px] overflow-y-auto">
-                        <GroupChatList type = "individual"/>
+                        <GroupChatList type="individual" />
                     </div>
                     <div className="bg-black w-full h-[1px]" />
                     <div className="flex items-center mb-4">
                         <FriendsTitle title="Seminars" />
                     </div>
                     <div className="h-[250px] overflow-y-auto">
-                        <GroupChatList type = "seminar"/>
+                        <GroupChatList type="seminar" />
                     </div>
                 </div>
             </div>
             <div className={`w-full ${location === 'customerchat' ? 'lg:w-[calc(100%-370px)]' : 'lg:w-[calc(100%-70px)]'} h-full`}>
                 <Routes>
                     <Route path="/calendar" element={<Calendar />} />
-                    <Route path="/chat" element={<Messenger videoChaton = {!!props.localStream}/>} />
+                    <Route path="/chat" element={<Messenger videoChaton={!!props.localStream} />} />
                     <Route path="/search" element={<Search />} />
                     <Route path="/seminar" element={<Seminars />} />
                     <Route path="/joinMeeting" element={<JoinMeeting />} />
@@ -233,7 +233,7 @@ export default function CustomerDrawer(props: Props) {
                     <Route path="/*" element={<Dashboard />} />
                 </Routes>
             </div>
-            {props.localStream && <VideoChat  role = {userDetails.role} otherUserId ={otherUserId}/>}
+            {(props.localStream || roomDetails) && <VideoChat role={userDetails.role} otherUserId={otherUserId} />}
             <IncomingCall />
         </div>
     );

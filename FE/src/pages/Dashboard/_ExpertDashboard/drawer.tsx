@@ -208,12 +208,12 @@ export default function ExpertDrawer(props: Props) {
                 <div className={`w-[300px] h-full bg-darkgrey overflow-y-auto px-[15px] pt-4 pb-[5px] ${location === 'expertchat' ? '' : 'hidden'}`}>
                     <FriendsTitle title="Shared Community Chats" />
                     <div className="h-[220px] overflow-y-auto">
-                        <CommunityChatList/>
+                        <CommunityChatList />
                     </div>
-                    <div className="bg-black w-full h-[1px] mb-4"/>
+                    <div className="bg-black w-full h-[1px] mb-4" />
                     <FriendsTitle title="Private Chats" />
                     <div className="h-[250px] overflow-y-auto">
-                        <CustomerList/>
+                        <CustomerList />
                     </div>
                     {/* <div className="flex items-center mt-2">
                         <FriendsTitle title="Active Rooms" />
@@ -225,7 +225,7 @@ export default function ExpertDrawer(props: Props) {
                         <FriendsTitle title="Individual Sessions" />
                     </div>
                     <div className="h-[250px] overflow-y-auto">
-                        <GroupChatList type = "individual"/>
+                        <GroupChatList type="individual" />
                     </div>
                     <div className="bg-black w-full h-[1px]" />
                     <div className="flex items-center mb-4">
@@ -239,7 +239,7 @@ export default function ExpertDrawer(props: Props) {
                         </Link>
                     </div>
                     <div className="h-[250px] overflow-y-auto">
-                        <GroupChatList type = "seminar" />
+                        <GroupChatList type="seminar" />
                     </div>
                 </div>
             </div>
@@ -247,14 +247,14 @@ export default function ExpertDrawer(props: Props) {
                 <Routes>
                     <Route path="/timeslots" element={<Availability />} />
                     <Route path="/calendar" element={<Calendar />} />
-                    <Route path="/chat" element={<Messenger videoChaton = {!!props.localStream}/>} />
+                    <Route path="/chat" element={<Messenger videoChaton={!!props.localStream} />} />
                     <Route path="/profile" element={<ExpertProfile userDetails={userDetails} />} />
                     <Route path="/seminar" element={<ExpertSeminar />} />
                     <Route path="/search" element={<Search />} />
-                    <Route path ="/joinMeeting" element={<JoinMeeting />} />
+                    <Route path="/joinMeeting" element={<JoinMeeting />} />
                     <Route path="/*" element={<Dashboard />} />
                 </Routes>
-                {props.localStream && <VideoChat role = {userDetails.role} otherUserId ={otherUserId}/>}
+                {(props.localStream || roomDetails) && <VideoChat role={userDetails.role} otherUserId={otherUserId} />}
                 <IncomingCall />
             </div>
         </div>
