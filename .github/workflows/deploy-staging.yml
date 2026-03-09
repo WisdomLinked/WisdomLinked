@@ -123,6 +123,8 @@ jobs:
               -e ZOHONOREPLY_PASS="${{ secrets.ZOHONOREPLY_PASS }}" \
               -e ZOHOADMIN_USER="${{ secrets.ZOHOADMIN_USER }}" \
               -e ZOHOADMIN_PASS="${{ secrets.ZOHOADMIN_PASS }}" \
+              -e TURN_USERNAME="${{ secrets.REACT_APP_TURN_USERNAME }}" \
+              -e TURN_PASSWORD="${{ secrets.REACT_APP_TURN_PASSWORD }}" \
               ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE }}:staging
 
             # Run the Frontend Staging Container

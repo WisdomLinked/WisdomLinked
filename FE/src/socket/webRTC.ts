@@ -88,25 +88,42 @@ export const getLocalStreamPreview = async (audioOnly: boolean, callback?: () =>
 const peerConfiguration = () => {
     if (process.env.REACT_APP_TURN_URL) {
         console.log("Using STUN + TURN servers");
+
+        const turnUrls = [
+            "turn:relay1.expressturn.com:80?transport=udp",
+            "turn:relay1.expressturn.com:80?transport=tcp",
+            "turn:relay1.expressturn.com:443?transport=udp",
+            "turn:relay1.expressturn.com:443?transport=tcp",
+            "turn:relay1.expressturn.com:3478?transport=udp",
+            "turn:relay1.expressturn.com:3478?transport=tcp",
+            "turn:relay2.expressturn.com:3478?transport=udp",
+            "turn:relay3.expressturn.com:3478?transport=udp",
+            "turn:relay4.expressturn.com:3478?transport=udp",
+            "turn:relay5.expressturn.com:3478?transport=udp",
+            "turn:relay6.expressturn.com:3478?transport=udp",
+            "turn:relay7.expressturn.com:3478?transport=udp",
+            "turn:relay8.expressturn.com:3478?transport=udp",
+            "turn:relay9.expressturn.com:3478?transport=udp",
+            "turn:relay10.expressturn.com:3478?transport=udp",
+            "turn:relay11.expressturn.com:3478?transport=udp",
+            "turn:relay12.expressturn.com:3478?transport=udp",
+            "turn:relay13.expressturn.com:3478?transport=udp",
+            "turn:relay14.expressturn.com:3478?transport=udp",
+            "turn:relay15.expressturn.com:3478?transport=udp",
+            "turn:relay16.expressturn.com:3478?transport=udp",
+            "turn:relay17.expressturn.com:3478?transport=udp",
+            "turn:relay18.expressturn.com:3478?transport=udp",
+            "turn:relay19.expressturn.com:3478?transport=udp",
+            "turn:global.expressturn.com:3478?transport=udp"
+        ];
+
         return {
             iceServers: [
                 {
                     urls: "stun:stun.l.google.com:19302"
                 },
                 {
-                    urls: [
-                        "turn:relay1.expressturn.com:3478?transport=udp",
-                        "turn:relay1.expressturn.com:3478?transport=tcp",
-                        "turn:relay2.expressturn.com:3478?transport=udp",
-                        "turn:relay3.expressturn.com:3478?transport=udp",
-                        "turn:relay4.expressturn.com:3478?transport=udp",
-                        "turn:relay5.expressturn.com:3478?transport=udp",
-                        "turn:relay6.expressturn.com:3478?transport=tcp",
-                        "turn:relay7.expressturn.com:3478?transport=udp",
-                        "turn:relay8.expressturn.com:3478?transport=udp",
-                        "turn:relay9.expressturn.com:3478?transport=udp",
-                        "turn:relay9.expressturn.com:3478?transport=udp"
-                    ],
+                    urls: turnUrls,
                     username: process.env.REACT_APP_TURN_USERNAME || "000000002086321408",
                     credential: process.env.REACT_APP_TURN_PASSWORD || "7D3h0/Ogol8Eql3n4d4WB9bs0Cg="
                 }
