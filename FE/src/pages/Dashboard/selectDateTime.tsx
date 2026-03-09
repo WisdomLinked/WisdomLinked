@@ -203,9 +203,10 @@ const SelectDateTime = ({
     const handleSelectDate = ({ start, end }: any) => {
         const dayStartTime = new Date(start).getTime();
         const dayEndTime = new Date(end).getTime();
+        const diffInHours = (dayEndTime - dayStartTime) / (1000 * 60 * 60);
 
-        // Check if it's a full day selection and the date is not in the past
-        if ((dayEndTime - dayStartTime) === 3600 * 24 * 1000 && dayEndTime >= new Date().getTime()) {
+        // Check if it's a full day selection (23-25 hours to account for DST)
+        if (diffInHours >= 23 && diffInHours <= 25 && dayEndTime >= new Date().getTime()) {
             // Check if the date is available
             if (!isDateAvailable(start)) {
                 // Date is unavailable (red), so we don't proceed
