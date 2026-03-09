@@ -22,6 +22,8 @@ import CastForEducationIcon from '@mui/icons-material/CastForEducation';
 import { createNewRoom, joinRoom } from "../../../../socket/roomHandler";
 import CloseIcon from '@mui/icons-material/Close';
 import EditIcon from '@mui/icons-material/Edit';
+import { setRoomDetails } from "../../../../actions/roomActions";
+import { useVideoChatContext } from "../../../../components/VideoChat/VideoChatContext";
 import { doLeftSeminar, doUpdateProfile, getCustomerById, getExpertById, shareMeetingViaEmail } from "../../../../api/api";
 import { SetLoadingStatus, SetTotalTimeSpent } from "../../../../actions/appActions";
 import { updateMe } from "../../../../actions/authActions";
@@ -112,20 +114,29 @@ const MessagesHeader = ({ scrollPosition, events, openCalendarModal, openSeminar
         }
     };
 
+    const { isRoomMinimized, setIsRoomMinimized } = useVideoChatContext();
+
     const isOnline = (userId: any) => {
         return onlineUsers.find(user => user.userId === userId) ? true : false
     }
 
     const createNewRoomOrJoinRoom = () => {
-        const targetRoom = activeRooms?.find((r) => r.groupId === chosenGroupChatDetails?.groupId || r.groupId === chosenGroupChatDetails?._id);
+        const targetRoomId = chosenGroupChatDetails?.groupId || chosenGroupChatDetails?._id;
 
-        if (targetRoom) {
-            console.log('Join room')
-            joinRoom(targetRoom)
-        } else {
-            console.log('Creating a room')
-            createNewRoom(chosenGroupChatDetails?.groupId || chosenGroupChatDetails?._id)
-        }
+        // Directly pop open the Jitsi Meet window via Redux bypass
+        dispatch(
+            setRoomDetails({
+                roomId: targetRoomId,
+                roomCreator: { userId: userDetails._id, username: userDetails.username, socketId: "jitsi-bypass" },
+                participants: [{ userId: userDetails._id, username: userDetails.username, socketId: "jitsi-bypass" }],
+                groupId: targetRoomId,
+                mutedParticipants: [],
+                selfMutedParticipants: [],
+                kickedParticipants: []
+            })
+        );
+
+        setIsRoomMinimized(false);
 
         if (userDetails.role === 'expert' && enabledEvent) {
             SetTotalTimeSpent(Date.now());

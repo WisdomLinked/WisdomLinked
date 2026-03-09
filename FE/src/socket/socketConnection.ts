@@ -15,7 +15,7 @@ import {
     setTyping,
 } from "../actions/chatActions";
 import { ActiveRoom, Message } from "../actions/types";
-import {store, useAppSelector} from "../store";
+import { store, useAppSelector } from "../store";
 import {
     setCallRequest,
     setCallStatus,
@@ -27,18 +27,14 @@ import {
 } from "../actions/videoChatActions";
 import {
     getLocalStreamPreview,
-    handleParticipantLeftRoom,
-    handleSignalingData,
     newPeerConnection,
-    prepareNewPeerConnection,
 } from "./webRTC";
 
 import {
     SetTotalTimeSpent
 } from "../actions/appActions";
 import SimplePeer from "simple-peer";
-import { initialRoomsUpdate, newRoomCreated, updateActiveRooms, leaveRoom } from "./roomHandler";
-import { setLocalStreamRoom } from "../actions/roomActions";
+import { setRoomDetails, setOpenRoom } from "../actions/roomActions";
 import { updateMe } from "../actions/authActions";
 import { showAlert } from "../actions/alertActions";
 
@@ -210,46 +206,14 @@ const connectWithSocketServer = (userDetails: UserDetails) => {
         store.dispatch(setVideoAudioStatus(data.videoEnabled, data.audioEnabled, false) as any);
     });
 
-    // rooms
-    socket.on("room-create", (data: { roomDetails: ActiveRoom }) => {
-        newRoomCreated(data);
-    });
-
-    socket.on("active-rooms", (data: { activeRooms: ActiveRoom[] }) => {
-        updateActiveRooms(data);
-    });
-
-    socket.on("active-rooms-initial", (data: { activeRooms: ActiveRoom[] }) => {
-        initialRoomsUpdate(data);
-    });
-
-    socket.on("conn-prepare", (data: { connUserSocketId: string }) => {
-        const { connUserSocketId } = data;
-        // prepare new peer connection for the connUserSocketId joining the room
-        prepareNewPeerConnection(connUserSocketId, false);
-
-        socket.emit("conn-init", { connUserSocketId: connUserSocketId });
-    });
-
-    socket.on("conn-init", (data: { connUserSocketId: string }) => {
-        const { connUserSocketId } = data;
-        prepareNewPeerConnection(connUserSocketId, true);
-    });
-
-    socket.on(
-        "conn-signal",
-        (data: { connUserSocketId: string; signal: SimplePeer.SignalData }) => {
-            handleSignalingData(data);
-        }
-    );
-
-    socket.on("room-participant-left", (data: { connUserSocketId: string }) => {
-        handleParticipantLeftRoom(data);
-    });
+    // Note: The raw WebRTC `room-create`, `active-rooms`, `conn-prepare`, `conn-init`,
+    // `conn-signal`, and `room-participant-left` events were removed here in favor of Jitsi Meet.
 
     socket.on("kicked-off-by-expert", (data: { roomId: string }) => {
         store.dispatch(showAlert("You are blocked from this seminar by the expert."))
-        leaveRoom()
+        // Inline leaveRoom: clear Redux room state (Jitsi iframe will unmount automatically)
+        store.dispatch(setRoomDetails(null) as any);
+        store.dispatch(setOpenRoom(false, false) as any);
         cancelCallRequest({ otherUserId: '' })
     });
 
@@ -352,7 +316,7 @@ const callRequest = (data: {
         peer.on("signal", (signal) => {
             console.log("Generated WebRTC signaling data:", signal);
             // TODO send data to server
-            socket.emit("call-request", {...data, signal,});
+            socket.emit("call-request", { ...data, signal, });
         });
 
         peer.on("stream", (stream) => {
@@ -563,7 +527,7 @@ const cleanupCall = () => {
     // Clear remote stream
     const remoteStream = store.getState().videoChat.remoteStream;
     if (remoteStream) {
-        remoteStream.getTracks().forEach((track:any) => track.stop());
+        remoteStream.getTracks().forEach((track: any) => track.stop());
         store.dispatch(setRemoteStream(null));
         console.log("Remote stream stopped and cleared.");
     }
