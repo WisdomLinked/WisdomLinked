@@ -71,7 +71,7 @@ const SelectDateTime = ({
     const dayStyleGetter = useCallback(
         (date) => {
             const today = new Date().setHours(0, 0, 0, 0); // Normalize today's date to midnight
-    
+
             // Style for past dates
             if (date < today) {
                 return {
@@ -81,47 +81,46 @@ const SelectDateTime = ({
                     },
                 };
             }
-    
+
             // Check if the date has an event
             const hasEvent = events.some(
                 (event) =>
                     date >= new Date(event.start).setHours(0, 0, 0, 0) &&
                     date <= new Date(event.end).setHours(23, 59, 59, 999)
             );
-            
+
             let availableTimeSlots = getAvailableTimeSlots(date, duration)
-            let backgroundColor
-            let cursorStyle = 'pointer'
-            if(selectedIndex === -1)
-            {
-                if(!availableTimeSlots.length){
-                    backgroundColor = '#f94144'
-                    cursorStyle = 'not-allowed';
+            let backgroundColor;
+            let cursor = 'pointer';
+            if (selectedIndex === -1) {
+                if (!availableTimeSlots.length) {
+                    backgroundColor = '#f94144';
+                    cursor = 'not-allowed';
                 }
-                else if(hasEvent){
-                    backgroundColor = '#f9a826'
+                else if (hasEvent) {
+                    backgroundColor = '#f9a826';
                 } else {
-                    backgroundColor = '#30B199'
+                    backgroundColor = '#30B199';
                 }
             }
-            else{
-                if(availableTimeSlots.includes(selectedIndex)){
-                    backgroundColor = '#30B199'
+            else {
+                if (availableTimeSlots.includes(selectedIndex)) {
+                    backgroundColor = '#30B199';
                 }
-                else{
-                    backgroundColor = '#f94144'
-                    cursorStyle = 'not-allowed';
+                else {
+                    backgroundColor = '#f94144';
+                    cursor = 'not-allowed';
                 }
             }
-    
+
             return {
                 style: {
-                    backgroundColor, 
-                    cursorStyle
+                    backgroundColor,
+                    cursor
                 },
             };
         },
-        [events, selectedIndex, duration] 
+        [events, selectedIndex, duration]
     );
 
     const isToday = (selectedDate: any) => {
@@ -180,31 +179,31 @@ const SelectDateTime = ({
 
     const isDateAvailable = (date: number) => {
         const today = new Date().setHours(0, 0, 0, 0);
-        
+
         // If date is in the past, it's not available
         if (date < today) {
             return false;
         }
-        
+
         // Check if the date has available time slots
         const availableTimeSlots = getAvailableTimeSlots(date, duration);
         if (availableTimeSlots.length === 0) {
             return false;
         }
-        
+
         // If we have a selected index, check if that time slot is available on this date
         if (selectedIndex >= 0) {
             return availableTimeSlots.includes(selectedIndex);
         }
-        
+
         return true;
     };
-    
+
     // Modify the handleSelectDate function to check availability
     const handleSelectDate = ({ start, end }: any) => {
         const dayStartTime = new Date(start).getTime();
         const dayEndTime = new Date(end).getTime();
-        
+
         // Check if it's a full day selection and the date is not in the past
         if ((dayEndTime - dayStartTime) === 3600 * 24 * 1000 && dayEndTime >= new Date().getTime()) {
             // Check if the date is available
@@ -212,7 +211,7 @@ const SelectDateTime = ({
                 // Date is unavailable (red), so we don't proceed
                 return;
             }
-            
+
             // Date is available, proceed as normal
             set_selectedDate(start);
             if (selectedIndex >= 0) {
@@ -287,63 +286,63 @@ const SelectDateTime = ({
         set_events([...temp])
     }, [selectedUser, myEvents])
 
-    
+
     const generateTimeSlotIndices = () => {
         const slots = [];
         let currentTime = new Date("2025-04-06T00:00:00"); // Start at 12:00 AM
         const endTime = new Date("2025-04-06T23:30:00"); // End at 11:30 PM
         let index = 0;
-      
+
         while (currentTime <= endTime) {
-          slots.push({ index, time: currentTime.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: true }) });
-          currentTime = new Date(currentTime.getTime() + 30 * 60 * 1000); // Increment by 30 minutes
-          index++;
+            slots.push({ index, time: currentTime.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: true }) });
+            currentTime = new Date(currentTime.getTime() + 30 * 60 * 1000); // Increment by 30 minutes
+            index++;
         }
-      
+
         return slots;
-      };
-      
-      const timeSlotIndices = generateTimeSlotIndices();
-      
+    };
+
+    const timeSlotIndices = generateTimeSlotIndices();
+
 
     return (
         <>
-            <div style={{ 
-            display: "flex", 
-            justifyContent: "space-between", 
-            alignItems: "center",
-            gap: "20px", 
-            marginBottom: "10px"
-        }}>
-            
-            <div style={{ flex: "0 0 auto" }}>
-                <LegendCalendar 
-                    showTimeSlotSelector={showTimeSlotSelector}
-                    toggleTimeSlotSelector={toggleTimeSlotSelector}
-                    selectedIndex={selectedIndex}
-                    setSelectedIndex={handleSetSelectedIndex}
-                    duration={duration}
-                    setDuration={handleSetDuration}
-                    timeSlotIndices={timeSlotIndices}
-                    durations={durations}
-                    selectedUser={selectedUser}
-                    hidePriceInDurationSelection={hidePriceInDurationSelection}
-                />
-            </div>
-        </div>
+            <div style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                gap: "20px",
+                marginBottom: "10px"
+            }}>
 
-        <Calendar
-            className="customerSelectDateTimeCalendar !h min-h-[400px] pt-1 pb-6 text-white"
-            views={["month"]}
-            selectable
-            localizer={localizer}
-            defaultDate={new Date()}
-            defaultView="month"
-            events={hideEvents ? [] : events}
-            eventPropGetter={eventStyleGetter}
-            dayPropGetter={dayStyleGetter}
-            onSelectSlot={handleSelectDate}
-        />
+                <div style={{ flex: "0 0 auto" }}>
+                    <LegendCalendar
+                        showTimeSlotSelector={showTimeSlotSelector}
+                        toggleTimeSlotSelector={toggleTimeSlotSelector}
+                        selectedIndex={selectedIndex}
+                        setSelectedIndex={handleSetSelectedIndex}
+                        duration={duration}
+                        setDuration={handleSetDuration}
+                        timeSlotIndices={timeSlotIndices}
+                        durations={durations}
+                        selectedUser={selectedUser}
+                        hidePriceInDurationSelection={hidePriceInDurationSelection}
+                    />
+                </div>
+            </div>
+
+            <Calendar
+                className="customerSelectDateTimeCalendar !h min-h-[400px] pt-1 pb-6 text-white"
+                views={["month"]}
+                selectable
+                localizer={localizer}
+                defaultDate={new Date()}
+                defaultView="month"
+                events={hideEvents ? [] : events}
+                eventPropGetter={eventStyleGetter}
+                dayPropGetter={dayStyleGetter}
+                onSelectSlot={handleSelectDate}
+            />
             {
                 modalShow ?
                     <div className={`absolute top-0 left-0 w-full h-full bg-white bg-opacity-10 backdrop-blur-sm z-10 flex items-center justify-center p-8`}>
