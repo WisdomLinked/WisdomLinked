@@ -81,6 +81,10 @@ const VideoChat = ({
                                     startWithAudioMuted: false,
                                     startWithVideoMuted: false,
                                     prejoinPageEnabled: false,
+                                    whiteboard: {
+                                        enabled: true,
+                                        collabServerBaseUrl: 'https://excalidraw-backend.8x8.vc',
+                                    },
                                 }}
                                 userInfo={{
                                     displayName: userDetails?.username || "Guest",
