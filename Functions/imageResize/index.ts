@@ -14,7 +14,7 @@ const sizes = [
   { name: "large", width: 900 },
 ];
 
-module.exports = async (req, res) => {
+module.exports = async (req: any, res: any) => {
   try {
     const { key } = req.query;
     const bucket = process.env.DO_SPACES_BUCKET;
@@ -46,7 +46,7 @@ module.exports = async (req, res) => {
     await Promise.all(resizePromises);
 
     res.status(200).json({ message: "Images resized and uploaded successfully." });
-  } catch (err) {
+  } catch (err: any) {
     console.error("Error resizing image:", err);
     res.status(500).json({ error: err.message });
   }

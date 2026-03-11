@@ -7,7 +7,7 @@ const s3 = new AWS.S3({
   region: 'us-east-1',
 });
 
-module.exports = async (req, res) => {
+module.exports = async (req: any, res: any) => {
   try {
     const bucketName = process.env.DO_SPACES_BUCKET;
     const { file, size } = req.query;
@@ -21,7 +21,7 @@ module.exports = async (req, res) => {
 
     res.setHeader("Content-Type", data.ContentType || "application/octet-stream");
     res.send(data.Body);
-  } catch (error) {
+  } catch (error: any) {
     console.error("Error fetching image from Spaces:", error);
     res.status(500).json({ error: error.message });
   }

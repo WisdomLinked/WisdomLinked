@@ -8,18 +8,18 @@ const s3 = new AWS.S3({
   region: 'us-east-1',
 });
 
-module.exports = async (req, res) => {
+module.exports = async (req: any, res: any) => {
   const bucketName = process.env.DO_SPACES_BUCKET;
 
   const busboy = Busboy({ headers: req.headers });
   const fileUploads = [];
   const uploadPromises = [];
 
-  busboy.on('file', (fieldname, file, info) => {
+  busboy.on('file', (fieldname: any, file: any, info: any) => {
     const { filename, mimeType } = info;
     const chunks = [];
 
-    file.on('data', chunk => chunks.push(chunk));
+    file.on('data', (chunk: any) => chunks.push(chunk));
 
     file.on('end', () => {
       const fileContent = Buffer.concat(chunks);
@@ -32,12 +32,12 @@ module.exports = async (req, res) => {
         ContentType: mimeType,
       }).promise()
         .then(() => fileUploads.push({ filename, status: 'uploaded' }))
-        .catch(err => fileUploads.push({ filename, status: 'failed', error: err.message }));
+        .catch((err: any) => fileUploads.push({ filename, status: 'failed', error: err.message }));
 
       uploadPromises.push(upload);
     });
 
-    file.on('error', err => console.error('File stream error:', err));
+    file.on('error', (err: any) => console.error('File stream error:', err));
   });
 
   busboy.on('finish', async () => {
