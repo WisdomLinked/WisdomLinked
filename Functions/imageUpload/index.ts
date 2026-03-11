@@ -47,3 +47,5 @@ module.exports = async (req: any, res: any) => {
 
   req.pipe(busboy);
 };
+
+export {};

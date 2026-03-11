@@ -26,3 +26,5 @@ module.exports = async (req: any, res: any) => {
     res.status(500).json({ error: error.message });
   }
 };
+
+export {};
