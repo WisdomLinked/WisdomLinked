@@ -69,11 +69,11 @@ const SelectDateTime = ({
     };
 
     const dayStyleGetter = useCallback(
-        (date) => {
+        (date: Date) => {
             const today = new Date().setHours(0, 0, 0, 0); // Normalize today's date to midnight
     
             // Style for past dates
-            if (date < today) {
+            if (date.getTime() < today) {
                 return {
                     style: {
                         backgroundColor: '#141414',
@@ -85,8 +85,8 @@ const SelectDateTime = ({
             // Check if the date has an event
             const hasEvent = events.some(
                 (event) =>
-                    date >= new Date(event.start).setHours(0, 0, 0, 0) &&
-                    date <= new Date(event.end).setHours(23, 59, 59, 999)
+                    date.getTime() >= new Date(event.start).setHours(0, 0, 0, 0) &&
+                    date.getTime() <= new Date(event.end).setHours(23, 59, 59, 999)
             );
             
             let availableTimeSlots = getAvailableTimeSlots(date, duration)
@@ -359,7 +359,6 @@ const SelectDateTime = ({
                             <div className="mt-8 text-lightgrey text-[12px] leading-[19px]">Duration (price)</div>
                             <select
                                 className="w-full bg-black rounded-[15px] h-[62px] mt-0.5 border text-white text-[14px] leading-[21px] px-[24px] disabled:cursor-not-allowed"
-                                placeholder="Input your Company Website"
                                 value={duration}
                                 disabled={disableDurationSelection}
                                 onChange={(e) => set_duration(parseInt(e.target.value))}

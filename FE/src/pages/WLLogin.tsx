@@ -14,7 +14,7 @@ export default function WLLogin() {
     const navigate = useNavigate();
     const dispatch = useDispatch();
     const [form, setForm] = useState({ email: '', password: '' });
-    const [errors, setErrors] = useState({});
+    const [errors, setErrors] = useState<Record<string, string>>({});
     const [submitting, setSubmitting] = useState(false);
     const [codeSent, setCodeSent] = useState(false);
     const [showPassword, setShowPassword] = useState(false);
@@ -24,7 +24,7 @@ export default function WLLogin() {
     const inputError = `${inputBase} border-red-300 focus:ring-red-300 focus:border-red-400 bg-red-50/30`;
 
     const validate = () => {
-        const e = {};
+        const e: Record<string, string> = {};
         if (!form.email.trim()) e.email = 'Email is required';
         else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) e.email = 'Enter a valid email';
         if (!form.password) e.password = 'Password is required';
@@ -36,7 +36,7 @@ export default function WLLogin() {
         if (Object.keys(e).length > 0) { setErrors(e); return; }
         setSubmitting(true);
         try {
-            const response = await login({ email: form.email, password: form.password });
+            const response = await login({ email: form.email, password: form.password }) as any;
             if (response.status === 'SUCCESS') {
                 setCodeSent(true);
             } else {
@@ -86,8 +86,8 @@ export default function WLLogin() {
                             <div>
                                 <label className="block text-xs font-semibold text-slate-600 mb-1.5"><span className="flex items-center gap-1.5"><Mail size={12} /> Email</span></label>
                                 <input type="email" placeholder="you@example.com" value={form.email}
-                                    onChange={e => { setForm(f => ({ ...f, email: e.target.value })); setErrors(er => ({ ...er, email: '' })); }}
-                                    onKeyDown={e => e.key === 'Enter' && handleSubmit()}
+                                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => { setForm(f => ({ ...f, email: e.target.value })); setErrors(er => ({ ...er, email: '' })); }}
+                                    onKeyDown={(e: React.KeyboardEvent<HTMLInputElement>) => e.key === 'Enter' && handleSubmit()}
                                     className={errors.email ? inputError : inputNormal} />
                                 {errors.email && <p className="mt-1 text-xs text-red-500 flex items-center gap-1"><AlertCircle size={11} />{errors.email}</p>}
                             </div>
@@ -95,8 +95,8 @@ export default function WLLogin() {
                                 <label className="block text-xs font-semibold text-slate-600 mb-1.5"><span className="flex items-center gap-1.5"><Lock size={12} /> Password</span></label>
                                 <div className="relative">
                                     <input type={showPassword ? 'text' : 'password'} placeholder="Your password" value={form.password}
-                                        onChange={e => { setForm(f => ({ ...f, password: e.target.value })); setErrors(er => ({ ...er, password: '' })); }}
-                                        onKeyDown={e => e.key === 'Enter' && handleSubmit()}
+                                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => { setForm(f => ({ ...f, password: e.target.value })); setErrors(er => ({ ...er, password: '' })); }}
+                                        onKeyDown={(e: React.KeyboardEvent<HTMLInputElement>) => e.key === 'Enter' && handleSubmit()}
                                         className={`${errors.password ? inputError : inputNormal} pr-10`} />
                                     <button type="button" onClick={() => setShowPassword(p => !p)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600" aria-label={showPassword ? 'Hide password' : 'Show password'}>
                                         {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}

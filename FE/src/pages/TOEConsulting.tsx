@@ -46,18 +46,18 @@ const COUNTRIES = [
   'Egypt', 'Kenya', 'South Africa', 'Argentina', 'Thailand', 'Malaysia', 'Other',
 ];
 
-function ContactFormModal({ onClose }) {
+function ContactFormModal({ onClose }: { onClose: () => void }) {
   const [form, setForm] = useState({ name: '', email: '', countryCode: '+1', phone: '', subject: '', description: '' });
-  const [errors, setErrors] = useState({});
+  const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitted, setSubmitted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [showCountryDrop, setShowCountryDrop] = useState(false);
-  const overlayRef = useRef(null);
-  const dropRef = useRef(null);
+  const overlayRef = useRef<HTMLDivElement>(null);
+  const dropRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const handler = (e) => {
-      if (dropRef.current && !dropRef.current.contains(e.target)) setShowCountryDrop(false);
+    const handler = (e: MouseEvent) => {
+      if (dropRef.current && !dropRef.current.contains(e.target as Node)) setShowCountryDrop(false);
     };
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
@@ -69,7 +69,7 @@ function ContactFormModal({ onClose }) {
   }, []);
 
   const validate = () => {
-    const e = {};
+    const e: Record<string, string> = {};
     if (!form.name.trim()) e.name = 'Name is required';
     if (!form.email.trim()) e.email = 'Email is required';
     else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) e.email = 'Enter a valid email';
@@ -233,8 +233,8 @@ const ACCENT_BG = 'hover:bg-[#D9EAFD]/60';
 const ACCENT_SELECTED = 'bg-[#D9EAFD]/70 text-[#234C6A]';
 
 /* ─── Signup Page ────────────────────────────────────────────────────────── */
-function SignupPage({ onClose, onGoLogin }) {
-  const [role, setRole] = useState(null);
+function SignupPage({ onClose, onGoLogin }: { onClose: () => void; onGoLogin: () => void }) {
+  const [role, setRole] = useState<'student' | 'expert' | null>(null);
   const inputBase = `w-full rounded-xl border bg-white px-4 py-3 text-sm text-slate-800 placeholder-slate-400 outline-none transition-all duration-200 ${FOCUS_RING}`;
   const inputNormal = `${inputBase} border-slate-200`;
   const inputError = `${inputBase} border-red-300 focus:ring-red-300 focus:border-red-400 bg-red-50/30`;
@@ -287,40 +287,40 @@ function SignupPage({ onClose, onGoLogin }) {
   );
 }
 
-function StudentSignupForm({ onBack, onClose, onGoLogin, inputNormal, inputError }) {
+function StudentSignupForm({ onBack, onClose, onGoLogin, inputNormal, inputError }: { onBack: () => void; onClose: () => void; onGoLogin: () => void; inputNormal: string; inputError: string }) {
   const [form, setForm] = useState({
-    fullName: '', majors: [], services: '', country: '', countryCode: '+1', phone: '', email: '', password: '', confirmPassword: '', terms: false
+    fullName: '', majors: [] as string[], services: '', country: '', countryCode: '+1', phone: '', email: '', password: '', confirmPassword: '', terms: false
   });
-  const [errors, setErrors] = useState({});
+  const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [showMajorDrop, setShowMajorDrop] = useState(false);
   const [showServiceDrop, setShowServiceDrop] = useState(false);
   const [showCountryDrop, setShowCountryDrop] = useState(false);
   const [showCodeDrop, setShowCodeDrop] = useState(false);
-  const majorRef = useRef(null);
-  const serviceRef = useRef(null);
-  const countryRef = useRef(null);
-  const codeRef = useRef(null);
+  const majorRef = useRef<HTMLDivElement>(null);
+  const serviceRef = useRef<HTMLDivElement>(null);
+  const countryRef = useRef<HTMLDivElement>(null);
+  const codeRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const handler = (e) => {
-      if (majorRef.current && !majorRef.current.contains(e.target)) setShowMajorDrop(false);
-      if (serviceRef.current && !serviceRef.current.contains(e.target)) setShowServiceDrop(false);
-      if (countryRef.current && !countryRef.current.contains(e.target)) setShowCountryDrop(false);
-      if (codeRef.current && !codeRef.current.contains(e.target)) setShowCodeDrop(false);
+    const handler = (e: MouseEvent) => {
+      if (majorRef.current && !majorRef.current.contains(e.target as Node)) setShowMajorDrop(false);
+      if (serviceRef.current && !serviceRef.current.contains(e.target as Node)) setShowServiceDrop(false);
+      if (countryRef.current && !countryRef.current.contains(e.target as Node)) setShowCountryDrop(false);
+      if (codeRef.current && !codeRef.current.contains(e.target as Node)) setShowCodeDrop(false);
     };
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
   }, []);
 
-  const toggleMajor = (m) => {
+  const toggleMajor = (m: string) => {
     setForm(f => ({ ...f, majors: f.majors.includes(m) ? f.majors.filter(x => x !== m) : [...f.majors, m] }));
     setErrors(e => ({ ...e, majors: '' }));
   };
 
   const validate = () => {
-    const e = {};
+    const e: Record<string, string> = {};
     if (!form.fullName.trim()) e.fullName = 'Full name is required';
     if (form.majors.length === 0) e.majors = 'Select at least one major';
     if (!form.services) e.services = 'Select a service';
@@ -520,45 +520,45 @@ function StudentSignupForm({ onBack, onClose, onGoLogin, inputNormal, inputError
   );
 }
 
-function ExpertSignupForm({ onBack, onClose, onGoLogin, inputNormal, inputError }) {
+function ExpertSignupForm({ onBack, onClose, onGoLogin, inputNormal, inputError }: { onBack: () => void; onClose: () => void; onGoLogin: () => void; inputNormal: string; inputError: string }) {
   const [form, setForm] = useState({
-    fullName: '', title: '', bio: '', majors: [], servicesOffered: [], country: '', countryCode: '+1', phone: '', email: '', password: '', confirmPassword: '', resumeFile: null, terms: false
+    fullName: '', title: '', bio: '', majors: [] as string[], servicesOffered: [] as string[], country: '', countryCode: '+1', phone: '', email: '', password: '', confirmPassword: '', resumeFile: null as File | null, terms: false
   });
-  const [errors, setErrors] = useState({});
+  const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [showMajorDrop, setShowMajorDrop] = useState(false);
   const [showServicesDrop, setShowServicesDrop] = useState(false);
   const [showCountryDrop, setShowCountryDrop] = useState(false);
   const [showCodeDrop, setShowCodeDrop] = useState(false);
-  const majorRef = useRef(null);
-  const servicesRef = useRef(null);
-  const countryRef = useRef(null);
-  const codeRef = useRef(null);
-  const fileInputRef = useRef(null);
+  const majorRef = useRef<HTMLDivElement>(null);
+  const servicesRef = useRef<HTMLDivElement>(null);
+  const countryRef = useRef<HTMLDivElement>(null);
+  const codeRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    const handler = (e) => {
-      if (majorRef.current && !majorRef.current.contains(e.target)) setShowMajorDrop(false);
-      if (servicesRef.current && !servicesRef.current.contains(e.target)) setShowServicesDrop(false);
-      if (countryRef.current && !countryRef.current.contains(e.target)) setShowCountryDrop(false);
-      if (codeRef.current && !codeRef.current.contains(e.target)) setShowCodeDrop(false);
+    const handler = (e: MouseEvent) => {
+      if (majorRef.current && !majorRef.current.contains(e.target as Node)) setShowMajorDrop(false);
+      if (servicesRef.current && !servicesRef.current.contains(e.target as Node)) setShowServicesDrop(false);
+      if (countryRef.current && !countryRef.current.contains(e.target as Node)) setShowCountryDrop(false);
+      if (codeRef.current && !codeRef.current.contains(e.target as Node)) setShowCodeDrop(false);
     };
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
   }, []);
 
-  const toggleMajor = (m) => {
+  const toggleMajor = (m: string) => {
     setForm(f => ({ ...f, majors: f.majors.includes(m) ? f.majors.filter(x => x !== m) : [...f.majors, m] }));
     setErrors(e => ({ ...e, majors: '' }));
   };
-  const toggleService = (s) => {
+  const toggleService = (s: string) => {
     setForm(f => ({ ...f, servicesOffered: f.servicesOffered.includes(s) ? f.servicesOffered.filter(x => x !== s) : [...f.servicesOffered, s] }));
     setErrors(e => ({ ...e, servicesOffered: '' }));
   };
 
   const validate = () => {
-    const e = {};
+    const e: Record<string, string> = {};
     if (!form.fullName.trim()) e.fullName = 'Full name is required';
     if (!form.title.trim()) e.title = 'Title is required';
     if (!form.bio.trim()) e.bio = 'Short description is required';
@@ -789,16 +789,16 @@ function ExpertSignupForm({ onBack, onClose, onGoLogin, inputNormal, inputError 
 }
 
 /* ─── Login Page ────────────────────────────────────────────────────────── */
-function LoginPage({ onClose, onGoSignup }) {
+function LoginPage({ onClose, onGoSignup }: { onClose: () => void; onGoSignup: () => void }) {
   const [form, setForm] = useState({ email: '', password: '' });
-  const [errors, setErrors] = useState({});
+  const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
   const inputBase = `w-full rounded-xl border bg-white px-4 py-3 text-sm text-slate-800 placeholder-slate-400 outline-none transition-all duration-200 ${FOCUS_RING}`;
   const inputNormal = `${inputBase} border-slate-200`;
   const inputError = `${inputBase} border-red-300 focus:ring-red-300 focus:border-red-400 bg-red-50/30`;
 
   const validate = () => {
-    const e = {};
+    const e: Record<string, string> = {};
     if (!form.email.trim()) e.email = 'Email is required';
     else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) e.email = 'Enter a valid email';
     if (!form.password) e.password = 'Password is required';
@@ -855,13 +855,14 @@ function LoginPage({ onClose, onGoSignup }) {
 
 /* ─── Interactive 3-D Globe ──────────────────────────────────────────────── */
 function GlobeCanvas() {
-  const canvasRef = useRef(null);
-  const stateRef = useRef({});
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const stateRef = useRef<any>({});
 
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
+    if (!ctx) return;
     const s = stateRef.current;
 
     const resize = () => {
@@ -905,9 +906,9 @@ function GlobeCanvas() {
       [1, 18], [5, 17], [16, 0], [4, 19], [7, 2],
     ];
 
-    const toRad = d => d * Math.PI / 180;
+    const toRad = (d: number) => d * Math.PI / 180;
 
-    const project = (lat, lon, phi, ss) => {
+    const project = (lat: number, lon: number, phi: number, ss: any) => {
       const latr = toRad(lat);
       const lonr = toRad(lon) + phi;
       const x3 = Math.cos(latr) * Math.sin(lonr);
@@ -916,7 +917,7 @@ function GlobeCanvas() {
       return { x: ss.cx + ss.R * x3, y: ss.cy - ss.R * y3, z: z3, visible: z3 > -0.15 };
     };
 
-    const arcPoints = (c1, c2, phi, ss, steps = 48) => {
+    const arcPoints = (c1: any, c2: any, phi: number, ss: any, steps = 48) => {
       const pts = [];
       const la1 = toRad(c1.lat), lo1 = toRad(c1.lon);
       const la2 = toRad(c2.lat), lo2 = toRad(c2.lon);
@@ -942,9 +943,9 @@ function GlobeCanvas() {
     resize();
     window.addEventListener('resize', resize);
 
-    const onDown = e => { s.drag = true; s.lastX = (e.touches?.[0] ?? e).clientX; };
+    const onDown = (e: any) => { s.drag = true; s.lastX = (e.touches?.[0] ?? e).clientX; };
     const onUp = () => { s.drag = false; };
-    const onMove = e => {
+    const onMove = (e: any) => {
       if (!s.drag) return;
       const x = (e.touches?.[0] ?? e).clientX;
       s.phi += (x - s.lastX) * 0.008;
@@ -965,7 +966,7 @@ function GlobeCanvas() {
         const tf = topo.transform;
         const scale = tf ? tf.scale : [1, 1];
         const translate = tf ? tf.translate : [0, 0];
-        const decodeArc = (arcIdx) => {
+        const decodeArc = (arcIdx: number) => {
           const raw = arcIdx < 0 ? arcsData[~arcIdx].slice().reverse() : arcsData[arcIdx].slice();
           const pts = [];
           let x = 0, y = 0;
@@ -976,10 +977,10 @@ function GlobeCanvas() {
           if (arcIdx < 0) pts.reverse();
           return pts;
         };
-        const buildRings = (geom) => {
-          const rings = [];
+        const buildRings = (geom: any) => {
+          const rings: any[] = [];
           if (!geom) return rings;
-          const processArcs = (arcsList) => { const ring = []; for (const ai of arcsList) ring.push(...decodeArc(ai)); return ring; };
+          const processArcs = (arcsList: any[]) => { const ring: any[] = []; for (const ai of arcsList) ring.push(...decodeArc(ai)); return ring; };
           if (geom.type === 'Polygon') for (const a of geom.arcs) rings.push(processArcs(a));
           else if (geom.type === 'MultiPolygon') for (const poly of geom.arcs) for (const a of poly) rings.push(processArcs(a));
           return rings;
@@ -993,19 +994,19 @@ function GlobeCanvas() {
       })
       .catch(e => console.warn('Topo load failed:', e));
 
-    const drawContinents = (phi) => {
+    const drawContinents = (phi: number) => {
       if (!s.landRings || s.landRings.length === 0) return;
       const MAX_JUMP = s.R * 0.35;
       ctx.lineWidth = 1.15;
       ctx.lineJoin = 'round';
       for (const { ring, stroke } of s.landRings) {
-        const pts = ring.map(([lon, lat]) => {
+        const pts = ring.map(([lon, lat]: [number, number]) => {
           const latr = lat * Math.PI / 180;
           const lonr = lon * Math.PI / 180 + phi;
           const z = Math.cos(latr) * Math.cos(lonr);
           return { x: s.cx + s.R * Math.cos(latr) * Math.sin(lonr), y: s.cy - s.R * Math.sin(latr), v: z > 0.05 };
         });
-        let run = [];
+        let run: any[] = [];
         const flush = () => {
           if (run.length < 2) { run = []; return; }
           ctx.beginPath();
@@ -1029,11 +1030,11 @@ function GlobeCanvas() {
       }
     };
 
-    const drawGrid = (phi) => {
+    const drawGrid = (phi: number) => {
       const MAX_JUMP = s.R * 0.35;
       ctx.lineWidth = 0.5;
       for (let lat = -75; lat <= 75; lat += 15) {
-        let run = [];
+        let run: any[] = [];
         const flush = () => {
           if (run.length < 2) { run = []; return; }
           ctx.beginPath(); ctx.moveTo(run[0].x, run[0].y);
@@ -1051,7 +1052,7 @@ function GlobeCanvas() {
         flush();
       }
       for (let lon = -180; lon < 180; lon += 20) {
-        let run = [];
+        let run: any[] = [];
         const flush = () => {
           if (run.length < 2) { run = []; return; }
           ctx.beginPath(); ctx.moveTo(run[0].x, run[0].y);
@@ -1070,7 +1071,7 @@ function GlobeCanvas() {
       }
     };
 
-    const drawArcs = (phi) => {
+    const drawArcs = (phi: number) => {
       arcs.forEach(([i, j], idx) => {
         const c1 = cities[i], c2 = cities[j];
         const pts = arcPoints(c1, c2, phi, s);
@@ -1113,7 +1114,7 @@ function GlobeCanvas() {
     };
 
     /* ── Shared circle base for icons ── */
-    const drawCircleBase = (cx, cy, radius, isMentor) => {
+    const drawCircleBase = (cx: number, cy: number, radius: number, isMentor: boolean) => {
       const bgColor = isMentor ? '#2563eb' : '#eab308';
       const bgColorLight = isMentor ? '#3b82f6' : '#facc15';
       const borderColor = isMentor ? '#1d4ed8' : '#ca8a04';
@@ -1154,7 +1155,7 @@ function GlobeCanvas() {
     };
 
     /* ── MENTOR icon: Person silhouette (no cap) — blue ── */
-    const drawMentorIcon = (cx, cy, radius, alpha) => {
+    const drawMentorIcon = (cx: number, cy: number, radius: number, alpha: number) => {
       ctx.save();
       ctx.globalAlpha = alpha;
       drawCircleBase(cx, cy, radius, true);
@@ -1183,7 +1184,7 @@ function GlobeCanvas() {
     };
 
     /* ── STUDENT icon: Person with graduation cap — yellow ── */
-    const drawStudentIcon = (cx, cy, radius, alpha) => {
+    const drawStudentIcon = (cx: number, cy: number, radius: number, alpha: number) => {
       ctx.save();
       ctx.globalAlpha = alpha;
       drawCircleBase(cx, cy, radius, false);
@@ -1243,7 +1244,7 @@ function GlobeCanvas() {
       ctx.restore();
     };
 
-    const drawCities = (phi) => {
+    const drawCities = (phi: number) => {
       const projected = cities.map(city => {
         const p = project(city.lat, city.lon, phi, s);
         return { ...city, ...p };
@@ -1320,7 +1321,7 @@ function GlobeCanvas() {
       ctx.clip();
     };
 
-    let raf;
+    let raf: number;
     const draw = () => {
       ctx.clearRect(0, 0, s.W, s.H);
       if (!s.drag) s.phi += s.dPhi;
@@ -1419,13 +1420,13 @@ export default function TOEConsulting() {
     PILL_STARTS.map(startIdx => ({ uniIdx: startIdx, shown: false, fading: false }))
   );
 
-  const statsRef = useRef(null);
-  const aboutRef = useRef(null);
-  const servicesRef = useRef(null);
-  const guidelinesRef = useRef(null);
-  const successRef = useRef(null);
-  const expertsRef = useRef(null);
-  const pricingRef = useRef(null);
+  const statsRef = useRef<HTMLDivElement>(null);
+  const aboutRef = useRef<HTMLDivElement>(null);
+  const servicesRef = useRef<HTMLDivElement>(null);
+  const guidelinesRef = useRef<HTMLDivElement>(null);
+  const successRef = useRef<HTMLDivElement>(null);
+  const expertsRef = useRef<HTMLDivElement>(null);
+  const pricingRef = useRef<HTMLDivElement>(null);
 
   const sectionRefs = [statsRef, aboutRef, servicesRef, guidelinesRef, successRef, expertsRef, pricingRef];
 
@@ -1485,7 +1486,7 @@ export default function TOEConsulting() {
     const handleScroll = () => setScrolled(window.scrollY > 20);
     window.addEventListener('scroll', handleScroll);
     // Staggered pill reveal + cycling
-    const allTimers = [];
+    const allTimers: any[] = [];
     PILL_STARTS.forEach((_, i) => {
       const revealAt = 800 + i * 1300;
       // Initial reveal
@@ -1520,7 +1521,7 @@ export default function TOEConsulting() {
     return () => { clearInterval(interval); window.removeEventListener('scroll', handleScroll); allTimers.forEach(id => { clearTimeout(id); clearInterval(id); }); };
   }, []);
 
-  const scrollTo = (ref) => { setMobileMenuOpen(false); ref.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }); };
+  const scrollTo = (ref: React.RefObject<HTMLDivElement>) => { setMobileMenuOpen(false); ref.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }); };
   const openContact = () => { setMobileMenuOpen(false); setShowContactModal(true); };
 
   const services = [
@@ -1648,8 +1649,8 @@ export default function TOEConsulting() {
             </div>
           </button>
           <nav className="hidden lg:flex items-center gap-8">
-            {[["About Us", () => scrollTo(aboutRef)], ["Services", () => scrollTo(servicesRef)], ["Guidelines", () => scrollTo(guidelinesRef)], ["Pricing", () => scrollTo(pricingRef)], ["Contact Us", openContact]].map(([label, action]) => (
-              <button key={label} onClick={action} className="nav-link text-slate-900 hover:text-[#234C6A] transition-colors text-sm font-semibold tracking-wide">{label}</button>
+            {([["About Us", () => scrollTo(aboutRef)], ["Services", () => scrollTo(servicesRef)], ["Guidelines", () => scrollTo(guidelinesRef)], ["Pricing", () => scrollTo(pricingRef)], ["Contact Us", openContact]] as const).map(([label, action]) => (
+              <button key={label as string} onClick={action as () => void} className="nav-link text-slate-900 hover:text-[#234C6A] transition-colors text-sm font-semibold tracking-wide">{label}</button>
             ))}
           </nav>
           <div className="hidden lg:flex items-center gap-3">
@@ -1662,8 +1663,8 @@ export default function TOEConsulting() {
         </div>
         {mobileMenuOpen && (
           <div className="lg:hidden border-t border-[#BCCCDC] bg-[#F8FAFC] px-4 sm:px-6 py-4 space-y-3">
-            {[["About Us", () => scrollTo(aboutRef)], ["Services", () => scrollTo(servicesRef)], ["Guidelines", () => scrollTo(guidelinesRef)], ["Pricing", () => scrollTo(pricingRef)], ["Contact Us", openContact]].map(([label, action]) => (
-              <button key={label} onClick={action} className="block w-full text-left text-slate-700 hover:text-[#234C6A] font-semibold py-1 transition-colors">{label}</button>
+            {([["About Us", () => scrollTo(aboutRef)], ["Services", () => scrollTo(servicesRef)], ["Guidelines", () => scrollTo(guidelinesRef)], ["Pricing", () => scrollTo(pricingRef)], ["Contact Us", openContact]] as const).map(([label, action]) => (
+              <button key={label as string} onClick={action as () => void} className="block w-full text-left text-slate-700 hover:text-[#234C6A] font-semibold py-1 transition-colors">{label}</button>
             ))}
             <div className="flex gap-3 pt-2">
               <button onClick={() => { setMobileMenuOpen(false); navigate('/login'); }} className="flex-1 py-2.5 rounded-full border border-slate-300 text-slate-700 text-sm font-semibold">Login</button>

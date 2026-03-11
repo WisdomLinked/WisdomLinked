@@ -46,9 +46,9 @@ export default function WLCustomerRegister() {
     const navigate = useNavigate();
     const dispatch = useDispatch();
     const [form, setForm] = useState({
-        fullName: '', majors: [], services: '', country: '', countryCode: '+1', phone: '', email: '', password: '', confirmPassword: '', specialNote: '', terms: false
+        fullName: '', majors: [] as string[], services: '', country: '', countryCode: '+1', phone: '', email: '', password: '', confirmPassword: '', specialNote: '', terms: false
     });
-    const [errors, setErrors] = useState({});
+    const [errors, setErrors] = useState<Record<string, string>>({});
     const [submitting, setSubmitting] = useState(false);
     const [confirmEmailSent, setConfirmEmailSent] = useState(false);
     const [showPassword, setShowPassword] = useState(false);
@@ -57,29 +57,29 @@ export default function WLCustomerRegister() {
     const [showServiceDrop, setShowServiceDrop] = useState(false);
     const [showCountryDrop, setShowCountryDrop] = useState(false);
     const [showCodeDrop, setShowCodeDrop] = useState(false);
-    const majorRef = useRef(null);
-    const serviceRef = useRef(null);
-    const countryRef = useRef(null);
-    const codeRef = useRef(null);
+    const majorRef = useRef<HTMLDivElement>(null);
+    const serviceRef = useRef<HTMLDivElement>(null);
+    const countryRef = useRef<HTMLDivElement>(null);
+    const codeRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
-        const handler = (e) => {
-            if (majorRef.current && !majorRef.current.contains(e.target)) setShowMajorDrop(false);
-            if (serviceRef.current && !serviceRef.current.contains(e.target)) setShowServiceDrop(false);
-            if (countryRef.current && !countryRef.current.contains(e.target)) setShowCountryDrop(false);
-            if (codeRef.current && !codeRef.current.contains(e.target)) setShowCodeDrop(false);
+        const handler = (e: MouseEvent) => {
+            if (majorRef.current && !majorRef.current.contains(e.target as Node)) setShowMajorDrop(false);
+            if (serviceRef.current && !serviceRef.current.contains(e.target as Node)) setShowServiceDrop(false);
+            if (countryRef.current && !countryRef.current.contains(e.target as Node)) setShowCountryDrop(false);
+            if (codeRef.current && !codeRef.current.contains(e.target as Node)) setShowCodeDrop(false);
         };
         document.addEventListener('mousedown', handler);
         return () => document.removeEventListener('mousedown', handler);
     }, []);
 
-    const toggleMajor = (m) => {
+    const toggleMajor = (m: string) => {
         setForm(f => ({ ...f, majors: f.majors.includes(m) ? f.majors.filter(x => x !== m) : [...f.majors, m] }));
         setErrors(e => ({ ...e, majors: '' }));
     };
 
     const validate = () => {
-        const e = {};
+        const e: Record<string, string> = {};
         if (!form.fullName.trim()) e.fullName = 'Full name is required';
         if (form.majors.length === 0) e.majors = 'Select at least one major';
         if (!form.services) e.services = 'Select a service';
@@ -114,7 +114,7 @@ export default function WLCustomerRegister() {
                 password: form.password,
                 ...(form.specialNote.trim() && { specialNote: form.specialNote.trim() })
             };
-            const response = await callApi('POST', 'auth/register', data);
+            const response = await callApi('POST', 'auth/register', data) as any;
             if (response.status === 'SUCCESS') {
                 setConfirmEmailSent(true);
             } else {
@@ -172,7 +172,7 @@ export default function WLCustomerRegister() {
                             <div>
                                 <label className="block text-xs font-semibold text-slate-600 mb-1.5"><span className="flex items-center gap-1.5"><User size={12} /> Full name</span></label>
                                 <input type="text" placeholder="e.g. Sarah Chen" value={form.fullName}
-                                    onChange={e => { setForm(f => ({ ...f, fullName: e.target.value })); setErrors(er => ({ ...er, fullName: '' })); }}
+                                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => { setForm(f => ({ ...f, fullName: e.target.value })); setErrors(er => ({ ...er, fullName: '' })); }}
                                     className={errors.fullName ? inputError : inputNormal} />
                                 {errors.fullName && <p className="mt-1 text-xs text-red-500 flex items-center gap-1"><AlertCircle size={11} />{errors.fullName}</p>}
                             </div>
@@ -257,7 +257,7 @@ export default function WLCustomerRegister() {
                                         )}
                                     </div>
                                     <input type="tel" placeholder="Phone number" value={form.phone}
-                                        onChange={e => { setForm(f => ({ ...f, phone: e.target.value })); setErrors(er => ({ ...er, phone: '' })); }}
+                                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => { setForm(f => ({ ...f, phone: e.target.value })); setErrors(er => ({ ...er, phone: '' })); }}
                                         className={`flex-1 ${errors.phone ? inputError : inputNormal}`} />
                                 </div>
                                 {errors.phone && <p className="mt-1 text-xs text-red-500 flex items-center gap-1"><AlertCircle size={11} />{errors.phone}</p>}
@@ -266,7 +266,7 @@ export default function WLCustomerRegister() {
                             <div>
                                 <label className="block text-xs font-semibold text-slate-600 mb-1.5"><span className="flex items-center gap-1.5"><Mail size={12} /> Email</span></label>
                                 <input type="email" placeholder="you@example.com" value={form.email}
-                                    onChange={e => { setForm(f => ({ ...f, email: e.target.value })); setErrors(er => ({ ...er, email: '' })); }}
+                                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => { setForm(f => ({ ...f, email: e.target.value })); setErrors(er => ({ ...er, email: '' })); }}
                                     className={errors.email ? inputError : inputNormal} />
                                 {errors.email && <p className="mt-1 text-xs text-red-500 flex items-center gap-1"><AlertCircle size={11} />{errors.email}</p>}
                             </div>
@@ -275,7 +275,7 @@ export default function WLCustomerRegister() {
                                 <label className="block text-xs font-semibold text-slate-600 mb-1.5"><span className="flex items-center gap-1.5"><Lock size={12} /> Password</span></label>
                                 <div className="relative">
                                     <input type={showPassword ? 'text' : 'password'} placeholder="Min. 8 characters" value={form.password}
-                                        onChange={e => { setForm(f => ({ ...f, password: e.target.value })); setErrors(er => ({ ...er, password: '', confirmPassword: '' })); }}
+                                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => { setForm(f => ({ ...f, password: e.target.value })); setErrors(er => ({ ...er, password: '', confirmPassword: '' })); }}
                                         className={`${errors.password ? inputError : inputNormal} pr-10`} />
                                     <button type="button" onClick={() => setShowPassword(p => !p)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600" aria-label={showPassword ? 'Hide password' : 'Show password'}>
                                         {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
@@ -288,7 +288,7 @@ export default function WLCustomerRegister() {
                                 <label className="block text-xs font-semibold text-slate-600 mb-1.5">Confirm password</label>
                                 <div className="relative">
                                     <input type={showConfirmPassword ? 'text' : 'password'} placeholder="Re-enter password" value={form.confirmPassword}
-                                        onChange={e => { setForm(f => ({ ...f, confirmPassword: e.target.value })); setErrors(er => ({ ...er, confirmPassword: '' })); }}
+                                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => { setForm(f => ({ ...f, confirmPassword: e.target.value })); setErrors(er => ({ ...er, confirmPassword: '' })); }}
                                         className={`${errors.confirmPassword ? inputError : inputNormal} pr-10`} />
                                     <button type="button" onClick={() => setShowConfirmPassword(p => !p)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600" aria-label={showConfirmPassword ? 'Hide password' : 'Show password'}>
                                         {showConfirmPassword ? <EyeOff size={18} /> : <Eye size={18} />}
@@ -300,7 +300,7 @@ export default function WLCustomerRegister() {
                             <div>
                                 <label className="block text-xs font-semibold text-slate-600 mb-1.5">Special note</label>
                                 <input type="text" placeholder="Optional, max 50 characters" value={form.specialNote} maxLength={50}
-                                    onChange={e => { setForm(f => ({ ...f, specialNote: e.target.value })); setErrors(er => ({ ...er, specialNote: '' })); }}
+                                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => { setForm(f => ({ ...f, specialNote: e.target.value })); setErrors(er => ({ ...er, specialNote: '' })); }}
                                     className={errors.specialNote ? inputError : inputNormal} />
                                 <div className="flex items-center justify-between mt-1">
                                     {errors.specialNote && <p className="text-xs text-red-500 flex items-center gap-1"><AlertCircle size={11} />{errors.specialNote}</p>}
@@ -310,7 +310,7 @@ export default function WLCustomerRegister() {
 
                             <div>
                                 <label className="flex items-start gap-3 cursor-pointer">
-                                    <input type="checkbox" checked={form.terms} onChange={e => { setForm(f => ({ ...f, terms: e.target.checked })); setErrors(er => ({ ...er, terms: '' })); }}
+                                    <input type="checkbox" checked={form.terms} onChange={(e: React.ChangeEvent<HTMLInputElement>) => { setForm(f => ({ ...f, terms: e.target.checked })); setErrors(er => ({ ...er, terms: '' })); }}
                                         className="mt-1 w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-400" />
                                     <span className="text-sm text-slate-600">I agree to the <a href="#" className="text-indigo-600 font-semibold hover:underline">Terms and Conditions</a></span>
                                 </label>

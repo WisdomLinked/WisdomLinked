@@ -149,7 +149,7 @@ const Dashboard = () => {
         const newImageMap = new Map(base64Images);
 
         images.forEach((image) => {
-            if (image) newImageMap.set(image.id, image.base64);
+            if (image) newImageMap.set(image.id, image.base64 as string);
         });
 
         setBase64Images(newImageMap);

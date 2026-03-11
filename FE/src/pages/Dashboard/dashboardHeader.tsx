@@ -21,7 +21,7 @@ const DashboardHeader = ({ userDetails }: any) => {
             if (userDetails.image) {
                 try {
                     const src = await profileImageFetch(userDetails.image,"small");
-                    setImageSrc(src);
+                    setImageSrc(src as string);
                 } catch (error) {
                     console.error("Error fetching image:", error);
                 }

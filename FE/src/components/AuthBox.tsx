@@ -11,7 +11,7 @@ const BoxWrapper = styled("div")({
     background: "#5865F2",
 });
 
-const AuthBox: React.FC = (props) => {
+const AuthBox: React.FC<React.PropsWithChildren<{}>> = (props) => {
     return (
         <BoxWrapper>
             <Box

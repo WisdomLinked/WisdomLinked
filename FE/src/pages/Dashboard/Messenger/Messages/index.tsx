@@ -60,7 +60,7 @@ const Messages = () => {
                     if (author.image) {
                         try {
                             const base64Image = await profileImageFetch(author.image, 'small');
-                            tempImages.set(_id, base64Image); // Save the Base64 image
+                            tempImages.set(_id, base64Image as string); // Save the Base64 image
                         } catch (error) {
                             console.error(`Error fetching Base64 image for userId ${_id}:`, error);
                         }
@@ -86,7 +86,7 @@ const Messages = () => {
                 if (message.author.image && !tempImages.has(userId)) {
                     try {
                         const base64Image = await profileImageFetch(message.author.image, 'small');
-                        tempImages.set(userId, base64Image);
+                        tempImages.set(userId, base64Image as string);
                     } catch (error) {
                         console.error(`Error fetching Base64 image for userId ${userId}:`, error);
                     }

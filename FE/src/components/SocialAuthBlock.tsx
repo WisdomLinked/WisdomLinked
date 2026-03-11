@@ -3,7 +3,7 @@ import React, { useState } from 'react';
 const POPUP_MESSAGE = 'Update your preferences in the profile section after logging in to receive better service.';
 
 const BASE_URL = (process.env.REACT_APP_API_BASE_URL || '').replace(/\/$/, '');
-function getAuthRedirectUrl(provider) {
+function getAuthRedirectUrl(provider: string) {
   const envUrl = process.env[`REACT_APP_${provider.toUpperCase()}_AUTH_URL`];
   if (envUrl) return envUrl;
   return BASE_URL ? `${BASE_URL}/auth/${provider}` : `#`;
@@ -33,9 +33,9 @@ const DiscordIcon = () => (
 
 export default function SocialAuthBlock() {
   const [showPopup, setShowPopup] = useState(false);
-  const [pendingProvider, setPendingProvider] = useState(null); // 'google' | 'facebook' | 'discord'
+  const [pendingProvider, setPendingProvider] = useState<string | null>(null); // 'google' | 'facebook' | 'discord'
 
-  const handleSocialClick = (provider) => {
+  const handleSocialClick = (provider: string) => {
     setPendingProvider(provider);
     setShowPopup(true);
   };
