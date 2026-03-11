@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   Star, Users, Briefcase, GraduationCap, TrendingUp, MessageCircle, CheckCircle,
   ArrowRight, Sparkles, Menu, X, BookOpen, Globe, ChevronDown, ChevronUp, Phone, Mail, User,
-  FileText, Send, AlertCircle, Lock, Upload
+  FileText, Send, AlertCircle, Lock, Upload, Calendar
 } from 'lucide-react';
 
 const COUNTRY_CODES = [
@@ -1381,6 +1381,17 @@ const UNIVERSITIES = [
   { label: 'UNSW · Australia', dot: '#14b8a6', border: '#ccfbf1' },
   { label: 'Columbia · USA', dot: '#234C6A', border: '#E8EEF4' },
   { label: 'HKU · Hong Kong', dot: '#22c55e', border: '#dcfce7' },
+  // Additional engineering schools with short labels
+  { label: 'UIUC · USA', dot: '#3b82f6', border: '#dbeafe' },        // Univ. of Illinois Urbana-Champaign
+  { label: 'KTH · Sweden', dot: '#06b6d4', border: '#cffafe' },      // KTH Royal Institute of Technology
+  { label: 'UCB · USA', dot: '#f97316', border: '#ffedd5' },         // UC Berkeley
+  { label: 'UCLA · USA', dot: '#0ea5e9', border: '#e0f2fe' },        // UCLA
+  { label: 'Georgia Tech · USA', dot: '#fbbf24', border: '#fef3c7' },
+  { label: 'NTU · Singapore', dot: '#22c55e', border: '#dcfce7' },   // Nanyang Technological Univ.
+  { label: 'HKUST · Hong Kong', dot: '#6366f1', border: '#e0e7ff' },
+  { label: 'PoliMi · Italy', dot: '#2563eb', border: '#dbeafe' },    // Politecnico di Milano
+  { label: 'UTokyo · Japan', dot: '#0f766e', border: '#ccfbf1' },    // Univ. of Tokyo short
+  { label: 'RWTH · Germany', dot: '#4f46e5', border: '#e0e7ff' },    // RWTH Aachen
 ];
 
 const PILL_POSITIONS = [
@@ -1391,9 +1402,9 @@ const PILL_POSITIONS = [
 ];
 
 // Each pill starts at a different offset so they always show distinct universities
-const PILL_STARTS = [0, 7, 14, 20];
-// Each pill advances by a different step (all coprime with 27) for full coverage
-const PILL_STEPS = [4, 5, 3, 6];
+const PILL_STARTS = [0, 9, 18, 27];
+// Each pill advances by a different step; we also enforce uniqueness per frame
+const PILL_STEPS = [5, 7, 9, 11];
 // Slightly different cycle intervals so pills don't all swap at once
 const PILL_CYCLES = [7000, 8200, 7600, 9000];
 
@@ -1482,14 +1493,24 @@ export default function TOEConsulting() {
         setPills(prev => prev.map((p, idx) => idx === i ? { ...p, shown: true } : p));
         // Start cycling after reveal settles
         const cycleId = setInterval(() => {
-          // Fade out
+          // Fade out this pill
           setPills(prev => prev.map((p, idx) => idx === i ? { ...p, fading: true } : p));
-          // Swap university after fade
+          // Swap university after fade, making sure no two pills show the same uni at once
           const swapId = setTimeout(() => {
-            setPills(prev => prev.map((p, idx) => {
-              if (idx !== i) return p;
-              return { ...p, uniIdx: (p.uniIdx + PILL_STEPS[i]) % UNIVERSITIES.length, fading: false };
-            }));
+            setPills(prev => {
+              const usedByOthers = prev
+                .map((p, idx) => (idx === i ? null : p.uniIdx))
+                .filter(v => v !== null);
+              let next = (prev[i].uniIdx + PILL_STEPS[i]) % UNIVERSITIES.length;
+              let guard = 0;
+              while (usedByOthers.includes(next) && guard < UNIVERSITIES.length) {
+                next = (next + 1) % UNIVERSITIES.length;
+                guard += 1;
+              }
+              return prev.map((p, idx) =>
+                idx === i ? { ...p, uniIdx: next, fading: false } : p
+              );
+            });
           }, 380);
           allTimers.push(swapId);
         }, PILL_CYCLES[i]);
@@ -1577,6 +1598,7 @@ export default function TOEConsulting() {
           pointer-events: none;
           background-image: radial-gradient(circle, rgba(148,163,184,0.55) 1.7px, transparent 1.7px);
           background-size: 26px 26px;
+          opacity: 0.65;
         }
         .page-dots-layer--animated {
           animation: dotsFade 4s ease-in-out infinite;
@@ -1592,6 +1614,7 @@ export default function TOEConsulting() {
           background-color: #F8FAFC;
           background-image: radial-gradient(circle, rgba(188,204,220,0.45) 1.8px, transparent 1.8px);
           background-size: 28px 28px;
+          opacity: 0.65;
         }
         .auth-dots-layer--animate {
           animation: authDotsDrift 35s linear infinite;
@@ -1631,7 +1654,7 @@ export default function TOEConsulting() {
           </nav>
           <div className="hidden lg:flex items-center gap-3">
             <button onClick={() => navigate('/login')} className="px-5 py-2.5 rounded-full border border-[#BCCCDC] text-slate-900 hover:border-[#9AA6B2] hover:text-[#234C6A] transition-all text-sm font-semibold bg-white/85">Login</button>
-            <button onClick={() => navigate('/customerregister')} className="btn-primary px-5 py-2.5 rounded-full text-white font-semibold text-sm shadow-md shadow-[#BCCCDC]">Sign Up</button>
+            <button onClick={() => navigate('/signup')} className="btn-primary px-5 py-2.5 rounded-full text-white font-semibold text-sm shadow-md shadow-[#BCCCDC]">Sign Up</button>
           </div>
           <button className="lg:hidden p-2 rounded-xl border border-slate-200 hover:bg-slate-100 transition" onClick={() => setMobileMenuOpen(v => !v)}>
             {mobileMenuOpen ? <X className="w-5 h-5 text-slate-600" /> : <Menu className="w-5 h-5 text-slate-600" />}
@@ -1644,7 +1667,7 @@ export default function TOEConsulting() {
             ))}
             <div className="flex gap-3 pt-2">
               <button onClick={() => { setMobileMenuOpen(false); navigate('/login'); }} className="flex-1 py-2.5 rounded-full border border-slate-300 text-slate-700 text-sm font-semibold">Login</button>
-              <button onClick={() => { setMobileMenuOpen(false); navigate('/customerregister'); }} className="flex-1 py-2.5 btn-primary rounded-full text-white text-sm font-semibold">Sign Up</button>
+              <button onClick={() => { setMobileMenuOpen(false); navigate('/signup'); }} className="flex-1 py-2.5 btn-primary rounded-full text-white text-sm font-semibold">Sign Up</button>
             </div>
           </div>
         )}
@@ -1682,8 +1705,6 @@ export default function TOEConsulting() {
 
           <div className="absolute -top-40 right-0 w-[700px] h-[700px] rounded-full pointer-events-none"
             style={{ background: 'radial-gradient(ellipse, rgba(156,173,189,0.32) 0%, transparent 65%)', filter: 'blur(70px)' }}></div>
-          <div className="absolute -bottom-20 -left-10 w-[450px] h-[450px] rounded-full pointer-events-none"
-            style={{ background: 'radial-gradient(ellipse, rgba(26,53,72,0.28) 0%, transparent 65%)', filter: 'blur(55px)' }}></div>
 
           <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 w-full pt-24 sm:pt-28 pb-12 sm:pb-20 grid lg:grid-cols-[1fr_1fr] gap-8 lg:gap-0 items-center min-h-screen">
 
@@ -1709,11 +1730,11 @@ export default function TOEConsulting() {
               </p>
 
               <div className="flex flex-col sm:flex-row gap-3 items-start mb-10 animate-fade-up" style={{ animationDelay: '0.4s' }}>
-                <button onClick={() => navigate('/customerregister')} className="group btn-primary px-8 py-4 rounded-2xl font-semibold text-white flex items-center gap-2.5 shadow-xl text-[0.9375rem]" style={{ boxShadow: '0 10px 40px rgba(35,60,82,0.25)' }}>
+                <button onClick={() => navigate('/signup')} className="group btn-primary px-8 py-4 rounded-2xl font-semibold text-white flex items-center gap-2.5 shadow-xl text-[0.9375rem]" style={{ boxShadow: '0 10px 40px rgba(35,60,82,0.25)' }}>
                   Book a Consultation
                   <ArrowRight className="w-4 h-4 group-hover:translate-x-1.5 transition-transform" />
                 </button>
-                <button onClick={() => navigate('/expertregister')} className="px-8 py-4 rounded-2xl border-2 border-slate-200 bg-white/70 backdrop-blur-sm text-slate-700 font-semibold text-[0.9375rem] hover:border-[#456882] hover:text-[#234C6A] hover:bg-white transition-all duration-300">
+                <button onClick={() => navigate('/signup')} className="px-8 py-4 rounded-2xl border-2 border-slate-200 bg-white/70 backdrop-blur-sm text-slate-700 font-semibold text-[0.9375rem] hover:border-[#456882] hover:text-[#234C6A] hover:bg-white transition-all duration-300">
                   Become an Expert
                 </button>
               </div>
@@ -1874,7 +1895,7 @@ export default function TOEConsulting() {
                       ))}
                     </div>
                   </div>
-                  <button onClick={() => navigate('/customerregister')} className="mt-6 w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl text-sm font-semibold text-white transition-all group-hover:gap-2.5 shrink-0" style={{ background: 'linear-gradient(135deg, #234C6A 0%, #456882 100%)' }}>
+                  <button onClick={() => navigate('/signup')} className="mt-6 w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl text-sm font-semibold text-white transition-all group-hover:gap-2.5 shrink-0" style={{ background: 'linear-gradient(135deg, #234C6A 0%, #456882 100%)' }}>
                     Start now <ArrowRight className="w-4 h-4" />
                   </button>
                 </div>
@@ -1984,22 +2005,182 @@ export default function TOEConsulting() {
           </div>
         </section>
 
-        {/* CTA BANNER */}
-        <section ref={pricingRef} className="relative py-16 sm:py-20 md:py-24 px-4 sm:px-6 scroll-mt-20" style={{ backgroundColor: '#F8FAFC' }}>
+        {/* PRICING / HOW IT WORKS */}
+        <section ref={pricingRef} className="relative py-24 px-4 sm:px-6 scroll-mt-20" style={{ backgroundColor: '#F8FAFC' }}>
           <div className="page-dots-layer page-dots-layer--animated" aria-hidden="true" />
-          <div className="relative z-10 max-w-4xl mx-auto">
-            <div className="relative overflow-hidden rounded-2xl sm:rounded-3xl p-8 sm:p-12 md:p-16 text-center" style={{ backgroundColor: '#234C6A' }}>
-              <div className="absolute inset-0 hero-grid opacity-10"></div>
-              <div className="absolute top-0 right-0 w-48 sm:w-80 h-48 sm:h-80 bg-white/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2"></div>
-              <div className="relative">
-                <div className="inline-block section-label text-[#D9EAFD] mb-4">Get Started</div>
-                <h2 className="font-display text-3xl sm:text-4xl md:text-5xl font-bold text-white mb-3 sm:mb-4">Ready to Connect?</h2>
-                <p className="text-[#D9EAFD] text-base sm:text-lg mb-6 sm:mb-8 max-w-xl mx-auto px-1">Whether you're seeking guidance or ready to share your expertise, start your journey with WisdomLinked today.</p>
-                <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 justify-center">
-                  <button onClick={() => navigate('/customerregister')} className="group px-8 py-4 bg-white rounded-full font-bold text-[#234C6A] text-base hover:bg-[#D9EAFD] transition-all shadow-xl flex items-center gap-2 justify-center">
-                    Get Started Now <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
-                  </button>
-                  <button onClick={openContact} className="px-8 py-4 rounded-full border-2 border-white/30 text-white font-bold text-base hover:bg-white/10 transition-all">Contact Us</button>
+          <div className="relative z-10 max-w-7xl mx-auto">
+            <div className="max-w-3xl">
+              <div className="inline-block section-label text-[#234C6A] mb-4">How pricing works</div>
+              <h2 className="font-display text-3xl sm:text-4xl md:text-5xl font-bold text-slate-900 mb-4">
+                Fair, transparent, expert driven rates
+              </h2>
+              <p className="text-slate-600 text-base sm:text-lg leading-relaxed mb-4">
+                Every expert sets their own rate based on their field, seniority, and demand. You see the full cost before you commit, no hidden fees, no surprises.
+              </p>
+              <div className="inline-flex items-center gap-2 px-3 py-2 rounded-full bg-emerald-50 border border-emerald-200 text-xs sm:text-sm text-emerald-800 font-semibold">
+                <CheckCircle className="w-4 h-4" />
+                <span>Pre-payment is fully refunded if your expert declines the request</span>
+              </div>
+            </div>
+
+            {/* Pricing explanation cards */}
+            <div className="mt-10 grid gap-5 md:gap-6 lg:grid-cols-3">
+              {/* Card 1 — wide, featured */}
+              <div className="lg:col-span-2">
+                <div className="card-hover h-full rounded-2xl border border-slate-200 bg-white/90 p-5 sm:p-6 flex flex-col gap-3 sm:gap-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <h3 className="font-display text-xl sm:text-2xl font-bold text-slate-900">
+                      Expert-set rates
+                    </h3>
+                    <span className="inline-flex items-center px-2.5 py-1 rounded-full border border-[#234C6A]/20 bg-[#E8EEF4] text-[10px] sm:text-xs font-semibold text-[#234C6A]">
+                      Transparent pricing
+                    </span>
+                  </div>
+                  <p className="text-slate-600 text-sm sm:text-base leading-relaxed">
+                    Each consultant independently sets their hourly or per-session rate based on their expertise, institutional standing, and field. Browse by budget to find the right fit for you.
+                  </p>
+                  <div className="mt-1 rounded-xl border border-dashed border-slate-200 bg-slate-50 px-4 py-3 text-xs sm:text-sm text-slate-700 flex flex-col gap-1.5">
+                    <div className="flex items-center justify-between flex-wrap gap-2">
+                      <span className="font-semibold text-slate-800">$0</span>
+                      <span className="text-slate-500 text-[11px] sm:text-xs">Intro or scholarship supported</span>
+                    </div>
+                    <div className="flex items-center justify-between flex-wrap gap-2">
+                      <span className="font-semibold text-slate-800">$5</span>
+                      <span className="text-slate-500 text-[11px] sm:text-xs">Standard session</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Card 2 — client gratuity */}
+              <div>
+                <div className="card-hover h-full rounded-2xl border border-slate-200 bg-white/90 p-5 sm:p-6 flex flex-col gap-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <h3 className="font-display text-lg sm:text-xl font-bold text-slate-900">
+                      Client gratuity
+                    </h3>
+                    <span className="inline-flex items-center px-2.5 py-1 rounded-full border border-slate-200 bg-slate-50 text-[10px] sm:text-xs font-semibold text-slate-600">
+                      Optional
+                    </span>
+                  </div>
+                  <p className="text-slate-600 text-sm leading-relaxed">
+                    For high-demand experts, you may add a custom tip on top of the session rate. It&apos;s entirely optional, a way to show appreciation or secure a preferred slot.
+                  </p>
+                </div>
+              </div>
+
+              {/* Card 3 — request & confirm */}
+              <div>
+                <div className="card-hover h-full rounded-2xl border border-[#234C6A] bg-[#234C6A]/95 p-5 sm:p-6 flex flex-col gap-3 text-white">
+                  <div className="flex items-center justify-between gap-3">
+                    <h3 className="font-display text-lg sm:text-xl font-bold">
+                      Request &amp; confirm
+                    </h3>
+                    <span className="inline-flex items-center px-2.5 py-1 rounded-full border border-white/30 bg-white/10 text-[10px] sm:text-xs font-semibold">
+                      Expert approved
+                    </span>
+                  </div>
+                  <p className="text-sm leading-relaxed text-[#E5EDF5]">
+                    Your booking is a proposal. The expert reviews your request and background before officially accepting, ensuring every session is a genuine match.
+                  </p>
+                </div>
+              </div>
+
+              {/* Card 4 — flexible rescheduling */}
+              <div>
+                <div className="card-hover h-full rounded-2xl border border-slate-200 bg-white/90 p-5 sm:p-6 flex flex-col gap-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <h3 className="font-display text-lg sm:text-xl font-bold text-slate-900">
+                      Flexible rescheduling
+                    </h3>
+                    <span className="inline-flex items-center px-2.5 py-1 rounded-full border border-slate-200 bg-slate-50 text-[10px] sm:text-xs font-semibold text-slate-600">
+                      No pressure
+                    </span>
+                  </div>
+                  <p className="text-slate-600 text-sm leading-relaxed">
+                    Plans change. You can request a time shift at any point. The new slot becomes confirmed once your expert approves — no automatic cancellations.
+                  </p>
+                </div>
+              </div>
+
+              {/* Card 5 — wide ratings card */}
+              <div className="lg:col-span-3">
+                <div className="card-hover rounded-2xl border border-slate-200 bg-white p-5 sm:p-6 md:p-7 flex flex-col md:flex-row gap-4 md:gap-6 items-start md:items-center">
+                  <div className="flex-1">
+                    <div className="flex items-center justify-between gap-3 mb-2">
+                      <h3 className="font-display text-xl sm:text-2xl font-bold text-slate-900">
+                        Two-way ratings
+                      </h3>
+                      <span className="inline-flex items-center px-2.5 py-1 rounded-full border border-amber-200 bg-amber-50 text-[10px] sm:text-xs font-semibold text-amber-700">
+                        Community standard
+                      </span>
+                    </div>
+                    <p className="text-slate-600 text-sm sm:text-base leading-relaxed">
+                      After every session, both expert and client leave a rating. This mutual accountability is how we maintain a community of excellence, and why our average sits at 4.9 out of 5.
+                    </p>
+                  </div>
+                  <div className="w-full md:w-auto md:min-w-[220px] rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs sm:text-sm text-slate-700 space-y-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="font-semibold">Expert → Client</span>
+                      <span className="flex items-center gap-1 text-amber-500 text-xs">
+                        ★★★★★
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="font-semibold">Client → Expert</span>
+                      <span className="flex items-center gap-1 text-amber-500 text-xs">
+                        ★★★★★
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between gap-2 pt-1 border-t border-slate-200">
+                      <span className="text-slate-500">Platform avg</span>
+                      <span className="font-semibold text-slate-900">
+                        4.9 / 5.0
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Bottom guarantee bar */}
+            <div className="mt-10 rounded-2xl border border-slate-200 bg-white/95 px-4 sm:px-6 py-5 sm:py-6">
+              <div className="grid gap-4 sm:gap-5 md:grid-cols-2 lg:grid-cols-4">
+                <div className="flex items-start gap-3">
+                  <div className="mt-0.5 w-8 h-8 rounded-full bg-emerald-50 flex items-center justify-center text-emerald-600">
+                    <CheckCircle className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <div className="text-sm font-semibold text-slate-900">Full refund guarantee</div>
+                    <p className="text-xs text-slate-600 mt-1">Pre-payment is returned in full if the expert declines your request.</p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-3">
+                  <div className="mt-0.5 w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-700">
+                    <Lock className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <div className="text-sm font-semibold text-slate-900">Secure payments</div>
+                    <p className="text-xs text-slate-600 mt-1">All transactions are encrypted and processed securely.</p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-3">
+                  <div className="mt-0.5 w-8 h-8 rounded-full bg-sky-50 flex items-center justify-center text-sky-700">
+                    <Calendar className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <div className="text-sm font-semibold text-slate-900">Appointment-only</div>
+                    <p className="text-xs text-slate-600 mt-1">No on-demand or drop-in sessions; every meeting is intentional.</p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-3">
+                  <div className="mt-0.5 w-8 h-8 rounded-full bg-amber-50 flex items-center justify-center text-amber-700">
+                    <AlertCircle className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <div className="text-sm font-semibold text-slate-900">Complaint resolution</div>
+                    <p className="text-xs text-slate-600 mt-1">Issues are reviewed and responded to within 5 business days.</p>
+                  </div>
                 </div>
               </div>
             </div>
