@@ -13,14 +13,16 @@ const ContactUS = () => {
     const [name, set_name] = useState("");
     const [email, set_email] = useState("");
     const [isValidEmail, set_isValidEmail] = useState(false);
+    const [subject, set_subject] = useState("");
     const [issue, set_issue] = useState("");
     const [countryCode, set_countryCode] = useState("");
     const [contactNumber, set_contactNumber] = useState("");
     const [showError, set_showError] = useState(false);
     const [issueError, set_issueError] = useState(false);
+    const [subjectError, set_subjectError] = useState(false);
     const [enableToSubmit, set_enableToSubmit] = useState(false);
 
-    const createEmailTemplate = (name: string, email: string, countryCode:string, contactNumber: string, issue: string) => {
+    const createEmailTemplate = (name: string, email: string, countryCode:string, contactNumber: string, subject: string, issue: string) => {
         return `
 Someone just reached us at WisdomLinked.com,
 
@@ -30,7 +32,8 @@ Name: ${name}
 Email: ${email}
 Country Code: ${countryCode}
 Contact Number: ${contactNumber}
-Reason: ${issue} 
+Subject: ${subject}
+Main message: ${issue}
 
 Warm Regards,
 The WisdomLinked.com Team
@@ -55,10 +58,18 @@ The WisdomLinked.com Team
 
     // Submit Function
     const submit = async () => {
-        // Validate Reason Field (Issue)
+        if (!subject.trim()) {
+            set_subjectError(true);
+            return;
+        }
+        set_subjectError(false);
         if (!issue.trim()) {
             set_issueError(true);
-            return; // Stop submission if Reason is empty
+            return;
+        }
+        if (issue.trim().length > 50) {
+            set_issueError(true);
+            return;
         }
         set_issueError(false);
 
@@ -75,18 +86,20 @@ The WisdomLinked.com Team
                     email,
                     countryCode,
                     contactNumber,
+                    subject,
                     issue
                 });
 
                 if (response) {
 
-                    const finalMessage = createEmailTemplate(name, email, countryCode, contactNumber, issue);
+                    const finalMessage = createEmailTemplate(name, email, countryCode, contactNumber, subject, issue);
                     await handleSendEmail(finalMessage);
                     alert("Thank you for contacting us. Your query has been submitted successfully.");
 
                     // Clear input fields
                     set_name("");
                     set_email("");
+                    set_subject("");
                     set_issue("");
                     set_countryCode("");
                     set_contactNumber("");
@@ -117,13 +130,13 @@ The WisdomLinked.com Team
 
     // Enable Submit Button Only If Valid
     useEffect(() => {
-        if (name.length >= 3 && isValidEmail && issue.trim().length > 0) {
+        if (name.length >= 3 && isValidEmail && subject.trim().length > 0 && issue.trim().length > 0 && issue.trim().length <= 50) {
             set_enableToSubmit(true);
             set_showError(false);
         } else {
             set_enableToSubmit(false);
         }
-    }, [name, isValidEmail, issue]);
+    }, [name, isValidEmail, subject, issue]);
 
     return (
         <div className="w-full main_container py-[40px] lg:py-[60px]">
@@ -183,27 +196,45 @@ The WisdomLinked.com Team
                     onChange={(e) => set_contactNumber(e.target.value)}
                 />
 
-                {/* Reason Field (Mandatory) */}
-                <div className="mt-8 lg:mt-12 text-lightgrey text-[12px] leading-[19px]">Reason *</div>
-                <textarea
-                    className="w-full bg-black rounded-[15px] h-[200px] mt-0.5 border text-white text-[14px] leading-[21px] p-[24px]"
-                    placeholder="Input your reason in detail"
-                    value={issue}
-                    onChange={(e) => set_issue(e.target.value)}
+                {/* Subject Field */}
+                <div className="mt-6 text-white text-[12px] leading-[19px]">Subject *</div>
+                <input
+                    className="w-full bg-black text-white rounded-[15px] h-[50px] mt-0.5 border text-[14px] leading-[21px] px-[24px]"
+                    placeholder="e.g. Graduate school application"
+                    type="text"
+                    value={subject}
+                    onChange={(e) => { set_subject(e.target.value); set_subjectError(false); }}
                 />
                 <ShowFieldError
-                    show={issueError || (showError && issue.trim().length === 0)}
-                    label="Reason is required."
+                    show={subjectError || (showError && !subject.trim())}
+                    label="Subject is required."
                 />
 
-                {/* Submit Button */}
+                {/* Main message Field (max 50 chars) */}
+                <div className="mt-6 text-lightgrey text-[12px] leading-[19px]">Main message *</div>
+                <textarea
+                    className="w-full bg-black rounded-[15px] h-[120px] mt-0.5 border text-white text-[14px] leading-[21px] p-[24px] resize-none"
+                    placeholder="Brief message (max 50 characters)"
+                    value={issue}
+                    maxLength={50}
+                    onChange={(e) => { set_issue(e.target.value); set_issueError(false); }}
+                />
+                <div className="flex items-center justify-between mt-1">
+                    <ShowFieldError
+                        show={issueError || (showError && issue.trim().length === 0)}
+                        label={issue.trim().length > 50 ? "Main message must be 50 characters or less." : "Main message is required."}
+                    />
+                    <span className={`text-[12px] ml-auto ${issue.length >= 50 ? "text-amber-400" : "text-lightgrey"}`}>{issue.length} / 50</span>
+                </div>
+
+                {/* Send Button */}
                 <div className="flex flex-row-reverse mt-[54px]">
                     <button
                         className="px-[48px] py-[15px] rounded-[14px] bg-green text-white text-[16px] leading-[24px] font-[600] disabled:opacity-50"
                         disabled={showError}
                         onClick={submit}
                     >
-                        Submit
+                        Send
                     </button>
                 </div>
             </div>
