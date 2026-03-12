@@ -115,9 +115,19 @@ export default function WLLogin() {
                         </button>
                         <SocialAuthBlock />
                         <p className="text-center text-slate-500 text-sm mt-4">
-                            Don't have an account? <button type="button" onClick={() => navigate('/customerregister')} className="font-semibold hover:underline" style={{ color: '#234C6A' }}>Sign up</button>
+                            Don't have an account? <button type="button" onClick={() => navigate('/signup')} className="font-semibold hover:underline" style={{ color: '#234C6A' }}>Sign up</button>
                         </p>
-                        <button onClick={() => navigate('/')} className="mt-4 w-full py-2.5 rounded-xl border border-slate-200 text-slate-600 font-semibold text-sm hover:bg-slate-50">Back to Home</button>
+                        <button
+                            onClick={() => navigate('/')}
+                            className="mt-4 w-full py-2.5 rounded-xl border text-sm font-semibold shadow-sm transition-colors"
+                            style={{
+                                backgroundColor: '#E8EEF4',
+                                borderColor: '#234C6A',
+                                color: '#234C6A'
+                            }}
+                        >
+                            Back to Home
+                        </button>
                     </div>
                 </div>
             </div>

@@ -324,9 +324,18 @@ export default function WLCustomerRegister() {
                             {submitting ? (<><svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" /></svg>Creating account...</>) : 'Sign Up'}
                         </button>
                         <SocialAuthBlock />
-                        <p className="text-center text-slate-500 text-sm mt-4">
-                            Already have an account? <button type="button" onClick={() => navigate('/login')} className="font-semibold hover:underline" style={{ color: '#234C6A' }}>Log in</button>
-                        </p>
+                        <div className="mt-4 flex flex-col items-center gap-2">
+                            <p className="text-slate-500 text-sm">
+                                Already have an account?
+                            </p>
+                            <button
+                                type="button"
+                                onClick={() => navigate('/login')}
+                                className="inline-flex items-center justify-center px-5 py-2.5 rounded-full border border-slate-300 bg-white/90 text-sm font-semibold text-[#234C6A] hover:bg-slate-50 hover:border-[#456882] transition-colors"
+                            >
+                                Log in
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>
