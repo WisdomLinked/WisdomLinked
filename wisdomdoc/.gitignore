@@ -1,0 +1,11 @@
+# Environment
+BE/.env
+
+# Persisted data (Docker bind mounts)
+.data/
+.uploads/
+
+# Node
+BE/node_modules/
+FE/node_modules/
+FE/dist/

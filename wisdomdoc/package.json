@@ -1,0 +1,17 @@
+{
+  "name": "wisdomdoc",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Wisdom Document System – document upload (SOP, LOR, Resume, Transcript)",
+  "scripts": {
+    "install:all": "npm install && cd BE && npm install && cd ../FE && npm install",
+    "backend": "cd BE && npm run dev",
+    "frontend": "cd FE && npm run dev",
+    "dev": "concurrently \"npm run backend\" \"npm run frontend\"",
+    "build": "cd FE && npm run build",
+    "start": "cd BE && npm start"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}

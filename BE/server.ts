@@ -18,7 +18,7 @@ const adminRoutes = require("./routes/adminRoutes")
 const contactRoutes = require("./routes/contactRoutes")
 const meetingAnalyticsRoutes = require("./routes/meetingAnalyticsRoutes");
 
-const { appendDefaultServices, appendAdminUserAndGroupChat, initAppStates } = require('./initDB')
+const { appendDefaultServices, appendAdminUserAndGroupChat, appendExpertUser, initAppStates } = require('./initDB')
 
 const { createSocketServer } = require("./socket/socketServer");
 
@@ -32,6 +32,7 @@ mongoose
         console.log("Connected to MongoDB Server");
         appendDefaultServices()
         appendAdminUserAndGroupChat()
+        appendExpertUser()
         initAppStates()
     })
     .catch((err) => {

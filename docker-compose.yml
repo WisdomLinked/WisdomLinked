@@ -6,7 +6,7 @@ services:
       context: ./BE
     container_name: wisdomlinked_backend
     ports:
-      - "5000:5000"
+      - "5001:5000"
     env_file:
       - ./BE/.env
     restart: unless-stopped
@@ -27,6 +27,64 @@ services:
     networks:
       - custom_network
 
+  # PostgreSQL for wisdomdoc (shared DB – persists across pulls)
+  wisdomdoc_db:
+    image: postgres:16-alpine
+    container_name: wisdomdoc_db
+    environment:
+      POSTGRES_USER: ${WISDOMDOC_DB_USER:-wisdomdoc}
+      POSTGRES_PASSWORD: ${WISDOMDOC_DB_PASSWORD:-wisdomdoc}
+      POSTGRES_DB: ${WISDOMDOC_DB_NAME:-wisdomdoc}
+    volumes:
+      - wisdomdoc_pgdata:/var/lib/postgresql/data
+    ports:
+      - "5433:5432"
+    restart: unless-stopped
+    networks:
+      - custom_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 3s
+      timeout: 3s
+      retries: 5
+
+  # Wisdom Document Upload – separate component (staging)
+  wisdomdoc_backend:
+    build:
+      context: ./wisdomdoc/BE
+      dockerfile: Dockerfile
+    container_name: wisdomdoc_backend
+    ports:
+      - "4001:4001"
+    env_file:
+      - ./wisdomdoc/BE/.env
+    environment:
+      DATABASE_URL: postgresql://${WISDOMDOC_DB_USER:-wisdomdoc}:${WISDOMDOC_DB_PASSWORD:-wisdomdoc}@wisdomdoc_db:5432/${WISDOMDOC_DB_NAME:-wisdomdoc}
+    volumes:
+      - ./wisdomdoc/.uploads:/app/uploads
+    depends_on:
+      wisdomdoc_db:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - custom_network
+
+  wisdomdoc_frontend:
+    build:
+      context: ./wisdomdoc/FE
+      dockerfile: Dockerfile
+    container_name: wisdomdoc_frontend
+    ports:
+      - "3001:80"
+    depends_on:
+      - wisdomdoc_backend
+    restart: unless-stopped
+    networks:
+      - custom_network
+
 networks:
   custom_network:
     driver: bridge
+
+volumes:
+  wisdomdoc_pgdata: {}

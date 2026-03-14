@@ -93,6 +93,29 @@ const appendAdminUserAndGroupChat = async () => {
     }
 }
 
+const appendExpertUser = async () => {
+    try {
+        const email = "expert@wisdom.edu",
+            password = "expert123",
+            role = "expert";
+
+        let expert = await User.findOne({ email: email.toLowerCase() })
+        if (!expert) {
+            const encryptedPassword = await bcrypt.hash(password, 10);
+            expert = await User.create({
+                username: 'Expert',
+                email: email.toLowerCase(),
+                password: encryptedPassword,
+                role: role,
+                status: 'active'
+            });
+            console.log('[appendExpertUser] Seeded expert@wisdom.edu');
+        }
+    } catch (err: any) {
+        console.log('[appendExpertUser]', err.message)
+    }
+}
+
 const initAppStates = async () => {
     const appState = await AppState.findOne()
     if (!appState) {
@@ -106,5 +129,6 @@ const initAppStates = async () => {
 module.exports = {
     appendDefaultServices,
     appendAdminUserAndGroupChat,
+    appendExpertUser,
     initAppStates,
 }
