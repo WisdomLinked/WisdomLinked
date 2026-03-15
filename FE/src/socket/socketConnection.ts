@@ -68,6 +68,8 @@ const connectWithSocketServer = (userDetails: UserDetails) => {
         console.log(
             `Successfully connected to socket.io server. Connected socket.id: ${socket.id}`
         );
+        // Request current online users immediately (redundant with server push, ensures we have data)
+        socket.emit("request-online-users");
     });
 
     socket.emit("helloFomClient");
@@ -90,6 +92,9 @@ const connectWithSocketServer = (userDetails: UserDetails) => {
     });
 
     socket.on("online-users", (data: any) => {
+        if (process.env.NODE_ENV === "development") {
+            console.log("[Socket] online-users received:", data?.length ?? 0, "users");
+        }
         store.dispatch(setOnlineUsers(data) as any);
     });
 

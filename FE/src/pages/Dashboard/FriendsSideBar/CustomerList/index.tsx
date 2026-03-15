@@ -6,6 +6,7 @@ import { useNavigate } from "react-router-dom";
 import { useDispatch } from "react-redux";
 import { setChosenGroupChatDetails } from "../../../../actions/chatActions";
 import { useAppSelector } from "../../../../store";
+import Avatar from "../../../../components/Avatar";
 
 const MainContainer = styled("div")({
   flexGrow: 1,
@@ -32,7 +33,7 @@ const SearchInput = styled("input")({
 const CustomerList: React.FC = () => {
   const navigate = useNavigate();
   const dispatch = useDispatch();
-  const { auth: { userDetails } } = useAppSelector((s) => s);
+  const { auth: { userDetails }, friends: { onlineUsers } } = useAppSelector((s) => s);
 
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [customers, setCustomers] = useState<any[]>([]);
@@ -174,13 +175,11 @@ const CustomerList: React.FC = () => {
               }
             }}
           >
-            <div className="w-12 h-12 rounded-full overflow-hidden bg-grey flex items-center justify-center text-white">
-              {customerImages[i] ? (
-                <img src={customerImages[i]!} className="w-full h-full object-cover" alt="avatar" />
-              ) : (
-                (c.username?.charAt(0) || "U")
-              )}
-            </div>
+            <Avatar
+              username={c.username}
+              image={customerImages[i] ?? undefined}
+              isOnline={!!onlineUsers?.find((u: any) => String(u.userId) === String(c._id))}
+            />
             <div className="flex-1">
                 <div className="text-sm font-bold text-white">{c.username}</div>
                 <div className="text-xs text-white">{c.title}</div>

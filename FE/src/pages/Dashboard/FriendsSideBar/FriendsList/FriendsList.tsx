@@ -37,7 +37,7 @@ const FriendsList = () => {
     try {
       return await Promise.all(
         friends.map(async (friend): Promise<any> => {
-          const isOnline = onlineUsers.find((user) => user.userId === friend.id);
+          const isOnline = onlineUsers.find((user) => String(user.userId) === String(friend.id ?? friend._id));
           let base64Image: string | null = null;
   
           if (friend.image) {

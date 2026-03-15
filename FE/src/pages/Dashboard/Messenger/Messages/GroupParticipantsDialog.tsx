@@ -10,6 +10,7 @@ import ListItemText from "@mui/material/ListItemText";
 import ListItemAvatar from "@mui/material/ListItemAvatar";
 import Typography from "@mui/material/Typography";
 import Avatar from "../../../../components/Avatar";
+import { useAppSelector } from "../../../../store";
 
 interface Props {
     isDialogOpen: boolean;
@@ -24,6 +25,7 @@ const GroupParticipantsDialog = ({
     groupDetails,
     currentUserId
 }: Props) => {
+    const { onlineUsers } = useAppSelector((state) => state.friends);
     const handleCloseDialog = () => {
         closeDialogHandler();
     };
@@ -51,6 +53,8 @@ const GroupParticipantsDialog = ({
                         }}
                     >
                         {groupDetails.participants.map((participant:any) => {
+                            const participantId = participant._id ?? participant.id;
+                            const isOnline = onlineUsers?.find((u: any) => String(u.userId) === String(participantId));
                             return (
                                 <Fragment key={participant._id}>
                                     <ListItem alignItems="flex-start">
@@ -58,6 +62,7 @@ const GroupParticipantsDialog = ({
                                             <Avatar
                                                 username={participant.username}
                                                 image={participant.image}
+                                                isOnline={!!isOnline}
                                             />
                                         </ListItemAvatar>
                                         <ListItemText

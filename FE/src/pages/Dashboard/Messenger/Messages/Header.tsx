@@ -113,7 +113,7 @@ const MessagesHeader = ({ scrollPosition, events, openCalendarModal, openSeminar
     };
 
     const isOnline = (userId: any) => {
-        return onlineUsers.find(user => user.userId === userId) ? true : false
+        return onlineUsers.find((user: any) => String(user.userId) === String(userId)) ? true : false
     }
 
     const createNewRoomOrJoinRoom = () => {
@@ -233,7 +233,7 @@ const MessagesHeader = ({ scrollPosition, events, openCalendarModal, openSeminar
                                  onClick={()=>{
                                      handleProfileModalOpen(chosenChatDetails)
                                  }}>
-                                <Avatar username={chosenChatDetails.username!} image={chosenChatDetails.image} />
+                                <Avatar username={chosenChatDetails.username!} image={chosenChatDetails.image} isOnline={isOnline(chosenChatDetails.userId)} />
                                 <div className="w-[calc(100%-48px)] text-[20px] text-white mr-2 truncate">
                                     {chosenChatDetails?.username}
                                 </div>

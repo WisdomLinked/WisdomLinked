@@ -60,7 +60,7 @@ const AddMembersToGroupDialog = ({
     closeDialogHandler,
 }: Props) => {
     const {
-        friends: { friends },
+        friends: { friends, onlineUsers },
         chat: { chosenGroupChatDetails },
     } = useAppSelector((state) => state);
     
@@ -123,15 +123,27 @@ const AddMembersToGroupDialog = ({
                             input={<OutlinedInput label="Name" />}
                             MenuProps={MenuProps}
                         >
-                            {friends.map((friend) => (
-                                <MenuItem
-                                    key={friend.id}
-                                    value={friend.id}
-                                    style={getStyles(friend.username, friendIds, theme)}
-                                >
-                                    {friend.username}
-                                </MenuItem>
-                            ))}
+                            {friends.map((friend) => {
+                                const isOnline = onlineUsers?.find((u: any) => String(u.userId) === String(friend.id ?? friend._id));
+                                return (
+                                    <MenuItem
+                                        key={friend.id}
+                                        value={friend.id}
+                                        style={getStyles(friend.username, friendIds, theme)}
+                                    >
+                                        <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                            <span style={{
+                                                width: 8,
+                                                height: 8,
+                                                borderRadius: '50%',
+                                                flexShrink: 0,
+                                                backgroundColor: isOnline ? '#22c55e' : 'transparent',
+                                            }} />
+                                            {friend.username}
+                                        </span>
+                                    </MenuItem>
+                                );
+                            })}
                         </Select>
                     </FormControl>
                 </DialogContent>

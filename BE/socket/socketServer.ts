@@ -43,6 +43,10 @@ const createSocketServer = (server) => {
         console.log(socket.user)
         console.log(`[SOCKET SERVER] New connection established: ${socket.id}`);
         newConnectionHandler(socket, io);
+
+        socket.on("request-online-users", () => {
+            socket.emit("online-users", getOnlineUsers());
+        });
         
         socket.on("setRemoteVideoAudioStatus", (data) => {
             const activeConnections = getActiveConnections(data.otherUserId);
@@ -147,10 +151,10 @@ const createSocketServer = (server) => {
         });
     });
 
-    // emit online users to all connected users every 10 seconds
-    // setInterval(() => {
-    //     io.emit("online-users", getOnlineUsers());
-    // }, 10 * 1000)
+    // emit online users to all connected users every 10 seconds (keeps active-user dots in sync)
+    setInterval(() => {
+        io.emit("online-users", getOnlineUsers());
+    }, 10 * 1000);
 };
 
 module.exports = {
