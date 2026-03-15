@@ -23,13 +23,15 @@ const ConfirmEmail = ({ email }: any) => {
         <>
             <Header />
             <div className="w-full h-[400px] flex flex-col items-center justify-center">
-                <div className="text-center text-white text-2xl">Confirmation Email Sent to {email}</div>
-                <div className="text-center text-grey text-lg">The confirmation link will be expired in 24 hours</div>
+                <div className="text-center text-white text-2xl">Your registration request needs to be verified via a link sent to your email account.</div>
+                <div className="text-center text-white text-lg mt-2">A verification link has been sent to <strong>{email}</strong></div>
+                <div className="text-center text-grey text-lg mt-1">The verification link will expire in 24 hours</div>
+                <div className="text-center text-gray-300 text-base mt-4">After your verification, the following will happen:</div>
                 {/* Steps */}
-                <ul className="text-gray-300 mt-6 space-y-2 text-base text-center">
+                <ul className="text-gray-300 mt-3 space-y-2 text-base text-center">
                 <li>1) After you confirm your email, your account will be sent to admin for review.</li>
                 <li>2) The review process may take up to 24 hours.</li>
-                <li>3) Once confirmed, you’ll get a final confirmation email.</li>
+                <li>3) Once approved, you'll get a notification of the final approval via email.</li>
                 </ul>
                 <button
                     className="px-3 py-1 border border-green rounded-md text-white text-lg mt-6 bg-green hover:text-green hover:bg-transparent"

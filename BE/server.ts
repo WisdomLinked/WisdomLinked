@@ -6,6 +6,8 @@ const cors = require("cors");
 const mongoose = require("mongoose");
 const cookieParser = require("cookie-parser");
 const path = require("path");
+const session = require("express-session");
+const passport = require("./config/passport");
 const imageUploadRoutes = require("./routes/imageUploadRoutes");
 const fetchImageRoute = require("./routes/fetchImageRoute");
 
@@ -60,6 +62,16 @@ app.use(express.json({ limit: maxRequestBodySize }));
 app.use(express.urlencoded({ limit: maxRequestBodySize }));
 app.use(cookieParser());
 app.use(express.json());
+
+// Session + Passport for OAuth
+app.use(session({
+    secret: process.env.JWT_SECRET || 'wisdomlinked-session-secret',
+    resave: false,
+    saveUninitialized: false,
+    cookie: { secure: false, maxAge: 60000 } // short-lived, just for OAuth handshake
+}));
+app.use(passport.initialize());
+app.use(passport.session());
 
 // register the routes
 app.use("/api/auth", authRoutes);
