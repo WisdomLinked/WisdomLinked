@@ -5,6 +5,10 @@ export default function TopBar({
   title = 'Student Dashboard',
   userName = 'Alex Rivera',
   avatarUrl,
+}: {
+  title?: string;
+  userName?: string;
+  avatarUrl?: string;
 }) {
   const [openMenu, setOpenMenu] = useState(false);
   const [menuVisible, setMenuVisible] = useState(false);

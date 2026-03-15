@@ -5,6 +5,7 @@ import {
   ArrowRight, Sparkles, Menu, X, BookOpen, Globe, ChevronDown, ChevronUp, Phone, Mail, User,
   FileText, Send, AlertCircle, Lock, Upload, Calendar
 } from 'lucide-react';
+import logo from '../assets/images/logo.png';
 
 const COUNTRY_CODES = [
   { code: '+1', country: 'US/CA', flag: '🇺🇸' },
@@ -119,7 +120,7 @@ function ContactFormModal({ onClose }: { onClose: () => void }) {
                   <span className="text-xs font-semibold uppercase tracking-widest" style={{ color: '#234C6A' }}>Get In Touch</span>
                 </div>
                 <h2 className="text-2xl font-bold text-slate-800 leading-tight">Contact Us</h2>
-                <p className="text-sm text-slate-500 mt-1">Tell us about your goals and we'll connect you with the right expert.</p>
+                <p className="text-sm text-slate-500 mt-1">Thank you for reaching out to us. We will look into it seriously and get back soon.</p>
               </div>
               <div className="space-y-4">
                 <div>
@@ -193,7 +194,7 @@ function ContactFormModal({ onClose }: { onClose: () => void }) {
                     className={`${errors.description ? inputError : inputNormal} resize-none`} style={{ lineHeight: 1.6 }} />
                   <div className="flex items-center justify-between mt-1">
                     {errors.description ? <p className="text-xs text-red-500 flex items-center gap-1"><AlertCircle size={11} />{errors.description}</p> : <span />}
-                    <span className={`text-xs ml-auto ${form.description.length >= 50 ? 'text-amber-600' : form.description.length > 0 ? 'text-emerald-500' : 'text-slate-400'}`}>{form.description.length} / 50</span>
+                    <span className={`text-xs ml-auto ${form.description.length >= 50 ? 'text-red-500' : form.description.length > 0 ? 'text-slate-500' : 'text-slate-400'}`}>{form.description.length} / 50</span>
                   </div>
                 </div>
               </div>
@@ -1397,7 +1398,8 @@ const UNIVERSITIES = [
 
 const PILL_POSITIONS = [
   'top-[30%] -left-3',
-  'top-[22%] right-4',
+  // move closer to the globe instead of hugging the right edge
+  'top-[24%] left-[68%]',
   'top-[62%] -left-3',
   'top-[52%] right-4',
 ];
@@ -1640,12 +1642,20 @@ export default function TOEConsulting() {
       {/* NAV */}
       <header className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${scrolled ? 'bg-[#F8FAFC]/95 backdrop-blur-md shadow-sm border-b border-[#BCCCDC]' : 'bg-[#F8FAFC]/80 backdrop-blur-sm'}`}>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 flex items-center justify-between h-16 sm:h-[4.5rem] py-3 sm:py-4">
-          <button type="button" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })} className="flex items-center gap-3 group">
-            <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-[#1B3C53] to-[#456882] flex items-center justify-center shadow-md shadow-[#D9EAFD] group-hover:shadow-[#9AA6B2] transition-shadow">
-              <BookOpen className="h-5 w-5 text-white" strokeWidth={2.2} />
+          <button
+            type="button"
+            onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+            className="flex items-center gap-3 group"
+          >
+            <div className="h-12 w-12 sm:h-[3.5rem] sm:w-[3.5rem] rounded-2xl bg-white border border-[#D0DFED] flex items-center justify-center shadow-md shadow-[#D9EAFD] group-hover:shadow-[#9AA6B2] transition-shadow overflow-hidden">
+              <img
+                src={logo}
+                alt="WisdomLinked logo"
+                className="h-10 w-10 sm:h-11 sm:w-11 object-contain"
+              />
             </div>
             <div className="leading-none">
-              <div className="font-display font-bold text-xl text-slate-900">WisdomLinked</div>
+              <div className="font-display font-bold text-[1.35rem] text-slate-900">WisdomLinked</div>
             </div>
           </button>
           <nav className="hidden lg:flex items-center gap-8">
@@ -2194,10 +2204,19 @@ export default function TOEConsulting() {
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-8 sm:gap-12 mb-8 sm:mb-12">
               <div className="md:col-span-1">
                 <div className="flex items-center gap-3 mb-4">
-                  <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-[#1B3C53]/40 to-[#456882]/40 border border-[#BCCCDC]/40 flex items-center justify-center">
-                    <BookOpen className="h-5 w-5 text-[#F8FAFC]" strokeWidth={2.2} />
+                  <div className="h-12 w-12 rounded-2xl bg-gradient-to-br from-[#E2ECF5] to-white border border-[#D0DFED] flex items-center justify-center shadow-md shadow-[#D9EAFD] overflow-hidden">
+                    <img
+                      src={logo}
+                      alt="WisdomLinked logo"
+                      className="h-10 w-10 object-contain"
+                    />
                   </div>
-                  <div><div className="font-display font-bold text-lg text-white">WisdomLinked</div><div className="text-xs text-[#D9EAFD]">Connect with experts</div></div>
+                  <div>
+                    <span className="font-black text-2xl tracking-[0.12em] uppercase text-white">
+                      WisdomLinked
+                    </span>
+                    <div className="text-xs text-[#D9EAFD]">Connect with experts</div>
+                  </div>
                 </div>
                 <p className="text-slate-400 text-sm leading-relaxed">Connecting expertise with ambition, globally.</p>
                 <button onClick={openContact} className="mt-4 inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/10 hover:bg-white/15 border border-white/10 text-white text-sm font-semibold transition">

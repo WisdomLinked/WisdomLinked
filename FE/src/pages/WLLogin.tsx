@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useDispatch } from 'react-redux';
-import { Mail, Lock, AlertCircle, BookOpen, Eye, EyeOff } from 'lucide-react';
+import { Mail, Lock, AlertCircle, Eye, EyeOff } from 'lucide-react';
 import { login } from '../api/api';
 import { showAlert } from '../actions/alertActions';
 import ConfirmCode from '../components/ConfirmCode';
 import SocialAuthBlock from '../components/SocialAuthBlock';
+import logo from '../assets/images/logo.png';
 
 const BTN_PRIMARY_STYLE = { background: 'linear-gradient(135deg, #234C6A 0%, #456882 100%)' };
 const FOCUS_RING = 'focus:ring-2 focus:ring-[#234C6A]/60 focus:border-[#234C6A]';
@@ -74,10 +75,16 @@ export default function WLLogin() {
                     <div className="p-8">
                         {/* Logo */}
                         <div className="flex items-center gap-3 mb-6">
-                            <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-[#1B3C53] to-[#456882] flex items-center justify-center shadow-md">
-                                <BookOpen className="h-5 w-5 text-white" strokeWidth={2.2} />
+                            <div className="h-12 w-12 rounded-2xl bg-white border border-[#D0DFED] flex items-center justify-center shadow-md shadow-[#D9EAFD] overflow-hidden">
+                                <img
+                                    src={logo}
+                                    alt="WisdomLinked logo"
+                                    className="h-10 w-10 object-contain"
+                                />
                             </div>
-                            <div className="font-display font-bold text-xl text-slate-900">WisdomLinked</div>
+                            <span className="font-black text-2xl tracking-[0.12em] uppercase text-slate-900">
+                                WisdomLinked
+                            </span>
                         </div>
 
                         <h2 className="font-display text-2xl font-bold text-slate-800 mb-1">Welcome back</h2>

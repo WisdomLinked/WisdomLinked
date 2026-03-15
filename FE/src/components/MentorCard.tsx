@@ -1,0 +1,124 @@
+import React from 'react';
+import { MapPin, Briefcase, GraduationCap, Users } from 'lucide-react';
+
+export interface MentorCardProps {
+  id: number;
+  name: string;
+  title: string;
+  institution: string;
+  field: string;
+  experience: string;
+  services: string[];
+  image: string | null;
+  isNew: boolean;
+  compact?: boolean;
+}
+
+const serviceColorByIndex = (index: number) => {
+  if (index === 0) return 'border-[#1A3A4A] text-[#1A3A4A]';
+  if (index === 1) return 'border-[#C9A84C] text-[#C9A84C]';
+  if (index === 2) return 'border-[#E07B54] text-[#E07B54]';
+  return 'border-[#E5E2DB] text-[#1A3A4A]';
+};
+
+const MentorCard: React.FC<MentorCardProps> = ({
+  name,
+  title,
+  institution,
+  field,
+  experience,
+  services,
+  image,
+  isNew,
+  compact = false,
+}) => {
+  return (
+    <article
+      className={`group flex flex-col rounded-xl border border-[#E5E2DB] bg-white transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_16px_40px_rgba(26,58,74,0.18)] ${
+        compact ? 'p-4' : 'p-5'
+      }`}
+    >
+      <div className="flex gap-4">
+        <div className="relative shrink-0">
+          <div className="h-28 w-20 overflow-hidden rounded-md bg-[#1A3A4A]/90 text-white flex items-center justify-center text-sm font-semibold">
+            {image ? (
+              <img
+                src={image}
+                alt={name}
+                className="h-full w-full object-cover"
+              />
+            ) : (
+              <span className="leading-tight">
+                {name
+                  .split(' ')
+                  .map(part => part[0])
+                  .join('')
+                  .slice(0, 2)
+                  .toUpperCase()}
+              </span>
+            )}
+          </div>
+          {isNew && (
+            <span className="absolute -top-2 left-0 rounded-sm bg-[#C9A84C] px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-[#1A3A4A] shadow-sm">
+              NEW
+            </span>
+          )}
+        </div>
+
+        <div className="min-w-0 flex-1">
+          <h3 className="font-serif text-[1.1rem] font-medium text-[#1A3A4A] leading-snug">
+            {name}
+          </h3>
+          <p className="mt-1 text-[0.85rem] text-[#7A7A72] leading-snug line-clamp-2">
+            {title}
+          </p>
+          <p className="mt-1 flex items-center gap-1 text-[0.8rem] text-[#7A7A72]">
+            <MapPin className="h-3.5 w-3.5" aria-hidden />
+            <span className="truncate">{institution}</span>
+          </p>
+          <div className="mt-2 flex flex-wrap items-center gap-2 text-[0.78rem] text-[#1A3A4A]">
+            <span className="inline-flex items-center gap-1 rounded-[3px] bg-[#F5F3EF] px-2 py-1">
+              <GraduationCap className="h-3.5 w-3.5" aria-hidden />
+              <span>{field}</span>
+            </span>
+            <span className="inline-flex items-center gap-1 rounded-[3px] bg-[#F5F3EF] px-2 py-1">
+              <Briefcase className="h-3.5 w-3.5" aria-hidden />
+              <span>{experience} experience</span>
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-4 border-t border-[#E5E2DB] pt-3">
+        <p className="mb-2 flex items-center gap-1 text-[0.7rem] font-medium uppercase tracking-[0.18em] text-[#7A7A72]">
+          <Users className="h-3 w-3" aria-hidden />
+          <span>Provides</span>
+        </p>
+        <div className="flex flex-wrap gap-1.5">
+          {services.map((service, idx) => (
+            <span
+              key={service}
+              className={`inline-flex items-center rounded-[3px] border px-2 py-0.5 text-[0.75rem] ${serviceColorByIndex(
+                idx,
+              )}`}
+            >
+              {service}
+            </span>
+          ))}
+        </div>
+      </div>
+
+      <div className="mt-4 flex justify-end">
+        <button
+          type="button"
+          className="rounded-[4px] bg-[#1A3A4A] px-3 py-1.5 text-[0.78rem] font-semibold text-white hover:bg-[#122635]"
+        >
+          View Profile
+        </button>
+      </div>
+    </article>
+  );
+};
+
+export default MentorCard;
+

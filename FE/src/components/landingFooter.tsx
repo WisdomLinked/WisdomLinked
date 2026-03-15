@@ -6,9 +6,11 @@ const LandingFooter = () => {
         <div className="w-full">
             <div className="main_container flex flex-col py-[60px] lg:py-[100px] lg:flex-row lg:justify-between">
                 <div className="w-full lg:w-[280px]">
-                    <Link to='/' className={`w-fit flex items-center space-x-[2px] text-white font-black text-4xl`}>
-                        <img src={logo} className="w-10 h-10"/>
-                        <span>OE</span>
+                    <Link to='/' className={`w-fit flex items-center space-x-[10px] text-white font-black text-2xl`}>
+                        <div className="w-12 h-12 rounded-2xl bg-white flex items-center justify-center overflow-hidden">
+                            <img src={logo} className="w-10 h-10 object-contain" />
+                        </div>
+                        <span className="tracking-[0.12em] uppercase">WisdomLinked</span>
                     </Link>
                     <div className="text-white font-bold mt-10 text-[32px] leading-[48px] ">
                         Talk with experts

@@ -224,7 +224,7 @@ The WisdomLinked.com Team
                         show={issueError || (showError && issue.trim().length === 0)}
                         label={issue.trim().length > 50 ? "Main message must be 50 characters or less." : "Main message is required."}
                     />
-                    <span className={`text-[12px] ml-auto ${issue.length >= 50 ? "text-amber-400" : "text-lightgrey"}`}>{issue.length} / 50</span>
+                    <span className={`text-[12px] ml-auto ${issue.length >= 50 ? "text-red-500" : "text-lightgrey"}`}>{issue.length} / 50</span>
                 </div>
 
                 {/* Send Button */}

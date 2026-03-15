@@ -1,31 +1,38 @@
-import React, { useState } from 'react';
+import React, { FormEvent, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Mail, Lock, AlertCircle, BookOpen, Eye, EyeOff } from 'lucide-react';
+import { Mail, Lock, AlertCircle, User, GraduationCap } from 'lucide-react';
+import logo from '../assets/images/logo.png';
 
 const BTN_PRIMARY_STYLE = { background: 'linear-gradient(135deg, #234C6A 0%, #456882 100%)' };
 const FOCUS_RING = 'focus:ring-2 focus:ring-[#234C6A]/60 focus:border-[#234C6A]';
 
-export default function LoginPage() {
+export default function SignupPage() {
   const navigate = useNavigate();
-  const [form, setForm] = useState({ email: '', password: '' });
-  const [errors, setErrors] = useState({});
+  const [form, setForm] = useState<{ name: string; email: string; password: string; role: 'student' | 'expert' }>({
+    name: '',
+    email: '',
+    password: '',
+    role: 'student',
+  });
+  const [errors, setErrors] = useState<Partial<Record<'name' | 'email' | 'password' | 'role', string>>>({});
   const [submitting, setSubmitting] = useState(false);
-  const [showPassword, setShowPassword] = useState(false);
 
   const inputBase = `w-full rounded-xl border bg-white px-4 py-3 text-sm text-slate-800 placeholder-slate-400 outline-none transition-all duration-200 ${FOCUS_RING}`;
   const inputNormal = `${inputBase} border-slate-200`;
   const inputError = `${inputBase} border-red-300 focus:ring-red-300 focus:border-red-400 bg-red-50/30`;
 
   const validate = () => {
-    const e = {};
+    const e: Partial<Record<'name' | 'email' | 'password' | 'role', string>> = {};
+    if (!form.name.trim()) e.name = 'Name is required';
     if (!form.email.trim()) e.email = 'Email is required';
     else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) e.email = 'Enter a valid email';
     if (!form.password) e.password = 'Password is required';
+    if (!form.role) e.role = 'Select a role';
     return e;
   };
 
-  const handleSubmit = (e) => {
-    if (e) e.preventDefault();
+  const handleSubmit = (e?: FormEvent) => {
+    e?.preventDefault();
     const eMap = validate();
     if (Object.keys(eMap).length > 0) {
       setErrors(eMap);
@@ -63,22 +70,55 @@ export default function LoginPage() {
           <div className="h-1 w-full" style={{ background: 'linear-gradient(90deg, #234C6A, #456882)' }} />
           <div className="p-8">
             <div className="flex items-center gap-3 mb-6">
-              <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-[#1B3C53] to-[#456882] flex items-center justify-center shadow-md">
-                <BookOpen className="h-5 w-5 text-white" strokeWidth={2.2} aria-hidden="true" />
+              <div className="h-12 w-12 rounded-2xl bg-white border border-[#D0DFED] flex items-center justify-center shadow-md shadow-[#D9EAFD] overflow-hidden">
+                <img
+                  src={logo}
+                  alt="WisdomLinked logo"
+                  className="h-10 w-10 object-contain"
+                />
               </div>
-              <div className="font-display font-bold text-xl text-slate-900">
+              <span className="font-black text-2xl tracking-[0.12em] uppercase text-slate-900">
                 WisdomLinked
-              </div>
+              </span>
             </div>
 
             <h2 className="font-display text-2xl font-bold text-slate-800 mb-1">
-              Welcome back
+              Join WisdomLinked
             </h2>
             <p className="text-slate-500 text-sm mb-6">
-              Sign in to your WisdomLinked account
+              Create your account to start exploring experts and seminars.
             </p>
 
             <div className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 mb-1.5">
+                  <span className="flex items-center gap-1.5">
+                    <User size={12} aria-hidden="true" /> Full name
+                  </span>
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. Sarah Chen"
+                  value={form.name}
+                  onChange={e => {
+                    setForm(f => ({ ...f, name: e.target.value }));
+                    setErrors(er => ({ ...er, name: '' }));
+                  }}
+                  className={errors.name ? inputError : inputNormal}
+                  aria-invalid={!!errors.name}
+                  aria-describedby={errors.name ? 'signup-name-error' : undefined}
+                />
+                {errors.name && (
+                  <p
+                    id="signup-name-error"
+                    className="mt-1 text-xs text-red-500 flex items-center gap-1"
+                  >
+                    <AlertCircle size={11} aria-hidden="true" />
+                    {errors.name}
+                  </p>
+                )}
+              </div>
+
               <div>
                 <label className="block text-xs font-semibold text-slate-600 mb-1.5">
                   <span className="flex items-center gap-1.5">
@@ -93,14 +133,13 @@ export default function LoginPage() {
                     setForm(f => ({ ...f, email: e.target.value }));
                     setErrors(er => ({ ...er, email: '' }));
                   }}
-                  onKeyDown={e => e.key === 'Enter' && handleSubmit()}
                   className={errors.email ? inputError : inputNormal}
                   aria-invalid={!!errors.email}
-                  aria-describedby={errors.email ? 'login-email-error' : undefined}
+                  aria-describedby={errors.email ? 'signup-email-error' : undefined}
                 />
                 {errors.email && (
                   <p
-                    id="login-email-error"
+                    id="signup-email-error"
                     className="mt-1 text-xs text-red-500 flex items-center gap-1"
                   >
                     <AlertCircle size={11} aria-hidden="true" />
@@ -108,42 +147,78 @@ export default function LoginPage() {
                   </p>
                 )}
               </div>
+
               <div>
                 <label className="block text-xs font-semibold text-slate-600 mb-1.5">
                   <span className="flex items-center gap-1.5">
                     <Lock size={12} aria-hidden="true" /> Password
                   </span>
                 </label>
-                <div className="relative">
-                  <input
-                    type={showPassword ? 'text' : 'password'}
-                    placeholder="Your password"
-                    value={form.password}
-                    onChange={e => {
-                      setForm(f => ({ ...f, password: e.target.value }));
-                      setErrors(er => ({ ...er, password: '' }));
-                    }}
-                    onKeyDown={e => e.key === 'Enter' && handleSubmit()}
-                    className={`${errors.password ? inputError : inputNormal} pr-10`}
-                    aria-invalid={!!errors.password}
-                    aria-describedby={errors.password ? 'login-password-error' : undefined}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(p => !p)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-                    aria-label={showPassword ? 'Hide password' : 'Show password'}
-                  >
-                    {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-                  </button>
-                </div>
+                <input
+                  type="password"
+                  placeholder="Create a secure password"
+                  value={form.password}
+                  onChange={e => {
+                    setForm(f => ({ ...f, password: e.target.value }));
+                    setErrors(er => ({ ...er, password: '' }));
+                  }}
+                  className={errors.password ? inputError : inputNormal}
+                  aria-invalid={!!errors.password}
+                  aria-describedby={errors.password ? 'signup-password-error' : undefined}
+                />
                 {errors.password && (
                   <p
-                    id="login-password-error"
+                    id="signup-password-error"
                     className="mt-1 text-xs text-red-500 flex items-center gap-1"
                   >
                     <AlertCircle size={11} aria-hidden="true" />
                     {errors.password}
+                  </p>
+                )}
+              </div>
+
+              <div>
+                <span className="block text-xs font-semibold text-slate-600 mb-1.5">
+                  <span className="flex items-center gap-1.5">
+                    <GraduationCap size={12} aria-hidden="true" /> Role
+                  </span>
+                </span>
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setForm(f => ({ ...f, role: 'student' }));
+                      setErrors(er => ({ ...er, role: '' }));
+                    }}
+                    className={`flex items-center justify-center gap-2 px-3 py-2.5 text-xs sm:text-sm rounded-xl border transition-all ${
+                      form.role === 'student'
+                        ? 'border-[#234C6A] bg-[#D9EAFD]/80 text-[#234C6A] font-semibold'
+                        : 'border-slate-200 bg-white text-slate-600 hover:border-[#456882]/70'
+                    }`}
+                    aria-pressed={form.role === 'student'}
+                  >
+                    Student
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setForm(f => ({ ...f, role: 'expert' }));
+                      setErrors(er => ({ ...er, role: '' }));
+                    }}
+                    className={`flex items-center justify-center gap-2 px-3 py-2.5 text-xs sm:text-sm rounded-xl border transition-all ${
+                      form.role === 'expert'
+                        ? 'border-[#234C6A] bg-[#D9EAFD]/80 text-[#234C6A] font-semibold'
+                        : 'border-slate-200 bg-white text-slate-600 hover:border-[#456882]/70'
+                    }`}
+                    aria-pressed={form.role === 'expert'}
+                  >
+                    Expert
+                  </button>
+                </div>
+                {errors.role && (
+                  <p className="mt-1 text-xs text-red-500 flex items-center gap-1">
+                    <AlertCircle size={11} aria-hidden="true" />
+                    {errors.role}
                   </p>
                 )}
               </div>
@@ -172,22 +247,22 @@ export default function LoginPage() {
                       d="M4 12a8 8 0 018-8v8z"
                     />
                   </svg>
-                  Signing in...
+                  Creating account...
                 </>
               ) : (
-                'Sign in'
+                'Create account'
               )}
             </button>
 
             <p className="text-center text-slate-500 text-sm mt-4">
-              Don't have an account?{' '}
+              Already have an account?{' '}
               <button
                 type="button"
-                onClick={() => navigate('/signup')}
+                onClick={() => navigate('/login')}
                 className="font-semibold hover:underline"
                 style={{ color: '#234C6A' }}
               >
-                Sign up
+                Log in
               </button>
             </p>
 

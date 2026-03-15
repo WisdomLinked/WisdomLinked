@@ -2,7 +2,24 @@ import React from 'react';
 import { Users, BookOpen, Lightbulb, Globe2 } from 'lucide-react';
 import CarouselCard from '../ui/CarouselCard';
 
-const sections = [
+type Section = {
+  id: string;
+  category: string;
+  icon: React.ComponentType<{ size?: number; className?: string; 'aria-hidden'?: boolean }>;
+  items: Array<{
+    sectionTitle: string;
+    title: string;
+    description: string;
+    tag?: string;
+    metaLabel?: string;
+    experience?: string;
+    location?: string;
+    cta: string;
+    image?: string;
+  }>;
+};
+
+const sections: Section[] = [
   {
     id: 'experts',
     category: 'Expert',

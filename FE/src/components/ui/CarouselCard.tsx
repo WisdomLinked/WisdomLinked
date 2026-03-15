@@ -1,19 +1,37 @@
 import React, { useEffect, useRef, useState } from 'react';
 import Badge from './Badge';
 
-export default function CarouselCard({ category, icon: Icon, items }) {
+type CarouselItem = {
+  sectionTitle: string;
+  title: string;
+  description: string;
+  tag?: string;
+  metaLabel?: string;
+  experience?: string;
+  location?: string;
+  cta: string;
+  image?: string;
+};
+
+type CarouselCardProps = {
+  category: string;
+  icon: React.ComponentType<{ size?: number; className?: string; 'aria-hidden'?: boolean }>;
+  items: CarouselItem[];
+};
+
+export default function CarouselCard({ category, icon: Icon, items }: CarouselCardProps) {
   const [index, setIndex] = useState(0);
   const [isFading, setIsFading] = useState(false);
-  const fadeTimeoutRef = useRef(null);
-  const intervalRef = useRef(null);
+  const fadeTimeoutRef = useRef<number | null>(null);
+  const intervalRef = useRef<number | null>(null);
   const item = items[index] || items[0];
 
   const safeLen = items?.length || 0;
 
-  const goTo = (getNextIndex) => {
+  const goTo = (getNextIndex: (current: number, len: number) => number) => {
     if (safeLen <= 1) return;
     setIsFading(true);
-    if (fadeTimeoutRef.current) window.clearTimeout(fadeTimeoutRef.current);
+    if (fadeTimeoutRef.current !== null) window.clearTimeout(fadeTimeoutRef.current);
     fadeTimeoutRef.current = window.setTimeout(() => {
       setIndex(i => getNextIndex(i, safeLen));
       setIsFading(false);
@@ -26,13 +44,13 @@ export default function CarouselCard({ category, icon: Icon, items }) {
 
   useEffect(() => {
     if (safeLen <= 1) return undefined;
-    if (intervalRef.current) window.clearInterval(intervalRef.current);
+    if (intervalRef.current !== null) window.clearInterval(intervalRef.current);
     intervalRef.current = window.setInterval(() => {
       next();
     }, 5000);
     return () => {
-      if (intervalRef.current) window.clearInterval(intervalRef.current);
-      if (fadeTimeoutRef.current) window.clearTimeout(fadeTimeoutRef.current);
+      if (intervalRef.current !== null) window.clearInterval(intervalRef.current);
+      if (fadeTimeoutRef.current !== null) window.clearTimeout(fadeTimeoutRef.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [safeLen]);
