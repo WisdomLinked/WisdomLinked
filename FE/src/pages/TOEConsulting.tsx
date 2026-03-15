@@ -1655,9 +1655,7 @@ export default function TOEConsulting() {
       <header className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${scrolled ? 'bg-[#F8FAFC]/95 backdrop-blur-md shadow-sm border-b border-[#BCCCDC]' : 'bg-[#F8FAFC]/80 backdrop-blur-sm'}`}>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 flex items-center justify-between h-16 sm:h-[4.5rem] py-3 sm:py-4">
           <button type="button" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })} className="flex items-center gap-3 group">
-            <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-[#1B3C53] to-[#456882] flex items-center justify-center shadow-md shadow-[#D9EAFD] group-hover:shadow-[#9AA6B2] transition-shadow">
-              <BookOpen className="h-5 w-5 text-white" strokeWidth={2.2} />
-            </div>
+            <img src="/logo.png" alt="WisdomLinked" className="h-10 w-10 rounded-xl object-contain" />
             <div className="leading-none">
               <div className="font-display font-bold text-xl text-slate-900">WisdomLinked</div>
             </div>
@@ -1749,7 +1747,7 @@ export default function TOEConsulting() {
                   Book a Consultation
                   <ArrowRight className="w-4 h-4 group-hover:translate-x-1.5 transition-transform" />
                 </button>
-                <button onClick={() => setShowSignupModal(true)} className="px-8 py-4 rounded-2xl border-2 border-slate-200 bg-white/70 backdrop-blur-sm text-slate-700 font-semibold text-[0.9375rem] hover:border-[#456882] hover:text-[#234C6A] hover:bg-white transition-all duration-300">
+                <button onClick={() => navigate('/expertregister')} className="px-8 py-4 rounded-2xl border-2 border-slate-200 bg-white/70 backdrop-blur-sm text-slate-700 font-semibold text-[0.9375rem] hover:border-[#456882] hover:text-[#234C6A] hover:bg-white transition-all duration-300">
                   Become an Expert
                 </button>
               </div>
@@ -1998,7 +1996,7 @@ export default function TOEConsulting() {
                     </div>
                   ))}
                 </div>
-                <button onClick={openContact} className="group btn-primary px-8 py-4 rounded-full font-semibold text-white text-base flex items-center gap-2 shadow-lg shadow-[#BCCCDC]">
+                <button onClick={() => navigate('/expertregister')} className="group btn-primary px-8 py-4 rounded-full font-semibold text-white text-base flex items-center gap-2 shadow-lg shadow-[#BCCCDC]">
                   Apply to Become an Expert <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
                 </button>
               </div>
@@ -2208,9 +2206,7 @@ export default function TOEConsulting() {
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-8 sm:gap-12 mb-8 sm:mb-12">
               <div className="md:col-span-1">
                 <div className="flex items-center gap-3 mb-4">
-                  <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-[#1B3C53]/40 to-[#456882]/40 border border-[#BCCCDC]/40 flex items-center justify-center">
-                    <BookOpen className="h-5 w-5 text-[#F8FAFC]" strokeWidth={2.2} />
-                  </div>
+                  <img src="/logo.png" alt="WisdomLinked" className="h-10 w-10 rounded-xl object-contain" />
                   <div><div className="font-display font-bold text-lg text-white">WisdomLinked</div><div className="text-xs text-[#D9EAFD]">Connect with experts</div></div>
                 </div>
                 <p className="text-slate-400 text-sm leading-relaxed">Connecting expertise with ambition, globally.</p>
