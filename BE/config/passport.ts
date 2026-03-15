@@ -47,13 +47,19 @@ async function findOrCreateOAuthUser(profile: any, provider: string) {
     return user;
 }
 
+// Build the base URL for OAuth callbacks (handles nginx SSL termination)
+const OAUTH_BASE = process.env.FE_URL
+    ? process.env.FE_URL.replace(/\/$/, '').replace(/:\d+$/, '').replace('http://', 'https://') 
+    : '';
+
 // ── Google Strategy ─────────────────────────────────────────
 if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
     passport.use(new GoogleStrategy(
         {
             clientID: process.env.GOOGLE_CLIENT_ID,
             clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-            callbackURL: '/api/auth/google/callback',
+            callbackURL: OAUTH_BASE ? `${OAUTH_BASE}/api/auth/google/callback` : '/api/auth/google/callback',
+            proxy: true,
             scope: ['profile', 'email'],
         },
         async (_accessToken: string, _refreshToken: string, profile: any, done: Function) => {
@@ -73,7 +79,7 @@ if (process.env.FACEBOOK_APP_ID && process.env.FACEBOOK_APP_SECRET) {
         {
             clientID: process.env.FACEBOOK_APP_ID,
             clientSecret: process.env.FACEBOOK_APP_SECRET,
-            callbackURL: '/api/auth/facebook/callback',
+            callbackURL: OAUTH_BASE ? `${OAUTH_BASE}/api/auth/facebook/callback` : '/api/auth/facebook/callback',
             profileFields: ['id', 'emails', 'name', 'displayName', 'photos'],
         },
         async (_accessToken: string, _refreshToken: string, profile: any, done: Function) => {
@@ -93,7 +99,7 @@ if (process.env.TWITTER_CONSUMER_KEY && process.env.TWITTER_CONSUMER_SECRET) {
         {
             consumerKey: process.env.TWITTER_CONSUMER_KEY,
             consumerSecret: process.env.TWITTER_CONSUMER_SECRET,
-            callbackURL: '/api/auth/twitter/callback',
+            callbackURL: OAUTH_BASE ? `${OAUTH_BASE}/api/auth/twitter/callback` : '/api/auth/twitter/callback',
             includeEmail: true,
         },
         async (_accessToken: string, _refreshToken: string, profile: any, done: Function) => {
