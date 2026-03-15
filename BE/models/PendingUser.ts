@@ -37,6 +37,7 @@ const pendingUserSchema = new mongoose.Schema(
         dailyTimeSlots: [{ type: Number }],
         price: [{ type: Number, default: 5 }],
         rating: { type: Number, default: 0 },
+        specialNote: { type: String },
     },
     { timestamps: true }
 );

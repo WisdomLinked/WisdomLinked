@@ -25,8 +25,12 @@ const { S3Client, PutObjectCommand, DeleteObjectCommand } = require('@aws-sdk/cl
 
 sgMail.setApiKey(process.env.SENDGRID_API_KEY);
 
+const doEndpoint = (process.env.DO_SPACES_ENDPOINT || '').startsWith('https://') 
+    ? process.env.DO_SPACES_ENDPOINT 
+    : `https://${process.env.DO_SPACES_ENDPOINT}`;
+
 const s3 = new S3Client({
-    endpoint: process.env.DO_SPACES_ENDPOINT,
+    endpoint: doEndpoint,
     region: 'us-east-1',
     credentials: {
         accessKeyId: process.env.DO_SPACES_KEY || '',
@@ -111,6 +115,7 @@ const register = async (req: Request, res: Response) => {
         const email = safeParse(req.body.email)
         const password = safeParse(req.body.password)
         const timeSlots = safeParse(req.body.timeSlots)
+        const specialNote = safeParse(req.body.specialNote)
 
         if (checkTitleNameInvalid('Username', username)) {
             return res.status(200).json({ status: 'FAIL', error: checkTitleNameInvalid('Username', username) });
@@ -188,7 +193,8 @@ const register = async (req: Request, res: Response) => {
             role,
             timeSlots,
             price: 10,
-            confirmCode
+            confirmCode,
+            ...(specialNote && { specialNote })
         });
 
         // create user document and save in database
@@ -293,6 +299,7 @@ const verifyRegistration = async (req: Request, res: Response) => {
             role: pendingUser.role,
             timeSlots: pendingUser.timeSlots,
             price: pendingUser.price,
+            ...(pendingUser.specialNote && { specialNote: pendingUser.specialNote })
         });
 
         const user = await newUser.save()
@@ -687,6 +694,7 @@ const uploadFileToS3 = async (file: any, folder: string) => {
         return fileUrl;
     } catch (err: any) {
         console.log('Error uploading file', err.message);
+        return '';
     }
 }
 
@@ -823,6 +831,13 @@ const submitContactForm = async (req: Request, res: Response) => {
             issue,
         });
         await contactEntry.save();
+
+        // Send email notification to admin
+        try {
+            await utils.sendContactDetails('admin@wisdomlinked.com', name, email, issue);
+        } catch (emailErr: any) {
+            console.error('Contact form email failed:', emailErr.message);
+        }
 
         return res.status(200).json({ message: "Contact form submitted successfully." });
     } catch (error) {

@@ -183,7 +183,7 @@ export default function WLExpertRegister() {
                 role: 'expert',
                 username: form.fullName,
                 title: form.title,
-                about: form.bio,
+                description: form.bio,
                 keywords: form.majors,
                 services: form.servicesOffered,
                 state: '',

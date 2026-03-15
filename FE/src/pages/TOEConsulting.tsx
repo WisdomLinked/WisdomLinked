@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { doContactUs } from '../api/api';
 import {
   Star, Users, Briefcase, GraduationCap, TrendingUp, MessageCircle, CheckCircle,
   ArrowRight, Sparkles, Menu, X, BookOpen, Globe, ChevronDown, ChevronUp, Phone, Mail, User,
@@ -81,11 +82,24 @@ function ContactFormModal({ onClose }: { onClose: () => void }) {
     return e;
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     const e = validate();
     if (Object.keys(e).length > 0) { setErrors(e); return; }
     setSubmitting(true);
-    setTimeout(() => { setSubmitting(false); setSubmitted(true); }, 1500);
+    try {
+      await doContactUs({
+        name: form.name,
+        email: form.email,
+        countryCode: form.countryCode,
+        contactNumber: form.phone,
+        issue: `[${form.subject}] ${form.description}`,
+      });
+      setSubmitted(true);
+    } catch (err) {
+      console.error('Contact form error:', err);
+      alert('Failed to submit. Please try again.');
+    }
+    setSubmitting(false);
   };
 
   const selectedCountry = COUNTRY_CODES.find(c => c.code === form.countryCode) || COUNTRY_CODES[0];
