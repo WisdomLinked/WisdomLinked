@@ -27,6 +27,7 @@ const AboutUS = React.lazy(() => import('./pages/AboutUS'));
 const Rules = React.lazy(() => import('./pages/Ruels'));
 const Services = React.lazy(() => import('./pages/Services'));
 const ContactUS = React.lazy(() => import('./pages/ContactUS'));
+const OAuthCallback = React.lazy(() => import('./pages/OAuthCallback'));
 
 // Heavy dashboard chunks — MUI, calendars, quill, etc. only load after login
 const ExpertDashboard = React.lazy(() => import('./pages/Dashboard/_ExpertDashboard'));
@@ -45,6 +46,7 @@ const UnauthenticatedRoutes = () => {
   return (
     <React.Fragment>
       <Routes>
+        <Route path="/oauth-callback" element={<OAuthCallback />} />
         <Route path="/customerregister" element={<WLCustomerRegister />} />
         <Route path="/expertregister" element={<WLExpertRegister />} />
         <Route path="/forgotpassword" element={<ForgotPassword />} />

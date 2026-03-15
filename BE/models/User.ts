@@ -30,7 +30,11 @@ const userSchema = new mongoose.Schema(
         isActive: { type: Boolean, default: true },
         isAdHocCustomer: { type: Boolean, default: false },
         token: { type: String, select: false },
-        password: { type: String, required: [true, "can't be blank"], select: false },
+        password: { type: String, select: false },
+
+        // OAUTH ---------------
+        oauthProvider: { type: String }, // 'google' | 'facebook' | 'twitter'
+        oauthId: { type: String },
 
         // EXPERT -------------
         title: { type: String },
