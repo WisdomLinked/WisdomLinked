@@ -61,6 +61,26 @@ const getUniqueConfirmCode = async () => {
     }
 }
 
+export const getArrayField = (req: Request, key: string) => {
+    let val = req.body[key] || req.body[`${key}[]`];
+    if (!val) return null;
+    if (Array.isArray(val)) return val;
+    if (typeof val === 'string') {
+        if (val.trim().startsWith('[') && val.trim().endsWith(']')) {
+            try { return JSON.parse(val); } 
+            catch (e) {
+                try {
+                    const innerString = val.trim().slice(1, -1);
+                    const items = innerString.split(',').map(item => item.trim().replace(/^['"]|['"]$/g, ''));
+                    return items.filter(i => i.length > 0);
+                } catch (err) { return [val]; }
+            }
+        }
+        return [val]; 
+    }
+    return [val];
+};
+
 const getKeywordsAndServices = async (req: Request, res: Response) => {
     try {
         const keywords = await Keyword.find()
@@ -107,8 +127,6 @@ const register = async (req: Request, res: Response) => {
         const username = safeParse(req.body.username)
         const title = safeParse(req.body.title)
         const description = safeParse(req.body.description)
-        const keywords = safeParse(req.body.keywords)
-        const services = safeParse(req.body.services)
         const country = safeParse(req.body.country)
         const state = safeParse(req.body.state)
         const city = safeParse(req.body.city)
@@ -117,6 +135,9 @@ const register = async (req: Request, res: Response) => {
         const password = safeParse(req.body.password)
         const timeSlots = safeParse(req.body.timeSlots)
         const specialNote = safeParse(req.body.specialNote)
+        
+        const keywords = getArrayField(req, 'keywords');
+        const services = getArrayField(req, 'services');
 
         if (checkTitleNameInvalid('Username', username)) {
             return res.status(200).json({ status: 'FAIL', error: checkTitleNameInvalid('Username', username) });
@@ -638,8 +659,8 @@ const updateProfile = async (req: any, res: Response) => {
         const title = safeParse(req.body.title) || req.body.title;
         const description = safeParse(req.body.description) || req.body.description;
         const image = safeParse(req.body.image) || req.body.image;
-        const keywords = safeParse(req.body.keywords) || req.body.keywords;
-        const services = safeParse(req.body.services) || req.body.services;
+        const keywords = getArrayField(req, 'keywords') || safeParse(req.body.keywords) || req.body.keywords;
+        const services = getArrayField(req, 'services') || safeParse(req.body.services) || req.body.services;
         const country = safeParse(req.body.country) || req.body.country;
         const state = safeParse(req.body.state) || req.body.state;
         const city = safeParse(req.body.city) || req.body.city;

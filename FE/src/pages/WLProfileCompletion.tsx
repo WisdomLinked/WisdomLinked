@@ -167,7 +167,7 @@ export default function WLProfileCompletion() {
 
             const response = await callApi('PUT', 'auth/profile', data, form.resumeFile || undefined) as any;
             
-            if (response.status === 'SUCCESS' || response.success) {
+            if (response.result || response.status === 'SUCCESS' || response.success) {
                 // Refresh user details
                 await dispatch(autoLogin() as any);
                 navigate(`/user/${role}dashboard`, { replace: true });
