@@ -230,9 +230,7 @@ const register = async (req: Request, res: Response) => {
         // res.cookie('accessToken', token, { maxAge: process.env.COOKIE_EXPIRED_TIME, httpOnly: true })
 
         // SEND EMAIL TO CUSTOMER
-        console.log('[register] Email:', email);
-        console.log('[register] confirmCode:', confirmCode);
-        console.log('[register] FE_URL:', process.env.FE_URL);
+
 
         let confirmLink = `<div>Verify your registration to Wisdom Linked by clicking the confirmation link below:<br/><a href="${process.env.FE_URL}/verification/${email}/${confirmCode}">Verify Email</a></div>`
         await utils.sendMagicLink(
@@ -253,7 +251,6 @@ const register = async (req: Request, res: Response) => {
 
 const healthCheck = async (req: Request, res: Response) => {
     try {
-        console.log("health check")
         res.status(200).send("OK Ready")
     } catch (err) {
         console.log(err)
@@ -303,7 +300,7 @@ const verifyRegistration = async (req: Request, res: Response) => {
             return res.status(200).json({ status: 'FAIL', error: "Verification email was expired." });
         }
 
-        console.log(pendingUser, '/////')
+
 
         const newUser = new User({
             username: pendingUser.username,
@@ -895,11 +892,11 @@ const leaveFeedback = async (req: any, res: Response) => {
 
         let userRating = 0
         for (let i = 0; i < otherUser.feedbacks.length; i++) {
-            console.log(otherUser.feedbacks[i])
+
             userRating += otherUser.feedbacks[i].rating
         }
         userRating = parseFloat((rating / otherUser.feedbacks.length).toFixed(2))
-        console.log(userRating)
+
         otherUser.rating = userRating
 
         await otherUser.save()
@@ -915,7 +912,6 @@ const leaveFeedback = async (req: any, res: Response) => {
 const getTimeZone = async (req: Request, res: Response) => {
     const { lat, lng } = req.query
     const apiKey = process.env.TIMEZONE_API_KEY;
-    console.log("inside gettimezone", req.body)
     try {
         const response = await fetch(`https://api.timezonedb.com/v2.1/get-time-zone?key=${apiKey}&format=json&by=position&lat=${lat}&lng=${lng}`, {
             method: "GET",
@@ -932,8 +928,7 @@ const getTimeZone = async (req: Request, res: Response) => {
 
         const data = await response.json();
         if (data.status === 'OK') {
-            console.log('Time Zone:', data.zoneName);
-            console.log('Local Time:', data.formatted);
+
         } else {
             console.error('Error:', data.message);
         }

@@ -19,6 +19,17 @@ if (!window.process) {
   window.process = process;
 }
 
+// ── Security: suppress console output in production ──────────────────────────
+// This ensures no sensitive user data (payloads, tokens, profile info) leaks
+// through the browser developer console when the app is deployed.
+if (process.env.NODE_ENV !== 'development') {
+  console.log = () => {};
+  console.debug = () => {};
+  console.info = () => {};
+  // Keep console.warn and console.error for critical production diagnostics
+}
+// ─────────────────────────────────────────────────────────────────────────────
+
 const container = document.getElementById('root');
 const root = createRoot(container!);
 
