@@ -20,7 +20,7 @@ exports.sendOTP = async (targetEmail, todays_date_str, smurf_details_str) => {
       name: "WisdomLinked Support",
       email: noReplyEmail,
     },
-    subject: "Registration Verification Needed",
+    subject: "Your One-Time Passcode (OTP)",
     html: `
         <p>Date: <strong>${todays_date_str}</strong></p>
         ${smurf_details_str}
@@ -32,6 +32,26 @@ exports.sendOTP = async (targetEmail, todays_date_str, smurf_details_str) => {
   } catch (error) {
     console.error("Error sending OTP email via SendGrid:", error.message);
     console.error("Error details:", error.response ? error.response.body : error);
+  }
+};
+
+exports.sendMagicLink = async (targetEmail, todays_date_str, smurf_details_str) => {
+  const msg = {
+    to: targetEmail,
+    from: {
+      name: "WisdomLinked Support",
+      email: noReplyEmail,
+    },
+    subject: "Registration Verification Needed",
+    html: `
+        <p>Date: <strong>${todays_date_str}</strong></p>
+        ${smurf_details_str}
+      `,
+  };
+  try {
+    await sgMail.send(msg);
+  } catch (error) {
+    console.error("Error sending Magic Link email via SendGrid:", error.message);
   }
 };
 

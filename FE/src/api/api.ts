@@ -130,13 +130,20 @@ export const confirmPasswordResetByCode = async ({ email, password, code }: any)
 export const verifyRegistration = async ({ email, confirmCode }: any) => {
     try {
         const res = await api.post<any>("auth/verifyRegistration", { email, confirmCode });
-
         return res.data;
-    } catch (err: any) {
-        console.log(err, '////')
-        return checkForAuthorization(err);
+    } catch (error) {
+        return { status: "FAIL" }
     }
-};
+}
+
+export const checkVerificationStatus = async (email: string) => {
+    try {
+        const res = await api.get<any>(`auth/checkVerification?email=${encodeURIComponent(email)}`);
+        return res.data;
+    } catch (error) {
+        return { status: "FAIL" }
+    }
+}
 
 export const passwordResetRequest = async ({ email, password }: any) => {
     try {

@@ -212,8 +212,8 @@ const register = async (req: Request, res: Response) => {
         console.log('[register] confirmCode:', confirmCode);
         console.log('[register] FE_URL:', process.env.FE_URL);
 
-        let confirmLink = `<div>Verify your registration to TOE by the confirmation Link <br/>${process.env.FE_URL}/verification/${email}/${confirmCode}</div>`
-        await utils.sendOTP(
+        let confirmLink = `<div>Verify your registration to Wisdom Linked by clicking the confirmation link below:<br/><a href="${process.env.FE_URL}/verification/${email}/${confirmCode}">Verify Email</a></div>`
+        await utils.sendMagicLink(
             // process.env.NODE_ENV === 'development' ? 'varunsahni10134@gmail.com' : email,
             email,
             utils.getCurrentDateString(),
@@ -244,14 +244,14 @@ const resendConfirmEmail = async (req: Request, res: Response) => {
         const { email } = req.body
 
         // check if user exists
-        const pendingUser = await PendingUser.find({ email: email.toLowerCase() });
+        const pendingUser = await PendingUser.findOne({ email: email.toLowerCase() });
         if (!pendingUser) {
             throw new Error('Pending registration request not found')
         }
 
         // SEND EMAIL TO CUSTOMER
-        let confirmLink = `<div>Verify your registration to TOE by the confirmation Link <br/>${process.env.FE_URL}/verification/${email}/${pendingUser.confirmCode}</div>`
-        await utils.sendOTP(
+        let confirmLink = `<div>Verify your registration to Wisdom Linked by clicking the confirmation link below:<br/><a href="${process.env.FE_URL}/verification/${email}/${pendingUser.confirmCode}">Verify Email</a></div>`
+        await utils.sendMagicLink(
             // process.env.NODE_ENV === 'development' ? 'varunsahni10134@gmail.com' : email,
             email,
             utils.getCurrentDateString(),
@@ -309,11 +309,71 @@ const verifyRegistration = async (req: Request, res: Response) => {
         //
         sendEmailNewUserAccountApproval(user.username)
 
+        const token = jwt.sign(
+            { email: user.email.toString() },
+            process.env.JWT_SECRET,
+            { expiresIn: process.env.COOKIE_EXPIRED_TIME || '24h' }
+        );
+        user.token = token;
+        await user.save();
+        
+        user.token = null;
+        user.password = null;
+        
+        res.cookie('accessToken', token, {
+            maxAge: Number(process.env.COOKIE_EXPIRED_TIME) || 86400000,
+            httpOnly: true
+        });
+
+        // The user just joined, so groupChats might be empty, but it's safe to update
+        updateActiveRoomsOfUsers(user._id.toString(), user.groupChats || []);
+
         res.status(200).json({
-            status: 'SUCCESS'
+            status: 'SUCCESS',
+            userDetails: user
         });
     } catch (err) {
         console.log(err)
+        return res.status(500).send(err.message);
+    }
+};
+
+const checkVerificationStatus = async (req: Request, res: Response) => {
+    try {
+        const email = String(req.query.email || '');
+        if (!email) return res.status(200).json({ status: 'FAIL', error: 'Email missing' });
+
+        // If user is in User collection, they are verified
+        const user = await getFullUserData(email);
+        if (user) {
+            const token = jwt.sign(
+                { email: user.email.toString() },
+                process.env.JWT_SECRET,
+                { expiresIn: process.env.COOKIE_EXPIRED_TIME || '24h' }
+            );
+            user.token = token;
+            await user.save();
+            
+            user.token = null;
+            user.password = null;
+
+            res.cookie('accessToken', token, {
+                maxAge: Number(process.env.COOKIE_EXPIRED_TIME) || 86400000,
+                httpOnly: true
+            });
+
+            return res.status(200).json({ status: 'VERIFIED', userDetails: user });
+        }
+
+        // If in PendingUser, still pending
+        const pending = await PendingUser.findOne({ email: email.toLowerCase() });
+        if (pending) {
+            return res.status(200).json({ status: 'PENDING' });
+        }
+
+        return res.status(200).json({ status: 'NOT_FOUND' });
+    } catch (err: any) {
+        console.error(err);
         return res.status(500).send(err.message);
     }
 };
@@ -558,9 +618,35 @@ const updateMissedChats = async (req: any, res: Response) => {
 const updateProfile = async (req: any, res: Response) => {
     try {
         const { email } = req.user
-        const { username, title, description, image, keywords, services, country, state, city, phoneNumber, price, joinPopupBlocked } = req.body;
+        
+        const safeParse = (val) => {
+            if (!val) return null;
+            try { return JSON.parse(val); } catch (e) {
+                if (typeof val === 'string' && val.trim().startsWith('[') && val.trim().endsWith(']')) {
+                    try {
+                        const innerString = val.slice(1, -1);
+                        const items = innerString.split(',').map(item => item.trim().replace(/^['"]|['"]$/g, ''));
+                        return items.filter(i => i.length > 0);
+                    } catch (innerError) { return val; }
+                }
+                return val;
+            }
+        };
 
-        if (checkTitleNameInvalid('Username', username)) {
+        const username = safeParse(req.body.username) || req.body.username;
+        const title = safeParse(req.body.title) || req.body.title;
+        const description = safeParse(req.body.description) || req.body.description;
+        const image = safeParse(req.body.image) || req.body.image;
+        const keywords = safeParse(req.body.keywords) || req.body.keywords;
+        const services = safeParse(req.body.services) || req.body.services;
+        const country = safeParse(req.body.country) || req.body.country;
+        const state = safeParse(req.body.state) || req.body.state;
+        const city = safeParse(req.body.city) || req.body.city;
+        const phoneNumber = safeParse(req.body.phoneNumber) || req.body.phoneNumber;
+        const price = safeParse(req.body.price) || req.body.price;
+        const joinPopupBlocked = safeParse(req.body.joinPopupBlocked) || req.body.joinPopupBlocked;
+
+        if (username && checkTitleNameInvalid('Username', username)) {
             throw new Error(checkTitleNameInvalid('Username', username))
         }
 
@@ -583,6 +669,18 @@ const updateProfile = async (req: any, res: Response) => {
         if (price) {
             updates.price = price
         }
+        
+        const file = req.file
+        if (file) {
+            // If they had an old resume, delete it
+            const me = await User.findOne({ email: email });
+            if (me && me.resume) {
+                const oldKey = me.resume.replace(`https://${process.env.DO_SPACES_BUCKET}.${process.env.DO_SPACES_ENDPOINT.replace('https://', '')}/`, '');
+                deleteFileFromS3(oldKey);
+            }
+            updates.resume = await uploadFileToS3(file, 'resumes');
+        }
+
         if (keywords) {
             let _keywords = []
             for (let i = 0; i < keywords.length; i++) {
@@ -903,6 +1001,7 @@ module.exports = {
     leaveFeedback,
     resendConfirmEmail,
     verifyRegistration,
+    checkVerificationStatus,
     confirmLoginByCode,
     passwordResetRequest,
     confirmPasswordResetByCode,

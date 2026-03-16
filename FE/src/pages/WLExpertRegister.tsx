@@ -271,7 +271,7 @@ export default function WLExpertRegister() {
                             {/* Full Name */}
                             <div>
                                 <label className="block text-xs font-semibold text-slate-600 mb-1.5"><span className="flex items-center gap-1.5"><User size={12} /> Full name</span></label>
-                                <input type="text" placeholder="e.g. Dr. Jane Smith" value={form.fullName}
+                                <input type="text" placeholder="e.g. Dr. Jane Smith" value={form.fullName} autoComplete="name"
                                     onChange={(e) => handleChange('fullName', e.target.value)}
                                     onBlur={() => handleBlur('fullName')}
                                     className={(touched.fullName && errors.fullName) ? inputError : inputNormal} />
@@ -311,7 +311,7 @@ export default function WLExpertRegister() {
                                         <div className="p-2 border-b border-slate-100 bg-slate-50/50">
                                             <div className="relative">
                                                 <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                                                <input type="text" placeholder="Search or add custom major" value={majorSearch}
+                                                <input type="text" placeholder="Search or add custom major" value={majorSearch} autoComplete="new-password"
                                                     onChange={(e) => setMajorSearch(e.target.value)}
                                                     onKeyDown={(e) => { if(e.key === 'Enter') { e.preventDefault(); handleAddCustomMajor(); } }}
                                                     className="w-full pl-9 pr-4 py-2 text-sm bg-white border border-slate-200 rounded-lg outline-none focus:border-[#234C6A] focus:ring-1 focus:ring-[#234C6A]" />

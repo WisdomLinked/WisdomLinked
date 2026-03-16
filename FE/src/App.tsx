@@ -28,6 +28,7 @@ const Rules = React.lazy(() => import('./pages/Ruels'));
 const Services = React.lazy(() => import('./pages/Services'));
 const ContactUS = React.lazy(() => import('./pages/ContactUS'));
 const OAuthCallback = React.lazy(() => import('./pages/OAuthCallback'));
+const WLProfileCompletion = React.lazy(() => import('./pages/WLProfileCompletion'));
 
 // Heavy dashboard chunks — MUI, calendars, quill, etc. only load after login
 const ExpertDashboard = React.lazy(() => import('./pages/Dashboard/_ExpertDashboard'));
@@ -47,6 +48,7 @@ const UnauthenticatedRoutes = () => {
     <React.Fragment>
       <Routes>
         <Route path="/oauth-callback" element={<OAuthCallback />} />
+        <Route path="/auth-complete-profile" element={<WLProfileCompletion />} />
         <Route path="/customerregister" element={<WLCustomerRegister />} />
         <Route path="/expertregister" element={<WLExpertRegister />} />
         <Route path="/forgotpassword" element={<ForgotPassword />} />
@@ -177,6 +179,12 @@ function App() {
   useEffect(() => {
     if (!oldUserDetails && userDetails?.email) {
       set_oldUserDetails(userDetails)
+      
+      const path = window.location.pathname;
+      if (path.includes('/oauth-callback') || path.includes('/verification/') || path.includes('/auth-complete-profile')) {
+        return;
+      }
+
       let locationUrl = ''
       const location = localStorage.getItem("location")
       if (location !== 'login' && location !== 'expertregister' && location !== 'customerregister') {

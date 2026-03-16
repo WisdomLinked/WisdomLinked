@@ -1,7 +1,5 @@
 const passport = require('passport');
 const GoogleStrategy = require('passport-google-oauth20').Strategy;
-const FacebookStrategy = require('passport-facebook').Strategy;
-const TwitterStrategy = require('passport-twitter').Strategy;
 const User = require('../models/User');
 
 // Shared callback: find or create user from OAuth profile
@@ -75,45 +73,7 @@ if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
     ));
 }
 
-// ── Facebook Strategy ───────────────────────────────────────
-if (process.env.FACEBOOK_APP_ID && process.env.FACEBOOK_APP_SECRET) {
-    passport.use(new FacebookStrategy(
-        {
-            clientID: process.env.FACEBOOK_APP_ID,
-            clientSecret: process.env.FACEBOOK_APP_SECRET,
-            callbackURL: OAUTH_BASE ? `${OAUTH_BASE}/api/auth/facebook/callback` : '/api/auth/facebook/callback',
-            profileFields: ['id', 'emails', 'name', 'displayName', 'photos'],
-        },
-        async (_accessToken: string, _refreshToken: string, profile: any, done: Function) => {
-            try {
-                const result = await findOrCreateOAuthUser(profile, 'facebook');
-                done(null, result);
-            } catch (err) {
-                done(err, null);
-            }
-        }
-    ));
-}
 
-// ── Twitter / X Strategy ────────────────────────────────────
-if (process.env.TWITTER_CONSUMER_KEY && process.env.TWITTER_CONSUMER_SECRET) {
-    passport.use(new TwitterStrategy(
-        {
-            consumerKey: process.env.TWITTER_CONSUMER_KEY,
-            consumerSecret: process.env.TWITTER_CONSUMER_SECRET,
-            callbackURL: OAUTH_BASE ? `${OAUTH_BASE}/api/auth/twitter/callback` : '/api/auth/twitter/callback',
-            includeEmail: true,
-        },
-        async (_accessToken: string, _refreshToken: string, profile: any, done: Function) => {
-            try {
-                const result = await findOrCreateOAuthUser(profile, 'twitter');
-                done(null, result);
-            } catch (err) {
-                done(err, null);
-            }
-        }
-    ));
-}
 
 // Serialize / Deserialize (we use JWT so these are minimal)
 passport.serializeUser((result: any, done: Function) => {

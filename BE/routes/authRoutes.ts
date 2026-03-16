@@ -13,6 +13,7 @@ const {
     getMe,
     resendConfirmEmail,
     verifyRegistration,
+    checkVerificationStatus,
     confirmLoginByCode,
     passwordResetRequest,
     confirmPasswordResetByCode,
@@ -49,6 +50,7 @@ router.post("/updateResume", uploads, updateResume);
 router.post("/uploadChatFile", uploads, uploadChatFile);
 router.post("/resendConfirmEmail", resendConfirmEmail);
 router.post("/verifyRegistration", verifyRegistration);
+router.get("/checkVerification", checkVerificationStatus);
 router.post("/login", validateLoginSchema, login);
 router.post("/confirmLoginByCode", confirmLoginByCode);
 router.post("/passwordResetRequest", passwordResetRequest);
@@ -56,6 +58,7 @@ router.post("/confirmPasswordResetByCode", confirmPasswordResetByCode);
 router.get("/getKeywordsAndServices", getKeywordsAndServices);
 router.post("/updateMissedChats", requireAuth(false), updateMissedChats);
 router.post("/updateProfile", requireAuth(false), updateProfile);
+router.put("/profile", requireAuth(true), uploads, updateProfile); // Used by complete profile flow
 router.post("/getEventsBetweenCustomerAndExpert", requireAuth(false), getEventsBetweenCustomerAndExpert);
 router.get("/me", requireAuth(false), getMe);
 router.get("/getMyEvents", requireAuth(false), getMyEvents);
@@ -115,8 +118,27 @@ const oauthCallback = async (req: any, res: any) => {
         });
         
         updateActiveRoomsOfUsers(user._id.toString(), user.groupChats);
+
+        // Check for incomplete profile
+        let isProfileIncomplete = false;
+        if (!user.keywords || user.keywords.length === 0) isProfileIncomplete = true;
+        
+        if (user.role === 'customer' || role === 'customer') {
+            if (!user.services || user.services.length === 0) isProfileIncomplete = true;
+        } else if (user.role === 'expert' || role === 'expert') {
+            if (!user.services || user.services.length === 0) isProfileIncomplete = true;
+            if (!user.title || user.title.trim() === '') isProfileIncomplete = true;
+            if (!user.description || user.description.trim() === '') isProfileIncomplete = true;
+        }
+
+        const needsProfile = isNew || isProfileIncomplete;
+
         // Redirect to FE with token so it can bootstrap the session
-        res.redirect(`${process.env.FE_URL}/oauth-callback?token=${token}&role=${user.role}`);
+        const redirectUrl = needsProfile 
+            ? `${process.env.FE_URL}/oauth-callback?token=${token}&role=${user.role}&needsProfile=true`
+            : `${process.env.FE_URL}/oauth-callback?token=${token}&role=${user.role}`;
+        
+        res.redirect(redirectUrl);
     } catch (err) {
         console.error('[OAuth Callback Error]', err);
         res.redirect(`${process.env.FE_URL}/login?error=auth_failed`);
@@ -130,21 +152,6 @@ router.get('/google', (req: any, res: any, next: any) => {
 });
 router.get('/google/callback', passport.authenticate('google', { failureRedirect: '/login?error=google_failed', session: false }), oauthCallback);
 
-// Facebook
-router.get('/facebook', (req: any, res: any, next: any) => {
-    const role = req.query.role || 'login';
-    passport.authenticate('facebook', { scope: ['email'], state: role })(req, res, next);
-});
-router.get('/facebook/callback', passport.authenticate('facebook', { failureRedirect: '/login?error=facebook_failed', session: false }), oauthCallback);
 
-// Twitter / X
-router.get('/twitter', (req: any, res: any, next: any) => {
-    const role = req.query.role || 'login';
-    // Twitter OAuth 1.0a doesn't support state, store in session
-    (req as any).session = (req as any).session || {};
-    (req as any).session.oauthRole = role;
-    passport.authenticate('twitter')(req, res, next);
-});
-router.get('/twitter/callback', passport.authenticate('twitter', { failureRedirect: '/login?error=twitter_failed', session: false }), oauthCallback);
 
 module.exports = router;
