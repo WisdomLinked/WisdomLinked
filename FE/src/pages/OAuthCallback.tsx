@@ -9,17 +9,24 @@ export default function OAuthCallback() {
     const [searchParams] = useSearchParams();
 
     useEffect(() => {
+        const token = searchParams.get('token');
         const role = searchParams.get('role') || 'customer';
         
-        // The httpOnly cookie was already set by the backend redirect.
-        // We just need to bootstrap the frontend session.
+        if (!token) {
+            navigate('/login?error=auth_failed', { replace: true });
+            return;
+        }
+
+        // Set the accessToken cookie on the frontend domain
+        // (the backend cookie may not persist across redirect in some setups)
+        document.cookie = `accessToken=${token}; path=/; max-age=86400`;
+
         localStorage.setItem('isLoginRemembered', 'true');
         localStorage.setItem('currentUser', JSON.stringify({ email: 'oauth-user' }));
 
         // Dispatch autoLogin which calls /auth/me using the cookie
         const doLogin = async () => {
             await dispatch(autoLogin() as any);
-            // Clear the loading spinner (autoLogin sets it to true but doesn't clear it)
             dispatch({ type: 'SetLoadingStatus', payload: false });
             navigate(`/user/${role}dashboard`, { replace: true });
         };
