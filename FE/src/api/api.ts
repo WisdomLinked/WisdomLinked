@@ -492,9 +492,10 @@ export const callApi = async (method: string, url: string, data: any, file?: any
         });
 
 
-        let options = {
+        let options: RequestInit = {
             method: method,
-            body: formData
+            body: formData,
+            credentials: 'include'
         }
         return fetch(BASE_URL + url, options)
             .then((response: any) => {

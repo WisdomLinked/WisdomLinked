@@ -58,7 +58,7 @@ router.post("/confirmPasswordResetByCode", confirmPasswordResetByCode);
 router.get("/getKeywordsAndServices", getKeywordsAndServices);
 router.post("/updateMissedChats", requireAuth(false), updateMissedChats);
 router.post("/updateProfile", requireAuth(false), updateProfile);
-router.put("/profile", requireAuth(true), uploads, updateProfile); // Used by complete profile flow
+router.put("/profile", requireAuth(false), uploads, updateProfile); // Used by complete profile flow
 router.post("/getEventsBetweenCustomerAndExpert", requireAuth(false), getEventsBetweenCustomerAndExpert);
 router.get("/me", requireAuth(false), getMe);
 router.get("/getMyEvents", requireAuth(false), getMyEvents);
