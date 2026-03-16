@@ -48,9 +48,11 @@ async function findOrCreateOAuthUser(profile: any, provider: string) {
 }
 
 // Build the base URL for OAuth callbacks (handles nginx SSL termination)
-const OAUTH_BASE = process.env.FE_URL
-    ? process.env.FE_URL.replace(/\/$/, '').replace(/:\d+$/, '').replace('http://', 'https://') 
-    : '';
+const _feUrl = (process.env.FE_URL || '').replace(/\/$/, '');
+const _isLocal = _feUrl.includes('localhost') || _feUrl.includes('127.0.0.1');
+const OAUTH_BASE = _isLocal
+    ? _feUrl   // keep http:// and port for local dev
+    : _feUrl.replace(/:\d+$/, '').replace('http://', 'https://');  // force https for prod/staging
 
 // ── Google Strategy ─────────────────────────────────────────
 if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
