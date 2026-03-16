@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useDispatch } from 'react-redux';
 import { Mail, Lock, AlertCircle, BookOpen, Eye, EyeOff } from 'lucide-react';
 import { login } from '../api/api';
@@ -12,7 +12,9 @@ const FOCUS_RING = 'focus:ring-2 focus:ring-[#234C6A]/60 focus:border-[#234C6A]'
 
 export default function WLLogin() {
     const navigate = useNavigate();
+    const [searchParams] = useSearchParams();
     const dispatch = useDispatch();
+    const oauthError = searchParams.get('error');
     const [form, setForm] = useState({ email: '', password: '' });
     const [errors, setErrors] = useState<Record<string, string>>({});
     const [submitting, setSubmitting] = useState(false);
@@ -82,6 +84,12 @@ export default function WLLogin() {
 
                         <h2 className="font-display text-2xl font-bold text-slate-800 mb-1">Welcome back</h2>
                         <p className="text-slate-500 text-sm mb-6">Sign in to your WisdomLinked account</p>
+                        {oauthError === 'no_account' && (
+                            <div className="mb-4 p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-sm flex items-start gap-2">
+                                <AlertCircle size={16} className="mt-0.5 shrink-0" />
+                                <span>No account found. Please <button type="button" onClick={() => navigate('/customerregister')} className="font-semibold underline">register</button> first.</span>
+                            </div>
+                        )}
                         <div className="space-y-4">
                             <div>
                                 <label className="block text-xs font-semibold text-slate-600 mb-1.5"><span className="flex items-center gap-1.5"><Mail size={12} /> Email</span></label>

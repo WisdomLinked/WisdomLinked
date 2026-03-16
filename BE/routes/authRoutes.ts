@@ -78,8 +78,28 @@ const { updateActiveRoomsOfUsers } = require('../socket/activeRooms');
 
 const oauthCallback = async (req: any, res: any) => {
     try {
-        const user = req.user;
-        if (!user) return res.redirect(`${process.env.FE_URL}/login?error=auth_failed`);
+        const result = req.user;
+        if (!result) return res.redirect(`${process.env.FE_URL}/login?error=auth_failed`);
+
+        // Unpack { user, isNew } from findOrCreateOAuthUser
+        const user = result.user || result;
+        const isNew = result.isNew || false;
+
+        // Read role from OAuth state parameter (Google/Facebook) or session (Twitter)
+        const role = req.query.state || (req.session && req.session.oauthRole) || null;
+
+        // If new user came from login page (no role), block signup and redirect to register
+        if (isNew && (!role || (role !== 'expert' && role !== 'customer'))) {
+            // Delete the auto-created user since they should register first
+            const User = require('../models/User');
+            await User.findByIdAndDelete(user._id);
+            return res.redirect(`${process.env.FE_URL}/login?error=no_account`);
+        }
+
+        // Set role for new users from registration pages
+        if (role && (role === 'expert' || role === 'customer') && user.role !== role) {
+            user.role = role;
+        }
         
         const token = jwt.sign(
             { email: user.email.toString() },
@@ -104,15 +124,27 @@ const oauthCallback = async (req: any, res: any) => {
 };
 
 // Google
-router.get('/google', passport.authenticate('google', { scope: ['profile', 'email'] }));
+router.get('/google', (req: any, res: any, next: any) => {
+    const role = req.query.role || 'customer';
+    passport.authenticate('google', { scope: ['profile', 'email'], state: role, session: false })(req, res, next);
+});
 router.get('/google/callback', passport.authenticate('google', { failureRedirect: '/login?error=google_failed', session: false }), oauthCallback);
 
 // Facebook
-router.get('/facebook', passport.authenticate('facebook', { scope: ['email'] }));
+router.get('/facebook', (req: any, res: any, next: any) => {
+    const role = req.query.role || 'customer';
+    passport.authenticate('facebook', { scope: ['email'], state: role })(req, res, next);
+});
 router.get('/facebook/callback', passport.authenticate('facebook', { failureRedirect: '/login?error=facebook_failed', session: false }), oauthCallback);
 
 // Twitter / X
-router.get('/twitter', passport.authenticate('twitter'));
+router.get('/twitter', (req: any, res: any, next: any) => {
+    const role = req.query.role || 'customer';
+    // Twitter OAuth 1.0a doesn't support state, store in session
+    (req as any).session = (req as any).session || {};
+    (req as any).session.oauthRole = role;
+    passport.authenticate('twitter')(req, res, next);
+});
 router.get('/twitter/callback', passport.authenticate('twitter', { failureRedirect: '/login?error=twitter_failed', session: false }), oauthCallback);
 
 module.exports = router;
