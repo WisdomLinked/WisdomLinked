@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 const User = require("../models/User");
 const PendingUser = require("../models/PendingUser");
+const jwt = require("jsonwebtoken");
 const PendingLogin = require("../models/PendingLogin");
 const PendingPasswordReset = require("../models/PendingPasswordReset");
 const Keyword = require("../models/Keyword")
