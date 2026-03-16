@@ -125,21 +125,21 @@ const oauthCallback = async (req: any, res: any) => {
 
 // Google
 router.get('/google', (req: any, res: any, next: any) => {
-    const role = req.query.role || 'customer';
+    const role = req.query.role || 'login';
     passport.authenticate('google', { scope: ['profile', 'email'], state: role, session: false })(req, res, next);
 });
 router.get('/google/callback', passport.authenticate('google', { failureRedirect: '/login?error=google_failed', session: false }), oauthCallback);
 
 // Facebook
 router.get('/facebook', (req: any, res: any, next: any) => {
-    const role = req.query.role || 'customer';
+    const role = req.query.role || 'login';
     passport.authenticate('facebook', { scope: ['email'], state: role })(req, res, next);
 });
 router.get('/facebook/callback', passport.authenticate('facebook', { failureRedirect: '/login?error=facebook_failed', session: false }), oauthCallback);
 
 // Twitter / X
 router.get('/twitter', (req: any, res: any, next: any) => {
-    const role = req.query.role || 'customer';
+    const role = req.query.role || 'login';
     // Twitter OAuth 1.0a doesn't support state, store in session
     (req as any).session = (req as any).session || {};
     (req as any).session.oauthRole = role;
