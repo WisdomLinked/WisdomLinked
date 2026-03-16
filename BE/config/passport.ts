@@ -18,7 +18,7 @@ async function findOrCreateOAuthUser(profile: any, provider: string) {
             user.oauthId = profile.id;
             await user.save();
         }
-        return user;
+        return { user, isNew: false };
     }
 
     // Create new user
@@ -44,7 +44,7 @@ async function findOrCreateOAuthUser(profile: any, provider: string) {
         sendEmailNewUserAccountApproval(user.username);
     } catch (e) { console.error('[OAuth] sendEmail error:', e.message); }
 
-    return user;
+    return { user, isNew: true };
 }
 
 // Build the base URL for OAuth callbacks (handles nginx SSL termination)
@@ -64,8 +64,8 @@ if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
         },
         async (_accessToken: string, _refreshToken: string, profile: any, done: Function) => {
             try {
-                const user = await findOrCreateOAuthUser(profile, 'google');
-                done(null, user);
+                const result = await findOrCreateOAuthUser(profile, 'google');
+                done(null, result);
             } catch (err) {
                 done(err, null);
             }
@@ -84,8 +84,8 @@ if (process.env.FACEBOOK_APP_ID && process.env.FACEBOOK_APP_SECRET) {
         },
         async (_accessToken: string, _refreshToken: string, profile: any, done: Function) => {
             try {
-                const user = await findOrCreateOAuthUser(profile, 'facebook');
-                done(null, user);
+                const result = await findOrCreateOAuthUser(profile, 'facebook');
+                done(null, result);
             } catch (err) {
                 done(err, null);
             }
@@ -104,8 +104,8 @@ if (process.env.TWITTER_CONSUMER_KEY && process.env.TWITTER_CONSUMER_SECRET) {
         },
         async (_accessToken: string, _refreshToken: string, profile: any, done: Function) => {
             try {
-                const user = await findOrCreateOAuthUser(profile, 'twitter');
-                done(null, user);
+                const result = await findOrCreateOAuthUser(profile, 'twitter');
+                done(null, result);
             } catch (err) {
                 done(err, null);
             }
@@ -114,7 +114,10 @@ if (process.env.TWITTER_CONSUMER_KEY && process.env.TWITTER_CONSUMER_SECRET) {
 }
 
 // Serialize / Deserialize (we use JWT so these are minimal)
-passport.serializeUser((user: any, done: Function) => done(null, user._id));
+passport.serializeUser((result: any, done: Function) => {
+    const user = result.user || result;
+    done(null, user._id);
+});
 passport.deserializeUser(async (id: string, done: Function) => {
     try {
         const user = await User.findById(id);

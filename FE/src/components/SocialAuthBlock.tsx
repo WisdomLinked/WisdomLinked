@@ -3,10 +3,11 @@ import React, { useState } from 'react';
 const POPUP_MESSAGE = 'Update your preferences in the profile section after logging in to receive better service.';
 
 const BASE_URL = (process.env.REACT_APP_API_BASE_URL || '').replace(/\/$/, '');
-function getAuthRedirectUrl(provider: string) {
+function getAuthRedirectUrl(provider: string, role?: string) {
   const envUrl = process.env[`REACT_APP_${provider.toUpperCase()}_AUTH_URL`];
-  if (envUrl) return envUrl;
-  return BASE_URL ? `${BASE_URL}/auth/${provider}` : `#`;
+  const base = envUrl || (BASE_URL ? `${BASE_URL}/auth/${provider}` : '#');
+  if (base === '#') return base;
+  return role ? `${base}?role=${role}` : base;
 }
 
 /* Minimal brand SVG icons (24x24) */
@@ -31,7 +32,7 @@ const XIcon = () => (
   </svg>
 );
 
-export default function SocialAuthBlock() {
+export default function SocialAuthBlock({ role }: { role?: string } = {}) {
   const [showPopup, setShowPopup] = useState(false);
   const [pendingProvider, setPendingProvider] = useState<string | null>(null); // 'google' | 'facebook' | 'twitter'
 
@@ -42,7 +43,7 @@ export default function SocialAuthBlock() {
 
   const handleContinue = () => {
     if (pendingProvider) {
-      const url = getAuthRedirectUrl(pendingProvider);
+      const url = getAuthRedirectUrl(pendingProvider, role);
       if (url && url !== '#') window.location.href = url;
     }
     setShowPopup(false);
