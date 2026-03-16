@@ -664,9 +664,23 @@ const updateProfile = async (req: any, res: Response) => {
         if (image) {
             updates.image = image
         }
-        if (services) {
-            updates.services = services
+        if (services && Array.isArray(services)) {
+            let _services = [];
+            for (let i = 0; i < services.length; i++) {
+                const serviceValue = typeof services[i] === 'string' ? services[i] : services[i].value;
+                if (!serviceValue) continue;
+
+                const existingService = await Service.findOne({ value: { $regex: new RegExp(`^${serviceValue}`, 'i') } });
+                if (existingService) {
+                    _services.push(existingService._id);
+                } else {
+                    const newService = await Service.create({ value: serviceValue, label: serviceValue });
+                    _services.push(newService._id);
+                }
+            }
+            updates.services = _services;
         }
+
         if (price) {
             updates.price = price
         }
@@ -682,23 +696,21 @@ const updateProfile = async (req: any, res: Response) => {
             updates.resume = await uploadFileToS3(file, 'resumes');
         }
 
-        if (keywords) {
-            let _keywords = []
+        if (keywords && Array.isArray(keywords)) {
+            let _keywords = [];
             for (let i = 0; i < keywords.length; i++) {
-                if (keywords[i].new) {
-                    const sameKeywordExist = await Keyword.find({ value: keywords[i].value })
-                    if (sameKeywordExist.length) {
-                        _keywords.push(sameKeywordExist[0]._id)
-                    } else {
-                        const temp = new Keyword(keywords[i])
-                        const newKeyword = await temp.save()
-                        _keywords.push(newKeyword._id)
-                    }
+                const keywordValue = typeof keywords[i] === 'string' ? keywords[i] : keywords[i].value;
+                if (!keywordValue) continue;
+
+                const existingKeyword = await Keyword.findOne({ value: { $regex: new RegExp(`^${keywordValue}$`, 'i') } });
+                if (existingKeyword) {
+                    _keywords.push(existingKeyword._id);
                 } else {
-                    _keywords.push(keywords[i]._id)
+                    const newKeyword = await Keyword.create({ value: keywordValue, label: keywordValue });
+                    _keywords.push(newKeyword._id);
                 }
             }
-            updates.keywords = keywords
+            updates.keywords = _keywords;
         }
         if (country) {
             updates.country = country
