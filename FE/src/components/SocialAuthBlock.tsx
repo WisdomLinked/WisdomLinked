@@ -1,6 +1,4 @@
-import React, { useState } from 'react';
-
-const POPUP_MESSAGE = 'Update your preferences in the profile section after logging in to receive better service.';
+import React from 'react';
 
 const BASE_URL = (process.env.REACT_APP_API_BASE_URL || '').replace(/\/$/, '');
 function getAuthRedirectUrl(provider: string, role?: string) {
@@ -33,87 +31,44 @@ const XIcon = () => (
 );
 
 export default function SocialAuthBlock({ role }: { role?: string } = {}) {
-  const [showPopup, setShowPopup] = useState(false);
-  const [pendingProvider, setPendingProvider] = useState<string | null>(null); // 'google' | 'facebook' | 'twitter'
-
   const handleSocialClick = (provider: string) => {
-    setPendingProvider(provider);
-    setShowPopup(true);
-  };
-
-  const handleContinue = () => {
-    if (pendingProvider) {
-      const url = getAuthRedirectUrl(pendingProvider, role);
-      if (url && url !== '#') window.location.href = url;
-    }
-    setShowPopup(false);
-    setPendingProvider(null);
+    const url = getAuthRedirectUrl(provider, role);
+    if (url && url !== '#') window.location.href = url;
   };
 
   return (
-    <>
-      <div className="mt-6">
-        <div className="relative flex items-center gap-3 my-4">
-          <div className="flex-1 h-px bg-slate-200" />
-          <span className="text-xs font-medium text-slate-400 uppercase tracking-wider">Or continue with</span>
-          <div className="flex-1 h-px bg-slate-200" />
-        </div>
-        <div className="flex items-center justify-center gap-3">
-          <button
-            type="button"
-            onClick={() => handleSocialClick('google')}
-            className="flex items-center justify-center gap-2 w-full flex-1 min-w-0 py-3 px-4 rounded-xl border border-slate-200 bg-white text-slate-700 text-sm font-medium hover:border-slate-300 hover:bg-slate-50 transition-colors"
-            aria-label="Continue with Google"
-          >
-            <GoogleIcon /> <span className="hidden sm:inline">Google</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => handleSocialClick('facebook')}
-            className="flex items-center justify-center gap-2 w-full flex-1 min-w-0 py-3 px-4 rounded-xl border border-slate-200 bg-white text-slate-700 text-sm font-medium hover:border-slate-300 hover:bg-slate-50 transition-colors"
-            aria-label="Continue with Facebook"
-          >
-            <FacebookIcon /> <span className="hidden sm:inline">Facebook</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => handleSocialClick('twitter')}
-            className="flex items-center justify-center gap-2 w-full flex-1 min-w-0 py-3 px-4 rounded-xl border border-slate-200 bg-white text-slate-700 text-sm font-medium hover:border-slate-300 hover:bg-slate-50 transition-colors"
-            aria-label="Continue with X"
-          >
-            <XIcon /> <span className="hidden sm:inline">X</span>
-          </button>
-        </div>
+    <div className="mt-6">
+      <div className="relative flex items-center gap-3 my-4">
+        <div className="flex-1 h-px bg-slate-200" />
+        <span className="text-xs font-medium text-slate-400 uppercase tracking-wider">Or continue with</span>
+        <div className="flex-1 h-px bg-slate-200" />
       </div>
-
-      {showPopup && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4"
-          style={{ background: 'rgba(15,23,42,0.4)', backdropFilter: 'blur(4px)' }}
-          onClick={() => { setShowPopup(false); setPendingProvider(null); }}
+      <div className="flex items-center justify-center gap-3">
+        <button
+          type="button"
+          onClick={() => handleSocialClick('google')}
+          className="flex items-center justify-center gap-2 w-full flex-1 min-w-0 py-3 px-4 rounded-xl border border-slate-200 bg-white text-slate-700 text-sm font-medium hover:border-slate-300 hover:bg-slate-50 transition-colors"
+          aria-label="Continue with Google"
         >
-          <div
-            className="w-full max-w-sm rounded-2xl overflow-hidden shadow-xl border border-slate-200"
-            style={{ background: 'linear-gradient(135deg, #ffffff 0%, #f8fafc 100%)' }}
-            onClick={e => e.stopPropagation()}
-          >
-            <div className="h-1 w-full" style={{ background: 'linear-gradient(90deg, #234C6A, #456882)' }} />
-            <div className="p-6">
-              <p className="text-slate-700 text-sm leading-relaxed text-center">
-                {POPUP_MESSAGE}
-              </p>
-              <button
-                type="button"
-                onClick={handleContinue}
-                className="mt-5 w-full py-3 rounded-xl text-sm font-semibold text-white transition-colors"
-                style={{ background: 'linear-gradient(135deg, #234C6A 0%, #456882 100%)' }}
-              >
-                Continue
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-    </>
+          <GoogleIcon /> <span className="hidden sm:inline">Google</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => handleSocialClick('facebook')}
+          className="flex items-center justify-center gap-2 w-full flex-1 min-w-0 py-3 px-4 rounded-xl border border-slate-200 bg-white text-slate-700 text-sm font-medium hover:border-slate-300 hover:bg-slate-50 transition-colors"
+          aria-label="Continue with Facebook"
+        >
+          <FacebookIcon /> <span className="hidden sm:inline">Facebook</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => handleSocialClick('twitter')}
+          className="flex items-center justify-center gap-2 w-full flex-1 min-w-0 py-3 px-4 rounded-xl border border-slate-200 bg-white text-slate-700 text-sm font-medium hover:border-slate-300 hover:bg-slate-50 transition-colors"
+          aria-label="Continue with X"
+        >
+          <XIcon /> <span className="hidden sm:inline">X</span>
+        </button>
+      </div>
+    </div>
   );
 }
