@@ -4,6 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { useDispatch } from "react-redux";
 import { setChosenGroupChatDetails } from "../../../../actions/chatActions";
 import { useAppSelector } from "../../../../store";
+import Avatar from "../../../../components/Avatar";
 
 const MainContainer = styled("div")({
   flexGrow: 1,
@@ -32,6 +33,7 @@ const CustomerPrivateExpertsList: React.FC = () => {
   const dispatch = useDispatch();
   const {
     auth: { userDetails },
+    friends: { onlineUsers },
   } = useAppSelector((s) => s);
 
   // derive currentUserId (can be null). It's okay to compute before useMemo.
@@ -105,26 +107,31 @@ const CustomerPrivateExpertsList: React.FC = () => {
   return (
     <MainContainer>
       <SearchInput type="text" placeholder="Search your private chats..." onChange={() => {}} />
-      {privateChats.map((p) => (
-        <div
-          key={p.chat._id ?? p.chat.groupId ?? p.otherId}
-          className="flex items-center gap-3 p-2 rounded hover:bg-black/20 cursor-pointer"
-          role="button"
-          tabIndex={0}
-          onClick={() => openChat(p)}
-          onKeyDown={(ev) => {
-            if (ev.key === "Enter" || ev.key === " ") {
-              ev.preventDefault();
-              openChat(p);
-            }
-          }}
-        >
-          <div className="flex-1">
-            <div className="text-sm font-bold text-white">{p.otherName}</div>
-            <div className="text-xs text-white">{p.chat.title ?? ""}</div>
+      {privateChats.map((p) => {
+        const isOnline = !!onlineUsers?.find((u: any) => String(u.userId) === String(p.otherId));
+        const otherImage = typeof p.other === "object" ? p.other?.image : undefined;
+        return (
+          <div
+            key={p.chat._id ?? p.chat.groupId ?? p.otherId}
+            className="flex items-center gap-3 p-2 rounded hover:bg-black/20 cursor-pointer"
+            role="button"
+            tabIndex={0}
+            onClick={() => openChat(p)}
+            onKeyDown={(ev) => {
+              if (ev.key === "Enter" || ev.key === " ") {
+                ev.preventDefault();
+                openChat(p);
+              }
+            }}
+          >
+            <Avatar username={p.otherName} isOnline={isOnline} image={otherImage} />
+            <div className="flex-1">
+              <div className="text-sm font-bold text-white">{p.otherName}</div>
+              <div className="text-xs text-white">{p.chat.title ?? ""}</div>
+            </div>
           </div>
-        </div>
-      ))}
+        );
+      })}
     </MainContainer>
   );
 };

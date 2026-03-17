@@ -1,0 +1,27 @@
+version: '3.8'
+
+services:
+  wisdomdoc_backend:
+    build:
+      context: ./BE
+      dockerfile: Dockerfile
+    container_name: wisdomdoc_backend
+    ports:
+      - "4001:4001"
+    env_file:
+      - ./BE/.env
+    volumes:
+      - ./BE/data:/app/data
+      - ./.uploads:/app/uploads
+    restart: unless-stopped
+
+  wisdomdoc_frontend:
+    build:
+      context: ./FE
+      dockerfile: Dockerfile
+    container_name: wisdomdoc_frontend
+    ports:
+      - "3001:80"
+    depends_on:
+      - wisdomdoc_backend
+    restart: unless-stopped

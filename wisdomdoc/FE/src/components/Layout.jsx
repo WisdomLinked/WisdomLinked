@@ -1,0 +1,48 @@
+import { Link, useLocation } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
+import styles from './Layout.module.css';
+
+export default function Layout({ children }) {
+  const { user, logout } = useAuth();
+  const isExpertOrAdmin = user?.role === 'expert' || user?.role === 'admin';
+  const location = useLocation();
+
+  return (
+    <div className={styles.layout}>
+      <header className={styles.header}>
+        <h1 className={styles.logo}>
+          <span className="gradient_text">Wisdom Document System</span>
+        </h1>
+        <nav className={styles.nav}>
+          {isExpertOrAdmin ? (
+            <>
+              <Link to="/committee" className={location.pathname === '/committee' ? styles.navActive : styles.navLink}>
+                Submissions
+              </Link>
+              <Link to="/profile" className={location.pathname === '/profile' ? styles.navActive : styles.navLink}>
+                Profile
+              </Link>
+            </>
+          ) : (
+            <>
+              <Link to="/" className={location.pathname === '/' ? styles.navActive : styles.navLink}>
+                My uploads
+              </Link>
+              <Link to="/profile" className={location.pathname === '/profile' ? styles.navActive : styles.navLink}>
+                Profile
+              </Link>
+            </>
+          )}
+        </nav>
+        <div className={styles.userRow}>
+          <span className={styles.email}>{user?.email}</span>
+          <span className={styles.role}>{user?.role === 'admin' ? 'Admin' : user?.role === 'expert' ? 'Expert' : 'Student'}</span>
+          <button type="button" className={styles.logout} onClick={logout}>
+            Logout
+          </button>
+        </div>
+      </header>
+      <main className={styles.main}>{children}</main>
+    </div>
+  );
+}
