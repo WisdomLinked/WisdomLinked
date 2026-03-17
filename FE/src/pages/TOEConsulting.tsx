@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { doContactUs } from '../api/api';
 import {
   Star, Users, Briefcase, GraduationCap, TrendingUp, MessageCircle, CheckCircle,
   ArrowRight, Sparkles, Menu, X, BookOpen, Globe, ChevronDown, ChevronUp, Phone, Mail, User,
   FileText, Send, AlertCircle, Lock, Upload, Calendar
 } from 'lucide-react';
-import logo from '../assets/images/logo.png';
 
 const COUNTRY_CODES = [
   { code: '+1', country: 'US/CA', flag: '🇺🇸' },
@@ -82,11 +82,24 @@ function ContactFormModal({ onClose }: { onClose: () => void }) {
     return e;
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     const e = validate();
     if (Object.keys(e).length > 0) { setErrors(e); return; }
     setSubmitting(true);
-    setTimeout(() => { setSubmitting(false); setSubmitted(true); }, 1500);
+    try {
+      await doContactUs({
+        name: form.name,
+        email: form.email,
+        countryCode: form.countryCode,
+        contactNumber: form.phone,
+        issue: `[${form.subject}] ${form.description}`,
+      });
+      setSubmitted(true);
+    } catch (err) {
+      console.error('Contact form error:', err);
+      alert('Failed to submit. Please try again.');
+    }
+    setSubmitting(false);
   };
 
   const selectedCountry = COUNTRY_CODES.find(c => c.code === form.countryCode) || COUNTRY_CODES[0];
@@ -235,54 +248,52 @@ const ACCENT_SELECTED = 'bg-[#D9EAFD]/70 text-[#234C6A]';
 
 /* ─── Signup Page ────────────────────────────────────────────────────────── */
 function SignupPage({ onClose, onGoLogin }: { onClose: () => void; onGoLogin: () => void }) {
-  const [role, setRole] = useState<'student' | 'expert' | null>(null);
-  const inputBase = `w-full rounded-xl border bg-white px-4 py-3 text-sm text-slate-800 placeholder-slate-400 outline-none transition-all duration-200 ${FOCUS_RING}`;
-  const inputNormal = `${inputBase} border-slate-200`;
-  const inputError = `${inputBase} border-red-300 focus:ring-red-300 focus:border-red-400 bg-red-50/30`;
+  const navigate = useNavigate();
 
-  if (role === 'student') {
-    return <StudentSignupForm onBack={() => setRole(null)} onClose={onClose} onGoLogin={onGoLogin} inputNormal={inputNormal} inputError={inputError} />;
-  }
-  if (role === 'expert') {
-    return <ExpertSignupForm onBack={() => setRole(null)} onClose={onClose} onGoLogin={onGoLogin} inputNormal={inputNormal} inputError={inputError} />;
-  }
+  useEffect(() => {
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = ''; };
+  }, []);
 
   return (
-    <div className="relative min-h-screen" style={{ backgroundColor: '#F8FAFC' }}>
-      <div className="auth-dots-layer auth-dots-layer--animate" aria-hidden="true" />
-      <div className="relative z-10 flex items-center justify-center p-6 min-h-screen">
-        <div className="w-full max-w-lg">
-          <div className="text-center mb-8">
-            <h1 className="font-display text-3xl font-bold text-slate-900 mb-2">Create your account</h1>
-            <p className="text-slate-500 text-sm">Choose how you want to join WisdomLinked</p>
-          </div>
-          <div className="grid sm:grid-cols-2 gap-4">
-            <button
-              onClick={() => setRole('expert')}
-              className="group p-6 rounded-2xl border-2 border-slate-200 bg-white hover:border-[#456882] hover:shadow-lg transition-all duration-300 text-left"
-            >
-              <div className="w-12 h-12 rounded-xl flex items-center justify-center mb-4 transition-colors" style={{ backgroundColor: '#D9EAFD' }}>
-                <Users size={24} className="text-[#234C6A]" />
-              </div>
-              <h3 className="font-display font-bold text-slate-800 mb-1">Join as an Expert</h3>
-              <p className="text-slate-500 text-xs">Share your expertise and mentor students globally</p>
-            </button>
-            <button
-              onClick={() => setRole('student')}
-              className="group p-6 rounded-2xl border-2 border-slate-200 bg-white hover:border-[#456882] hover:shadow-lg transition-all duration-300 text-left"
-            >
-              <div className="w-12 h-12 rounded-xl bg-amber-100 flex items-center justify-center mb-4 group-hover:bg-amber-200 transition-colors">
-                <GraduationCap size={24} className="text-amber-600" />
-              </div>
-              <h3 className="font-display font-bold text-slate-800 mb-1">Join as a student</h3>
-              <p className="text-slate-500 text-xs">Get guidance on studies, work abroad & research</p>
-            </button>
-          </div>
-          <p className="text-center text-slate-500 text-sm mt-6">
-            Already have an account? <button type="button" onClick={onGoLogin} className="font-semibold text-[#234C6A] hover:underline">Log in</button>
-          </p>
-          <button onClick={onClose} className="mt-4 w-full py-2.5 rounded-xl border border-slate-200 text-slate-600 font-semibold text-sm hover:bg-slate-50">Cancel</button>
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style={{ background: 'rgba(15,15,35,0.65)', backdropFilter: 'blur(8px)' }}
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      <div className="w-full max-w-lg bg-white rounded-3xl p-8 shadow-2xl relative" style={{ animation: 'modalIn 0.35s cubic-bezier(0.34,1.56,0.64,1) both' }}>
+        <button onClick={onClose} className="absolute top-4 right-4 w-8 h-8 flex items-center justify-center rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 transition-all z-10">
+          <X size={16} />
+        </button>
+        <div className="text-center mb-8">
+          <h1 className="font-display text-3xl font-bold text-slate-900 mb-2">Create your account</h1>
+          <p className="text-slate-500 text-sm">Choose how you want to join WisdomLinked</p>
         </div>
+        <div className="grid sm:grid-cols-2 gap-4">
+          <button
+            onClick={() => { onClose(); navigate('/expertregister'); }}
+            className="group p-6 rounded-2xl border-2 border-slate-200 bg-white hover:border-[#456882] hover:shadow-lg transition-all duration-300 text-left"
+          >
+            <div className="w-12 h-12 rounded-xl flex items-center justify-center mb-4 transition-colors" style={{ backgroundColor: '#D9EAFD' }}>
+              <Users size={24} className="text-[#234C6A]" />
+            </div>
+            <h3 className="font-display font-bold text-slate-800 mb-1">Join as an Expert</h3>
+            <p className="text-slate-500 text-xs">Share your expertise and mentor students globally</p>
+          </button>
+          <button
+            onClick={() => { onClose(); navigate('/customerregister'); }}
+            className="group p-6 rounded-2xl border-2 border-slate-200 bg-white hover:border-[#456882] hover:shadow-lg transition-all duration-300 text-left"
+          >
+            <div className="w-12 h-12 rounded-xl bg-amber-100 flex items-center justify-center mb-4 group-hover:bg-amber-200 transition-colors">
+              <GraduationCap size={24} className="text-amber-600" />
+            </div>
+            <h3 className="font-display font-bold text-slate-800 mb-1">Join as a student</h3>
+            <p className="text-slate-500 text-xs">Get guidance on studies, work abroad & research</p>
+          </button>
+        </div>
+        <p className="text-center text-slate-500 text-sm mt-6">
+          Already have an account? <button type="button" onClick={onGoLogin} className="font-semibold text-[#234C6A] hover:underline">Log in</button>
+        </p>
       </div>
     </div>
   );
@@ -1418,6 +1429,7 @@ export default function TOEConsulting() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
   const [showContactModal, setShowContactModal] = useState(false);
+  const [showSignupModal, setShowSignupModal] = useState(false);
   const [pills, setPills] = useState(
     PILL_STARTS.map(startIdx => ({ uniIdx: startIdx, shown: false, fading: false }))
   );
@@ -1564,6 +1576,7 @@ export default function TOEConsulting() {
   return (
     <div className="min-h-screen text-slate-900 overflow-x-hidden" style={{ fontFamily: "'DM Sans', sans-serif", backgroundColor: '#F8FAFC' }}>
       {showContactModal && <ContactFormModal onClose={() => setShowContactModal(false)} />}
+      {showSignupModal && <SignupPage onClose={() => setShowSignupModal(false)} onGoLogin={() => { setShowSignupModal(false); navigate('/login'); }} />}
 
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700;800&family=DM+Sans:wght@300;400;500;600&family=Inter:wght@400;500;600;700;800&display=swap');
@@ -1642,18 +1655,8 @@ export default function TOEConsulting() {
       {/* NAV */}
       <header className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${scrolled ? 'bg-[#F8FAFC]/95 backdrop-blur-md shadow-sm border-b border-[#BCCCDC]' : 'bg-[#F8FAFC]/80 backdrop-blur-sm'}`}>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 flex items-center justify-between h-16 sm:h-[4.5rem] py-3 sm:py-4">
-          <button
-            type="button"
-            onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
-            className="flex items-center gap-3 group"
-          >
-            <div className="h-12 w-12 sm:h-[3.5rem] sm:w-[3.5rem] rounded-2xl bg-white border border-[#D0DFED] flex items-center justify-center shadow-md shadow-[#D9EAFD] group-hover:shadow-[#9AA6B2] transition-shadow overflow-hidden">
-              <img
-                src={logo}
-                alt="WisdomLinked logo"
-                className="h-10 w-10 sm:h-11 sm:w-11 object-contain"
-              />
-            </div>
+          <button type="button" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })} className="flex items-center gap-3 group">
+            <img src="/logo.png" alt="WisdomLinked" className="h-10 w-10 rounded-xl object-contain" />
             <div className="leading-none">
               <div className="font-display font-bold text-[1.35rem] text-slate-900">WisdomLinked</div>
             </div>
@@ -1665,7 +1668,7 @@ export default function TOEConsulting() {
           </nav>
           <div className="hidden lg:flex items-center gap-3">
             <button onClick={() => navigate('/login')} className="px-5 py-2.5 rounded-full border border-[#BCCCDC] text-slate-900 hover:border-[#9AA6B2] hover:text-[#234C6A] transition-all text-sm font-semibold bg-white/85">Login</button>
-            <button onClick={() => navigate('/signup')} className="btn-primary px-5 py-2.5 rounded-full text-white font-semibold text-sm shadow-md shadow-[#BCCCDC]">Sign Up</button>
+            <button onClick={() => setShowSignupModal(true)} className="btn-primary px-5 py-2.5 rounded-full text-white font-semibold text-sm shadow-md shadow-[#BCCCDC]">Sign Up</button>
           </div>
           <button className="lg:hidden p-2 rounded-xl border border-slate-200 hover:bg-slate-100 transition" onClick={() => setMobileMenuOpen(v => !v)}>
             {mobileMenuOpen ? <X className="w-5 h-5 text-slate-600" /> : <Menu className="w-5 h-5 text-slate-600" />}
@@ -1678,7 +1681,7 @@ export default function TOEConsulting() {
             ))}
             <div className="flex gap-3 pt-2">
               <button onClick={() => { setMobileMenuOpen(false); navigate('/login'); }} className="flex-1 py-2.5 rounded-full border border-slate-300 text-slate-700 text-sm font-semibold">Login</button>
-              <button onClick={() => { setMobileMenuOpen(false); navigate('/signup'); }} className="flex-1 py-2.5 btn-primary rounded-full text-white text-sm font-semibold">Sign Up</button>
+              <button onClick={() => { setMobileMenuOpen(false); setShowSignupModal(true); }} className="flex-1 py-2.5 btn-primary rounded-full text-white text-sm font-semibold">Sign Up</button>
             </div>
           </div>
         )}
@@ -1741,11 +1744,11 @@ export default function TOEConsulting() {
               </p>
 
               <div className="flex flex-col sm:flex-row gap-3 items-start mb-10 animate-fade-up" style={{ animationDelay: '0.4s' }}>
-                <button onClick={() => navigate('/signup')} className="group btn-primary px-8 py-4 rounded-2xl font-semibold text-white flex items-center gap-2.5 shadow-xl text-[0.9375rem]" style={{ boxShadow: '0 10px 40px rgba(35,60,82,0.25)' }}>
+                <button onClick={() => setShowSignupModal(true)} className="group btn-primary px-8 py-4 rounded-2xl font-semibold text-white flex items-center gap-2.5 shadow-xl text-[0.9375rem]" style={{ boxShadow: '0 10px 40px rgba(35,60,82,0.25)' }}>
                   Book a Consultation
                   <ArrowRight className="w-4 h-4 group-hover:translate-x-1.5 transition-transform" />
                 </button>
-                <button onClick={() => navigate('/signup')} className="px-8 py-4 rounded-2xl border-2 border-slate-200 bg-white/70 backdrop-blur-sm text-slate-700 font-semibold text-[0.9375rem] hover:border-[#456882] hover:text-[#234C6A] hover:bg-white transition-all duration-300">
+                <button onClick={() => navigate('/expertregister')} className="px-8 py-4 rounded-2xl border-2 border-slate-200 bg-white/70 backdrop-blur-sm text-slate-700 font-semibold text-[0.9375rem] hover:border-[#456882] hover:text-[#234C6A] hover:bg-white transition-all duration-300">
                   Become an Expert
                 </button>
               </div>
@@ -1906,7 +1909,7 @@ export default function TOEConsulting() {
                       ))}
                     </div>
                   </div>
-                  <button onClick={() => navigate('/signup')} className="mt-6 w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl text-sm font-semibold text-white transition-all group-hover:gap-2.5 shrink-0" style={{ background: 'linear-gradient(135deg, #234C6A 0%, #456882 100%)' }}>
+                  <button onClick={() => setShowSignupModal(true)} className="mt-6 w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl text-sm font-semibold text-white transition-all group-hover:gap-2.5 shrink-0" style={{ background: 'linear-gradient(135deg, #234C6A 0%, #456882 100%)' }}>
                     Start now <ArrowRight className="w-4 h-4" />
                   </button>
                 </div>
@@ -1994,7 +1997,7 @@ export default function TOEConsulting() {
                     </div>
                   ))}
                 </div>
-                <button onClick={openContact} className="group btn-primary px-8 py-4 rounded-full font-semibold text-white text-base flex items-center gap-2 shadow-lg shadow-[#BCCCDC]">
+                <button onClick={() => navigate('/expertregister')} className="group btn-primary px-8 py-4 rounded-full font-semibold text-white text-base flex items-center gap-2 shadow-lg shadow-[#BCCCDC]">
                   Apply to Become an Expert <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
                 </button>
               </div>
@@ -2204,19 +2207,8 @@ export default function TOEConsulting() {
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-8 sm:gap-12 mb-8 sm:mb-12">
               <div className="md:col-span-1">
                 <div className="flex items-center gap-3 mb-4">
-                  <div className="h-12 w-12 rounded-2xl bg-gradient-to-br from-[#E2ECF5] to-white border border-[#D0DFED] flex items-center justify-center shadow-md shadow-[#D9EAFD] overflow-hidden">
-                    <img
-                      src={logo}
-                      alt="WisdomLinked logo"
-                      className="h-10 w-10 object-contain"
-                    />
-                  </div>
-                  <div>
-                    <span className="font-black text-2xl tracking-[0.12em] uppercase text-white">
-                      WisdomLinked
-                    </span>
-                    <div className="text-xs text-[#D9EAFD]">Connect with experts</div>
-                  </div>
+                  <img src="/logo.png" alt="WisdomLinked" className="h-10 w-10 rounded-xl object-contain" />
+                  <div><div className="font-display font-bold text-lg text-white">WisdomLinked</div><div className="text-xs text-[#D9EAFD]">Connect with experts</div></div>
                 </div>
                 <p className="text-slate-400 text-sm leading-relaxed">Connecting expertise with ambition, globally.</p>
                 <button onClick={openContact} className="mt-4 inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/10 hover:bg-white/15 border border-white/10 text-white text-sm font-semibold transition">

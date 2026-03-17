@@ -19,13 +19,8 @@ import ForgotPassword from './pages/ForgotPassword';
 import { VideoChatProvider } from './components/VideoChat/VideoChatContext';
 
 // Lazy-loaded pages — only downloaded when the user navigates to them
-const LandingPage = React.lazy(() => import('./pages/LandingPage'));
-const LoginPage = React.lazy(() => import('./pages/LoginPage'));
-const SignupPage = React.lazy(() => import('./pages/SignupPage'));
-const LoginSuccessPage = React.lazy(() => import('./pages/LoginSuccessPage'));
 const StudentDashboard = React.lazy(() => import('./pages/StudentDashboard'));
 const WLLogin = React.lazy(() => import('./pages/WLLogin'));
-const WLSignupChoice = React.lazy(() => import('./pages/WLSignupChoice'));
 const WLCustomerRegister = React.lazy(() => import('./pages/WLCustomerRegister'));
 const WLExpertRegister = React.lazy(() => import('./pages/WLExpertRegister'));
 const TOEConsulting = React.lazy(() => import('./pages/TOEConsulting'));
@@ -33,6 +28,8 @@ const AboutUS = React.lazy(() => import('./pages/AboutUS'));
 const Rules = React.lazy(() => import('./pages/Ruels'));
 const Services = React.lazy(() => import('./pages/Services'));
 const ContactUS = React.lazy(() => import('./pages/ContactUS'));
+const OAuthCallback = React.lazy(() => import('./pages/OAuthCallback'));
+const WLProfileCompletion = React.lazy(() => import('./pages/WLProfileCompletion'));
 
 // Heavy dashboard chunks — MUI, calendars, quill, etc. only load after login
 const ExpertDashboard = React.lazy(() => import('./pages/Dashboard/_ExpertDashboard'));
@@ -51,19 +48,13 @@ const UnauthenticatedRoutes = () => {
   return (
     <React.Fragment>
       <Routes>
-        <Route path="/" element={<LandingPage />} />
-        <Route path="/login" element={<LoginPage />} />
-        <Route path="/signup" element={<SignupPage />} />
-        <Route path="/login-success" element={<LoginSuccessPage />} />
-        <Route path="/dashboard" element={<StudentDashboard />} />
-
-        {/* Existing auth flows retained for backward compatibility */}
-        <Route path="/legacy-login" element={<WLLogin />} />
-        <Route path="/legacy-signup" element={<WLSignupChoice />} />
+        <Route path="/oauth-callback" element={<OAuthCallback />} />
+        <Route path="/auth-complete-profile" element={<WLProfileCompletion />} />
         <Route path="/customerregister" element={<WLCustomerRegister />} />
         <Route path="/expertregister" element={<WLExpertRegister />} />
         <Route path="/forgotpassword" element={<ForgotPassword />} />
         <Route path="/verification/:email/:confirmCode" element={<VerifyEmail />} />
+        <Route path="/login" element={<WLLogin />} />
         <Route path="/aboutus" element={
           <React.Fragment>
             <Header />
@@ -92,8 +83,7 @@ const UnauthenticatedRoutes = () => {
             <LandingFooter />
           </React.Fragment>
         } />
-        {/* Fallback to landing for any other marketing routes */}
-        <Route path="/*" element={<LandingPage />} />
+        <Route path="/*" element={<TOEConsulting />} />
       </Routes>
     </React.Fragment>
   )
@@ -106,6 +96,11 @@ const AuthenticatedRoutes = () => {
       <Route path={'expertdashboard/*'} element={
         <PrivateRoute>
           <ExpertDashboard />
+        </PrivateRoute>
+      } />
+      <Route path={'studentdashboard/*'} element={
+        <PrivateRoute>
+          <StudentDashboard />
         </PrivateRoute>
       } />
       <Route path={'customerdashboard/*'} element={
@@ -190,6 +185,12 @@ function App() {
   useEffect(() => {
     if (!oldUserDetails && userDetails?.email) {
       set_oldUserDetails(userDetails)
+      
+      const path = window.location.pathname;
+      if (path.includes('/oauth-callback') || path.includes('/verification/') || path.includes('/auth-complete-profile')) {
+        return;
+      }
+
       let locationUrl = ''
       const location = localStorage.getItem("location")
       if (location !== 'login' && location !== 'expertregister' && location !== 'customerregister') {
@@ -202,7 +203,11 @@ function App() {
       if (locationUrl) {
         navigate(locationUrl)
       } else {
-        navigate('/user/' + userDetails?.role + "dashboard")
+        if (userDetails?.role === 'customer') {
+          navigate('/user/studentdashboard')
+        } else {
+          navigate('/user/' + userDetails?.role + "dashboard")
+        }
       }
     }
   }, [userDetails, navigate])

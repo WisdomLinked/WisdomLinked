@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 const User = require("../models/User");
 const PendingUser = require("../models/PendingUser");
+const jwt = require("jsonwebtoken");
 const PendingLogin = require("../models/PendingLogin");
 const PendingPasswordReset = require("../models/PendingPasswordReset");
 const Keyword = require("../models/Keyword")
@@ -25,8 +26,12 @@ const { S3Client, PutObjectCommand, DeleteObjectCommand } = require('@aws-sdk/cl
 
 sgMail.setApiKey(process.env.SENDGRID_API_KEY);
 
+const doEndpoint = (process.env.DO_SPACES_ENDPOINT || '').startsWith('https://') 
+    ? process.env.DO_SPACES_ENDPOINT 
+    : `https://${process.env.DO_SPACES_ENDPOINT}`;
+
 const s3 = new S3Client({
-    endpoint: process.env.DO_SPACES_ENDPOINT,
+    endpoint: doEndpoint,
     region: 'us-east-1',
     credentials: {
         accessKeyId: process.env.DO_SPACES_KEY || '',
@@ -55,6 +60,26 @@ const getUniqueConfirmCode = async () => {
         return Math.random().toString(36).substring(2, 15);
     }
 }
+
+export const getArrayField = (req: Request, key: string) => {
+    let val = req.body[key] || req.body[`${key}[]`];
+    if (!val) return null;
+    if (Array.isArray(val)) return val;
+    if (typeof val === 'string') {
+        if (val.trim().startsWith('[') && val.trim().endsWith(']')) {
+            try { return JSON.parse(val); } 
+            catch (e) {
+                try {
+                    const innerString = val.trim().slice(1, -1);
+                    const items = innerString.split(',').map(item => item.trim().replace(/^['"]|['"]$/g, ''));
+                    return items.filter(i => i.length > 0);
+                } catch (err) { return [val]; }
+            }
+        }
+        return [val]; 
+    }
+    return [val];
+};
 
 const getKeywordsAndServices = async (req: Request, res: Response) => {
     try {
@@ -102,8 +127,6 @@ const register = async (req: Request, res: Response) => {
         const username = safeParse(req.body.username)
         const title = safeParse(req.body.title)
         const description = safeParse(req.body.description)
-        const keywords = safeParse(req.body.keywords)
-        const services = safeParse(req.body.services)
         const country = safeParse(req.body.country)
         const state = safeParse(req.body.state)
         const city = safeParse(req.body.city)
@@ -111,6 +134,10 @@ const register = async (req: Request, res: Response) => {
         const email = safeParse(req.body.email)
         const password = safeParse(req.body.password)
         const timeSlots = safeParse(req.body.timeSlots)
+        const specialNote = safeParse(req.body.specialNote)
+        
+        const keywords = getArrayField(req, 'keywords');
+        const services = getArrayField(req, 'services');
 
         if (checkTitleNameInvalid('Username', username)) {
             return res.status(200).json({ status: 'FAIL', error: checkTitleNameInvalid('Username', username) });
@@ -188,7 +215,8 @@ const register = async (req: Request, res: Response) => {
             role,
             timeSlots,
             price: 10,
-            confirmCode
+            confirmCode,
+            ...(specialNote && { specialNote })
         });
 
         // create user document and save in database
@@ -202,12 +230,10 @@ const register = async (req: Request, res: Response) => {
         // res.cookie('accessToken', token, { maxAge: process.env.COOKIE_EXPIRED_TIME, httpOnly: true })
 
         // SEND EMAIL TO CUSTOMER
-        console.log('[register] Email:', email);
-        console.log('[register] confirmCode:', confirmCode);
-        console.log('[register] FE_URL:', process.env.FE_URL);
 
-        let confirmLink = `<div>Verify your registration to TOE by the confirmation Link <br/>${process.env.FE_URL}/verification/${email}/${confirmCode}</div>`
-        await utils.sendOTP(
+
+        let confirmLink = `<div>Verify your registration to Wisdom Linked by clicking the confirmation link below:<br/><a href="${process.env.FE_URL}/verification/${email}/${confirmCode}">Verify Email</a></div>`
+        await utils.sendMagicLink(
             // process.env.NODE_ENV === 'development' ? 'varunsahni10134@gmail.com' : email,
             email,
             utils.getCurrentDateString(),
@@ -225,7 +251,6 @@ const register = async (req: Request, res: Response) => {
 
 const healthCheck = async (req: Request, res: Response) => {
     try {
-        console.log("health check")
         res.status(200).send("OK Ready")
     } catch (err) {
         console.log(err)
@@ -238,14 +263,14 @@ const resendConfirmEmail = async (req: Request, res: Response) => {
         const { email } = req.body
 
         // check if user exists
-        const pendingUser = await PendingUser.find({ email: email.toLowerCase() });
+        const pendingUser = await PendingUser.findOne({ email: email.toLowerCase() });
         if (!pendingUser) {
             throw new Error('Pending registration request not found')
         }
 
         // SEND EMAIL TO CUSTOMER
-        let confirmLink = `<div>Verify your registration to TOE by the confirmation Link <br/>${process.env.FE_URL}/verification/${email}/${pendingUser.confirmCode}</div>`
-        await utils.sendOTP(
+        let confirmLink = `<div>Verify your registration to Wisdom Linked by clicking the confirmation link below:<br/><a href="${process.env.FE_URL}/verification/${email}/${pendingUser.confirmCode}">Verify Email</a></div>`
+        await utils.sendMagicLink(
             // process.env.NODE_ENV === 'development' ? 'varunsahni10134@gmail.com' : email,
             email,
             utils.getCurrentDateString(),
@@ -275,7 +300,7 @@ const verifyRegistration = async (req: Request, res: Response) => {
             return res.status(200).json({ status: 'FAIL', error: "Verification email was expired." });
         }
 
-        console.log(pendingUser, '/////')
+
 
         const newUser = new User({
             username: pendingUser.username,
@@ -293,6 +318,7 @@ const verifyRegistration = async (req: Request, res: Response) => {
             role: pendingUser.role,
             timeSlots: pendingUser.timeSlots,
             price: pendingUser.price,
+            ...(pendingUser.specialNote && { specialNote: pendingUser.specialNote })
         });
 
         const user = await newUser.save()
@@ -302,11 +328,71 @@ const verifyRegistration = async (req: Request, res: Response) => {
         //
         sendEmailNewUserAccountApproval(user.username)
 
+        const token = jwt.sign(
+            { email: user.email.toString() },
+            process.env.JWT_SECRET,
+            { expiresIn: process.env.COOKIE_EXPIRED_TIME || '24h' }
+        );
+        user.token = token;
+        await user.save();
+        
+        user.token = null;
+        user.password = null;
+        
+        res.cookie('accessToken', token, {
+            maxAge: Number(process.env.COOKIE_EXPIRED_TIME) || 86400000,
+            httpOnly: true
+        });
+
+        // The user just joined, so groupChats might be empty, but it's safe to update
+        updateActiveRoomsOfUsers(user._id.toString(), user.groupChats || []);
+
         res.status(200).json({
-            status: 'SUCCESS'
+            status: 'SUCCESS',
+            userDetails: user
         });
     } catch (err) {
         console.log(err)
+        return res.status(500).send(err.message);
+    }
+};
+
+const checkVerificationStatus = async (req: Request, res: Response) => {
+    try {
+        const email = String(req.query.email || '');
+        if (!email) return res.status(200).json({ status: 'FAIL', error: 'Email missing' });
+
+        // If user is in User collection, they are verified
+        const user = await getFullUserData(email);
+        if (user) {
+            const token = jwt.sign(
+                { email: user.email.toString() },
+                process.env.JWT_SECRET,
+                { expiresIn: process.env.COOKIE_EXPIRED_TIME || '24h' }
+            );
+            user.token = token;
+            await user.save();
+            
+            user.token = null;
+            user.password = null;
+
+            res.cookie('accessToken', token, {
+                maxAge: Number(process.env.COOKIE_EXPIRED_TIME) || 86400000,
+                httpOnly: true
+            });
+
+            return res.status(200).json({ status: 'VERIFIED', userDetails: user });
+        }
+
+        // If in PendingUser, still pending
+        const pending = await PendingUser.findOne({ email: email.toLowerCase() });
+        if (pending) {
+            return res.status(200).json({ status: 'PENDING' });
+        }
+
+        return res.status(200).json({ status: 'NOT_FOUND' });
+    } catch (err: any) {
+        console.error(err);
         return res.status(500).send(err.message);
     }
 };
@@ -551,9 +637,35 @@ const updateMissedChats = async (req: any, res: Response) => {
 const updateProfile = async (req: any, res: Response) => {
     try {
         const { email } = req.user
-        const { username, title, description, image, keywords, services, country, state, city, phoneNumber, price, joinPopupBlocked } = req.body;
+        
+        const safeParse = (val) => {
+            if (!val) return null;
+            try { return JSON.parse(val); } catch (e) {
+                if (typeof val === 'string' && val.trim().startsWith('[') && val.trim().endsWith(']')) {
+                    try {
+                        const innerString = val.slice(1, -1);
+                        const items = innerString.split(',').map(item => item.trim().replace(/^['"]|['"]$/g, ''));
+                        return items.filter(i => i.length > 0);
+                    } catch (innerError) { return val; }
+                }
+                return val;
+            }
+        };
 
-        if (checkTitleNameInvalid('Username', username)) {
+        const username = safeParse(req.body.username) || req.body.username;
+        const title = safeParse(req.body.title) || req.body.title;
+        const description = safeParse(req.body.description) || req.body.description;
+        const image = safeParse(req.body.image) || req.body.image;
+        const keywords = getArrayField(req, 'keywords') || safeParse(req.body.keywords) || req.body.keywords;
+        const services = getArrayField(req, 'services') || safeParse(req.body.services) || req.body.services;
+        const country = safeParse(req.body.country) || req.body.country;
+        const state = safeParse(req.body.state) || req.body.state;
+        const city = safeParse(req.body.city) || req.body.city;
+        const phoneNumber = safeParse(req.body.phoneNumber) || req.body.phoneNumber;
+        const price = safeParse(req.body.price) || req.body.price;
+        const joinPopupBlocked = safeParse(req.body.joinPopupBlocked) || req.body.joinPopupBlocked;
+
+        if (username && checkTitleNameInvalid('Username', username)) {
             throw new Error(checkTitleNameInvalid('Username', username))
         }
 
@@ -570,29 +682,53 @@ const updateProfile = async (req: any, res: Response) => {
         if (image) {
             updates.image = image
         }
-        if (services) {
-            updates.services = services
+        if (services && Array.isArray(services)) {
+            let _services = [];
+            for (let i = 0; i < services.length; i++) {
+                const serviceValue = typeof services[i] === 'string' ? services[i] : services[i].value;
+                if (!serviceValue) continue;
+
+                const existingService = await Service.findOne({ value: { $regex: new RegExp(`^${serviceValue}`, 'i') } });
+                if (existingService) {
+                    _services.push(existingService._id);
+                } else {
+                    const newService = await Service.create({ value: serviceValue, label: serviceValue });
+                    _services.push(newService._id);
+                }
+            }
+            updates.services = _services;
         }
+
         if (price) {
             updates.price = price
         }
-        if (keywords) {
-            let _keywords = []
+        
+        const file = req.file
+        if (file) {
+            // If they had an old resume, delete it
+            const me = await User.findOne({ email: email });
+            if (me && me.resume) {
+                const oldKey = me.resume.replace(`https://${process.env.DO_SPACES_BUCKET}.${process.env.DO_SPACES_ENDPOINT.replace('https://', '')}/`, '');
+                deleteFileFromS3(oldKey);
+            }
+            updates.resume = await uploadFileToS3(file, 'resumes');
+        }
+
+        if (keywords && Array.isArray(keywords)) {
+            let _keywords = [];
             for (let i = 0; i < keywords.length; i++) {
-                if (keywords[i].new) {
-                    const sameKeywordExist = await Keyword.find({ value: keywords[i].value })
-                    if (sameKeywordExist.length) {
-                        _keywords.push(sameKeywordExist[0]._id)
-                    } else {
-                        const temp = new Keyword(keywords[i])
-                        const newKeyword = await temp.save()
-                        _keywords.push(newKeyword._id)
-                    }
+                const keywordValue = typeof keywords[i] === 'string' ? keywords[i] : keywords[i].value;
+                if (!keywordValue) continue;
+
+                const existingKeyword = await Keyword.findOne({ value: { $regex: new RegExp(`^${keywordValue}$`, 'i') } });
+                if (existingKeyword) {
+                    _keywords.push(existingKeyword._id);
                 } else {
-                    _keywords.push(keywords[i]._id)
+                    const newKeyword = await Keyword.create({ value: keywordValue, label: keywordValue });
+                    _keywords.push(newKeyword._id);
                 }
             }
-            updates.keywords = keywords
+            updates.keywords = _keywords;
         }
         if (country) {
             updates.country = country
@@ -687,6 +823,7 @@ const uploadFileToS3 = async (file: any, folder: string) => {
         return fileUrl;
     } catch (err: any) {
         console.log('Error uploading file', err.message);
+        return '';
     }
 }
 
@@ -755,11 +892,11 @@ const leaveFeedback = async (req: any, res: Response) => {
 
         let userRating = 0
         for (let i = 0; i < otherUser.feedbacks.length; i++) {
-            console.log(otherUser.feedbacks[i])
+
             userRating += otherUser.feedbacks[i].rating
         }
         userRating = parseFloat((rating / otherUser.feedbacks.length).toFixed(2))
-        console.log(userRating)
+
         otherUser.rating = userRating
 
         await otherUser.save()
@@ -775,7 +912,6 @@ const leaveFeedback = async (req: any, res: Response) => {
 const getTimeZone = async (req: Request, res: Response) => {
     const { lat, lng } = req.query
     const apiKey = process.env.TIMEZONE_API_KEY;
-    console.log("inside gettimezone", req.body)
     try {
         const response = await fetch(`https://api.timezonedb.com/v2.1/get-time-zone?key=${apiKey}&format=json&by=position&lat=${lat}&lng=${lng}`, {
             method: "GET",
@@ -792,8 +928,7 @@ const getTimeZone = async (req: Request, res: Response) => {
 
         const data = await response.json();
         if (data.status === 'OK') {
-            console.log('Time Zone:', data.zoneName);
-            console.log('Local Time:', data.formatted);
+
         } else {
             console.error('Error:', data.message);
         }
@@ -823,6 +958,13 @@ const submitContactForm = async (req: Request, res: Response) => {
             issue,
         });
         await contactEntry.save();
+
+        // Send email notification to admin
+        try {
+            await utils.sendContactDetails('admin@wisdomlinked.com', name, email, issue);
+        } catch (emailErr: any) {
+            console.error('Contact form email failed:', emailErr.message);
+        }
 
         return res.status(200).json({ message: "Contact form submitted successfully." });
     } catch (error) {
@@ -888,6 +1030,7 @@ module.exports = {
     leaveFeedback,
     resendConfirmEmail,
     verifyRegistration,
+    checkVerificationStatus,
     confirmLoginByCode,
     passwordResetRequest,
     confirmPasswordResetByCode,

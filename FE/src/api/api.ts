@@ -130,13 +130,20 @@ export const confirmPasswordResetByCode = async ({ email, password, code }: any)
 export const verifyRegistration = async ({ email, confirmCode }: any) => {
     try {
         const res = await api.post<any>("auth/verifyRegistration", { email, confirmCode });
-
         return res.data;
-    } catch (err: any) {
-        console.log(err, '////')
-        return checkForAuthorization(err);
+    } catch (error) {
+        return { status: "FAIL" }
     }
-};
+}
+
+export const checkVerificationStatus = async (email: string) => {
+    try {
+        const res = await api.get<any>(`auth/checkVerification?email=${encodeURIComponent(email)}`);
+        return res.data;
+    } catch (error) {
+        return { status: "FAIL" }
+    }
+}
 
 export const passwordResetRequest = async ({ email, password }: any) => {
     try {
@@ -478,24 +485,15 @@ export const callApi = async (method: string, url: string, data: any, file?: any
             formData.append("media", file, file.name);
         }
 
-        console.log("Making API Call:", {
-            method,
-            url: BASE_URL + url,
-            data,
-        });
 
 
-        let options = {
+        let options: RequestInit = {
             method: method,
-            body: formData
+            body: formData,
+            credentials: 'include'
         }
         return fetch(BASE_URL + url, options)
             .then((response: any) => {
-                console.log("API Response:", {
-                    status: response.status,
-                    statusText: response.statusText,
-                    headers: response.headers,
-                });
 
                 if (!response.ok) {
                     const error = Object.assign({}, response, {

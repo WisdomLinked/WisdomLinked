@@ -169,6 +169,8 @@ jobs:
               -e ZOHONOREPLY_PASS="${{ secrets.ZOHONOREPLY_PASS }}" \
               -e ZOHOADMIN_USER="${{ secrets.ZOHOADMIN_USER }}" \
               -e ZOHOADMIN_PASS="${{ secrets.ZOHOADMIN_PASS }}" \
+              -e GOOGLE_CLIENT_ID="${{ secrets.GOOGLE_CLIENT_ID }}" \
+              -e GOOGLE_CLIENT_SECRET="${{ secrets.GOOGLE_CLIENT_SECRET }}" \
               ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE }}:staging
 
             # Run the Frontend Staging Container
