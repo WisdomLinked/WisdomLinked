@@ -14,7 +14,7 @@ import SeminarDetails from "../../seminarDetails";
 import { deleteGroupAction } from "../../../../actions/groupChatActions";
 import ExpertSeminar from "../../_ExpertDashboard/seminar";
 
-const Messages = () => {
+const Messages = ({ theme = "dark" }: any) => {
     const dispatch = useDispatch()
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const audioRef = useRef<HTMLAudioElement>(null);
@@ -192,7 +192,10 @@ const Messages = () => {
     }, [messages]);
 
     return (
-        <div className="w-full flex flex-col items-center h-full overflow-auto pb-[10px]" onScroll={handleScroll}>
+        <div
+            className={`w-full flex flex-col items-center h-full overflow-auto pb-[10px] ${theme === "light" ? "bg-white" : ""}`}
+            onScroll={handleScroll}
+        >
             <audio ref={audioRef} preload="auto">
                 <source
                     src="https://www.soundjay.com/buttons/sounds/button-16a.mp3"
@@ -206,10 +209,11 @@ const Messages = () => {
                 openCalendarModal={() => set_eventsModalShow(true)}
                 openSeminarModal={() => set_seminarDetailsModalShow(true)}
                 openEditSeminarModal={() => set_editSeminarModalShow(true)}
+                theme={theme}
             />
             {
                 gotAllChats ?
-                    <div className="mt-[15px] text-[13px] text-grey text-center px-6">
+                    <div className={`mt-[15px] text-[13px] text-center px-6 ${theme === "light" ? "text-slate-500" : "text-grey"}`}>
                         {chat.chosenChatDetails?.userId
                             ? `This is the beginning of your conversation with ${chat.chosenChatDetails?.username}`
                             : "This is the beginning of the conversation with your friends!"}
@@ -253,7 +257,7 @@ const Messages = () => {
                 return (
                     <div key={message._id + index} style={{ width: "97%" }}>
                         {(!isSameDay || index === 0) && (
-                            <DateSeparator date={message.createdAt} />
+                            <DateSeparator date={message.createdAt} theme={theme} />
                         )}
 
                         <Message
@@ -272,6 +276,7 @@ const Messages = () => {
                             disableBookButton={disableBookButton}
                             myRole={userDetails?.role}
                             hideDate={isSameDay && isSameTime}
+                            theme={theme}
                         />
                     </div>
                 );
@@ -279,11 +284,11 @@ const Messages = () => {
             <div ref={messagesEndRef} />
             {
                 eventsModalShow ?
-                    <div className="absolute top-0 left-0 w-full h-full bg-white bg-opacity-10 backdrop-blur-sm z-[1000] p-4 sm:p-8">
-                        <div className="w-full h-full bg-black relative text-white rounded-md p-6 flex flex-col">
-                            <div className="text-center text-white text-2xl mb-6">Events with "{chosenChatDetails?.username}"</div>
+                    <div className={`absolute top-0 left-0 w-full h-full z-[1000] p-4 sm:p-8 ${theme === "light" ? "bg-black/30 backdrop-blur-sm" : "bg-white bg-opacity-10 backdrop-blur-sm"}`}>
+                        <div className={`w-full h-full relative rounded-md p-6 flex flex-col ${theme === "light" ? "bg-white text-slate-900 shadow-xl" : "bg-black text-white"}`}>
+                            <div className={`text-center text-2xl mb-6 font-semibold ${theme === "light" ? "text-slate-900" : "text-white"}`}>Events with "{chosenChatDetails?.username}"</div>
                             <button
-                                className="absolute right-2 top-2 rounded-md hover:bg-grey"
+                                className={theme === "light" ? "absolute right-2 top-2 rounded-md hover:bg-slate-100 p-1" : "absolute right-2 top-2 rounded-md hover:bg-grey"}
                                 onClick={() => set_eventsModalShow(false)}
                             >
                                 <CloseIcon />
@@ -295,17 +300,17 @@ const Messages = () => {
             }
             {
                 seminarDetailsModalShow ?
-                    <div className="absolute top-0 left-0 w-full h-full bg-white bg-opacity-10 backdrop-blur-sm z-[1000] p-4 sm:p-8 flex items-center justify-center">
+                    <div className={`absolute top-0 left-0 w-full h-full z-[1000] p-4 sm:p-8 flex items-center justify-center ${theme === "light" ? "bg-black/30 backdrop-blur-sm" : "bg-white bg-opacity-10 backdrop-blur-sm"}`}>
                         <div
                             className="absolute top-0 left-0 w-full h-full cursor-pointer"
                             onClick={() => set_seminarDetailsModalShow(false)}
                         />
-                        <div className="w-max max-w-[460px] bg-black rounded-lg text-white p-6 relative">
-                            <div className="text-center text-white text-2xl mb-6">
+                        <div className={`w-full max-w-[560px] rounded-2xl p-6 relative shadow-xl ${theme === "light" ? "bg-white text-slate-900" : "bg-black text-white"}`}>
+                            <div className={`text-center text-2xl mb-6 font-semibold ${theme === "light" ? "text-slate-900" : "text-white"}`}>
                                 {chosenGroupChatDetails?.type === "community" ? "Chat Details" : "Seminar Details"}
                             </div>
                             <button
-                                className="absolute right-2 top-2 rounded-md hover:bg-grey"
+                                className={theme === "light" ? "absolute right-2 top-2 rounded-md hover:bg-slate-100 p-1" : "absolute right-2 top-2 rounded-md hover:bg-grey"}
                                 onClick={() => set_seminarDetailsModalShow(false)}
                             >
                                 <CloseIcon />
@@ -340,11 +345,11 @@ const Messages = () => {
             }
             {
                 editSeminarModalShow ?
-                    <div className="absolute top-0 left-0 w-full h-full bg-white bg-opacity-10 backdrop-blur-sm z-[1000] p-4 sm:p-8">
-                        <div className="w-full h-full bg-black relative text-white rounded-md p-6 flex flex-col">
-                            <div className="text-center text-white text-2xl mb-6">Edit Seminar Details</div>
+                    <div className={`absolute top-0 left-0 w-full h-full z-[1000] p-4 sm:p-8 ${theme === "light" ? "bg-black/30 backdrop-blur-sm" : "bg-white bg-opacity-10 backdrop-blur-sm"}`}>
+                        <div className={`w-full h-full relative rounded-md p-6 flex flex-col ${theme === "light" ? "bg-white text-slate-900 shadow-xl" : "bg-black text-white"}`}>
+                            <div className={`text-center text-2xl mb-6 font-semibold ${theme === "light" ? "text-slate-900" : "text-white"}`}>Edit Seminar Details</div>
                             <button
-                                className="absolute right-2 top-2 rounded-md hover:bg-grey"
+                                className={theme === "light" ? "absolute right-2 top-2 rounded-md hover:bg-slate-100 p-1" : "absolute right-2 top-2 rounded-md hover:bg-grey"}
                                 onClick={() => set_editSeminarModalShow(false)}
                             >
                                 <CloseIcon />

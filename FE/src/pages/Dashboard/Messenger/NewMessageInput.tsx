@@ -9,7 +9,7 @@ import { callApi } from "../../../api/api";
 import { showAlert } from "../../../actions/alertActions";
 import { useDispatch } from "react-redux";
 
-const NewMessageInput: React.FC = () => {
+const NewMessageInput: React.FC<any> = ({ theme = "dark" }: any) => {
     const [_message, set_message] = useState("");
     const [typing, set_typing] = useState(0);
     const dispatch = useDispatch();
@@ -290,12 +290,12 @@ const NewMessageInput: React.FC = () => {
     }, []);
 
     return (
-        <div className="w-full p-4 pt-0 pb-12 sm:pb-4 flex items-center">
+        <div className={`w-full p-4 pt-0 pb-12 sm:pb-4 flex items-center border-t ${theme === "light" ? "border-slate-200 bg-white" : "border-transparent"}`}>
             <div className="relative w-full">
                 <ReactQuill
                     ref={quillRef}
                     theme="snow"
-                    className="w-full bg-black flex flex-col-reverse rounded-md"
+                    className={theme === "light" ? "w-full bg-white flex flex-col-reverse rounded-xl border border-slate-200 overflow-hidden" : "w-full bg-black flex flex-col-reverse rounded-md"}
                     value={_message}
                     onChange={set_message}
                     onKeyDown={handleSendMessage}
@@ -329,13 +329,9 @@ const NewMessageInput: React.FC = () => {
             {/* Send button */}
             <button
                 onClick={sendMessage}
-                className="ml-2 flex items-center justify-center"
-                style={{
-                    backgroundColor: "#31B099",
-                    borderRadius: "50%",
-                    width: "40px",
-                    height: "40px",
-                }}
+                className={theme === "light"
+                    ? "ml-2 inline-flex h-10 w-10 items-center justify-center rounded-full bg-sky-600 hover:bg-sky-700 text-white shadow-sm"
+                    : "ml-2 inline-flex h-10 w-10 items-center justify-center rounded-full bg-[#31B099] text-white"}
             >
                 <svg
                     xmlns="http://www.w3.org/2000/svg"

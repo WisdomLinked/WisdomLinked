@@ -5,10 +5,12 @@ export default function TopBar({
   title = 'Student Dashboard',
   userName = 'Alex Rivera',
   avatarUrl,
+  onProfileClick,
 }: {
   title?: string;
   userName?: string;
   avatarUrl?: string;
+  onProfileClick?: () => void;
 }) {
   const [openMenu, setOpenMenu] = useState(false);
   const [menuVisible, setMenuVisible] = useState(false);
@@ -75,6 +77,10 @@ export default function TopBar({
                 <button
                   type="button"
                   className="flex w-full items-center gap-2 px-3 py-2 hover:bg-slate-50"
+                  onClick={() => {
+                    onProfileClick?.();
+                    setOpenMenu(false);
+                  }}
                 >
                   <UserCircle2 className="h-4 w-4 text-slate-500" aria-hidden="true" />
                   <span>My Profile</span>

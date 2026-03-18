@@ -192,7 +192,7 @@ const Dashboard = () => {
                                     <div><span className="font-bold">Price  : </span> ${item.price}</div>
                                     <hr className="my-2"/>
                                     <button
-                                        className="py-1 w-full bg-green rounded-lg flex items-center justify-center disabled:opacity-50"
+                                        className="py-1 w-full bg-[#234C6A] hover:bg-[#1b3c53] rounded-lg flex items-center justify-center disabled:opacity-50"
                                         onClick={() => navigateSeminar(item)}
                                     >
                                         Go To Seminar
@@ -233,7 +233,7 @@ const Dashboard = () => {
                                     <div><span className="font-bold">Price  : </span> ${item.groupChatId.price}</div>
                                     <hr className="my-2"/>
                                     <button
-                                        className="py-1 w-full bg-green rounded-lg flex items-center justify-center disabled:opacity-50"
+                                        className="py-1 w-full bg-[#234C6A] hover:bg-[#1b3c53] rounded-lg flex items-center justify-center disabled:opacity-50"
                                         disabled={status === 'review'}
                                         onClick={() => acceptSeminarAppointment(item)}
                                     >
@@ -276,7 +276,7 @@ const Dashboard = () => {
                                     <div><span className="font-bold">Price  : </span> ${item.price}</div>
                                     <hr className="my-2"/>
                                     <button
-                                        className="py-1 w-full bg-green rounded-lg flex items-center justify-center disabled:opacity-50"
+                                        className="py-1 w-full bg-[#234C6A] hover:bg-[#1b3c53] rounded-lg flex items-center justify-center disabled:opacity-50"
                                         onClick={() => navigateSeminar(item)}
                                     >
                                         Go To Session
@@ -323,7 +323,7 @@ const Dashboard = () => {
                                             Cancel
                                         </button>
                                         : <button
-                                            className="py-1 w-full bg-green rounded-lg flex items-center justify-center disabled:opacity-50"
+                                            className="py-1 w-full bg-[#234C6A] hover:bg-[#1b3c53] rounded-lg flex items-center justify-center disabled:opacity-50"
                                             disabled={status === 'review'}
                                             onClick={() => acceptAppointment(item)}
                                         >

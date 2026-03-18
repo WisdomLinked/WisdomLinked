@@ -27,11 +27,13 @@ export default function Sidebar({
   activeItem,
   onNavigate,
   studentName = 'Alex Rivera',
+  roleLabel = 'Student',
 }: {
   navItems?: { id: string; label: string; icon: React.ComponentType<{ className?: string }> }[];
   activeItem: string;
   onNavigate: (id: string) => void;
   studentName?: string;
+  roleLabel?: string;
 }) {
   const [openMobile, setOpenMobile] = useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
@@ -98,7 +100,7 @@ export default function Sidebar({
             <div className="font-sans text-[13px] font-semibold text-slate-800">
               {studentName}
             </div>
-            <div className="font-sans text-[10px] text-slate-400">Student</div>
+            <div className="font-sans text-[10px] text-slate-400">{roleLabel}</div>
           </div>
         </div>
         <button

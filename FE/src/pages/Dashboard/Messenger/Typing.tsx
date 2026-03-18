@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import gif from "../../../assets/images/typing.gif";
 import { useAppSelector } from "../../../store";
 
-const Typing = () => {
+const Typing = ({ theme = "dark" }: any) => {
     const { auth: { userDetails }, chat: { chosenChatDetails, typing, chosenGroupChatDetails, groupTyping } } = useAppSelector(state => state);
 
     const [directChatTyping, set_directChatTyping] = useState<any>(null)
@@ -27,7 +27,7 @@ const Typing = () => {
 
     return (
         (directChatTyping?.typing) ?
-            <div className="flex items-center font-bold pl-4 text-lightgrey">
+            <div className={`flex items-center font-semibold px-4 py-2 ${theme === "light" ? "text-slate-600" : "text-lightgrey"}`}>
                 <>
                     {chosenChatDetails?.username}
                     <img
@@ -38,7 +38,7 @@ const Typing = () => {
                 </>
             </div> :
             typingUsers?.length ?
-                <div className="flex items-center font-bold pl-4 text-lightgrey">
+                <div className={`flex items-center font-semibold px-4 py-2 ${theme === "light" ? "text-slate-600" : "text-lightgrey"}`}>
                     <>
                         {
                             typingUsers.map((item: any, index: number) => {

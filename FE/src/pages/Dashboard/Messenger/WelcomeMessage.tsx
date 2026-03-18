@@ -1,27 +1,23 @@
 import React from "react";
-import { Typography } from "@mui/material";
-import { styled } from "@mui/system";
 import Robot from "./robot.gif";
 
-const Wrapper = styled("div")({
-    flexGrow: 1,
-    height: "100%",
-    display: "flex",
-    flexDirection: "column",
-    alignItems: "center",
-    justifyContent: "center",
-    padding: "16px",
-    textAlign: "center"
-});
-
-const WelcomeMessage = () => {
+const WelcomeMessage = ({ theme = "dark" }: any) => {
     return (
-        <Wrapper>
-            <img src={Robot} alt="robot greeting welcome" style={{ height: "15rem" }}/>
-            <Typography variant="h6" sx={{ color: "white" }}>
-                To start chatting - select a friend for conversation
-            </Typography>
-        </Wrapper>
+        <div
+            className={
+                theme === "light"
+                    ? "w-full h-full flex flex-col items-center justify-center p-6 text-center bg-white rounded-2xl border border-slate-200 shadow-sm"
+                    : "w-full h-full flex flex-col items-center justify-center p-6 text-center"
+            }
+        >
+            <img src={Robot} alt="robot greeting welcome" className="h-56 w-auto" />
+            <div className={theme === "light" ? "mt-4 text-[15px] font-semibold text-slate-800" : "mt-4 text-[15px] font-semibold text-white"}>
+                To start chatting — select a chat from the left
+            </div>
+            <div className={theme === "light" ? "mt-1 text-[13px] text-slate-500" : "mt-1 text-[13px] text-lightgrey"}>
+                You can open a private chat or join a community.
+            </div>
+        </div>
     );
 };
 

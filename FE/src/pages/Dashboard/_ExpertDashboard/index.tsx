@@ -35,7 +35,7 @@ const ExpertDashboard = () => {
         <div className="w-full h-[100vh] flex flex-col">
             {
                 userDetails.status === 'review' ?
-                    <div className="bg-green w-full h-14 leading-[120%] flex items-center px-6 justify-center text-white text-center">
+                    <div className="bg-[#234C6A] w-full h-14 leading-[120%] flex items-center px-6 justify-center text-white text-center">
                         Your account is under review. Some features are not able to use till you are approved.
                     </div> :
                     null

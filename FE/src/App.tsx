@@ -20,6 +20,7 @@ import { VideoChatProvider } from './components/VideoChat/VideoChatContext';
 
 // Lazy-loaded pages — only downloaded when the user navigates to them
 const StudentDashboard = React.lazy(() => import('./pages/StudentDashboard'));
+const ExpertDashboard = React.lazy(() => import('./pages/ExpertDashboard'));
 const WLLogin = React.lazy(() => import('./pages/WLLogin'));
 const WLCustomerRegister = React.lazy(() => import('./pages/WLCustomerRegister'));
 const WLExpertRegister = React.lazy(() => import('./pages/WLExpertRegister'));
@@ -32,7 +33,7 @@ const OAuthCallback = React.lazy(() => import('./pages/OAuthCallback'));
 const WLProfileCompletion = React.lazy(() => import('./pages/WLProfileCompletion'));
 
 // Heavy dashboard chunks — MUI, calendars, quill, etc. only load after login
-const ExpertDashboard = React.lazy(() => import('./pages/Dashboard/_ExpertDashboard'));
+const LegacyExpertDashboard = React.lazy(() => import('./pages/Dashboard/_ExpertDashboard'));
 const CustomerDashboard = React.lazy(() => import('./pages/Dashboard/_CustomerDashboard'));
 const AdminDashboard = React.lazy(() => import('./pages/Dashboard/_AdminDashboard'));
 
@@ -96,6 +97,11 @@ const AuthenticatedRoutes = () => {
       <Route path={'expertdashboard/*'} element={
         <PrivateRoute>
           <ExpertDashboard />
+        </PrivateRoute>
+      } />
+      <Route path={'expertdashboard-legacy/*'} element={
+        <PrivateRoute>
+          <LegacyExpertDashboard />
         </PrivateRoute>
       } />
       <Route path={'studentdashboard/*'} element={

@@ -12,14 +12,21 @@ export const autoLogin = () => {
             payload: true,
         });
 
-        const response: any = await getMe();
-        if (response) {
-            localStorage.setItem("currentUser", JSON.stringify(response.me));
+        try {
+            const response: any = await getMe();
+            if (response) {
+                localStorage.setItem("currentUser", JSON.stringify(response.me));
+                dispatch({
+                    type: actionTypes.authenticate,
+                    payload: {
+                        ...response.me,
+                    },
+                });
+            }
+        } finally {
             dispatch({
-                type: actionTypes.authenticate,
-                payload: {
-                    ...response.me,
-                },
+                type: "SetLoadingStatus",
+                payload: false,
             });
         }
     }
