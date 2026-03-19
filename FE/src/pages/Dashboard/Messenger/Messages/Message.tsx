@@ -44,11 +44,8 @@ const Message = ({ content, sameAuthor, hiddenDropDown, disableBookButton, hideD
     }
 
     const book = async () => {
-        if (myRole === 'customer') {
-            navigate(`${process.env.REACT_APP_AUTH_URL}${myRole}dashboard/search?_id=${userId}`)
-        } else {
-            navigate(`${process.env.REACT_APP_AUTH_URL}${myRole}dashboard/search?_id=${userId}`)
-        }
+        const dashPrefix = myRole === 'customer' ? 'student' : myRole;
+        navigate(`${process.env.REACT_APP_AUTH_URL}${dashPrefix}dashboard/search?_id=${userId}`)
     }
 
     const handleDownload = () => {

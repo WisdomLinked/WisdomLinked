@@ -170,7 +170,8 @@ export default function WLProfileCompletion() {
             if (response.result || response.status === 'SUCCESS' || response.success) {
                 // Refresh user details
                 await dispatch(autoLogin() as any);
-                navigate(`/user/${role}dashboard`, { replace: true });
+                const dashboardPath = role === 'customer' ? '/user/studentdashboard' : `/user/${role}dashboard`;
+                navigate(dashboardPath, { replace: true });
             } else {
                 dispatch(showAlert(response.error || 'Failed to update profile.'));
             }
