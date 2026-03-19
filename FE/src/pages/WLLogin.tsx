@@ -6,7 +6,6 @@ import { login, confirmLoginByCode } from '../api/api';
 import { showAlert } from '../actions/alertActions';
 import { actionTypes } from '../actions/types';
 import SocialAuthBlock from '../components/SocialAuthBlock';
-import logo from '../assets/images/logo.png';
 
 const BTN_PRIMARY_STYLE = { background: 'linear-gradient(135deg, #234C6A 0%, #456882 100%)' };
 const FOCUS_RING = 'focus:ring-2 focus:ring-[#234C6A]/60 focus:border-[#234C6A]';
@@ -207,9 +206,9 @@ export default function WLLogin() {
                     <div className="p-8">
                         {/* Logo */}
                         <div className="flex items-center gap-3 mb-6">
-                            <div className="h-12 w-12 rounded-2xl bg-white border border-[#D0DFED] flex items-center justify-center shadow-md shadow-[#D9EAFD] overflow-hidden">
+                            <div className="h-10 w-10 rounded-xl bg-white border border-[#D0DFED] flex items-center justify-center shadow-sm overflow-hidden blur-[0.3px]">
                                 <img
-                                    src={logo}
+                                    src="/logo.png"
                                     alt="WisdomLinked logo"
                                     className="h-10 w-10 object-contain"
                                 />
@@ -233,7 +232,11 @@ export default function WLLogin() {
                                 {oauthError === 'role_mismatch' && (
                                     <div className="mb-4 p-3 rounded-xl bg-red-50 border border-red-200 text-red-800 text-sm flex items-start gap-2">
                                         <AlertCircle size={16} className="mt-0.5 shrink-0" />
-                                        <span>An account already exists with a different role. Please log in with your existing role.</span>
+                                        <span>
+                                            {searchParams.get('existingRole') 
+                                                ? `This email is already registered as a ${searchParams.get('existingRole')} account. Please log in to your existing account, or use a different email to register a new role.`
+                                                : "An account already exists with a different role. Please log in with your existing role."}
+                                        </span>
                                     </div>
                                 )}
                                 <div className="space-y-4">
@@ -252,7 +255,7 @@ export default function WLLogin() {
                                                 onChange={(e: React.ChangeEvent<HTMLInputElement>) => { setForm(f => ({ ...f, password: e.target.value })); setErrors(er => ({ ...er, password: '' })); }}
                                                 onKeyDown={(e: React.KeyboardEvent<HTMLInputElement>) => e.key === 'Enter' && handleSubmit()}
                                                 className={`${errors.password ? inputError : inputNormal} pr-10`} />
-                                            <button type="button" onClick={() => setShowPassword(p => !p)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600" aria-label={showPassword ? 'Hide password' : 'Show password'}>
+                                            <button type="button" onClick={(e) => { e.preventDefault(); setShowPassword(!showPassword); }} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 z-10" aria-label={showPassword ? 'Hide password' : 'Show password'}>
                                                 {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                                             </button>
                                         </div>

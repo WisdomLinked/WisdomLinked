@@ -40,6 +40,35 @@ const s3 = new S3Client({
     forcePathStyle: false,
 });
 
+const checkRateLimit = (record: any) => {
+    if (!record) return null;
+    if (record.lockUntil && record.lockUntil > new Date()) {
+        const minutes = Math.ceil((record.lockUntil.getTime() - new Date().getTime()) / 60000);
+        return `Too many failed attempts. Please try again in ${minutes} minutes.`;
+    }
+    return null;
+}
+
+const handleFailedAttempt = async (record: any) => {
+    if (!record) return;
+    record.failedAttempts = (record.failedAttempts || 0) + 1;
+    if (record.failedAttempts >= 50) {
+        record.lockUntil = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+    } else if (record.failedAttempts >= 6) {
+        record.lockUntil = new Date(Date.now() + 30 * 60 * 1000); // 30 mins
+    }
+    await record.save();
+}
+
+const resetFailedAttempts = async (record: any) => {
+    if (!record) return;
+    if (record.failedAttempts > 0 || record.lockUntil) {
+        record.failedAttempts = 0;
+        record.lockUntil = null;
+        await record.save();
+    }
+}
+
 const getUniqueConfirmCode = async () => {
     try {
         let isDuplicated = true, confirmCode;
@@ -144,15 +173,17 @@ const register = async (req: Request, res: Response) => {
         }
 
         // check if user exists
-        const userExists = await User.exists({ email: email.toLowerCase() });
-        if (userExists) {
-            return res.status(200).json({ status: 'FAIL', error: "E-mail already in use." });
+        const existingUser = await User.findOne({ email: email.toLowerCase() });
+        if (existingUser) {
+            const roleName = existingUser.role === 'customer' ? 'student' : (existingUser.role || 'user');
+            return res.status(200).json({ status: 'FAIL', error: `This email is already registered as a ${roleName} account.` });
         }
 
         // check if user exists in pending list
-        const userExistsInPending = await PendingUser.exists({ email: email.toLowerCase() });
-        if (userExistsInPending) {
-            return res.status(200).json({ status: 'FAIL', error: "E-mail already in use in pending list." });
+        const existingPendingUser = await PendingUser.findOne({ email: email.toLowerCase() });
+        if (existingPendingUser) {
+            // Delete the stale pending record and allow them to re-register to get un-stuck
+            await PendingUser.deleteOne({ _id: existingPendingUser._id });
         }
 
         const file = req.file
@@ -282,6 +313,11 @@ const resendConfirmEmail = async (req: Request, res: Response) => {
             throw new Error('Pending registration request not found')
         }
 
+        const lockError = checkRateLimit(pendingUser);
+        if (lockError) {
+            return res.status(200).json({ status: 'FAIL', error: lockError });
+        }
+
         // SEND EMAIL TO CUSTOMER
         let confirmLink = `<div>Verify your registration to Wisdom Linked by clicking the confirmation link below:<br/><a href="${process.env.FE_URL}/verification/${email}/${pendingUser.confirmCode}">Verify Email</a></div>`
         await utils.sendMagicLink(
@@ -305,10 +341,22 @@ const verifyRegistration = async (req: Request, res: Response) => {
         const { email, confirmCode } = req.body
 
         // check if user exists
-        const pendingUser = await PendingUser.findOne({ email: email.toLowerCase(), confirmCode: confirmCode });
+        const pendingUser = await PendingUser.findOne({ email: email.toLowerCase() });
         if (!pendingUser) {
             return res.status(200).json({ status: 'FAIL', error: 'Pending registration request not found' });
         }
+
+        const lockError = checkRateLimit(pendingUser);
+        if (lockError) {
+            return res.status(200).json({ status: 'FAIL', error: lockError });
+        }
+
+        if (pendingUser.confirmCode !== confirmCode) {
+            await handleFailedAttempt(pendingUser);
+            return res.status(200).json({ status: 'FAIL', error: "Invalid verification code" });
+        }
+
+        await resetFailedAttempts(pendingUser);
 
         if ((new Date().getTime() - pendingUser.updatedAt.getTime()) >= 24 * 3600 * 1000) {
             return res.status(200).json({ status: 'FAIL', error: "Verification email was expired." });
@@ -419,6 +467,12 @@ const login = async (req: Request, res: Response) => {
         if (!user) {
             return res.status(200).json({ status: 'FAIL', error: "Invalid credentials. Please try again" });
         }
+
+        if (!user.password) {
+            const provider = user.oauthProvider ? (user.oauthProvider.charAt(0).toUpperCase() + user.oauthProvider.slice(1)) : 'Google';
+            return res.status(200).json({ status: 'FAIL', error: `This account was created using ${provider} Sign-In. Please use ${provider} to log in.` });
+        }
+
         const passwordsMatch = await bcrypt.compare(String(password), user.password);
 
         if (!passwordsMatch) {
@@ -439,6 +493,10 @@ const login = async (req: Request, res: Response) => {
                 code,
             })
         } else {
+            const lockError = checkRateLimit(loginRequest);
+            if (lockError) {
+                return res.status(200).json({ status: 'FAIL', error: lockError });
+            }
             loginRequest.code = code
             loginRequest.validUntil = new Date(Date.now() + 60 * 1000)
         }
@@ -489,9 +547,17 @@ const confirmLoginByCode = async (req: Request, res: Response) => {
             return res.status(200).json({ status: 'FAIL', error: "Login request not found or expired. Please request a new code" });
         }
 
+        const lockError = checkRateLimit(loginRequest);
+        if (lockError) {
+            return res.status(200).json({ status: 'FAIL', error: lockError });
+        }
+
         if (loginRequest.code !== Number(code)) {
+            await handleFailedAttempt(loginRequest);
             return res.status(200).json({ status: 'FAIL', error: "Incorrect code" });
         }
+
+        await resetFailedAttempts(loginRequest);
 
         if ((new Date() >= loginRequest.validUntil)) {
             return res.status(200).json({ status: 'FAIL', error: "Code expired. Please request a new code." });
@@ -546,6 +612,11 @@ const passwordResetRequest = async (req: Request, res: Response) => {
             return res.status(200).json({ status: 'FAIL', error: "Provided email not found." });
         }
 
+        if (!user.password) {
+            const provider = user.oauthProvider ? (user.oauthProvider.charAt(0).toUpperCase() + user.oauthProvider.slice(1)) : 'Google';
+            return res.status(200).json({ status: 'FAIL', error: `This account uses ${provider} Sign-In. Password reset is not available.` });
+        }
+
         // const code = randomize('0', 6)
         const code = "123456"
 
@@ -560,6 +631,10 @@ const passwordResetRequest = async (req: Request, res: Response) => {
             })
             await newRequest.save()
         } else {
+            const lockError = checkRateLimit(pwdRequest);
+            if (lockError) {
+                return res.status(200).json({ status: 'FAIL', error: lockError });
+            }
             pwdRequest.code = code
             pwdRequest.password = encryptedPassword
             await pwdRequest.save()
@@ -599,14 +674,26 @@ const confirmPasswordResetByCode = async (req: Request, res: Response) => {
     try {
         const { email, password, code } = req.body;
 
+        if (password.length < 8 || !/[A-Z]/.test(password) || !/[0-9]/.test(password) || !/[^A-Za-z0-9]/.test(password)) {
+            return res.status(200).json({ status: 'FAIL', error: "Password does not meet strong requirements" });
+        }
+
         const request = await PendingPasswordReset.findOne({ email: { $regex: new RegExp(`^${email}$`, 'i') } })
         if (!request) {
             return res.status(200).json({ status: 'FAIL', error: "Password reset request not found" });
         }
 
+        const lockError = checkRateLimit(request);
+        if (lockError) {
+            return res.status(200).json({ status: 'FAIL', error: lockError });
+        }
+
         if (request.code !== Number(code)) {
+            await handleFailedAttempt(request);
             return res.status(200).json({ status: 'FAIL', error: "Incorrect code" });
         }
+
+        await resetFailedAttempts(request);
 
         if ((new Date().getTime() - request.updatedAt.getTime()) >= 60 * 1000) {
             return res.status(200).json({ status: 'FAIL', error: "Code was expired." });

@@ -1,10 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useDispatch } from 'react-redux';
-import { Mail, Lock, ArrowLeft, ArrowRight, RefreshCw, ShieldCheck, Eye, EyeOff, CheckCircle, AlertCircle } from 'lucide-react';
-import { passwordResetRequest, confirmPasswordResetByCode } from '../api/api';
+import { Mail, ArrowLeft, RefreshCw, AlertCircle, ShieldCheck, Lock, Eye, EyeOff, ArrowRight, CheckCircle } from 'lucide-react';
+import { callApi, passwordResetRequest, confirmPasswordResetByCode } from '../api/api';
 import { showAlert } from '../actions/alertActions';
-import logo from '../assets/images/logo.png';
 
 const BTN_PRIMARY_STYLE = { background: 'linear-gradient(135deg, #234C6A 0%, #456882 100%)' };
 const FOCUS_RING = 'focus:ring-2 focus:ring-[#234C6A]/60 focus:border-[#234C6A]';
@@ -28,6 +27,15 @@ export default function ForgotPassword() {
     const [resending, setResending] = useState(false);
     const [otpError, setOtpError] = useState('');
     const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
+
+    const PasswordRequirement = ({ met, text }: { met: boolean, text: string }) => (
+        <p className={`text-xs flex items-center gap-1 ${met ? 'text-green-600' : 'text-slate-400'}`}>
+            <span className={`w-3.5 h-3.5 rounded-full flex items-center justify-center ${met ? 'bg-green-100' : 'bg-slate-100 text-slate-300'}`}>
+                {met ? <CheckCircle size={10} /> : <div className="w-1 h-1 rounded-full bg-current" />}
+            </span>
+            {text}
+        </p>
+    );
     const timerRef = useRef<NodeJS.Timeout | null>(null);
 
     // New Password step
@@ -162,7 +170,10 @@ export default function ForgotPassword() {
     // ─── Step 3: Set new password ───
     const handleSetPassword = async () => {
         setPwdError('');
-        if (newPassword.length < 6) { setPwdError('Password must be at least 6 characters'); return; }
+        if (newPassword.length < 8 || !/[A-Z]/.test(newPassword) || !/[0-9]/.test(newPassword) || !/[^A-Za-z0-9]/.test(newPassword)) {
+            setPwdError('Password does not meet strong requirements');
+            return;
+        }
         if (newPassword !== confirmPassword) { setPwdError('Passwords do not match'); return; }
 
         setChangingPwd(true);
@@ -205,7 +216,7 @@ export default function ForgotPassword() {
                 {/* Logo */}
                 <div className="flex items-center justify-center gap-3 mb-6">
                     <div className="w-10 h-10 rounded-2xl bg-slate-50 border border-slate-200 flex items-center justify-center overflow-hidden">
-                        <img src={logo} className="w-8 h-8 object-contain" alt="WisdomLinked" />
+                        <img src="/logo.png" className="w-8 h-8 object-contain" alt="WisdomLinked" />
                     </div>
                     <span className="font-black text-2xl tracking-[0.12em] uppercase text-slate-900">
                         WisdomLinked
@@ -289,7 +300,7 @@ export default function ForgotPassword() {
                                     onChange={e => handleOtpChange(i, e.target.value)}
                                     onKeyDown={e => handleOtpKeyDown(i, e)}
                                     onPaste={i === 0 ? handleOtpPaste : undefined}
-                                    className={`w-12 h-14 text-center text-xl font-bold rounded-xl border-2 outline-none transition-all duration-200
+                                    className={`w-12 h-14 text-center text-xl font-bold rounded-xl border-2 outline-none transition-all duration-200 text-slate-900
                                         ${digit ? 'border-[#234C6A] bg-blue-50/50' : 'border-slate-200 bg-white'}
                                         focus:border-[#234C6A] focus:ring-2 focus:ring-[#234C6A]/30`}
                                     disabled={verifying}
@@ -302,6 +313,13 @@ export default function ForgotPassword() {
                                 <AlertCircle size={12} /> {otpError}
                             </p>
                         )}
+
+                        <div className="bg-amber-50 text-amber-700 p-3 rounded-lg text-xs leading-5 text-left mb-4 border border-amber-100 flex gap-2 items-start shadow-sm">
+                            <ShieldCheck size={16} className="shrink-0 mt-0.5 text-amber-600" />
+                            <p>
+                                <strong>Security Notice:</strong> If the verification code does not match, the password will not be changed. You are allowed up to 50 failed attempts in 24 hours.
+                            </p>
+                        </div>
 
                         {verifying && (
                             <p className="text-sm text-[#234C6A] font-medium flex items-center justify-center gap-2 mb-4">
@@ -354,19 +372,28 @@ export default function ForgotPassword() {
                                 </label>
                                 <input
                                     type={showPwd ? 'text' : 'password'}
-                                    placeholder="At least 6 characters"
+                                    placeholder="Min. 8 characters"
                                     value={newPassword}
                                     onChange={(e: React.ChangeEvent<HTMLInputElement>) => { setNewPassword(e.target.value); setPwdError(''); }}
                                     className={inputNormal}
                                 />
                                 <button
                                     type="button"
-                                    onClick={() => setShowPwd(!showPwd)}
-                                    className="absolute right-3 top-[34px] text-slate-400 hover:text-slate-600"
+                                    onClick={(e) => { e.preventDefault(); setShowPwd(!showPwd); }}
+                                    className="absolute right-3 top-[34px] text-slate-400 hover:text-slate-600 z-10"
                                 >
                                     {showPwd ? <EyeOff size={16} /> : <Eye size={16} />}
                                 </button>
                             </div>
+
+                            {newPassword && (
+                                <div className="mt-2 space-y-1 bg-slate-50 p-2.5 rounded-xl border border-slate-100">
+                                    <PasswordRequirement met={newPassword.length >= 8} text="8+ characters" />
+                                    <PasswordRequirement met={/[A-Z]/.test(newPassword)} text="Uppercase letter" />
+                                    <PasswordRequirement met={/[0-9]/.test(newPassword)} text="Number" />
+                                    <PasswordRequirement met={/[^A-Za-z0-9]/.test(newPassword)} text="Special character" />
+                                </div>
+                            )}
 
                             <div className="relative">
                                 <label className="block text-xs font-semibold text-slate-600 mb-1.5">
@@ -382,8 +409,8 @@ export default function ForgotPassword() {
                                 />
                                 <button
                                     type="button"
-                                    onClick={() => setShowConfirmPwd(!showConfirmPwd)}
-                                    className="absolute right-3 top-[34px] text-slate-400 hover:text-slate-600"
+                                    onClick={(e) => { e.preventDefault(); setShowConfirmPwd(!showConfirmPwd); }}
+                                    className="absolute right-3 top-[34px] text-slate-400 hover:text-slate-600 z-10"
                                 >
                                     {showConfirmPwd ? <EyeOff size={16} /> : <Eye size={16} />}
                                 </button>

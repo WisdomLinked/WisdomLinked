@@ -1,6 +1,5 @@
 import React from "react";
 import { Link } from "react-router-dom";
-import logo from '../assets/images/logo.png'
 
 const Header = () => {
 
@@ -20,7 +19,7 @@ const Header = () => {
             <div className="w-full flex lg:hidden justify-between items-center">
                 <Link to='/' className={`w-fit flex items-center space-x-[8px] font-black text-2xl`}>
                     <div className="w-11 h-11 rounded-2xl bg-white flex items-center justify-center overflow-hidden">
-                        <img src={logo} className="w-9 h-9 object-contain" />
+                        <img src="/logo.png" className="w-9 h-9 object-contain" />
                     </div>
                     <span className="tracking-[0.08em] uppercase">WisdomLinked</span>
                 </Link>
@@ -65,7 +64,7 @@ const Header = () => {
             <div className="w-full hidden lg:flex justify-between items-center text-[16px] leading-[24px]">
                     <Link to='/' className={`w-fit flex items-center space-x-[10px] font-black text-2xl`}>
                         <div className="w-12 h-12 rounded-2xl bg-white flex items-center justify-center overflow-hidden">
-                            <img src={logo} className="w-10 h-10 object-contain" />
+                            <img src="/logo.png" className="w-10 h-10 object-contain" />
                         </div>
                         <span className="tracking-[0.12em] uppercase text-white">WisdomLinked</span>
                     </Link>

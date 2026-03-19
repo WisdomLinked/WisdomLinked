@@ -1,5 +1,4 @@
 import React, {useEffect, useState} from "react";
-import logo from '../../assets/images/logo.png'
 import { Link } from "react-router-dom";
 import Avatar from "../../components/Avatar";
 import OverlayPortal from "../../components/OverayPortal";
@@ -41,26 +40,26 @@ const DashboardHeader = ({ userDetails }: any) => {
             {
                 userDetails.role==="admin"? <Link to='/user/admindashboard' className={`w-fit flex items-center space-x-[10px] font-black text-2xl ml-10 lg:ml-0`}>
                     <div className="w-11 h-11 rounded-2xl bg-white flex items-center justify-center overflow-hidden">
-                        <img src={logo} className="w-9 h-9 object-contain" />
+                        <img src="/logo.png" className="w-9 h-9 object-contain" />
                     </div>
                     <span className="tracking-[0.12em] uppercase">WisdomLinked</span>
                 </Link>
                     :  userDetails.role==="expert"? <Link to='/user/expertdashboard' className={`w-fit flex items-center space-x-[10px] font-black text-2xl ml-10 lg:ml-0`}>
                         <div className="w-11 h-11 rounded-2xl bg-white flex items-center justify-center overflow-hidden">
-                            <img src={logo} className="w-9 h-9 object-contain" />
+                            <img src="/logo.png" className="w-9 h-9 object-contain" />
                         </div>
                         <span className="tracking-[0.12em] uppercase">WisdomLinked</span>
                     </Link>
                     :   userDetails.role==="customer"? <Link to='/user/studentdashboard' className={`w-fit flex items-center space-x-[10px] font-black text-2xl ml-10 lg:ml-0`}>
                         <div className="w-11 h-11 rounded-2xl bg-white flex items-center justify-center overflow-hidden">
-                            <img src={logo} className="w-9 h-9 object-contain" />
+                            <img src="/logo.png" className="w-9 h-9 object-contain" />
                         </div>
                         <span className="tracking-[0.12em] uppercase">WisdomLinked</span>
                     </Link>
                         :
                         <Link to='/' className={`w-fit flex items-center space-x-[10px] font-black text-2xl ml-10 lg:ml-0`}>
                             <div className="w-11 h-11 rounded-2xl bg-white flex items-center justify-center overflow-hidden">
-                                <img src={logo} className="w-9 h-9 object-contain" />
+                                <img src="/logo.png" className="w-9 h-9 object-contain" />
                             </div>
                             <span className="tracking-[0.12em] uppercase">WisdomLinked</span>
                         </Link>

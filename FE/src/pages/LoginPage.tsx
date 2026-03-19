@@ -1,8 +1,6 @@
 import React, { FormEvent, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Mail, Lock, AlertCircle, Eye, EyeOff } from 'lucide-react';
-import logo from '../assets/images/logo.png';
-
 const BTN_PRIMARY_STYLE = { background: 'linear-gradient(135deg, #234C6A 0%, #456882 100%)' };
 const FOCUS_RING = 'focus:ring-2 focus:ring-[#234C6A]/60 focus:border-[#234C6A]';
 
@@ -66,7 +64,7 @@ export default function LoginPage() {
             <div className="flex items-center gap-3 mb-6">
               <div className="h-12 w-12 rounded-2xl bg-white border border-[#D0DFED] flex items-center justify-center shadow-md shadow-[#D9EAFD] overflow-hidden">
                 <img
-                  src={logo}
+                  src="/logo.png"
                   alt="WisdomLinked logo"
                   className="h-10 w-10 object-contain"
                 />

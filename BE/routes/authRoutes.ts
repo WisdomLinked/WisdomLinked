@@ -106,7 +106,8 @@ const oauthCallback = async (req: any, res: any) => {
         
         // Block existing users from switching roles via OAuth re-registration
         if (!isNew && role && (role === 'expert' || role === 'customer') && user.role !== role) {
-            return res.redirect(`${process.env.FE_URL}/login?error=role_mismatch`);
+            const roleName = user.role === 'customer' ? 'student' : (user.role || 'user');
+            return res.redirect(`${process.env.FE_URL}/login?error=role_mismatch&existingRole=${roleName}`);
         }
         
         const token = jwt.sign(

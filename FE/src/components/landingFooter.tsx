@@ -1,6 +1,4 @@
 import { Link } from 'react-router-dom';
-import logo from '../assets/images/logo.png';
-
 const LandingFooter = () => {
     return (
         <div className="w-full">
@@ -8,7 +6,7 @@ const LandingFooter = () => {
                 <div className="w-full lg:w-[280px]">
                     <Link to='/' className={`w-fit flex items-center space-x-[10px] text-white font-black text-2xl`}>
                         <div className="w-12 h-12 rounded-2xl bg-white flex items-center justify-center overflow-hidden">
-                            <img src={logo} className="w-10 h-10 object-contain" />
+                            <img src="/logo.png" className="w-10 h-10 object-contain" />
                         </div>
                         <span className="tracking-[0.12em] uppercase">WisdomLinked</span>
                     </Link>

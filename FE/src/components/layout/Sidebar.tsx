@@ -9,7 +9,6 @@ import {
   Menu,
   X,
 } from 'lucide-react';
-import logo from '../../assets/images/logo.png';
 import { useNavigate } from 'react-router-dom';
 
 const defaultNavItems = [
@@ -45,7 +44,7 @@ export default function Sidebar({
         <div className="flex items-center gap-2.5">
           <div className="h-9 w-9 rounded-xl bg-white border border-slate-200 flex items-center justify-center shadow-sm overflow-hidden">
             <img
-              src={logo}
+              src="/logo.png"
               alt="WisdomLinked logo"
               className="h-7 w-7 object-contain"
             />
