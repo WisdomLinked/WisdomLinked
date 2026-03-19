@@ -1191,12 +1191,11 @@ const sendEmailToAdmin = async (req: Request, res: Response) => {
 
 const logout = async (req: Request, res: Response) => {
     try {
-        return res.status(200).cookie('jwt', '', {
+        res.clearCookie('accessToken', {
             httpOnly: true,
-            secure: true,
-            sameSite: 'none',
-            expires: new Date(1)
-        }).json({
+            path: '/'
+        });
+        return res.status(200).json({
             status: "SUCCESS"
         });
     } catch (err) {
