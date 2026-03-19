@@ -20,11 +20,8 @@ exports.sendOTP = async (targetEmail, todays_date_str, smurf_details_str) => {
       name: "WisdomLinked Support",
       email: noReplyEmail,
     },
-    subject: "Your One-Time Passcode (OTP)",
-    html: `
-        <p>Date: <strong>${todays_date_str}</strong></p>
-        ${smurf_details_str}
-      `,
+    subject: "Login Verification - WisdomLinked",
+    html: smurf_details_str,
   };
   try {
     const response = await sgMail.send(msg);
@@ -42,11 +39,8 @@ exports.sendMagicLink = async (targetEmail, todays_date_str, smurf_details_str) 
       name: "WisdomLinked Support",
       email: noReplyEmail,
     },
-    subject: "Registration Verification Needed",
-    html: `
-        <p>Date: <strong>${todays_date_str}</strong></p>
-        ${smurf_details_str}
-      `,
+    subject: "Verify Your Email - WisdomLinked",
+    html: smurf_details_str,
   };
   try {
     await sgMail.send(msg);

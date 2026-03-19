@@ -232,9 +232,23 @@ const register = async (req: Request, res: Response) => {
         // SEND EMAIL TO CUSTOMER
 
 
-        let confirmLink = `<div>Verify your registration to Wisdom Linked by clicking the confirmation link below:<br/><a href="${process.env.FE_URL}/verification/${email}/${confirmCode}">Verify Email</a></div>`
+        let confirmLink = `<div style="font-family: Arial, sans-serif; max-width: 520px; margin: 0 auto; background: #ffffff; border-radius: 16px; overflow: hidden; border: 1px solid #e2e8f0;">
+            <div style="background: linear-gradient(135deg, #234C6A 0%, #456882 100%); padding: 32px 24px; text-align: center;">
+                <h1 style="color: #ffffff; font-size: 24px; margin: 0; font-weight: 700; letter-spacing: 2px;">WISDOMLINKED</h1>
+            </div>
+            <div style="padding: 32px 24px;">
+                <h2 style="color: #1e293b; font-size: 22px; margin: 0 0 12px 0;">Welcome! Verify Your Email</h2>
+                <p style="color: #475569; font-size: 15px; line-height: 1.6; margin: 0 0 24px 0;">Thank you for registering with WisdomLinked. Please click the button below to verify your email address and activate your account.</p>
+                <div style="text-align: center; margin: 24px 0;">
+                    <a href="${process.env.FE_URL}/verification/${email}/${confirmCode}" style="display: inline-block; background: linear-gradient(135deg, #234C6A 0%, #456882 100%); color: #ffffff; text-decoration: none; padding: 14px 40px; border-radius: 12px; font-size: 16px; font-weight: 600; letter-spacing: 0.5px;">Verify My Email</a>
+                </div>
+                <p style="color: #94a3b8; font-size: 13px; line-height: 1.5; margin: 24px 0 0 0;">If you didn't create an account with WisdomLinked, you can safely ignore this email.</p>
+            </div>
+            <div style="background: #f8fafc; padding: 16px 24px; text-align: center; border-top: 1px solid #e2e8f0;">
+                <p style="color: #94a3b8; font-size: 12px; margin: 0;">&copy; ${new Date().getFullYear()} WisdomLinked. All rights reserved.</p>
+            </div>
+        </div>`
         await utils.sendMagicLink(
-            // process.env.NODE_ENV === 'development' ? 'varunsahni10134@gmail.com' : email,
             email,
             utils.getCurrentDateString(),
             confirmLink
@@ -415,8 +429,7 @@ const login = async (req: Request, res: Response) => {
             return res.status(200).json({ status: 'FAIL', error: "User is blocked" });
         }
 
-        // const code = randomize('0', 6)
-        const code = "123456"
+        const code = randomize('0', 6)
 
         let loginRequest = await PendingLogin.findOne({ email: { $regex: new RegExp(`^${email}$`, 'i') } })
         if (!loginRequest) {
@@ -434,7 +447,22 @@ const login = async (req: Request, res: Response) => {
             console.error("Unable to save login request: ", err.message)
         }
 
-        let text = `<div>Verify your login to TOE by the code <br/><b>${code}</b></div>`
+        let text = `<div style="font-family: Arial, sans-serif; max-width: 520px; margin: 0 auto; background: #ffffff; border-radius: 16px; overflow: hidden; border: 1px solid #e2e8f0;">
+            <div style="background: linear-gradient(135deg, #234C6A 0%, #456882 100%); padding: 32px 24px; text-align: center;">
+                <h1 style="color: #ffffff; font-size: 24px; margin: 0; font-weight: 700; letter-spacing: 2px;">WISDOMLINKED</h1>
+            </div>
+            <div style="padding: 32px 24px;">
+                <h2 style="color: #1e293b; font-size: 22px; margin: 0 0 12px 0;">Login Verification</h2>
+                <p style="color: #475569; font-size: 15px; line-height: 1.6; margin: 0 0 24px 0;">Use the code below to verify your login to WisdomLinked. This code will expire in 60 seconds.</p>
+                <div style="background: #f1f5f9; border-radius: 12px; padding: 24px; text-align: center; margin: 16px 0;">
+                    <span style="font-size: 36px; font-weight: bold; letter-spacing: 10px; color: #234C6A;">${code}</span>
+                </div>
+                <p style="color: #94a3b8; font-size: 13px; line-height: 1.5; margin: 24px 0 0 0;">If you didn't attempt to log in, please secure your account by changing your password immediately.</p>
+            </div>
+            <div style="background: #f8fafc; padding: 16px 24px; text-align: center; border-top: 1px solid #e2e8f0;">
+                <p style="color: #94a3b8; font-size: 12px; margin: 0;">&copy; ${new Date().getFullYear()} WisdomLinked. All rights reserved.</p>
+            </div>
+        </div>`
         await utils.sendOTP(
             email,
             utils.getCurrentDateString(),
@@ -517,8 +545,7 @@ const passwordResetRequest = async (req: Request, res: Response) => {
             return res.status(200).json({ status: 'FAIL', error: "Provided email not found." });
         }
 
-        // const code = randomize('0', 6)
-        const code = "123456"
+        const code = randomize('0', 6)
 
         const encryptedPassword = await bcrypt.hash(String(password), 10);
 
@@ -536,14 +563,21 @@ const passwordResetRequest = async (req: Request, res: Response) => {
             await pwdRequest.save()
         }
 
-        let text = `<div style="font-family: Arial, sans-serif; max-width: 480px; margin: 0 auto;">
-            <h2 style="color: #234C6A;">Password Reset Request</h2>
-            <p>We received a request to reset your WisdomLinked account password.</p>
-            <p>Your verification code is:</p>
-            <div style="background: #f1f5f9; border-radius: 12px; padding: 20px; text-align: center; margin: 16px 0;">
-                <span style="font-size: 32px; font-weight: bold; letter-spacing: 8px; color: #234C6A;">${code}</span>
+        let text = `<div style="font-family: Arial, sans-serif; max-width: 520px; margin: 0 auto; background: #ffffff; border-radius: 16px; overflow: hidden; border: 1px solid #e2e8f0;">
+            <div style="background: linear-gradient(135deg, #234C6A 0%, #456882 100%); padding: 32px 24px; text-align: center;">
+                <h1 style="color: #ffffff; font-size: 24px; margin: 0; font-weight: 700; letter-spacing: 2px;">WISDOMLINKED</h1>
             </div>
-            <p style="color: #64748b; font-size: 14px;">This code expires in 60 seconds. If you didn't request a password reset, please ignore this email.</p>
+            <div style="padding: 32px 24px;">
+                <h2 style="color: #1e293b; font-size: 22px; margin: 0 0 12px 0;">Password Reset Request</h2>
+                <p style="color: #475569; font-size: 15px; line-height: 1.6; margin: 0 0 24px 0;">We received a request to reset your WisdomLinked account password. Use the code below to proceed.</p>
+                <div style="background: #f1f5f9; border-radius: 12px; padding: 24px; text-align: center; margin: 16px 0;">
+                    <span style="font-size: 36px; font-weight: bold; letter-spacing: 10px; color: #234C6A;">${code}</span>
+                </div>
+                <p style="color: #94a3b8; font-size: 13px; line-height: 1.5; margin: 24px 0 0 0;">This code expires in 60 seconds. If you didn't request a password reset, please ignore this email.</p>
+            </div>
+            <div style="background: #f8fafc; padding: 16px 24px; text-align: center; border-top: 1px solid #e2e8f0;">
+                <p style="color: #94a3b8; font-size: 12px; margin: 0;">&copy; ${new Date().getFullYear()} WisdomLinked. All rights reserved.</p>
+            </div>
         </div>`
         await utils.sendPasswordResetOTP(
             email,
