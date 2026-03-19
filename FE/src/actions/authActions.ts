@@ -1,5 +1,5 @@
 import { Dispatch, } from "redux";
-import { getMe } from "../api/api";
+import { getMe, callLogout } from "../api/api";
 import { resetChatAction } from "./chatActions";
 import { resetFriendsAction } from "./friendActions";
 import { actionTypes, CurrentUser } from "./types";
@@ -49,6 +49,7 @@ export const updateMe = () => {
 
 export const logoutUser = () => {
     return async (dispatch: Dispatch, getState: any) => {
+        await callLogout();
         localStorage.clear();
         dispatch({
             type: actionTypes.logout,

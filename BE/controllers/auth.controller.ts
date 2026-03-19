@@ -1182,8 +1182,24 @@ const sendEmailToAdmin = async (req: Request, res: Response) => {
     }
 };
 
+const logout = async (req: Request, res: Response) => {
+    try {
+        return res.status(200).cookie('jwt', '', {
+            httpOnly: true,
+            secure: true,
+            sameSite: 'none',
+            expires: new Date(1)
+        }).json({
+            status: "SUCCESS"
+        });
+    } catch (err) {
+        return res.status(500).send("Internal Server Error");
+    }
+}
+
 module.exports = {
     login,
+    logout,
     register,
     getMe,
     updateMissedChats,

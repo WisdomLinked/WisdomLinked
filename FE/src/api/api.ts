@@ -53,6 +53,14 @@ const logOut = () => {
     store.dispatch(logoutUser())
 };
 
+export const callLogout = async () => {
+    try {
+        await api.post("auth/logout");
+    } catch (err) {
+        console.error("Logout API failed", err);
+    }
+};
+
 const checkForAuthorization = (error: any) => {
     const responseCode = error?.response?.status;
 

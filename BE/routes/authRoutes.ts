@@ -4,6 +4,7 @@ const router = express.Router();
 
 const {
     login,
+    logout,
     register,
     updateMissedChats,
     updateProfile,
@@ -53,6 +54,7 @@ router.post("/resendConfirmEmail", resendConfirmEmail);
 router.post("/verifyRegistration", verifyRegistration);
 router.get("/checkVerification", checkVerificationStatus);
 router.post("/login", validateLoginSchema, login);
+router.post("/logout", logout);
 router.post("/confirmLoginByCode", confirmLoginByCode);
 router.post("/passwordResetRequest", passwordResetRequest);
 router.post("/verifyPasswordResetOTP", verifyPasswordResetOTP);

@@ -82,6 +82,14 @@ export default function WLLogin() {
         return () => { if (timerRef.current) clearInterval(timerRef.current); };
     }, []);
 
+    // Parse OAuth errors from URL
+    useEffect(() => {
+        const err = searchParams.get('error');
+        if (err) {
+            setOauthError(err);
+        }
+    }, [searchParams]);
+
     // OTP input handling
     const handleOtpChange = (index: number, value: string) => {
         if (!/^\d*$/.test(value)) return; // digits only
