@@ -51,7 +51,7 @@ const DashboardHeader = ({ userDetails }: any) => {
                         </div>
                         <span className="tracking-[0.12em] uppercase">WisdomLinked</span>
                     </Link>
-                    :   userDetails.role==="customer"? <Link to='/user/customerdashboard' className={`w-fit flex items-center space-x-[10px] font-black text-2xl ml-10 lg:ml-0`}>
+                    :   userDetails.role==="customer"? <Link to='/user/studentdashboard' className={`w-fit flex items-center space-x-[10px] font-black text-2xl ml-10 lg:ml-0`}>
                         <div className="w-11 h-11 rounded-2xl bg-white flex items-center justify-center overflow-hidden">
                             <img src={logo} className="w-9 h-9 object-contain" />
                         </div>

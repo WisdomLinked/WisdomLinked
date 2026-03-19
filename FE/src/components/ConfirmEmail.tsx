@@ -25,7 +25,7 @@ const ConfirmEmail: React.FC<ConfirmEmailProps> = ({ email }) => {
                     dispatch(showAlert('Verification successful! Logging you in...'));
                     setTimeout(() => {
                         navigate(data.userDetails.role === 'customer' 
-                            ? '/user/customerdashboard' 
+                            ? '/user/studentdashboard' 
                             : '/user/expertdashboard');
                     }, 1000);
                 }

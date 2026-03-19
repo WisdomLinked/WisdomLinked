@@ -99,9 +99,14 @@ const oauthCallback = async (req: any, res: any) => {
             return res.redirect(`${process.env.FE_URL}/login?error=no_account`);
         }
 
-        // Set role for new users from registration pages
-        if (role && (role === 'expert' || role === 'customer') && user.role !== role) {
+        // Set role for NEW users from registration pages only
+        if (isNew && role && (role === 'expert' || role === 'customer')) {
             user.role = role;
+        }
+        
+        // Block existing users from switching roles via OAuth re-registration
+        if (!isNew && role && (role === 'expert' || role === 'customer') && user.role !== role) {
+            return res.redirect(`${process.env.FE_URL}/login?error=role_mismatch`);
         }
         
         const token = jwt.sign(

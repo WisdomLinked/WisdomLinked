@@ -25,7 +25,7 @@ const VerifyEmail = () => {
                     dispatch(autoLogin() as any);
                     setTimeout(() => {
                         navigate(response.userDetails.role === 'customer' 
-                            ? '/user/customerdashboard' 
+                            ? '/user/studentdashboard' 
                             : '/user/expertdashboard');
                     }, 2000);
                 } else {

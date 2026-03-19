@@ -223,6 +223,12 @@ export default function WLLogin() {
                                         <span>No account found. Please <button type="button" onClick={() => navigate('/customerregister')} className="font-semibold underline">register</button> first.</span>
                                     </div>
                                 )}
+                                {oauthError === 'role_mismatch' && (
+                                    <div className="mb-4 p-3 rounded-xl bg-red-50 border border-red-200 text-red-800 text-sm flex items-start gap-2">
+                                        <AlertCircle size={16} className="mt-0.5 shrink-0" />
+                                        <span>An account already exists with a different role. Please log in with your existing role.</span>
+                                    </div>
+                                )}
                                 <div className="space-y-4">
                                     <div>
                                         <label className="block text-xs font-semibold text-slate-600 mb-1.5"><span className="flex items-center gap-1.5"><Mail size={12} /> Email</span></label>
