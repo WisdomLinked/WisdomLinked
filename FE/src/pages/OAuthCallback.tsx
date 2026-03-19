@@ -34,7 +34,8 @@ export default function OAuthCallback() {
             if (needsProfile) {
                 navigate('/auth-complete-profile', { replace: true });
             } else {
-                navigate(`/user/${role}dashboard`, { replace: true });
+                const dashboardPath = role === 'customer' ? '/user/studentdashboard' : `/user/${role}dashboard`;
+                navigate(dashboardPath, { replace: true });
             }
         };
         doLogin();
