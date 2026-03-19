@@ -741,13 +741,15 @@ const confirmPasswordResetByCode = async (req: Request, res: Response) => {
             return res.status(200).json({ status: 'FAIL', error: "User is blocked" });
         }
 
-        const passwordsMatch = await bcrypt.compare(String(password), request.password);
-
-        if (!passwordsMatch) {
-            return res.status(200).json({ status: 'FAIL', error: "Invalid password. Please try again" });
+        const isSameAsOld = await bcrypt.compare(String(password), user.password);
+        if (isSameAsOld) {
+            return res.status(200).json({ status: 'FAIL', error: "New password cannot be the same as the old password." });
         }
 
-        user.password = request.password
+        const salt = await bcrypt.genSalt(10);
+        const cryptPassword = await bcrypt.hash(password, salt);
+
+        user.password = cryptPassword;
         await user.save()
 
         await request.deleteOne()
