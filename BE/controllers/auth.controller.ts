@@ -670,6 +670,34 @@ const passwordResetRequest = async (req: Request, res: Response) => {
     }
 };
 
+const verifyPasswordResetOTP = async (req: Request, res: Response) => {
+    try {
+        const { email, code } = req.body;
+
+        const pwdRequest = await PendingPasswordReset.findOne({ email: { $regex: new RegExp(`^${email}$`, 'i') } });
+        if (!pwdRequest) {
+            return res.status(200).json({ status: 'FAIL', error: "Your reset request has expired. Please try again." });
+        }
+
+        const lockError = checkRateLimit(pwdRequest);
+        if (lockError) {
+            return res.status(200).json({ status: 'FAIL', error: lockError });
+        }
+
+        if (pwdRequest.code !== code) {
+            await handleFailedAttempt(pwdRequest);
+            return res.status(200).json({ status: 'FAIL', error: "Invalid code. Please try again." });
+        }
+
+        await resetFailedAttempts(pwdRequest);
+
+        return res.status(200).json({ status: 'SUCCESS' });
+    } catch (err) {
+        console.log(err)
+        return res.status(500).send(err.message);
+    }
+};
+
 const confirmPasswordResetByCode = async (req: Request, res: Response) => {
     try {
         const { email, password, code } = req.body;
@@ -1162,6 +1190,7 @@ module.exports = {
     checkVerificationStatus,
     confirmLoginByCode,
     passwordResetRequest,
+    verifyPasswordResetOTP,
     confirmPasswordResetByCode,
     updateResume,
     uploadChatFile,

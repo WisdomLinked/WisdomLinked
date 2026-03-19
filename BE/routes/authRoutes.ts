@@ -16,6 +16,7 @@ const {
     checkVerificationStatus,
     confirmLoginByCode,
     passwordResetRequest,
+    verifyPasswordResetOTP,
     confirmPasswordResetByCode,
     updateResume,
     uploadChatFile,
@@ -54,6 +55,7 @@ router.get("/checkVerification", checkVerificationStatus);
 router.post("/login", validateLoginSchema, login);
 router.post("/confirmLoginByCode", confirmLoginByCode);
 router.post("/passwordResetRequest", passwordResetRequest);
+router.post("/verifyPasswordResetOTP", verifyPasswordResetOTP);
 router.post("/confirmPasswordResetByCode", confirmPasswordResetByCode);
 router.get("/getKeywordsAndServices", getKeywordsAndServices);
 router.post("/updateMissedChats", requireAuth(false), updateMissedChats);

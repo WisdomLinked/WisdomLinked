@@ -6,6 +6,7 @@ import { login, confirmLoginByCode } from '../api/api';
 import { showAlert } from '../actions/alertActions';
 import { actionTypes } from '../actions/types';
 import SocialAuthBlock from '../components/SocialAuthBlock';
+import SignupModal from '../components/SignupModal';
 
 const BTN_PRIMARY_STYLE = { background: 'linear-gradient(135deg, #234C6A 0%, #456882 100%)' };
 const FOCUS_RING = 'focus:ring-2 focus:ring-[#234C6A]/60 focus:border-[#234C6A]';
@@ -14,7 +15,7 @@ export default function WLLogin() {
     const navigate = useNavigate();
     const [searchParams] = useSearchParams();
     const dispatch = useDispatch();
-    const oauthError = searchParams.get('error');
+    const [oauthError, setOauthError] = useState<string | null>(null);
     const [form, setForm] = useState({ email: '', password: '' });
     const [errors, setErrors] = useState<Record<string, string>>({});
     const [submitting, setSubmitting] = useState(false);
@@ -22,6 +23,7 @@ export default function WLLogin() {
 
     // OTP state
     const [codeSent, setCodeSent] = useState(false);
+    const [showSignupModal, setShowSignupModal] = useState(false);
     const [otpDigits, setOtpDigits] = useState<string[]>(['', '', '', '', '', '']);
     const [timeRemaining, setTimeRemaining] = useState(60);
     const [verifying, setVerifying] = useState(false);
@@ -272,7 +274,7 @@ export default function WLLogin() {
                                 </button>
                                 <SocialAuthBlock />
                                 <p className="text-center text-slate-500 text-sm mt-4">
-                                    Don't have an account? <button type="button" onClick={() => navigate('/customerregister')} className="font-semibold hover:underline" style={{ color: '#234C6A' }}>Sign up</button>
+                                    Don't have an account? <button type="button" onClick={() => setShowSignupModal(true)} className="font-semibold hover:underline" style={{ color: '#234C6A' }}>Sign up</button>
                                 </p>
                                 <button onClick={() => navigate('/')} className="mt-4 w-full py-2.5 rounded-xl border border-slate-200 text-slate-600 font-semibold text-sm hover:bg-slate-50">Back to Home</button>
                             </div>
@@ -347,6 +349,12 @@ export default function WLLogin() {
                     </div>
                 </div>
             </div>
+            {showSignupModal && (
+                <SignupModal 
+                    onClose={() => setShowSignupModal(false)} 
+                    onGoLogin={() => setShowSignupModal(false)} 
+                />
+            )}
         </div>
     );
 }

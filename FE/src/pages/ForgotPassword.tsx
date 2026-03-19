@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useDispatch } from 'react-redux';
-import { Mail, ArrowLeft, RefreshCw, AlertCircle, ShieldCheck, Lock, Eye, EyeOff, ArrowRight, CheckCircle } from 'lucide-react';
-import { callApi, passwordResetRequest, confirmPasswordResetByCode } from '../api/api';
+import { Mail, Lock, RefreshCw, AlertCircle, Eye, EyeOff, ArrowLeft, ArrowRight, ShieldCheck, CheckCircle } from 'lucide-react';
+import { passwordResetRequest, verifyPasswordResetOTP, confirmPasswordResetByCode } from '../api/api';
 import { showAlert } from '../actions/alertActions';
 
 const BTN_PRIMARY_STYLE = { background: 'linear-gradient(135deg, #234C6A 0%, #456882 100%)' };
@@ -132,7 +132,7 @@ export default function ForgotPassword() {
         setVerifying(true);
         setOtpError('');
         try {
-            const response = await confirmPasswordResetByCode({ email, password: 'temp_placeholder_pwd', code }) as any;
+            const response = await verifyPasswordResetOTP({ email, code }) as any;
             if (response.status === 'SUCCESS') {
                 // OTP verified — move to new password step
                 setStep('newPassword');

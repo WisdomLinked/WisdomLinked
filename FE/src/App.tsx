@@ -193,7 +193,13 @@ function App() {
       set_oldUserDetails(userDetails)
       
       const path = window.location.pathname;
-      if (path.includes('/oauth-callback') || path.includes('/verification/') || path.includes('/auth-complete-profile')) {
+      const search = window.location.search;
+      if (
+        path.includes('/oauth-callback') || 
+        path.includes('/verification/') || 
+        path.includes('/auth-complete-profile') ||
+        (path.includes('/login') && search.includes('error='))
+      ) {
         return;
       }
 

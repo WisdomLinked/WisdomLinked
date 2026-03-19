@@ -127,6 +127,16 @@ export const confirmPasswordResetByCode = async ({ email, password, code }: any)
     }
 };
 
+export const verifyPasswordResetOTP = async ({ email, code }: any) => {
+    try {
+        const res = await api.post<any>("auth/verifyPasswordResetOTP", { email, code });
+
+        return res.data;
+    } catch (err: any) {
+        return checkForAuthorization(err);
+    }
+};
+
 export const verifyRegistration = async ({ email, confirmCode }: any) => {
     try {
         const res = await api.post<any>("auth/verifyRegistration", { email, confirmCode });
