@@ -55,6 +55,23 @@ exports.sendMagicLink = async (targetEmail, todays_date_str, smurf_details_str) 
   }
 };
 
+exports.sendPasswordResetOTP = async (targetEmail, htmlContent) => {
+  const msg = {
+    to: targetEmail,
+    from: {
+      name: "WisdomLinked Support",
+      email: noReplyEmail,
+    },
+    subject: "Password Reset - WisdomLinked",
+    html: htmlContent,
+  };
+  try {
+    await sgMail.send(msg);
+  } catch (error) {
+    console.error("Error sending password reset OTP via SendGrid:", error.message);
+  }
+};
+
 exports.sendContactDetails = async (targetEmail, name, email, demand) => {
   const html = `
       <h3>New Contact Request</h3>

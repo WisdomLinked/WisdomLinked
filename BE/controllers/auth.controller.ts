@@ -536,11 +536,17 @@ const passwordResetRequest = async (req: Request, res: Response) => {
             await pwdRequest.save()
         }
 
-        let text = `<div>Verify your reset password request to TOE by the code <br/><b>${code}</b></div>`
-        await utils.sendOTP(
-            // process.env.NODE_ENV === 'development' ? 'varunsahni10134@gmail.com' : email,
+        let text = `<div style="font-family: Arial, sans-serif; max-width: 480px; margin: 0 auto;">
+            <h2 style="color: #234C6A;">Password Reset Request</h2>
+            <p>We received a request to reset your WisdomLinked account password.</p>
+            <p>Your verification code is:</p>
+            <div style="background: #f1f5f9; border-radius: 12px; padding: 20px; text-align: center; margin: 16px 0;">
+                <span style="font-size: 32px; font-weight: bold; letter-spacing: 8px; color: #234C6A;">${code}</span>
+            </div>
+            <p style="color: #64748b; font-size: 14px;">This code expires in 60 seconds. If you didn't request a password reset, please ignore this email.</p>
+        </div>`
+        await utils.sendPasswordResetOTP(
             email,
-            utils.getCurrentDateString(),
             text
         );
 
