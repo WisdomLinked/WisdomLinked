@@ -684,12 +684,16 @@ const verifyPasswordResetOTP = async (req: Request, res: Response) => {
             return res.status(200).json({ status: 'FAIL', error: lockError });
         }
 
-        if (pwdRequest.code !== code) {
+        if (pwdRequest.code !== Number(code)) {
             await handleFailedAttempt(pwdRequest);
             return res.status(200).json({ status: 'FAIL', error: "Invalid code. Please try again." });
         }
 
         await resetFailedAttempts(pwdRequest);
+
+        if ((new Date().getTime() - pwdRequest.updatedAt.getTime()) >= 60 * 1000) {
+            return res.status(200).json({ status: 'FAIL', error: "Code was expired." });
+        }
 
         return res.status(200).json({ status: 'SUCCESS' });
     } catch (err) {
