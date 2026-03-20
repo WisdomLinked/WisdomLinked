@@ -10,6 +10,8 @@ import {
   Check,
   Loader2,
 } from 'lucide-react';
+import { useAppSelector } from '../../store';
+import { doUpdateProfile, profileImageFetch, profileImageUpload } from '../../api/api';
 
 const PREFERENCE_OPTIONS = [
   { id: 'study_abroad', label: 'Study abroad' },
@@ -82,9 +84,22 @@ const MOCK_PAYMENTS: PaymentRecord[] = [
 ];
 
 export default function StudentProfile() {
-  const [name, setName] = useState('Alex Rivera');
-  const [email, setEmail] = useState('alex.rivera@example.com');
+  const { auth: { userDetails } } = useAppSelector((state: any) => state);
+
+  const [name, setName] = useState(() => userDetails?.username ?? '');
+  const [email, setEmail] = useState(() => userDetails?.email ?? '');
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
+  const [photoDataUrl, setPhotoDataUrl] = useState<string | null>(null);
+  const [photoFile, setPhotoFile] = useState<File | null>(null);
+
+  const readFileAsDataUrl = (file: File) =>
+    new Promise<string | null>(resolve => {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        resolve(typeof reader.result === 'string' ? reader.result : null);
+      };
+      reader.readAsDataURL(file);
+    });
   const [preferences, setPreferences] = useState<Record<string, boolean>>({
     study_abroad: true,
     work_abroad: false,
@@ -97,6 +112,23 @@ export default function StudentProfile() {
   const [personalDirty, setPersonalDirty] = useState(false);
   const [preferencesDirty, setPreferencesDirty] = useState(false);
   const [interestsDirty, setInterestsDirty] = useState(false);
+
+  // Keep profile header fields in sync with the authenticated user.
+  // Avoid overwriting while the user is editing the personal section.
+  useEffect(() => {
+    if (personalDirty) return;
+    if (userDetails?.username) setName(userDetails.username);
+    if (userDetails?.email) setEmail(userDetails.email);
+    if (userDetails?.image) {
+      profileImageFetch(userDetails.image, 'small')
+        .then((img: any) => {
+          if (typeof img === 'string') setPhotoUrl(img);
+        })
+        .catch(() => {
+          // keep current preview if fetch fails
+        });
+    }
+  }, [personalDirty, userDetails?.username, userDetails?.email, userDetails?.image]);
 
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [passwordStep, setPasswordStep] = useState<'request' | 'verify' | 'done'>('request');
@@ -138,13 +170,45 @@ export default function StudentProfile() {
     if (file && file.type.startsWith('image/')) {
       const url = URL.createObjectURL(file);
       setPhotoUrl(url);
+      setPhotoFile(file);
+      setPhotoDataUrl(null);
+
+      // Persist image by sending a base64 data URL to the backend.
+      // (The backend update endpoint expects `image` in the request body.)
+      // Precompute preview payload; we also re-read on save if needed.
+      readFileAsDataUrl(file).then(dataUrl => setPhotoDataUrl(dataUrl));
+
       setPersonalDirty(true);
     }
   };
 
-  const handleSavePersonal = () => {
-    // TODO: wire up API call to persist name/email/photo
-    setPersonalDirty(false);
+  const handleSavePersonal = async () => {
+    const trimmedName = name.trim();
+    if (!trimmedName) return;
+
+    let uploadedImageName: string | null = null;
+    if (photoFile) {
+      const formData = new FormData();
+      formData.append('image', photoFile);
+      const uploadRes = await profileImageUpload(formData);
+      uploadedImageName = uploadRes?.data?.details?.[0]?.filename || null;
+    } else if (photoDataUrl && typeof userDetails?.image === 'string') {
+      uploadedImageName = userDetails.image;
+    }
+
+    const ok = await doUpdateProfile({
+      username: trimmedName,
+      ...(uploadedImageName ? { image: uploadedImageName } : {}),
+      // Note: email isn't updated by the current backend `/auth/updateProfile` handler.
+    });
+
+    if (ok) {
+      setPersonalDirty(false);
+      setPhotoDataUrl(null);
+      setPhotoFile(null);
+      // Keep the email field consistent with backend response.
+      if (userDetails?.email) setEmail(userDetails.email);
+    }
   };
 
   const handleSavePreferences = () => {

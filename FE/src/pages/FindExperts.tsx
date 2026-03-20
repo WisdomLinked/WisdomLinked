@@ -62,7 +62,11 @@ const mentors: Mentor[] = [
   },
 ];
 
-export default function FindExpertsPage() {
+export default function FindExpertsPage({
+  onViewExpert,
+}: {
+  onViewExpert?: (mentor: MentorCardProps) => void;
+}) {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedMajor, setSelectedMajor] = useState<string>('all');
   const [selectedService, setSelectedService] = useState<string>('all');
@@ -218,7 +222,7 @@ export default function FindExpertsPage() {
                   key={mentor.id}
                   className="snap-start min-w-[260px] md:min-w-0 md:w-auto"
                 >
-                  <MentorCard {...mentor} />
+                  <MentorCard {...mentor} onViewProfile={onViewExpert} />
                 </div>
               ))}
               {newlyJoined.length === 0 && (
@@ -242,7 +246,12 @@ export default function FindExpertsPage() {
 
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 lg:gap-6">
               {others.map(mentor => (
-                <MentorCard key={mentor.id} {...mentor} compact />
+                <MentorCard
+                  key={mentor.id}
+                  {...mentor}
+                  compact
+                  onViewProfile={onViewExpert}
+                />
               ))}
             </div>
           </section>

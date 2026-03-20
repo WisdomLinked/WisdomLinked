@@ -12,6 +12,7 @@ export interface MentorCardProps {
   image: string | null;
   isNew: boolean;
   compact?: boolean;
+  onViewProfile?: (mentor: MentorCardProps) => void;
 }
 
 const serviceColorByIndex = (index: number) => {
@@ -31,9 +32,26 @@ const MentorCard: React.FC<MentorCardProps> = ({
   image,
   isNew,
   compact = false,
+  onViewProfile,
+  id,
 }) => {
+  const aiHeadshotUrl = (seed: string) =>
+    `https://api.dicebear.com/9.x/bottts-neutral/svg?seed=${encodeURIComponent(seed)}`;
+
+  const resolvedImage = image ?? aiHeadshotUrl(name);
+
   return (
     <article
+      onClick={() => onViewProfile?.({ id, name, title, institution, field, experience, services, image, isNew, compact })}
+      role={onViewProfile ? 'button' : undefined}
+      tabIndex={onViewProfile ? 0 : undefined}
+      onKeyDown={e => {
+        if (!onViewProfile) return;
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          onViewProfile({ id, name, title, institution, field, experience, services, image, isNew, compact });
+        }
+      }}
       className={`group flex flex-col rounded-xl border border-[#E5E2DB] bg-white transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_16px_40px_rgba(26,58,74,0.18)] ${
         compact ? 'p-4' : 'p-5'
       }`}
@@ -41,22 +59,7 @@ const MentorCard: React.FC<MentorCardProps> = ({
       <div className="flex gap-4">
         <div className="relative shrink-0">
           <div className="h-28 w-20 overflow-hidden rounded-md bg-[#1A3A4A]/90 text-white flex items-center justify-center text-sm font-semibold">
-            {image ? (
-              <img
-                src={image}
-                alt={name}
-                className="h-full w-full object-cover"
-              />
-            ) : (
-              <span className="leading-tight">
-                {name
-                  .split(' ')
-                  .map(part => part[0])
-                  .join('')
-                  .slice(0, 2)
-                  .toUpperCase()}
-              </span>
-            )}
+            <img src={resolvedImage} alt={name} className="h-full w-full object-cover" />
           </div>
           {isNew && (
             <span className="absolute -top-2 left-0 rounded-sm bg-[#C9A84C] px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-[#1A3A4A] shadow-sm">
@@ -112,6 +115,10 @@ const MentorCard: React.FC<MentorCardProps> = ({
         <button
           type="button"
           className="rounded-[4px] bg-[#1A3A4A] px-3 py-1.5 text-[0.78rem] font-semibold text-white hover:bg-[#122635]"
+          onClick={e => {
+            e.stopPropagation();
+            onViewProfile?.({ id, name, title, institution, field, experience, services, image, isNew, compact });
+          }}
         >
           View Profile
         </button>

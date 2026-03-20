@@ -6,6 +6,7 @@ import {
   Calendar,
   Video,
   UserCircle,
+  Settings,
   Menu,
   X,
 } from 'lucide-react';
@@ -19,6 +20,7 @@ const defaultNavItems = [
   { id: 'calendar', label: 'Calendar', icon: Calendar },
   { id: 'join-meeting', label: 'Join Meeting', icon: Video },
   { id: 'profile', label: 'Profile', icon: UserCircle },
+  { id: 'settings', label: 'Settings', icon: Settings },
 ];
 
 export default function Sidebar({
@@ -26,12 +28,14 @@ export default function Sidebar({
   activeItem,
   onNavigate,
   studentName = 'Alex Rivera',
+  avatarUrl,
   roleLabel = 'Student',
 }: {
   navItems?: { id: string; label: string; icon: React.ComponentType<{ className?: string }> }[];
   activeItem: string;
   onNavigate: (id: string) => void;
   studentName?: string;
+  avatarUrl?: string;
   roleLabel?: string;
 }) {
   const [openMobile, setOpenMobile] = useState(false);
@@ -50,12 +54,12 @@ export default function Sidebar({
             />
           </div>
           <div>
-            <div className="font-serif text-lg font-bold text-[#234c6a] leading-tight">
+              <div className="font-serif text-lg font-bold text-[#234c6a] leading-tight">
               WisdomLinked
             </div>
-            <div className="mt-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">
-              Learning Platform
-            </div>
+              <div className="mt-1 whitespace-nowrap text-[9px] font-semibold uppercase tracking-[0.08em] text-[#7A7A72]">
+                {(roleLabel === 'Expert' || roleLabel === 'Student') ? 'Advising 🔄 Learning' : 'Learning Platform'}
+              </div>
           </div>
         </div>
       </div>
@@ -87,14 +91,22 @@ export default function Sidebar({
 
       <div className="mt-4 border-t border-slate-200 pt-4">
         <div className="flex items-center gap-3 mb-3">
-          <div className="avatar flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#e8f0f8] text-[11px] font-bold text-[#234c6a]">
-            {studentName
-              .split(' ')
-              .map(part => part[0])
-              .join('')
-              .slice(0, 2)
-              .toUpperCase()}
-          </div>
+          {avatarUrl ? (
+            <img
+              src={avatarUrl}
+              alt={studentName}
+              className="h-9 w-9 shrink-0 rounded-full object-cover border border-slate-200"
+            />
+          ) : (
+            <div className="avatar flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#e8f0f8] text-[11px] font-bold text-[#234c6a]">
+              {studentName
+                .split(' ')
+                .map(part => part[0])
+                .join('')
+                .slice(0, 2)
+                .toUpperCase()}
+            </div>
+          )}
           <div>
             <div className="font-sans text-[13px] font-semibold text-slate-800">
               {studentName}

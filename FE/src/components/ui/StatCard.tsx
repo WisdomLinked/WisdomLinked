@@ -46,7 +46,7 @@ export default function StatCard({
 
   return (
     <div
-      className={`group relative flex items-center justify-between rounded-2xl border border-[#e8e6e1] bg-white px-10 py-6 min-h-[118px] shadow-[0_10px_30px_rgba(0,0,0,0.06)] transition-transform duration-150 hover:-translate-y-1 hover:shadow-[0_16px_40px_rgba(0,0,0,0.10)] ${
+      className={`group relative flex items-center justify-between rounded-2xl border border-[#e8e6e1] bg-white px-8 py-8 min-h-[148px] shadow-[0_10px_30px_rgba(0,0,0,0.06)] transition-transform duration-150 hover:-translate-y-1 hover:shadow-[0_16px_40px_rgba(0,0,0,0.10)] ${
         onClick ? 'cursor-pointer' : ''
       }`}
       role={onClick ? 'button' : undefined}
@@ -76,7 +76,7 @@ export default function StatCard({
           </div>
         )}
       </div>
-      <div className="ml-4 flex flex-col items-end gap-1">
+      <div className="ml-3 flex flex-col items-end gap-1">
         <div
           className={`flex h-12 w-12 items-center justify-center rounded-full ${colors.iconBg} ${colors.iconText}`}
         >

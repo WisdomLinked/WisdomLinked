@@ -13,7 +13,11 @@ type Meeting = {
 
 const containerClass = 'h-[calc(100vh-56px)] overflow-y-auto px-6 py-7 bg-[#F5F3EF]';
 
-export default function StudentCalendar() {
+export default function StudentCalendar({
+  onJoinMeeting,
+}: {
+  onJoinMeeting?: () => void;
+}) {
   const today = new Date();
   const ymd = (d: Date) => d.toISOString().slice(0, 10);
   const todayDateStr = ymd(today);
@@ -348,6 +352,16 @@ export default function StudentCalendar() {
                       <span className="truncate">{m.location}</span>
                     </div>
                     <p className="mt-0.5 text-[11px] text-slate-500">{m.with}</p>
+                    <div className="mt-2 flex justify-end">
+                      <button
+                        type="button"
+                        onClick={() => onJoinMeeting?.()}
+                        className="inline-flex items-center justify-center rounded-[4px] bg-[#234C6A] px-3 py-1.5 text-[11px] font-semibold text-white hover:brightness-110 disabled:opacity-60"
+                        disabled={!onJoinMeeting}
+                      >
+                        Join meeting
+                      </button>
+                    </div>
                   </div>
                 ))}
               {upcomingMeetings.length === 0 && (
@@ -518,6 +532,17 @@ export default function StudentCalendar() {
                             <p className="mt-1 text-[11px] text-slate-500">
                               {m.with}
                             </p>
+                            {!isPastMeeting(m) && onJoinMeeting && (
+                              <div className="mt-2">
+                                <button
+                                  type="button"
+                                  onClick={() => onJoinMeeting?.()}
+                                  className="inline-flex w-full items-center justify-center rounded-[4px] bg-[#234C6A] px-3 py-1.5 text-[11px] font-semibold text-white hover:brightness-110"
+                                >
+                                  Join meeting
+                                </button>
+                              </div>
+                            )}
                           </div>
                           <span
                             className={`shrink-0 inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold ${colorForMeeting(m).bg} ${

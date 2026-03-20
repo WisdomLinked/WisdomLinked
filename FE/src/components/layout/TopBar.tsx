@@ -1,5 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import { Bell, ChevronDown, UserCircle2 } from 'lucide-react';
+import { Bell, ChevronDown, UserCircle2, MessageSquare, Users, BookOpen, X } from 'lucide-react';
+import { useDispatch } from 'react-redux';
+import { logoutUser } from '../../actions/authActions';
 
 export default function TopBar({
   title = 'Student Dashboard',
@@ -12,8 +14,31 @@ export default function TopBar({
   avatarUrl?: string;
   onProfileClick?: () => void;
 }) {
+  const dispatch = useDispatch();
   const [openMenu, setOpenMenu] = useState(false);
   const [menuVisible, setMenuVisible] = useState(false);
+  const [openNotifications, setOpenNotifications] = useState(false);
+
+  const notifications = [
+    {
+      id: 'n1',
+      title: 'New seminar added by Prof. Emily Chen',
+      meta: '2 hours ago',
+      icon: <BookOpen className="h-3.5 w-3.5 text-[#1A3A4A]" aria-hidden />,
+    },
+    {
+      id: 'n2',
+      title: 'New expert joined: Dr. Liam Carter',
+      meta: 'Today',
+      icon: <Users className="h-3.5 w-3.5 text-[#1A3A4A]" aria-hidden />,
+    },
+    {
+      id: 'n3',
+      title: 'New chat message from Prof. Daniel Ortiz',
+      meta: '5 mins ago',
+      icon: <MessageSquare className="h-3.5 w-3.5 text-[#1A3A4A]" aria-hidden />,
+    },
+  ];
 
   useEffect(() => {
     if (!openMenu) {
@@ -30,19 +55,64 @@ export default function TopBar({
         <span className="font-sans text-[14px] font-semibold text-slate-800">
           {title}
         </span>
-        <div className="flex items-center gap-2.5">
+        <div className="relative flex items-center gap-2.5">
           <button
             type="button"
+            onClick={() => {
+              setOpenNotifications(o => !o);
+              setOpenMenu(false);
+            }}
             className="relative inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 hover:bg-slate-50"
             aria-label="Notifications"
           >
             <Bell className="h-4 w-4" aria-hidden="true" />
             <span className="absolute right-1.5 top-1.5 inline-flex h-1.5 w-1.5 rounded-full bg-emerald-500" />
           </button>
+          {openNotifications && (
+            <div className="absolute right-16 top-10 z-30 w-[320px] rounded-xl border border-[#E5E2DB] bg-white shadow-[0_16px_40px_rgba(0,0,0,0.10)]">
+              <div className="border-b border-[#E5E2DB] px-4 py-3 flex items-center justify-between">
+                <p className="text-[12px] font-semibold uppercase tracking-[0.16em] text-[#7A7A72]">
+                  Notifications
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setOpenNotifications(false)}
+                  className="inline-flex h-6 w-6 items-center justify-center rounded-md text-slate-500 hover:bg-slate-100 hover:text-slate-700"
+                  aria-label="Close notifications"
+                >
+                  <X className="h-4 w-4" aria-hidden />
+                </button>
+              </div>
+              <div className="max-h-72 overflow-y-auto p-2">
+                {notifications.map(item => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    className="w-full rounded-lg px-2 py-2 text-left hover:bg-[#F5F3EF]"
+                  >
+                    <div className="flex items-start gap-2">
+                      <span className="mt-0.5 inline-flex h-6 w-6 items-center justify-center rounded-full bg-[#E8EEF4]">
+                        {item.icon}
+                      </span>
+                      <div className="min-w-0">
+                        <p className="text-[12px] font-semibold text-slate-900">
+                          {item.title}
+                        </p>
+                        <p className="mt-0.5 text-[11px] text-[#7A7A72]">{item.meta}</p>
+                      </div>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
           <div className="relative">
             <button
               type="button"
-              onClick={() => setOpenMenu(o => !o)}
+              onClick={() => {
+                setOpenMenu(o => !o);
+                setOpenNotifications(false);
+              }}
               className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-2.5 py-1.5 text-[12px] text-slate-700 hover:bg-slate-50"
               aria-haspopup="menu"
               aria-expanded={openMenu}
@@ -87,13 +157,11 @@ export default function TopBar({
                 </button>
                 <button
                   type="button"
-                  className="w-full px-3 py-2 text-left hover:bg-slate-50"
-                >
-                  Settings
-                </button>
-                <button
-                  type="button"
                   className="w-full px-3 py-2 text-left text-red-600 hover:bg-red-50"
+                  onClick={() => {
+                    dispatch(logoutUser() as any);
+                    setOpenMenu(false);
+                  }}
                 >
                   Logout
                 </button>
