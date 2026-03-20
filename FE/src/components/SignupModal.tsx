@@ -32,7 +32,7 @@ export default function SignupModal({ onClose, onGoLogin }: { onClose: () => voi
             <div className="w-12 h-12 rounded-xl flex items-center justify-center mb-4 transition-colors" style={{ backgroundColor: '#D9EAFD' }}>
               <Users size={24} className="text-[#234C6A]" />
             </div>
-            <h3 className="font-display font-bold text-slate-800 mb-1">Join as an Expert</h3>
+            <h3 className="font-display font-bold text-slate-800 mb-1">Join as an expert</h3>
             <p className="text-slate-500 text-xs">Share your expertise and mentor students globally</p>
           </button>
           <button

@@ -10,9 +10,13 @@ import StudentCalendar from '../components/dashboard/StudentCalendar';
 import JoinMeeting from '../components/dashboard/JoinMeeting';
 import StudentSeminars from '../components/dashboard/StudentSeminars';
 import FindExpertsPage from './FindExperts';
+import Chatbot from '../components/chatbot';
+import UpcomingCountdownCard from '../components/dashboard/UpcomingCountdownCard';
+import UpcomingSessionModal from '../components/dashboard/UpcomingSessionModal';
 
 export default function StudentDashboard() {
   const [activeItem, setActiveItem] = useState('dashboard');
+  const [upcomingModalKind, setUpcomingModalKind] = useState<'seminar' | 'oneToOne' | null>(null);
   const greeting = useMemo(() => {
     const hour = new Date().getHours();
     return hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
@@ -27,15 +31,17 @@ export default function StudentDashboard() {
     tooltip?: string;
     icon: typeof BookOpen;
     color: 'primary' | 'success' | 'warning' | 'neutral';
+    onClick?: () => void;
   }> = [
     {
       id: 'booked-seminars',
       label: 'Booked seminar sessions',
       value: 8,
       trend: '+12% this week',
-      subline: '2 days until next seminar',
+      subline: undefined,
       icon: BookOpen,
       color: 'success',
+      onClick: () => setUpcomingModalKind('seminar'),
     },
     {
       id: 'pending-seminars',
@@ -50,9 +56,10 @@ export default function StudentDashboard() {
       label: 'Booked individual sessions',
       value: 5,
       trend: '+8% this week',
-      subline: '4 hours to next 1:1',
+      subline: undefined,
       icon: UserCheck,
       color: 'success',
+      onClick: () => setUpcomingModalKind('oneToOne'),
     },
     {
       id: 'pending-individual',
@@ -109,20 +116,43 @@ export default function StudentDashboard() {
             <StudentSeminars />
           ) : (
             <div className="px-6 py-7">
-              <section>
-                <h2 className="text-3xl font-semibold text-slate-900">
-                  {greeting}, {studentName.split(' ')[0]} 👋
-                </h2>
-                <p className="mt-1 max-w-xl font-sans text-[13px] text-slate-500">
-                  Here&apos;s what&apos;s happening with your WisdomLinked sessions today.
-                </p>
-                <StatsGrid cards={cards} />
-              </section>
+              <div className="grid gap-6 lg:grid-cols-[1fr_380px]">
+                <section className="min-w-0">
+                  <h2 className="text-3xl font-semibold text-slate-900">
+                    {greeting}, {studentName.split(' ')[0]} 👋
+                  </h2>
+                  <p className="mt-1 max-w-xl font-sans text-[13px] text-slate-500">
+                    Here&apos;s what&apos;s happening with your WisdomLinked sessions today.
+                  </p>
+                  <StatsGrid cards={cards} />
+                </section>
+
+                <div className="hidden lg:block">
+                  <div className="mt-16">
+                    <UpcomingCountdownCard />
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-6 lg:hidden">
+                <UpcomingCountdownCard />
+              </div>
 
               <CarouselSection />
             </div>
           )}
+          {activeItem !== 'chat' && activeItem !== 'profile' ? <Chatbot /> : null}
         </main>
+        {upcomingModalKind && (
+          <UpcomingSessionModal
+            kind={upcomingModalKind}
+            onClose={() => setUpcomingModalKind(null)}
+            onJoin={() => {
+              setUpcomingModalKind(null);
+              setActiveItem('join-meeting');
+            }}
+          />
+        )}
       </div>
     </div>
   );

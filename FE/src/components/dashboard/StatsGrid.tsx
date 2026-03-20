@@ -10,6 +10,7 @@ type StatsCardConfig = {
   tooltip?: string;
   icon: React.ComponentType<{ size?: number; className?: string; 'aria-hidden'?: boolean }>;
   color?: 'primary' | 'success' | 'warning' | 'neutral';
+  onClick?: () => void;
 };
 
 export default function StatsGrid({ cards }: { cards: StatsCardConfig[] }) {

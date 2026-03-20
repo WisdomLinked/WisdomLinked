@@ -13,7 +13,6 @@ import CloseIcon from '@mui/icons-material/Close';
 import SelectDateTime from "../selectDateTime";
 import { showAlert } from "../../../actions/alertActions";
 import {setChosenChatDetails, setChosenGroupChatDetails} from "../../../actions/chatActions";
-import Chatbot from "../../../components/chatbot";
 
 const Dashboard = () => {
 
@@ -450,16 +449,7 @@ const Dashboard = () => {
                                             </div>
                                         </div>
             )}
-            <div
-                style={{
-                    position: "fixed",
-                    bottom: "20px",
-                    right: "20px",
-                    zIndex: 1000,
-                }}
-            >
-                <Chatbot/>
-            </div>
+            {null}
         </div>
     );
 };

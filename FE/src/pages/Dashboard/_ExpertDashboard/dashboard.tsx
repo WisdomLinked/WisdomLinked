@@ -15,7 +15,6 @@ import { updateMe } from "../../../actions/authActions";
 import { useDispatch } from "react-redux";
 import { SetLoadingStatus } from "../../../actions/appActions";
 import {setChosenChatDetails, setChosenGroupChatDetails} from "../../../actions/chatActions";
-import Chatbot from "../../../components/chatbot";
 
 const Dashboard = () => {
 
@@ -336,16 +335,7 @@ const Dashboard = () => {
                     </div> :
                     <div className="text-center text-lightgrey my-10">No pending Individual sessions</div>
             }
-            <div
-                style={{
-                    position: "fixed",
-                    bottom: "20px",
-                    right: "20px",
-                    zIndex: 1000,
-                }}
-            >
-                <Chatbot/>
-            </div>
+            {null}
         </div>
     );
 };

@@ -131,10 +131,9 @@ import React, {
   
     useEffect(() => {
       if (userDetails.status === 'review') {
-        dispatch(showAlert("This feature isn't available under review"));
-        navigate(-1);
+        dispatch(showAlert("This feature isn't available while your profile is under review."));
       }
-    }, [userDetails.status, dispatch, navigate]);
+    }, [userDetails.status, dispatch]);
   
     useEffect(() => {
       if (!selectedSeminar) return;

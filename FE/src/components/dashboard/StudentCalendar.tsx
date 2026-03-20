@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { CalendarDays, Clock, Plus, MapPin } from 'lucide-react';
+import { CalendarDays, Clock, MapPin, X } from 'lucide-react';
 
 type Meeting = {
   id: string;
@@ -11,43 +11,61 @@ type Meeting = {
   type: 'seminar' | 'session';
 };
 
-const initialMeetings: Meeting[] = [
-  {
-    id: 'm1',
-    title: 'AI for Healthcare seminar',
-    date: new Date().toISOString().slice(0, 10),
-    time: '17:00',
-    with: 'Seminar host: Dr. Yuki Tanaka',
-    location: 'Online · WisdomLinked Room',
-    type: 'seminar',
-  },
-  {
-    id: 'm2',
-    title: '1:1 with Dr. Emily Chen',
-    date: new Date(new Date().setDate(new Date().getDate() + 2))
-      .toISOString()
-      .slice(0, 10),
-    time: '10:30',
-    with: 'Mentor: Dr. Emily Chen',
-    location: 'Online · WisdomLinked Room',
-    type: 'session',
-  },
-];
-
 const containerClass = 'h-[calc(100vh-56px)] overflow-y-auto px-6 py-7 bg-[#F5F3EF]';
 
 export default function StudentCalendar() {
   const today = new Date();
+  const ymd = (d: Date) => d.toISOString().slice(0, 10);
+  const todayDateStr = ymd(today);
+
+  const initialMeetings: Meeting[] = [
+    {
+      id: 'm1',
+      title: 'AI for Healthcare seminar',
+      date: ymd(new Date(new Date().setDate(new Date().getDate() - 5))),
+      time: '14:00',
+      with: 'Seminar host: Dr. Yuki Tanaka',
+      location: 'Online · WisdomLinked Room',
+      type: 'seminar',
+    },
+    {
+      id: 'm2',
+      title: '1:1 with Dr. Emily Chen',
+      date: ymd(new Date(new Date().setDate(new Date().getDate() - 2))),
+      time: '10:30',
+      with: 'Mentor: Dr. Emily Chen',
+      location: 'Online · WisdomLinked Room',
+      type: 'session',
+    },
+    {
+      id: 'm3',
+      title: 'Seminar: AI in Healthcare Systems',
+      date: ymd(new Date(new Date().setDate(new Date().getDate() + 3))),
+      time: '17:00',
+      with: 'Seminar host: Dr. Yuki Tanaka',
+      location: 'Online · WisdomLinked Room',
+      type: 'seminar',
+    },
+    {
+      id: 'm4',
+      title: '1:1 session with Prof. Daniel Ortiz',
+      date: ymd(new Date(new Date().setDate(new Date().getDate() + 1))),
+      time: '09:30',
+      with: 'Mentor: Prof. Daniel Ortiz',
+      location: 'Online · WisdomLinked Room',
+      type: 'session',
+    },
+  ];
+
   const [currentMonth, setCurrentMonth] = useState(
     new Date(today.getFullYear(), today.getMonth(), 1),
   );
   const [meetings, setMeetings] = useState<Meeting[]>(initialMeetings);
 
-  const [newTitle, setNewTitle] = useState('');
-  const [newDate, setNewDate] = useState(today.toISOString().slice(0, 10));
-  const [newTime, setNewTime] = useState('09:00');
-  const [newWith, setNewWith] = useState('');
-  const [newType, setNewType] = useState<'seminar' | 'session'>('session');
+  const [selectedPastId, setSelectedPastId] = useState<string | null>(null);
+
+  const [selectedDayDate, setSelectedDayDate] = useState<string | null>(null);
+  const [showDayModal, setShowDayModal] = useState(false);
 
   const monthLabel = useMemo(
     () =>
@@ -85,6 +103,40 @@ export default function StudentCalendar() {
     return map;
   }, [meetings]);
 
+  const getMeetingDateTime = (m: Meeting) => {
+    // Combine date + time into a local Date so "past vs upcoming" is correct.
+    const dt = new Date(`${m.date}T${m.time}:00`);
+    return Number.isNaN(dt.getTime()) ? null : dt;
+  };
+
+  const isPastMeeting = (m: Meeting) => {
+    const dt = getMeetingDateTime(m);
+    if (!dt) return false;
+    return dt.getTime() < Date.now();
+  };
+
+  const colorForMeeting = (m: Meeting) => {
+    if (isPastMeeting(m)) {
+      return {
+        bg: 'bg-slate-200 text-slate-600',
+        dot: 'bg-slate-400',
+        label: m.type === 'seminar' ? 'Past seminar' : 'Past 1-1',
+      };
+    }
+    if (m.type === 'seminar') {
+      return {
+        bg: 'bg-emerald-500 text-white',
+        dot: 'bg-emerald-300',
+        label: 'Seminar',
+      };
+    }
+    return {
+      bg: 'bg-[#2563EB] text-white',
+      dot: 'bg-blue-300',
+      label: '1-1 session',
+    };
+  };
+
   const handlePrevMonth = () => {
     setCurrentMonth(
       new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, 1),
@@ -97,29 +149,45 @@ export default function StudentCalendar() {
     );
   };
 
-  const handleAddMeeting = () => {
-    if (!newTitle.trim()) return;
-    const id = `m-${Date.now()}`;
-    const meeting: Meeting = {
-      id,
-      title: newTitle.trim(),
-      date: newDate,
-      time: newTime,
-      with: newWith.trim() || 'Custom meeting',
-      location: 'Online · WisdomLinked Room',
-      type: newType,
-    };
-    setMeetings(prev => [...prev, meeting]);
-    setNewTitle('');
-    setNewWith('');
-  };
-
   const isSameDate = (a: Date, b: Date) =>
     a.getFullYear() === b.getFullYear() &&
     a.getMonth() === b.getMonth() &&
     a.getDate() === b.getDate();
 
-  const todayStr = today.toISOString().slice(0, 10);
+  const pastMeetings = useMemo(
+    () =>
+      meetings
+        .filter(m => isPastMeeting(m))
+        .slice()
+        .sort((a, b) => {
+          const aDt = getMeetingDateTime(a)?.getTime() ?? 0;
+          const bDt = getMeetingDateTime(b)?.getTime() ?? 0;
+          return bDt - aDt;
+        }),
+    [meetings],
+  );
+
+  const upcomingMeetings = useMemo(
+    () =>
+      meetings
+        .filter(m => !isPastMeeting(m))
+        .slice()
+        .sort((a, b) => {
+          const aDt = getMeetingDateTime(a)?.getTime() ?? 0;
+          const bDt = getMeetingDateTime(b)?.getTime() ?? 0;
+          return aDt - bDt;
+        }),
+    [meetings],
+  );
+
+  const selectedPast =
+    (selectedPastId
+      ? pastMeetings.find(m => m.id === selectedPastId)
+      : null) ?? pastMeetings[0] ?? null;
+
+  const selectedDayMeetings = selectedDayDate
+    ? meetingsByDate[selectedDayDate] ?? []
+    : [];
 
   return (
     <div className={containerClass}>
@@ -129,7 +197,7 @@ export default function StudentCalendar() {
             Calendar
           </h1>
           <p className="text-sm text-slate-500">
-            See your upcoming seminars and 1-1 sessions, and add new meetings.
+            See upcoming seminars and 1-1 sessions, and review your past meetings.
           </p>
         </div>
         <div className="flex items-center gap-2 text-xs text-slate-600">
@@ -138,8 +206,12 @@ export default function StudentCalendar() {
             Seminar
           </span>
           <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-1 text-[11px] text-slate-700">
-            <span className="inline-block h-2 w-2 rounded-full bg-sky-500" />
-            1-1 session
+            <span className="inline-block h-2 w-2 rounded-full bg-[#2563EB]" />
+            1-1 appointment
+          </span>
+          <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-1 text-[11px] text-slate-600">
+            <span className="inline-block h-2 w-2 rounded-full bg-slate-300" />
+            Past
           </span>
         </div>
       </div>
@@ -184,9 +256,14 @@ export default function StudentCalendar() {
               const dayMeetings = meetingsByDate[dateStr] || [];
               const isToday = isSameDate(date, today);
               return (
-                <div
+                <button
                   key={dateStr}
-                  className={`min-h-[72px] rounded-xl border border-slate-100 bg-slate-50/60 px-1.5 py-1.5 ${
+                  type="button"
+                  onClick={() => {
+                    setSelectedDayDate(dateStr);
+                    setShowDayModal(true);
+                  }}
+                  className={`min-h-[72px] rounded-xl border border-slate-100 bg-slate-50/60 px-1.5 py-1.5 text-left transition-colors ${
                     isToday
                       ? 'border-[#234C6A] bg-[#E8EEF4]'
                       : 'hover:border-slate-300'
@@ -203,25 +280,31 @@ export default function StudentCalendar() {
                     )}
                   </div>
                   <div className="space-y-0.5">
-                    {dayMeetings.slice(0, 3).map(m => (
-                      <div
-                        key={m.id}
-                        className={`truncate rounded-md px-1 py-0.5 text-[10px] text-white ${
-                          m.type === 'seminar'
-                            ? 'bg-emerald-500'
-                            : 'bg-sky-500'
-                        }`}
-                      >
-                        {m.time} · {m.title}
-                      </div>
-                    ))}
-                    {dayMeetings.length > 3 && (
-                      <div className="text-[9px] text-slate-500">
-                        +{dayMeetings.length - 3} more
-                      </div>
+                    {dayMeetings.length === 0 ? (
+                      isToday ? (
+                        <p className="text-[9px] text-slate-500">No events today</p>
+                      ) : null
+                    ) : (
+                      <>
+                        {dayMeetings.slice(0, 3).map(m => (
+                          <div
+                            key={m.id}
+                            className={`truncate rounded-md px-1 py-0.5 text-[10px] text-white ${
+                              colorForMeeting(m).bg
+                            }`}
+                          >
+                            {m.time} · {m.title}
+                          </div>
+                        ))}
+                        {dayMeetings.length > 3 && (
+                          <div className="text-[9px] text-slate-500">
+                            +{dayMeetings.length - 3} more
+                          </div>
+                        )}
+                      </>
                     )}
                   </div>
-                </div>
+                </button>
               );
             })}
           </div>
@@ -234,11 +317,7 @@ export default function StudentCalendar() {
               Upcoming meetings
             </h2>
             <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
-              {meetings
-                .slice()
-                .sort((a, b) =>
-                  `${a.date}T${a.time}`.localeCompare(`${b.date}T${b.time}`),
-                )
+              {upcomingMeetings
                 .map(m => (
                   <div
                     key={m.id}
@@ -252,7 +331,7 @@ export default function StudentCalendar() {
                         className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium ${
                           m.type === 'seminar'
                             ? 'bg-emerald-100 text-emerald-700'
-                            : 'bg-sky-100 text-sky-700'
+                            : 'bg-blue-100 text-blue-700'
                         }`}
                       >
                         {m.type === 'seminar' ? 'Seminar' : '1-1 session'}
@@ -271,7 +350,7 @@ export default function StudentCalendar() {
                     <p className="mt-0.5 text-[11px] text-slate-500">{m.with}</p>
                   </div>
                 ))}
-              {meetings.length === 0 && (
+              {upcomingMeetings.length === 0 && (
                 <p className="text-[11px] text-slate-500">
                   No meetings scheduled yet.
                 </p>
@@ -281,99 +360,181 @@ export default function StudentCalendar() {
 
           <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
             <h2 className="mb-2 text-sm font-semibold text-slate-900">
-              Add new meeting
+              Past meetings
             </h2>
-            <div className="space-y-2 text-xs">
-              <div>
-                <label className="mb-1 block text-[11px] font-medium text-slate-600">
-                  Title
-                </label>
-                <input
-                  type="text"
-                  value={newTitle}
-                  onChange={e => setNewTitle(e.target.value)}
-                  placeholder="e.g. 1-1 with Dr. Chen"
-                  className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-800 placeholder:text-slate-400 outline-none focus:border-[#234C6A] focus:ring-1 focus:ring-[#234C6A]/40"
-                />
+
+            <div className="space-y-3">
+              <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+                {pastMeetings.length === 0 ? (
+                  <p className="text-[11px] text-slate-500">
+                    No past meetings yet.
+                  </p>
+                ) : (
+                  pastMeetings.map(m => {
+                    const active = m.id === selectedPast?.id;
+                    const chipBg = 'bg-slate-200 text-slate-600';
+                    const label = m.type === 'seminar' ? 'Seminar' : '1-1';
+                    return (
+                      <button
+                        key={m.id}
+                        type="button"
+                        onClick={() => setSelectedPastId(m.id)}
+                        className={`w-full text-left rounded-xl border px-3 py-2 text-xs transition-colors ${
+                          active
+                            ? 'border-[#234C6A] bg-[#E8EEF4] text-slate-900'
+                            : 'border-slate-100 bg-slate-50 text-slate-700 hover:bg-slate-100'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="font-semibold text-slate-900 truncate">
+                            {m.title}
+                          </p>
+                          <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium ${chipBg}`}>
+                            {label}
+                          </span>
+                        </div>
+                        <div className="mt-0.5 flex items-center gap-2 text-[11px] text-slate-600">
+                          <Clock className="h-3 w-3" aria-hidden />
+                          <span>
+                            {m.date} · {m.time}
+                          </span>
+                        </div>
+                      </button>
+                    );
+                  })
+                )}
               </div>
-              <div className="flex gap-2">
-                <div className="flex-1">
-                  <label className="mb-1 block text-[11px] font-medium text-slate-600">
-                    Date
-                  </label>
-                  <input
-                    type="date"
-                    value={newDate}
-                    onChange={e => setNewDate(e.target.value)}
-                    className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-800 outline-none focus:border-[#234C6A] focus:ring-1 focus:ring-[#234C6A]/40"
-                  />
+
+              {selectedPast && (
+                <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-xs font-semibold text-slate-900 truncate">
+                      {selectedPast.title}
+                    </p>
+                    <span className="shrink-0 rounded-full bg-slate-200 px-2 py-0.5 text-[10px] font-semibold text-slate-600">
+                      Past
+                    </span>
+                  </div>
+
+                  <div className="mt-2 space-y-2 text-[11px] text-slate-600">
+                    <div className="flex items-center gap-2">
+                      <Clock className="h-3 w-3" aria-hidden />
+                      <span>
+                        {selectedPast.date} · {selectedPast.time}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <MapPin className="h-3 w-3" aria-hidden />
+                      <span className="truncate">{selectedPast.location}</span>
+                    </div>
+                    <p className="text-slate-500">
+                      {selectedPast.with}
+                    </p>
+                  </div>
                 </div>
-                <div className="w-24">
-                  <label className="mb-1 block text-[11px] font-medium text-slate-600">
-                    Time
-                  </label>
-                  <input
-                    type="time"
-                    value={newTime}
-                    onChange={e => setNewTime(e.target.value)}
-                    className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-800 outline-none focus:border-[#234C6A] focus:ring-1 focus:ring-[#234C6A]/40"
-                  />
-                </div>
-              </div>
-              <div>
-                <label className="mb-1 block text-[11px] font-medium text-slate-600">
-                  With (optional)
-                </label>
-                <input
-                  type="text"
-                  value={newWith}
-                  onChange={e => setNewWith(e.target.value)}
-                  placeholder="e.g. Prof. Ortiz"
-                  className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-800 placeholder:text-slate-400 outline-none focus:border-[#234C6A] focus:ring-1 focus:ring-[#234C6A]/40"
-                />
-              </div>
-              <div>
-                <label className="mb-1 block text-[11px] font-medium text-slate-600">
-                  Type
-                </label>
-                <div className="flex gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setNewType('session')}
-                    className={`flex-1 rounded-lg border px-2 py-1.5 text-[11px] font-medium ${
-                      newType === 'session'
-                        ? 'border-sky-500 bg-sky-50 text-sky-700'
-                        : 'border-slate-200 bg-white text-slate-600'
-                    }`}
-                  >
-                    1-1 session
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setNewType('seminar')}
-                    className={`flex-1 rounded-lg border px-2 py-1.5 text-[11px] font-medium ${
-                      newType === 'seminar'
-                        ? 'border-emerald-500 bg-emerald-50 text-emerald-700'
-                        : 'border-slate-200 bg-white text-slate-600'
-                    }`}
-                  >
-                    Seminar
-                  </button>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={handleAddMeeting}
-                disabled={!newTitle.trim()}
-                className="mt-2 inline-flex w-full items-center justify-center gap-1.5 rounded-lg bg-[#234C6A] px-3 py-1.5 text-xs font-semibold text-white hover:brightness-110 disabled:opacity-60"
-              >
-                <Plus className="h-3.5 w-3.5" aria-hidden />
-                Add meeting
-              </button>
+              )}
             </div>
           </div>
         </section>
       </div>
+
+      {/* Day details modal */}
+      {showDayModal && selectedDayDate && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4"
+          onClick={e => {
+            if (e.target === e.currentTarget) {
+              setShowDayModal(false);
+              setSelectedDayDate(null);
+            }
+          }}
+        >
+          <div
+            className="w-full max-w-md rounded-2xl border border-slate-200 bg-white shadow-xl overflow-hidden"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between gap-3 border-b border-slate-200 px-6 py-4">
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
+                  Meetings
+                </p>
+                <h3 className="text-sm font-semibold text-slate-900">
+                  {selectedDayDate}
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowDayModal(false);
+                  setSelectedDayDate(null);
+                }}
+                className="p-1 rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+                aria-label="Close"
+              >
+                <X className="h-5 w-5" aria-hidden />
+              </button>
+            </div>
+            <div className="p-6">
+              {selectedDayMeetings.length === 0 ? (
+                <div className="text-center">
+                  <p className="text-xs font-semibold text-slate-900">
+                    {selectedDayDate === todayDateStr
+                      ? 'No events today'
+                      : 'No meetings scheduled'}
+                  </p>
+                  <p className="mt-1 text-[11px] text-slate-500">
+                    Try selecting another date.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {selectedDayMeetings
+                    .slice()
+                    .sort((a, b) => a.time.localeCompare(b.time))
+                    .map(m => (
+                      <div
+                        key={m.id}
+                        className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2"
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <p className="truncate text-xs font-semibold text-slate-900">
+                              {m.title}
+                            </p>
+                            <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-slate-600">
+                              <span className="inline-flex items-center gap-1">
+                                <Clock className="h-3 w-3" aria-hidden />
+                                <span>
+                                  {m.time}
+                                </span>
+                              </span>
+                              <span className="inline-flex items-center gap-1">
+                                <MapPin className="h-3 w-3" aria-hidden />
+                                <span className="truncate max-w-[160px]">
+                                  {m.location}
+                                </span>
+                              </span>
+                            </p>
+                            <p className="mt-1 text-[11px] text-slate-500">
+                              {m.with}
+                            </p>
+                          </div>
+                          <span
+                            className={`shrink-0 inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold ${colorForMeeting(m).bg} ${
+                              isPastMeeting(m) ? '' : ''
+                            }`}
+                          >
+                            {colorForMeeting(m).label}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

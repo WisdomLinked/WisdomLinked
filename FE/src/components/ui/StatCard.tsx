@@ -31,6 +31,7 @@ export default function StatCard({
   tooltip,
   icon: Icon,
   color = 'primary',
+  onClick,
 }: {
   label: string;
   value: string | number;
@@ -39,31 +40,47 @@ export default function StatCard({
   tooltip?: string;
   icon: React.ComponentType<{ size?: number; className?: string; 'aria-hidden'?: boolean }>;
   color?: keyof typeof colorMap;
+  onClick?: () => void;
 }) {
   const colors = colorMap[color] || colorMap.primary;
 
   return (
-    <div className="group relative flex items-center justify-between rounded-2xl border border-[#e8e6e1] bg-white px-8 py-5 shadow-[0_10px_30px_rgba(0,0,0,0.06)] transition-transform duration-150 hover:-translate-y-1 hover:shadow-[0_16px_40px_rgba(0,0,0,0.10)]">
+    <div
+      className={`group relative flex items-center justify-between rounded-2xl border border-[#e8e6e1] bg-white px-10 py-6 min-h-[118px] shadow-[0_10px_30px_rgba(0,0,0,0.06)] transition-transform duration-150 hover:-translate-y-1 hover:shadow-[0_16px_40px_rgba(0,0,0,0.10)] ${
+        onClick ? 'cursor-pointer' : ''
+      }`}
+      role={onClick ? 'button' : undefined}
+      tabIndex={onClick ? 0 : undefined}
+      onClick={onClick}
+      onKeyDown={e => {
+        if (!onClick) return;
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          onClick();
+        }
+      }}
+      aria-label={onClick ? `Open ${label}` : undefined}
+    >
       <div className="flex flex-col">
         <span className="font-sans text-[14px] font-semibold text-slate-800">
           {label}
         </span>
         <div
-          className={`mt-2 font-serif text-[32px] font-bold leading-none ${colors.value}`}
+          className={`mt-2 font-serif text-[36px] font-bold leading-none ${colors.value}`}
         >
           {value}
         </div>
         {subline && (
-          <div className="mt-1 font-sans text-[12px] font-semibold text-[#234C6A]">
+          <div className="mt-1 font-sans text-[13px] font-semibold text-[#234C6A]">
             {subline}
           </div>
         )}
       </div>
       <div className="ml-4 flex flex-col items-end gap-1">
         <div
-          className={`flex h-11 w-11 items-center justify-center rounded-full ${colors.iconBg} ${colors.iconText}`}
+          className={`flex h-12 w-12 items-center justify-center rounded-full ${colors.iconBg} ${colors.iconText}`}
         >
-          <Icon size={20} aria-hidden="true" />
+          <Icon size={22} aria-hidden="true" />
         </div>
         {trend && (
           <div className="text-[11px] font-medium text-emerald-600">

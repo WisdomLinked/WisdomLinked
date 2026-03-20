@@ -75,7 +75,7 @@ router.get("/healthCheck", healthCheck)
 router.get("/getTimezone",getTimeZone)
 router.post("/contact-form", submitContactForm)
 router.post("/sendEmailToAdmin", sendEmailToAdmin)
-router.post("/getChatBotAnswer",requireAuth(true),getChatBotAnswer)
+router.post("/getChatBotAnswer",requireAuth(false),getChatBotAnswer)
 // Note: stripe-webhook is now handled directly in server.js before JSON parsing
 
 // ── OAuth Routes ──────────────────────────────────────────
