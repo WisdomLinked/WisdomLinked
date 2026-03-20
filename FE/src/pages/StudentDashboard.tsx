@@ -151,7 +151,7 @@ export default function StudentDashboard() {
               setUpcomingModalKind(null);
               setActiveItem('join-meeting');
             }}
-          />
+          /> 
         )}
       </div>
     </div>
