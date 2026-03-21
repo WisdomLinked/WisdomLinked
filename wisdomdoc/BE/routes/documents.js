@@ -40,7 +40,7 @@ router.get('/', (req, res) => {
   let docs;
   try {
     docs = db.prepare(
-      'SELECT id, type, filename, path, size, created_at, description, uploaded_by FROM documents WHERE user_id = ? ORDER BY uploaded_by IS NULL DESC, created_at DESC'
+      'SELECT id, type, filename, path, size, created_at, description, uploaded_by, COALESCE(version, 1) as version FROM documents WHERE user_id = ? ORDER BY type, COALESCE(version, 1) DESC, created_at DESC'
     ).all(req.userId);
   } catch (_) {
     docs = db.prepare(
@@ -68,6 +68,7 @@ router.post('/upload', upload.single('file'), (req, res) => {
     return res.status(403).json({ error: 'Only selected students can upload. Contact the committee.' });
   }
   const type = (req.body.type || '').toLowerCase();
+  const caseId = req.body.caseId ? parseInt(req.body.caseId, 10) : null;
   if (!ALLOWED_TYPES.includes(type)) {
     if (req.file && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
     return res.status(400).json({ error: 'Invalid type.' });
@@ -75,10 +76,16 @@ router.post('/upload', upload.single('file'), (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
   const originalName = req.body.originalName || req.file.originalname || type;
   const description = type === 'additional' && req.body.description != null ? String(req.body.description).trim().slice(0, 200) : null;
+
+  const maxRow = db.prepare(
+    'SELECT COALESCE(MAX(version), 0) as v FROM documents WHERE user_id = ? AND type = ?'
+  ).get(req.userId, type);
+  const version = (maxRow?.v || 0) + 1;
+
   db.prepare(
-    'INSERT INTO documents (user_id, type, filename, path, size, description) VALUES (?, ?, ?, ?, ?, ?)'
-  ).run(req.userId, type, originalName, req.file.filename, req.file.size, description || null);
-  const row = db.prepare('SELECT id, type, filename, path, size, created_at, description FROM documents WHERE id = last_insert_rowid()').get();
+    'INSERT INTO documents (user_id, case_id, type, filename, path, size, description, version) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+  ).run(req.userId, caseId || null, type, originalName, req.file.filename, req.file.size, description || null, version);
+  const row = db.prepare('SELECT id, type, filename, path, size, created_at, description, version FROM documents WHERE id = last_insert_rowid()').get();
   res.status(201).json(row);
 });
 

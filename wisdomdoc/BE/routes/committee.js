@@ -106,9 +106,10 @@ router.post('/students/:studentId/clarify', async (req, res) => {
   const student = db.prepare('SELECT id, email FROM users WHERE id = ? AND role = ?').get(studentId, 'student');
   if (!student) return res.status(404).json({ error: 'Student not found' });
   if (req.userRole !== 'admin') {
+    const assigned = db.prepare('SELECT id FROM cases WHERE student_id = ? AND assigned_expert_id = ?').get(studentId, req.userId);
     const expertMajors = (req.userMajors || []).map(m => m.trim().toLowerCase()).filter(Boolean);
     const s = db.prepare('SELECT major FROM users WHERE id = ?').get(studentId);
-    if (!majorMatches(s?.major, expertMajors)) return res.status(403).json({ error: 'Student not in your majors' });
+    if (!assigned && !majorMatches(s?.major, expertMajors)) return res.status(403).json({ error: 'Student not in your majors' });
   }
   const message = req.body.message != null ? String(req.body.message).trim().slice(0, 500) : '';
   if (!message) return res.status(400).json({ error: 'Message required' });
@@ -137,9 +138,10 @@ router.post('/students/:studentId/feedback', feedbackUpload.single('file'), asyn
   const student = db.prepare('SELECT id, email FROM users WHERE id = ? AND role = ?').get(studentId, 'student');
   if (!student) return res.status(404).json({ error: 'Student not found' });
   if (req.userRole !== 'admin') {
+    const assigned = db.prepare('SELECT id FROM cases WHERE student_id = ? AND assigned_expert_id = ?').get(studentId, req.userId);
     const expertMajors = (req.userMajors || []).map(m => m.trim().toLowerCase()).filter(Boolean);
     const s = db.prepare('SELECT major FROM users WHERE id = ?').get(studentId);
-    if (!majorMatches(s?.major, expertMajors)) return res.status(403).json({ error: 'Student not in your majors' });
+    if (!assigned && !majorMatches(s?.major, expertMajors)) return res.status(403).json({ error: 'Student not in your majors' });
   }
   if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
   const description = req.body.description != null ? String(req.body.description).trim().slice(0, 200) : null;
@@ -179,13 +181,14 @@ router.get('/students/:id', (req, res) => {
   const student = db.prepare('SELECT id, email, major, created_at, COALESCE(approved, 0) AS approved, timezone, username, bio, title, image, phone, country, state, city FROM users WHERE id = ? AND role = ?').get(studentId, 'student');
   if (!student) return res.status(404).json({ error: 'Student not found' });
   if (req.userRole !== 'admin') {
+    const assigned = db.prepare('SELECT id FROM cases WHERE student_id = ? AND assigned_expert_id = ?').get(studentId, req.userId);
     const expertMajors = (req.userMajors || []).map(m => m.trim().toLowerCase()).filter(Boolean);
-    if (!majorMatches(student.major, expertMajors)) return res.status(404).json({ error: 'Student not found' });
+    if (!assigned && !majorMatches(student.major, expertMajors)) return res.status(404).json({ error: 'Student not found' });
   }
   let documents;
   try {
     documents = db.prepare(
-      'SELECT id, type, filename, path, size, created_at, description, uploaded_by FROM documents WHERE user_id = ? ORDER BY uploaded_by IS NULL DESC, type, created_at DESC'
+      'SELECT id, type, filename, path, size, created_at, description, uploaded_by, COALESCE(version, 1) as version FROM documents WHERE user_id = ? ORDER BY uploaded_by IS NULL DESC, type, COALESCE(version, 1) DESC, created_at DESC'
     ).all(studentId);
   } catch (err) {
     documents = db.prepare(
@@ -221,20 +224,40 @@ router.patch('/me', (req, res) => {
   res.json({ id: u.id, email: u.email, role: u.role, majors: parseMajors(u.majors), username: u.username, bio: u.bio, title: u.title, image: u.image, phone: u.phone });
 });
 
+function getDocForStudent(req, studentId, docId) {
+  const student = db.prepare('SELECT id, major FROM users WHERE id = ? AND role = ?').get(studentId, 'student');
+  if (!student) return null;
+  if (req.userRole !== 'admin') {
+    const assigned = db.prepare('SELECT id FROM cases WHERE student_id = ? AND assigned_expert_id = ?').get(studentId, req.userId);
+    const expertMajors = (req.userMajors || []).map(m => m.trim().toLowerCase()).filter(Boolean);
+    if (!assigned && !majorMatches(student.major, expertMajors)) return null;
+  }
+  const doc = db.prepare('SELECT id, filename, path FROM documents WHERE id = ? AND user_id = ?').get(docId, studentId);
+  if (!doc) return null;
+  const filePath = path.join(uploadsDir, doc.path);
+  if (!fs.existsSync(filePath)) return null;
+  return { doc, filePath };
+}
+
 router.get('/students/:studentId/documents/:docId/download', (req, res) => {
   const studentId = parseInt(req.params.studentId, 10);
   const docId = parseInt(req.params.docId, 10);
-  const student = db.prepare('SELECT id, major FROM users WHERE id = ? AND role = ?').get(studentId, 'student');
-  if (!student) return res.status(404).json({ error: 'Student not found' });
-  if (req.userRole !== 'admin') {
-    const expertMajors = (req.userMajors || []).map(m => m.trim().toLowerCase()).filter(Boolean);
-    if (!majorMatches(student.major, expertMajors)) return res.status(403).json({ error: 'Student not found' });
-  }
-  const doc = db.prepare('SELECT id, filename, path FROM documents WHERE id = ? AND user_id = ?').get(docId, studentId);
-  if (!doc) return res.status(404).json({ error: 'Document not found' });
-  const filePath = path.join(uploadsDir, doc.path);
-  if (!fs.existsSync(filePath)) return res.status(404).json({ error: 'File not found' });
-  res.download(filePath, doc.filename);
+  const result = getDocForStudent(req, studentId, docId);
+  if (!result) return res.status(404).json({ error: 'Not found' });
+  res.download(result.filePath, result.doc.filename);
+});
+
+router.get('/students/:studentId/documents/:docId/preview', (req, res) => {
+  const studentId = parseInt(req.params.studentId, 10);
+  const docId = parseInt(req.params.docId, 10);
+  const result = getDocForStudent(req, studentId, docId);
+  if (!result) return res.status(404).json({ error: 'Not found' });
+  const ext = (path.extname(result.doc.filename) || '').toLowerCase();
+  const contentTypes = { '.pdf': 'application/pdf', '.txt': 'text/plain', '.doc': 'application/msword', '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' };
+  const contentType = contentTypes[ext] || 'application/octet-stream';
+  res.setHeader('Content-Type', contentType);
+  res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(result.doc.filename)}"`);
+  res.sendFile(result.filePath);
 });
 
 export default router;

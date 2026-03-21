@@ -26,22 +26,35 @@ export default function Upload() {
   const [error, setError] = useState('');
   const [additionalFile, setAdditionalFile] = useState(null);
   const [additionalDesc, setAdditionalDesc] = useState('');
+  const [myCases, setMyCases] = useState([]);
+  const [submitting, setSubmitting] = useState(false);
+  const [resubmitting, setResubmitting] = useState(false);
 
   const headers = () => ({ Authorization: `Bearer ${token}` });
+
+  const requiredTypes = ['sop', 'lor', 'resume'];
+  const hasRequiredDocs = requiredTypes.every(
+    (t) => documents.some((d) => d.type === t && !d.uploaded_by)
+  );
+  const activeCase = myCases.find((c) => c.status !== 'approved' && c.status !== 'rejected');
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
-        const res = await fetch(`${API}/documents`, { headers: headers() });
-        if (!res.ok) throw new Error('Failed to load');
-        const data = await res.json();
+        const [docsRes, casesRes] = await Promise.all([
+          fetch(`${API}/documents`, { headers: headers() }),
+          fetch(`${API}/cases`, { headers: headers() }),
+        ]);
+        const docsData = await docsRes.json();
+        const casesData = casesRes.ok ? await casesRes.json() : { cases: [] };
         if (!cancelled) {
-          setDocuments(data.documents || []);
-          setIsApproved(!!data.isApproved);
-          setMessages(data.messages || []);
-          setClarifications(data.clarifications || []);
-          setTimezone(data.timezone || 'America/Chicago');
+          setDocuments(docsData.documents || []);
+          setIsApproved(!!docsData.isApproved);
+          setMessages(docsData.messages || []);
+          setClarifications(docsData.clarifications || []);
+          setTimezone(docsData.timezone || 'America/Chicago');
+          setMyCases(casesData.cases || []);
         }
       } catch (e) {
         if (!cancelled) setError(e.message || 'Could not load documents');
@@ -92,6 +105,47 @@ export default function Upload() {
     }
   }
 
+  async function handleSubmitApplication(e) {
+    e?.preventDefault();
+    if (!hasRequiredDocs || activeCase) return;
+    setError('');
+    setSubmitting(true);
+    try {
+      const res = await fetch(`${API}/cases`, {
+        method: 'POST',
+        headers: { ...headers(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Submit failed');
+      setMyCases((prev) => [{ ...data, status: 'submitted' }, ...prev]);
+    } catch (e) {
+      setError(e.message || 'Submit failed');
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function handleResubmit(e) {
+    e?.preventDefault();
+    if (!activeCase || activeCase.status !== 'needs_info' || !hasRequiredDocs) return;
+    setError('');
+    setResubmitting(true);
+    try {
+      const res = await fetch(`${API}/cases/${activeCase.id}/resubmit`, {
+        method: 'PATCH',
+        headers: headers(),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Resubmit failed');
+      setMyCases((prev) => prev.map((c) => c.id === activeCase.id ? { ...c, ...data, status: 'resubmitted' } : c));
+    } catch (e) {
+      setError(e.message || 'Resubmit failed');
+    } finally {
+      setResubmitting(false);
+    }
+  }
+
   async function handleSaveMessage(e) {
     e.preventDefault();
     setError('');
@@ -132,10 +186,90 @@ export default function Upload() {
     );
   }
 
+  const STATUS_LABELS = {
+    draft: 'Draft',
+    submitted: 'Submitted',
+    assigned: 'Assigned',
+    under_review: 'Under review',
+    needs_info: 'Needs info',
+    resubmitted: 'Resubmitted',
+    approved: 'Approved',
+    rejected: 'Rejected',
+    overdue: 'Overdue',
+  };
+  const BADGE_CLASS = {
+    draft: styles.badgeDraft,
+    submitted: styles.badgeSubmitted,
+    assigned: styles.badgeAssigned,
+    under_review: styles.badgeUnderReview,
+    needs_info: styles.badgeNeedsInfo,
+    resubmitted: styles.badgeResubmitted,
+    approved: styles.badgeApproved,
+    rejected: styles.badgeRejected,
+    overdue: styles.badgeOverdue,
+  };
+  const completedCases = myCases.filter((c) => c.status === 'approved' || c.status === 'rejected');
+
   return (
     <div className={styles.page}>
       <h2 className={styles.heading}>Upload documents for admission</h2>
-      <p className={styles.hint}>PDF, DOC, DOCX, or TXT (max 10MB each).</p>
+      <p className={styles.hint}>PDF, DOC, DOCX, or TXT (max 10MB each). Upload SOP, LOR, and Resume, then submit your application.</p>
+
+      {activeCase && (
+        <div className={styles.caseStatusBanner}>
+          <span className={styles.caseStageLabel}>Case stage</span>
+          <div className={styles.caseStatusHeader}>
+            <span className={styles.caseIdPill}>{activeCase.case_id}</span>
+            <span className={`${styles.statusBadge} ${BADGE_CLASS[activeCase.status] || styles.badgeDefault}`}>
+              {STATUS_LABELS[activeCase.status] || activeCase.status}
+            </span>
+          </div>
+          <div className={styles.caseStatusMeta}>
+            {activeCase.due_at && (
+              <span className={styles.caseDue}>
+                Due: {formatDate(activeCase.due_at, timezone)}
+                {new Date(activeCase.due_at) < new Date() && (
+                  <span className={styles.overdueBadge}>Overdue</span>
+                )}
+              </span>
+            )}
+            {activeCase.status === 'needs_info' && (
+              <>
+                <span className={styles.statusHint}>Please provide the requested information and resubmit.</span>
+                {hasRequiredDocs && (
+                  <button
+                    type="button"
+                    className={styles.submitBtn}
+                    onClick={handleResubmit}
+                    disabled={resubmitting}
+                  >
+                    {resubmitting ? 'Resubmitting…' : 'Resubmit'}
+                  </button>
+                )}
+              </>
+            )}
+          </div>
+        </div>
+      )}
+      {completedCases.length > 0 && !activeCase && (
+        <div className={styles.caseStatusBanner}>
+          <span className={styles.caseStageLabel}>Case stage</span>
+          <div className={styles.caseStatusHeader}>
+            <span className={styles.caseIdPill}>{completedCases[0].case_id}</span>
+            <span className={`${styles.statusBadge} ${completedCases[0].status === 'approved' ? styles.badgeApproved : styles.badgeRejected}`}>
+              {STATUS_LABELS[completedCases[0].status]}
+            </span>
+          </div>
+          <div className={styles.caseStatusMeta}>
+            {completedCases[0].approved_at && (
+              <span className={styles.caseApprovedAt}>Processed {formatDate(completedCases[0].approved_at, timezone)}</span>
+            )}
+            {completedCases[0].rejected_at && (
+              <span className={styles.caseRejectedAt}>Assessed {formatDate(completedCases[0].rejected_at, timezone)}</span>
+            )}
+          </div>
+        </div>
+      )}
 
       {error && <div className={styles.error}>{error}</div>}
 
@@ -193,7 +327,10 @@ export default function Upload() {
                   {list.map(doc => (
                     <li key={doc.id} className={styles.docItem}>
                       <div className={styles.docInfo}>
-                        <span className={styles.docName}>{doc.filename}</span>
+                        <span className={styles.docName}>
+                          {doc.filename}
+                          {doc.version > 1 && <span className={styles.versionBadge}> v{doc.version}</span>}
+                        </span>
                         {isAdditional && doc.description && (
                           <span className={styles.docDesc}>{doc.description}</span>
                         )}
@@ -247,6 +384,21 @@ export default function Upload() {
             </section>
           );
         })()}
+
+        {!activeCase && hasRequiredDocs && isApproved && !myCases.some((c) => c.status === 'approved') && (
+          <section className={styles.section}>
+            <label className={styles.label}>Submit application</label>
+            <p className={styles.submitHint}>You have uploaded SOP, LOR, and Resume. Click to create your application case.</p>
+            <button
+              type="button"
+              className={styles.submitBtn}
+              onClick={handleSubmitApplication}
+              disabled={submitting}
+            >
+              {submitting ? 'Submitting…' : 'Submit application'}
+            </button>
+          </section>
+        )}
 
         {clarifications.length > 0 && (
           <section className={styles.section}>

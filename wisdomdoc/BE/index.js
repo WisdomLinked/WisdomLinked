@@ -4,9 +4,11 @@ import cors from 'cors';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { initDb } from './db.js';
+import { runSlaJob } from './jobs/slaJob.js';
 import authRoutes from './routes/auth.js';
 import documentRoutes from './routes/documents.js';
 import committeeRoutes from './routes/committee.js';
+import casesRoutes from './routes/cases.js';
 
 process.on('uncaughtException', (err) => { console.error('Uncaught:', err); process.exit(1); });
 process.on('unhandledRejection', (err) => { console.error('Unhandled:', err); });
@@ -23,6 +25,14 @@ try {
   process.exit(1);
 }
 
+const SLA_INTERVAL_MS = 60 * 60 * 1000;
+setInterval(() => {
+  try {
+    const count = runSlaJob();
+    if (count > 0) console.log(`SLA job: marked ${count} case(s) overdue`);
+  } catch (e) { console.error('SLA job:', e); }
+}, SLA_INTERVAL_MS);
+
 app.use(cors({ origin: true, credentials: true }));
 app.use(express.json());
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
@@ -30,6 +40,7 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 app.use('/api/auth', authRoutes);
 app.use('/api/documents', documentRoutes);
 app.use('/api/committee', committeeRoutes);
+app.use('/api/cases', casesRoutes);
 
 app.get('/api/health', (_, res) => res.json({ ok: true }));
 app.get('/', (_, res) => res.redirect('/api/health'));
