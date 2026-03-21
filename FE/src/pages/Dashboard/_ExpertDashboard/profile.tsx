@@ -74,6 +74,10 @@ const ExpertProfile = ({
     const [currFileName, set_currFileName] = useState('');
     const [showPreview, setShowPreview] = useState(false);
 
+    const SPECIAL_NOTE_MAX = 2000;
+    const [specialNote, set_specialNote] = useState('');
+    const [savingSpecialNote, set_savingSpecialNote] = useState(false);
+
     const reset = async () => {
         if (!userDetails) return;
         if (userDetails.image) set_imageSrc(oldImageSrc);
@@ -87,6 +91,7 @@ const ExpertProfile = ({
         set_city(userDetails.city || null);
         set_phoneNumber(userDetails.phoneNumber || '');
         set_resume(userDetails.resume || '');
+        set_specialNote(userDetails.specialNote || '');
     };
 
     const loadData = async () => {
@@ -105,6 +110,29 @@ const ExpertProfile = ({
         set_city(userDetails.city || null);
         set_phoneNumber(userDetails.phoneNumber || '');
         set_resume(userDetails.resume || '');
+        set_specialNote(userDetails.specialNote || '');
+    };
+
+    const saveSpecialNote = async () => {
+        const trimmed = (specialNote || '').slice(0, SPECIAL_NOTE_MAX);
+        set_savingSpecialNote(true);
+        if (!isFromAdminPanel) {
+            const ok = await doUpdateProfile({ email: userDetails.email, specialNote: trimmed });
+            if (ok) {
+                set_specialNote(trimmed);
+                dispatch(showAlert('Notes saved'));
+            }
+        } else {
+            const res = await doUpdateProfileByAdmin({ email: userDetails.email, specialNote: trimmed });
+            if (res?.result) {
+                updateOneUser(res.result);
+                set_specialNote(trimmed);
+                dispatch(showAlert('Notes saved'));
+            } else {
+                dispatch(showAlert('Could not save notes'));
+            }
+        }
+        set_savingSpecialNote(false);
     };
 
     const uploadProfileImage = async (newDataUri: any) => {
@@ -371,6 +399,44 @@ const ExpertProfile = ({
                                     />
                                 </div>
                             </div>
+                        </div>
+                    </div>
+
+                    {/* ── Card: Preferences & expectations (special notes) ── */}
+                    <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+                        <SectionHeader
+                            icon={
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden>
+                                    <path d="M4 4h16v12H7l-3 3V4z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round"/>
+                                    <path d="M8 9h8M8 13h5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/>
+                                </svg>
+                            }
+                            title="Preferences & expectations"
+                            subtitle="Optional notes for students about how you work and what you expect"
+                        />
+                        <p className="text-xs text-slate-600 mb-3">
+                            Examples: communication preferences, how to prepare for sessions, cancellation policy in your
+                            own words, or topics you especially enjoy mentoring.
+                        </p>
+                        <textarea
+                            className={`${inputClass} min-h-[120px] resize-y`}
+                            placeholder="Write anything that helps students get the most out of working with you…"
+                            value={specialNote}
+                            onChange={(e) => set_specialNote(e.target.value.slice(0, SPECIAL_NOTE_MAX))}
+                            maxLength={SPECIAL_NOTE_MAX}
+                        />
+                        <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+                            <span className="text-[11px] text-slate-400">
+                                {specialNote.length}/{SPECIAL_NOTE_MAX}
+                            </span>
+                            <button
+                                type="button"
+                                onClick={saveSpecialNote}
+                                disabled={savingSpecialNote}
+                                className="rounded-xl bg-[#234C6A] px-4 py-2 text-xs font-semibold text-white shadow-sm hover:bg-[#1b3c53] disabled:opacity-50 transition"
+                            >
+                                {savingSpecialNote ? 'Saving…' : 'Save notes'}
+                            </button>
                         </div>
                     </div>
 

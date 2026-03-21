@@ -908,6 +908,13 @@ const updateProfile = async (req: any, res: Response) => {
         if (joinPopupBlocked) {
             updates.joinPopupBlocked = joinPopupBlocked
         }
+        if (req.body.specialNote !== undefined && req.body.specialNote !== null) {
+            const raw =
+                typeof req.body.specialNote === 'string'
+                    ? req.body.specialNote
+                    : String(req.body.specialNote);
+            updates.specialNote = raw.slice(0, 5000);
+        }
         // [User Model] -- add more updating fields based on the user model
         await User.findOneAndUpdate({ email: email }, updates, { new: true })
         const result = await getFullUserData(email)

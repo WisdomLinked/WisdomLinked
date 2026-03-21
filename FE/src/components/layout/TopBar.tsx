@@ -1,44 +1,66 @@
 import React, { useEffect, useState } from 'react';
-import { Bell, ChevronDown, UserCircle2, MessageSquare, Users, BookOpen, X } from 'lucide-react';
+import {
+  Bell,
+  ChevronDown,
+  UserCircle2,
+  MessageSquare,
+  Users,
+  BookOpen,
+  X,
+  Settings,
+} from 'lucide-react';
 import { useDispatch } from 'react-redux';
 import { logoutUser } from '../../actions/authActions';
+
+export type TopBarNotificationItem = {
+  id: string;
+  title: string;
+  meta: string;
+  icon?: React.ReactNode;
+};
+
+const defaultNotifications: TopBarNotificationItem[] = [
+  {
+    id: 'n1',
+    title: 'New seminar added by Prof. Emily Chen',
+    meta: '2 hours ago',
+    icon: <BookOpen className="h-3.5 w-3.5 text-[#1A3A4A]" aria-hidden />,
+  },
+  {
+    id: 'n2',
+    title: 'New expert joined: Dr. Liam Carter',
+    meta: 'Today',
+    icon: <Users className="h-3.5 w-3.5 text-[#1A3A4A]" aria-hidden />,
+  },
+  {
+    id: 'n3',
+    title: 'New chat message from Prof. Daniel Ortiz',
+    meta: '5 mins ago',
+    icon: <MessageSquare className="h-3.5 w-3.5 text-[#1A3A4A]" aria-hidden />,
+  },
+];
 
 export default function TopBar({
   title = 'Student Dashboard',
   userName = 'Alex Rivera',
   avatarUrl,
   onProfileClick,
+  onSettingsClick,
+  notifications: notificationsProp,
 }: {
   title?: string;
   userName?: string;
   avatarUrl?: string;
   onProfileClick?: () => void;
+  onSettingsClick?: () => void;
+  notifications?: TopBarNotificationItem[];
 }) {
   const dispatch = useDispatch();
   const [openMenu, setOpenMenu] = useState(false);
   const [menuVisible, setMenuVisible] = useState(false);
   const [openNotifications, setOpenNotifications] = useState(false);
 
-  const notifications = [
-    {
-      id: 'n1',
-      title: 'New seminar added by Prof. Emily Chen',
-      meta: '2 hours ago',
-      icon: <BookOpen className="h-3.5 w-3.5 text-[#1A3A4A]" aria-hidden />,
-    },
-    {
-      id: 'n2',
-      title: 'New expert joined: Dr. Liam Carter',
-      meta: 'Today',
-      icon: <Users className="h-3.5 w-3.5 text-[#1A3A4A]" aria-hidden />,
-    },
-    {
-      id: 'n3',
-      title: 'New chat message from Prof. Daniel Ortiz',
-      meta: '5 mins ago',
-      icon: <MessageSquare className="h-3.5 w-3.5 text-[#1A3A4A]" aria-hidden />,
-    },
-  ];
+  const notifications = notificationsProp ?? defaultNotifications;
 
   useEffect(() => {
     if (!openMenu) {
@@ -155,6 +177,19 @@ export default function TopBar({
                   <UserCircle2 className="h-4 w-4 text-slate-500" aria-hidden="true" />
                   <span>My Profile</span>
                 </button>
+                {onSettingsClick ? (
+                  <button
+                    type="button"
+                    className="flex w-full items-center gap-2 px-3 py-2 hover:bg-slate-50"
+                    onClick={() => {
+                      onSettingsClick();
+                      setOpenMenu(false);
+                    }}
+                  >
+                    <Settings className="h-4 w-4 text-slate-500" aria-hidden="true" />
+                    <span>Settings</span>
+                  </button>
+                ) : null}
                 <button
                   type="button"
                   className="w-full px-3 py-2 text-left text-red-600 hover:bg-red-50"

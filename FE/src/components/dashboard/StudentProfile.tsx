@@ -9,6 +9,8 @@ import {
   X,
   Check,
   Loader2,
+  StickyNote,
+  Save,
 } from 'lucide-react';
 import { useAppSelector } from '../../store';
 import { doUpdateProfile, profileImageFetch, profileImageUpload } from '../../api/api';
@@ -84,7 +86,7 @@ const MOCK_PAYMENTS: PaymentRecord[] = [
 ];
 
 export default function StudentProfile() {
-  const { auth: { userDetails } } = useAppSelector((state: any) => state);
+  const userDetails = useAppSelector((state: any) => state?.auth?.userDetails ?? null);
 
   const [name, setName] = useState(() => userDetails?.username ?? '');
   const [email, setEmail] = useState(() => userDetails?.email ?? '');
@@ -113,6 +115,11 @@ export default function StudentProfile() {
   const [preferencesDirty, setPreferencesDirty] = useState(false);
   const [interestsDirty, setInterestsDirty] = useState(false);
 
+  const SPECIAL_NOTE_MAX = 2000;
+  const [specialNote, setSpecialNote] = useState(() => (userDetails as any)?.specialNote ?? '');
+  const [notesDirty, setNotesDirty] = useState(false);
+  const [notesSaving, setNotesSaving] = useState(false);
+
   // Keep profile header fields in sync with the authenticated user.
   // Avoid overwriting while the user is editing the personal section.
   useEffect(() => {
@@ -129,6 +136,11 @@ export default function StudentProfile() {
         });
     }
   }, [personalDirty, userDetails?.username, userDetails?.email, userDetails?.image]);
+
+  useEffect(() => {
+    if (notesDirty) return;
+    setSpecialNote((userDetails as any)?.specialNote ?? '');
+  }, [notesDirty, (userDetails as any)?.specialNote]);
 
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [passwordStep, setPasswordStep] = useState<'request' | 'verify' | 'done'>('request');
@@ -221,6 +233,17 @@ export default function StudentProfile() {
     setInterestsDirty(false);
   };
 
+  const handleSaveSpecialNote = async () => {
+    const trimmed = specialNote.slice(0, SPECIAL_NOTE_MAX);
+    setNotesSaving(true);
+    const ok = await doUpdateProfile({ specialNote: trimmed });
+    setNotesSaving(false);
+    if (ok) {
+      setNotesDirty(false);
+      setSpecialNote(trimmed);
+    }
+  };
+
   const handleRequestOtp = () => {
     setPasswordError('');
     setPasswordLoading(true);
@@ -299,12 +322,14 @@ export default function StudentProfile() {
                   <img src={photoUrl} alt="Profile" className="h-full w-full object-cover" />
                 ) : (
                   <span className="text-3xl font-bold text-[#234C6A]">
-                    {name
-                      .split(' ')
+                    {String(name ?? '')
+                      .trim()
+                      .split(/\s+/)
+                      .filter(Boolean)
                       .map(p => p[0])
                       .join('')
                       .slice(0, 2)
-                      .toUpperCase()}
+                      .toUpperCase() || '?'}
                   </span>
                 )}
               </div>
@@ -357,6 +382,49 @@ export default function StudentProfile() {
               />
             </div>
           </div>
+        </div>
+      </section>
+
+      {/* Preferences & expectations (saved to your account) */}
+      <section className={cardClass + ' mb-6'}>
+        <div className="mb-4">
+          <h2 className="text-sm font-semibold uppercase tracking-wider text-slate-900 flex items-center gap-2">
+            <StickyNote className="h-4 w-4 text-[#234C6A]" aria-hidden />
+            Preferences &amp; expectations
+          </h2>
+        </div>
+        <p className="text-xs text-slate-600 mb-3">
+          Share your goals, learning style, and what you hope to get from mentors or sessions. Mentors you work with can
+          use this to prepare.
+        </p>
+        <textarea
+          value={specialNote}
+          onChange={e => {
+            const v = e.target.value.slice(0, SPECIAL_NOTE_MAX);
+            setSpecialNote(v);
+            setNotesDirty(true);
+          }}
+          placeholder="e.g. I’m applying to MS programs in the US, prefer structured feedback, and want help with SOP drafts…"
+          rows={5}
+          className={`${inputNormal} resize-y min-h-[120px] py-3`}
+        />
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+          <p className="text-[11px] text-slate-400">
+            {specialNote.length}/{SPECIAL_NOTE_MAX}
+          </p>
+          <button
+            type="button"
+            onClick={handleSaveSpecialNote}
+            disabled={notesSaving || !notesDirty}
+            className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#234C6A] px-4 py-2.5 text-[13px] font-semibold text-white shadow-sm transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {notesSaving ? (
+              <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+            ) : (
+              <Save className="h-4 w-4" aria-hidden />
+            )}
+            {notesSaving ? 'Saving…' : 'Save'}
+          </button>
         </div>
       </section>
 

@@ -85,6 +85,7 @@ const filterSeminars = async (req, res) => {
         const { name, keywords, services, sortBy } = req.body
 
         let query = GroupChat.find({
+            type: 'seminar',
             $or: [
                 {
                     start: { $gt: new Date() },

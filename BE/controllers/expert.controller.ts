@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 const GroupChat = require("../models/GroupChat");
 const User = require("../models/User");
 const Keyword = require("../models/Keyword");
+const PaymentHistory = require("../models/PaymentHistory");
 const { shareMeetingId } = require("../services/notifications")
 
 const updateTimeSlots = async (req: any, res: Response) => {
@@ -174,11 +175,64 @@ const shareMeetingViaEmail = async (req, res) => {
     }
 }
 
+/** Stripe amounts are minor units (e.g. cents). Classify by linked group chat / event. */
+const classifyPayment = (h: any) => {
+    if (h.groupChat?.type === "seminar") return "seminar";
+    if (h.groupChat) return "individual";
+    if (h.event) return "individual";
+    return "other";
+};
+
+const getMyPaymentHistory = async (req: any, res: Response) => {
+    try {
+        const expertId = req.user.userId;
+        const histories = await PaymentHistory.find({ expert: expertId })
+            .populate("customer", "username email")
+            .populate("groupChat", "name type")
+            .populate("event", "title")
+            .sort({ createdAt: -1 })
+            .limit(500)
+            .lean();
+
+        let individualSessionsCents = 0;
+        let seminarsCents = 0;
+        let otherCents = 0;
+
+        for (const h of histories) {
+            if (h.status !== "completed") continue;
+            const amt = typeof h.amount === "number" ? h.amount : 0;
+            const cat = classifyPayment(h);
+            if (cat === "seminar") seminarsCents += amt;
+            else if (cat === "individual") individualSessionsCents += amt;
+            else otherCents += amt;
+        }
+
+        const enriched = histories.map((h: any) => ({
+            ...h,
+            paymentKind: classifyPayment(h),
+        }));
+
+        return res.status(200).json({
+            result: enriched,
+            summary: {
+                totalReceivedCents: individualSessionsCents + seminarsCents + otherCents,
+                individualSessionsCents,
+                seminarsCents,
+                otherCents,
+            },
+        });
+    } catch (err: any) {
+        console.log(err);
+        return res.status(500).send(err.message);
+    }
+};
+
 module.exports = {
     updateTimeSlots,
     getDailyTimeSlots,
     updateDailyTimeSlots,
     filterCustomers,
     getCustomerById,
-    shareMeetingViaEmail
+    shareMeetingViaEmail,
+    getMyPaymentHistory,
 }

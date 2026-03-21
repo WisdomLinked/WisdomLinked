@@ -136,6 +136,7 @@ export default function StudentDashboard() {
             userName={studentName}
             avatarUrl={avatarUrl}
             onProfileClick={() => setActiveItem('profile')}
+            onSettingsClick={() => setActiveItem('settings')}
           />
           {activeItem === 'chat' ? (
             <div className="h-[calc(100vh-56px)]">
@@ -176,7 +177,7 @@ export default function StudentDashboard() {
               <div className="grid gap-6 lg:grid-cols-[1fr_380px]">
                 <section className="min-w-0">
                   <h2 className="text-3xl font-semibold text-slate-900">
-                  {greeting}, {studentName.split(' ')[0]}!
+                    {greeting}, {studentName.split(' ')[0]}!
                   </h2>
                   <p className="mt-1 max-w-xl font-sans text-[13px] text-slate-500">
                     Here&apos;s what&apos;s happening with your WisdomLinked sessions today.

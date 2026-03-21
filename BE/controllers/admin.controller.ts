@@ -133,7 +133,7 @@ const getFullUserDataByEmail = async (req, res) => {
 
 const updateProfileOfUser = async (req, res) => {
     try {
-        const { email, username, title, description, image, keywords, services, country, state, city, phoneNumber, price, joinPopupBlocked, status } = req.body;
+        const { email, username, title, description, image, keywords, services, country, state, city, phoneNumber, price, joinPopupBlocked, status, specialNote } = req.body;
         const updates: Record<string, any> = {}
         if (username) {
             updates.username = username
@@ -189,6 +189,10 @@ const updateProfileOfUser = async (req, res) => {
         }
         if (joinPopupBlocked) {
             updates.joinPopupBlocked = joinPopupBlocked
+        }
+        if (specialNote !== undefined && specialNote !== null) {
+            updates.specialNote =
+                typeof specialNote === 'string' ? specialNote.slice(0, 5000) : String(specialNote).slice(0, 5000);
         }
 
         await User.findOneAndUpdate({ email: email }, updates, { new: true })

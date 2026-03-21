@@ -11,6 +11,7 @@ import React, {
   import { createGroupChat, updateGroupChat } from '../../../api/api';
   import { SetLoadingStatus } from '../../../actions/appActions';
   import { showAlert } from '../../../actions/alertActions';
+  import { updateMe } from '../../../actions/authActions';
   
   type StepId = 1 | 2 | 3;
   
@@ -50,12 +51,27 @@ import React, {
       duration?: number;
       price?: number;
     };
+    /** New expert shell: refresh user + switch tab without full page navigation */
+    onAfterSeminarSave?: () => void;
+    /** Return to seminar list without saving */
+    onCancel?: () => void;
   }
   
   type MultiSelectField = 'majors' | 'services';
   type DropdownId = 'majors' | 'services' | null;
   
   type SeminarErrors = Partial<Record<keyof SeminarFormData, string>>;
+
+  const keywordServiceToStrings = (arr: unknown[] | undefined): string[] => {
+    if (!arr?.length) return [];
+    return arr
+      .map((item: any) => {
+        if (typeof item === 'string') return item;
+        if (item?.value) return String(item.value);
+        return '';
+      })
+      .filter(Boolean);
+  };
   
   const initialFormData: SeminarFormData = {
     title: '',
@@ -115,7 +131,11 @@ import React, {
   
   const CURRENCY_OPTIONS: string[] = ['USD', 'EUR', 'GBP', 'INR'];
   
-  const ExpertSeminar: React.FC<ExpertSeminarProps> = ({ selectedSeminar }) => {
+  const ExpertSeminar: React.FC<ExpertSeminarProps> = ({
+    selectedSeminar,
+    onAfterSeminarSave,
+    onCancel,
+  }) => {
     const dispatch = useDispatch();
     const navigate = useNavigate();
     const {
@@ -130,22 +150,22 @@ import React, {
     const [coverPreview, setCoverPreview] = useState<string | null>(null);
   
     useEffect(() => {
-      if (userDetails.status === 'review') {
+      if (userDetails?.status === 'review') {
         dispatch(showAlert("This feature isn't available while your profile is under review."));
       }
-    }, [userDetails.status, dispatch]);
+    }, [userDetails?.status, dispatch]);
   
     useEffect(() => {
       if (!selectedSeminar) return;
-  
+
       const start = selectedSeminar.start ? new Date(selectedSeminar.start) : null;
       const end = selectedSeminar.end ? new Date(selectedSeminar.end) : null;
-  
+
       const patched: Partial<SeminarFormData> = {
         title: selectedSeminar.groupName || '',
         description: selectedSeminar.description || '',
-        majors: selectedSeminar.keywords || [],
-        services: selectedSeminar.services || [],
+        majors: keywordServiceToStrings(selectedSeminar.keywords as unknown[] | undefined),
+        services: keywordServiceToStrings(selectedSeminar.services as unknown[] | undefined),
         price: selectedSeminar.price ?? '',
       };
   
@@ -344,19 +364,23 @@ import React, {
           });
           if (res) {
             dispatch(showAlert('Seminar updated successfully'));
-            dispatch({
-              type: 'updateUserDetails',
-              payload: {
-                groupChats: res.result.groupChats,
-              },
-            });
-            navigate(`${process.env.REACT_APP_AUTH_URL}expertdashboard/calendar`);
+            await (dispatch as any)(updateMe());
+            if (onAfterSeminarSave) {
+              onAfterSeminarSave();
+            } else {
+              navigate(`${process.env.REACT_APP_AUTH_URL}expertdashboard/calendar`);
+            }
           }
         } else {
           const res = await createGroupChat(payload);
           if (res) {
             dispatch(showAlert('Seminar created successfully'));
-            navigate(`${process.env.REACT_APP_AUTH_URL}expertdashboard/calendar`);
+            await (dispatch as any)(updateMe());
+            if (onAfterSeminarSave) {
+              onAfterSeminarSave();
+            } else {
+              navigate(`${process.env.REACT_APP_AUTH_URL}expertdashboard/calendar`);
+            }
           }
         }
       } catch {
@@ -875,15 +899,28 @@ import React, {
   
   return (
     <div
-      className="min-h-full bg-white"
+      className="min-h-full bg-[#F5F3EF]"
       onClick={() => setOpenDropdown(null)}
     >
         <div className="mx-auto max-w-2xl px-6 py-8">
-          <header className="mb-6">
-            <h1 className="text-2xl font-semibold text-gray-900">Create a Seminar</h1>
-            <p className="mt-1 text-sm text-gray-500">
-              Fill in the details below to schedule your next seminar.
-            </p>
+          <header className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <h1 className="text-2xl font-semibold text-gray-900">
+                {selectedSeminar?.groupId ? 'Edit seminar' : 'Create a seminar'}
+              </h1>
+              <p className="mt-1 text-sm text-gray-500">
+                Fill in the details below to schedule your next seminar.
+              </p>
+            </div>
+            {onCancel ? (
+              <button
+                type="button"
+                onClick={onCancel}
+                className="shrink-0 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50"
+              >
+                Back to list
+              </button>
+            ) : null}
           </header>
   
           {renderStepper()}

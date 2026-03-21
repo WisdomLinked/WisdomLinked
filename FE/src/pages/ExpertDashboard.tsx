@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { useDispatch } from 'react-redux';
 import {
@@ -9,13 +9,22 @@ import {
   Clock,
   UserCircle,
   LayoutDashboard,
+  Settings,
+  Wallet,
+  UserCheck,
+  AlertCircle,
 } from 'lucide-react';
 
 import Sidebar from '../components/layout/Sidebar';
 import TopBar from '../components/layout/TopBar';
+import type { TopBarNotificationItem } from '../components/layout/TopBar';
+import StudentSettings from '../components/dashboard/StudentSettings';
+import { profileImageFetch } from '../api/api';
 import { useAppSelector } from '../store';
 import { connectWithSocketServer, UserDetails } from '../socket/socketConnection';
 import { logoutUser, updateMe } from '../actions/authActions';
+import { showAlert } from '../actions/alertActions';
+import { setChosenGroupChatDetails } from '../actions/chatActions';
 
 import IncomingCall from '../components/IncomingCall';
 import VideoChat from '../components/VideoChat';
@@ -23,11 +32,64 @@ import VideoChat from '../components/VideoChat';
 // Reuse existing expert dashboard feature pages (legacy MUI pages)
 import ExpertCalendar from './Dashboard/_ExpertDashboard/calendar';
 import ExpertAvailability from './Dashboard/_ExpertDashboard/availability';
-import ExpertSeminar from './Dashboard/_ExpertDashboard/seminar';
+import ExpertSeminarHub from './Dashboard/_ExpertDashboard/ExpertSeminarHub';
 import ExpertSearch from './Dashboard/_ExpertDashboard/search';
 import ExpertProfile from './Dashboard/_ExpertDashboard/profile';
+import ExpertRevenue from './Dashboard/_ExpertDashboard/ExpertRevenue';
 import ModernChat from './Dashboard/_ExpertDashboard/ModernChat';
-import ChatPage from './ChatPage';
+import StatCard from '../components/ui/StatCard';
+import UpcomingSessionModal, {
+  type UpcomingModalSession,
+} from '../components/dashboard/UpcomingSessionModal';
+
+function mapExpertGroupToModalSession(g: any): UpcomingModalSession {
+  const start = g?.start ? new Date(g.start).getTime() : Date.now();
+  const when = g?.start
+    ? new Date(g.start).toLocaleString(undefined, {
+        dateStyle: 'medium',
+        timeStyle: 'short',
+      })
+    : '—';
+  let withLabel = 'Session';
+  if (g?.type === 'seminar') {
+    const n = Array.isArray(g.participants) ? g.participants.length : 0;
+    withLabel = n ? `${n} enrolled` : 'Seminar';
+  } else {
+    const parts = g.participants || [];
+    const first = parts[0];
+    if (first && typeof first === 'object' && first.username) {
+      withLabel = first.username;
+    } else if (parts.length) {
+      withLabel = `${parts.length} participant(s)`;
+    } else {
+      withLabel = '1:1 session';
+    }
+  }
+  return {
+    id: String(g._id),
+    title: g.name || 'Session',
+    at: start,
+    when,
+    location: 'Online · WisdomLinked',
+    with: withLabel,
+  };
+}
+
+function mapPendingSeminarToModal(pg: any): UpcomingModalSession {
+  const g = pg?.groupChatId;
+  if (!g?._id) {
+    return {
+      id: String(pg._id || 'pending'),
+      title: 'Seminar',
+      at: Date.now(),
+      when: '—',
+      location: 'Online · WisdomLinked',
+      with: 'Pending invite',
+    };
+  }
+  const base = mapExpertGroupToModalSession(g);
+  return { ...base, with: 'Awaiting confirmation' };
+}
 
 export default function ExpertDashboard() {
   const dispatch = useDispatch();
@@ -42,7 +104,41 @@ export default function ExpertDashboard() {
 
   const [activeItem, setActiveItem] = useState('dashboard');
   const [range, setRange] = useState<'today' | 'week' | 'all'>('today');
+  const [avatarUrl, setAvatarUrl] = useState<string | undefined>(undefined);
+  const [expertUpcomingModal, setExpertUpcomingModal] = useState<{
+    kind: 'seminar' | 'oneToOne';
+    status: 'booked' | 'pending';
+  } | null>(null);
 
+  const userDetailsRef = useRef(userDetails);
+  userDetailsRef.current = userDetails;
+
+  const expertNotifications: TopBarNotificationItem[] = useMemo(
+    () => [
+      {
+        id: 'e1',
+        title: 'New 1:1 session request',
+        meta: 'A student requested a session — review in Clients.',
+        icon: <Users className="h-3.5 w-3.5 text-[#234C6A]" aria-hidden />,
+      },
+      {
+        id: 'e2',
+        title: 'Student joined your seminar',
+        meta: 'Someone registered for your upcoming seminar.',
+        icon: <BookOpen className="h-3.5 w-3.5 text-[#234C6A]" aria-hidden />,
+      },
+      {
+        id: 'e3',
+        title: 'Reminder: session starting soon',
+        meta: 'You have a 1:1 or seminar in the next hour.',
+        icon: <Clock className="h-3.5 w-3.5 text-[#234C6A]" aria-hidden />,
+      },
+    ],
+    []
+  );
+
+  // Auth + socket only. Do NOT call updateMe() when userDetails changes — that caused an
+  // infinite loop (updateMe → new userDetails → effect → updateMe) and broke pages like Seminar.
   useEffect(() => {
     const isLoggedIn = !!userDetails?.email;
     if (!isLoggedIn || String(userDetails?.role).toLowerCase() !== 'expert') {
@@ -51,17 +147,49 @@ export default function ExpertDashboard() {
     }
 
     if (!connectedWithSocketServer) {
-      connectWithSocketServer(userDetails as UserDetails);
+      connectWithSocketServer(userDetailsRef.current as UserDetails);
       dispatch({
         type: 'SetConnectedWithSocketServer',
         payload: true,
       });
+    }
+  }, [
+    userDetails?.email,
+    userDetails?.role,
+    userDetails?._id,
+    connectedWithSocketServer,
+    dispatch,
+  ]);
+
+  // Refresh profile when the route changes or socket first becomes ready — not on every userDetails update.
+  useEffect(() => {
+    const isLoggedIn = !!userDetails?.email;
+    if (!isLoggedIn || String(userDetails?.role).toLowerCase() !== 'expert') {
       return;
     }
+    if (!connectedWithSocketServer) return;
+    dispatch(updateMe() as any);
+  }, [
+    location.pathname,
+    connectedWithSocketServer,
+    userDetails?.email,
+    userDetails?.role,
+    dispatch,
+  ]);
 
-    // keep userDetails fresh
-    updateMe();
-  }, [userDetails, connectedWithSocketServer, location, dispatch]);
+  useEffect(() => {
+    const image = userDetails?.image as string | undefined;
+    if (!image) {
+      setAvatarUrl(undefined);
+      return;
+    }
+    profileImageFetch(image, 'small')
+      .then((img: unknown) => {
+        if (typeof img === 'string') setAvatarUrl(img);
+        else setAvatarUrl(undefined);
+      })
+      .catch(() => setAvatarUrl(undefined));
+  }, [userDetails?.image]);
 
   const navItems = useMemo(
     () => [
@@ -72,6 +200,8 @@ export default function ExpertDashboard() {
       { id: 'calendar', label: 'Calendar', icon: Calendar },
       { id: 'availability', label: 'Availability', icon: Clock },
       { id: 'profile', label: 'Profile', icon: UserCircle },
+      { id: 'revenue', label: 'Revenue', icon: Wallet },
+      { id: 'settings', label: 'Settings', icon: Settings },
     ],
     []
   );
@@ -150,6 +280,45 @@ export default function ExpertDashboard() {
     };
   }, [userDetails, range]);
 
+  const expertModalSessions = useMemo((): UpcomingModalSession[] => {
+    if (!expertUpcomingModal) return [];
+    const { kind, status } = expertUpcomingModal;
+    if (kind === 'oneToOne') {
+      const list = status === 'booked' ? bookedSessions : pendingSessions;
+      return list.map(mapExpertGroupToModalSession);
+    }
+    if (status === 'booked') {
+      return acceptedSeminars.map(mapExpertGroupToModalSession);
+    }
+    return pendingSeminars.map(mapPendingSeminarToModal);
+  }, [
+    expertUpcomingModal,
+    bookedSessions,
+    pendingSessions,
+    acceptedSeminars,
+    pendingSeminars,
+  ]);
+
+  const handleExpertJoinSession = (session: UpcomingModalSession) => {
+    const id = session.id;
+    const raw =
+      bookedSessions.find((x: any) => String(x._id) === id) ||
+      acceptedSeminars.find((x: any) => String(x._id) === id);
+    if (!raw) {
+      dispatch(showAlert('Could not open this session.'));
+      return;
+    }
+    dispatch(
+      setChosenGroupChatDetails({
+        ...raw,
+        groupId: raw._id,
+        groupName: raw.name,
+      } as any)
+    );
+    setExpertUpcomingModal(null);
+    setActiveItem('chat');
+  };
+
   const totalRevenuePlaceholder =
     (bookedSessions?.length || 0) * (userDetails?.price || 50) +
     (acceptedSeminars?.length || 0) * (userDetails?.price || 50);
@@ -159,28 +328,36 @@ export default function ExpertDashboard() {
       ? 'Chat'
       : activeItem === 'clients'
         ? 'Clients'
-        : activeItem === 'seminar'
-          ? 'Seminar'
-          : activeItem === 'calendar'
-            ? 'Calendar'
-            : activeItem === 'availability'
-              ? 'Availability'
-              : activeItem === 'profile'
-                ? 'Profile'
-                : 'Expert Dashboard';
+        : activeItem === 'revenue'
+          ? 'Revenue'
+          : activeItem === 'seminar'
+            ? 'Seminar'
+            : activeItem === 'calendar'
+              ? 'Calendar'
+              : activeItem === 'availability'
+                ? 'Availability'
+                : activeItem === 'profile'
+                  ? 'Profile'
+                  : activeItem === 'settings'
+                    ? 'Settings'
+                    : 'Expert Dashboard';
 
   const content =
     activeItem === 'chat' ? (
       <div className="h-[calc(100vh-56px)] overflow-hidden bg-[#F5F3EF]">
-        <ChatPage />
+        <ModernChat videoChaton={!!(localStream || localStreamRoom)} />
       </div>
     ) : activeItem === 'clients' ? (
       <div className="h-[calc(100vh-56px)] overflow-y-auto bg-[#F5F3EF]">
         <ExpertSearch />
       </div>
+    ) : activeItem === 'revenue' ? (
+      <div className="h-[calc(100vh-56px)] overflow-y-auto bg-[#F5F3EF]">
+        <ExpertRevenue />
+      </div>
     ) : activeItem === 'seminar' ? (
       <div className="h-[calc(100vh-56px)] overflow-y-auto bg-[#F5F3EF]">
-        <ExpertSeminar />
+        <ExpertSeminarHub />
       </div>
     ) : activeItem === 'calendar' ? (
       <div className="h-[calc(100vh-56px)] overflow-y-auto bg-[#F5F3EF]">
@@ -194,6 +371,8 @@ export default function ExpertDashboard() {
       <div className="h-[calc(100vh-56px)] overflow-y-auto bg-[#F5F3EF]">
         <ExpertProfile userDetails={userDetails} />
       </div>
+    ) : activeItem === 'settings' ? (
+      <StudentSettings />
     ) : (
       <div className="px-6 py-7 space-y-6">
         {/* Stats row */}
@@ -201,39 +380,45 @@ export default function ExpertDashboard() {
           <h2 className="text-2xl font-semibold text-slate-900 mb-3">
             Overview
           </h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-              <div className="text-[12px] font-medium text-slate-500 mb-1">
-                Upcoming 1:1 sessions
-              </div>
-              <div className="text-2xl font-semibold text-slate-900">
-                {bookedSessions.length}
-              </div>
-            </div>
-            <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-              <div className="text-[12px] font-medium text-slate-500 mb-1">
-                Pending 1:1 requests
-              </div>
-              <div className="text-2xl font-semibold text-slate-900">
-                {pendingSessions.length}
-              </div>
-            </div>
-            <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-              <div className="text-[12px] font-medium text-slate-500 mb-1">
-                Upcoming seminars
-              </div>
-              <div className="text-2xl font-semibold text-slate-900">
-                {acceptedSeminars.length}
-              </div>
-            </div>
-            <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-              <div className="text-[12px] font-medium text-slate-500 mb-1">
-                Est. revenue (placeholder)
-              </div>
-              <div className="text-2xl font-semibold text-slate-900">
-                ${totalRevenuePlaceholder}
-              </div>
-            </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-4 gap-5">
+            <StatCard
+              label="Upcoming 1:1 sessions"
+              value={bookedSessions.length}
+              icon={UserCheck}
+              color="success"
+              tooltip="View sessions and join the meeting room"
+              onClick={() =>
+                setExpertUpcomingModal({ kind: 'oneToOne', status: 'booked' })
+              }
+            />
+            <StatCard
+              label="Pending 1:1 requests"
+              value={pendingSessions.length}
+              icon={AlertCircle}
+              color="warning"
+              tooltip="Requests awaiting confirmation"
+              onClick={() =>
+                setExpertUpcomingModal({ kind: 'oneToOne', status: 'pending' })
+              }
+            />
+            <StatCard
+              label="Upcoming seminars"
+              value={acceptedSeminars.length}
+              icon={BookOpen}
+              color="primary"
+              tooltip="Your hosted seminars — join opens chat"
+              onClick={() =>
+                setExpertUpcomingModal({ kind: 'seminar', status: 'booked' })
+              }
+            />
+            <StatCard
+              label="Est. revenue (placeholder)"
+              value={`$${totalRevenuePlaceholder}`}
+              icon={Wallet}
+              color="neutral"
+              tooltip="Open full revenue and payment history"
+              onClick={() => setActiveItem('revenue')}
+            />
           </div>
         </section>
 
@@ -398,7 +583,10 @@ export default function ExpertDashboard() {
           <TopBar
             title={title}
             userName={expertName}
+            avatarUrl={avatarUrl}
+            notifications={expertNotifications}
             onProfileClick={() => setActiveItem('profile')}
+            onSettingsClick={() => setActiveItem('settings')}
           />
           {content}
 
@@ -408,6 +596,21 @@ export default function ExpertDashboard() {
             <VideoChat role={userDetails?.role} otherUserId={otherUserId} />
           )}
         </main>
+
+        {expertUpcomingModal ? (
+          <UpcomingSessionModal
+            kind={expertUpcomingModal.kind}
+            status={expertUpcomingModal.status}
+            role="expert"
+            sessions={expertModalSessions}
+            onClose={() => setExpertUpcomingModal(null)}
+            onJoinSession={
+              expertUpcomingModal.status === 'booked'
+                ? handleExpertJoinSession
+                : undefined
+            }
+          />
+        ) : null}
       </div>
     </div>
   );

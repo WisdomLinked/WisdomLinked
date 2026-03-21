@@ -158,21 +158,26 @@ const ExpertCalendar: React.FC = () => {
         type: "event",
       }));
 
-      response.result.groupChats.forEach((seminar: any) => {
+      const meId = userDetails?._id;
+      response.result.groupChats.forEach((g: any) => {
+        const createdById = g.createdBy?._id ?? g.createdBy;
+        const iAmCreator =
+          createdById != null &&
+          meId != null &&
+          String(createdById) === String(meId);
         const shouldPush =
-          seminar.status !== "pending" ||
-          !seminar.createdBy ||
-          seminar.createdBy._id === userDetails._id;
+          g.status !== "pending" || !g.createdBy || iAmCreator;
 
         if (shouldPush) {
+          const isSeminar = g.type === "seminar";
           temp.push({
-            ...seminar,
-            id: seminar._id,
-            start: new Date(seminar.start),
-            end: new Date(seminar.end),
-            title: "(S)" + seminar.name,
-            type: seminar.type,
-            status: seminar.status,
+            ...g,
+            id: g._id,
+            start: new Date(g.start),
+            end: new Date(g.end),
+            title: isSeminar ? `(S) ${g.name}` : g.name || "1:1 session",
+            type: g.type,
+            status: g.status,
           });
         }
       });

@@ -7,7 +7,8 @@ const {
     updateDailyTimeSlots,
     filterCustomers,
     getCustomerById,
-    shareMeetingViaEmail
+    shareMeetingViaEmail,
+    getMyPaymentHistory,
 } = require('../controllers/expert.controller')
 const {
     acceptEvent,
@@ -17,6 +18,7 @@ const {
     cancelInvitation,
     createFeedback,
 } = require('../controllers/event.controller')
+const { filterSeminars } = require('../controllers/customer.controller')
 
 router.post(
     "/updateDailyTimeSlots",
@@ -74,5 +76,8 @@ router.post("/createEventFeedback", expertAuth(true), createFeedback);
 
 router.post("/shareMeetingViaEmail", expertAuth(true), shareMeetingViaEmail);
 
+router.post("/getMyPaymentHistory", expertAuth(false), getMyPaymentHistory);
+
+router.post("/filterSeminars", expertAuth(false), filterSeminars);
 
 module.exports = router;

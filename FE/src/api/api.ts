@@ -706,6 +706,16 @@ export const doFilterSeminars = async (filter: any) => {
     }
 };
 
+/** Same seminar discovery as customer flow; use while logged in as expert */
+export const doExpertFilterSeminars = async (filter: any) => {
+    try {
+        const res = await api.post("expert/filterSeminars", filter);
+        return res.data;
+    } catch (err: any) {
+        return checkForAuthorization(err);
+    }
+};
+
 export const doAppendEvent = async ({ title, start, end, duration, price, paidBy, expert, customer, payment_intent, eventId, createdBy }: any) => {
     try {
         const res = await api.post("customer/appendEvent", { title, start, end, duration, price, paidBy, expert, customer, payment_intent, eventId, createdBy });
@@ -863,6 +873,15 @@ export const getCustomerById = async (id: any) => {
 export const shareMeetingViaEmail = async (data: any) => {
     try {
         const res = await api.post("expert/shareMeetingViaEmail", data);
+        return res.data;
+    } catch (err: any) {
+        return checkForAuthorization(err);
+    }
+};
+
+export const doGetExpertPaymentHistory = async () => {
+    try {
+        const res = await api.post("expert/getMyPaymentHistory", {});
         return res.data;
     } catch (err: any) {
         return checkForAuthorization(err);

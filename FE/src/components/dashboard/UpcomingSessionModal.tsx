@@ -1,8 +1,18 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Calendar, Clock, MapPin, BookOpen, UserCheck } from 'lucide-react';
+import { Calendar, MapPin, BookOpen, UserCheck } from 'lucide-react';
 
 type SessionKind = 'seminar' | 'oneToOne';
 type SessionStatus = 'booked' | 'pending';
+
+/** Real or mock row for the modal list */
+export type UpcomingModalSession = {
+  id: string;
+  title: string;
+  at: number;
+  when: string;
+  location?: string;
+  with?: string;
+};
 
 const pad2 = (n: number) => String(n).padStart(2, '0');
 
@@ -24,11 +34,20 @@ export default function UpcomingSessionModal({
   status,
   onClose,
   onJoin,
+  onJoinSession,
+  sessions: sessionsProp,
+  role = 'student',
 }: {
   kind: SessionKind;
   status: SessionStatus;
   onClose: () => void;
+  /** Student dashboard: navigate to generic join flow */
   onJoin?: () => void;
+  /** Expert (or future): open a specific session (e.g. group chat) */
+  onJoinSession?: (session: UpcomingModalSession) => void;
+  /** When set (including `[]`), replaces demo data */
+  sessions?: UpcomingModalSession[];
+  role?: 'student' | 'expert';
 }) {
   const baseNow = useMemo(() => Date.now(), []);
 
@@ -39,31 +58,41 @@ export default function UpcomingSessionModal({
   }, []);
 
   const content = useMemo(() => {
+    const expert = role === 'expert';
     if (kind === 'seminar') {
       return {
-        title: status === 'pending' ? 'Pending seminar sessions' : 'Booked seminar sessions',
+        title: status === 'pending' ? 'Pending seminar sessions' : 'Upcoming seminars',
         typeLabel: 'Seminar',
-        description:
-          status === 'pending'
+        description: expert
+          ? status === 'pending'
+            ? 'Seminar invites or drafts that are not confirmed yet.'
+            : 'Seminars you are hosting — join to open the meeting room in chat.'
+          : status === 'pending'
             ? 'These seminar requests are waiting for mentor approval.'
             : 'These are your upcoming booked seminar sessions.',
         icon: <BookOpen className="h-4 w-4" aria-hidden />,
       };
     }
     return {
-      title: status === 'pending' ? 'Pending individual sessions' : 'Booked individual sessions',
+      title: status === 'pending' ? 'Pending individual sessions' : 'Upcoming 1:1 sessions',
       typeLabel: '1-1 session',
-      description:
-        status === 'pending'
+      description: expert
+        ? status === 'pending'
+          ? '1:1 requests waiting for you or the student to confirm.'
+          : 'Confirmed 1:1 sessions — join opens the session in chat.'
+        : status === 'pending'
           ? 'These 1:1 requests are waiting for mentor approval.'
           : 'These are your upcoming booked 1:1 sessions.',
       icon: <UserCheck className="h-4 w-4" aria-hidden />,
     };
-  }, [kind, status]);
+  }, [kind, status, role]);
 
   const showJoin = status === 'booked';
 
   const sessions = useMemo(() => {
+    if (sessionsProp !== undefined) {
+      return sessionsProp;
+    }
     if (kind === 'seminar') {
       return [
         {
@@ -119,7 +148,7 @@ export default function UpcomingSessionModal({
         with: 'Dr. Yuki Tanaka',
       },
     ];
-  }, [kind, baseNow]);
+  }, [kind, baseNow, sessionsProp]);
 
   return (
     <div
@@ -155,6 +184,11 @@ export default function UpcomingSessionModal({
           <p className="text-sm text-slate-600">{content.description}</p>
 
           <div className="max-h-[52vh] overflow-y-auto space-y-3 pr-1">
+            {sessions.length === 0 ? (
+              <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 py-10 text-center text-sm text-slate-500">
+                No sessions in this view for the selected time range.
+              </div>
+            ) : null}
             {sessions.map(session => (
               <div key={session.id} className="rounded-xl border border-slate-200 bg-[#F8FAFC] p-3">
                 <div className="flex items-start justify-between gap-3">
@@ -198,7 +232,10 @@ export default function UpcomingSessionModal({
                     {showJoin ? (
                       <button
                         type="button"
-                        onClick={onJoin}
+                        onClick={() => {
+                          if (onJoinSession) onJoinSession(session);
+                          else onJoin?.();
+                        }}
                         className="mt-2 rounded-lg bg-[#234C6A] px-3 py-1.5 text-[11px] font-semibold text-white hover:brightness-110"
                       >
                         Join meeting
