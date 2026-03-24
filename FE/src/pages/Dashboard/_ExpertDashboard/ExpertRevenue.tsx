@@ -62,6 +62,8 @@ type Summary = {
   otherCents: number;
 };
 
+type DateFilter = 'all' | 'today' | 'last7' | 'last30';
+
 const kindLabel = (k: PaymentKind | undefined) => {
   if (k === 'seminar') return 'Seminar';
   if (k === 'individual') return '1:1 session';
@@ -79,7 +81,10 @@ export default function ExpertRevenue() {
   const [loading, setLoading] = useState(true);
   const [rows, setRows] = useState<PaymentRow[]>([]);
   const [summary, setSummary] = useState<Summary | null>(null);
-  const [filter, setFilter] = useState<'all' | 'individual' | 'seminar'>('all');
+  const [typeFilter, setTypeFilter] = useState<'all' | 'individual' | 'seminar'>(
+    'all',
+  );
+  const [dateFilter, setDateFilter] = useState<DateFilter>('all');
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -98,11 +103,35 @@ export default function ExpertRevenue() {
     load();
   }, [load]);
 
+  const isInsideDateFilter = useCallback((createdAt?: string) => {
+    if (dateFilter === 'all') return true;
+    if (!createdAt) return false;
+    const created = new Date(createdAt);
+    if (Number.isNaN(created.getTime())) return false;
+
+    const now = new Date();
+    if (dateFilter === 'today') {
+      const start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      return created >= start;
+    }
+    const days = dateFilter === 'last7' ? 7 : 30;
+    const start = new Date(now);
+    start.setDate(start.getDate() - days);
+    return created >= start;
+  }, [dateFilter]);
+
   const filteredRows = useMemo(() => {
-    if (filter === 'all') return rows;
-    if (filter === 'seminar') return rows.filter((r) => r.paymentKind === 'seminar');
-    return rows.filter((r) => r.paymentKind === 'individual');
-  }, [rows, filter]);
+    return rows.filter((r) => {
+      const typeOk =
+        typeFilter === 'all'
+          ? true
+          : typeFilter === 'seminar'
+            ? r.paymentKind === 'seminar'
+            : r.paymentKind === 'individual';
+      const dateOk = isInsideDateFilter(r.createdAt);
+      return typeOk && dateOk;
+    });
+  }, [rows, typeFilter, isInsideDateFilter]);
 
   const primaryCurrency = useMemo(() => {
     const first = rows.find((r) => r.currency);
@@ -187,27 +216,53 @@ export default function ExpertRevenue() {
                 </p>
               </div>
             </div>
-            <div className="inline-flex rounded-full bg-slate-100 p-0.5">
-              {(
-                [
-                  ['all', 'All'],
-                  ['individual', '1:1'],
-                  ['seminar', 'Seminars'],
-                ] as const
-              ).map(([key, label]) => (
-                <button
-                  key={key}
-                  type="button"
-                  onClick={() => setFilter(key)}
-                  className={`px-3 py-1.5 text-[11px] font-semibold rounded-full transition ${
-                    filter === key
-                      ? 'bg-white text-slate-900 shadow-sm'
-                      : 'text-slate-500 hover:text-slate-800'
-                  }`}
-                >
-                  {label}
-                </button>
-              ))}
+            <div className="flex flex-col items-stretch gap-2 sm:items-end">
+              <div className="inline-flex rounded-full bg-slate-100 p-0.5">
+                {(
+                  [
+                    ['all', 'All dates'],
+                    ['today', 'Today'],
+                    ['last7', 'Last 7 days'],
+                    ['last30', 'Last 30 days'],
+                  ] as const
+                ).map(([key, label]) => (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => setDateFilter(key)}
+                    className={`px-3 py-1.5 text-[11px] font-semibold rounded-full transition ${
+                      dateFilter === key
+                        ? 'bg-white text-slate-900 shadow-sm'
+                        : 'text-slate-500 hover:text-slate-800'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+
+              <div className="inline-flex rounded-full bg-slate-100 p-0.5">
+                {(
+                  [
+                    ['all', 'All sessions'],
+                    ['individual', '1:1'],
+                    ['seminar', 'Seminars'],
+                  ] as const
+                ).map(([key, label]) => (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => setTypeFilter(key)}
+                    className={`px-3 py-1.5 text-[11px] font-semibold rounded-full transition ${
+                      typeFilter === key
+                        ? 'bg-white text-slate-900 shadow-sm'
+                        : 'text-slate-500 hover:text-slate-800'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
 

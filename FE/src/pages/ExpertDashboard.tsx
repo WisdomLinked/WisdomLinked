@@ -13,6 +13,7 @@ import {
   Wallet,
   UserCheck,
   AlertCircle,
+  MessageSquareMore,
 } from 'lucide-react';
 
 import Sidebar from '../components/layout/Sidebar';
@@ -36,8 +37,10 @@ import ExpertSeminarHub from './Dashboard/_ExpertDashboard/ExpertSeminarHub';
 import ExpertSearch from './Dashboard/_ExpertDashboard/search';
 import ExpertProfile from './Dashboard/_ExpertDashboard/profile';
 import ExpertRevenue from './Dashboard/_ExpertDashboard/ExpertRevenue';
+import ContactAdmin from './Dashboard/_ExpertDashboard/ContactAdmin';
 import ModernChat from './Dashboard/_ExpertDashboard/ModernChat';
 import StatCard from '../components/ui/StatCard';
+import Chatbot from '../components/chatbot';
 import UpcomingSessionModal, {
   type UpcomingModalSession,
 } from '../components/dashboard/UpcomingSessionModal';
@@ -103,6 +106,8 @@ export default function ExpertDashboard() {
   } = useAppSelector((state) => state);
 
   const [activeItem, setActiveItem] = useState('dashboard');
+  // Dummy unread indicator for sidebar showcase; replace with backend unread count later.
+  const [hasNewChatMessage, setHasNewChatMessage] = useState(true);
   const [range, setRange] = useState<'today' | 'week' | 'all'>('today');
   const [avatarUrl, setAvatarUrl] = useState<string | undefined>(undefined);
   const [expertUpcomingModal, setExpertUpcomingModal] = useState<{
@@ -191,6 +196,12 @@ export default function ExpertDashboard() {
       .catch(() => setAvatarUrl(undefined));
   }, [userDetails?.image]);
 
+  useEffect(() => {
+    if (activeItem === 'chat') {
+      setHasNewChatMessage(false);
+    }
+  }, [activeItem]);
+
   const navItems = useMemo(
     () => [
       { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -199,9 +210,10 @@ export default function ExpertDashboard() {
       { id: 'seminar', label: 'Seminar', icon: BookOpen },
       { id: 'calendar', label: 'Calendar', icon: Calendar },
       { id: 'availability', label: 'Availability', icon: Clock },
-      { id: 'profile', label: 'Profile', icon: UserCircle },
-      { id: 'revenue', label: 'Revenue', icon: Wallet },
+      { id: 'contact-admin', label: 'Contact admin', icon: MessageSquareMore },
       { id: 'settings', label: 'Settings', icon: Settings },
+      { id: 'revenue', label: 'Revenue', icon: Wallet },
+      { id: 'profile', label: 'Profile', icon: UserCircle },
     ],
     []
   );
@@ -330,6 +342,8 @@ export default function ExpertDashboard() {
         ? 'Clients'
         : activeItem === 'revenue'
           ? 'Revenue'
+          : activeItem === 'contact-admin'
+            ? 'Contact admin'
           : activeItem === 'seminar'
             ? 'Seminar'
             : activeItem === 'calendar'
@@ -354,6 +368,10 @@ export default function ExpertDashboard() {
     ) : activeItem === 'revenue' ? (
       <div className="h-[calc(100vh-56px)] overflow-y-auto bg-[#F5F3EF]">
         <ExpertRevenue />
+      </div>
+    ) : activeItem === 'contact-admin' ? (
+      <div className="h-[calc(100vh-56px)] overflow-y-auto bg-[#F5F3EF]">
+        <ContactAdmin />
       </div>
     ) : activeItem === 'seminar' ? (
       <div className="h-[calc(100vh-56px)] overflow-y-auto bg-[#F5F3EF]">
@@ -577,6 +595,7 @@ export default function ExpertDashboard() {
           navItems={navItems}
           studentName={expertName}
           roleLabel="Expert"
+          notifications={{ chat: hasNewChatMessage }}
         />
 
         <main className="flex-1 min-w-0 lg:ml-[220px]">
@@ -589,6 +608,7 @@ export default function ExpertDashboard() {
             onSettingsClick={() => setActiveItem('settings')}
           />
           {content}
+          <Chatbot />
 
           {/* Keep call UX working in the new layout */}
           <IncomingCall />

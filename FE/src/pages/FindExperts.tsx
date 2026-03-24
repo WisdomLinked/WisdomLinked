@@ -70,6 +70,15 @@ export default function FindExpertsPage({
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedMajor, setSelectedMajor] = useState<string>('all');
   const [selectedService, setSelectedService] = useState<string>('all');
+  const [followedMentorIds, setFollowedMentorIds] = useState<number[]>([]);
+
+  const toggleFollow = (mentorId: number) => {
+    setFollowedMentorIds(prev =>
+      prev.includes(mentorId)
+        ? prev.filter(id => id !== mentorId)
+        : [...prev, mentorId],
+    );
+  };
 
   const majors = useMemo(
     () => Array.from(new Set(mentors.map(m => m.field))).sort(),
@@ -222,7 +231,12 @@ export default function FindExpertsPage({
                   key={mentor.id}
                   className="snap-start min-w-[260px] md:min-w-0 md:w-auto"
                 >
-                  <MentorCard {...mentor} onViewProfile={onViewExpert} />
+                  <MentorCard
+                    {...mentor}
+                    onViewProfile={onViewExpert}
+                    isFollowing={followedMentorIds.includes(mentor.id)}
+                    onToggleFollow={toggleFollow}
+                  />
                 </div>
               ))}
               {newlyJoined.length === 0 && (
@@ -251,6 +265,8 @@ export default function FindExpertsPage({
                   {...mentor}
                   compact
                   onViewProfile={onViewExpert}
+                  isFollowing={followedMentorIds.includes(mentor.id)}
+                  onToggleFollow={toggleFollow}
                 />
               ))}
             </div>

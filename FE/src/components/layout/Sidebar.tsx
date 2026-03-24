@@ -7,6 +7,7 @@ import {
   Video,
   UserCircle,
   Settings,
+  MessageSquareMore,
   Menu,
   X,
 } from 'lucide-react';
@@ -19,6 +20,7 @@ const defaultNavItems = [
   { id: 'seminars', label: 'Seminars', icon: BookOpen },
   { id: 'calendar', label: 'Calendar', icon: Calendar },
   { id: 'join-meeting', label: 'Join Meeting', icon: Video },
+  { id: 'contact-admin', label: 'Contact admin', icon: MessageSquareMore },
   { id: 'profile', label: 'Profile', icon: UserCircle },
   { id: 'settings', label: 'Settings', icon: Settings },
 ];
@@ -30,6 +32,7 @@ export default function Sidebar({
   studentName = 'Alex Rivera',
   avatarUrl,
   roleLabel = 'Student',
+  notifications = {},
 }: {
   navItems?: { id: string; label: string; icon: React.ComponentType<{ className?: string }> }[];
   activeItem: string;
@@ -37,6 +40,7 @@ export default function Sidebar({
   studentName?: string;
   avatarUrl?: string;
   roleLabel?: string;
+  notifications?: Record<string, boolean>;
 }) {
   const [openMobile, setOpenMobile] = useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
@@ -83,7 +87,15 @@ export default function Sidebar({
               }`}
             >
               <Icon className="h-4 w-4" aria-hidden="true" />
-              <span className="font-sans">{item.label}</span>
+              <span className="font-sans inline-flex items-center gap-2">
+                {item.label}
+                {notifications[item.id] ? (
+                  <span
+                    className="inline-block h-2.5 w-2.5 rounded-full bg-emerald-500"
+                    aria-label={`${item.label} has new notification`}
+                  />
+                ) : null}
+              </span>
             </button>
           );
         })}

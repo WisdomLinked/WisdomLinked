@@ -14,6 +14,7 @@ import JoinMeeting from '../components/dashboard/JoinMeeting';
 import StudentSeminars from '../components/dashboard/StudentSeminars';
 import FindExpertsPage from './FindExperts';
 import Chatbot from '../components/chatbot';
+import ContactAdmin from './Dashboard/_ExpertDashboard/ContactAdmin';
 import UpcomingCountdownCard from '../components/dashboard/UpcomingCountdownCard';
 import UpcomingSessionModal from '../components/dashboard/UpcomingSessionModal';
 import ExpertProfile from '../components/dashboard/ExpertProfile';
@@ -21,6 +22,8 @@ import type { MentorCardProps } from '../components/MentorCard';
 
 export default function StudentDashboard() {
   const [activeItem, setActiveItem] = useState('dashboard');
+  // Dummy unread indicator for sidebar showcase; replace with backend unread count later.
+  const [hasNewChatMessage, setHasNewChatMessage] = useState(true);
   const [selectedExpert, setSelectedExpert] = useState<MentorCardProps | null>(null);
   const [upcomingModal, setUpcomingModal] = useState<{
     kind: 'seminar' | 'oneToOne';
@@ -105,6 +108,12 @@ export default function StudentDashboard() {
       .catch(() => setAvatarUrl(undefined));
   }, [userDetails?.image]);
 
+  useEffect(() => {
+    if (activeItem === 'chat') {
+      setHasNewChatMessage(false);
+    }
+  }, [activeItem]);
+
   return (
     <div className="min-h-screen bg-[#f8f7f4] text-[14px]">
       <div className="flex min-h-screen">
@@ -113,6 +122,7 @@ export default function StudentDashboard() {
           onNavigate={setActiveItem}
           studentName={studentName}
           avatarUrl={avatarUrl}
+          notifications={{ chat: hasNewChatMessage }}
         />
         <main className="flex-1 min-w-0 lg:ml-[220px]">
           <TopBar
@@ -123,6 +133,8 @@ export default function StudentDashboard() {
                   ? 'Expert Profile'
                 : activeItem === 'settings'
                   ? 'Settings'
+                : activeItem === 'contact-admin'
+                  ? 'Contact admin'
                 : activeItem === 'experts'
                   ? 'Find experts'
                   : activeItem === 'calendar'
@@ -170,6 +182,8 @@ export default function StudentDashboard() {
             <StudentCalendar onJoinMeeting={() => setActiveItem('join-meeting')} />
           ) : activeItem === 'join-meeting' ? (
             <JoinMeeting />
+          ) : activeItem === 'contact-admin' ? (
+            <ContactAdmin />
           ) : activeItem === 'seminars' ? (
             <StudentSeminars />
           ) : (

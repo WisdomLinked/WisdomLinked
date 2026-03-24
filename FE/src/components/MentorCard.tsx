@@ -13,6 +13,8 @@ export interface MentorCardProps {
   isNew: boolean;
   compact?: boolean;
   onViewProfile?: (mentor: MentorCardProps) => void;
+  isFollowing?: boolean;
+  onToggleFollow?: (mentorId: number) => void;
 }
 
 const serviceColorByIndex = (index: number) => {
@@ -34,6 +36,8 @@ const MentorCard: React.FC<MentorCardProps> = ({
   compact = false,
   onViewProfile,
   id,
+  isFollowing = false,
+  onToggleFollow,
 }) => {
   const aiHeadshotUrl = (seed: string) =>
     `https://api.dicebear.com/9.x/bottts-neutral/svg?seed=${encodeURIComponent(seed)}`;
@@ -111,7 +115,21 @@ const MentorCard: React.FC<MentorCardProps> = ({
         </div>
       </div>
 
-      <div className="mt-4 flex justify-end">
+      <div className="mt-4 flex items-center justify-between gap-2">
+        <button
+          type="button"
+          onClick={e => {
+            e.stopPropagation();
+            onToggleFollow?.(id);
+          }}
+          className={`rounded-[4px] border px-3 py-1.5 text-[0.78rem] font-semibold transition-colors ${
+            isFollowing
+              ? 'border-[#1A3A4A] bg-[#E8EEF4] text-[#1A3A4A]'
+              : 'border-[#E5E2DB] bg-white text-[#1A3A4A] hover:bg-[#F5F3EF]'
+          }`}
+        >
+          {isFollowing ? 'Following' : 'Follow'}
+        </button>
         <button
           type="button"
           className="rounded-[4px] bg-[#1A3A4A] px-3 py-1.5 text-[0.78rem] font-semibold text-white hover:bg-[#122635]"
