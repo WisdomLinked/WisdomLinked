@@ -7,7 +7,6 @@ import {
   BookOpen,
   Calendar,
   Clock,
-  UserCircle,
   LayoutDashboard,
   Settings,
   Wallet,
@@ -213,7 +212,6 @@ export default function ExpertDashboard() {
       { id: 'contact-admin', label: 'Contact admin', icon: MessageSquareMore },
       { id: 'settings', label: 'Settings', icon: Settings },
       { id: 'revenue', label: 'Revenue', icon: Wallet },
-      { id: 'profile', label: 'Profile', icon: UserCircle },
     ],
     []
   );

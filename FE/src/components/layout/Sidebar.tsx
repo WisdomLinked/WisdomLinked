@@ -21,7 +21,6 @@ const defaultNavItems = [
   { id: 'calendar', label: 'Calendar', icon: Calendar },
   { id: 'join-meeting', label: 'Join Meeting', icon: Video },
   { id: 'contact-admin', label: 'Contact admin', icon: MessageSquareMore },
-  { id: 'profile', label: 'Profile', icon: UserCircle },
   { id: 'settings', label: 'Settings', icon: Settings },
 ];
 
@@ -46,8 +45,15 @@ export default function Sidebar({
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const navigate = useNavigate();
 
+  const mainNavItems = navItems.filter(item => item.id !== 'profile');
+
+  const goToProfile = () => {
+    onNavigate('profile');
+    setOpenMobile(false);
+  };
+
   const content = (
-    <div className="flex h-full flex-col bg-[#f8fafc] px-3 py-5 border-r border-slate-200">
+    <div className="flex h-full min-h-0 flex-col bg-[#f8fafc] px-3 py-5 border-r border-slate-200">
       <div className="mb-7 pl-1">
         <div className="flex items-center gap-2.5">
           <div className="h-9 w-9 rounded-xl bg-white border border-slate-200 flex items-center justify-center shadow-sm overflow-hidden">
@@ -68,8 +74,8 @@ export default function Sidebar({
         </div>
       </div>
 
-      <nav className="flex-1 space-y-1">
-        {navItems.map(item => {
+      <nav className="flex-1 min-h-0 space-y-1 overflow-y-auto">
+        {mainNavItems.map(item => {
           const Icon = item.icon;
           const isActive = item.id === activeItem;
           return (
@@ -101,12 +107,40 @@ export default function Sidebar({
         })}
       </nav>
 
-      <div className="mt-4 border-t border-slate-200 pt-4">
-        <div className="flex items-center gap-3 mb-3">
+      <div className="mt-auto shrink-0 border-t border-slate-200 pt-3">
+        <button
+          type="button"
+          onClick={goToProfile}
+          className={`nav-btn mb-2 flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-[13px] font-medium transition-colors focus:outline-none border-l-4 ${
+            activeItem === 'profile'
+              ? 'bg-white text-slate-900 border-[#234C6A] shadow-sm'
+              : 'text-slate-600 hover:bg-white hover:text-slate-900 border-transparent'
+          }`}
+        >
+          <UserCircle className="h-4 w-4" aria-hidden="true" />
+          <span className="font-sans inline-flex items-center gap-2">
+            Profile
+            {notifications.profile ? (
+              <span
+                className="inline-block h-2.5 w-2.5 rounded-full bg-emerald-500"
+                aria-label="Profile has new notification"
+              />
+            ) : null}
+          </span>
+        </button>
+
+        <button
+          type="button"
+          onClick={goToProfile}
+          className={`mb-3 flex w-full items-center gap-3 rounded-lg px-2 py-2 text-left transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#234C6A]/30 ${
+            activeItem === 'profile' ? 'bg-white shadow-sm ring-1 ring-slate-200/80' : 'hover:bg-white/80'
+          }`}
+          aria-label={`Open profile for ${studentName}`}
+        >
           {avatarUrl ? (
             <img
               src={avatarUrl}
-              alt={studentName}
+              alt=""
               className="h-9 w-9 shrink-0 rounded-full object-cover border border-slate-200"
             />
           ) : (
@@ -119,13 +153,13 @@ export default function Sidebar({
                 .toUpperCase()}
             </div>
           )}
-          <div>
-            <div className="font-sans text-[13px] font-semibold text-slate-800">
+          <div className="min-w-0 flex-1">
+            <div className="font-sans text-[13px] font-semibold text-slate-800 truncate">
               {studentName}
             </div>
             <div className="font-sans text-[10px] text-slate-400">{roleLabel}</div>
           </div>
-        </div>
+        </button>
         <button
           type="button"
           className="mt-1 inline-flex w-full items-center justify-center rounded-lg border border-[#234C6A] bg-[#E8EEF4] px-3 py-1.5 text-[12px] font-semibold text-[#234C6A] hover:bg-[#234C6A] hover:text-white transition-colors"

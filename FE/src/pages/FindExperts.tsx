@@ -62,23 +62,29 @@ const mentors: Mentor[] = [
   },
 ];
 
+/** Baseline follower counts (mock); parent owns state and passes counts + toggle. */
+export const INITIAL_FOLLOWER_COUNTS: Record<number, number> = {
+  1: 142,
+  2: 89,
+  3: 256,
+  4: 67,
+  5: 198,
+};
+
 export default function FindExpertsPage({
   onViewExpert,
+  followedMentorIds,
+  followerCounts,
+  onToggleFollow,
 }: {
   onViewExpert?: (mentor: MentorCardProps) => void;
+  followedMentorIds: number[];
+  followerCounts: Record<number, number>;
+  onToggleFollow: (mentorId: number) => void;
 }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedMajor, setSelectedMajor] = useState<string>('all');
   const [selectedService, setSelectedService] = useState<string>('all');
-  const [followedMentorIds, setFollowedMentorIds] = useState<number[]>([]);
-
-  const toggleFollow = (mentorId: number) => {
-    setFollowedMentorIds(prev =>
-      prev.includes(mentorId)
-        ? prev.filter(id => id !== mentorId)
-        : [...prev, mentorId],
-    );
-  };
 
   const majors = useMemo(
     () => Array.from(new Set(mentors.map(m => m.field))).sort(),
@@ -233,9 +239,10 @@ export default function FindExpertsPage({
                 >
                   <MentorCard
                     {...mentor}
+                    followerCount={followerCounts[mentor.id] ?? 0}
                     onViewProfile={onViewExpert}
                     isFollowing={followedMentorIds.includes(mentor.id)}
-                    onToggleFollow={toggleFollow}
+                    onToggleFollow={onToggleFollow}
                   />
                 </div>
               ))}
@@ -264,9 +271,10 @@ export default function FindExpertsPage({
                   key={mentor.id}
                   {...mentor}
                   compact
+                  followerCount={followerCounts[mentor.id] ?? 0}
                   onViewProfile={onViewExpert}
                   isFollowing={followedMentorIds.includes(mentor.id)}
-                  onToggleFollow={toggleFollow}
+                  onToggleFollow={onToggleFollow}
                 />
               ))}
             </div>

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { BookOpen, Clock, UserCheck, AlertCircle } from 'lucide-react';
 import { useAppSelector } from '../store';
 import { profileImageFetch } from '../api/api';
@@ -12,7 +12,7 @@ import StudentSettings from '../components/dashboard/StudentSettings';
 import StudentCalendar from '../components/dashboard/StudentCalendar';
 import JoinMeeting from '../components/dashboard/JoinMeeting';
 import StudentSeminars from '../components/dashboard/StudentSeminars';
-import FindExpertsPage from './FindExperts';
+import FindExpertsPage, { INITIAL_FOLLOWER_COUNTS } from './FindExperts';
 import Chatbot from '../components/chatbot';
 import ContactAdmin from './Dashboard/_ExpertDashboard/ContactAdmin';
 import UpcomingCountdownCard from '../components/dashboard/UpcomingCountdownCard';
@@ -25,6 +25,25 @@ export default function StudentDashboard() {
   // Dummy unread indicator for sidebar showcase; replace with backend unread count later.
   const [hasNewChatMessage, setHasNewChatMessage] = useState(true);
   const [selectedExpert, setSelectedExpert] = useState<MentorCardProps | null>(null);
+  const [followedMentorIds, setFollowedMentorIds] = useState<number[]>([]);
+  const [followerCounts, setFollowerCounts] = useState<Record<number, number>>(
+    () => ({ ...INITIAL_FOLLOWER_COUNTS }),
+  );
+
+  const toggleExpertFollow = useCallback((mentorId: number) => {
+    setFollowedMentorIds((prev: number[]) => {
+      const isFollowing = prev.includes(mentorId);
+      setFollowerCounts((fc: Record<number, number>) => ({
+        ...fc,
+        [mentorId]:
+          (fc[mentorId] ?? INITIAL_FOLLOWER_COUNTS[mentorId] ?? 0) +
+          (isFollowing ? -1 : 1),
+      }));
+      return isFollowing
+        ? prev.filter((id: number) => id !== mentorId)
+        : [...prev, mentorId];
+    });
+  }, []);
   const [upcomingModal, setUpcomingModal] = useState<{
     kind: 'seminar' | 'oneToOne';
     status: 'booked' | 'pending';
@@ -162,6 +181,13 @@ export default function StudentDashboard() {
             selectedExpert ? (
               <ExpertProfile
                 mentor={selectedExpert}
+                followerCount={
+                  followerCounts[selectedExpert.id] ??
+                  selectedExpert.followerCount ??
+                  0
+                }
+                isFollowing={followedMentorIds.includes(selectedExpert.id)}
+                onToggleFollow={toggleExpertFollow}
                 onBack={() => setActiveItem('experts')}
               />
             ) : (
@@ -172,6 +198,9 @@ export default function StudentDashboard() {
           ) : activeItem === 'experts' ? (
             <div className="h-[calc(100vh-56px)] overflow-y-auto bg-[#F5F3EF]">
               <FindExpertsPage
+                followedMentorIds={followedMentorIds}
+                followerCounts={followerCounts}
+                onToggleFollow={toggleExpertFollow}
                 onViewExpert={mentor => {
                   setSelectedExpert(mentor);
                   setActiveItem('expert-profile');

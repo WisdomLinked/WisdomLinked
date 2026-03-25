@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Calendar, Clock, MapPin, Star, ArrowLeft } from 'lucide-react';
+import { Calendar, Clock, MapPin, Star, ArrowLeft, Users } from 'lucide-react';
 import type { MentorCardProps } from '../MentorCard';
 import { useAppSelector } from '../../store';
 
@@ -15,9 +15,16 @@ function extractExperienceYears(experience: string) {
 export default function ExpertProfile({
   mentor,
   onBack,
+  followerCount: followerCountLive,
+  isFollowing = false,
+  onToggleFollow,
 }: {
   mentor: MentorCardProps;
   onBack: () => void;
+  /** Live count from parent (list + profile stay in sync). */
+  followerCount?: number;
+  isFollowing?: boolean;
+  onToggleFollow?: (mentorId: number) => void;
 }) {
   const { auth: { userDetails } } = useAppSelector((state: any) => state);
   const experienceYears = useMemo(
@@ -55,6 +62,9 @@ export default function ExpertProfile({
     end: string; // HH:MM
   } | null>(null);
 
+  /** 1:1 only — price scales from hourly peak/off-peak rate. */
+  const [sessionDurationMinutes, setSessionDurationMinutes] = useState<30 | 60 | 90>(60);
+
   const [bookingSuccess, setBookingSuccess] = useState(false);
   const [bookingError, setBookingError] = useState<string | null>(null);
 
@@ -74,9 +84,13 @@ export default function ExpertProfile({
     return isWeekend || isDinner;
   };
 
-  const selectedRate = serviceChoice === 'seminar'
-    ? (isPeakSlot(selectedSlot) ? peakRate : seminarOffPeakRate)
-    : (isPeakSlot(selectedSlot) ? peakRate : oneToOneOffPeakRate);
+  const oneToOneHourlyRate = isPeakSlot(selectedSlot) ? peakRate : oneToOneOffPeakRate;
+  const seminarSessionRate = isPeakSlot(selectedSlot) ? peakRate : seminarOffPeakRate;
+
+  const selectedRate =
+    serviceChoice === 'seminar'
+      ? seminarSessionRate
+      : oneToOneHourlyRate * (sessionDurationMinutes / 60);
 
   const isPeakSeminarDateTime = (dateStr: string, timeStr: string) => {
     // dateStr like "2026-04-12", timeStr like "17:00"
@@ -157,6 +171,19 @@ export default function ExpertProfile({
     return { start: startDt.toISOString(), end: endDt.toISOString() };
   };
 
+  /** 1:1 booking end time follows chosen session length, not the slot window. */
+  const slotStartEndAsDatesWithDuration = (
+    slot: { day: string; start: string; end: string },
+    durationMinutes: number,
+  ) => {
+    const base = resolveNextDateForDay(slot.day);
+    const [sh, sm] = slot.start.split(':').map(Number);
+    const startDt = new Date(base);
+    startDt.setHours(sh, sm, 0, 0);
+    const endDt = new Date(startDt.getTime() + durationMinutes * 60_000);
+    return { start: startDt.toISOString(), end: endDt.toISOString() };
+  };
+
   const bio = useMemo(() => {
     return `Professor ${mentor.name} is a ${mentor.title} focused on ${mentor.field}. With ${mentor.experience} of experience, they guide students through research and real-world preparation across 1:1 sessions and seminars.`;
   }, [mentor]);
@@ -197,6 +224,9 @@ export default function ExpertProfile({
 
   const resolvedImage = mentor.image ?? aiHeadshotUrl(mentor.name);
 
+  const displayFollowers =
+    followerCountLive ?? mentor.followerCount ?? 0;
+
   return (
     <div className="min-h-[calc(100vh-56px)] overflow-y-auto bg-[#F5F3EF] px-6 py-8 text-[#1A3A4A]">
       <div className="mb-6 flex items-center gap-3">
@@ -212,41 +242,65 @@ export default function ExpertProfile({
 
       <div className="grid gap-6 lg:grid-cols-[1fr_420px]">
         <section className="rounded-2xl border border-[#E5E2DB] bg-white p-6">
-          <div className="flex flex-col gap-5 sm:flex-row sm:items-start">
-            <div className="h-44 w-44 overflow-hidden rounded-2xl border border-[#E5E2DB] bg-[#F5F3EF]">
-              <img src={resolvedImage} alt={mentor.name} className="h-full w-full object-cover" />
-            </div>
+          <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
+            <div className="flex min-w-0 flex-1 flex-col gap-5 sm:flex-row sm:items-start">
+              <div className="h-44 w-44 shrink-0 overflow-hidden rounded-2xl border border-[#E5E2DB] bg-[#F5F3EF]">
+                <img src={resolvedImage} alt={mentor.name} className="h-full w-full object-cover" />
+              </div>
 
-            <div className="min-w-0 flex-1">
-              <h1 className="font-serif text-[2rem] font-medium text-[#1A3A4A] leading-tight">
-                {mentor.name}
-              </h1>
-              <p className="mt-2 text-sm text-[#7A7A72]">
-                {mentor.title} · {mentor.institution}
-              </p>
-
-              <div className="mt-4 flex flex-wrap items-center gap-2">
-                <span className="inline-flex items-center gap-2 rounded-[3px] border border-[#E5E2DB] bg-[#F5F3EF] px-3 py-1.5 text-[12px] font-semibold text-[#1A3A4A]">
-                  <MapPin className="h-3.5 w-3.5" aria-hidden />
-                  {mentor.field}
-                </span>
-                {mentor.services.slice(0, 3).map((s, idx) => (
-                  <span
-                    key={`${s}-${idx}`}
-                    className={[
-                      'inline-flex items-center rounded-[3px] border px-3 py-1.5 text-[12px] font-semibold',
-                      idx === 0
-                        ? 'border-[#1A3A4A] text-[#1A3A4A]'
-                        : idx === 1
-                          ? 'border-[#C9A84C] text-[#C9A84C]'
-                          : 'border-[#E07B54] text-[#E07B54]',
-                    ].join(' ')}
-                  >
-                    {s}
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                  <h1 className="font-serif text-[2rem] font-medium text-[#1A3A4A] leading-tight">
+                    {mentor.name}
+                  </h1>
+                  <span className="inline-flex items-center gap-1 rounded-[3px] border border-slate-200 bg-slate-100 px-2 py-0.5 text-[12px] font-semibold tabular-nums text-slate-700">
+                    <Users className="h-3.5 w-3.5" aria-hidden />
+                    {displayFollowers.toLocaleString()} followers
                   </span>
-                ))}
+                </div>
+                <p className="mt-2 text-sm text-[#7A7A72]">
+                  {mentor.title} · {mentor.institution}
+                </p>
+
+                <div className="mt-4 flex flex-wrap items-center gap-2">
+                  <span className="inline-flex items-center gap-2 rounded-[3px] border border-[#E5E2DB] bg-[#F5F3EF] px-3 py-1.5 text-[12px] font-semibold text-[#1A3A4A]">
+                    <MapPin className="h-3.5 w-3.5" aria-hidden />
+                    {mentor.field}
+                  </span>
+                  {mentor.services.slice(0, 3).map((s, idx) => (
+                    <span
+                      key={`${s}-${idx}`}
+                      className={[
+                        'inline-flex items-center rounded-[3px] border px-3 py-1.5 text-[12px] font-semibold',
+                        idx === 0
+                          ? 'border-[#1A3A4A] text-[#1A3A4A]'
+                          : idx === 1
+                            ? 'border-[#C9A84C] text-[#C9A84C]'
+                            : 'border-[#E07B54] text-[#E07B54]',
+                      ].join(' ')}
+                    >
+                      {s}
+                    </span>
+                  ))}
+                </div>
               </div>
             </div>
+
+            {onToggleFollow ? (
+              <div className="flex shrink-0 flex-col items-stretch gap-1 sm:items-end lg:pt-1">
+                <button
+                  type="button"
+                  onClick={() => onToggleFollow(mentor.id)}
+                  className={`rounded-[4px] px-4 py-2 text-[12px] font-semibold text-white shadow-sm transition-colors ${
+                    isFollowing
+                      ? 'bg-slate-500 hover:bg-slate-600'
+                      : 'bg-slate-600 hover:bg-slate-700'
+                  }`}
+                >
+                  {isFollowing ? 'Following' : 'Follow +'}
+                </button>
+              </div>
+            ) : null}
           </div>
 
           <div className="mt-6 border-t border-[#E5E2DB] pt-6">
@@ -373,6 +427,7 @@ export default function ExpertProfile({
                         setServiceChoice('oneToOne');
                         setSelectedSlot(null);
                         setBookingError(null);
+                        setSessionDurationMinutes(60);
                       }}
                       className={`rounded-[4px] border px-3 py-1.5 text-[12px] font-semibold transition-colors ${
                         serviceChoice === 'oneToOne'
@@ -390,6 +445,7 @@ export default function ExpertProfile({
                         setServiceChoice('seminar');
                         setSelectedSlot(null);
                         setBookingError(null);
+                        setSessionDurationMinutes(60);
                       }}
                       className={`rounded-[4px] border px-3 py-1.5 text-[12px] font-semibold transition-colors ${
                         serviceChoice === 'seminar'
@@ -402,6 +458,36 @@ export default function ExpertProfile({
                   )}
                 </div>
               </div>
+
+              {serviceChoice === 'oneToOne' && (
+                <div>
+                  <p className="text-[12px] font-semibold uppercase tracking-[0.16em] text-[#7A7A72] mb-2">
+                    Session length
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {([30, 60, 90] as const).map(mins => (
+                      <button
+                        key={mins}
+                        type="button"
+                        onClick={() => {
+                          setSessionDurationMinutes(mins);
+                          setBookingError(null);
+                        }}
+                        className={`rounded-[4px] border px-3 py-1.5 text-[12px] font-semibold transition-colors ${
+                          sessionDurationMinutes === mins
+                            ? 'border-[#1A3A4A] bg-[#1A3A4A] text-white'
+                            : 'border-[#E5E2DB] bg-white text-[#1A3A4A] hover:bg-[#F5F3EF]'
+                        }`}
+                      >
+                        {mins} min
+                      </button>
+                    ))}
+                  </div>
+                  <p className="mt-2 text-[11px] text-[#7A7A72]">
+                    Total uses the hourly rate for your slot (peak or off-peak) × session length.
+                  </p>
+                </div>
+              )}
 
               <div>
                 <p className="text-[12px] font-semibold uppercase tracking-[0.16em] text-[#7A7A72] mb-2">
@@ -461,7 +547,18 @@ export default function ExpertProfile({
                       ${selectedRate.toFixed(0)}
                     </p>
                     <p className="mt-1 text-[12px] text-[#7A7A72]">
-                      Estimated total (payment later)
+                      {serviceChoice === 'oneToOne' ? (
+                        selectedSlot ? (
+                          <>
+                            {sessionDurationMinutes} min · ${oneToOneHourlyRate.toFixed(0)}/hr
+                            {isPeakSlot(selectedSlot) ? ' (peak)' : ' (off-peak)'} · estimated total
+                          </>
+                        ) : (
+                          'Pick a slot to see peak vs off-peak hourly rate'
+                        )
+                      ) : (
+                        'Estimated total (payment later)'
+                      )}
                     </p>
                   </div>
                   <Star className="h-5 w-5 text-[#C9A84C]" aria-hidden />
@@ -481,12 +578,18 @@ export default function ExpertProfile({
                       return;
                     }
 
-                    const duration = formatMinutesDuration(selectedSlot);
-                    const { start, end } = slotStartEndAsDates({
-                      day: selectedSlot.day,
-                      start: selectedSlot.start,
-                      end: selectedSlot.end,
-                    });
+                    const duration =
+                      serviceChoice === 'seminar'
+                        ? formatMinutesDuration(selectedSlot)
+                        : sessionDurationMinutes;
+                    const { start, end } =
+                      serviceChoice === 'seminar'
+                        ? slotStartEndAsDates({
+                            day: selectedSlot.day,
+                            start: selectedSlot.start,
+                            end: selectedSlot.end,
+                          })
+                        : slotStartEndAsDatesWithDuration(selectedSlot, sessionDurationMinutes);
 
                     const serviceLabel =
                       serviceChoice === 'seminar' ? 'Seminar' : '1:1 session';
@@ -545,7 +648,9 @@ export default function ExpertProfile({
                     <p className="mt-2 text-[20px] font-serif font-semibold text-[#1A3A4A]">
                       ${oneToOneRate.toFixed(0)}
                     </p>
-                    <p className="mt-1 text-[12px] text-[#7A7A72]">per session (mock)</p>
+                    <p className="mt-1 text-[12px] text-[#7A7A72]">
+                      per hour (mock) — 30 / 60 / 90 min totals scale from this rate
+                    </p>
                   </div>
                   <Star className="h-5 w-5 text-[#C9A84C]" aria-hidden />
                 </div>

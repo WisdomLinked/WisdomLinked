@@ -12,6 +12,8 @@ export interface MentorCardProps {
   image: string | null;
   isNew: boolean;
   compact?: boolean;
+  /** Shown on the card; updates when the user follows or unfollows from this page. */
+  followerCount?: number;
   onViewProfile?: (mentor: MentorCardProps) => void;
   isFollowing?: boolean;
   onToggleFollow?: (mentorId: number) => void;
@@ -34,6 +36,7 @@ const MentorCard: React.FC<MentorCardProps> = ({
   image,
   isNew,
   compact = false,
+  followerCount = 0,
   onViewProfile,
   id,
   isFollowing = false,
@@ -46,21 +49,69 @@ const MentorCard: React.FC<MentorCardProps> = ({
 
   return (
     <article
-      onClick={() => onViewProfile?.({ id, name, title, institution, field, experience, services, image, isNew, compact })}
+      onClick={() =>
+        onViewProfile?.({
+          id,
+          name,
+          title,
+          institution,
+          field,
+          experience,
+          services,
+          image,
+          isNew,
+          compact,
+          followerCount,
+        })
+      }
       role={onViewProfile ? 'button' : undefined}
       tabIndex={onViewProfile ? 0 : undefined}
       onKeyDown={e => {
         if (!onViewProfile) return;
         if (e.key === 'Enter' || e.key === ' ') {
           e.preventDefault();
-          onViewProfile({ id, name, title, institution, field, experience, services, image, isNew, compact });
+          onViewProfile({
+            id,
+            name,
+            title,
+            institution,
+            field,
+            experience,
+            services,
+            image,
+            isNew,
+            compact,
+            followerCount,
+          });
         }
       }}
-      className={`group flex flex-col rounded-xl border border-[#E5E2DB] bg-white transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_16px_40px_rgba(26,58,74,0.18)] ${
+      className={`group relative flex flex-col rounded-xl border border-[#E5E2DB] bg-white transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_16px_40px_rgba(26,58,74,0.18)] ${
         compact ? 'p-4' : 'p-5'
       }`}
     >
-      <div className="flex gap-4">
+      {onToggleFollow ? (
+        <div className="absolute top-3 right-3 z-10 flex flex-col items-end gap-1">
+          <button
+            type="button"
+            onClick={e => {
+              e.stopPropagation();
+              onToggleFollow(id);
+            }}
+            className={`rounded-[4px] border px-2.5 py-1 text-[11px] font-semibold text-white shadow-sm transition-colors ${
+              isFollowing
+                ? 'border-slate-500 bg-slate-500 hover:bg-slate-600'
+                : 'border-slate-600 bg-slate-600 hover:bg-slate-700'
+            }`}
+          >
+            {isFollowing ? 'Following' : 'Follow +'}
+          </button>
+          <span className="text-[10px] font-medium tabular-nums text-[#7A7A72]">
+            {followerCount.toLocaleString()} followers
+          </span>
+        </div>
+      ) : null}
+
+      <div className={`flex gap-4 ${onToggleFollow ? 'pr-[4.75rem]' : ''}`}>
         <div className="relative shrink-0">
           <div className="h-28 w-20 overflow-hidden rounded-md bg-[#1A3A4A]/90 text-white flex items-center justify-center text-sm font-semibold">
             <img src={resolvedImage} alt={name} className="h-full w-full object-cover" />
@@ -115,27 +166,25 @@ const MentorCard: React.FC<MentorCardProps> = ({
         </div>
       </div>
 
-      <div className="mt-4 flex items-center justify-between gap-2">
-        <button
-          type="button"
-          onClick={e => {
-            e.stopPropagation();
-            onToggleFollow?.(id);
-          }}
-          className={`rounded-[4px] border px-3 py-1.5 text-[0.78rem] font-semibold transition-colors ${
-            isFollowing
-              ? 'border-[#1A3A4A] bg-[#E8EEF4] text-[#1A3A4A]'
-              : 'border-[#E5E2DB] bg-white text-[#1A3A4A] hover:bg-[#F5F3EF]'
-          }`}
-        >
-          {isFollowing ? 'Following' : 'Follow'}
-        </button>
+      <div className="mt-4 flex items-center justify-end gap-2">
         <button
           type="button"
           className="rounded-[4px] bg-[#1A3A4A] px-3 py-1.5 text-[0.78rem] font-semibold text-white hover:bg-[#122635]"
           onClick={e => {
             e.stopPropagation();
-            onViewProfile?.({ id, name, title, institution, field, experience, services, image, isNew, compact });
+            onViewProfile?.({
+              id,
+              name,
+              title,
+              institution,
+              field,
+              experience,
+              services,
+              image,
+              isNew,
+              compact,
+              followerCount,
+            });
           }}
         >
           View Profile
