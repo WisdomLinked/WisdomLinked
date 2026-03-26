@@ -63,8 +63,11 @@ export default function Sidebar({
               className="h-7 w-7 object-contain"
             />
           </div>
-          <div className="font-serif text-lg font-bold text-[#234c6a] leading-tight">
-            WisdomLinked
+          <div className="font-serif font-bold text-[#234c6a] leading-tight">
+            <span className="text-[26px]">W</span>
+            <span className="text-lg">isdom</span>
+            <span className="text-[26px] ml-[1px]">L</span>
+            <span className="text-lg">inked</span>
           </div>
         </div>
       </div>
