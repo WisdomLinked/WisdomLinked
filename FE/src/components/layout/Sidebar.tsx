@@ -63,13 +63,8 @@ export default function Sidebar({
               className="h-7 w-7 object-contain"
             />
           </div>
-          <div>
-              <div className="font-serif text-lg font-bold text-[#234c6a] leading-tight">
-              WisdomLinked
-            </div>
-              <div className="mt-1 whitespace-nowrap text-[9px] font-semibold uppercase tracking-[0.08em] text-[#7A7A72]">
-                {(roleLabel === 'Expert' || roleLabel === 'Student') ? 'Advising 🔄 Learning' : 'Learning Platform'}
-              </div>
+          <div className="font-serif text-lg font-bold text-[#234c6a] leading-tight">
+            WisdomLinked
           </div>
         </div>
       </div>
