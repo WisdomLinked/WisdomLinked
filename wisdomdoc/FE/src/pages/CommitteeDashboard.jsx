@@ -5,6 +5,8 @@ import { formatDate } from '../utils/dateFormat';
 import styles from './CommitteeDashboard.module.css';
 
 const DOC_LABELS = { sop: 'SOP', lor: 'LOR', resume: 'Resume', transcript: 'Transcript', additional: 'Additional files', feedback: 'Committee feedback' };
+/** Order of document category headings under Documents */
+const DOC_TYPE_ORDER = ['sop', 'lor', 'resume', 'transcript', 'additional'];
 const STATUS_LABELS = {
   draft: 'Draft',
   submitted: 'Submitted',
@@ -12,11 +14,12 @@ const STATUS_LABELS = {
   under_review: 'Under review',
   needs_info: 'Needs info',
   resubmitted: 'Resubmitted',
+  pending_admin_approval: 'Pending admin approval',
   approved: 'Approved',
   rejected: 'Rejected',
   overdue: 'Overdue',
 };
-const PENDING_STATUSES = ['submitted', 'assigned', 'under_review', 'needs_info', 'resubmitted'];
+const PENDING_STATUSES = ['submitted', 'assigned', 'under_review', 'needs_info', 'resubmitted', 'pending_admin_approval'];
 
 export default function CommitteeDashboard() {
   const { token, user } = useAuth();
@@ -245,7 +248,7 @@ export default function CommitteeDashboard() {
       const res = await fetch(`${API}/cases/${caseId}/approve`, { method: 'PATCH', headers: headers() });
       if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'Failed');
       loadCases();
-      if (selected?.id === caseId) setSelected(prev => prev ? { ...prev, status: 'approved' } : null);
+      if (selected?.id === caseId) setSelected(prev => prev ? { ...prev, status: 'pending_admin_approval' } : null);
     } catch (e) {
       setError(e.message || 'Failed to approve');
     } finally {
@@ -381,7 +384,7 @@ export default function CommitteeDashboard() {
 
       <p className={styles.hint}>
         {activeTab === 'cases'
-          ? 'Click a case to view documents. Admin: assign an expert. Expert: approve cases assigned to you.'
+          ? 'Click a case to view documents. Admin: assign experts and grant Final Approval - Offered. Expert: Approve or Reject.'
           : 'Click a student to manage their access. Enable/disable upload permissions.'}
       </p>
 
@@ -420,7 +423,7 @@ export default function CommitteeDashboard() {
                         )}
                       </span>
                     </button>
-                    {isExpert && (c.status === 'assigned' || c.status === 'under_review' || c.status === 'needs_info' || c.status === 'resubmitted') && (
+                    {isExpert && (c.status === 'assigned' || c.status === 'under_review' || c.status === 'needs_info' || c.status === 'resubmitted' || c.status === 'overdue') && (
                       <div className={styles.expertQuickActions}>
                         <button
                           type="button"
@@ -482,6 +485,14 @@ export default function CommitteeDashboard() {
           {selected && detailLoading && <p className={styles.placeholder}>Loading…</p>}
           {selected && detail && !detailLoading && detail.student && (
             <>
+              {detail.hasSubmittedApplication === false && (
+                <div className={styles.studentInProgressBanner} role="status">
+                  <span className={styles.studentInProgressBadge}>In progress</span>
+                  <p className={styles.studentInProgressText}>
+                    The student is still working on their application. The application has not been submitted yet.
+                  </p>
+                </div>
+              )}
               {activeTab === 'cases' && selected.case_id && (
                 <>
                   <div className={styles.caseBanner}>
@@ -512,12 +523,24 @@ export default function CommitteeDashboard() {
                         <option value="under_review">Under review</option>
                         <option value="needs_info">Needs info</option>
                         <option value="resubmitted">Resubmitted</option>
-                        <option value="approved">Approved</option>
+                        <option value="pending_admin_approval">Pending admin approval</option>
+                        <option value="approved">Final Approval - Offered</option>
                         <option value="rejected">Rejected</option>
                         <option value="overdue">Overdue</option>
                       </select>
                     )}
-                    {isExpert && (selected.status === 'assigned' || selected.status === 'under_review' || selected.status === 'needs_info' || selected.status === 'resubmitted') && (
+                    {isAdmin && selected.status === 'pending_admin_approval' && (
+                      <button
+                        type="button"
+                        className={styles.finalApproveBtn}
+                        onClick={() => handleAdminStatusChange(selected.id, 'approved')}
+                        disabled={updatingStatus === selected.id}
+                        title="Grant final approval after expert recommendation"
+                      >
+                        {updatingStatus === selected.id ? 'Saving…' : 'Final Approval - Offered'}
+                      </button>
+                    )}
+                    {isExpert && (selected.status === 'assigned' || selected.status === 'under_review' || selected.status === 'needs_info' || selected.status === 'resubmitted' || selected.status === 'overdue') && (
                       <div className={styles.expertActions}>
                         <button
                           type="button"
@@ -643,32 +666,48 @@ export default function CommitteeDashboard() {
                 {(() => {
                   const studentDocs = (detail.documents || []).filter(d => !d.uploaded_by);
                   if (!studentDocs.length) return <p className={styles.empty}>No documents uploaded</p>;
+                  const byType = {};
+                  studentDocs.forEach((d) => {
+                    const t = d.type || 'additional';
+                    if (!byType[t]) byType[t] = [];
+                    byType[t].push(d);
+                  });
+                  const orderedTypes = [
+                    ...DOC_TYPE_ORDER.filter((t) => byType[t]?.length),
+                    ...Object.keys(byType).filter((t) => !DOC_TYPE_ORDER.includes(t)),
+                  ];
                   return (
-                  <ul className={styles.docList}>
-                    {studentDocs.map((doc) => (
-                      <li key={doc.id} className={styles.docItem}>
-                        <div className={styles.docInfo}>
-                          <div className={styles.docRow}>
-                            <span className={styles.docType}>{docLabel(doc.type)}</span>
-                            <span className={styles.docName}>
-                              {doc.filename}
-                              {doc.version > 1 && <span className={styles.versionBadge}> v{doc.version}</span>}
-                            </span>
-                          </div>
-                          {(doc.type === 'additional' || doc.type === 'feedback') && doc.description && (
-                            <span className={styles.docDesc}>{doc.description}</span>
-                          )}
-                          {doc.created_at && (
-                            <span className={styles.docTime}>{doc.uploaded_by ? 'Feedback uploaded' : 'Uploaded'} {formatDate(doc.created_at, detail.student?.timezone)}</span>
-                          )}
+                    <div className={styles.docCategoriesTable}>
+                      {orderedTypes.map((type) => (
+                        <div key={type} className={styles.docCategoryRow}>
+                          <div className={styles.docCategoryLabel}>{docLabel(type)}</div>
+                          <ul className={styles.docCategoryFileList}>
+                            {byType[type].map((doc) => (
+                              <li key={doc.id} className={styles.docCategoryFileItem}>
+                                <div className={styles.docInfo}>
+                                  <div className={styles.docRow}>
+                                    <span className={styles.docName}>
+                                      {doc.filename}
+                                      {doc.version > 1 && <span className={styles.versionBadge}> v{doc.version}</span>}
+                                    </span>
+                                  </div>
+                                  {(doc.type === 'additional' || doc.type === 'feedback') && doc.description && (
+                                    <span className={`${styles.docDesc} ${styles.docDescStacked}`}>{doc.description}</span>
+                                  )}
+                                  {doc.created_at && (
+                                    <span className={`${styles.docTime} ${styles.docTimeStacked}`}>Uploaded {formatDate(doc.created_at, detail.student?.timezone)}</span>
+                                  )}
+                                </div>
+                                <div className={styles.docActions}>
+                                  <button type="button" className={styles.previewLink} onClick={() => setPreviewDoc({ studentId: detail.student.id, docId: doc.id, filename: doc.filename })}>Preview</button>
+                                  <a href={downloadUrl(detail.student.id, doc.id)} target="_blank" rel="noopener noreferrer" className={styles.downloadLink}>Download</a>
+                                </div>
+                              </li>
+                            ))}
+                          </ul>
                         </div>
-                        <div className={styles.docActions}>
-                          <button type="button" className={styles.previewLink} onClick={() => setPreviewDoc({ studentId: detail.student.id, docId: doc.id, filename: doc.filename })}>Preview</button>
-                          <a href={downloadUrl(detail.student.id, doc.id)} target="_blank" rel="noopener noreferrer" className={styles.downloadLink}>Download</a>
-                        </div>
-                      </li>
-                    ))}
-                  </ul>
+                      ))}
+                    </div>
                   );
                 })()}
               </div>

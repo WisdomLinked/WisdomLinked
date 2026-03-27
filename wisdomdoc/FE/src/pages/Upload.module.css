@@ -50,6 +50,17 @@
   font-size: 0.9rem;
 }
 
+.uploadLockedNote {
+  margin: 0 0 1rem;
+  padding: 0.75rem 1rem;
+  font-size: 0.9rem;
+  line-height: 1.45;
+  color: var(--text-muted);
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
 .caseStatusBanner {
   padding: 1.25rem 1.5rem;
   margin-bottom: 1.25rem;
@@ -58,6 +69,75 @@
   border-radius: 12px;
   font-size: 0.95rem;
   color: var(--text);
+}
+
+.inProgressBanner {
+  padding: 1rem 1.25rem;
+  margin-bottom: 1.25rem;
+  background: rgba(100, 149, 237, 0.12);
+  border: 1px solid rgba(100, 149, 237, 0.35);
+  border-radius: 12px;
+}
+
+.inProgressBadge {
+  display: inline-block;
+  margin-bottom: 0.5rem;
+  padding: 0.3rem 0.65rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #90caf9;
+  background: rgba(100, 149, 237, 0.25);
+  border-radius: 6px;
+}
+
+.inProgressText {
+  margin: 0;
+  font-size: 0.95rem;
+  line-height: 1.5;
+  color: var(--text);
+}
+
+.dualStatusRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  gap: 0.65rem;
+}
+
+.statusRectApproved,
+.statusRectPendingAdmin {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 2.5rem;
+  padding: 0.45rem 1rem;
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border-radius: 8px;
+  border: 1px solid;
+}
+
+.statusRectApproved {
+  color: #81c784;
+  background: rgba(76, 175, 80, 0.2);
+  border-color: rgba(76, 175, 80, 0.55);
+}
+
+.statusRectPendingAdmin {
+  color: #64b5f6;
+  background: rgba(33, 150, 243, 0.15);
+  border-color: rgba(33, 150, 243, 0.5);
+}
+
+.tentativeApprovalHint {
+  margin: 0.5rem 0 0;
+  font-size: 0.88rem;
+  line-height: 1.45;
+  color: var(--text-muted);
 }
 
 .caseStageLabel {
@@ -136,6 +216,12 @@
   background: rgba(156, 39, 176, 0.2);
   color: #9c27b0;
   border: 1px solid rgba(156, 39, 176, 0.5);
+}
+
+.badgePendingAdmin {
+  background: rgba(33, 150, 243, 0.2);
+  color: #42a5f5;
+  border: 1px solid rgba(33, 150, 243, 0.45);
 }
 
 .badgeApproved {
@@ -439,6 +525,114 @@
 .removeBtn:hover {
   border-color: #e57373;
   color: #e57373;
+}
+
+.removeBtn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.docActions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-shrink: 0;
+}
+
+.previewLink {
+  background: none;
+  border: none;
+  color: var(--link);
+  font-size: 0.9rem;
+  cursor: pointer;
+  padding: 0;
+}
+
+.previewLink:hover {
+  text-decoration: underline;
+}
+
+.previewOverlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.previewModal {
+  background: var(--bg);
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+  width: 92vw;
+  height: 88vh;
+  min-width: 480px;
+  min-height: 420px;
+  max-width: 96vw;
+  max-height: 94vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  resize: both;
+}
+
+.previewModalHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.previewModalTitle {
+  font-weight: 600;
+  font-size: 0.95rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.previewModalClose {
+  background: none;
+  border: none;
+  font-size: 1.5rem;
+  line-height: 1;
+  cursor: pointer;
+  color: var(--text-muted);
+  padding: 0.25rem;
+}
+
+.previewModalClose:hover {
+  color: var(--text);
+}
+
+.previewModalBody {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: auto;
+}
+
+.previewIframe {
+  flex: 1;
+  width: 100%;
+  min-height: 600px;
+  border: none;
+}
+
+.previewFallback {
+  padding: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.previewFallback .downloadLink {
+  display: inline-block;
 }
 
 .textarea {

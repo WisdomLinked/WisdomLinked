@@ -22,6 +22,13 @@ export async function sendStatusEmail(status, { studentEmail, expertEmail, caseI
         );
       }
       break;
+    case CaseStatus.PENDING_ADMIN_APPROVAL:
+      if (studentEmail) await sendClarificationEmail(
+        studentEmail,
+        `[${caseId}] Expert recommendation received – ${appName}`,
+        `An expert has recommended approval for your application ${caseId}. Final approval is pending from the admission office. You will be notified when the decision is complete.\n\n— ${appName}`
+      );
+      break;
     case CaseStatus.ASSIGNED:
       if (studentEmail) await sendClarificationEmail(
         studentEmail,

@@ -199,11 +199,14 @@ router.get('/students/:id', (req, res) => {
   const clarifications = db.prepare(
     'SELECT c.id, c.message, c.created_at, u.email AS from_email FROM clarifications c LEFT JOIN users u ON u.id = c.from_user_id WHERE c.student_id = ? ORDER BY c.created_at DESC'
   ).all(studentId);
+  const caseCountRow = db.prepare('SELECT COUNT(*) AS c FROM cases WHERE student_id = ?').get(studentId);
+  const hasSubmittedApplication = (caseCountRow?.c || 0) > 0;
   res.json({
     student: { id: student.id, email: student.email, major: student.major, created_at: student.created_at, approved: student.approved === 1, timezone: student.timezone || 'America/Chicago', username: student.username, bio: student.bio, title: student.title, image: student.image, phone: student.phone, country: student.country, state: student.state, city: student.city },
     documents,
     messages: messages || [],
     clarifications,
+    hasSubmittedApplication,
   });
 });
 

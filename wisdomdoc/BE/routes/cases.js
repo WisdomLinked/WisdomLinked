@@ -258,11 +258,21 @@ router.patch('/:id/status', async (req, res) => {
   const isAdmin = req.userRole === 'admin';
   const isExpert = caseRow.assigned_expert_id === req.userId;
   if (!isAdmin && !isExpert) return res.status(403).json({ error: 'Forbidden' });
-  if (isExpert && !isAdmin && ![CaseStatus.UNDER_REVIEW, CaseStatus.NEEDS_INFO, CaseStatus.APPROVED, CaseStatus.REJECTED].includes(status)) {
-    return res.status(403).json({ error: 'Experts can only set under_review, needs_info, approved, rejected' });
+  if (isExpert && !isAdmin && caseRow.status === CaseStatus.PENDING_ADMIN_APPROVAL) {
+    return res.status(403).json({ error: 'Case is awaiting admin decision' });
+  }
+  if (isExpert && !isAdmin && ![CaseStatus.UNDER_REVIEW, CaseStatus.NEEDS_INFO, CaseStatus.REJECTED].includes(status)) {
+    return res.status(403).json({ error: 'Experts can only set under_review, needs_info, or rejected' });
   }
 
-  if (!isAdmin && !canTransition(caseRow.status, status)) {
+  if (status === CaseStatus.APPROVED) {
+    if (!isAdmin) return res.status(403).json({ error: 'Only admin can give final approval' });
+    if (caseRow.status !== CaseStatus.PENDING_ADMIN_APPROVAL) {
+      return res.status(400).json({ error: 'Final approval is only allowed after expert recommendation (case must be Pending admin approval).' });
+    }
+  }
+
+  if (!canTransition(caseRow.status, status)) {
     return res.status(400).json({ error: `Invalid transition: ${caseRow.status} -> ${status}` });
   }
 
@@ -292,23 +302,29 @@ router.patch('/:id/status', async (req, res) => {
   res.json(updated);
 });
 
-/** Expert: approve */
+/** Expert: recommend approval (admin must finalize) */
 router.patch('/:id/approve', async (req, res) => {
   if (req.userRole !== 'expert') return res.status(403).json({ error: 'Experts only' });
   const id = parseInt(req.params.id, 10);
   const caseRow = db.prepare('SELECT id, case_id, student_id, assigned_expert_id, status FROM cases WHERE id = ?').get(id);
   if (!caseRow) return res.status(404).json({ error: 'Case not found' });
   if (caseRow.assigned_expert_id !== req.userId) return res.status(403).json({ error: 'Not assigned to you' });
-  if ([CaseStatus.APPROVED, CaseStatus.REJECTED].includes(caseRow.status)) return res.status(400).json({ error: 'Already processed' });
+  if ([CaseStatus.APPROVED, CaseStatus.REJECTED, CaseStatus.PENDING_ADMIN_APPROVAL].includes(caseRow.status)) {
+    return res.status(400).json({ error: caseRow.status === CaseStatus.PENDING_ADMIN_APPROVAL ? 'Already recommended for approval' : 'Already processed' });
+  }
+  if (!canTransition(caseRow.status, CaseStatus.PENDING_ADMIN_APPROVAL)) {
+    return res.status(400).json({ error: `Cannot recommend approval from status: ${caseRow.status}` });
+  }
 
   const now = new Date().toISOString();
-  db.prepare('UPDATE cases SET status = ?, approved_at = ?, assessed_at = ? WHERE id = ?').run(CaseStatus.APPROVED, now, now, id);
-  logCaseUpdate(id, caseRow.status, CaseStatus.APPROVED, req.userId);
-  logEvent('case', id, 'approved', req.userId, {});
+  db.prepare('UPDATE cases SET status = ?, assessed_at = ?, approved_at = NULL WHERE id = ?').run(CaseStatus.PENDING_ADMIN_APPROVAL, now, id);
+  logCaseUpdate(id, caseRow.status, CaseStatus.PENDING_ADMIN_APPROVAL, req.userId, 'Expert recommended approval');
+  logEvent('case', id, 'expert_recommended', req.userId, {});
 
-  await triggerEmailIfNeeded(CaseStatus.APPROVED, caseRow);
+  const fullCase = { ...caseRow, status: CaseStatus.PENDING_ADMIN_APPROVAL };
+  await triggerEmailIfNeeded(CaseStatus.PENDING_ADMIN_APPROVAL, fullCase);
 
-  res.json(db.prepare('SELECT id, case_id, status, approved_at, assessed_at FROM cases WHERE id = ?').get(id));
+  res.json(db.prepare('SELECT id, case_id, status, assessed_at, approved_at FROM cases WHERE id = ?').get(id));
 });
 
 /** Expert: reject */
@@ -319,6 +335,9 @@ router.patch('/:id/reject', async (req, res) => {
   if (!caseRow) return res.status(404).json({ error: 'Case not found' });
   if (caseRow.assigned_expert_id !== req.userId) return res.status(403).json({ error: 'Not assigned to you' });
   if ([CaseStatus.APPROVED, CaseStatus.REJECTED].includes(caseRow.status)) return res.status(400).json({ error: 'Already processed' });
+  if (caseRow.status === CaseStatus.PENDING_ADMIN_APPROVAL) {
+    return res.status(400).json({ error: 'Case is awaiting admin decision' });
+  }
 
   const now = new Date().toISOString();
   db.prepare('UPDATE cases SET status = ?, rejected_at = ?, assessed_at = ? WHERE id = ?').run(CaseStatus.REJECTED, now, now, id);

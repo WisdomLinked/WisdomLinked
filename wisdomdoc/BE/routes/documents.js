@@ -6,6 +6,12 @@ import { v4 as uuidv4 } from 'uuid';
 import fs from 'fs';
 import { db } from '../db.js';
 import { authMiddleware, requireStudent } from '../middleware/auth.js';
+import { CaseStatus } from '../constants/caseStatus.js';
+
+function hasApprovedCase(studentId) {
+  const row = db.prepare('SELECT id FROM cases WHERE student_id = ? AND status = ?').get(studentId, CaseStatus.APPROVED);
+  return !!row;
+}
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const uploadsDir = path.join(__dirname, '..', 'uploads');
@@ -67,6 +73,10 @@ router.post('/upload', upload.single('file'), (req, res) => {
     if (req.file && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
     return res.status(403).json({ error: 'Only selected students can upload. Contact the committee.' });
   }
+  if (hasApprovedCase(req.userId)) {
+    if (req.file && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
+    return res.status(403).json({ error: 'Uploads are closed after your application has been approved.' });
+  }
   const type = (req.body.type || '').toLowerCase();
   const caseId = req.body.caseId ? parseInt(req.body.caseId, 10) : null;
   if (!ALLOWED_TYPES.includes(type)) {
@@ -116,7 +126,24 @@ router.get('/:id/download', (req, res) => {
   res.download(filePath, doc.filename);
 });
 
+router.get('/:id/preview', (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  const doc = db.prepare('SELECT id, filename, path FROM documents WHERE id = ? AND user_id = ?').get(id, req.userId);
+  if (!doc) return res.status(404).json({ error: 'Not found' });
+  const filePath = path.join(uploadsDir, doc.path);
+  if (!fs.existsSync(filePath)) return res.status(404).json({ error: 'File not found' });
+  const ext = (path.extname(doc.filename) || '').toLowerCase();
+  const contentTypes = { '.pdf': 'application/pdf', '.txt': 'text/plain', '.doc': 'application/msword', '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' };
+  const contentType = contentTypes[ext] || 'application/octet-stream';
+  res.setHeader('Content-Type', contentType);
+  res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(doc.filename)}"`);
+  res.sendFile(filePath);
+});
+
 router.delete('/:id', (req, res) => {
+  if (hasApprovedCase(req.userId)) {
+    return res.status(403).json({ error: 'Documents cannot be removed after your application has been approved.' });
+  }
   const id = parseInt(req.params.id, 10);
   const row = db.prepare('SELECT id, path FROM documents WHERE id = ? AND user_id = ? AND uploaded_by IS NULL').get(id, req.userId);
   if (!row) return res.status(404).json({ error: 'Not found' });

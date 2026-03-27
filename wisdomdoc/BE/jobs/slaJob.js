@@ -7,6 +7,7 @@ const OVERDUE_STATUSES = [
   CaseStatus.UNDER_REVIEW,
   CaseStatus.NEEDS_INFO,
   CaseStatus.RESUBMITTED,
+  CaseStatus.PENDING_ADMIN_APPROVAL,
 ];
 
 export function runSlaJob() {
