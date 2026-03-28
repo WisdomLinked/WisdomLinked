@@ -1,14 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useDispatch } from 'react-redux';
-import {
-    User, Mail, Lock, Phone, AlertCircle, CheckCircle, ChevronDown,
-    ArrowRight, GraduationCap, BookOpen, Eye, EyeOff, Search, Plus, Check
-} from 'lucide-react';
+import { User, Mail, Lock, Phone, AlertCircle, CheckCircle, ChevronDown, ArrowRight, GraduationCap, BookOpen, Eye, EyeOff, Search, Plus, Check } from 'lucide-react';
 import { callApi } from '../api/api';
 import { showAlert } from '../actions/alertActions';
-import ConfirmEmail from '../components/ConfirmEmail';
 import SocialAuthBlock from '../components/SocialAuthBlock';
+import ConfirmEmail from '../components/ConfirmEmail';
+import logo from '../assets/images/logo.png';
 
 const BTN_PRIMARY_STYLE = { background: 'linear-gradient(135deg, #234C6A 0%, #456882 100%)' };
 const FOCUS_RING = 'focus:ring-2 focus:ring-[#234C6A]/60 focus:border-[#234C6A]';
@@ -46,7 +44,7 @@ export default function WLCustomerRegister() {
     const navigate = useNavigate();
     const dispatch = useDispatch();
     const [form, setForm] = useState({
-        fullName: '', majors: [] as string[], services: '', country: '', countryCode: '+1', phone: '', email: '', password: '', confirmPassword: '', specialNote: '', terms: false
+        fullName: '', majors: [] as string[], services: [] as string[], country: '', countryCode: '+1', phone: '', email: '', password: '', confirmPassword: '', specialNote: '', terms: false
     });
     const [errors, setErrors] = useState<Record<string, string>>({});
     const [touched, setTouched] = useState<Record<string, boolean>>({});
@@ -91,7 +89,7 @@ export default function WLCustomerRegister() {
                 if (value !== currentForm.password) error = 'Passwords do not match';
                 break;
             case 'majors': if (value.length === 0) error = 'Select at least one major'; break;
-            case 'services': if (!value) error = 'Select a service'; break;
+            case 'services': if (value.length === 0) error = 'Select at least one service'; break;
             case 'country': if (!value) error = 'Country is required'; break;
             case 'terms': if (!value) error = 'You must accept the terms and conditions'; break;
             case 'specialNote': if (value.trim().length > 50) error = 'Special note must be 50 characters or less'; break;
@@ -174,7 +172,7 @@ export default function WLCustomerRegister() {
                 role: 'customer',
                 username: form.fullName,
                 keywords: form.majors,
-                services: [form.services],
+                services: form.services,
                 state: '',
                 country: form.country,
                 city: '',
@@ -247,10 +245,16 @@ export default function WLCustomerRegister() {
                     <div className="p-6 sm:p-8">
                         {/* Logo */}
                         <div className="flex items-center gap-3 mb-4">
-                            <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-[#1B3C53] to-[#456882] flex items-center justify-center shadow-md">
-                                <BookOpen className="h-5 w-5 text-white" strokeWidth={2.2} />
+                            <div className="h-10 w-10 rounded-xl bg-white border border-[#D0DFED] flex items-center justify-center shadow-sm overflow-hidden blur-[0.3px]">
+                                <img
+                                    src="/logo.png"
+                                    alt="WisdomLinked logo"
+                                    className="h-10 w-10 object-contain"
+                                />
                             </div>
-                            <div className="font-display font-bold text-xl text-slate-900">WisdomLinked</div>
+                            <span className="font-black text-2xl tracking-[0.12em] uppercase text-slate-900">
+                                WisdomLinked
+                            </span>
                         </div>
 
                         <h2 className="font-display text-2xl font-bold text-slate-800 mb-1">Student sign up</h2>
@@ -259,7 +263,7 @@ export default function WLCustomerRegister() {
                         <div className="space-y-4">
                             <div>
                                 <label className="block text-xs font-semibold text-slate-600 mb-1.5"><span className="flex items-center gap-1.5"><User size={12} /> Full name</span></label>
-                                <input type="text" placeholder="e.g. Sarah Chen" value={form.fullName}
+                                <input type="text" placeholder="e.g. Sarah Chen" value={form.fullName} autoComplete="name"
                                     onChange={(e) => handleChange('fullName', e.target.value)}
                                     onBlur={() => handleBlur('fullName')}
                                     className={(touched.fullName && errors.fullName) ? inputError : inputNormal} />
@@ -278,7 +282,7 @@ export default function WLCustomerRegister() {
                                         <div className="p-2 border-b border-slate-100 bg-slate-50/50">
                                             <div className="relative">
                                                 <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                                                <input type="text" placeholder="Search or add custom major" value={majorSearch}
+                                                <input type="text" placeholder="Search or add custom major" value={majorSearch} autoComplete="new-password"
                                                     onChange={(e) => setMajorSearch(e.target.value)}
                                                     onKeyDown={(e) => { if(e.key === 'Enter') { e.preventDefault(); handleAddCustomMajor(); } }}
                                                     className="w-full pl-9 pr-4 py-2 text-sm bg-white border border-slate-200 rounded-lg outline-none focus:border-[#234C6A] focus:ring-1 focus:ring-[#234C6A]" />
@@ -307,15 +311,18 @@ export default function WLCustomerRegister() {
                                 <label className="block text-xs font-semibold text-slate-600 mb-1.5">Services</label>
                                 <button type="button" onClick={() => setShowServiceDrop(v => !v)}
                                     className={`w-full flex items-center justify-between rounded-xl border px-4 py-3 text-sm text-left ${(touched.services && errors.services) ? 'border-red-300 bg-red-50/30' : 'border-slate-200 bg-white'} ${FOCUS_RING} outline-none`}>
-                                    <span className={form.services ? 'text-slate-800' : 'text-slate-400'}>{form.services || 'Select service'}</span>
+                                    <span className={form.services.length ? 'text-slate-800' : 'text-slate-400'}>{form.services.length ? form.services.join(', ') : 'Select services'}</span>
                                     <ChevronDown size={16} className={`text-slate-400 transition-transform ${showServiceDrop ? 'rotate-180' : ''}`} />
                                 </button>
                                 {showServiceDrop && (
-                                    <div className="absolute z-50 mt-1 w-full max-w-xl rounded-2xl border border-slate-200 bg-white shadow-xl overflow-hidden">
+                                    <div className="absolute z-50 mt-1 w-full max-w-xl rounded-2xl border border-slate-200 bg-white shadow-xl overflow-hidden flex flex-col max-h-56 overflow-y-auto">
                                         {STUDENT_SERVICES.map(s => (
-                                            <button key={s} type="button" onClick={() => { handleChange('services', s); setShowServiceDrop(false); }}
-                                                className={`w-full flex items-center gap-2 px-4 py-2.5 text-sm text-left ${ACCENT_BG} transition-colors text-slate-700`}>
-                                                {s}
+                                            <button key={s} type="button" onClick={() => {
+                                                const newServices = form.services.includes(s) ? form.services.filter(x => x !== s) : [...form.services, s];
+                                                handleChange('services', newServices);
+                                            }}
+                                                className={`w-full flex items-center gap-2 px-4 py-2.5 text-sm text-left transition-colors ${form.services.includes(s) ? `${ACCENT_SELECTED} font-semibold` : `text-slate-700 ${ACCENT_BG}`}`}>
+                                                {form.services.includes(s) && <CheckCircle size={14} style={{ color: '#234C6A' }} />}{s}
                                             </button>
                                         ))}
                                     </div>
@@ -386,7 +393,7 @@ export default function WLCustomerRegister() {
                                         onChange={(e) => handleChange('password', e.target.value)}
                                         onBlur={() => handleBlur('password')}
                                         className={`${(touched.password && errors.password) ? inputError : inputNormal} pr-10`} />
-                                    <button type="button" onClick={() => setShowPassword(p => !p)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600" aria-label={showPassword ? 'Hide password' : 'Show password'}>
+                                    <button type="button" onClick={(e) => { e.preventDefault(); setShowPassword(!showPassword); }} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 z-10" aria-label={showPassword ? 'Hide password' : 'Show password'}>
                                         {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                                     </button>
                                 </div>
@@ -418,7 +425,7 @@ export default function WLCustomerRegister() {
                                         onChange={(e) => handleChange('confirmPassword', e.target.value)}
                                         onBlur={() => handleBlur('confirmPassword')}
                                         className={`${(touched.confirmPassword && errors.confirmPassword) ? inputError : inputNormal} pr-10`} />
-                                    <button type="button" onClick={() => setShowConfirmPassword(p => !p)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600" aria-label={showConfirmPassword ? 'Hide password' : 'Show password'}>
+                                    <button type="button" onClick={(e) => { e.preventDefault(); setShowConfirmPassword(!showConfirmPassword); }} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 z-10" aria-label={showConfirmPassword ? 'Hide password' : 'Show password'}>
                                         {showConfirmPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                                     </button>
                                 </div>

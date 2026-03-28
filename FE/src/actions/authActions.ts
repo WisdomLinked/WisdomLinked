@@ -1,5 +1,5 @@
 import { Dispatch, } from "redux";
-import { getMe } from "../api/api";
+import { getMe, callLogout } from "../api/api";
 import { resetChatAction } from "./chatActions";
 import { resetFriendsAction } from "./friendActions";
 import { actionTypes, CurrentUser } from "./types";
@@ -12,14 +12,21 @@ export const autoLogin = () => {
             payload: true,
         });
 
-        const response: any = await getMe();
-        if (response) {
-            localStorage.setItem("currentUser", JSON.stringify(response.me));
+        try {
+            const response: any = await getMe();
+            if (response) {
+                localStorage.setItem("currentUser", JSON.stringify(response.me));
+                dispatch({
+                    type: actionTypes.authenticate,
+                    payload: {
+                        ...response.me,
+                    },
+                });
+            }
+        } finally {
             dispatch({
-                type: actionTypes.authenticate,
-                payload: {
-                    ...response.me,
-                },
+                type: "SetLoadingStatus",
+                payload: false,
             });
         }
     }
@@ -42,6 +49,7 @@ export const updateMe = () => {
 
 export const logoutUser = () => {
     return async (dispatch: Dispatch, getState: any) => {
+        await callLogout();
         localStorage.clear();
         dispatch({
             type: actionTypes.logout,

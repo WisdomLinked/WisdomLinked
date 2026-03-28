@@ -548,7 +548,6 @@ const createGroupChat = async (req, res) => {
         const currentUser = await User.findById(userId);
         currentUser.groupChats.push(chat._id);
         await currentUser.save();
-        currentUser.populate(['events', 'keywords', 'services', 'groupChats'])
 
         updateUsersGroupChatList(userId.toString());
 
@@ -559,7 +558,6 @@ const createGroupChat = async (req, res) => {
             }
             customer.groupChats.push(chat._id);
             await customer.save();
-            customer.populate(['events', 'keywords', 'services', 'groupChats'])
 
             updateUsersGroupChatList(customerId.toString());
 
@@ -567,8 +565,12 @@ const createGroupChat = async (req, res) => {
 
         }
 
+        const userDetails = await getFullUserData(currentUser.email);
+        userDetails.token = null;
+        userDetails.password = null;
+
         return res.status(200).json({
-            result: currentUser,
+            result: userDetails,
         });
     } catch (err) {
         return res
@@ -721,11 +723,14 @@ const updateGroupChat = async (req, res) => {
         // Update group chat with only provided fields
         await GroupChat.findByIdAndUpdate(groupId, updateFields, { new: true });
 
-        const currentUser = await User.findById(userId).populate(['events', 'keywords', 'services', 'groupChats']);
         updateUsersGroupChatList(userId.toString());
 
+        const userDetails = await getFullUserData(req.user.email);
+        userDetails.token = null;
+        userDetails.password = null;
+
         return res.status(200).json({
-            result: currentUser,
+            result: userDetails,
         });
     } catch (err) {
         return res.status(500).send(err.message);

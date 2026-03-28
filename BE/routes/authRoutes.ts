@@ -4,6 +4,7 @@ const router = express.Router();
 
 const {
     login,
+    logout,
     register,
     updateMissedChats,
     updateProfile,
@@ -13,8 +14,10 @@ const {
     getMe,
     resendConfirmEmail,
     verifyRegistration,
+    checkVerificationStatus,
     confirmLoginByCode,
     passwordResetRequest,
+    verifyPasswordResetOTP,
     confirmPasswordResetByCode,
     updateResume,
     uploadChatFile,
@@ -49,13 +52,17 @@ router.post("/updateResume", uploads, updateResume);
 router.post("/uploadChatFile", uploads, uploadChatFile);
 router.post("/resendConfirmEmail", resendConfirmEmail);
 router.post("/verifyRegistration", verifyRegistration);
+router.get("/checkVerification", checkVerificationStatus);
 router.post("/login", validateLoginSchema, login);
+router.post("/logout", logout);
 router.post("/confirmLoginByCode", confirmLoginByCode);
 router.post("/passwordResetRequest", passwordResetRequest);
+router.post("/verifyPasswordResetOTP", verifyPasswordResetOTP);
 router.post("/confirmPasswordResetByCode", confirmPasswordResetByCode);
 router.get("/getKeywordsAndServices", getKeywordsAndServices);
 router.post("/updateMissedChats", requireAuth(false), updateMissedChats);
 router.post("/updateProfile", requireAuth(false), updateProfile);
+router.put("/profile", requireAuth(false), uploads, updateProfile); // Used by complete profile flow
 router.post("/getEventsBetweenCustomerAndExpert", requireAuth(false), getEventsBetweenCustomerAndExpert);
 router.get("/me", requireAuth(false), getMe);
 router.get("/getMyEvents", requireAuth(false), getMyEvents);
@@ -68,7 +75,7 @@ router.get("/healthCheck", healthCheck)
 router.get("/getTimezone",getTimeZone)
 router.post("/contact-form", submitContactForm)
 router.post("/sendEmailToAdmin", sendEmailToAdmin)
-router.post("/getChatBotAnswer",requireAuth(true),getChatBotAnswer)
+router.post("/getChatBotAnswer",requireAuth(false),getChatBotAnswer)
 // Note: stripe-webhook is now handled directly in server.js before JSON parsing
 
 // ── OAuth Routes ──────────────────────────────────────────
@@ -96,9 +103,15 @@ const oauthCallback = async (req: any, res: any) => {
             return res.redirect(`${process.env.FE_URL}/login?error=no_account`);
         }
 
-        // Set role for new users from registration pages
-        if (role && (role === 'expert' || role === 'customer') && user.role !== role) {
+        // Set role for NEW users from registration pages only
+        if (isNew && role && (role === 'expert' || role === 'customer')) {
             user.role = role;
+        }
+        
+        // Block existing users from switching roles via OAuth re-registration
+        if (!isNew && role && (role === 'expert' || role === 'customer') && user.role !== role) {
+            const roleName = user.role === 'customer' ? 'student' : (user.role || 'user');
+            return res.redirect(`${process.env.FE_URL}/login?error=role_mismatch&existingRole=${roleName}`);
         }
         
         const token = jwt.sign(
@@ -115,8 +128,27 @@ const oauthCallback = async (req: any, res: any) => {
         });
         
         updateActiveRoomsOfUsers(user._id.toString(), user.groupChats);
+
+        // Check for incomplete profile
+        let isProfileIncomplete = false;
+        if (!user.keywords || user.keywords.length === 0) isProfileIncomplete = true;
+        
+        if (user.role === 'customer' || role === 'customer') {
+            if (!user.services || user.services.length === 0) isProfileIncomplete = true;
+        } else if (user.role === 'expert' || role === 'expert') {
+            if (!user.services || user.services.length === 0) isProfileIncomplete = true;
+            if (!user.title || user.title.trim() === '') isProfileIncomplete = true;
+            if (!user.description || user.description.trim() === '') isProfileIncomplete = true;
+        }
+
+        const needsProfile = isNew || isProfileIncomplete;
+
         // Redirect to FE with token so it can bootstrap the session
-        res.redirect(`${process.env.FE_URL}/oauth-callback?token=${token}&role=${user.role}`);
+        const redirectUrl = needsProfile 
+            ? `${process.env.FE_URL}/oauth-callback?token=${token}&role=${user.role}&needsProfile=true`
+            : `${process.env.FE_URL}/oauth-callback?token=${token}&role=${user.role}`;
+        
+        res.redirect(redirectUrl);
     } catch (err) {
         console.error('[OAuth Callback Error]', err);
         res.redirect(`${process.env.FE_URL}/login?error=auth_failed`);
@@ -130,21 +162,6 @@ router.get('/google', (req: any, res: any, next: any) => {
 });
 router.get('/google/callback', passport.authenticate('google', { failureRedirect: '/login?error=google_failed', session: false }), oauthCallback);
 
-// Facebook
-router.get('/facebook', (req: any, res: any, next: any) => {
-    const role = req.query.role || 'login';
-    passport.authenticate('facebook', { scope: ['email'], state: role })(req, res, next);
-});
-router.get('/facebook/callback', passport.authenticate('facebook', { failureRedirect: '/login?error=facebook_failed', session: false }), oauthCallback);
 
-// Twitter / X
-router.get('/twitter', (req: any, res: any, next: any) => {
-    const role = req.query.role || 'login';
-    // Twitter OAuth 1.0a doesn't support state, store in session
-    (req as any).session = (req as any).session || {};
-    (req as any).session.oauthRole = role;
-    passport.authenticate('twitter')(req, res, next);
-});
-router.get('/twitter/callback', passport.authenticate('twitter', { failureRedirect: '/login?error=twitter_failed', session: false }), oauthCallback);
 
 module.exports = router;

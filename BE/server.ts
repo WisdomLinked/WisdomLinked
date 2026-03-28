@@ -26,20 +26,12 @@ const { createSocketServer } = require("./socket/socketServer");
 
 const PORT = process.env.PORT || 5000;
 
-const MONGO_URI = process.env.MONGO_URI
+const MONGO_URI = process.env.MONGO_URI;
 
-mongoose
-    .connect(MONGO_URI)
-    .then(() => {
-        console.log("Connected to MongoDB Server");
-        appendDefaultServices()
-        appendAdminUserAndGroupChat()
-        initAppStates()
-    })
-    .catch((err) => {
-        console.log("database connection failed. Server not started");
-        console.error(err);
-    });
+if (!MONGO_URI) {
+    console.error("MONGO_URI is not set. Set it in BE/.env (see BE/.env.example).");
+    process.exit(1);
+}
 
 const app = express();
 const maxRequestBodySize = process.env.MAX_REQUEST_BODY_SIZE || '1mb';
@@ -91,13 +83,26 @@ app.get('/uploads/*', (req, res) => {
     res.sendFile(decodeURI(fileName), { root: path.join(__dirname, `.${req.path.replace(fileName, '')}`) });
 });
 
+// Wait for MongoDB before accepting traffic — avoids Mongoose "buffering timed out" on failed connects
+mongoose
+    .connect(MONGO_URI, { serverSelectionTimeoutMS: 15_000 })
+    .then(() => {
+        console.log("Connected to MongoDB Server");
+        appendDefaultServices();
+        appendAdminUserAndGroupChat();
+        initAppStates();
 
-
-
-var httpServer = require('http').Server(app)
-httpServer.listen(PORT, function () {
-    console.log(`App listening on port ${PORT}.`);
-});
-
-// socket connection
-createSocketServer(httpServer);
+        const httpServer = require('http').Server(app);
+        httpServer.listen(PORT, function () {
+            console.log(`App listening on port ${PORT}.`);
+        });
+        createSocketServer(httpServer);
+    })
+    .catch((err) => {
+        console.error("Database connection failed — server not started.");
+        console.error(err);
+        console.error(
+            "Tip: If the API runs in Docker, MONGO_URI must use hostname `mongo` (see BE/.env.example), not localhost."
+        );
+        process.exit(1);
+    });

@@ -1,14 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useDispatch } from 'react-redux';
-import {
-    User, Mail, Lock, Phone, AlertCircle, CheckCircle, ChevronDown,
-    ArrowRight, Upload, BookOpen, Eye, EyeOff, Check, Search, Plus
-} from 'lucide-react';
+import { User, Mail, Lock, Phone, AlertCircle, CheckCircle, ChevronDown, ArrowRight, Upload, BookOpen, Eye, EyeOff, Check, Search, Plus } from 'lucide-react';
 import { callApi } from '../api/api';
 import { showAlert } from '../actions/alertActions';
-import ConfirmEmail from '../components/ConfirmEmail';
 import SocialAuthBlock from '../components/SocialAuthBlock';
+import ConfirmEmail from '../components/ConfirmEmail';
+import logo from '../assets/images/logo.png';
 
 const BTN_PRIMARY_STYLE = { background: 'linear-gradient(135deg, #234C6A 0%, #456882 100%)' };
 const FOCUS_RING = 'focus:ring-2 focus:ring-[#234C6A]/60 focus:border-[#234C6A]';
@@ -258,10 +256,16 @@ export default function WLExpertRegister() {
                     <div className="p-6 sm:p-8">
                         {/* Logo */}
                         <div className="flex items-center gap-3 mb-4">
-                            <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-[#1B3C53] to-[#456882] flex items-center justify-center shadow-md">
-                                <BookOpen className="h-5 w-5 text-white" strokeWidth={2.2} />
+                            <div className="h-10 w-10 rounded-xl bg-white border border-[#D0DFED] flex items-center justify-center shadow-sm overflow-hidden blur-[0.3px]">
+                                <img
+                                    src="/logo.png"
+                                    alt="WisdomLinked logo"
+                                    className="h-10 w-10 object-contain"
+                                />
                             </div>
-                            <div className="font-display font-bold text-xl text-slate-900">WisdomLinked</div>
+                            <span className="font-black text-2xl tracking-[0.12em] uppercase text-slate-900">
+                                WisdomLinked
+                            </span>
                         </div>
 
                         <h2 className="font-display text-2xl font-bold text-slate-800 mb-1">Expert sign up</h2>
@@ -271,7 +275,7 @@ export default function WLExpertRegister() {
                             {/* Full Name */}
                             <div>
                                 <label className="block text-xs font-semibold text-slate-600 mb-1.5"><span className="flex items-center gap-1.5"><User size={12} /> Full name</span></label>
-                                <input type="text" placeholder="e.g. Dr. Jane Smith" value={form.fullName}
+                                <input type="text" placeholder="e.g. Dr. Jane Smith" value={form.fullName} autoComplete="name"
                                     onChange={(e) => handleChange('fullName', e.target.value)}
                                     onBlur={() => handleBlur('fullName')}
                                     className={(touched.fullName && errors.fullName) ? inputError : inputNormal} />
@@ -311,7 +315,7 @@ export default function WLExpertRegister() {
                                         <div className="p-2 border-b border-slate-100 bg-slate-50/50">
                                             <div className="relative">
                                                 <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                                                <input type="text" placeholder="Search or add custom major" value={majorSearch}
+                                                <input type="text" placeholder="Search or add custom major" value={majorSearch} autoComplete="new-password"
                                                     onChange={(e) => setMajorSearch(e.target.value)}
                                                     onKeyDown={(e) => { if(e.key === 'Enter') { e.preventDefault(); handleAddCustomMajor(); } }}
                                                     className="w-full pl-9 pr-4 py-2 text-sm bg-white border border-slate-200 rounded-lg outline-none focus:border-[#234C6A] focus:ring-1 focus:ring-[#234C6A]" />
@@ -424,7 +428,7 @@ export default function WLExpertRegister() {
                                         onChange={(e) => handleChange('password', e.target.value)}
                                         onBlur={() => handleBlur('password')}
                                         className={`${(touched.password && errors.password) ? inputError : inputNormal} pr-10`} />
-                                    <button type="button" onClick={() => setShowPassword(p => !p)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600" aria-label={showPassword ? 'Hide password' : 'Show password'}>
+                                    <button type="button" onClick={(e) => { e.preventDefault(); setShowPassword(!showPassword); }} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 z-10" aria-label={showPassword ? 'Hide password' : 'Show password'}>
                                         {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                                     </button>
                                 </div>
@@ -457,7 +461,7 @@ export default function WLExpertRegister() {
                                         onChange={(e) => handleChange('confirmPassword', e.target.value)}
                                         onBlur={() => handleBlur('confirmPassword')}
                                         className={`${(touched.confirmPassword && errors.confirmPassword) ? inputError : inputNormal} pr-10`} />
-                                    <button type="button" onClick={() => setShowConfirmPassword(p => !p)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600" aria-label={showConfirmPassword ? 'Hide password' : 'Show password'}>
+                                    <button type="button" onClick={(e) => { e.preventDefault(); setShowConfirmPassword(!showConfirmPassword); }} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 z-10" aria-label={showConfirmPassword ? 'Hide password' : 'Show password'}>
                                         {showConfirmPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                                     </button>
                                 </div>

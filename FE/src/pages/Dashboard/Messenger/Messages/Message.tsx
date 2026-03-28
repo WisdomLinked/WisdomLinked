@@ -15,7 +15,7 @@ const parseHtml = (html: any) => {
     return parse(html ? html : '')
 }
 
-const Message = ({ content, sameAuthor, hiddenDropDown, disableBookButton, hideDate, userId, username, image, date, incomingMessage, isFriend, role, myRole, status }: any) => {
+const Message = ({ content, sameAuthor, hiddenDropDown, disableBookButton, hideDate, userId, username, image, date, incomingMessage, isFriend, role, myRole, status, theme = "dark" }: any) => {
 
     const dispatch = useDispatch()
     const navigate = useNavigate()
@@ -44,11 +44,8 @@ const Message = ({ content, sameAuthor, hiddenDropDown, disableBookButton, hideD
     }
 
     const book = async () => {
-        if (myRole === 'customer') {
-            navigate(`${process.env.REACT_APP_AUTH_URL}${myRole}dashboard/search?_id=${userId}`)
-        } else {
-            navigate(`${process.env.REACT_APP_AUTH_URL}${myRole}dashboard/search?_id=${userId}`)
-        }
+        const dashPrefix = myRole === 'customer' ? 'student' : myRole;
+        navigate(`${process.env.REACT_APP_AUTH_URL}${dashPrefix}dashboard/search?_id=${userId}`)
     }
 
     const handleDownload = () => {
@@ -161,11 +158,11 @@ const Message = ({ content, sameAuthor, hiddenDropDown, disableBookButton, hideD
             <div className="chat_value_container">
                 <div className="flex flex-col items-end mt-1 pl-14">
                     {!hideDate ? (
-                        <div className="text-grey text-[12px]">
+                        <div className={`text-[12px] ${theme === "light" ? "text-slate-500" : "text-grey"}`}>
                             {formatDate(new Date(date))}
                         </div>
                     ) : null}
-                    <div className="w-fit text-white bg-gray-800 rounded-[13px] px-1.5 py-1">
+                    <div className={`w-fit rounded-[13px] px-2 py-1.5 text-[14px] leading-[20px] shadow-sm ${theme === "light" ? "text-white bg-sky-600" : "text-white bg-gray-800"}`}>
                         {parseHtml(content)}
                     </div>
                 </div>
@@ -227,7 +224,7 @@ const Message = ({ content, sameAuthor, hiddenDropDown, disableBookButton, hideD
             {/* Main message content area */}
             <div className={`${sameAuthor ? "ml-[60px]" : ""} max-w-[calc(100%-60px)] pr-14`}>
                 {!hideDate && (
-                    <div className="text-grey text-[12px]">
+                    <div className={`text-[12px] ${theme === "light" ? "text-slate-500" : "text-grey"}`}>
                         {formatDate(new Date(date))}
                     </div>
                 )}
@@ -284,7 +281,7 @@ const Message = ({ content, sameAuthor, hiddenDropDown, disableBookButton, hideD
                         </div>
                 ) : (
                     // Otherwise, show the regular incoming message bubble
-                    <div className="w-fit text-white bg-black rounded-[13px] px-1.5 py-1">
+                    <div className={`w-fit rounded-[13px] px-2 py-1.5 text-[14px] leading-[20px] shadow-sm ${theme === "light" ? "text-slate-900 bg-slate-50 border border-slate-200" : "text-white bg-black"}`}>
                         {parseHtml(content)}
                     </div>
                 )}

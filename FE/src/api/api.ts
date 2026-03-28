@@ -53,6 +53,14 @@ const logOut = () => {
     store.dispatch(logoutUser())
 };
 
+export const callLogout = async () => {
+    try {
+        await api.post("auth/logout");
+    } catch (err) {
+        console.error("Logout API failed", err);
+    }
+};
+
 const checkForAuthorization = (error: any) => {
     const responseCode = error?.response?.status;
 
@@ -127,16 +135,33 @@ export const confirmPasswordResetByCode = async ({ email, password, code }: any)
     }
 };
 
-export const verifyRegistration = async ({ email, confirmCode }: any) => {
+export const verifyPasswordResetOTP = async ({ email, code }: any) => {
     try {
-        const res = await api.post<any>("auth/verifyRegistration", { email, confirmCode });
+        const res = await api.post<any>("auth/verifyPasswordResetOTP", { email, code });
 
         return res.data;
     } catch (err: any) {
-        console.log(err, '////')
         return checkForAuthorization(err);
     }
 };
+
+export const verifyRegistration = async ({ email, confirmCode }: any) => {
+    try {
+        const res = await api.post<any>("auth/verifyRegistration", { email, confirmCode });
+        return res.data;
+    } catch (error) {
+        return { status: "FAIL" }
+    }
+}
+
+export const checkVerificationStatus = async (email: string) => {
+    try {
+        const res = await api.get<any>(`auth/checkVerification?email=${encodeURIComponent(email)}`);
+        return res.data;
+    } catch (error) {
+        return { status: "FAIL" }
+    }
+}
 
 export const passwordResetRequest = async ({ email, password }: any) => {
     try {
@@ -478,24 +503,15 @@ export const callApi = async (method: string, url: string, data: any, file?: any
             formData.append("media", file, file.name);
         }
 
-        console.log("Making API Call:", {
-            method,
-            url: BASE_URL + url,
-            data,
-        });
 
 
-        let options = {
+        let options: RequestInit = {
             method: method,
-            body: formData
+            body: formData,
+            credentials: 'include'
         }
         return fetch(BASE_URL + url, options)
             .then((response: any) => {
-                console.log("API Response:", {
-                    status: response.status,
-                    statusText: response.statusText,
-                    headers: response.headers,
-                });
 
                 if (!response.ok) {
                     const error = Object.assign({}, response, {
@@ -690,6 +706,16 @@ export const doFilterSeminars = async (filter: any) => {
     }
 };
 
+/** Same seminar discovery as customer flow; use while logged in as expert */
+export const doExpertFilterSeminars = async (filter: any) => {
+    try {
+        const res = await api.post("expert/filterSeminars", filter);
+        return res.data;
+    } catch (err: any) {
+        return checkForAuthorization(err);
+    }
+};
+
 export const doAppendEvent = async ({ title, start, end, duration, price, paidBy, expert, customer, payment_intent, eventId, createdBy }: any) => {
     try {
         const res = await api.post("customer/appendEvent", { title, start, end, duration, price, paidBy, expert, customer, payment_intent, eventId, createdBy });
@@ -847,6 +873,15 @@ export const getCustomerById = async (id: any) => {
 export const shareMeetingViaEmail = async (data: any) => {
     try {
         const res = await api.post("expert/shareMeetingViaEmail", data);
+        return res.data;
+    } catch (err: any) {
+        return checkForAuthorization(err);
+    }
+};
+
+export const doGetExpertPaymentHistory = async () => {
+    try {
+        const res = await api.post("expert/getMyPaymentHistory", {});
         return res.data;
     } catch (err: any) {
         return checkForAuthorization(err);

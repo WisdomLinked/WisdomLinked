@@ -18,18 +18,6 @@ const GoogleIcon = () => (
   </svg>
 );
 
-const FacebookIcon = () => (
-  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="shrink-0">
-    <path d="M24 12c0-6.627-5.373-12-12-12S0 5.373 0 12c0 5.99 4.388 10.954 10.125 11.854V15.47H7.078V12h3.047V9.356c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.234 2.686.234v2.953H15.83c-1.491 0-1.956.925-1.956 1.874V12h3.328l-.532 3.469h-2.796v8.385C19.612 22.954 24 17.99 24 12z" fill="#1877F2"/>
-  </svg>
-);
-
-const XIcon = () => (
-  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="shrink-0">
-    <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" fill="#000000"/>
-  </svg>
-);
-
 export default function SocialAuthBlock({ role }: { role?: string } = {}) {
   const handleSocialClick = (provider: string) => {
     const url = getAuthRedirectUrl(provider, role);
@@ -51,22 +39,6 @@ export default function SocialAuthBlock({ role }: { role?: string } = {}) {
           aria-label="Continue with Google"
         >
           <GoogleIcon /> <span className="hidden sm:inline">Google</span>
-        </button>
-        <button
-          type="button"
-          onClick={() => handleSocialClick('facebook')}
-          className="flex items-center justify-center gap-2 w-full flex-1 min-w-0 py-3 px-4 rounded-xl border border-slate-200 bg-white text-slate-700 text-sm font-medium hover:border-slate-300 hover:bg-slate-50 transition-colors"
-          aria-label="Continue with Facebook"
-        >
-          <FacebookIcon /> <span className="hidden sm:inline">Facebook</span>
-        </button>
-        <button
-          type="button"
-          onClick={() => handleSocialClick('twitter')}
-          className="flex items-center justify-center gap-2 w-full flex-1 min-w-0 py-3 px-4 rounded-xl border border-slate-200 bg-white text-slate-700 text-sm font-medium hover:border-slate-300 hover:bg-slate-50 transition-colors"
-          aria-label="Continue with X"
-        >
-          <XIcon /> <span className="hidden sm:inline">X</span>
         </button>
       </div>
     </div>

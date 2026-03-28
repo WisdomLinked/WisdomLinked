@@ -1,6 +1,18 @@
 version: '3.8'
 
 services:
+  # MongoDB for local/docker dev. From the API container, use host name `mongo`, not `localhost`.
+  mongo:
+    image: mongo:7
+    container_name: wisdomlinked_mongo
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+    networks:
+      - custom_network
+    restart: unless-stopped
+
   backend:
     build:
       context: ./BE
@@ -9,6 +21,8 @@ services:
       - "5000:5000"
     env_file:
       - ./BE/.env
+    depends_on:
+      - mongo
     restart: unless-stopped
     networks:
       - custom_network
@@ -32,3 +46,6 @@ services:
 networks:
   custom_network:
     driver: bridge
+
+volumes:
+  mongo_data:

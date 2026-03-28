@@ -6,6 +6,7 @@ import { login, confirmLoginByCode } from '../api/api';
 import { showAlert } from '../actions/alertActions';
 import { actionTypes } from '../actions/types';
 import SocialAuthBlock from '../components/SocialAuthBlock';
+import SignupModal from '../components/SignupModal';
 
 const BTN_PRIMARY_STYLE = { background: 'linear-gradient(135deg, #234C6A 0%, #456882 100%)' };
 const FOCUS_RING = 'focus:ring-2 focus:ring-[#234C6A]/60 focus:border-[#234C6A]';
@@ -14,7 +15,7 @@ export default function WLLogin() {
     const navigate = useNavigate();
     const [searchParams] = useSearchParams();
     const dispatch = useDispatch();
-    const oauthError = searchParams.get('error');
+    const [oauthError, setOauthError] = useState<string | null>(null);
     const [form, setForm] = useState({ email: '', password: '' });
     const [errors, setErrors] = useState<Record<string, string>>({});
     const [submitting, setSubmitting] = useState(false);
@@ -22,6 +23,7 @@ export default function WLLogin() {
 
     // OTP state
     const [codeSent, setCodeSent] = useState(false);
+    const [showSignupModal, setShowSignupModal] = useState(false);
     const [otpDigits, setOtpDigits] = useState<string[]>(['', '', '', '', '', '']);
     const [timeRemaining, setTimeRemaining] = useState(60);
     const [verifying, setVerifying] = useState(false);
@@ -80,6 +82,14 @@ export default function WLLogin() {
         return () => { if (timerRef.current) clearInterval(timerRef.current); };
     }, []);
 
+    // Parse OAuth errors from URL
+    useEffect(() => {
+        const err = searchParams.get('error');
+        if (err) {
+            setOauthError(err);
+        }
+    }, [searchParams]);
+
     // OTP input handling
     const handleOtpChange = (index: number, value: string) => {
         if (!/^\d*$/.test(value)) return; // digits only
@@ -130,6 +140,13 @@ export default function WLLogin() {
                 localStorage.setItem('currentUser', JSON.stringify(response.userDetails));
                 dispatch({ type: actionTypes.authenticate, payload: response.userDetails });
                 dispatch(showAlert(`Hi, ${response.userDetails.username} 👋. Welcome back.`));
+                // Navigate to the correct dashboard based on role
+                const role = response.userDetails.role;
+                if (role === 'customer') {
+                    navigate('/user/studentdashboard');
+                } else {
+                    navigate('/user/' + role + 'dashboard');
+                }
             } else {
                 dispatch(showAlert(response.error));
                 setOtpDigits(['', '', '', '', '', '']);
@@ -199,8 +216,16 @@ export default function WLLogin() {
                     <div className="p-8">
                         {/* Logo */}
                         <div className="flex items-center gap-3 mb-6">
-                            <img src="/logo.png" alt="WisdomLinked" className="h-10 w-10 rounded-xl object-contain" />
-                            <div className="font-display font-bold text-xl text-slate-900">WisdomLinked</div>
+                            <div className="h-10 w-10 rounded-xl bg-white border border-[#D0DFED] flex items-center justify-center shadow-sm overflow-hidden blur-[0.3px]">
+                                <img
+                                    src="/logo.png"
+                                    alt="WisdomLinked logo"
+                                    className="h-10 w-10 object-contain"
+                                />
+                            </div>
+                            <span className="font-black text-2xl tracking-[0.12em] uppercase text-slate-900">
+                                WisdomLinked
+                            </span>
                         </div>
 
                         {!codeSent ? (
@@ -212,6 +237,16 @@ export default function WLLogin() {
                                     <div className="mb-4 p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-sm flex items-start gap-2">
                                         <AlertCircle size={16} className="mt-0.5 shrink-0" />
                                         <span>No account found. Please <button type="button" onClick={() => navigate('/customerregister')} className="font-semibold underline">register</button> first.</span>
+                                    </div>
+                                )}
+                                {oauthError === 'role_mismatch' && (
+                                    <div className="mb-4 p-3 rounded-xl bg-red-50 border border-red-200 text-red-800 text-sm flex items-start gap-2">
+                                        <AlertCircle size={16} className="mt-0.5 shrink-0" />
+                                        <span>
+                                            {searchParams.get('existingRole') 
+                                                ? `This email is already registered as a ${searchParams.get('existingRole')} account. Please log in to your existing account, or use a different email to register a new role.`
+                                                : "An account already exists with a different role. Please log in with your existing role."}
+                                        </span>
                                     </div>
                                 )}
                                 <div className="space-y-4">
@@ -230,7 +265,7 @@ export default function WLLogin() {
                                                 onChange={(e: React.ChangeEvent<HTMLInputElement>) => { setForm(f => ({ ...f, password: e.target.value })); setErrors(er => ({ ...er, password: '' })); }}
                                                 onKeyDown={(e: React.KeyboardEvent<HTMLInputElement>) => e.key === 'Enter' && handleSubmit()}
                                                 className={`${errors.password ? inputError : inputNormal} pr-10`} />
-                                            <button type="button" onClick={() => setShowPassword(p => !p)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600" aria-label={showPassword ? 'Hide password' : 'Show password'}>
+                                            <button type="button" onClick={(e) => { e.preventDefault(); setShowPassword(!showPassword); }} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 z-10" aria-label={showPassword ? 'Hide password' : 'Show password'}>
                                                 {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                                             </button>
                                         </div>
@@ -247,7 +282,7 @@ export default function WLLogin() {
                                 </button>
                                 <SocialAuthBlock />
                                 <p className="text-center text-slate-500 text-sm mt-4">
-                                    Don't have an account? <button type="button" onClick={() => navigate('/customerregister')} className="font-semibold hover:underline" style={{ color: '#234C6A' }}>Sign up</button>
+                                    Don't have an account? <button type="button" onClick={() => setShowSignupModal(true)} className="font-semibold hover:underline" style={{ color: '#234C6A' }}>Sign up</button>
                                 </p>
                                 <button onClick={() => navigate('/')} className="mt-4 w-full py-2.5 rounded-xl border border-slate-200 text-slate-600 font-semibold text-sm hover:bg-slate-50">Back to Home</button>
                             </div>
@@ -322,6 +357,12 @@ export default function WLLogin() {
                     </div>
                 </div>
             </div>
+            {showSignupModal && (
+                <SignupModal 
+                    onClose={() => setShowSignupModal(false)} 
+                    onGoLogin={() => setShowSignupModal(false)} 
+                />
+            )}
         </div>
     );
 }

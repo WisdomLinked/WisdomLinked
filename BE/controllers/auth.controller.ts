@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 const User = require("../models/User");
 const PendingUser = require("../models/PendingUser");
+const jwt = require("jsonwebtoken");
 const PendingLogin = require("../models/PendingLogin");
 const PendingPasswordReset = require("../models/PendingPasswordReset");
 const Keyword = require("../models/Keyword")
@@ -39,6 +40,35 @@ const s3 = new S3Client({
     forcePathStyle: false,
 });
 
+const checkRateLimit = (record: any) => {
+    if (!record) return null;
+    if (record.lockUntil && record.lockUntil > new Date()) {
+        const minutes = Math.ceil((record.lockUntil.getTime() - new Date().getTime()) / 60000);
+        return `Too many failed attempts. Please try again in ${minutes} minutes.`;
+    }
+    return null;
+}
+
+const handleFailedAttempt = async (record: any) => {
+    if (!record) return;
+    record.failedAttempts = (record.failedAttempts || 0) + 1;
+    if (record.failedAttempts >= 50) {
+        record.lockUntil = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+    } else if (record.failedAttempts >= 6) {
+        record.lockUntil = new Date(Date.now() + 30 * 60 * 1000); // 30 mins
+    }
+    await record.save();
+}
+
+const resetFailedAttempts = async (record: any) => {
+    if (!record) return;
+    if (record.failedAttempts > 0 || record.lockUntil) {
+        record.failedAttempts = 0;
+        record.lockUntil = null;
+        await record.save();
+    }
+}
+
 const getUniqueConfirmCode = async () => {
     try {
         let isDuplicated = true, confirmCode;
@@ -59,6 +89,26 @@ const getUniqueConfirmCode = async () => {
         return Math.random().toString(36).substring(2, 15);
     }
 }
+
+export const getArrayField = (req: Request, key: string) => {
+    let val = req.body[key] || req.body[`${key}[]`];
+    if (!val) return null;
+    if (Array.isArray(val)) return val;
+    if (typeof val === 'string') {
+        if (val.trim().startsWith('[') && val.trim().endsWith(']')) {
+            try { return JSON.parse(val); } 
+            catch (e) {
+                try {
+                    const innerString = val.trim().slice(1, -1);
+                    const items = innerString.split(',').map(item => item.trim().replace(/^['"]|['"]$/g, ''));
+                    return items.filter(i => i.length > 0);
+                } catch (err) { return [val]; }
+            }
+        }
+        return [val]; 
+    }
+    return [val];
+};
 
 const getKeywordsAndServices = async (req: Request, res: Response) => {
     try {
@@ -106,8 +156,6 @@ const register = async (req: Request, res: Response) => {
         const username = safeParse(req.body.username)
         const title = safeParse(req.body.title)
         const description = safeParse(req.body.description)
-        const keywords = safeParse(req.body.keywords)
-        const services = safeParse(req.body.services)
         const country = safeParse(req.body.country)
         const state = safeParse(req.body.state)
         const city = safeParse(req.body.city)
@@ -116,21 +164,26 @@ const register = async (req: Request, res: Response) => {
         const password = safeParse(req.body.password)
         const timeSlots = safeParse(req.body.timeSlots)
         const specialNote = safeParse(req.body.specialNote)
+        
+        const keywords = getArrayField(req, 'keywords');
+        const services = getArrayField(req, 'services');
 
         if (checkTitleNameInvalid('Username', username)) {
             return res.status(200).json({ status: 'FAIL', error: checkTitleNameInvalid('Username', username) });
         }
 
         // check if user exists
-        const userExists = await User.exists({ email: email.toLowerCase() });
-        if (userExists) {
-            return res.status(200).json({ status: 'FAIL', error: "E-mail already in use." });
+        const existingUser = await User.findOne({ email: email.toLowerCase() });
+        if (existingUser) {
+            const roleName = existingUser.role === 'customer' ? 'student' : (existingUser.role || 'user');
+            return res.status(200).json({ status: 'FAIL', error: `This email is already registered as a ${roleName} account.` });
         }
 
         // check if user exists in pending list
-        const userExistsInPending = await PendingUser.exists({ email: email.toLowerCase() });
-        if (userExistsInPending) {
-            return res.status(200).json({ status: 'FAIL', error: "E-mail already in use in pending list." });
+        const existingPendingUser = await PendingUser.findOne({ email: email.toLowerCase() });
+        if (existingPendingUser) {
+            // Delete the stale pending record and allow them to re-register to get un-stuck
+            await PendingUser.deleteOne({ _id: existingPendingUser._id });
         }
 
         const file = req.file
@@ -208,13 +261,25 @@ const register = async (req: Request, res: Response) => {
         // res.cookie('accessToken', token, { maxAge: process.env.COOKIE_EXPIRED_TIME, httpOnly: true })
 
         // SEND EMAIL TO CUSTOMER
-        console.log('[register] Email:', email);
-        console.log('[register] confirmCode:', confirmCode);
-        console.log('[register] FE_URL:', process.env.FE_URL);
 
-        let confirmLink = `<div>Verify your registration to TOE by the confirmation Link <br/>${process.env.FE_URL}/verification/${email}/${confirmCode}</div>`
-        await utils.sendOTP(
-            // process.env.NODE_ENV === 'development' ? 'varunsahni10134@gmail.com' : email,
+
+        let confirmLink = `<div style="font-family: Arial, sans-serif; max-width: 520px; margin: 0 auto; background: #ffffff; border-radius: 16px; overflow: hidden; border: 1px solid #e2e8f0;">
+            <div style="background: linear-gradient(135deg, #234C6A 0%, #456882 100%); padding: 32px 24px; text-align: center;">
+                <h1 style="color: #ffffff; font-size: 24px; margin: 0; font-weight: 700; letter-spacing: 2px;">WISDOMLINKED</h1>
+            </div>
+            <div style="padding: 32px 24px;">
+                <h2 style="color: #1e293b; font-size: 22px; margin: 0 0 12px 0;">Welcome! Verify Your Email</h2>
+                <p style="color: #475569; font-size: 15px; line-height: 1.6; margin: 0 0 24px 0;">Thank you for registering with WisdomLinked. Please click the button below to verify your email address and activate your account.</p>
+                <div style="text-align: center; margin: 24px 0;">
+                    <a href="${process.env.FE_URL}/verification/${email}/${confirmCode}" style="display: inline-block; background: linear-gradient(135deg, #234C6A 0%, #456882 100%); color: #ffffff; text-decoration: none; padding: 14px 40px; border-radius: 12px; font-size: 16px; font-weight: 600; letter-spacing: 0.5px;">Verify My Email</a>
+                </div>
+                <p style="color: #94a3b8; font-size: 13px; line-height: 1.5; margin: 24px 0 0 0;">If you didn't create an account with WisdomLinked, you can safely ignore this email.</p>
+            </div>
+            <div style="background: #f8fafc; padding: 16px 24px; text-align: center; border-top: 1px solid #e2e8f0;">
+                <p style="color: #94a3b8; font-size: 12px; margin: 0;">&copy; ${new Date().getFullYear()} WisdomLinked. All rights reserved.</p>
+            </div>
+        </div>`
+        await utils.sendMagicLink(
             email,
             utils.getCurrentDateString(),
             confirmLink
@@ -231,7 +296,6 @@ const register = async (req: Request, res: Response) => {
 
 const healthCheck = async (req: Request, res: Response) => {
     try {
-        console.log("health check")
         res.status(200).send("OK Ready")
     } catch (err) {
         console.log(err)
@@ -244,14 +308,19 @@ const resendConfirmEmail = async (req: Request, res: Response) => {
         const { email } = req.body
 
         // check if user exists
-        const pendingUser = await PendingUser.find({ email: email.toLowerCase() });
+        const pendingUser = await PendingUser.findOne({ email: email.toLowerCase() });
         if (!pendingUser) {
             throw new Error('Pending registration request not found')
         }
 
+        const lockError = checkRateLimit(pendingUser);
+        if (lockError) {
+            return res.status(200).json({ status: 'FAIL', error: lockError });
+        }
+
         // SEND EMAIL TO CUSTOMER
-        let confirmLink = `<div>Verify your registration to TOE by the confirmation Link <br/>${process.env.FE_URL}/verification/${email}/${pendingUser.confirmCode}</div>`
-        await utils.sendOTP(
+        let confirmLink = `<div>Verify your registration to Wisdom Linked by clicking the confirmation link below:<br/><a href="${process.env.FE_URL}/verification/${email}/${pendingUser.confirmCode}">Verify Email</a></div>`
+        await utils.sendMagicLink(
             // process.env.NODE_ENV === 'development' ? 'varunsahni10134@gmail.com' : email,
             email,
             utils.getCurrentDateString(),
@@ -272,16 +341,28 @@ const verifyRegistration = async (req: Request, res: Response) => {
         const { email, confirmCode } = req.body
 
         // check if user exists
-        const pendingUser = await PendingUser.findOne({ email: email.toLowerCase(), confirmCode: confirmCode });
+        const pendingUser = await PendingUser.findOne({ email: email.toLowerCase() });
         if (!pendingUser) {
             return res.status(200).json({ status: 'FAIL', error: 'Pending registration request not found' });
         }
+
+        const lockError = checkRateLimit(pendingUser);
+        if (lockError) {
+            return res.status(200).json({ status: 'FAIL', error: lockError });
+        }
+
+        if (pendingUser.confirmCode !== confirmCode) {
+            await handleFailedAttempt(pendingUser);
+            return res.status(200).json({ status: 'FAIL', error: "Invalid verification code" });
+        }
+
+        await resetFailedAttempts(pendingUser);
 
         if ((new Date().getTime() - pendingUser.updatedAt.getTime()) >= 24 * 3600 * 1000) {
             return res.status(200).json({ status: 'FAIL', error: "Verification email was expired." });
         }
 
-        console.log(pendingUser, '/////')
+
 
         const newUser = new User({
             username: pendingUser.username,
@@ -309,11 +390,71 @@ const verifyRegistration = async (req: Request, res: Response) => {
         //
         sendEmailNewUserAccountApproval(user.username)
 
+        const token = jwt.sign(
+            { email: user.email.toString() },
+            process.env.JWT_SECRET,
+            { expiresIn: process.env.COOKIE_EXPIRED_TIME || '24h' }
+        );
+        user.token = token;
+        await user.save();
+        
+        user.token = null;
+        user.password = null;
+        
+        res.cookie('accessToken', token, {
+            maxAge: Number(process.env.COOKIE_EXPIRED_TIME) || 86400000,
+            httpOnly: true
+        });
+
+        // The user just joined, so groupChats might be empty, but it's safe to update
+        updateActiveRoomsOfUsers(user._id.toString(), user.groupChats || []);
+
         res.status(200).json({
-            status: 'SUCCESS'
+            status: 'SUCCESS',
+            userDetails: user
         });
     } catch (err) {
         console.log(err)
+        return res.status(500).send(err.message);
+    }
+};
+
+const checkVerificationStatus = async (req: Request, res: Response) => {
+    try {
+        const email = String(req.query.email || '');
+        if (!email) return res.status(200).json({ status: 'FAIL', error: 'Email missing' });
+
+        // If user is in User collection, they are verified
+        const user = await getFullUserData(email);
+        if (user) {
+            const token = jwt.sign(
+                { email: user.email.toString() },
+                process.env.JWT_SECRET,
+                { expiresIn: process.env.COOKIE_EXPIRED_TIME || '24h' }
+            );
+            user.token = token;
+            await user.save();
+            
+            user.token = null;
+            user.password = null;
+
+            res.cookie('accessToken', token, {
+                maxAge: Number(process.env.COOKIE_EXPIRED_TIME) || 86400000,
+                httpOnly: true
+            });
+
+            return res.status(200).json({ status: 'VERIFIED', userDetails: user });
+        }
+
+        // If in PendingUser, still pending
+        const pending = await PendingUser.findOne({ email: email.toLowerCase() });
+        if (pending) {
+            return res.status(200).json({ status: 'PENDING' });
+        }
+
+        return res.status(200).json({ status: 'NOT_FOUND' });
+    } catch (err: any) {
+        console.error(err);
         return res.status(500).send(err.message);
     }
 };
@@ -326,6 +467,12 @@ const login = async (req: Request, res: Response) => {
         if (!user) {
             return res.status(200).json({ status: 'FAIL', error: "Invalid credentials. Please try again" });
         }
+
+        if (!user.password) {
+            const provider = user.oauthProvider ? (user.oauthProvider.charAt(0).toUpperCase() + user.oauthProvider.slice(1)) : 'Google';
+            return res.status(200).json({ status: 'FAIL', error: `This account was created using ${provider} Sign-In. Please use ${provider} to log in.` });
+        }
+
         const passwordsMatch = await bcrypt.compare(String(password), user.password);
 
         if (!passwordsMatch) {
@@ -346,6 +493,10 @@ const login = async (req: Request, res: Response) => {
                 code,
             })
         } else {
+            const lockError = checkRateLimit(loginRequest);
+            if (lockError) {
+                return res.status(200).json({ status: 'FAIL', error: lockError });
+            }
             loginRequest.code = code
             loginRequest.validUntil = new Date(Date.now() + 60 * 1000)
         }
@@ -355,7 +506,22 @@ const login = async (req: Request, res: Response) => {
             console.error("Unable to save login request: ", err.message)
         }
 
-        let text = `<div>Verify your login to TOE by the code <br/><b>${code}</b></div>`
+        let text = `<div style="font-family: Arial, sans-serif; max-width: 520px; margin: 0 auto; background: #ffffff; border-radius: 16px; overflow: hidden; border: 1px solid #e2e8f0;">
+            <div style="background: linear-gradient(135deg, #234C6A 0%, #456882 100%); padding: 32px 24px; text-align: center;">
+                <h1 style="color: #ffffff; font-size: 24px; margin: 0; font-weight: 700; letter-spacing: 2px;">WISDOMLINKED</h1>
+            </div>
+            <div style="padding: 32px 24px;">
+                <h2 style="color: #1e293b; font-size: 22px; margin: 0 0 12px 0;">Login Verification</h2>
+                <p style="color: #475569; font-size: 15px; line-height: 1.6; margin: 0 0 24px 0;">Use the code below to verify your login to WisdomLinked. This code will expire in 60 seconds.</p>
+                <div style="background: #f1f5f9; border-radius: 12px; padding: 24px; text-align: center; margin: 16px 0;">
+                    <span style="font-size: 36px; font-weight: bold; letter-spacing: 10px; color: #234C6A;">${code}</span>
+                </div>
+                <p style="color: #94a3b8; font-size: 13px; line-height: 1.5; margin: 24px 0 0 0;">If you didn't attempt to log in, please secure your account by changing your password immediately.</p>
+            </div>
+            <div style="background: #f8fafc; padding: 16px 24px; text-align: center; border-top: 1px solid #e2e8f0;">
+                <p style="color: #94a3b8; font-size: 12px; margin: 0;">&copy; ${new Date().getFullYear()} WisdomLinked. All rights reserved.</p>
+            </div>
+        </div>`
         await utils.sendOTP(
             email,
             utils.getCurrentDateString(),
@@ -381,9 +547,17 @@ const confirmLoginByCode = async (req: Request, res: Response) => {
             return res.status(200).json({ status: 'FAIL', error: "Login request not found or expired. Please request a new code" });
         }
 
+        const lockError = checkRateLimit(loginRequest);
+        if (lockError) {
+            return res.status(200).json({ status: 'FAIL', error: lockError });
+        }
+
         if (loginRequest.code !== Number(code)) {
+            await handleFailedAttempt(loginRequest);
             return res.status(200).json({ status: 'FAIL', error: "Incorrect code" });
         }
+
+        await resetFailedAttempts(loginRequest);
 
         if ((new Date() >= loginRequest.validUntil)) {
             return res.status(200).json({ status: 'FAIL', error: "Code expired. Please request a new code." });
@@ -438,6 +612,11 @@ const passwordResetRequest = async (req: Request, res: Response) => {
             return res.status(200).json({ status: 'FAIL', error: "Provided email not found." });
         }
 
+        if (!user.password) {
+            const provider = user.oauthProvider ? (user.oauthProvider.charAt(0).toUpperCase() + user.oauthProvider.slice(1)) : 'Google';
+            return res.status(200).json({ status: 'FAIL', error: `This account uses ${provider} Sign-In. Password reset is not available.` });
+        }
+
         // const code = randomize('0', 6)
         const code = "123456"
 
@@ -452,16 +631,33 @@ const passwordResetRequest = async (req: Request, res: Response) => {
             })
             await newRequest.save()
         } else {
+            const lockError = checkRateLimit(pwdRequest);
+            if (lockError) {
+                return res.status(200).json({ status: 'FAIL', error: lockError });
+            }
             pwdRequest.code = code
             pwdRequest.password = encryptedPassword
             await pwdRequest.save()
         }
 
-        let text = `<div>Verify your reset password request to TOE by the code <br/><b>${code}</b></div>`
-        await utils.sendOTP(
-            // process.env.NODE_ENV === 'development' ? 'varunsahni10134@gmail.com' : email,
+        let text = `<div style="font-family: Arial, sans-serif; max-width: 520px; margin: 0 auto; background: #ffffff; border-radius: 16px; overflow: hidden; border: 1px solid #e2e8f0;">
+            <div style="background: linear-gradient(135deg, #234C6A 0%, #456882 100%); padding: 32px 24px; text-align: center;">
+                <h1 style="color: #ffffff; font-size: 24px; margin: 0; font-weight: 700; letter-spacing: 2px;">WISDOMLINKED</h1>
+            </div>
+            <div style="padding: 32px 24px;">
+                <h2 style="color: #1e293b; font-size: 22px; margin: 0 0 12px 0;">Password Reset Request</h2>
+                <p style="color: #475569; font-size: 15px; line-height: 1.6; margin: 0 0 24px 0;">We received a request to reset your WisdomLinked account password. Use the code below to proceed.</p>
+                <div style="background: #f1f5f9; border-radius: 12px; padding: 24px; text-align: center; margin: 16px 0;">
+                    <span style="font-size: 36px; font-weight: bold; letter-spacing: 10px; color: #234C6A;">${code}</span>
+                </div>
+                <p style="color: #94a3b8; font-size: 13px; line-height: 1.5; margin: 24px 0 0 0;">This code expires in 60 seconds. If you didn't request a password reset, please ignore this email.</p>
+            </div>
+            <div style="background: #f8fafc; padding: 16px 24px; text-align: center; border-top: 1px solid #e2e8f0;">
+                <p style="color: #94a3b8; font-size: 12px; margin: 0;">&copy; ${new Date().getFullYear()} WisdomLinked. All rights reserved.</p>
+            </div>
+        </div>`
+        await utils.sendPasswordResetOTP(
             email,
-            utils.getCurrentDateString(),
             text
         );
 
@@ -474,18 +670,62 @@ const passwordResetRequest = async (req: Request, res: Response) => {
     }
 };
 
+const verifyPasswordResetOTP = async (req: Request, res: Response) => {
+    try {
+        const { email, code } = req.body;
+
+        const pwdRequest = await PendingPasswordReset.findOne({ email: { $regex: new RegExp(`^${email}$`, 'i') } });
+        if (!pwdRequest) {
+            return res.status(200).json({ status: 'FAIL', error: "Your reset request has expired. Please try again." });
+        }
+
+        const lockError = checkRateLimit(pwdRequest);
+        if (lockError) {
+            return res.status(200).json({ status: 'FAIL', error: lockError });
+        }
+
+        if (pwdRequest.code !== Number(code)) {
+            await handleFailedAttempt(pwdRequest);
+            return res.status(200).json({ status: 'FAIL', error: "Invalid code. Please try again." });
+        }
+
+        await resetFailedAttempts(pwdRequest);
+
+        if ((new Date().getTime() - pwdRequest.updatedAt.getTime()) >= 60 * 1000) {
+            return res.status(200).json({ status: 'FAIL', error: "Code was expired." });
+        }
+
+        return res.status(200).json({ status: 'SUCCESS' });
+    } catch (err) {
+        console.log(err)
+        return res.status(500).send(err.message);
+    }
+};
+
 const confirmPasswordResetByCode = async (req: Request, res: Response) => {
     try {
         const { email, password, code } = req.body;
+
+        if (password.length < 8 || !/[A-Z]/.test(password) || !/[0-9]/.test(password) || !/[^A-Za-z0-9]/.test(password)) {
+            return res.status(200).json({ status: 'FAIL', error: "Password does not meet strong requirements" });
+        }
 
         const request = await PendingPasswordReset.findOne({ email: { $regex: new RegExp(`^${email}$`, 'i') } })
         if (!request) {
             return res.status(200).json({ status: 'FAIL', error: "Password reset request not found" });
         }
 
+        const lockError = checkRateLimit(request);
+        if (lockError) {
+            return res.status(200).json({ status: 'FAIL', error: lockError });
+        }
+
         if (request.code !== Number(code)) {
+            await handleFailedAttempt(request);
             return res.status(200).json({ status: 'FAIL', error: "Incorrect code" });
         }
+
+        await resetFailedAttempts(request);
 
         if ((new Date().getTime() - request.updatedAt.getTime()) >= 60 * 1000) {
             return res.status(200).json({ status: 'FAIL', error: "Code was expired." });
@@ -501,13 +741,15 @@ const confirmPasswordResetByCode = async (req: Request, res: Response) => {
             return res.status(200).json({ status: 'FAIL', error: "User is blocked" });
         }
 
-        const passwordsMatch = await bcrypt.compare(String(password), request.password);
-
-        if (!passwordsMatch) {
-            return res.status(200).json({ status: 'FAIL', error: "Invalid password. Please try again" });
+        const isSameAsOld = await bcrypt.compare(String(password), user.password);
+        if (isSameAsOld) {
+            return res.status(200).json({ status: 'FAIL', error: "New password cannot be the same as the old password." });
         }
 
-        user.password = request.password
+        const salt = await bcrypt.genSalt(10);
+        const cryptPassword = await bcrypt.hash(password, salt);
+
+        user.password = cryptPassword;
         await user.save()
 
         await request.deleteOne()
@@ -558,9 +800,35 @@ const updateMissedChats = async (req: any, res: Response) => {
 const updateProfile = async (req: any, res: Response) => {
     try {
         const { email } = req.user
-        const { username, title, description, image, keywords, services, country, state, city, phoneNumber, price, joinPopupBlocked } = req.body;
+        
+        const safeParse = (val) => {
+            if (!val) return null;
+            try { return JSON.parse(val); } catch (e) {
+                if (typeof val === 'string' && val.trim().startsWith('[') && val.trim().endsWith(']')) {
+                    try {
+                        const innerString = val.slice(1, -1);
+                        const items = innerString.split(',').map(item => item.trim().replace(/^['"]|['"]$/g, ''));
+                        return items.filter(i => i.length > 0);
+                    } catch (innerError) { return val; }
+                }
+                return val;
+            }
+        };
 
-        if (checkTitleNameInvalid('Username', username)) {
+        const username = safeParse(req.body.username) || req.body.username;
+        const title = safeParse(req.body.title) || req.body.title;
+        const description = safeParse(req.body.description) || req.body.description;
+        const image = safeParse(req.body.image) || req.body.image;
+        const keywords = getArrayField(req, 'keywords') || safeParse(req.body.keywords) || req.body.keywords;
+        const services = getArrayField(req, 'services') || safeParse(req.body.services) || req.body.services;
+        const country = safeParse(req.body.country) || req.body.country;
+        const state = safeParse(req.body.state) || req.body.state;
+        const city = safeParse(req.body.city) || req.body.city;
+        const phoneNumber = safeParse(req.body.phoneNumber) || req.body.phoneNumber;
+        const price = safeParse(req.body.price) || req.body.price;
+        const joinPopupBlocked = safeParse(req.body.joinPopupBlocked) || req.body.joinPopupBlocked;
+
+        if (username && checkTitleNameInvalid('Username', username)) {
             throw new Error(checkTitleNameInvalid('Username', username))
         }
 
@@ -577,29 +845,53 @@ const updateProfile = async (req: any, res: Response) => {
         if (image) {
             updates.image = image
         }
-        if (services) {
-            updates.services = services
+        if (services && Array.isArray(services)) {
+            let _services = [];
+            for (let i = 0; i < services.length; i++) {
+                const serviceValue = typeof services[i] === 'string' ? services[i] : services[i].value;
+                if (!serviceValue) continue;
+
+                const existingService = await Service.findOne({ value: { $regex: new RegExp(`^${serviceValue}`, 'i') } });
+                if (existingService) {
+                    _services.push(existingService._id);
+                } else {
+                    const newService = await Service.create({ value: serviceValue, label: serviceValue });
+                    _services.push(newService._id);
+                }
+            }
+            updates.services = _services;
         }
+
         if (price) {
             updates.price = price
         }
-        if (keywords) {
-            let _keywords = []
+        
+        const file = req.file
+        if (file) {
+            // If they had an old resume, delete it
+            const me = await User.findOne({ email: email });
+            if (me && me.resume) {
+                const oldKey = me.resume.replace(`https://${process.env.DO_SPACES_BUCKET}.${process.env.DO_SPACES_ENDPOINT.replace('https://', '')}/`, '');
+                deleteFileFromS3(oldKey);
+            }
+            updates.resume = await uploadFileToS3(file, 'resumes');
+        }
+
+        if (keywords && Array.isArray(keywords)) {
+            let _keywords = [];
             for (let i = 0; i < keywords.length; i++) {
-                if (keywords[i].new) {
-                    const sameKeywordExist = await Keyword.find({ value: keywords[i].value })
-                    if (sameKeywordExist.length) {
-                        _keywords.push(sameKeywordExist[0]._id)
-                    } else {
-                        const temp = new Keyword(keywords[i])
-                        const newKeyword = await temp.save()
-                        _keywords.push(newKeyword._id)
-                    }
+                const keywordValue = typeof keywords[i] === 'string' ? keywords[i] : keywords[i].value;
+                if (!keywordValue) continue;
+
+                const existingKeyword = await Keyword.findOne({ value: { $regex: new RegExp(`^${keywordValue}$`, 'i') } });
+                if (existingKeyword) {
+                    _keywords.push(existingKeyword._id);
                 } else {
-                    _keywords.push(keywords[i]._id)
+                    const newKeyword = await Keyword.create({ value: keywordValue, label: keywordValue });
+                    _keywords.push(newKeyword._id);
                 }
             }
-            updates.keywords = keywords
+            updates.keywords = _keywords;
         }
         if (country) {
             updates.country = country
@@ -615,6 +907,13 @@ const updateProfile = async (req: any, res: Response) => {
         }
         if (joinPopupBlocked) {
             updates.joinPopupBlocked = joinPopupBlocked
+        }
+        if (req.body.specialNote !== undefined && req.body.specialNote !== null) {
+            const raw =
+                typeof req.body.specialNote === 'string'
+                    ? req.body.specialNote
+                    : String(req.body.specialNote);
+            updates.specialNote = raw.slice(0, 5000);
         }
         // [User Model] -- add more updating fields based on the user model
         await User.findOneAndUpdate({ email: email }, updates, { new: true })
@@ -763,11 +1062,11 @@ const leaveFeedback = async (req: any, res: Response) => {
 
         let userRating = 0
         for (let i = 0; i < otherUser.feedbacks.length; i++) {
-            console.log(otherUser.feedbacks[i])
+
             userRating += otherUser.feedbacks[i].rating
         }
         userRating = parseFloat((rating / otherUser.feedbacks.length).toFixed(2))
-        console.log(userRating)
+
         otherUser.rating = userRating
 
         await otherUser.save()
@@ -783,7 +1082,6 @@ const leaveFeedback = async (req: any, res: Response) => {
 const getTimeZone = async (req: Request, res: Response) => {
     const { lat, lng } = req.query
     const apiKey = process.env.TIMEZONE_API_KEY;
-    console.log("inside gettimezone", req.body)
     try {
         const response = await fetch(`https://api.timezonedb.com/v2.1/get-time-zone?key=${apiKey}&format=json&by=position&lat=${lat}&lng=${lng}`, {
             method: "GET",
@@ -800,8 +1098,7 @@ const getTimeZone = async (req: Request, res: Response) => {
 
         const data = await response.json();
         if (data.status === 'OK') {
-            console.log('Time Zone:', data.zoneName);
-            console.log('Local Time:', data.formatted);
+
         } else {
             console.error('Error:', data.message);
         }
@@ -892,8 +1189,23 @@ const sendEmailToAdmin = async (req: Request, res: Response) => {
     }
 };
 
+const logout = async (req: Request, res: Response) => {
+    try {
+        res.clearCookie('accessToken', {
+            httpOnly: true,
+            path: '/'
+        });
+        return res.status(200).json({
+            status: "SUCCESS"
+        });
+    } catch (err) {
+        return res.status(500).send("Internal Server Error");
+    }
+}
+
 module.exports = {
     login,
+    logout,
     register,
     getMe,
     updateMissedChats,
@@ -903,8 +1215,10 @@ module.exports = {
     leaveFeedback,
     resendConfirmEmail,
     verifyRegistration,
+    checkVerificationStatus,
     confirmLoginByCode,
     passwordResetRequest,
+    verifyPasswordResetOTP,
     confirmPasswordResetByCode,
     updateResume,
     uploadChatFile,

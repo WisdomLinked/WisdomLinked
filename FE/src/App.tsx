@@ -19,6 +19,8 @@ import ForgotPassword from './pages/ForgotPassword';
 import { VideoChatProvider } from './components/VideoChat/VideoChatContext';
 
 // Lazy-loaded pages — only downloaded when the user navigates to them
+const StudentDashboard = React.lazy(() => import('./pages/StudentDashboard'));
+const ExpertDashboard = React.lazy(() => import('./pages/ExpertDashboard'));
 const WLLogin = React.lazy(() => import('./pages/WLLogin'));
 const WLCustomerRegister = React.lazy(() => import('./pages/WLCustomerRegister'));
 const WLExpertRegister = React.lazy(() => import('./pages/WLExpertRegister'));
@@ -28,9 +30,10 @@ const Rules = React.lazy(() => import('./pages/Ruels'));
 const Services = React.lazy(() => import('./pages/Services'));
 const ContactUS = React.lazy(() => import('./pages/ContactUS'));
 const OAuthCallback = React.lazy(() => import('./pages/OAuthCallback'));
+const WLProfileCompletion = React.lazy(() => import('./pages/WLProfileCompletion'));
 
 // Heavy dashboard chunks — MUI, calendars, quill, etc. only load after login
-const ExpertDashboard = React.lazy(() => import('./pages/Dashboard/_ExpertDashboard'));
+const LegacyExpertDashboard = React.lazy(() => import('./pages/Dashboard/_ExpertDashboard'));
 const CustomerDashboard = React.lazy(() => import('./pages/Dashboard/_CustomerDashboard'));
 const AdminDashboard = React.lazy(() => import('./pages/Dashboard/_AdminDashboard'));
 
@@ -47,6 +50,7 @@ const UnauthenticatedRoutes = () => {
     <React.Fragment>
       <Routes>
         <Route path="/oauth-callback" element={<OAuthCallback />} />
+        <Route path="/auth-complete-profile" element={<WLProfileCompletion />} />
         <Route path="/customerregister" element={<WLCustomerRegister />} />
         <Route path="/expertregister" element={<WLExpertRegister />} />
         <Route path="/forgotpassword" element={<ForgotPassword />} />
@@ -93,6 +97,16 @@ const AuthenticatedRoutes = () => {
       <Route path={'expertdashboard/*'} element={
         <PrivateRoute>
           <ExpertDashboard />
+        </PrivateRoute>
+      } />
+      <Route path={'expertdashboard-legacy/*'} element={
+        <PrivateRoute>
+          <LegacyExpertDashboard />
+        </PrivateRoute>
+      } />
+      <Route path={'studentdashboard/*'} element={
+        <PrivateRoute>
+          <StudentDashboard />
         </PrivateRoute>
       } />
       <Route path={'customerdashboard/*'} element={
@@ -177,6 +191,18 @@ function App() {
   useEffect(() => {
     if (!oldUserDetails && userDetails?.email) {
       set_oldUserDetails(userDetails)
+      
+      const path = window.location.pathname;
+      const search = window.location.search;
+      if (
+        path.includes('/oauth-callback') || 
+        path.includes('/verification/') || 
+        path.includes('/auth-complete-profile') ||
+        (path.includes('/login') && search.includes('error='))
+      ) {
+        return;
+      }
+
       let locationUrl = ''
       const location = localStorage.getItem("location")
       if (location !== 'login' && location !== 'expertregister' && location !== 'customerregister') {
@@ -189,7 +215,11 @@ function App() {
       if (locationUrl) {
         navigate(locationUrl)
       } else {
-        navigate('/user/' + userDetails?.role + "dashboard")
+        if (userDetails?.role === 'customer') {
+          navigate('/user/studentdashboard')
+        } else {
+          navigate('/user/' + userDetails?.role + "dashboard")
+        }
       }
     }
   }, [userDetails, navigate])

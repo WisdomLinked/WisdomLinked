@@ -17,6 +17,8 @@ export default function OAuthCallback() {
             return;
         }
 
+        const needsProfile = searchParams.get('needsProfile') === 'true';
+
         // Set the accessToken cookie on the frontend domain
         // (the backend cookie may not persist across redirect in some setups)
         document.cookie = `accessToken=${token}; path=/; max-age=86400`;
@@ -28,7 +30,13 @@ export default function OAuthCallback() {
         const doLogin = async () => {
             await dispatch(autoLogin() as any);
             dispatch({ type: 'SetLoadingStatus', payload: false });
-            navigate(`/user/${role}dashboard`, { replace: true });
+
+            if (needsProfile) {
+                navigate('/auth-complete-profile', { replace: true });
+            } else {
+                const dashboardPath = role === 'customer' ? '/user/studentdashboard' : `/user/${role}dashboard`;
+                navigate(dashboardPath, { replace: true });
+            }
         };
         doLogin();
     }, []);

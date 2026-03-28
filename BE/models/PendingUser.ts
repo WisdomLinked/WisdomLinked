@@ -27,6 +27,8 @@ const pendingUserSchema = new mongoose.Schema(
         status: { type: String, default: 'review' },
 
         confirmCode: { type: String },
+        failedAttempts: { type: Number, default: 0 },
+        lockUntil: { type: Date },
         password: { type: String, required: [true, "can't be blank"] },
 
         // EXPERT -------------
@@ -41,5 +43,8 @@ const pendingUserSchema = new mongoose.Schema(
     },
     { timestamps: true }
 );
+
+// TTL index to automatically delete documents 24 hours (86400 seconds) after createdAt
+pendingUserSchema.index({ createdAt: 1 }, { expireAfterSeconds: 86400 });
 
 module.exports = mongoose.model("PendingUser", pendingUserSchema);
