@@ -9,6 +9,56 @@ const Keyword = require("../models/Keyword");
 const ContactedUs = require("../models/ContactedUs");
 const PendingUser = require("../models/PendingUser");
 const PendingLogin = require("../models/PendingLogin");
+const chatBotQA = require("../models/chatBotQA");
+
+function startOfDayLocal(d: Date) {
+    const x = new Date(d);
+    x.setHours(0, 0, 0, 0);
+    return x;
+}
+
+function endOfDayLocal(d: Date) {
+    const x = new Date(d);
+    x.setHours(23, 59, 59, 999);
+    return x;
+}
+
+/** Overlap calendar day & not yet ended (still “upcoming” for today). */
+function buildTodayUpcomingTimeFilter() {
+    const now = new Date();
+    const sod = startOfDayLocal(now);
+    const eod = endOfDayLocal(now);
+    return {
+        $and: [{ start: { $lte: eod } }, { end: { $gte: sod } }, { end: { $gte: now } }],
+    };
+}
+
+function buildScopeTimeFilter(scope: string) {
+    const now = new Date();
+    const sod = startOfDayLocal(now);
+    const eod = endOfDayLocal(now);
+    if (scope === "today") {
+        return buildTodayUpcomingTimeFilter();
+    }
+    if (scope === "upcoming") {
+        return { end: { $gte: now } };
+    }
+    if (scope === "past") {
+        return { end: { $lt: now } };
+    }
+    return null;
+}
+
+async function countTodayUpcomingEvents() {
+    const q = buildTodayUpcomingTimeFilter();
+    const [e, g] = await Promise.all([
+        Event.countDocuments(q),
+        GroupChat.countDocuments({
+            $and: [q, { type: { $in: ["seminar", "individual"] } }],
+        }),
+    ]);
+    return e + g;
+}
 const sgMail = require("@sendgrid/mail");
 const adminEmail = "admin@wisdomlinked.com";
 sgMail.setApiKey(process.env.SENDGRID_API_KEY);
@@ -517,6 +567,152 @@ const sendEmailToUser = async (req, res) => {
     }
 };
 
+const getDashboardStats = async (req: Request, res: Response) => {
+    try {
+        const [
+            pendingUsersCount,
+            pendingLoginsCount,
+            unactionedContacts,
+            unansweredChatbot,
+            expertCount,
+            customerCount,
+            oneOnOneSessions,
+            seminarsHeld,
+            totalPaymentRecords,
+            refundRecords,
+            todayUpcomingEvents,
+        ] = await Promise.all([
+            PendingUser.countDocuments(),
+            PendingLogin.countDocuments(),
+            ContactedUs.countDocuments({ actioned: "No" }),
+            chatBotQA.countDocuments({
+                $or: [
+                    { answer: { $exists: false } },
+                    { answer: "" },
+                    { answer: "Pending answer..." },
+                ],
+            }),
+            User.countDocuments({ role: "expert" }),
+            User.countDocuments({ role: "customer" }),
+            Event.countDocuments(),
+            GroupChat.countDocuments({ type: "seminar" }),
+            PaymentHistory.countDocuments({ paymentType: { $ne: "refund" } }),
+            PaymentHistory.countDocuments({ paymentType: "refund" }),
+            countTodayUpcomingEvents(),
+        ]);
+
+        return res.status(200).json({
+            status: "SUCCESS",
+            data: {
+                pendingApprovals: pendingUsersCount + pendingLoginsCount,
+                newContactMessages: unactionedContacts,
+                unansweredChatbotQuestions: unansweredChatbot,
+                expertCount,
+                customerCount,
+                oneOnOneSessions,
+                seminarsHeld,
+                totalPayments: totalPaymentRecords,
+                refundCount: refundRecords,
+                todayUpcomingEvents,
+            },
+        });
+    } catch (err: any) {
+        console.error(err);
+        return res.status(500).json({ status: "FAILED", message: err?.message || "Server error" });
+    }
+};
+
+const getAdminPlatformEvents = async (req: Request, res: Response) => {
+    try {
+        const scope = (req.query.scope || "upcoming").toString();
+        const typesRaw = req.query.types;
+        const types = typesRaw
+            ? String(typesRaw)
+                  .split(",")
+                  .map((s) => s.trim())
+                  .filter(Boolean)
+            : ["event", "seminar", "oneToOne"];
+
+        const timeFilter = buildScopeTimeFilter(scope);
+        const sortOrder = scope === "past" ? -1 : 1;
+        const limit = scope === "all" ? 400 : 500;
+
+        const items: any[] = [];
+
+        const includeEvent = types.includes("event");
+        const includeSeminar = types.includes("seminar");
+        const includeOneToOne = types.includes("oneToOne");
+
+        if (includeEvent) {
+            const q = timeFilter || {};
+            const events = await Event.find(q)
+                .populate("expert", "username email")
+                .populate("customer", "username email")
+                .sort({ start: sortOrder })
+                .limit(limit);
+            for (const ev of events) {
+                items.push({
+                    kind: "booking",
+                    id: String(ev._id),
+                    title: ev.title || "1:1 booking",
+                    start: ev.start,
+                    end: ev.end,
+                    status: ev.status,
+                    expert: ev.expert
+                        ? { username: ev.expert.username, email: ev.expert.email }
+                        : null,
+                    customer: ev.customer
+                        ? { username: ev.customer.username, email: ev.customer.email }
+                        : null,
+                });
+            }
+        }
+
+        const gcTypes: string[] = [];
+        if (includeSeminar) gcTypes.push("seminar");
+        if (includeOneToOne) gcTypes.push("individual");
+
+        if (gcTypes.length) {
+            const gcQuery = timeFilter
+                ? { $and: [timeFilter, { type: { $in: gcTypes } }] }
+                : { type: { $in: gcTypes } };
+            const gcs = await GroupChat.find(gcQuery)
+                .populate("createdBy", "username email")
+                .populate("admin", "username email")
+                .sort({ start: sortOrder })
+                .limit(limit);
+            for (const g of gcs) {
+                const isSeminar = g.type === "seminar";
+                const adminUser = g.admin || g.createdBy;
+                items.push({
+                    kind: isSeminar ? "seminar" : "groupOneToOne",
+                    id: String(g._id),
+                    title: isSeminar ? `(S) ${g.name || "Seminar"}` : g.name || "1:1 session",
+                    start: g.start,
+                    end: g.end,
+                    status: g.status,
+                    expert: adminUser
+                        ? { username: adminUser.username, email: adminUser.email }
+                        : null,
+                    customer: null,
+                    groupChatType: g.type,
+                });
+            }
+        }
+
+        items.sort((a, b) => {
+            const ta = new Date(a.start).getTime();
+            const tb = new Date(b.start).getTime();
+            return sortOrder === 1 ? ta - tb : tb - ta;
+        });
+
+        return res.status(200).json({ status: "SUCCESS", items });
+    } catch (err: any) {
+        console.error(err);
+        return res.status(500).json({ status: "FAILED", message: err?.message || "Server error" });
+    }
+};
+
 const getPendingUsers = async (req, res) => {
     try {
         const pendingUsers = await PendingUser.find();
@@ -705,6 +901,8 @@ module.exports = {
     toggleActionedStatus,
     sendEmailToUser,
     sendWelcomeEmail,
+    getDashboardStats,
+    getAdminPlatformEvents,
     getPendingUsers,
     getPendingLogins,
     deletePendingUser,

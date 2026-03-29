@@ -889,6 +889,60 @@ export const doGetExpertPaymentHistory = async () => {
 };
 
 // ADMIN APIS ------------------
+
+export type AdminDashboardStatsData = {
+    pendingApprovals: number;
+    newContactMessages: number;
+    unansweredChatbotQuestions: number;
+    expertCount: number;
+    customerCount: number;
+    oneOnOneSessions: number;
+    seminarsHeld: number;
+    totalPayments: number;
+    refundCount: number;
+    todayUpcomingEvents: number;
+};
+
+export type AdminPlatformEventItem = {
+    kind: "booking" | "seminar" | "groupOneToOne";
+    id: string;
+    title: string;
+    start: string;
+    end: string;
+    status?: string;
+    expert: { username?: string; email?: string } | null;
+    customer: { username?: string; email?: string } | null;
+    groupChatType?: string;
+};
+
+export const doGetAdminDashboardStats = async (): Promise<{
+    status: string;
+    data?: AdminDashboardStatsData;
+} | null> => {
+    try {
+        const res = await api.get("admin/dashboardStats");
+        return res.data;
+    } catch (err: any) {
+        return checkForAuthorization(err);
+    }
+};
+
+export const doGetAdminPlatformEvents = async (params: {
+    scope?: "today" | "upcoming" | "past" | "all";
+    types?: string[];
+}) => {
+    try {
+        const search = new URLSearchParams();
+        if (params.scope) search.set("scope", params.scope);
+        if (params.types?.length) search.set("types", params.types.join(","));
+        const q = search.toString();
+        const res = await api.get(`admin/platformEvents${q ? `?${q}` : ""}`);
+        return res.data as { status: string; items: AdminPlatformEventItem[] };
+    } catch (err: any) {
+        return checkForAuthorization(err);
+    }
+};
+
 export const doFilterUsers = async (filter: any) => {
     try {
         const res = await api.post("admin/filterUsers", filter);

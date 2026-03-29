@@ -35,7 +35,7 @@ const WLProfileCompletion = React.lazy(() => import('./pages/WLProfileCompletion
 // Heavy dashboard chunks — MUI, calendars, quill, etc. only load after login
 const LegacyExpertDashboard = React.lazy(() => import('./pages/Dashboard/_ExpertDashboard'));
 const CustomerDashboard = React.lazy(() => import('./pages/Dashboard/_CustomerDashboard'));
-const AdminDashboard = React.lazy(() => import('./pages/Dashboard/_AdminDashboard'));
+const AdminDashboard = React.lazy(() => import('./pages/AdminDashboard'));
 
 // Suspense fallback
 const LazyFallback = () => (

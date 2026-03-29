@@ -170,7 +170,7 @@ export default function StudentDashboard() {
             onSettingsClick={() => setActiveItem('settings')}
           />
           {activeItem === 'chat' ? (
-            <div className="h-[calc(100vh-56px)]">
+            <div className="h-[calc(100vh-56px)] bg-wl-chatGold">
               <StudentChat />
             </div>
           ) : activeItem === 'profile' ? (

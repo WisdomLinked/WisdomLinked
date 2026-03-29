@@ -140,7 +140,7 @@ const StudentChat: React.FC = () => {
   };
 
   return (
-    <div className="flex h-full bg-[#F5F3EF] text-slate-900">
+    <div className="flex h-full bg-wl-chatGold text-slate-900">
       {/* Left: chat list */}
       <aside className="hidden md:flex md:w-80 lg:w-96 flex-col border-r border-slate-200 bg-white">
         <div className="px-4 pt-4 pb-3 border-b border-slate-200">
@@ -261,7 +261,7 @@ const StudentChat: React.FC = () => {
       </aside>
 
       {/* Right: chat window */}
-      <section className="flex-1 flex flex-col bg-[#F5F3EF]">
+      <section className="flex flex-1 flex-col bg-wl-chatGold">
         <header className="flex items-center justify-between border-b border-slate-200 px-4 py-3 bg-white">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">

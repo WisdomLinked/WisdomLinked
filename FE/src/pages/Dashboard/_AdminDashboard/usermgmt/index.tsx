@@ -264,8 +264,8 @@ const UserMgmt = () => {
     return (
         <div className="relative w-full h-full">
             <div className={`w-full h-full py-10 px-5 ${manageModalShow || auditModalShow ? "overflow-hidden" : "overflow-y-auto"}`}>
-                <div className="w-full max-w-[1400px] mx-auto text-white">
-                    <div className="text-center text-2xl">User Management</div>
+                <div className="w-full max-w-[1400px] mx-auto text-wl-ink">
+                    <div className="text-center text-2xl font-semibold text-wl-brand">User Management</div>
 
                     <div className="w-full my-4">
                         <div className="text-grey mb-0.5 text-[12px] leading-[19px]">Manage:</div>
@@ -284,7 +284,7 @@ const UserMgmt = () => {
                                 <div className="w-[calc(100%-174px)] sm:w-[calc(100%-324px)]">
                                     <div className="text-grey mb-0.5 text-[12px] leading-[19px]">Filter by email</div>
                                     <input
-                                        className="w-full rounded-[15px] h-[50px] bg-transparent border border-lightgrey text-[14px] leading-[21px] px-[24px]"
+                                        className="w-full rounded-[15px] h-[50px] bg-wl-card border border-lightgrey text-[14px] leading-[21px] px-[24px] text-wl-ink placeholder:text-grey"
                                         placeholder="Input email"
                                         value={email}
                                         onChange={(e) => set_email(e.target.value)}
@@ -305,7 +305,7 @@ const UserMgmt = () => {
                                 <div className="w-[calc(100%-174px)] sm:w-[calc(100%-324px)]">
                                     <div className="text-grey mb-0.5 text-[12px] leading-[19px]">Filter by username</div>
                                     <input
-                                        className="w-full rounded-[15px] h-[50px] bg-transparent border border-lightgrey text-[14px] leading-[21px] px-[24px]"
+                                        className="w-full rounded-[15px] h-[50px] bg-wl-card border border-lightgrey text-[14px] leading-[21px] px-[24px] text-wl-ink placeholder:text-grey"
                                         placeholder="Input username"
                                         value={username}
                                         onChange={(e) => set_username(e.target.value)}
@@ -325,7 +325,7 @@ const UserMgmt = () => {
                         </div>
                     )}
 
-                    <div className="w-full rounded-[16px] mt-4 bg-midgrey shadow-md">
+                    <div className="w-full rounded-2xl mt-4 bg-wl-card border border-wl-line shadow-sm overflow-hidden">
 
                         {dataType.value === "User" && (
                             <div className="w-full flex flex-col sm:flex-row sm:justify-between sm:items-center p-4 gap-4">
@@ -344,7 +344,7 @@ const UserMgmt = () => {
                         {dataType.value === "User" && (
                             <div className="relative overflow-x-auto w-full px-4">
                                 <table className="w-full text-sm text-left">
-                                    <thead className="text-xs uppercase bg-darkgrey">
+                                    <thead className="text-xs uppercase bg-wl-brandSoft text-wl-brand">
                                     <tr>
                                         <th className="px-6 py-3 text-center">No</th>
                                         <th className="px-6 py-3 text-center">Avatar</th>
@@ -363,7 +363,7 @@ const UserMgmt = () => {
                                     </thead>
                                     <tbody>
                                     {users.map((u, idx) => (
-                                        <tr key={idx} className="border-b border-grey hover:bg-midgrey">
+                                        <tr key={idx} className="border-b border-wl-line hover:bg-wl-pageAlt text-wl-ink">
                                             <td className="py-2 px-2 text-center">
                                                 {numPerPage * currentPage + idx + 1}
                                             </td>
@@ -375,7 +375,7 @@ const UserMgmt = () => {
                                             <td className="text-center px-2">{u.title}</td>
                                             <td
                                                 className={`px-2 text-center uppercase text-sm ${
-                                                    u.role === "expert" ? "text-brownyellow" : "text-lightgrey"
+                                                    u.role === "expert" ? "text-brownyellow" : "text-wl-brand"
                                                 }`}
                                             >
                                                 {u.role}
@@ -390,7 +390,7 @@ const UserMgmt = () => {
                                                         href={`${process.env.REACT_APP_SERVER_URL}/${u.resume}`}
                                                         target="_blank"
                                                         rel="noreferrer"
-                                                        className="text-blue underline"
+                                                        className="text-wl-brand underline font-medium hover:brightness-95"
                                                     >
                                                         resume
                                                     </a>
@@ -398,9 +398,9 @@ const UserMgmt = () => {
                                             </td>
                                             <td>
                                                 <select
-                                                    className={`bg-darkgrey-1 border rounded-md border-grey px-2 outline-none ${
+                                                    className={`bg-wl-card border rounded-lg border-wl-line text-wl-ink px-2 py-1 text-[13px] outline-none focus:ring-2 focus:ring-wl-brand/20 ${
                                                         u.status === "active"
-                                                            ? "text-green"
+                                                            ? "text-wl-brand font-medium"
                                                             : u.status === "blocked"
                                                                 ? "text-red"
                                                                 : "text-brownyellow"
@@ -413,21 +413,23 @@ const UserMgmt = () => {
                                                         })
                                                     }
                                                 >
-                                                    <option value="active" className="text-green">Active</option>
+                                                    <option value="active" className="text-wl-brand">Active</option>
                                                     <option value="review" className="text-brownyellow">Review</option>
                                                     <option value="blocked" className="text-red">Blocked</option>
                                                 </select>
                                             </td>
                                             <td className="px-2 max-w-[200px] truncate">
-                                                <div className="flex gap-2">
+                                                <div className="flex flex-wrap gap-2">
                                                     <button
-                                                        className="px-3 py-1 border border-green rounded-md bg-green hover:text-green hover:bg-transparent"
+                                                        type="button"
+                                                        className="inline-flex items-center rounded-lg bg-wl-brand px-3 py-1.5 text-[12px] font-semibold text-white shadow-sm transition hover:brightness-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-wl-brand/30"
                                                         onClick={() => openManageModal(u)}
                                                     >
                                                         Manage
                                                     </button>
                                                     <button
-                                                        className="px-3 py-1 border rounded-md border-lightgrey hover:bg-lightgrey hover:text-black"
+                                                        type="button"
+                                                        className="inline-flex items-center rounded-lg border border-wl-line bg-white px-3 py-1.5 text-[12px] font-semibold text-wl-brand shadow-sm transition hover:bg-wl-brandSoft focus:outline-none focus-visible:ring-2 focus-visible:ring-wl-brand/20"
                                                         onClick={() => openAuditModal(u)}
                                                     >
                                                         Audit
@@ -444,7 +446,7 @@ const UserMgmt = () => {
                         {dataType.value === "PendingUser" && (
                             <div className="relative overflow-x-auto w-full px-4">
                                 <table className="w-full text-sm text-left">
-                                    <thead className="text-xs uppercase bg-darkgrey">
+                                    <thead className="text-xs uppercase bg-wl-brandSoft text-wl-brand">
                                     <tr>
                                         <th className="px-6 py-3 text-center">No</th>
                                         <th className="px-6 py-3 text-center">Email</th>
@@ -455,21 +457,23 @@ const UserMgmt = () => {
                                     </thead>
                                     <tbody>
                                     {pendingUsers.map((p, idx) => (
-                                        <tr key={idx} className="border-b border-grey hover:bg-midgrey">
+                                        <tr key={idx} className="border-b border-wl-line hover:bg-wl-pageAlt text-wl-ink">
                                             <td className="py-2 px-2 text-center">{idx + 1}</td>
                                             <td className="text-center px-2">{p.email}</td>
                                             <td className="text-center px-2">{p.username}</td>
                                             <td className="text-center px-2">{p.role}</td>
                                             <td className="px-2">
-                                                <div className="flex gap-2 justify-center">
+                                                <div className="flex flex-wrap gap-2 justify-center">
                                                     <button
-                                                        className="px-3 py-1 border border-green rounded-md bg-green hover:text-green hover:bg-transparent"
+                                                        type="button"
+                                                        className="inline-flex items-center rounded-lg bg-wl-brand px-3 py-1.5 text-[12px] font-semibold text-white shadow-sm transition hover:brightness-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-wl-brand/30"
                                                         onClick={() => handleActivatePendingUser(p._id)}
                                                     >
                                                         Activate
                                                     </button>
                                                     <button
-                                                        className="px-3 py-1 border border-red-500 text-red-500 rounded-md hover:bg-red-500 hover:text-white"
+                                                        type="button"
+                                                        className="inline-flex items-center rounded-lg border border-red-500/80 bg-white px-3 py-1.5 text-[12px] font-semibold text-red-600 transition hover:bg-red-500 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-red-400/40"
                                                         onClick={() => handleDeletePendingUser(p._id)}
                                                     >
                                                         Delete
@@ -486,7 +490,7 @@ const UserMgmt = () => {
                         {dataType.value === "PendingLogin" && (
                             <div className="relative overflow-x-auto w-full px-4">
                                 <table className="w-full text-sm text-left">
-                                    <thead className="text-xs uppercase bg-darkgrey">
+                                    <thead className="text-xs uppercase bg-wl-brandSoft text-wl-brand">
                                     <tr>
                                         <th className="px-6 py-3 text-center">No</th>
                                         <th className="px-6 py-3 text-center">Email</th>
@@ -496,14 +500,15 @@ const UserMgmt = () => {
                                     </thead>
                                     <tbody>
                                     {pendingLogins.map((p, idx) => (
-                                        <tr key={idx} className="border-b border-grey hover:bg-midgrey">
+                                        <tr key={idx} className="border-b border-wl-line hover:bg-wl-pageAlt text-wl-ink">
                                             <td className="py-2 px-2 text-center">{idx + 1}</td>
                                             <td className="text-center px-2">{p.email}</td>
                                             <td className="text-center px-2">{p.code}</td>
                                             <td className="px-2">
-                                                <div className="flex gap-2 justify-center">
+                                                <div className="flex flex-wrap gap-2 justify-center">
                                                     <button
-                                                        className="px-3 py-1 border border-red-500 text-red-500 rounded-md hover:bg-red-500 hover:text-white"
+                                                        type="button"
+                                                        className="inline-flex items-center rounded-lg border border-red-500/80 bg-white px-3 py-1.5 text-[12px] font-semibold text-red-600 transition hover:bg-red-500 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-red-400/40"
                                                         onClick={() => handleDeletePendingLogin(p._id)}
                                                     >
                                                         Delete
@@ -522,7 +527,7 @@ const UserMgmt = () => {
                                 <div className="flex gap-6">
                                     <div>Show rows:</div>
                                     <select
-                                        className="bg-darkgrey-1 text-white border rounded-md border-grey px-2 outline-none"
+                                        className="bg-wl-card text-wl-ink border rounded-md border-wl-line px-2 outline-none"
                                         value={numPerPage}
                                         onChange={(e) => set_numPerPage(Number(e.target.value))}
                                     >

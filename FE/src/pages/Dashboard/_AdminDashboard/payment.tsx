@@ -66,6 +66,12 @@ const Payment = () => {
             label: "Refunded"
         }
     ]
+    const pageSizeOptions = [
+        { value: 5, label: "5" },
+        { value: 10, label: "10" },
+        { value: 25, label: "25" },
+        { value: 50, label: "50" },
+    ]
     const [stripeMode, set_stripeMode] = useState('test');
     const [email, set_email] = useState('');
     const [selectedMode, set_selectedMode] = useState(modes[0]);
@@ -77,7 +83,7 @@ const Payment = () => {
     });
     const [datePickerShow, set_datePickerShow] = useState(false);
 
-    const [numPerPage, set_numPerPage] = useState<any>(5)
+    const [numPerPage, set_numPerPage] = useState(5)
     const [currentPage, set_currentPage] = useState(0)
     const [totalCount, set_totalCount] = useState(-1)
     const [totalPage, set_totalPage] = useState(0)
@@ -373,21 +379,21 @@ const Payment = () => {
     };
 
     return (
-        <div className="w-full h-full pt-10 overflow-y-auto text-white px-[18px]">
-            <div className="w-full max-w-[1500px] mx-auto text-white">
-                <div className="text-center text-2xl">Payment Management</div>
+        <div className="w-full h-full pt-10 overflow-y-auto text-wl-ink px-[18px]">
+            <div className="w-full max-w-[1500px] mx-auto text-wl-ink">
+                <div className="text-center text-2xl font-semibold text-wl-brand">Payment Management</div>
                 <div className="flex items-center justify-center space-x-6 mt-6">
-                    <div>Toggle Stripe Mode</div>
-                    <div className="rounded-full border border-white overflow-clip">
+                    <div className="text-wl-muted">Toggle Stripe Mode</div>
+                    <div className="rounded-full border border-wl-line overflow-hidden bg-wl-card shadow-sm">
                         <button
-                            className={`w-16 h-8 ${stripeMode === 'test' ? 'bg-white text-black' : ''} hover:bg-grey`}
+                            className={`w-16 h-8 text-sm font-medium ${stripeMode === 'test' ? 'bg-wl-brand text-white' : 'text-wl-muted hover:bg-wl-pageAlt'}`}
                             disabled={stripeMode === 'test'}
                             onClick={() => updateStripeMode('test')}
                         >
                             Test
                         </button>
                         <button
-                            className={`w-16 h-8 ${stripeMode === 'live' ? 'bg-white text-black' : ''} hover:bg-grey`}
+                            className={`w-16 h-8 text-sm font-medium ${stripeMode === 'live' ? 'bg-wl-brand text-white' : 'text-wl-muted hover:bg-wl-pageAlt'}`}
                             disabled={stripeMode === 'live'}
                             onClick={() => updateStripeMode('live')}
                         >
@@ -400,7 +406,7 @@ const Payment = () => {
                         <div className="w-[calc(100%-174px)] sm:w-[calc(100%-324px)]">
                             <div className="text-grey mb-0.5 text-[12px] leading-[19px]">Filter by email</div>
                             <input
-                                className="w-full rounded-[15px] h-[50px] bg-transparent border border-lightgrey text-[14px] leading-[21px] px-[24px]"
+                                className="w-full rounded-[15px] h-[50px] bg-white border border-lightgrey text-[14px] leading-[21px] px-[24px] text-wl-ink placeholder:text-grey"
                                 placeholder="Input email"
                                 value={email}
                                 onChange={(e) => set_email(e.target.value)}
@@ -443,9 +449,9 @@ const Payment = () => {
                         <div className="w-[calc(100%-174px)] sm:w-[calc(100%-324px)] relative">
                             <div className="text-grey mb-0.5 text-[12px] leading-[19px]">Time periods</div>
                             <div
-                                className={`w-full rounded-[15px] h-[50px] bg-transparent border border-lightgrey text-[14px] leading-[21px] px-[24px] flex items-center justify-between cursor-pointer ${dateRange.dateFrom && dateRange.dateTo
-                                    ? 'text-white'
-                                    : 'text-white/50 hover:text-white'
+                                className={`w-full rounded-[15px] h-[50px] bg-white border border-lightgrey text-[14px] leading-[21px] px-[24px] flex items-center justify-between cursor-pointer ${dateRange.dateFrom && dateRange.dateTo
+                                    ? 'text-wl-ink'
+                                    : 'text-wl-muted hover:text-wl-ink'
                                     }`}
                                 onClick={() => set_datePickerShow(!datePickerShow)}
                             >
@@ -515,10 +521,10 @@ const Payment = () => {
                         </div>
                     </div>
                 </div>
-                <div className="w-full rounded-[16px]">
-                    <div className="w-full flex flex-col sm:flex-row sm:justify-between sm:items-center p-4 gap-4">
+                <div className="w-full rounded-2xl border border-wl-line bg-wl-card shadow-sm overflow-hidden mt-4">
+                    <div className="w-full flex flex-col sm:flex-row sm:justify-between sm:items-center p-4 gap-4 border-b border-wl-line bg-wl-pageAlt/50">
                         <div>
-                            <div className="">Total of {totalCount} histories</div>
+                            <div className="text-wl-ink font-medium">Total of {totalCount} histories</div>
                         </div>
                         <Pagination
                             currentPage={currentPage}
@@ -534,7 +540,7 @@ const Payment = () => {
                     <div className="flex justify-end px-4 mb-4">
                         <button
                             onClick={handleAdHocPaymentClick}
-                            className="bg-blue hover:bg-blue/60 text-white px-6 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2"
+                            className="bg-wl-brand hover:brightness-95 text-white px-6 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2"
                             title="Send custom payment request to any customer"
                         >
                             Send Ad-hoc Payment
@@ -543,7 +549,7 @@ const Payment = () => {
                     
                     <div className="relative overflow-x-auto w-full px-4">
                         <table className="w-full text-sm text-left">
-                            <thead className="text-xs uppercase bg-darkgrey">
+                            <thead className="text-xs uppercase bg-wl-brandSoft text-wl-brand">
                                 <tr>
                                     <th scope="col" className="px-6 py-3 text-center">
                                         No
@@ -590,7 +596,7 @@ const Payment = () => {
                                 {
                                     histories.map((item, index) => {
                                         return (
-                                            <tr key={index} className="border-b border-grey hover:bg-midgrey">
+                                            <tr key={index} className="border-b border-wl-line hover:bg-wl-pageAlt text-wl-ink">
                                                 <td className='py-2 px-2 text-center'>{numPerPage * currentPage + index + 1}</td>
                                                 <td className='px-2'>{formatDateYYYY_MM_DD_h_m(new Date(item.createdAt))}</td>
                                                 <td className='text-center px-2'>{item.amount / 100}</td>
@@ -650,18 +656,17 @@ const Payment = () => {
                         </table>
                     </div>
                     <div className="w-full flex flex-col sm:flex-row sm:justify-between sm:items-center p-4 gap-4">
-                        <div className='flex gap-6'>
-                            <div className="">Show rows:</div>
-                            <select
-                                className='bg-black text-white border rounded-md border-midgrey px-2 outline-none'
-                                value={numPerPage}
-                                onChange={(e) => set_numPerPage(e.target.value)}
-                            >
-                                <option value={5}>5</option>
-                                <option value={10}>10</option>
-                                <option value={25}>25</option>
-                                <option value={50}>50</option>
-                            </select>
+                        <div className="w-full max-w-[200px]">
+                            <div className="text-grey mb-0.5 text-[12px] leading-[19px]">Show rows</div>
+                            <SelectionWithCheckBox
+                                options={pageSizeOptions}
+                                selectedOptions={
+                                    pageSizeOptions.find((o) => o.value === numPerPage) ?? pageSizeOptions[0]
+                                }
+                                set_selectedOptions={(opt: { value: number }) => set_numPerPage(opt.value)}
+                                placeholder="Rows per page"
+                                isMulti={false}
+                            />
                         </div>
                         <Pagination
                             currentPage={currentPage}

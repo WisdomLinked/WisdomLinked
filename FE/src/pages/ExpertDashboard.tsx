@@ -356,7 +356,7 @@ export default function ExpertDashboard() {
 
   const content =
     activeItem === 'chat' ? (
-      <div className="h-[calc(100vh-56px)] overflow-hidden bg-[#F5F3EF]">
+      <div className="h-[calc(100vh-56px)] overflow-hidden bg-wl-chatGold">
         <ModernChat videoChaton={!!(localStream || localStreamRoom)} />
       </div>
     ) : activeItem === 'clients' ? (
@@ -606,7 +606,7 @@ export default function ExpertDashboard() {
             onSettingsClick={() => setActiveItem('settings')}
           />
           {content}
-          <Chatbot />
+          {activeItem !== 'chat' ? <Chatbot /> : null}
 
           {/* Keep call UX working in the new layout */}
           <IncomingCall />

@@ -1,4 +1,4 @@
-import react, { useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import Select, { components } from "react-select";
 
 const InputOption = ({
@@ -45,7 +45,7 @@ const InputOption = ({
             getStyles={getStyles}
             innerProps={props}
         >
-            <span className="text-darkgrey">{children}</span>
+            <span className="text-wl-ink">{children}</span>
         </components.Option>
     );
 };
@@ -118,7 +118,8 @@ export default function MultiSelectionWithInputTag ({
 
     return (
         <Select
-            className="w-full rounded-[15px] min-h-[50px] mt-0.5 border text-inherit text-[14px] leading-[21px] py-[5px] border-lightgrey MultiSelection flex flex-col justify-center"
+            className="MultiSelection mt-0.5 flex w-full min-h-[50px] flex-col justify-center rounded-[15px] border-0 py-[5px] text-[14px] leading-[21px] text-wl-ink"
+            classNamePrefix="wl-select"
             value={selectedOptions}
             options={[...optionList]}
             placeholder={placeholder || "Select"}

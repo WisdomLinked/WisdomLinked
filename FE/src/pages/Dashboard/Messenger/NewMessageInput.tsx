@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
+import { Paperclip, Send } from "lucide-react";
 import { useAppSelector } from "../../../store";
 import { notifyTyping, sendDirectMessage, sendGroupMessage } from "../../../socket/socketConnection";
 import ReactQuill from 'react-quill'
@@ -8,6 +9,16 @@ import Picker from '@emoji-mart/react';
 import { callApi } from "../../../api/api";
 import { showAlert } from "../../../actions/alertActions";
 import { useDispatch } from "react-redux";
+
+function plainTextToMessageHtml(text: string): string {
+    const trimmed = text.trim();
+    if (!trimmed) return "";
+    const escaped = trimmed
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;");
+    return "<p>" + escaped.replace(/\n/g, "<br>") + "</p>";
+}
 
 const NewMessageInput: React.FC<any> = ({ theme = "dark" }: any) => {
     const [_message, set_message] = useState("");
@@ -45,6 +56,28 @@ const NewMessageInput: React.FC<any> = ({ theme = "dark" }: any) => {
         return temp2
     }
 
+    const dispatchOutgoingHtml = (message: string) => {
+        if (chosenChatDetails) {
+            sendDirectMessage({
+                message,
+                receiverUserId: chosenChatDetails.userId!,
+            });
+        }
+        if (chosenGroupChatDetails) {
+            sendGroupMessage({
+                message,
+                groupChatId: chosenGroupChatDetails.groupId,
+            });
+        }
+        set_message("");
+    };
+
+    const sendPlainMessage = () => {
+        const html = plainTextToMessageHtml(_message);
+        if (!html) return;
+        dispatchOutgoingHtml(html);
+    };
+
     const sendMessage = () => {
         if (_message.trim()) {
             let arr = _message.split("<p>");
@@ -75,26 +108,7 @@ const NewMessageInput: React.FC<any> = ({ theme = "dark" }: any) => {
             message = correctStyling(message, "h2");
             message = correctStyling(message, "h3");
 
-            if (chosenChatDetails) {
-                console.log("Sending direct message...");
-                console.log("Message content:", message);
-                console.log("Receiver User ID:", chosenChatDetails.userId);
-                sendDirectMessage({
-                    message,
-                    receiverUserId: chosenChatDetails.userId!,
-                });
-            }
-
-            if (chosenGroupChatDetails) {
-                console.log("Sending group message...");
-                console.log("Message content:", message);
-                console.log("Group Chat ID:", chosenGroupChatDetails.groupId);
-                sendGroupMessage({
-                    message,
-                    groupChatId: chosenGroupChatDetails.groupId,
-                });
-            }
-            set_message("");
+            dispatchOutgoingHtml(message);
         }
     };
 
@@ -130,20 +144,7 @@ const NewMessageInput: React.FC<any> = ({ theme = "dark" }: any) => {
                 message = correctStyling(message, 'h2')
                 message = correctStyling(message, 'h3')
 
-                if (chosenChatDetails) {
-                    sendDirectMessage({
-                        message,
-                        receiverUserId: chosenChatDetails.userId!,
-                    });
-                }
-
-                if (chosenGroupChatDetails) {
-                    sendGroupMessage({
-                        message,
-                        groupChatId: chosenGroupChatDetails.groupId
-                    })
-                }
-                set_message("");
+                dispatchOutgoingHtml(message);
             }
         } else {
             set_typing(typing + 1)
@@ -248,8 +249,9 @@ const NewMessageInput: React.FC<any> = ({ theme = "dark" }: any) => {
         ]
     };
 
-    // Add custom buttons to toolbar after component mounts
+    // Add custom buttons to toolbar after component mounts (rich editor only)
     useEffect(() => {
+        if (theme === "light") return;
         const toolbar = document.querySelector('.ql-toolbar');
         if (toolbar && !toolbar.querySelector('.custom-attachment-btn')) {
             // Create attachment button
@@ -287,51 +289,97 @@ const NewMessageInput: React.FC<any> = ({ theme = "dark" }: any) => {
                 setShowEmojiPicker(prev => !prev);
             };
         }
-    }, []);
+    }, [theme]);
+
+    if (theme === "light") {
+        return (
+            <div className="w-full border-t border-wl-line bg-white px-3 py-2 sm:px-4 sm:pb-3">
+                <div className="flex items-end gap-2 rounded-full bg-slate-100 px-3 py-1.5">
+                    <button
+                        type="button"
+                        onClick={handleButtonClick}
+                        className="mb-0.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-wl-muted transition hover:bg-white hover:text-wl-brand"
+                        aria-label="Attach file"
+                    >
+                        <Paperclip className="h-4 w-4" />
+                    </button>
+                    <textarea
+                        value={_message}
+                        onChange={(e) => {
+                            set_message(e.target.value);
+                            set_typing((t) => t + 1);
+                        }}
+                        onKeyDown={(e) => {
+                            if (e.key === "Enter" && !e.shiftKey) {
+                                e.preventDefault();
+                                sendPlainMessage();
+                            }
+                        }}
+                        onBlur={onBlur}
+                        placeholder="Type a message…"
+                        rows={1}
+                        className="min-h-[40px] max-h-28 w-0 flex-1 resize-none bg-transparent text-xs text-wl-ink placeholder:text-slate-400 outline-none sm:text-sm"
+                    />
+                    <input
+                        type="file"
+                        ref={fileInputRef}
+                        className="hidden"
+                        onChange={handleFileChange}
+                    />
+                    <button
+                        type="button"
+                        onClick={sendPlainMessage}
+                        disabled={!_message.trim()}
+                        className="mb-0.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-wl-brand text-white shadow-sm transition hover:brightness-95 disabled:pointer-events-none disabled:opacity-35"
+                        aria-label="Send message"
+                    >
+                        <Send className="h-4 w-4" strokeWidth={2.5} />
+                    </button>
+                </div>
+            </div>
+        );
+    }
 
     return (
-        <div className={`w-full p-4 pt-0 pb-12 sm:pb-4 flex items-center border-t ${theme === "light" ? "border-slate-200 bg-white" : "border-transparent"}`}>
+        <div className="w-full flex items-center border-t border-transparent p-4 pb-12 pt-0 sm:pb-4">
             <div className="relative w-full">
                 <ReactQuill
                     ref={quillRef}
                     theme="snow"
-                    className={theme === "light" ? "w-full bg-white flex flex-col-reverse rounded-xl border border-slate-200 overflow-hidden" : "w-full bg-black flex flex-col-reverse rounded-md"}
+                    className="flex w-full flex-col-reverse rounded-md bg-black"
                     value={_message}
                     onChange={set_message}
                     onKeyDown={handleSendMessage}
                     onBlur={onBlur}
                     modules={modules}
                 />
-                
-                {/* Hidden file input */}
+
                 <input
                     type="file"
                     ref={fileInputRef}
-                    style={{ display: 'none' }}
+                    style={{ display: "none" }}
                     onChange={handleFileChange}
                 />
-                
-                {/* Emoji picker positioned above the toolbar */}
+
                 {showEmojiPicker && (
                     <div
                         style={{
                             position: "absolute",
                             bottom: "60px",
                             left: "10px",
-                            zIndex: 1000
+                            zIndex: 1000,
                         }}
                     >
                         <Picker data={data} onEmojiSelect={handleEmojiSelect} />
                     </div>
                 )}
             </div>
-            
-            {/* Send button */}
+
             <button
+                type="button"
                 onClick={sendMessage}
-                className={theme === "light"
-                    ? "ml-2 inline-flex h-10 w-10 items-center justify-center rounded-full bg-sky-600 hover:bg-sky-700 text-white shadow-sm"
-                    : "ml-2 inline-flex h-10 w-10 items-center justify-center rounded-full bg-[#31B099] text-white"}
+                className="ml-2 inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#31B099] text-white"
+                aria-label="Send message"
             >
                 <svg
                     xmlns="http://www.w3.org/2000/svg"

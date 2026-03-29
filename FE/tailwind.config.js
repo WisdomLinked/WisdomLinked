@@ -12,6 +12,19 @@ module.exports = {
         'crimson': ['"Crimson Pro"', 'Georgia', 'serif'],
       },
       colors: {
+        /* WisdomLinked dashboard palette (student / expert / admin) */
+        wl: {
+          brand: "#234C6A",
+          brandSoft: "#E8EEF4",
+          page: "#F5F3EF",
+          /** Warm light gold — chat routes (student / expert / admin) */
+          chatGold: "#F7F1E6",
+          pageAlt: "#f8f7f4",
+          card: "#ffffff",
+          line: "#e8e6e1",
+          ink: "#1a2d3a",
+          muted: "#6C7278",
+        },
         "green": "#31B099",
         "blue": "#03a9f4",
         "darkgrey": "#141414",

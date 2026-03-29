@@ -173,16 +173,21 @@ function AdminRegisterExpert() {
         getKeywordsAndServices();
     }, []);
 
+    const field =
+        "w-full h-[50px] px-4 rounded-[15px] bg-wl-pageAlt border border-wl-line text-wl-ink text-[14px] shadow-[inset_0_1px_2px_rgba(35,76,106,0.06)] placeholder:text-grey transition-colors hover:border-wl-brand/20 focus:outline-none focus:border-wl-brand/40 focus:ring-2 focus:ring-wl-brand/25 focus:bg-white";
+    const label = "mb-1.5 text-sm text-wl-muted";
+    const textareaField =
+        "w-full min-h-[100px] px-4 py-3 rounded-[15px] bg-wl-pageAlt border border-wl-line text-wl-ink text-[14px] shadow-[inset_0_1px_2px_rgba(35,76,106,0.06)] placeholder:text-grey transition-colors hover:border-wl-brand/20 focus:outline-none focus:border-wl-brand/40 focus:ring-2 focus:ring-wl-brand/25 focus:bg-white resize-y";
+
     return (
-        <div className="bg-[#181818] text-white p-6 rounded-lg shadow-lg w-[500px]">
-            <h3 className="text-xl font-bold text-[#31B099] mb-4">
+        <div className="admin-register-form w-full max-w-[520px] mx-auto rounded-2xl border border-wl-line bg-white p-6 sm:p-8 shadow-[0_10px_30px_rgba(35,76,106,0.08)] text-wl-ink">
+            <h3 className="text-xl font-semibold text-wl-brand mb-6">
                 Register Expert (By Admin)
             </h3>
 
-            <div className="mb-2 text-sm text-gray-200">Full name *</div>
+            <div className={label}>Full name *</div>
             <input
-                className="w-full mb-1 p-2 rounded bg-[#2e2e2e] text-white
-                   border border-gray-700 focus:outline-none"
+                className={`${field} mb-1`}
                 placeholder="Input your name"
                 value={name}
                 onChange={(e) => set_name(e.target.value)}
@@ -196,10 +201,9 @@ function AdminRegisterExpert() {
                 }
             />
 
-            <div className="mb-2 text-sm text-gray-200 mt-4">Title *</div>
+            <div className={`${label} mt-5`}>Title *</div>
             <input
-                className="w-full mb-1 p-2 rounded bg-[#2e2e2e] text-white
-                   border border-gray-700 focus:outline-none"
+                className={`${field} mb-1`}
                 placeholder="Input your title"
                 value={title}
                 onChange={(e) => set_title(e.target.value)}
@@ -209,10 +213,9 @@ function AdminRegisterExpert() {
                 label="Title is required."
             />
 
-            <div className="mb-2 text-sm text-gray-200 mt-4">Short bio *</div>
+            <div className={`${label} mt-5`}>Short bio *</div>
             <textarea
-                className="w-full mb-1 p-2 rounded bg-[#2e2e2e] text-white
-                   border border-gray-700 focus:outline-none"
+                className={`${textareaField} mb-1`}
                 rows={3}
                 value={description}
                 onChange={(e) => set_description(e.target.value)}
@@ -222,7 +225,7 @@ function AdminRegisterExpert() {
                 label="Bio should include 20 ~ 100 characters."
             />
 
-            <div className="mb-2 text-sm text-gray-200 mt-4">Majors *</div>
+            <div className={`${label} mt-5`}>Majors *</div>
             <MultiSelectionWithInputTag
                 options={keywords}
                 selectedOptions={selectedKeywords}
@@ -234,9 +237,10 @@ function AdminRegisterExpert() {
                 label="Add at least 3 keywords"
             />
 
-            <div className="mb-2 text-sm text-gray-200 mt-4">Services *</div>
+            <div className={`${label} mt-5`}>Services *</div>
             <SelectionWithCheckBox
                 options={services}
+                selectedOptions={selectedServices}
                 set_selectedOptions={set_selectedServices}
                 placeholder="Select services"
                 isMulti={true}
@@ -260,24 +264,23 @@ function AdminRegisterExpert() {
                 showError={showError}
             />
 
-            <div className="mb-2 text-sm text-gray-200 mt-4">Phone number *</div>
+            <div className={`${label} mt-5`}>Phone number *</div>
             <PhoneInput
                 placeholder="Enter phone number"
                 value={phoneNumber}
                 onChange={(data) => set_phoneNumber(data)}
-                containerClass="mb-2"
-                inputClass="!bg-[#2e2e2e] !text-white !border !border-gray-700"
-                buttonClass="!bg-[#2e2e2e] !text-white"
+                containerClass="mb-2 !w-full"
+                inputClass="!h-[50px] !w-full !rounded-[15px] !bg-wl-pageAlt !text-wl-ink !border !border-wl-line !text-[14px] !pl-[52px] !shadow-[inset_0_1px_2px_rgba(35,76,106,0.06)] hover:!border-wl-brand/20 focus:!ring-2 focus:!ring-wl-brand/25 focus:!border-wl-brand/40 focus:!bg-white"
+                buttonClass="!bg-wl-pageAlt !border-wl-line !rounded-l-[15px] hover:!bg-wl-brandSoft"
             />
             <ShowFieldError
                 show={phoneNumber.length < 8 && showError}
                 label="Must provide phone number"
             />
 
-            <div className="mb-2 text-sm text-gray-200 mt-4">Email *</div>
+            <div className={`${label} mt-5`}>Email *</div>
             <input
-                className="w-full mb-1 p-2 rounded bg-[#2e2e2e] text-white
-                   border border-gray-700 focus:outline-none"
+                className={`${field} mb-1`}
                 placeholder="Input email address"
                 value={email}
                 onChange={(e) => set_email(e.target.value)}
@@ -289,15 +292,14 @@ function AdminRegisterExpert() {
             />
 
             {/* Password fields ALWAYS visible (type="text") */}
-            <div className="mb-2 text-sm text-gray-200 mt-4">
+            <div className={`${label} mt-5`}>
                 Password *
-                <span className="ml-2 text-xs text-gray-400">
-          (Should be greater than 5 characters)
-        </span>
+                <span className="ml-2 text-xs text-wl-muted">
+                    (Should be greater than 5 characters)
+                </span>
             </div>
             <input
-                className="w-full p-2 rounded bg-[#2e2e2e] text-white
-                   border border-gray-700 focus:outline-none"
+                className={field}
                 placeholder="Input your password"
                 type="text"
                 value={pwd}
@@ -309,10 +311,9 @@ function AdminRegisterExpert() {
                 label="Password must be longer than 6 characters."
             />
 
-            <div className="mb-2 text-sm text-gray-200 mt-4">Repeat Password *</div>
+            <div className={`${label} mt-5`}>Repeat Password *</div>
             <input
-                className="w-full p-2 rounded bg-[#2e2e2e] text-white
-                   border border-gray-700 focus:outline-none"
+                className={field}
                 placeholder="Confirm your password"
                 type="text"
                 value={confirmPwd}
@@ -324,7 +325,7 @@ function AdminRegisterExpert() {
                 label="Passwords do not match."
             />
 
-            <div className="mb-2 text-sm text-gray-200 mt-4">Upload resume *</div>
+            <div className={`${label} mt-5`}>Upload resume *</div>
             <FileBrowser
                 file={file}
                 set_file={set_file}
@@ -336,11 +337,11 @@ function AdminRegisterExpert() {
             />
 
             <button
-                className={`mt-6 px-6 py-3 rounded font-semibold
-                    ${
+                type="button"
+                className={`mt-8 w-full rounded-xl px-6 py-3 text-sm font-semibold transition-colors ${
                     enableToRegister
-                        ? "bg-[#31B099] text-black hover:bg-[#28a286]"
-                        : "bg-gray-600 text-gray-400 cursor-not-allowed"
+                        ? "bg-wl-brand text-white hover:brightness-95 shadow-sm"
+                        : "bg-wl-line text-wl-muted cursor-not-allowed"
                 }`}
                 disabled={!enableToRegister}
                 onClick={handleRegisterAsExpert}

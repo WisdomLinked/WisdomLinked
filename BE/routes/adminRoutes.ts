@@ -20,6 +20,8 @@ const {
     toggleActionedStatus,
     sendEmailToUser,
     sendWelcomeEmail,
+    getDashboardStats,
+    getAdminPlatformEvents,
     getPendingLogins,
     getPendingUsers,
     deletePendingLogin,
@@ -47,6 +49,8 @@ router.post("/setStripeMode", adminAuth, setStripeMode)
 router.post("/sendPaymentLinkToUser", adminAuth, sendPaymentLinkToUser)
 router.post("/processRefund", adminAuth, processRefund)
 router.post("/sendAdHocPaymentLink", adminAuth, sendAdHocPaymentLink)
+router.get("/dashboardStats", adminAuth, getDashboardStats)
+router.get("/platformEvents", adminAuth, getAdminPlatformEvents)
 router.post("/filterUsers", adminAuth, filterUsers)
 router.post("/filterPaymentHistories", adminAuth, filterPaymentHistories)
 router.post("/getFullUserDataByEmail", adminAuth, getFullUserDataByEmail)

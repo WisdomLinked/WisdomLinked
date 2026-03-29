@@ -164,7 +164,7 @@ export default function ModernChat({ videoChaton }: { videoChaton: boolean }) {
   };
 
   return (
-    <div className="h-[calc(100vh-56px)] bg-[#F5F3EF]">
+    <div className="h-[calc(100vh-56px)] bg-wl-chatGold">
       <div className="h-full flex">
         {/* Left panel */}
         <aside className="hidden md:flex md:w-80 lg:w-96 flex-col border-r border-slate-200 bg-white">

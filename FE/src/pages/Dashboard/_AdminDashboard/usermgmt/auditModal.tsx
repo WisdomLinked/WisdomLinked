@@ -29,18 +29,18 @@ const AuditModal = ({
                 className="absolute top-0 left-0 w-full h-full cursor-pointer"
                 onClick={closeModal}
             />
-            <div className="relative w-full h-full  mx-auto pb-3 py-6 sm:py-6 bg-black rounded-lg text-white">
+            <div className="relative w-full h-full  mx-auto pb-3 py-6 sm:py-6 bg-wl-card rounded-2xl border border-wl-line text-wl-ink shadow-xl">
                 <button
-                    className="absolute right-2 top-2 rounded-md hover:bg-grey"
+                    className="absolute right-2 top-2 rounded-md p-1 text-wl-muted hover:bg-wl-pageAlt hover:text-wl-ink"
                     onClick={closeModal}
                 >
                     <CloseIcon />
                 </button>
-                <div className="text-center text-white text-2xl mb-2 mt-3 sm:mt-0">Audit {userDetails?.role?.toUpperCase()} Account ({userDetails?.username})</div>
+                <div className="text-center text-wl-brand text-2xl font-semibold mb-2 mt-3 sm:mt-0">Audit {userDetails?.role?.toUpperCase()} Account ({userDetails?.username})</div>
                 <div className="w-full h-[calc(100%-50px)] sm:h-[calc(100%-40px)] p-3 sm:px-6">
                     <div className="flex space-x-6 border-0 border-b-[1px] border-lightgrey py-3">
-                        <div className={`${selectedTab === 0 ? "text-green font-bold" : 'text-lightgrey'} cursor-pointer`} onClick={() => set_selectedTab(0)}>Chat History</div>
-                        <div className={`${selectedTab === 1 ? "text-green font-bold" : 'text-lightgrey'} cursor-pointer`} onClick={() => set_selectedTab(1)}>Payment History</div>
+                        <div className={`${selectedTab === 0 ? "text-wl-brand font-bold" : 'text-wl-muted'} cursor-pointer text-sm`} onClick={() => set_selectedTab(0)}>Chat History</div>
+                        <div className={`${selectedTab === 1 ? "text-wl-brand font-bold" : 'text-wl-muted'} cursor-pointer text-sm`} onClick={() => set_selectedTab(1)}>Payment History</div>
                     </div>
                     <div className="w-full h-[calc(100%-50px)]">
                         {
