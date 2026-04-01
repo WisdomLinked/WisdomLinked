@@ -10,6 +10,13 @@ import { getDailyTimeSlots } from "../../api/api";
 import { useAppSelector } from "../../store";
 import LegendCalendar from "../../components/LegendCalendar"
 
+function toYMDLocal(d: Date) {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+}
+
 const SelectDateTime = ({
     setStartEndTime,
     selectedUser,
@@ -183,6 +190,12 @@ const SelectDateTime = ({
         
         // If date is in the past, it's not available
         if (date < today) {
+            return false;
+        }
+
+        const dayDate = new Date(date);
+        const blocked = (selectedUser as any)?.blockedBookingDates;
+        if (Array.isArray(blocked) && blocked.includes(toYMDLocal(dayDate))) {
             return false;
         }
         

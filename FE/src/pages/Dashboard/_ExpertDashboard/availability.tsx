@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { Check, ChevronDown, ChevronRight, X } from 'lucide-react';
+import ExpertAvailabilitySchedule from './ExpertAvailabilitySchedule';
 
 type AvailabilityMode = 'common' | 'daily';
 
@@ -387,13 +388,13 @@ const AvailabilityPage: React.FC = () => {
 
   return (
     <div className="min-h-full bg-white">
-      <div className="mx-auto max-w-3xl px-6 py-8 bg-[#F5F3EF] rounded-2xl">
+      <div className="mx-auto max-w-6xl px-6 py-8 bg-[#F5F3EF] rounded-2xl">
         <div className="mb-4 flex items-start justify-between gap-4">
           <div>
             <h1 className="text-2xl font-semibold text-gray-900">Your Availability</h1>
             <p className="mt-1 text-sm text-gray-500">
-              Set your hourly rate and available time slots so students can book sessions
-              with you.
+              View sessions on the calendar and block full days if needed, then set your
+              hourly rate and weekly time slots below.
             </p>
           </div>
           <button
@@ -427,6 +428,8 @@ const AvailabilityPage: React.FC = () => {
             </button>
           </div>
         )}
+
+        <ExpertAvailabilitySchedule />
 
         {/* Section 1: Session Settings */}
         <div className="mb-6 rounded-xl border border-gray-100 bg-white p-6">

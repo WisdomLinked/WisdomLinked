@@ -5,6 +5,7 @@ const {
     updateTimeSlots,
     getDailyTimeSlots,
     updateDailyTimeSlots,
+    setBlockedBookingDates,
     filterCustomers,
     getCustomerById,
     shareMeetingViaEmail,
@@ -36,6 +37,12 @@ router.post(
     "/updateTimeSlots",
     expertAuth(false),
     updateTimeSlots
+);
+
+router.post(
+    "/blockedBookingDates",
+    expertAuth(false),
+    setBlockedBookingDates
 );
 
 router.post(

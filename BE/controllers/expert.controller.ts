@@ -183,6 +183,34 @@ const classifyPayment = (h: any) => {
     return "other";
 };
 
+/** Replace expert whole-day booking blocks (YYYY-MM-DD). */
+const setBlockedBookingDates = async (req: any, res: Response) => {
+    try {
+        const { email } = req.user;
+        const { dates } = req.body;
+        if (!Array.isArray(dates)) {
+            return res.status(400).send("dates must be an array of YYYY-MM-DD strings");
+        }
+        const normalized = dates
+            .map((d: unknown) => String(d || "").trim().slice(0, 10))
+            .filter((s: string) => /^\d{4}-\d{2}-\d{2}$/.test(s));
+        const user = await User.findOneAndUpdate(
+            { email },
+            { blockedBookingDates: normalized },
+            { new: true }
+        ).select("blockedBookingDates email");
+        if (!user) {
+            return res.status(404).send("User not found");
+        }
+        return res.status(200).json({
+            blockedBookingDates: user.blockedBookingDates || [],
+        });
+    } catch (err: any) {
+        console.log(err);
+        return res.status(500).send(err.message);
+    }
+};
+
 const getMyPaymentHistory = async (req: any, res: Response) => {
     try {
         const expertId = req.user.userId;
@@ -231,6 +259,7 @@ module.exports = {
     updateTimeSlots,
     getDailyTimeSlots,
     updateDailyTimeSlots,
+    setBlockedBookingDates,
     filterCustomers,
     getCustomerById,
     shareMeetingViaEmail,

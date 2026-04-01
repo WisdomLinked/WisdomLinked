@@ -806,6 +806,16 @@ export const doUpdateTimeSlots = async (timeSlots: any) => {
     }
 };
 
+/** Expert-only: replace list of YYYY-MM-DD dates when no new bookings should be accepted. */
+export const doSetExpertBlockedBookingDates = async (dates: string[]) => {
+    try {
+        const res = await api.post("expert/blockedBookingDates", { dates });
+        return res.data;
+    } catch (err: any) {
+        return checkForAuthorization(err);
+    }
+};
+
 export const createEvent = async ({ title, start, end, duration, price, expert, customer, createdBy }: any) => {
     try {
         const res = await api.post("expert/createEvent", { title, start, end, duration, price, expert, customer, createdBy });

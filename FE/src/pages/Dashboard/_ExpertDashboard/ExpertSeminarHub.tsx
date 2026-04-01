@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   ArrowLeft,
   CalendarDays,
@@ -10,7 +10,6 @@ import {
 } from 'lucide-react';
 import { useDispatch } from 'react-redux';
 
-import { doExpertFilterSeminars } from '../../../api/api';
 import { useAppSelector } from '../../../store';
 import { updateMe } from '../../../actions/authActions';
 import { formatDateYYYY_MM_DD_h_m } from '../../../actions/common';
@@ -400,22 +399,10 @@ export default function ExpertSeminarHub() {
   const me = userDetails?._id;
 
   const [screen, setScreen] = useState<HubScreen>('list');
-  const [browseSeminars, setBrowseSeminars] = useState<any[]>([]);
-  const [browseLoading, setBrowseLoading] = useState(false);
   const [detailSeminar, setDetailSeminar] = useState<any | null>(null);
   const [editPayload, setEditPayload] = useState<ReturnType<typeof mapGroupChatToExpertSeminar> | null>(
     null,
   );
-
-  /** Stable primitive for loadBrowse deps (avoids new Set() identity churn on each Redux update). */
-  const mySeminarIdsKey = useMemo(() => {
-    const chats = userDetails?.groupChats || [];
-    return chats
-      .map((g: any) => getRefId(g))
-      .filter(Boolean)
-      .sort()
-      .join(',');
-  }, [userDetails?.groupChats]);
 
   const mySeminars = useMemo(() => {
     const chats = (userDetails?.groupChats || []).filter(
@@ -428,39 +415,10 @@ export default function ExpertSeminarHub() {
     });
   }, [userDetails?.groupChats]);
 
-  const loadBrowse = useCallback(async () => {
-    const myIds = new Set(
-      mySeminarIdsKey ? mySeminarIdsKey.split(',').filter(Boolean) : [],
-    );
-    setBrowseLoading(true);
-    try {
-      const res: any = await doExpertFilterSeminars({
-        sortBy: 'Name in ASC',
-      });
-      const raw = Array.isArray(res?.result) ? res.result : [];
-      const filtered = raw.filter((s: any) => {
-        if (s?.type !== 'seminar') return false;
-        const adminId = getRefId(s?.admin);
-        if (me && adminId && adminId === String(me)) return false;
-        if (s?._id && myIds.has(String(s._id))) return false;
-        return true;
-      });
-      setBrowseSeminars(filtered);
-    } finally {
-      setBrowseLoading(false);
-    }
-  }, [me, mySeminarIdsKey]);
-
-  useEffect(() => {
-    if (!me) return;
-    loadBrowse();
-  }, [me, loadBrowse]);
-
   const handleAfterSave = async () => {
     await (dispatch as any)(updateMe());
     setScreen('list');
     setEditPayload(null);
-    loadBrowse();
   };
 
   const adminIdOf = (s: any) => getRefId(s?.admin);
@@ -533,37 +491,10 @@ export default function ExpertSeminarHub() {
 
       <div className="max-w-6xl mx-auto space-y-10">
         <section>
-          <h2 className="text-lg font-semibold text-slate-900 mb-1">Available from other experts</h2>
-          <p className="text-sm text-slate-600 mb-4">
-            Seminars you can open for reference (you’re not enrolled yet).
-          </p>
-          {browseLoading ? (
-            <div className="rounded-2xl border border-[#E5E2DB] bg-white/80 px-6 py-10 text-center text-sm text-slate-600">
-              Loading seminars from other experts…
-            </div>
-          ) : browseSeminars.length === 0 ? (
-            <div className="rounded-2xl border border-dashed border-[#E5E2DB] bg-white/60 px-6 py-10 text-center text-sm text-slate-600">
-              No open seminars from other experts right now. Check back later.
-            </div>
-          ) : (
-            <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
-              {browseSeminars.map((s: any) => (
-                <SeminarCard
-                  key={s._id}
-                  seminar={s}
-                  onClick={() => openDetail(s)}
-                  badge="Discovery"
-                />
-              ))}
-            </div>
-          )}
-        </section>
-
-        <section>
           <h2 className="text-lg font-semibold text-slate-900 mb-1">Your seminars</h2>
           <p className="text-sm text-slate-600 mb-4">
-            Sessions you host or have joined — select for full details. Your hosted seminars include
-            edit and past events.
+            Current and past seminars — select for full details. Hosted seminars include
+            edit support.
           </p>
           {mySeminars.length === 0 ? (
             <div className="rounded-2xl border border-dashed border-[#E5E2DB] bg-white/60 px-6 py-10 text-center text-sm text-slate-600">

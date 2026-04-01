@@ -42,6 +42,8 @@ const userSchema = new mongoose.Schema(
         description: { type: String },
         timeSlots: [{ type: Number }],
         dailyTimeSlots: [{ type: Number }],
+        /** YYYY-MM-DD dates when expert is not accepting bookings (whole day) */
+        blockedBookingDates: [{ type: String }],
         price: [{ type: Number, default: 5 }],
         rating: { type: Number, default: 0 },
         specialNote: { type: String },
