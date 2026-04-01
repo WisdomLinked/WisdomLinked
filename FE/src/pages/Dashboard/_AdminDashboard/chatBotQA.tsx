@@ -110,8 +110,9 @@ const ChatBotQA = () => {
 
                         {/* Add New Button */}
                         <button
+                            type="button"
                             onClick={() => setShowCreateModal(true)}
-                            className="flex items-center gap-2 px-4 py-2 bg-green text-white rounded-lg hover:brightness-95 transition-colors"
+                            className="flex items-center gap-2 rounded-xl border border-wl-brand bg-wl-brand px-4 py-2 text-sm font-medium text-white shadow-sm transition-colors hover:brightness-95"
                         >
                             <Plus size={20} />
                             Add New Q&A
