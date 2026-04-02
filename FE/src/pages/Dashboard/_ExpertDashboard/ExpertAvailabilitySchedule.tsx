@@ -274,7 +274,7 @@ const ExpertAvailabilitySchedule: React.FC = () => {
     selectedDay != null && blockedDates.includes(toYMD(selectedDay));
 
   return (
-    <div id="expert-availability-schedule" className="mb-6 space-y-4 scroll-mt-24">
+    <div id="expert-availability-schedule" className="mt-8 space-y-4 scroll-mt-24">
       <style>{`
         .rbc-off-range-bg { background-color: #f1f5f9 !important; }
         .rbc-off-range .rbc-button-link { color: #94a3b8 !important; }

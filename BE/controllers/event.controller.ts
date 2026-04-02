@@ -9,6 +9,7 @@ const { checkPaymentIntentSucceeded, refundPaymentIntent } = require("./stripe.c
 const { appendPaymentHistory } = require("./payment.controller");
 const { checkTitleNameInvalid } = require('../services/global')
 const { sendEmailMeetingRequestToExpert, sendEmailMeetingRequestToCustomer, scheduleEmailReminder, sendEmailMeetingAcceptance } = require('../services/notifications')
+const { assertBookingLeadTime } = require("../utils/bookingLeadTime");
 
 const createEventByExpert = async (req, res) => {
     try {
@@ -132,6 +133,8 @@ const appendEvent = async (req, res) => {
                     "Sorry, the user you are trying to invite doesn't exist. Please check the email address"
                 );
         }
+
+        assertBookingLeadTime(expertUser, start);
 
         let eventExists
         if (eventId) {

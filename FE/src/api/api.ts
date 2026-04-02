@@ -816,6 +816,18 @@ export const doSetExpertBlockedBookingDates = async (dates: string[]) => {
     }
 };
 
+/** Expert-only: minimum advance booking window for students (24, 48, or 72 hours). */
+export const doSetExpertBookingNoticeHours = async (bookingNoticeHours: number) => {
+    try {
+        const res = await api.post("expert/bookingNoticeHours", {
+            bookingNoticeHours,
+        });
+        return res.data;
+    } catch (err: any) {
+        return checkForAuthorization(err);
+    }
+};
+
 export const createEvent = async ({ title, start, end, duration, price, expert, customer, createdBy }: any) => {
     try {
         const res = await api.post("expert/createEvent", { title, start, end, duration, price, expert, customer, createdBy });

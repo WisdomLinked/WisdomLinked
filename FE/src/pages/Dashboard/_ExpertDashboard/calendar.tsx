@@ -257,12 +257,13 @@ const ExpertCalendar: React.FC = () => {
     color: #0f172a !important;
   }
   .rbc-toolbar button.rbc-active {
-    background-color: #0ea5e9 !important;
+    background-color: #234c6a !important;
     color: #ffffff !important;
-    border-color: #0ea5e9 !important;
+    border-color: #234c6a !important;
   }
   .rbc-toolbar button.rbc-active:hover {
-    background-color: #0284c7 !important;
+    background-color: #1b3c53 !important;
+    border-color: #1b3c53 !important;
   }
 
   /* ✅ Month label - "March 2026" */
@@ -425,7 +426,7 @@ const ExpertCalendar: React.FC = () => {
                     Decline
                   </button>
                   <button
-                    className="w-[calc(50%-8px)] bg-[#0ea5e9] hover:bg-[#0284c7] text-white rounded-xl flex items-center justify-center disabled:opacity-50"
+                    className="w-[calc(50%-8px)] bg-[#234C6A] hover:bg-[#1b3c53] text-white rounded-xl flex items-center justify-center disabled:opacity-50"
                     disabled={userDetails.status === "review"}
                     onClick={acceptEvent}
                   >
@@ -441,7 +442,7 @@ const ExpertCalendar: React.FC = () => {
                     Decline
                   </button>
                   <button
-                    className="w-[calc(50%-8px)] bg-[#0ea5e9] hover:bg-[#0284c7] text-white rounded-xl flex items-center justify-center disabled:opacity-50"
+                    className="w-[calc(50%-8px)] bg-[#234C6A] hover:bg-[#1b3c53] text-white rounded-xl flex items-center justify-center disabled:opacity-50"
                     onClick={() => navigateCustomer(selectedEvent?.customer)}
                   >
                     Go To Chat
@@ -451,7 +452,7 @@ const ExpertCalendar: React.FC = () => {
             ) : (
               <div className="w-full h-10 flex justify-center mt-6">
                 <button
-                  className="w-[calc(50%-8px)] bg-[#0ea5e9] hover:bg-[#0284c7] text-white rounded-xl flex items-center justify-center disabled:opacity-50"
+                  className="w-[calc(50%-8px)] bg-[#234C6A] hover:bg-[#1b3c53] text-white rounded-xl flex items-center justify-center disabled:opacity-50"
                   onClick={() => navigateCustomer(selectedEvent?.customer)}
                 >
                   Chat History
@@ -493,7 +494,7 @@ const ExpertCalendar: React.FC = () => {
 
             <div className="w-full h-10 flex justify-center mt-6 space-x-4">
               <button
-                className="w-fit px-4 rounded-xl bg-[#0ea5e9] hover:bg-[#0284c7] text-white flex items-center justify-center"
+                className="w-fit px-4 rounded-xl bg-[#234C6A] hover:bg-[#1b3c53] text-white flex items-center justify-center"
                 onClick={() => {
                   if (selectedEvent?.type === "individual" && selectedEvent?.status === "pending") {
                     cancelAppointment(selectedEvent._id);

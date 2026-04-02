@@ -215,15 +215,13 @@ export default function WLLogin() {
                     <div className="h-1 w-full" style={{ background: 'linear-gradient(90deg, #234C6A, #456882)' }} />
                     <div className="p-8">
                         {/* Logo */}
-                        <div className="flex items-center gap-3 mb-6">
-                            <div className="h-10 w-10 rounded-xl bg-white border border-[#D0DFED] flex items-center justify-center shadow-sm overflow-hidden blur-[0.3px]">
-                                <img
-                                    src="/logo.png"
-                                    alt="WisdomLinked logo"
-                                    className="h-10 w-10 object-contain"
-                                />
-                            </div>
-                            <span className="font-black text-2xl tracking-[0.12em] uppercase text-slate-900">
+                        <div className="flex items-center justify-center gap-1.5 mb-6">
+                            <img
+                                src="/logos/main_gold_blue.svg"
+                                alt="WisdomLinked"
+                                className="h-10 w-auto max-w-[200px] object-contain shrink-0"
+                            />
+                            <span className="font-display font-bold text-[1.35rem] text-slate-900 tracking-normal">
                                 WisdomLinked
                             </span>
                         </div>

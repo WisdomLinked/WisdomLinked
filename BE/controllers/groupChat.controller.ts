@@ -13,6 +13,7 @@ const { appendPaymentHistory } = require("./payment.controller");
 const { getFullUserData } = require("../middlewares/requireAuth");
 const { checkTitleNameInvalid } = require('../services/global')
 const { scheduleEmailReminder, sendEmailMeetingRequestToCustomer, sendEmailMeetingRequestToExpert, sendEmailMeetingAcceptance } = require('../services/notifications')
+const { assertBookingLeadTime } = require("../utils/bookingLeadTime");
 
 const createGeneralChatAndJoinGlobalChat = async (expertId) => {
     try {
@@ -462,6 +463,12 @@ const createGroupChatByUser = async (req, res) => {
             throw new Error("Payment intent not succeeded")
         }
 
+        const expertUser = await User.findById(expert);
+        if (!expertUser) {
+            throw new Error("Expert not found");
+        }
+        assertBookingLeadTime(expertUser, start);
+
         // create group
         const chat = await GroupChat.create({
             name: name,
@@ -486,7 +493,6 @@ const createGroupChatByUser = async (req, res) => {
 
         updateUsersGroupChatList(userId.toString());
 
-        const expertUser = await User.findById(expert);
         expertUser.groupChats.push(chat._id);
         await expertUser.save();
         expertUser.populate(['events', 'keywords', 'services', 'groupChats'])
@@ -764,6 +770,16 @@ const addMemberToPendingGroup = async (req, res) => {
                 );
         }
 
+        const expert = await User.findById(groupChat.admin.toString());
+        if (!expert) {
+            return res.status(404).send("Expert not found for this seminar");
+        }
+        assertBookingLeadTime(
+            expert,
+            groupChat.start,
+            "Seminar registrations"
+        );
+
         // add friends to the pending group
 
         const friendsToAdd = [];
@@ -783,7 +799,6 @@ const addMemberToPendingGroup = async (req, res) => {
         customer.pendingGroupChats.push(newPendingGroup._id)
         await customer.save()
 
-        const expert = await User.findById(groupChat.admin.toString())
         expert.pendingGroupChats.push(newPendingGroup._id)
         await expert.save()
 

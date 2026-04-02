@@ -18,8 +18,8 @@ const Header = () => {
             {/* MOBILE VIEW */}
             <div className="w-full flex lg:hidden justify-between items-center">
                 <Link to='/' className={`w-fit flex items-center space-x-[8px] font-black text-2xl`}>
-                    <div className="w-11 h-11 rounded-2xl bg-white flex items-center justify-center overflow-hidden">
-                        <img src="/logo.png" className="w-9 h-9 object-contain" />
+                    <div className="h-11 max-w-[200px] rounded-2xl bg-white flex items-center justify-center overflow-hidden px-2">
+                        <img src="/logos/main_gold_blue.svg" className="h-9 w-auto max-w-[160px] object-contain object-left" alt="" />
                     </div>
                     <span className="tracking-[0.08em] uppercase">WisdomLinked</span>
                 </Link>
@@ -63,8 +63,8 @@ const Header = () => {
             {/* DESKTOP VIEW */}
             <div className="w-full hidden lg:flex justify-between items-center text-[16px] leading-[24px]">
                     <Link to='/' className={`w-fit flex items-center space-x-[10px] font-black text-2xl`}>
-                        <div className="w-12 h-12 rounded-2xl bg-white flex items-center justify-center overflow-hidden">
-                            <img src="/logo.png" className="w-10 h-10 object-contain" />
+                        <div className="h-12 max-w-[220px] rounded-2xl bg-white flex items-center justify-center overflow-hidden px-2">
+                            <img src="/logos/main_gold_blue.svg" className="h-10 w-auto max-w-[180px] object-contain object-left" alt="" />
                         </div>
                         <span className="tracking-[0.12em] uppercase text-white">WisdomLinked</span>
                     </Link>

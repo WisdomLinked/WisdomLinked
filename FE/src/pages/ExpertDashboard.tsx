@@ -210,8 +210,8 @@ export default function ExpertDashboard() {
       { id: 'calendar', label: 'Calendar', icon: Calendar },
       { id: 'availability', label: 'Availability', icon: Clock },
       { id: 'contact-admin', label: 'Contact admin', icon: MessageSquareMore },
-      { id: 'settings', label: 'Settings', icon: Settings },
       { id: 'revenue', label: 'Revenue', icon: Wallet },
+      { id: 'settings', label: 'Settings', icon: Settings },
     ],
     []
   );
@@ -329,10 +329,6 @@ export default function ExpertDashboard() {
     setActiveItem('chat');
   };
 
-  const totalRevenuePlaceholder =
-    (bookedSessions?.length || 0) * (userDetails?.price || 50) +
-    (acceptedSeminars?.length || 0) * (userDetails?.price || 50);
-
   const title =
     activeItem === 'chat'
       ? 'Chat'
@@ -408,16 +404,6 @@ export default function ExpertDashboard() {
               }
             />
             <StatCard
-              label="Pending 1:1 requests"
-              value={pendingSessions.length}
-              icon={AlertCircle}
-              color="warning"
-              tooltip="Requests awaiting confirmation"
-              onClick={() =>
-                setExpertUpcomingModal({ kind: 'oneToOne', status: 'pending' })
-              }
-            />
-            <StatCard
               label="Upcoming seminars"
               value={acceptedSeminars.length}
               icon={BookOpen}
@@ -428,12 +414,24 @@ export default function ExpertDashboard() {
               }
             />
             <StatCard
-              label="Est. revenue (placeholder)"
-              value={`$${totalRevenuePlaceholder}`}
-              icon={Wallet}
-              color="neutral"
-              tooltip="Open full revenue and payment history"
-              onClick={() => setActiveItem('revenue')}
+              label="Pending 1:1 sessions"
+              value={pendingSessions.length}
+              icon={AlertCircle}
+              color="warning"
+              tooltip="Requests awaiting confirmation"
+              onClick={() =>
+                setExpertUpcomingModal({ kind: 'oneToOne', status: 'pending' })
+              }
+            />
+            <StatCard
+              label="Pending seminar requests"
+              value={pendingSeminars.length}
+              icon={AlertCircle}
+              color="warning"
+              tooltip="Seminar invites awaiting your confirmation"
+              onClick={() =>
+                setExpertUpcomingModal({ kind: 'seminar', status: 'pending' })
+              }
             />
           </div>
         </section>

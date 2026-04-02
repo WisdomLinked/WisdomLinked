@@ -38,29 +38,21 @@ const DashboardHeader = ({ userDetails }: any) => {
         <div className="w-full h-[63px] bg-black flex justify-between items-center px-5 drop-shadow-sm text-white">
 
             {
-                userDetails.role==="admin"? <Link to='/user/admindashboard' className={`w-fit flex items-center space-x-[10px] font-black text-2xl ml-10 lg:ml-0`}>
-                    <div className="w-11 h-11 rounded-2xl bg-white flex items-center justify-center overflow-hidden">
-                        <img src="/logo.png" className="w-9 h-9 object-contain" />
-                    </div>
+                userDetails.role==="admin"? <Link to='/user/admindashboard' className={`w-fit flex items-center gap-2.5 font-black text-2xl ml-10 lg:ml-0`}>
+                    <img src="/logos/main_gold_blue.svg" className="h-9 w-auto max-w-[200px] shrink-0 object-contain object-left" alt="" />
                     <span className="tracking-[0.12em] uppercase">WisdomLinked</span>
                 </Link>
-                    :  userDetails.role==="expert"? <Link to='/user/expertdashboard' className={`w-fit flex items-center space-x-[10px] font-black text-2xl ml-10 lg:ml-0`}>
-                        <div className="w-11 h-11 rounded-2xl bg-white flex items-center justify-center overflow-hidden">
-                            <img src="/logo.png" className="w-9 h-9 object-contain" />
-                        </div>
+                    :  userDetails.role==="expert"? <Link to='/user/expertdashboard' className={`w-fit flex items-center gap-2.5 font-black text-2xl ml-10 lg:ml-0`}>
+                        <img src="/logos/main_gold_blue.svg" className="h-9 w-auto max-w-[200px] shrink-0 object-contain object-left" alt="" />
                         <span className="tracking-[0.12em] uppercase">WisdomLinked</span>
                     </Link>
-                    :   userDetails.role==="customer"? <Link to='/user/studentdashboard' className={`w-fit flex items-center space-x-[10px] font-black text-2xl ml-10 lg:ml-0`}>
-                        <div className="w-11 h-11 rounded-2xl bg-white flex items-center justify-center overflow-hidden">
-                            <img src="/logo.png" className="w-9 h-9 object-contain" />
-                        </div>
+                    :   userDetails.role==="customer"? <Link to='/user/studentdashboard' className={`w-fit flex items-center gap-2.5 font-black text-2xl ml-10 lg:ml-0`}>
+                        <img src="/logos/main_gold_blue.svg" className="h-9 w-auto max-w-[200px] shrink-0 object-contain object-left" alt="" />
                         <span className="tracking-[0.12em] uppercase">WisdomLinked</span>
                     </Link>
                         :
-                        <Link to='/' className={`w-fit flex items-center space-x-[10px] font-black text-2xl ml-10 lg:ml-0`}>
-                            <div className="w-11 h-11 rounded-2xl bg-white flex items-center justify-center overflow-hidden">
-                                <img src="/logo.png" className="w-9 h-9 object-contain" />
-                            </div>
+                        <Link to='/' className={`w-fit flex items-center gap-2.5 font-black text-2xl ml-10 lg:ml-0`}>
+                            <img src="/logos/main_gold_blue.svg" className="h-9 w-auto max-w-[200px] shrink-0 object-contain object-left" alt="" />
                             <span className="tracking-[0.12em] uppercase">WisdomLinked</span>
                         </Link>
             }

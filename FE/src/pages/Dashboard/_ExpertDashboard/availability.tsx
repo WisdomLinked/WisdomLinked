@@ -1,6 +1,10 @@
-import React, { useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import { Check, ChevronDown, ChevronRight, X } from 'lucide-react';
+import { useDispatch } from 'react-redux';
 import ExpertAvailabilitySchedule from './ExpertAvailabilitySchedule';
+import { useAppSelector } from '../../../store';
+import { doSetExpertBookingNoticeHours } from '../../../api/api';
+import { updateMe } from '../../../actions/authActions';
 
 type AvailabilityMode = 'common' | 'daily';
 
@@ -48,6 +52,7 @@ const TIMEZONES: string[] = [
 
 const SESSION_DURATIONS: number[] = [30, 60, 90];
 const BUFFER_TIMES: number[] = [0, 15, 30];
+const BOOKING_NOTICE_HOURS = [24, 48, 72] as const;
 
 const DAYS: DayOfWeek[] = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
@@ -86,10 +91,51 @@ const initialFormState: AvailabilityFormState = {
 };
 
 const AvailabilityPage: React.FC = () => {
+  const dispatch = useDispatch();
+  const { auth: { userDetails } } = useAppSelector((s: any) => s);
+
   const [form, setForm] = useState<AvailabilityFormState>(initialFormState);
   const [rateError, setRateError] = useState<string>('');
   const [banner, setBanner] = useState<BannerState>({ type: null, message: '' });
   const [expandedDays, setExpandedDays] = useState<DayOfWeek[]>(['Mon']);
+  const [noticeSaving, setNoticeSaving] = useState(false);
+
+  const activeBookingNotice = useMemo(() => {
+    const n = Number(userDetails?.bookingNoticeHours);
+    return BOOKING_NOTICE_HOURS.includes(n as (typeof BOOKING_NOTICE_HOURS)[number])
+      ? n
+      : 24;
+  }, [userDetails?.bookingNoticeHours]);
+
+  const saveBookingNotice = useCallback(
+    async (hours: (typeof BOOKING_NOTICE_HOURS)[number]) => {
+      if (hours === activeBookingNotice) return;
+      setNoticeSaving(true);
+      try {
+        const res = await doSetExpertBookingNoticeHours(hours);
+        if (res && res !== false) {
+          await (dispatch as any)(updateMe());
+          setBanner({
+            type: 'success',
+            message: 'Booking notice period saved. Students will only see slots that meet this lead time.',
+          });
+        } else {
+          setBanner({
+            type: 'error',
+            message: 'Could not save booking notice. Please try again.',
+          });
+        }
+      } catch {
+        setBanner({
+          type: 'error',
+          message: 'Could not save booking notice. Please try again.',
+        });
+      } finally {
+        setNoticeSaving(false);
+      }
+    },
+    [dispatch, activeBookingNotice],
+  );
 
   const slotsMorning = useMemo(
     () => ALL_SLOTS.filter((slot) => slot.period === 'AM'),
@@ -393,8 +439,8 @@ const AvailabilityPage: React.FC = () => {
           <div>
             <h1 className="text-2xl font-semibold text-gray-900">Your Availability</h1>
             <p className="mt-1 text-sm text-gray-500">
-              View sessions on the calendar and block full days if needed, then set your
-              hourly rate and weekly time slots below.
+              Set your hourly rate and weekly time slots, then use the calendar below to
+              view bookings and block full days when needed.
             </p>
           </div>
           <button
@@ -428,8 +474,6 @@ const AvailabilityPage: React.FC = () => {
             </button>
           </div>
         )}
-
-        <ExpertAvailabilitySchedule />
 
         {/* Section 1: Session Settings */}
         <div className="mb-6 rounded-xl border border-gray-100 bg-white p-6">
@@ -538,6 +582,38 @@ const AvailabilityPage: React.FC = () => {
                 })}
               </div>
             </div>
+
+            <div className="md:col-span-2">
+              <label className="mb-1.5 block text-sm font-medium text-gray-700">
+                Minimum booking notice
+              </label>
+              <p className="mb-2 text-xs text-gray-400">
+                Students can only book sessions that start at least this many hours from
+                when they book (applies to 1:1 bookings and seminar sign-ups).
+              </p>
+              <div className="inline-flex flex-wrap rounded-full bg-gray-50 p-1 text-xs font-medium text-gray-600">
+                {BOOKING_NOTICE_HOURS.map((h) => {
+                  const active = activeBookingNotice === h;
+                  return (
+                    <button
+                      key={h}
+                      type="button"
+                      disabled={noticeSaving}
+                      onClick={() => void saveBookingNotice(h)}
+                      className={[
+                        'px-3 py-1.5 rounded-full transition-colors',
+                        active
+                          ? 'bg-[#234C6A] text-white'
+                          : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50',
+                        noticeSaving ? 'opacity-60 cursor-wait' : '',
+                      ].join(' ')}
+                    >
+                      {h} hours
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
           </div>
         </div>
 
@@ -548,14 +624,15 @@ const AvailabilityPage: React.FC = () => {
             <div className="inline-flex rounded-full bg-gray-50 p-1 text-xs font-medium text-gray-600">
               {(['common', 'daily'] as AvailabilityMode[]).map((mode) => {
                 const active = form.mode === mode;
-                const label = mode === 'common' ? 'Common' : 'Daily';
+                const label =
+                  mode === 'common' ? 'Recurring daily' : 'Weekday Specific';
                 return (
                   <button
                     key={mode}
                     type="button"
                     onClick={() => updateForm('mode', mode)}
                     className={[
-                      'px-3 py-1.5 rounded-full transition-colors capitalize',
+                      'px-3 py-1.5 rounded-full transition-colors',
                       active
                         ? 'bg-[#234C6A] text-white'
                         : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50',
@@ -570,6 +647,8 @@ const AvailabilityPage: React.FC = () => {
 
           {form.mode === 'common' ? renderCommonMode() : renderDailyMode()}
         </div>
+
+        <ExpertAvailabilitySchedule />
       </div>
     </div>
   );

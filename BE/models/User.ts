@@ -44,6 +44,8 @@ const userSchema = new mongoose.Schema(
         dailyTimeSlots: [{ type: Number }],
         /** YYYY-MM-DD dates when expert is not accepting bookings (whole day) */
         blockedBookingDates: [{ type: String }],
+        /** Minimum hours before session start that students may book (24, 48, or 72). */
+        bookingNoticeHours: { type: Number, default: 24 },
         price: [{ type: Number, default: 5 }],
         rating: { type: Number, default: 0 },
         specialNote: { type: String },

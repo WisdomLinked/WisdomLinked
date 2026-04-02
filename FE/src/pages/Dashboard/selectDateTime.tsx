@@ -128,7 +128,7 @@ const SelectDateTime = ({
                 },
             };
         },
-        [events, selectedIndex, duration] 
+        [events, selectedIndex, duration, availableSlots, selectedUser]
     );
 
     const isToday = (selectedDate: any) => {
@@ -181,6 +181,13 @@ const SelectDateTime = ({
             }
         }
 
+        const noticeRaw = Number((selectedUser as any)?.bookingNoticeHours);
+        const noticeH = [24, 48, 72].includes(noticeRaw) ? noticeRaw : 24;
+        const earliestMs = Date.now() + noticeH * 60 * 60 * 1000;
+        updatedAvailableSlots = updatedAvailableSlots.filter((slotIdx: number) => {
+            const slotStartMs = dayStartTime + slotIdx * 30 * 60 * 1000;
+            return slotStartMs >= earliestMs;
+        });
 
         return updatedAvailableSlots;
     }
@@ -246,7 +253,7 @@ const SelectDateTime = ({
         if (selectedDate && modalShow) {
             updateTimeSlots()
         }
-    }, [duration, selectedDate, modalShow])
+    }, [duration, selectedDate, modalShow, selectedUser])
 
     const saveAndNext = () => {
         if (!selectedDate || selectedTimeSlot === undefined) {

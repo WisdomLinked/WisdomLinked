@@ -56,18 +56,13 @@ export default function Sidebar({
     <div className="flex h-full min-h-0 flex-col bg-[#f8fafc] px-3 py-5 border-r border-slate-200">
       <div className="mb-7 pl-1">
         <div className="flex items-center gap-2.5">
-          <div className="h-9 w-9 rounded-xl bg-white border border-slate-200 flex items-center justify-center shadow-sm overflow-hidden">
-            <img
-              src="/logo.png"
-              alt="WisdomLinked logo"
-              className="h-7 w-7 object-contain"
-            />
-          </div>
-          <div className="font-serif font-bold text-[#234c6a] leading-tight">
-            <span className="text-[26px]">W</span>
-            <span className="text-lg">isdom</span>
-            <span className="text-[26px] ml-[1px]">L</span>
-            <span className="text-lg">inked</span>
+          <img
+            src="/logos/main_gold_blue.svg"
+            alt="WisdomLinked logo"
+            className="h-9 w-auto max-w-[200px] shrink-0 object-contain object-left"
+          />
+          <div className="font-serif font-bold text-[#234c6a] leading-tight text-lg tracking-tight">
+            WisdomLinked
           </div>
         </div>
       </div>

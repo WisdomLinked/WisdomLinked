@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+const { ALLOWED_NOTICE_HOURS } = require("../utils/bookingLeadTime");
 const GroupChat = require("../models/GroupChat");
 const User = require("../models/User");
 const Keyword = require("../models/Keyword");
@@ -183,6 +184,34 @@ const classifyPayment = (h: any) => {
     return "other";
 };
 
+/** Set minimum advance booking notice (24 / 48 / 72 hours). */
+const setBookingNoticeHours = async (req: any, res: Response) => {
+    try {
+        const { email } = req.user;
+        const raw = req.body?.bookingNoticeHours ?? req.body?.hours;
+        const n = Number(raw);
+        if (!ALLOWED_NOTICE_HOURS.includes(n)) {
+            return res.status(400).json({
+                error: "bookingNoticeHours must be 24, 48, or 72",
+            });
+        }
+        const user = await User.findOneAndUpdate(
+            { email },
+            { bookingNoticeHours: n },
+            { new: true }
+        ).select("bookingNoticeHours email");
+        if (!user) {
+            return res.status(404).send("User not found");
+        }
+        return res.status(200).json({
+            bookingNoticeHours: user.bookingNoticeHours,
+        });
+    } catch (err: any) {
+        console.log(err);
+        return res.status(500).send(err.message);
+    }
+};
+
 /** Replace expert whole-day booking blocks (YYYY-MM-DD). */
 const setBlockedBookingDates = async (req: any, res: Response) => {
     try {
@@ -259,6 +288,7 @@ module.exports = {
     updateTimeSlots,
     getDailyTimeSlots,
     updateDailyTimeSlots,
+    setBookingNoticeHours,
     setBlockedBookingDates,
     filterCustomers,
     getCustomerById,

@@ -5,8 +5,8 @@ const LandingFooter = () => {
             <div className="main_container flex flex-col py-[60px] lg:py-[100px] lg:flex-row lg:justify-between">
                 <div className="w-full lg:w-[280px]">
                     <Link to='/' className={`w-fit flex items-center space-x-[10px] text-white font-black text-2xl`}>
-                        <div className="w-12 h-12 rounded-2xl bg-white flex items-center justify-center overflow-hidden">
-                            <img src="/logo.png" className="w-10 h-10 object-contain" />
+                        <div className="h-12 max-w-[220px] rounded-2xl bg-white flex items-center justify-center overflow-hidden px-2">
+                            <img src="/logos/main_gold_blue.svg" className="h-10 w-auto max-w-[180px] object-contain object-left" alt="" />
                         </div>
                         <span className="tracking-[0.12em] uppercase">WisdomLinked</span>
                     </Link>

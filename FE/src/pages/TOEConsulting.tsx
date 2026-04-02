@@ -1606,7 +1606,7 @@ export default function TOEConsulting() {
       <header className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${scrolled ? 'bg-[#F8FAFC]/95 backdrop-blur-md shadow-sm border-b border-[#BCCCDC]' : 'bg-[#F8FAFC]/80 backdrop-blur-sm'}`}>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 flex items-center justify-between h-16 sm:h-[4.5rem] py-3 sm:py-4">
           <button type="button" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })} className="flex items-center gap-3 group">
-            <img src="/logo.png" alt="WisdomLinked" className="h-10 w-10 rounded-xl object-contain" />
+            <img src="/logos/main_gold_blue.svg" alt="WisdomLinked" className="h-10 w-auto max-w-[200px] object-contain object-left" />
             <div className="leading-none">
               <div className="font-display font-bold text-[1.35rem] text-slate-900">WisdomLinked</div>
             </div>
@@ -1683,10 +1683,8 @@ export default function TOEConsulting() {
                 <span className="text-[11px] font-bold tracking-[0.13em] uppercase" style={{ color: '#234C6A' }}>500+ Active Experts · 100+ Countries</span>
               </div>
 
-              <h1 className="font-display font-bold leading-[1.04] mb-6 animate-fade-up" style={{ animationDelay: '0.15s', fontSize: 'clamp(3rem, 5.5vw, 5rem)' }}>
-                <span style={{ color: '#234C6A' }}>Wisdom</span>
-                <br />
-                <span className="text-slate-900 relative">Linked</span>
+              <h1 className="font-display font-bold leading-[1.04] mb-6 animate-fade-up text-slate-900" style={{ animationDelay: '0.15s', fontSize: 'clamp(3rem, 5.5vw, 5rem)' }}>
+                WisdomLinked
               </h1>
 
               <p className="text-slate-500 leading-relaxed mb-6 sm:mb-9 max-w-[480px] animate-fade-up text-sm sm:text-base" style={{ animationDelay: '0.28s' }}>
@@ -2157,7 +2155,7 @@ export default function TOEConsulting() {
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-8 sm:gap-12 mb-8 sm:mb-12">
               <div className="md:col-span-1">
                 <div className="flex items-center gap-3 mb-4">
-                  <img src="/logo.png" alt="WisdomLinked" className="h-10 w-10 rounded-xl object-contain" />
+                  <img src="/logos/b_w.svg" alt="WisdomLinked" className="h-10 w-auto max-w-[200px] object-contain object-left" />
                   <div><div className="font-display font-bold text-lg text-white">WisdomLinked</div><div className="text-xs text-[#D9EAFD]">Connect with experts</div></div>
                 </div>
                 <p className="text-slate-400 text-sm leading-relaxed">Connecting expertise with ambition, globally.</p>
