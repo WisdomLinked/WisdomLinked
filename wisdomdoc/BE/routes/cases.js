@@ -258,6 +258,9 @@ router.patch('/:id/status', async (req, res) => {
   const isAdmin = req.userRole === 'admin';
   const isExpert = caseRow.assigned_expert_id === req.userId;
   if (!isAdmin && !isExpert) return res.status(403).json({ error: 'Forbidden' });
+  if (caseRow.status === CaseStatus.APPROVED && !isAdmin) {
+    return res.status(403).json({ error: 'Only admin can reopen or change a case after final approval' });
+  }
   if (isExpert && !isAdmin && caseRow.status === CaseStatus.PENDING_ADMIN_APPROVAL) {
     return res.status(403).json({ error: 'Case is awaiting admin decision' });
   }
@@ -285,6 +288,8 @@ router.patch('/:id/status', async (req, res) => {
   } else if (status === CaseStatus.REJECTED) {
     updates.push('rejected_at = ?');
     params.push(now);
+  } else if (status === CaseStatus.NEEDS_INFO && caseRow.status === CaseStatus.APPROVED) {
+    updates.push('approved_at = NULL');
   } else if ([CaseStatus.UNDER_REVIEW, CaseStatus.ASSIGNED].includes(status)) {
     updates.push('assessed_at = NULL');
   }

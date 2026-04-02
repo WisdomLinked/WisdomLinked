@@ -24,7 +24,7 @@ export const STATUS_TRANSITIONS = Object.freeze({
   [CaseStatus.NEEDS_INFO]: [CaseStatus.RESUBMITTED, CaseStatus.OVERDUE],
   [CaseStatus.RESUBMITTED]: [CaseStatus.UNDER_REVIEW, CaseStatus.NEEDS_INFO, CaseStatus.REJECTED, CaseStatus.OVERDUE, CaseStatus.PENDING_ADMIN_APPROVAL],
   [CaseStatus.PENDING_ADMIN_APPROVAL]: [CaseStatus.APPROVED, CaseStatus.REJECTED, CaseStatus.NEEDS_INFO],
-  [CaseStatus.APPROVED]: [], // terminal
+  [CaseStatus.APPROVED]: [CaseStatus.NEEDS_INFO], // admin-only: reopen for supplements
   [CaseStatus.REJECTED]: [], // terminal
   [CaseStatus.OVERDUE]: [CaseStatus.ASSIGNED, CaseStatus.UNDER_REVIEW, CaseStatus.NEEDS_INFO, CaseStatus.REJECTED, CaseStatus.PENDING_ADMIN_APPROVAL],
 });

@@ -13,6 +13,38 @@ function hasApprovedCase(studentId) {
   return !!row;
 }
 
+/** Active case that is not terminal (approved/rejected) */
+function getActiveNonTerminalCase(studentId) {
+  return db.prepare(
+    'SELECT id, status FROM cases WHERE student_id = ? AND status NOT IN (?, ?)'
+  ).get(studentId, CaseStatus.APPROVED, CaseStatus.REJECTED);
+}
+
+/**
+ * Upload/remove allowed when committee enabled upload, no final approval, and:
+ * - no active case, or
+ * - needs_info (committee asked for more), or
+ * - submitted (application filed but not yet assigned to an examiner).
+ * Once status is assigned or later (except needs_info), uploads are closed.
+ */
+function canStudentUploadDocuments(studentId) {
+  const user = db.prepare('SELECT approved FROM users WHERE id = ?').get(studentId);
+  if (!user || user.approved !== 1) return false;
+  if (hasApprovedCase(studentId)) return false;
+  const active = getActiveNonTerminalCase(studentId);
+  if (!active) return true;
+  if (active.status === CaseStatus.NEEDS_INFO) return true;
+  if (active.status === CaseStatus.SUBMITTED) return true;
+  return false;
+}
+
+function uploadDisabledReasonFor(studentId, isApproved) {
+  if (canStudentUploadDocuments(studentId)) return null;
+  if (!isApproved) return 'committee_disabled';
+  if (hasApprovedCase(studentId)) return 'final_approved';
+  return 'case_in_review';
+}
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const uploadsDir = path.join(__dirname, '..', 'uploads');
 
@@ -64,18 +96,34 @@ router.get('/', (req, res) => {
       ORDER BY c.created_at DESC
     `).all(req.userId);
   } catch (_) {}
-  res.json({ documents: docs, messages: messages || [], clarifications, isApproved: !!isApproved, timezone: user.timezone || 'America/Chicago' });
+  const canUpload = canStudentUploadDocuments(req.userId);
+  res.json({
+    documents: docs,
+    messages: messages || [],
+    clarifications,
+    isApproved: !!isApproved,
+    timezone: user.timezone || 'America/Chicago',
+    canUploadDocuments: canUpload,
+    uploadDisabledReason: uploadDisabledReasonFor(req.userId, !!isApproved),
+    /** Uploads may be closed after submit; messaging stays available for all students */
+    canMessageCommittee: true,
+  });
 });
 
 router.post('/upload', upload.single('file'), (req, res) => {
-  const user = db.prepare('SELECT approved FROM users WHERE id = ?').get(req.userId);
-  if (!user || user.approved !== 1) {
+  if (!canStudentUploadDocuments(req.userId)) {
     if (req.file && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
-    return res.status(403).json({ error: 'Only selected students can upload. Contact the committee.' });
-  }
-  if (hasApprovedCase(req.userId)) {
-    if (req.file && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
-    return res.status(403).json({ error: 'Uploads are closed after your application has been approved.' });
+    const user = db.prepare('SELECT approved FROM users WHERE id = ?').get(req.userId);
+    if (!user || user.approved !== 1) {
+      return res.status(403).json({ error: 'Only selected students can upload. Contact the committee.' });
+    }
+    if (hasApprovedCase(req.userId)) {
+      return res.status(403).json({ error: 'Uploads are closed after your application has been approved.' });
+    }
+    return res.status(403).json({
+      error:
+        'Uploads are closed after your case has been assigned for review. You can upload again when the committee asks for more information.',
+    });
   }
   const type = (req.body.type || '').toLowerCase();
   const caseId = req.body.caseId ? parseInt(req.body.caseId, 10) : null;
@@ -100,11 +148,8 @@ router.post('/upload', upload.single('file'), (req, res) => {
 });
 
 router.post('/message', (req, res) => {
-  const user = db.prepare('SELECT approved FROM users WHERE id = ?').get(req.userId);
-  if (!user || user.approved !== 1) {
-    return res.status(403).json({ error: 'Only selected students can add messages.' });
-  }
   const message = req.body.message != null ? String(req.body.message).trim() : '';
+  if (!message) return res.status(400).json({ error: 'Message is required.' });
   db.prepare('INSERT INTO messages (user_id, message) VALUES (?, ?)').run(req.userId, message);
   const count = db.prepare('SELECT COUNT(*) as c FROM messages WHERE user_id = ?').get(req.userId).c;
   if (count > MESSAGE_CAP) {
@@ -141,8 +186,18 @@ router.get('/:id/preview', (req, res) => {
 });
 
 router.delete('/:id', (req, res) => {
-  if (hasApprovedCase(req.userId)) {
-    return res.status(403).json({ error: 'Documents cannot be removed after your application has been approved.' });
+  if (!canStudentUploadDocuments(req.userId)) {
+    if (hasApprovedCase(req.userId)) {
+      return res.status(403).json({ error: 'Documents cannot be removed after your application has been approved.' });
+    }
+    const user = db.prepare('SELECT approved FROM users WHERE id = ?').get(req.userId);
+    if (!user || user.approved !== 1) {
+      return res.status(403).json({ error: 'Documents cannot be removed. Contact the committee.' });
+    }
+    return res.status(403).json({
+      error:
+        'Documents cannot be removed after your case has been assigned for review. You can remove or add files again when the committee asks for more information.',
+    });
   }
   const id = parseInt(req.params.id, 10);
   const row = db.prepare('SELECT id, path FROM documents WHERE id = ? AND user_id = ? AND uploaded_by IS NULL').get(id, req.userId);

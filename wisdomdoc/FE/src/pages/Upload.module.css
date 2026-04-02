@@ -61,6 +61,35 @@
   border-radius: 8px;
 }
 
+.accessDisabledBanner {
+  margin: 0 0 1rem;
+  padding: 0.75rem 1rem;
+  font-size: 0.9rem;
+  line-height: 1.45;
+  color: var(--text);
+  background: rgba(100, 149, 237, 0.12);
+  border: 1px solid rgba(100, 149, 237, 0.35);
+  border-radius: 8px;
+}
+
+.committeeClosedMsg {
+  margin: 0 0 0.75rem;
+  padding: 0.65rem 0.85rem;
+  font-size: 0.9rem;
+  line-height: 1.45;
+  color: var(--text);
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.messageHint {
+  margin: 0 0 0.65rem;
+  font-size: 0.88rem;
+  line-height: 1.4;
+  color: var(--text-muted);
+}
+
 .caseStatusBanner {
   padding: 1.25rem 1.5rem;
   margin-bottom: 1.25rem;
@@ -342,6 +371,15 @@
   display: flex;
   align-items: center;
   gap: 0.75rem;
+}
+
+.selectedFileLabel {
+  font-size: 0.875rem;
+  color: var(--text-muted);
+  max-width: min(100%, 14rem);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .additionalUpload {

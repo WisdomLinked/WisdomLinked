@@ -30,8 +30,26 @@ export default function Upload() {
   const [myCases, setMyCases] = useState([]);
   const [submitting, setSubmitting] = useState(false);
   const [resubmitting, setResubmitting] = useState(false);
+  const [canUploadDocuments, setCanUploadDocuments] = useState(true);
+  const [uploadDisabledReason, setUploadDisabledReason] = useState(null);
+  const [additionalInputKey, setAdditionalInputKey] = useState(0);
 
   const headers = () => ({ Authorization: `Bearer ${token}` });
+
+  /** e.g. "Cover Letter.pdf" → "Cover Letter (1).pdf", bumping until not in list */
+  function uniqueCopyFilename(originalName, existingFilenames) {
+    const existing = new Set(existingFilenames.map((f) => f));
+    const dot = originalName.lastIndexOf('.');
+    const base = dot >= 0 ? originalName.slice(0, dot) : originalName;
+    const ext = dot >= 0 ? originalName.slice(dot) : '';
+    let n = 1;
+    let candidate = `${base} (${n})${ext}`;
+    while (existing.has(candidate)) {
+      n += 1;
+      candidate = `${base} (${n})${ext}`;
+    }
+    return candidate;
+  }
 
   const downloadUrl = (docId) =>
     `${API}/documents/${docId}/download?token=${encodeURIComponent(token)}`;
@@ -46,8 +64,30 @@ export default function Upload() {
   const hasFinalApprovedCase = myCases.some((c) => c.status === 'approved');
   /** Before first submit (or after reject while preparing again) — not when a workflow case exists */
   const showInProgressBanner = isApproved && !activeCase && !hasFinalApprovedCase;
-  /** No new uploads or removals after final case approval */
-  const uploadsLocked = hasFinalApprovedCase;
+  /** Server-driven; falls back if older API */
+  const uploadsLocked = !canUploadDocuments;
+
+  function ingestDocumentsPayload(docsData, cases) {
+    setDocuments(docsData.documents || []);
+    const approved = !!docsData.isApproved;
+    setIsApproved(approved);
+    setMessages(docsData.messages || []);
+    setClarifications(docsData.clarifications || []);
+    setTimezone(docsData.timezone || 'America/Chicago');
+    setMyCases(cases);
+    const hasApprovedCase = cases.some((c) => c.status === 'approved');
+    const act = cases.find((c) => c.status !== 'approved' && c.status !== 'rejected');
+    const fallbackCan =
+      approved &&
+      !hasApprovedCase &&
+      (!act || act.status === 'needs_info' || act.status === 'submitted');
+    if (docsData.canUploadDocuments !== undefined) {
+      setCanUploadDocuments(!!docsData.canUploadDocuments);
+    } else {
+      setCanUploadDocuments(fallbackCan);
+    }
+    setUploadDisabledReason(docsData.uploadDisabledReason || null);
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -60,12 +100,7 @@ export default function Upload() {
         const docsData = await docsRes.json();
         const casesData = casesRes.ok ? await casesRes.json() : { cases: [] };
         if (!cancelled) {
-          setDocuments(docsData.documents || []);
-          setIsApproved(!!docsData.isApproved);
-          setMessages(docsData.messages || []);
-          setClarifications(docsData.clarifications || []);
-          setTimezone(docsData.timezone || 'America/Chicago');
-          setMyCases(casesData.cases || []);
+          ingestDocumentsPayload(docsData, casesData.cases || []);
         }
       } catch (e) {
         if (!cancelled) setError(e.message || 'Could not load documents');
@@ -78,12 +113,29 @@ export default function Upload() {
 
   async function handleUpload(type, file, description) {
     if (!file || uploadsLocked) return;
+    let displayName = file.name;
+    if (type === 'additional') {
+      const existingNames = documents
+        .filter((d) => d.type === 'additional' && !d.uploaded_by)
+        .map((d) => d.filename);
+      const dup = existingNames.includes(file.name);
+      if (dup) {
+        displayName = uniqueCopyFilename(file.name, existingNames);
+        if (
+          !window.confirm(
+            `A file named "${file.name}" is already on file. Save this upload as "${displayName}"?`
+          )
+        ) {
+          return;
+        }
+      }
+    }
     setError('');
     setUploading(type);
     const form = new FormData();
     form.append('file', file);
     form.append('type', type);
-    form.append('originalName', file.name);
+    form.append('originalName', displayName);
     if (type === 'additional' && description != null) form.append('description', description);
     try {
       const res = await fetch(`${API}/documents/upload`, {
@@ -97,6 +149,7 @@ export default function Upload() {
       if (type === 'additional') {
         setAdditionalFile(null);
         setAdditionalDesc('');
+        setAdditionalInputKey((k) => k + 1);
       }
     } catch (e) {
       setError(e.message || 'Upload failed');
@@ -112,6 +165,7 @@ export default function Upload() {
       const res = await fetch(`${API}/documents/${id}`, { method: 'DELETE', headers: headers() });
       if (!res.ok) throw new Error('Delete failed');
       setDocuments(prev => prev.filter(d => d.id !== id));
+      setAdditionalInputKey((k) => k + 1);
     } catch (e) {
       setError(e.message || 'Delete failed');
     }
@@ -130,7 +184,13 @@ export default function Upload() {
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || 'Submit failed');
-      setMyCases((prev) => [{ ...data, status: 'submitted' }, ...prev]);
+      const [docsRes, casesRes] = await Promise.all([
+        fetch(`${API}/documents`, { headers: headers() }),
+        fetch(`${API}/cases`, { headers: headers() }),
+      ]);
+      const docsData = await docsRes.json();
+      const casesData = casesRes.ok ? await casesRes.json() : { cases: [] };
+      ingestDocumentsPayload(docsData, casesData.cases || []);
     } catch (e) {
       setError(e.message || 'Submit failed');
     } finally {
@@ -150,7 +210,13 @@ export default function Upload() {
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || 'Resubmit failed');
-      setMyCases((prev) => prev.map((c) => c.id === activeCase.id ? { ...c, ...data, status: 'resubmitted' } : c));
+      const [docsRes, casesRes] = await Promise.all([
+        fetch(`${API}/documents`, { headers: headers() }),
+        fetch(`${API}/cases`, { headers: headers() }),
+      ]);
+      const docsData = await docsRes.json();
+      const casesData = casesRes.ok ? await casesRes.json() : { cases: [] };
+      ingestDocumentsPayload(docsData, casesData.cases || []);
     } catch (e) {
       setError(e.message || 'Resubmit failed');
     } finally {
@@ -187,17 +253,6 @@ export default function Upload() {
     );
   }
 
-  if (!isApproved) {
-    return (
-      <div className={styles.page}>
-        <div className={styles.notApproved}>
-          <h2 className={styles.heading}>Upload not available</h2>
-          <p>Only selected students can add files. You have not been selected yet. Contact the admission committee.</p>
-        </div>
-      </div>
-    );
-  }
-
   const STATUS_LABELS = {
     draft: 'Draft',
     submitted: 'Submitted',
@@ -224,10 +279,32 @@ export default function Upload() {
   };
   const completedCases = myCases.filter((c) => c.status === 'approved' || c.status === 'rejected');
 
+  function uploadLockedCopy(reason) {
+    if (reason === 'committee_disabled') {
+      return 'Your package appears complete and the uploading function is closed. Contact admin if there are questions.';
+    }
+    if (reason === 'final_approved') {
+      return 'Your application has been approved. You can no longer upload or remove documents. You can still preview or download your files below.';
+    }
+    if (reason === 'case_in_review') {
+      return 'Your case has been assigned for review (or is in a review stage). Uploading is closed until the committee asks for more information. You can still send messages to the committee below, and preview or download your files.';
+    }
+    return 'You cannot upload or remove documents right now. You can still message the committee below and preview or download your files.';
+  }
+
   return (
     <div className={styles.page}>
       <h2 className={styles.heading}>Upload documents for admission</h2>
-      <p className={styles.hint}>PDF, DOC, DOCX, or TXT (max 10MB each). Upload SOP, LOR, and Resume, then submit your application.</p>
+      {!isApproved && (
+        <div className={styles.accessDisabledBanner} role="status">
+          Upload access is disabled by the committee. You can still view your documents and message the committee below.
+        </div>
+      )}
+      <p className={styles.hint}>
+        {isApproved
+          ? 'PDF, DOC, DOCX, or TXT (max 10MB each). Upload SOP, LOR, and Resume, then submit your application.'
+          : 'You can view your submitted files and message the committee. Enable upload is controlled by the committee.'}
+      </p>
 
       {showInProgressBanner && (
         <div className={styles.inProgressBanner} role="status">
@@ -271,7 +348,7 @@ export default function Upload() {
             {activeCase.status === 'needs_info' && (
               <>
                 <span className={styles.statusHint}>Please provide the requested information and resubmit.</span>
-                {hasRequiredDocs && (
+                {hasRequiredDocs && canUploadDocuments && (
                   <button
                     type="button"
                     className={styles.submitBtn}
@@ -308,9 +385,9 @@ export default function Upload() {
 
       {error && <div className={styles.error}>{error}</div>}
 
-      {uploadsLocked && (
+      {uploadsLocked && uploadDisabledReason !== 'committee_disabled' && (
         <p className={styles.uploadLockedNote} role="status">
-          Your application has been approved. You can no longer upload or remove documents. You can still preview or download your files below.
+          {uploadLockedCopy(uploadDisabledReason)}
         </p>
       )}
 
@@ -327,12 +404,21 @@ export default function Upload() {
                   <div className={styles.additionalUpload}>
                     <div className={styles.row}>
                       <input
+                        key={additionalInputKey}
                         type="file"
                         accept=".pdf,.doc,.docx,.txt"
                         className={styles.fileInput}
-                        onChange={e => setAdditionalFile(e.target.files?.[0] || null)}
+                        onChange={(e) => {
+                          const f = e.target.files?.[0] ?? null;
+                          setAdditionalFile(f);
+                          // Reset so choosing the same file again fires change on the next pick
+                          e.target.value = '';
+                        }}
                         disabled={isUploading}
                       />
+                      {additionalFile && (
+                        <span className={styles.selectedFileLabel}>{additionalFile.name}</span>
+                      )}
                     </div>
                     <input
                       type="text"
@@ -360,7 +446,11 @@ export default function Upload() {
                       type="file"
                       accept=".pdf,.doc,.docx,.txt"
                       className={styles.fileInput}
-                      onChange={e => handleUpload(id, e.target.files?.[0])}
+                      onChange={(e) => {
+                        const f = e.target.files?.[0];
+                        e.target.value = '';
+                        if (f) handleUpload(id, f);
+                      }}
                       disabled={isUploading}
                     />
                     {isUploading && <span className={styles.status}>Uploading…</span>}
@@ -391,6 +481,14 @@ export default function Upload() {
                         >
                           Preview
                         </button>
+                        <a
+                          href={downloadUrl(doc.id)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className={styles.downloadLink}
+                        >
+                          Download
+                        </a>
                         {!uploadsLocked && (
                           <button
                             type="button"
@@ -411,11 +509,20 @@ export default function Upload() {
 
         {(() => {
           const committeeFeedback = documents.filter(d => d.uploaded_by != null || d.type === 'feedback');
-          if (committeeFeedback.length === 0) return null;
+          const showCommitteeSection =
+            committeeFeedback.length > 0 ||
+            uploadDisabledReason === 'committee_disabled' ||
+            !isApproved;
+          if (!showCommitteeSection) return null;
           return (
             <section className={styles.section}>
               <label className={styles.label}>Committee feedback</label>
               <p className={styles.feedbackHint}>Comments, edits, or critiques from the admission committee.</p>
+              {(!isApproved || uploadDisabledReason === 'committee_disabled') && (
+                <p className={styles.committeeClosedMsg} role="status">
+                  Your package appears complete and the uploading function is closed. Contact admin if there are questions.
+                </p>
+              )}
               <ul className={styles.list}>
                 {committeeFeedback.map(doc => (
                   <li key={doc.id} className={styles.docItem}>
@@ -450,7 +557,7 @@ export default function Upload() {
           );
         })()}
 
-        {!activeCase && hasRequiredDocs && isApproved && !myCases.some((c) => c.status === 'approved') && (
+        {!activeCase && hasRequiredDocs && isApproved && canUploadDocuments && !myCases.some((c) => c.status === 'approved') && (
           <section className={styles.section}>
             <label className={styles.label}>Submit application</label>
             <p className={styles.submitHint}>You have uploaded SOP, LOR, and Resume. Click to create your application case.</p>
@@ -483,6 +590,11 @@ export default function Upload() {
 
         <section className={styles.section}>
           <label className={styles.label}>Message to admission committee</label>
+          {uploadsLocked && uploadDisabledReason !== 'committee_disabled' && (
+            <p className={styles.messageHint} role="status">
+              You can always send messages here, even while uploads are closed.
+            </p>
+          )}
           <form onSubmit={handleSaveMessage}>
             <textarea
               value={message}
