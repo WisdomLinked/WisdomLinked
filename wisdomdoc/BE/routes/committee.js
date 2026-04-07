@@ -7,6 +7,7 @@ import fs from 'fs';
 import { db } from '../db.js';
 import { authMiddleware, requireCommittee } from '../middleware/auth.js';
 import { majorMatches } from '../utils/majorMatch.js';
+import { CaseStatus } from '../constants/caseStatus.js';
 import { sendClarificationEmail } from '../utils/email.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -41,11 +42,13 @@ router.use(authMiddleware, requireCommittee);
 router.get('/students', (req, res) => {
   const isAdmin = req.userRole === 'admin';
   let students;
+  const approvedCaseSubquery = `(SELECT COUNT(*) FROM cases c2 WHERE c2.student_id = u.id AND c2.status = '${CaseStatus.APPROVED}') AS has_approved_case`;
   if (isAdmin) {
     students = db.prepare(`
       SELECT u.id, u.email, u.major, u.created_at, COALESCE(u.approved, 0) AS approved,
              (SELECT COUNT(*) FROM documents d WHERE d.user_id = u.id) AS doc_count,
-             (SELECT COUNT(*) FROM messages m WHERE m.user_id = u.id) AS message_count
+             (SELECT COUNT(*) FROM messages m WHERE m.user_id = u.id) AS message_count,
+             ${approvedCaseSubquery}
       FROM users u
       WHERE u.role = 'student'
       ORDER BY u.created_at DESC
@@ -58,7 +61,8 @@ router.get('/students', (req, res) => {
       const allStudents = db.prepare(`
         SELECT u.id, u.email, u.major, u.created_at, COALESCE(u.approved, 0) AS approved,
                (SELECT COUNT(*) FROM documents d WHERE d.user_id = u.id) AS doc_count,
-               (SELECT COUNT(*) FROM messages m WHERE m.user_id = u.id) AS message_count
+               (SELECT COUNT(*) FROM messages m WHERE m.user_id = u.id) AS message_count,
+               ${approvedCaseSubquery}
         FROM users u
         WHERE u.role = 'student' AND COALESCE(u.major,'') != ''
         ORDER BY u.created_at DESC
@@ -70,35 +74,15 @@ router.get('/students', (req, res) => {
 });
 
 router.patch('/students/approve-all', (req, res) => {
-  const isAdmin = req.userRole === 'admin';
-  if (isAdmin) {
-    const result = db.prepare('UPDATE users SET approved = 1 WHERE role = ?').run('student');
-    return res.json({ count: result.changes });
-  }
-  const expertMajors = (req.userMajors || []).map(m => m.trim().toLowerCase()).filter(Boolean);
-  if (expertMajors.length === 0) return res.json({ count: 0 });
-  const allStudents = db.prepare("SELECT id, major FROM users WHERE role = 'student' AND COALESCE(major,'') != ''").all();
-  const ids = allStudents.filter(s => majorMatches(s.major, expertMajors)).map(s => s.id);
-  if (ids.length === 0) return res.json({ count: 0 });
-  const placeholders = ids.map(() => '?').join(',');
-  const result = db.prepare(`UPDATE users SET approved = 1 WHERE id IN (${placeholders})`).run(...ids);
-  res.json({ count: result.changes });
+  if (req.userRole !== 'admin') return res.status(403).json({ error: 'Admin only' });
+  const result = db.prepare('UPDATE users SET approved = 1 WHERE role = ?').run('student');
+  return res.json({ count: result.changes });
 });
 
 router.patch('/students/disable-all', (req, res) => {
-  const isAdmin = req.userRole === 'admin';
-  if (isAdmin) {
-    const result = db.prepare('UPDATE users SET approved = 0 WHERE role = ?').run('student');
-    return res.json({ count: result.changes });
-  }
-  const expertMajors = (req.userMajors || []).map(m => m.trim().toLowerCase()).filter(Boolean);
-  if (expertMajors.length === 0) return res.json({ count: 0 });
-  const allStudents = db.prepare("SELECT id, major FROM users WHERE role = 'student' AND COALESCE(major,'') != ''").all();
-  const ids = allStudents.filter(s => majorMatches(s.major, expertMajors)).map(s => s.id);
-  if (ids.length === 0) return res.json({ count: 0 });
-  const placeholders = ids.map(() => '?').join(',');
-  const result = db.prepare(`UPDATE users SET approved = 0 WHERE id IN (${placeholders})`).run(...ids);
-  res.json({ count: result.changes });
+  if (req.userRole !== 'admin') return res.status(403).json({ error: 'Admin only' });
+  const result = db.prepare('UPDATE users SET approved = 0 WHERE role = ?').run('student');
+  return res.json({ count: result.changes });
 });
 
 router.post('/students/:studentId/clarify', async (req, res) => {
@@ -168,7 +152,16 @@ router.patch('/students/:id/approve', (req, res) => {
   if (!student) return res.status(404).json({ error: 'Student not found' });
   if (req.userRole !== 'admin') {
     const expertMajors = (req.userMajors || []).map(m => m.trim().toLowerCase()).filter(Boolean);
-    if (!majorMatches(student.major, expertMajors)) return res.status(403).json({ error: 'Major does not match' });
+    const assigned = db.prepare('SELECT id FROM cases WHERE student_id = ? AND assigned_expert_id = ?').get(id, req.userId);
+    if (!assigned && !majorMatches(student.major, expertMajors)) {
+      return res.status(403).json({ error: 'Not allowed for this student' });
+    }
+    const approvedCase = db.prepare('SELECT id FROM cases WHERE student_id = ? AND status = ? LIMIT 1').get(id, CaseStatus.APPROVED);
+    if (approvedCase) {
+      return res.status(403).json({
+        error: 'Cannot change upload access while the case is final-approved. An admin must reopen the case first.',
+      });
+    }
   }
   const current = db.prepare('SELECT approved FROM users WHERE id = ?').get(id);
   const next = current.approved === 1 ? 0 : 1;
@@ -201,8 +194,13 @@ router.get('/students/:id', (req, res) => {
   ).all(studentId);
   const caseCountRow = db.prepare('SELECT COUNT(*) AS c FROM cases WHERE student_id = ?').get(studentId);
   const hasSubmittedApplication = (caseCountRow?.c || 0) > 0;
+  const approvedCase = db.prepare('SELECT id FROM cases WHERE student_id = ? AND status = ? LIMIT 1').get(studentId, CaseStatus.APPROVED);
   res.json({
-    student: { id: student.id, email: student.email, major: student.major, created_at: student.created_at, approved: student.approved === 1, timezone: student.timezone || 'America/Chicago', username: student.username, bio: student.bio, title: student.title, image: student.image, phone: student.phone, country: student.country, state: student.state, city: student.city },
+    student: {
+      id: student.id, email: student.email, major: student.major, created_at: student.created_at, approved: student.approved === 1,
+      hasApprovedCase: !!approvedCase,
+      timezone: student.timezone || 'America/Chicago', username: student.username, bio: student.bio, title: student.title, image: student.image, phone: student.phone, country: student.country, state: student.state, city: student.city,
+    },
     documents,
     messages: messages || [],
     clarifications,

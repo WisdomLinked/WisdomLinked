@@ -278,6 +278,9 @@ export default function Upload() {
     overdue: styles.badgeOverdue,
   };
   const completedCases = myCases.filter((c) => c.status === 'approved' || c.status === 'rejected');
+  const studentOwnedDocs = documents.filter((d) => !d.uploaded_by);
+  /** New student: committee has not enabled upload and no files yet — simple prompt, no empty upload UI */
+  const awaitingAdminFirstUpload = !isApproved && studentOwnedDocs.length === 0;
 
   function uploadLockedCopy(reason) {
     if (reason === 'committee_disabled') {
@@ -295,6 +298,59 @@ export default function Upload() {
   return (
     <div className={styles.page}>
       <h2 className={styles.heading}>Upload documents for admission</h2>
+
+      {awaitingAdminFirstUpload ? (
+        <>
+          <div className={styles.awaitingAdminCard} role="status">
+            <p>
+              The expert will enable you to upload your files. Message the committee and admin/expert will get back to you soon.
+            </p>
+          </div>
+          {error && <div className={styles.error}>{error}</div>}
+          {clarifications.length > 0 && (
+            <section className={styles.section}>
+              <label className={styles.label}>Clarifications from committee</label>
+              <ul className={styles.list}>
+                {clarifications.map(c => (
+                  <li key={c.id} className={styles.docItem}>
+                    <div className={styles.docInfo}>
+                      <span className={styles.docName}>{c.message}</span>
+                      <span className={styles.docTime}>{c.from_email} · {formatDate(c.created_at, timezone)}</span>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
+          <section className={styles.section}>
+            <label className={styles.label}>Message to admission committee</label>
+            <form onSubmit={handleSaveMessage}>
+              <textarea
+                value={message}
+                onChange={e => setMessage(e.target.value)}
+                placeholder="Message the admin…"
+                className={styles.textarea}
+                rows={4}
+              />
+              <button type="submit" className={styles.saveMsgBtn} disabled={messageSaving}>
+                {messageSaving ? 'Sending…' : 'Send message'}
+              </button>
+            </form>
+            {messages.length > 0 && (
+              <div className={styles.msgHistory}>
+                <p className={styles.msgHistoryTitle}>Previous Messages</p>
+                {messages.map(m => (
+                  <div key={m.id} className={styles.msgItem}>
+                    <p className={styles.msgText}>{m.message}</p>
+                    <p className={styles.msgMeta}>You · {formatDate(m.created_at, timezone)}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+        </>
+      ) : (
+        <>
       {!isApproved && (
         <div className={styles.accessDisabledBanner} role="status">
           Upload access is disabled by the committee. You can still view your documents and message the committee below.
@@ -620,6 +676,8 @@ export default function Upload() {
           )}
         </section>
       </div>
+        </>
+      )}
 
       {previewDoc && (
         <div className={styles.previewOverlay} onClick={() => setPreviewDoc(null)} role="dialog" aria-modal="true" aria-label="Document preview">

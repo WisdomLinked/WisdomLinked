@@ -1,10 +1,17 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { API } from '../config';
 import { formatDate } from '../utils/dateFormat';
 import styles from './CommitteeDashboard.module.css';
 
-const DOC_LABELS = { sop: 'SOP', lor: 'LOR', resume: 'Resume', transcript: 'Transcript', additional: 'Additional files', feedback: 'Committee feedback' };
+const DOC_LABELS = {
+  sop: 'Statement of Purpose (SOP)',
+  lor: 'Letter of Recommendation (LOR)',
+  resume: 'Resume',
+  transcript: 'Transcript',
+  additional: 'Additional files',
+  feedback: 'Committee feedback',
+};
 /** Order of document category headings under Documents */
 const DOC_TYPE_ORDER = ['sop', 'lor', 'resume', 'transcript', 'additional'];
 const STATUS_LABELS = {
@@ -22,7 +29,7 @@ const STATUS_LABELS = {
 const PENDING_STATUSES = ['submitted', 'assigned', 'under_review', 'needs_info', 'resubmitted', 'pending_admin_approval'];
 
 export default function CommitteeDashboard() {
-  const { token, user } = useAuth();
+  const { token, user } = useAuth(); // user.id used to label expert’s own assigned cases
   const [activeTab, setActiveTab] = useState('cases');
   const [cases, setCases] = useState([]);
   const [experts, setExperts] = useState([]);
@@ -49,7 +56,39 @@ export default function CommitteeDashboard() {
   const [expertsForCase, setExpertsForCase] = useState(null);
   const [error, setError] = useState('');
   const [previewDoc, setPreviewDoc] = useState(null);
+  /** Admin case list filters (Cases tab) */
+  const [caseApprovalFilter, setCaseApprovalFilter] = useState('all');
+  const [caseMajorFilter, setCaseMajorFilter] = useState('all');
   const headers = () => ({ Authorization: `Bearer ${token}` });
+
+  const MAJOR_FILTER_EMPTY = '__empty__';
+
+  const uniqueMajorsFromCases = useMemo(() => {
+    const set = new Set();
+    let hasNoMajor = false;
+    (cases || []).forEach((c) => {
+      const m = (c.major || '').trim();
+      if (m) set.add(m);
+      else hasNoMajor = true;
+    });
+    const sorted = Array.from(set).sort((a, b) => a.localeCompare(b));
+    return { majors: sorted, hasNoMajor };
+  }, [cases]);
+
+  const filteredCases = useMemo(() => {
+    if (!isAdmin) return cases;
+    return (cases || []).filter((c) => {
+      if (caseApprovalFilter === 'approved' && c.status !== 'approved') return false;
+      if (caseApprovalFilter === 'not_approved' && c.status === 'approved') return false;
+      if (caseMajorFilter !== 'all') {
+        const m = (c.major || '').trim();
+        if (caseMajorFilter === MAJOR_FILTER_EMPTY) {
+          if (m) return false;
+        } else if (m !== caseMajorFilter) return false;
+      }
+      return true;
+    });
+  }, [cases, isAdmin, caseApprovalFilter, caseMajorFilter]);
 
   function loadExpertsForCase(caseId) {
     if (!caseId || !isAdmin) return;
@@ -203,6 +242,12 @@ export default function CommitteeDashboard() {
       setExpertsForCase(null);
     }
   }, [activeTab, selected?.id, isAdmin]);
+
+  useEffect(() => {
+    if (activeTab !== 'cases' || !selected?.id) return;
+    const list = isAdmin ? filteredCases : cases;
+    if (!list.some((c) => c.id === selected.id)) setSelected(null);
+  }, [activeTab, selected?.id, isAdmin, filteredCases, cases]);
 
   useEffect(() => {
     if (activeTab === 'cases' && selected?.id) {
@@ -384,13 +429,15 @@ export default function CommitteeDashboard() {
 
       <p className={styles.hint}>
         {activeTab === 'cases'
-          ? 'Click a case to view documents. Admin: assign experts and grant Final Approval - Offered. Expert: Approve or Reject.'
-          : 'Click a student to manage their access. Enable/disable upload permissions.'}
+          ? (isAdmin
+            ? 'Filter by outcome and major, then click a case. Assign experts and grant Final Approval where appropriate.'
+            : 'Click a case to view documents. Approve or Reject when assigned.')
+          : 'Click a student to manage upload access. Experts and admins can enable or disable uploads (not for students with a final-approved case until an admin reopens the case).'}
       </p>
 
       {error && <div className={styles.error}>{error}</div>}
 
-      {activeTab === 'students' && students.length > 0 && (
+      {activeTab === 'students' && isAdmin && students.length > 0 && (
         <div className={styles.bulkActions}>
           <button type="button" className={styles.enableAllBtn} onClick={enableAll} disabled={enablingAll || disablingAll}>
             {enablingAll ? 'Enabling…' : 'Enable upload for all'}
@@ -404,11 +451,46 @@ export default function CommitteeDashboard() {
       <div className={`${styles.grid} ${!isExpert ? styles.gridTwoCol : ''}`}>
         <aside className={styles.sidebar}>
           {activeTab === 'cases' ? (
+            <>
+              {isAdmin && (
+                <div className={styles.caseFilters}>
+                  <label className={styles.filterField}>
+                    <span className={styles.filterFieldLabel}>Outcome</span>
+                    <select
+                      className={styles.filterSelect}
+                      value={caseApprovalFilter}
+                      onChange={(e) => setCaseApprovalFilter(e.target.value)}
+                      aria-label="Filter cases by approval outcome"
+                    >
+                      <option value="all">All cases</option>
+                      <option value="approved">Final approved</option>
+                      <option value="not_approved">Not final approved</option>
+                    </select>
+                  </label>
+                  <label className={styles.filterField}>
+                    <span className={styles.filterFieldLabel}>Major</span>
+                    <select
+                      className={styles.filterSelect}
+                      value={caseMajorFilter}
+                      onChange={(e) => setCaseMajorFilter(e.target.value)}
+                      aria-label="Filter cases by student major"
+                    >
+                      <option value="all">All majors</option>
+                      {uniqueMajorsFromCases.hasNoMajor && (
+                        <option value={MAJOR_FILTER_EMPTY}>No major listed</option>
+                      )}
+                      {uniqueMajorsFromCases.majors.map((m) => (
+                        <option key={m} value={m}>{m}</option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+              )}
             <ul className={styles.studentList}>
-              {cases.length === 0 ? (
-                <li className={styles.empty}>No cases yet</li>
+              {filteredCases.length === 0 ? (
+                <li className={styles.empty}>{cases.length === 0 ? 'No cases yet' : 'No cases match the filters'}</li>
               ) : (
-                cases.map((c) => (
+                filteredCases.map((c) => (
                   <li key={c.id} className={styles.studentListItem}>
                     <button
                       type="button"
@@ -422,6 +504,13 @@ export default function CommitteeDashboard() {
                           <span className={styles.overdueBadge}> Overdue</span>
                         )}
                       </span>
+                      {isAdmin && c.status === 'approved' && (c.expert_email || c.expert_username) && (
+                        <span className={styles.caseHandledByProminent}>
+                          <span className={styles.caseHandledByLabel}>Handled by</span>
+                          <span className={styles.caseHandledByExpert}>{c.expert_username || 'Expert'}</span>
+                          <span className={styles.caseHandledByEmail}>{c.expert_email || '—'}</span>
+                        </span>
+                      )}
                     </button>
                     {isExpert && (c.status === 'assigned' || c.status === 'under_review' || c.status === 'needs_info' || c.status === 'resubmitted' || c.status === 'overdue') && (
                       <div className={styles.expertQuickActions}>
@@ -449,13 +538,16 @@ export default function CommitteeDashboard() {
                 ))
               )}
             </ul>
+            </>
           ) : (
             <ul className={styles.studentList}>
               {students.length === 0 ? (
                 <li className={styles.empty}>No students yet</li>
               ) : (
-                students.map((s) => (
-                  <li key={s.id} className={styles.studentListItem}>
+                students.map((s) => {
+                  const approvedCaseLocked = !!s.has_approved_case;
+                  return (
+                  <li key={s.id} className={`${styles.studentListItem} ${isExpert && approvedCaseLocked ? styles.studentListItemGrey : ''}`}>
                     <button
                       type="button"
                       className={selected?.id === s.id ? styles.studentBtnActive : styles.studentBtn}
@@ -464,18 +556,27 @@ export default function CommitteeDashboard() {
                       <span className={styles.studentEmail}>{s.email}</span>
                       <span className={styles.studentMeta}>
                         {s.major || 'No major'} · {s.approved ? '✓' : '–'} · {s.doc_count} doc{s.doc_count !== 1 ? 's' : ''}
+                        {approvedCaseLocked && <span className={styles.approvedCaseBadge}> Final approval</span>}
                       </span>
                     </button>
-                    <button
-                      type="button"
-                      className={s.approved ? styles.approveBtnOn : styles.approveBtn}
-                      onClick={(e) => { e.stopPropagation(); toggleApproval(s.id); }}
-                      title={s.approved ? 'Disable upload for student' : 'Enable upload for student'}
-                    >
-                      {s.approved ? 'Disable upload' : 'Enable upload'}
-                    </button>
+                    {(isAdmin || isExpert) && (
+                      <button
+                        type="button"
+                        className={s.approved ? styles.approveBtnOn : styles.approveBtn}
+                        onClick={(e) => { e.stopPropagation(); toggleApproval(s.id); }}
+                        disabled={isExpert && approvedCaseLocked}
+                        title={
+                          isExpert && approvedCaseLocked
+                            ? 'Cannot change while the case is final-approved (admin must reopen)'
+                            : (s.approved ? 'Disable upload for student' : 'Enable upload for student')
+                        }
+                      >
+                        {s.approved ? 'Disable upload' : 'Enable upload'}
+                      </button>
+                    )}
                   </li>
-                ))
+                  );
+                })
               )}
             </ul>
           )}
@@ -495,6 +596,19 @@ export default function CommitteeDashboard() {
               )}
               {activeTab === 'cases' && selected.case_id && (
                 <>
+                  {isAdmin && selected.status === 'approved' && selected.assigned_expert_id && (
+                    <div className={styles.handledCasePanel} role="region" aria-label="Handling Expert Details">
+                      <div className={styles.handledCasePanelHeader}>Handling Expert Details</div>
+                      <div className={styles.handledCasePanelBody}>
+                        <div className={styles.handledCasePanelName}>{selected.expert_username || selected.expert_email || 'Expert'}</div>
+                        {selected.expert_email && (
+                          <a className={styles.handledCasePanelEmail} href={`mailto:${selected.expert_email}`}>
+                            {selected.expert_email}
+                          </a>
+                        )}
+                      </div>
+                    </div>
+                  )}
                   <div className={styles.caseBanner}>
                     <span className={styles.caseStageLabel}>Case stage</span>
                     <span className={styles.caseId}>{selected.case_id}</span>
@@ -507,8 +621,17 @@ export default function CommitteeDashboard() {
                         )}
                       </span>
                     )}
-                    {selected.assigned_expert_id && (
-                      <span className={styles.caseExpert}>Assigned to: {selected.expert_username || selected.expert_email || 'Expert'}</span>
+                    {selected.assigned_expert_id && !(isAdmin && selected.status === 'approved') && (
+                      <span className={styles.caseExpert}>
+                        {isExpert && selected.assigned_expert_id === user?.id
+                          ? (selected.status === 'approved' ? 'You handled this case' : 'You are assigned to this case')
+                          : (
+                            <>
+                              {selected.status === 'approved' ? 'Handled by' : 'Assigned to'}: {selected.expert_username || selected.expert_email || 'Expert'}
+                              {selected.expert_email ? ` · ${selected.expert_email}` : ''}
+                            </>
+                          )}
+                      </span>
                     )}
                     {isAdmin && (
                       <select
@@ -641,13 +764,21 @@ export default function CommitteeDashboard() {
               )}
               <div className={styles.detailHeader}>
                 <h3 className={styles.detailTitle}>Profile</h3>
-                <button
-                  type="button"
-                  className={detail.student.approved ? styles.approveBtnOn : styles.approveBtn}
-                  onClick={() => toggleApproval(detail.student.id)}
-                >
-                  {detail.student.approved ? 'Disable upload' : 'Enable upload'}
-                </button>
+                {(isAdmin || isExpert) && (
+                  <button
+                    type="button"
+                    className={detail.student.approved ? styles.approveBtnOn : styles.approveBtn}
+                    onClick={() => toggleApproval(detail.student.id)}
+                    disabled={isExpert && detail.student.hasApprovedCase}
+                    title={
+                      isExpert && detail.student.hasApprovedCase
+                        ? 'Cannot change while the case is final-approved (admin must reopen)'
+                        : undefined
+                    }
+                  >
+                    {detail.student.approved ? 'Disable upload' : 'Enable upload'}
+                  </button>
+                )}
               </div>
 
               <div className={styles.profilePanel}>
