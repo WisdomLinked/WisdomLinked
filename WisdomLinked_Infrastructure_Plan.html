@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>WisdomLinked — Communications Infrastructure Plan</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Inter',sans-serif;color:#1e293b;line-height:1.7;padding:60px 80px;max-width:900px;margin:0 auto;font-size:13px}
+@media print{body{padding:40px 50px;font-size:12px}h1{font-size:22px!important}.page-break{page-break-before:always}}
+h1{font-size:26px;font-weight:700;color:#0f172a;margin-bottom:4px}
+h2{font-size:17px;font-weight:700;color:#234C6A;margin:32px 0 12px;padding-bottom:6px;border-bottom:2px solid #e2e8f0}
+h3{font-size:14px;font-weight:600;color:#334155;margin:20px 0 8px}
+p{margin:8px 0;color:#334155}
+table{width:100%;border-collapse:collapse;margin:12px 0;font-size:12px}
+th{background:#234C6A;color:#fff;padding:8px 12px;text-align:left;font-weight:600}
+td{padding:7px 12px;border-bottom:1px solid #e2e8f0}
+tr:nth-child(even){background:#f8fafc}
+.subtitle{font-size:14px;color:#64748b;margin-bottom:4px}
+.meta{color:#94a3b8;font-size:12px;margin-bottom:40px}
+.badge{display:inline-block;padding:2px 10px;border-radius:20px;font-size:11px;font-weight:600}
+.badge-green{background:#dcfce7;color:#166534}
+.badge-blue{background:#dbeafe;color:#1e40af}
+.badge-red{background:#fee2e2;color:#991b1b}
+.badge-yellow{background:#fef9c3;color:#854d0e}
+.callout{background:#f0f9ff;border-left:4px solid #234C6A;padding:12px 16px;margin:16px 0;border-radius:0 8px 8px 0;font-size:12px}
+.arch-box{background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:20px;margin:16px 0;font-family:monospace;font-size:11px;white-space:pre;line-height:1.6}
+.cover{text-align:center;padding:120px 0 80px}
+.cover h1{font-size:32px;margin-bottom:8px}
+.cover .logo{font-size:40px;font-weight:700;color:#234C6A;letter-spacing:3px;margin-bottom:40px}
+.toc a{color:#234C6A;text-decoration:none}
+.toc li{margin:6px 0}
+ul{margin:8px 0 8px 20px}
+li{margin:4px 0}
+.footer{text-align:center;color:#94a3b8;font-size:11px;margin-top:60px;padding-top:20px;border-top:1px solid #e2e8f0}
+</style>
+</head>
+<body>
+
+<div class="cover">
+<div class="logo">WISDOMLINKED</div>
+<h1>Communications Infrastructure Plan</h1>
+<p class="subtitle">Video Calling & Real-Time Chat — Architecture, Implementation & Migration</p>
+<p class="meta">Prepared by: Khussal Pradhan &nbsp;|&nbsp; Date: April 4, 2026 &nbsp;|&nbsp; Version 1.0</p>
+<p class="meta">CONFIDENTIAL — Internal Use Only</p>
+</div>
+
+<div class="page-break"></div>
+
+<h2>Table of Contents</h2>
+<ol class="toc">
+<li><a href="#s1">Executive Summary</a></li>
+<li><a href="#s2">Current Architecture & Limitations</a></li>
+<li><a href="#s3">Proposed Architecture</a></li>
+<li><a href="#s4">Technology Selection</a></li>
+<li><a href="#s5">Infrastructure Layout</a></li>
+<li><a href="#s6">Data Flow & Integration</a></li>
+<li><a href="#s7">Security Architecture</a></li>
+<li><a href="#s8">Migration Plan</a></li>
+<li><a href="#s9">Cost Analysis</a></li>
+<li><a href="#s10">Risk Assessment</a></li>
+<li><a href="#s11">Timeline</a></li>
+</ol>
+
+<div class="page-break"></div>
+
+<h2 id="s1">1. Executive Summary</h2>
+<p>This document outlines the plan to replace WisdomLinked's current custom Socket.IO chat and public Jitsi video calling with a self-hosted, enterprise-grade communications infrastructure using <strong>Rocket.Chat</strong> (real-time messaging) and <strong>Jitsi Meet</strong> (video conferencing), deployed on a dedicated DigitalOcean server.</p>
+<p>The migration eliminates MAU (Monthly Active User) limits currently affecting video calls, resolves critical reliability issues in the chat system, and reduces long-term costs compared to paid alternatives.</p>
+
+<div class="callout">
+<strong>Key Outcomes:</strong> Zero MAU limits • Offline message delivery • End-to-end encryption • Message search • Push notifications • Integrated video calling from chat • Full data ownership • ~$58/mo total infrastructure cost
+</div>
+
+<h2 id="s2">2. Current Architecture & Limitations</h2>
+
+<h3>2.1 Current Stack</h3>
+<table>
+<tr><th>Component</th><th>Technology</th><th>Hosting</th></tr>
+<tr><td>Chat (Real-time)</td><td>Custom Socket.IO + Node.js</td><td>App server (DO Droplet)</td></tr>
+<tr><td>Chat Storage</td><td>MongoDB (shared with app)</td><td>App server</td></tr>
+<tr><td>Video Calling</td><td>Jitsi Meet (public instance)</td><td>meet.jit.si (third-party)</td></tr>
+<tr><td>Frontend</td><td>React + Vite</td><td>App server</td></tr>
+<tr><td>Backend</td><td>Node.js + Express + TypeScript</td><td>App server</td></tr>
+</table>
+
+<h3>2.2 Critical Limitations</h3>
+<table>
+<tr><th>Issue</th><th>Component</th><th>Severity</th><th>Impact</th></tr>
+<tr><td>Messages lost when user offline</td><td>Chat</td><td><span class="badge badge-red">Critical</span></td><td>No message queue or retry mechanism</td></tr>
+<tr><td>No reconnection sync</td><td>Chat</td><td><span class="badge badge-red">Critical</span></td><td>Internet drop = permanent disconnect</td></tr>
+<tr><td>In-memory state</td><td>Chat</td><td><span class="badge badge-red">Critical</span></td><td>Server restart loses all connections</td></tr>
+<tr><td>MAU limit hit</td><td>Video</td><td><span class="badge badge-red">Critical</span></td><td>Public Jitsi throttles/blocks users</td></tr>
+<tr><td>No read receipts</td><td>Chat</td><td><span class="badge badge-yellow">Medium</span></td><td>Users can't confirm message delivery</td></tr>
+<tr><td>No push notifications</td><td>Chat</td><td><span class="badge badge-yellow">Medium</span></td><td>Users must have app open</td></tr>
+<tr><td>No message search</td><td>Chat</td><td><span class="badge badge-yellow">Medium</span></td><td>Can't find old conversations</td></tr>
+<tr><td>No encryption</td><td>Chat</td><td><span class="badge badge-yellow">Medium</span></td><td>Messages in plaintext over WebSocket</td></tr>
+<tr><td>Cannot scale horizontally</td><td>Chat</td><td><span class="badge badge-yellow">Medium</span></td><td>Single server ceiling</td></tr>
+</table>
+
+<div class="page-break"></div>
+
+<h2 id="s3">3. Proposed Architecture</h2>
+
+<div class="arch-box">
+┌─────────────────────────────────────────────────────────────────────┐
+│                    PROPOSED INFRASTRUCTURE                          │
+├─────────────────────────────┬───────────────────────────────────────┤
+│   DROPLET 1 (Existing)      │   DROPLET 2 (New — Communications)   │
+│   App Server                │   8 GB RAM / 4 vCPU / Ubuntu 22.04   │
+│                             │                                       │
+│  ┌────────────┐             │  ┌─────────────────────────────────┐  │
+│  │ WisdomLink │             │  │          Nginx (SSL)            │  │
+│  │ Frontend   │────HTTPS───▶│  │  chat.wisdomlinked.com :443     │  │
+│  │ (React)    │             │  │  meet.wisdomlinked.com :443     │  │
+│  └────────────┘             │  └──────┬──────────┬──────────────┘  │
+│                             │         │          │                  │
+│  ┌────────────┐             │  ┌──────▼─────┐ ┌─▼────────────┐    │
+│  │ WisdomLink │             │  │ Rocket.Chat│ │  Jitsi Meet  │    │
+│  │ Backend    │──REST API──▶│  │  :3000     │ │  :8000/8443  │    │
+│  │ (Node.js)  │             │  └──────┬─────┘ └──────────────┘    │
+│  └────────────┘             │         │                            │
+│                             │  ┌──────▼─────┐                      │
+│  ┌────────────┐             │  │  MongoDB   │                      │
+│  │ MongoDB    │             │  │  :27017    │                      │
+│  │ (App Data) │             │  │  (Chat DB) │                      │
+│  └────────────┘             │  └────────────┘                      │
+└─────────────────────────────┴───────────────────────────────────────┘
+</div>
+
+<h2 id="s4">4. Technology Selection</h2>
+
+<h3>4.1 Rocket.Chat — Real-Time Messaging</h3>
+<table>
+<tr><th>Attribute</th><th>Detail</th></tr>
+<tr><td>License</td><td>MIT (fully open-source, free forever)</td></tr>
+<tr><td>Enterprise Users</td><td>US Navy, Deutsche Bahn, Credit Suisse, German Federal Police</td></tr>
+<tr><td>GitHub Stars</td><td>40,000+</td></tr>
+<tr><td>Features</td><td>1:1 & group chat, threads, reactions, file sharing, search, E2EE, push notifications, read receipts, typing indicators, offline delivery, webhooks, 200+ REST API endpoints</td></tr>
+<tr><td>Integration</td><td>iframe embed OR custom React UI via REST API</td></tr>
+<tr><td>Database</td><td>MongoDB (same technology WisdomLinked already uses)</td></tr>
+<tr><td>Built-in Jitsi Support</td><td>Native integration — start video calls from any chat</td></tr>
+</table>
+
+<h3>4.2 Jitsi Meet — Video Conferencing</h3>
+<table>
+<tr><th>Attribute</th><th>Detail</th></tr>
+<tr><td>License</td><td>Apache 2.0 (fully open-source, free forever)</td></tr>
+<tr><td>Enterprise Users</td><td>8x8, Ooma, Onet, Opal</td></tr>
+<tr><td>Features</td><td>HD video/audio, screen sharing, recording, breakout rooms, live captions, virtual backgrounds, lobby/waiting room</td></tr>
+<tr><td>Self-hosted benefit</td><td>Zero MAU limits — unlimited users, unlimited meetings</td></tr>
+<tr><td>Current status</td><td>Already implemented in main branch (using public instance)</td></tr>
+</table>
+
+<h3>4.3 Why Not Paid Alternatives?</h3>
+<table>
+<tr><th>Paid Suite</th><th>Monthly Cost</th><th>Why We Passed</th></tr>
+<tr><td>CometChat</td><td>$299–$1,249</td><td>No E2EE, data on their servers, expensive at scale</td></tr>
+<tr><td>TalkJS</td><td>$279–$569</td><td>Group chat capped at 300, no video, basic moderation</td></tr>
+<tr><td>Stream</td><td>$499–$1,299</td><td>Most expensive, video billed separately</td></tr>
+<tr><td>Sendbird</td><td>$399–$499+</td><td>Unpredictable overage charges, complex pricing</td></tr>
+<tr><td><strong>Rocket.Chat</strong></td><td><strong>$0</strong></td><td><strong>Selected — free, feature-complete, self-hosted</strong></td></tr>
+</table>
+
+<div class="page-break"></div>
+
+<h2 id="s5">5. Infrastructure Layout</h2>
+
+<h3>5.1 Server Specifications</h3>
+<table>
+<tr><th>Component</th><th>Specification</th></tr>
+<tr><td>Provider</td><td>DigitalOcean</td></tr>
+<tr><td>Droplet Size</td><td>8 GB RAM / 4 vCPU / 160 GB SSD</td></tr>
+<tr><td>OS</td><td>Ubuntu 22.04 LTS</td></tr>
+<tr><td>Region</td><td>NYC1 (same region as existing droplet)</td></tr>
+<tr><td>Containerization</td><td>Docker + Docker Compose</td></tr>
+<tr><td>Reverse Proxy</td><td>Nginx with Let's Encrypt SSL</td></tr>
+<tr><td>Backups</td><td>Automated daily MongoDB dumps + DO snapshots</td></tr>
+</table>
+
+<h3>5.2 DNS Configuration</h3>
+<table>
+<tr><th>Record</th><th>Type</th><th>Value</th><th>Service</th></tr>
+<tr><td>chat.wisdomlinked.com</td><td>A</td><td>&lt;Droplet IP&gt;</td><td>Rocket.Chat</td></tr>
+<tr><td>meet.wisdomlinked.com</td><td>A</td><td>&lt;Droplet IP&gt;</td><td>Jitsi Meet</td></tr>
+</table>
+
+<h3>5.3 Port Allocation</h3>
+<table>
+<tr><th>Port</th><th>Protocol</th><th>Service</th><th>Access</th></tr>
+<tr><td>22</td><td>TCP</td><td>SSH</td><td>Admin only</td></tr>
+<tr><td>80</td><td>TCP</td><td>HTTP → HTTPS redirect</td><td>Public</td></tr>
+<tr><td>443</td><td>TCP</td><td>HTTPS (Nginx)</td><td>Public</td></tr>
+<tr><td>3000</td><td>TCP</td><td>Rocket.Chat</td><td>Internal (behind Nginx)</td></tr>
+<tr><td>8000</td><td>TCP</td><td>Jitsi Web</td><td>Internal (behind Nginx)</td></tr>
+<tr><td>10000</td><td>UDP</td><td>Jitsi Video Bridge (RTP)</td><td>Public</td></tr>
+<tr><td>27017</td><td>TCP</td><td>MongoDB</td><td>Internal only</td></tr>
+</table>
+
+<h3>5.4 Docker Services</h3>
+<table>
+<tr><th>Container</th><th>Image</th><th>RAM (Est.)</th><th>Purpose</th></tr>
+<tr><td>rocketchat</td><td>registry.rocket.chat/rocketchat/rocket.chat:latest</td><td>~2 GB</td><td>Chat server</td></tr>
+<tr><td>mongodb</td><td>bitnami/mongodb:5.0</td><td>~1 GB</td><td>Chat database (replica set)</td></tr>
+<tr><td>jitsi-web</td><td>jitsi/web:latest</td><td>~256 MB</td><td>Jitsi web interface</td></tr>
+<tr><td>jitsi-prosody</td><td>jitsi/prosody:latest</td><td>~256 MB</td><td>XMPP signaling server</td></tr>
+<tr><td>jitsi-jicofo</td><td>jitsi/jicofo:latest</td><td>~256 MB</td><td>Conference focus manager</td></tr>
+<tr><td>jitsi-jvb</td><td>jitsi/jvb:latest</td><td>~1.5 GB</td><td>Video bridge (media routing)</td></tr>
+</table>
+
+<div class="page-break"></div>
+
+<h2 id="s6">6. Data Flow & Integration</h2>
+
+<h3>6.1 User Registration Flow</h3>
+<div class="arch-box">User registers on WisdomLinked
+        │
+        ▼
+WisdomLinked Backend creates user in MongoDB
+        │
+        ▼
+Backend calls Rocket.Chat REST API ──▶ POST /api/v1/users.create
+        │                                    (syncs username, email, role)
+        ▼
+User can now access chat via WisdomLinked UI</div>
+
+<h3>6.2 Chat Message Flow</h3>
+<div class="arch-box">User A sends message in WisdomLinked UI
+        │
+        ▼
+Request hits Rocket.Chat (via iframe embed OR REST API)
+        │
+        ▼
+Rocket.Chat stores message in its MongoDB
+        │
+        ▼
+Rocket.Chat pushes message to User B via WebSocket (managed by RC)
+        │
+        ▼
+If User B is offline:
+  → Message queued in MongoDB
+  → Push notification sent
+  → Delivered on reconnect</div>
+
+<h3>6.3 Video Call Flow</h3>
+<div class="arch-box">User A clicks "Video Call" in chat
+        │
+        ▼
+Rocket.Chat creates Jitsi room link
+  (meet.wisdomlinked.com/WisdomLinked_roomId)
+        │
+        ▼
+Notification sent to User B
+        │
+        ▼
+Both users connect to self-hosted Jitsi
+  → No MAU limits
+  → WebRTC peer-to-peer (or via JVB for 3+ users)
+  → In-call chat available via Jitsi</div>
+
+<h3>6.4 Integration Approaches</h3>
+<table>
+<tr><th>Approach</th><th>Effort</th><th>UX Quality</th><th>Description</th></tr>
+<tr><td><strong>Option A: iframe Embed</strong></td><td>1-2 days</td><td>Good</td><td>Embed Rocket.Chat UI in an iframe within WisdomLinked pages. Fast to implement, looks slightly separate.</td></tr>
+<tr><td><strong>Option B: REST API + Custom UI</strong></td><td>1-2 weeks</td><td>Excellent</td><td>Build custom React chat components calling Rocket.Chat's 200+ REST API endpoints. Chat feels fully native.</td></tr>
+</table>
+
+<h3>6.5 Backend Code Changes</h3>
+<table>
+<tr><th>Action</th><th>Files Affected</th></tr>
+<tr><td><span class="badge badge-red">REMOVE</span> Socket.IO server</td><td>BE/socket/* (3 files)</td></tr>
+<tr><td><span class="badge badge-red">REMOVE</span> Socket controllers</td><td>BE/socketControllers/* (11 files + room/)</td></tr>
+<tr><td><span class="badge badge-red">REMOVE</span> Socket.IO wiring</td><td>BE/server.ts (socket import + createSocketServer)</td></tr>
+<tr><td><span class="badge badge-green">ADD</span> Rocket.Chat service</td><td>BE/services/rocketchat.ts (user sync, API calls)</td></tr>
+<tr><td><span class="badge badge-green">ADD</span> Environment variables</td><td>BE/.env (ROCKETCHAT_URL, admin credentials)</td></tr>
+<tr><td><span class="badge badge-blue">UPDATE</span> Auth controller</td><td>BE/controllers/auth.controller.ts (create RC user on register)</td></tr>
+<tr><td><span class="badge badge-blue">UPDATE</span> Jitsi domain</td><td>Frontend config (point to meet.wisdomlinked.com)</td></tr>
+</table>
+
+<div class="page-break"></div>
+
+<h2 id="s7">7. Security Architecture</h2>
+
+<table>
+<tr><th>Layer</th><th>Measure</th><th>Status</th></tr>
+<tr><td>Transport</td><td>TLS 1.2/1.3 via Let's Encrypt SSL (all traffic encrypted)</td><td><span class="badge badge-green">Included</span></td></tr>
+<tr><td>Message Encryption</td><td>End-to-End Encryption (E2EE) per channel — client-side encryption</td><td><span class="badge badge-green">Included</span></td></tr>
+<tr><td>Authentication</td><td>SSO via WisdomLinked JWT + Rocket.Chat OAuth integration</td><td><span class="badge badge-green">Included</span></td></tr>
+<tr><td>2FA</td><td>TOTP-based two-factor authentication</td><td><span class="badge badge-green">Included</span></td></tr>
+<tr><td>Access Control</td><td>Role-based permissions (admin, expert, customer)</td><td><span class="badge badge-green">Included</span></td></tr>
+<tr><td>Data Ownership</td><td>All data on our server — no third-party access</td><td><span class="badge badge-green">Included</span></td></tr>
+<tr><td>Firewall</td><td>UFW — only ports 22, 80, 443, 10000 exposed</td><td><span class="badge badge-green">Included</span></td></tr>
+<tr><td>Compliance</td><td>GDPR-ready, HIPAA-ready (self-hosted = we control compliance)</td><td><span class="badge badge-green">Included</span></td></tr>
+<tr><td>Backups</td><td>Automated daily MongoDB dumps, 30-day retention</td><td><span class="badge badge-green">Included</span></td></tr>
+<tr><td>Video Security</td><td>Jitsi lobby/waiting room, optional meeting passwords</td><td><span class="badge badge-green">Included</span></td></tr>
+</table>
+
+<h2 id="s8">8. Migration Plan</h2>
+
+<h3>Phase 1 — Infrastructure (Week 1)</h3>
+<ul>
+<li>Provision DigitalOcean droplet (8GB/4vCPU)</li>
+<li>Configure DNS records (chat.wisdomlinked.com, meet.wisdomlinked.com)</li>
+<li>Install Docker, Nginx, Certbot</li>
+<li>Deploy Rocket.Chat + MongoDB via Docker Compose</li>
+<li>Deploy Jitsi Meet via Docker Compose</li>
+<li>Configure Nginx reverse proxy + SSL</li>
+<li>Configure Rocket.Chat admin settings</li>
+<li>Connect Jitsi to Rocket.Chat</li>
+</ul>
+
+<h3>Phase 2 — Integration (Week 2)</h3>
+<ul>
+<li>Create Rocket.Chat service module in backend (user sync API)</li>
+<li>Update auth controller to create RC users on registration</li>
+<li>Implement chat embed (iframe or custom UI) in frontend</li>
+<li>Update Jitsi domain from meet.jit.si to meet.wisdomlinked.com</li>
+<li>Add environment variables to staging and production</li>
+</ul>
+
+<h3>Phase 3 — Cleanup & Testing (Week 3)</h3>
+<ul>
+<li>Remove Socket.IO server code (BE/socket/*)</li>
+<li>Remove all socket controllers (BE/socketControllers/*)</li>
+<li>Remove Socket.IO client code from frontend</li>
+<li>Remove socket.io dependencies from package.json</li>
+<li>End-to-end testing: 1:1 chat, group chat, file sharing, video calls</li>
+<li>Test offline message delivery and push notifications</li>
+<li>Load testing with concurrent users</li>
+</ul>
+
+<h3>Phase 4 — Deployment (Week 4)</h3>
+<ul>
+<li>Deploy to staging environment</li>
+<li>QA testing on staging</li>
+<li>Production deployment</li>
+<li>Monitor for 48 hours post-deploy</li>
+<li>Documentation handoff</li>
+</ul>
+
+<div class="page-break"></div>
+
+<h2 id="s9">9. Cost Analysis</h2>
+
+<h3>9.1 New Infrastructure Cost</h3>
+<table>
+<tr><th>Item</th><th>Monthly Cost</th><th>Annual Cost</th></tr>
+<tr><td>DigitalOcean Droplet (8GB/4vCPU)</td><td>$48.00</td><td>$576.00</td></tr>
+<tr><td>Automated Backups (DO)</td><td>$9.60</td><td>$115.20</td></tr>
+<tr><td>SSL Certificates (Let's Encrypt)</td><td>$0</td><td>$0</td></tr>
+<tr><td>Rocket.Chat License</td><td>$0</td><td>$0</td></tr>
+<tr><td>Jitsi Meet License</td><td>$0</td><td>$0</td></tr>
+<tr><td><strong>Total</strong></td><td><strong>$57.60</strong></td><td><strong>$691.20</strong></td></tr>
+</table>
+
+<h3>9.2 Cost vs. Paid Alternatives</h3>
+<table>
+<tr><th>Solution</th><th>Monthly (at 5K MAU)</th><th>Annual</th><th>Savings vs. Ours</th></tr>
+<tr><td><strong>Our Solution (RC + Jitsi)</strong></td><td><strong>$57.60</strong></td><td><strong>$691</strong></td><td>—</td></tr>
+<tr><td>CometChat + Jitsi Cloud</td><td>$699+</td><td>$8,388+</td><td>$7,697/yr saved</td></tr>
+<tr><td>Stream + Jitsi Cloud</td><td>$599+</td><td>$7,188+</td><td>$6,497/yr saved</td></tr>
+<tr><td>Sendbird (chat+video)</td><td>$499+</td><td>$5,988+</td><td>$5,297/yr saved</td></tr>
+</table>
+
+<h2 id="s10">10. Risk Assessment</h2>
+<table>
+<tr><th>Risk</th><th>Likelihood</th><th>Impact</th><th>Mitigation</th></tr>
+<tr><td>Server downtime</td><td>Low</td><td>High</td><td>DO uptime SLA, automated backups, Docker restart policies</td></tr>
+<tr><td>MongoDB data loss</td><td>Low</td><td>High</td><td>Daily automated backups with 30-day retention</td></tr>
+<tr><td>Integration complexity</td><td>Medium</td><td>Medium</td><td>Start with iframe embed (1-2 days), iterate to custom UI later</td></tr>
+<tr><td>Jitsi performance under load</td><td>Medium</td><td>Medium</td><td>JVB scales per-user; upgrade droplet or add JVB shard if needed</td></tr>
+<tr><td>Rocket.Chat breaking update</td><td>Low</td><td>Low</td><td>Pin Docker image versions, test updates on staging first</td></tr>
+</table>
+
+<h2 id="s11">11. Timeline</h2>
+<table>
+<tr><th>Week</th><th>Phase</th><th>Deliverables</th></tr>
+<tr><td>Week 1</td><td>Infrastructure Setup</td><td>Server provisioned, Rocket.Chat + Jitsi running, SSL configured</td></tr>
+<tr><td>Week 2</td><td>App Integration</td><td>Chat embedded in WisdomLinked, user sync working, Jitsi domain migrated</td></tr>
+<tr><td>Week 3</td><td>Cleanup & Testing</td><td>Socket.IO code removed, E2E tests passing, load testing complete</td></tr>
+<tr><td>Week 4</td><td>Deployment</td><td>Staging QA, production deploy, monitoring, documentation</td></tr>
+</table>
+
+<div class="callout">
+<strong>Estimated Total Effort:</strong> 4 weeks (1 developer) — resulting in enterprise-grade chat + video infrastructure at ~$58/mo with zero vendor lock-in and full data ownership.
+</div>
+
+<div class="footer">
+<p>WisdomLinked Communications Infrastructure Plan v1.0 — April 2026</p>
+<p>This document is confidential and intended for internal use only.</p>
+</div>
+
+</body>
+</html>

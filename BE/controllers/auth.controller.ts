@@ -15,6 +15,7 @@ const { createGeneralChatAndJoinGlobalChat } = require("./groupChat.controller")
 const { checkTitleNameInvalid } = require('../services/global')
 const { sendEmailNewUserAccountApproval } = require('../services/notifications')
 import { v4 as uuidv4 } from 'uuid';
+import { syncUserToRocketChat } from '../services/rocketchat.service';
 const utils = require('../services/utils')
 const randomize = require('randomatic');
 const Event = require("../models/Event");
@@ -387,6 +388,13 @@ const verifyRegistration = async (req: Request, res: Response) => {
         await createGeneralChatAndJoinGlobalChat(user._id)
         await pendingUser.deleteOne()
 
+        // Sync user to Rocket.Chat (fire-and-forget)
+        syncUserToRocketChat({
+            email: user.email,
+            username: user.username,
+            name: user.username,
+        }).catch(err => console.error('RC sync failed (registration):', err.message));
+
         //
         sendEmailNewUserAccountApproval(user.username)
 
@@ -589,6 +597,13 @@ const confirmLoginByCode = async (req: Request, res: Response) => {
         user.token = null
         user.password = null
         res.cookie('accessToken', token, { maxAge: Number(process.env.COOKIE_EXPIRED_TIME) || 86400000, httpOnly: true })
+
+        // Ensure user exists in Rocket.Chat (fire-and-forget)
+        syncUserToRocketChat({
+            email: user.email,
+            username: user.username,
+            name: user.username,
+        }).catch(err => console.error('RC sync failed (login):', err.message));
 
         updateActiveRoomsOfUsers(user._id.toString(), user.groupChats)
 
