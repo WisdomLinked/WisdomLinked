@@ -20,13 +20,13 @@ router.post('/login', (req, res) => {
   if (!email || !password) {
     return res.status(400).json({ error: 'Email and password required' });
   }
-  const user = db.prepare('SELECT id, email, role, major, majors, timezone, username, bio, title, image, phone, country, state, city FROM users WHERE email = ? AND password_hash = ?').get(email, password);
+  const user = db.prepare('SELECT id, email, role, major, majors, timezone, username, bio, title, image, phone, country, state, city, target_year FROM users WHERE email = ? AND password_hash = ?').get(email, password);
   if (!user) {
     return res.status(401).json({ error: 'Invalid email or password' });
   }
   const role = user.role || 'student';
   res.json({
-    user: { id: user.id, email: user.email, role, major: user.major, majors: parseMajors(user.majors), timezone: user.timezone || 'America/Chicago', username: user.username, bio: user.bio, title: user.title, image: user.image, phone: user.phone, country: user.country, state: user.state, city: user.city },
+    user: { id: user.id, email: user.email, role, major: user.major, majors: parseMajors(user.majors), timezone: user.timezone || 'America/Chicago', username: user.username, bio: user.bio, title: user.title, image: user.image, phone: user.phone, country: user.country, state: user.state, city: user.city, target_year: user.target_year != null ? Number(user.target_year) : null },
     token: `session-${user.id}-${Date.now()}`,
   });
 });
@@ -60,9 +60,9 @@ router.post('/register', (req, res) => {
   const ph = phone != null ? String(phone).trim().slice(0, 30) : null;
   try {
     db.prepare('INSERT INTO users (email, password_hash, role, major, majors, timezone, username, bio, title, country, state, city, phone) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run(email, password, userRole, maj, majs, tz, un || null, b || null, tt || null, ctry || null, st || null, cty || null, ph || null);
-    const user = db.prepare('SELECT id, email, role, major, majors, timezone, username, bio, title, image, phone, country, state, city FROM users WHERE email = ?').get(email);
+    const user = db.prepare('SELECT id, email, role, major, majors, timezone, username, bio, title, image, phone, country, state, city, target_year FROM users WHERE email = ?').get(email);
     res.status(201).json({
-      user: { id: user.id, email: user.email, role: user.role || userRole, major: user.major, majors: parseMajors(user.majors), timezone: user.timezone || 'America/Chicago', username: user.username, bio: user.bio, title: user.title, image: user.image, phone: user.phone, country: user.country, state: user.state, city: user.city },
+      user: { id: user.id, email: user.email, role: user.role || userRole, major: user.major, majors: parseMajors(user.majors), timezone: user.timezone || 'America/Chicago', username: user.username, bio: user.bio, title: user.title, image: user.image, phone: user.phone, country: user.country, state: user.state, city: user.city, target_year: user.target_year != null ? Number(user.target_year) : null },
       token: `session-${user.id}-${Date.now()}`,
     });
   } catch (e) {
@@ -107,7 +107,7 @@ router.post('/reset-password', (req, res) => {
 });
 
 router.get('/me', authMiddleware, (req, res) => {
-  const u = db.prepare('SELECT id, email, role, major, majors, timezone, username, bio, title, image, phone, country, state, city, created_at FROM users WHERE id = ?').get(req.userId);
+  const u = db.prepare('SELECT id, email, role, major, majors, timezone, username, bio, title, image, phone, country, state, city, created_at, target_year FROM users WHERE id = ?').get(req.userId);
   if (!u) return res.status(404).json({ error: 'Not found' });
   res.json({
     id: u.id,
@@ -125,6 +125,110 @@ router.get('/me', authMiddleware, (req, res) => {
     state: u.state,
     city: u.city,
     created_at: u.created_at,
+    target_year: u.target_year != null ? Number(u.target_year) : null,
+  });
+});
+
+router.patch('/me', authMiddleware, (req, res) => {
+  const row = db.prepare('SELECT id, email, role FROM users WHERE id = ?').get(req.userId);
+  if (!row) return res.status(404).json({ error: 'Not found' });
+  const role = row.role || 'student';
+  if (req.body.email !== undefined && String(req.body.email).trim().toLowerCase() !== String(row.email).trim().toLowerCase()) {
+    return res.status(400).json({ error: 'Email cannot be changed; it is your login identifier' });
+  }
+
+  const sets = [];
+  const vals = [];
+
+  function pushSet(column, value) {
+    sets.push(`${column} = ?`);
+    vals.push(value);
+  }
+
+  if (req.body.username !== undefined) {
+    pushSet('username', req.body.username === null || req.body.username === '' ? null : String(req.body.username).trim().slice(0, 100));
+  }
+  if (req.body.bio !== undefined) {
+    const b = req.body.bio === null || req.body.bio === '' ? null : String(req.body.bio).trim().slice(0, 2000);
+    if ((role === 'expert' || role === 'admin') && b && b.length < 30) {
+      return res.status(400).json({ error: 'Bio must be at least 30 characters' });
+    }
+    pushSet('bio', b);
+  }
+  if (req.body.title !== undefined) {
+    pushSet('title', req.body.title === null || req.body.title === '' ? null : String(req.body.title).trim().slice(0, 200));
+  }
+  ['phone', 'country', 'state', 'city'].forEach((field) => {
+    if (req.body[field] !== undefined) {
+      const max = field === 'phone' ? 30 : 100;
+      const v = req.body[field];
+      pushSet(field, v === null || v === '' ? null : String(v).trim().slice(0, max));
+    }
+  });
+
+  if (req.body.timezone !== undefined) {
+    const tz = req.body.timezone;
+    if (tz === null || tz === '') {
+      pushSet('timezone', 'America/Chicago');
+    } else if (!VALID_TIMEZONES.includes(tz)) {
+      return res.status(400).json({ error: 'Invalid timezone' });
+    } else {
+      pushSet('timezone', tz);
+    }
+  }
+
+  if (role === 'student') {
+    if (req.body.major !== undefined) {
+      pushSet('major', req.body.major === null || req.body.major === '' ? null : String(req.body.major).trim());
+    }
+    if (req.body.target_year !== undefined) {
+      if (req.body.target_year === null || req.body.target_year === '') {
+        pushSet('target_year', null);
+      } else {
+        const y = parseInt(String(req.body.target_year), 10);
+        if (Number.isNaN(y) || y < 2000 || y > 2100) {
+          return res.status(400).json({ error: 'Target year must be between 2000 and 2100' });
+        }
+        pushSet('target_year', y);
+      }
+    }
+  }
+
+  if (role === 'expert' || role === 'admin') {
+    if (req.body.majors !== undefined) {
+      const arr = Array.isArray(req.body.majors)
+        ? req.body.majors.map((m) => String(m).trim()).filter(Boolean)
+        : String(req.body.majors || '')
+          .split(/[,\n]/)
+          .map((m) => m.trim())
+          .filter(Boolean);
+      pushSet('majors', JSON.stringify(arr));
+    }
+  }
+
+  if (sets.length > 0) {
+    vals.push(req.userId);
+    db.prepare(`UPDATE users SET ${sets.join(', ')} WHERE id = ?`).run(...vals);
+  }
+
+  const out = db.prepare('SELECT id, email, role, major, majors, timezone, username, bio, title, image, phone, country, state, city, created_at, target_year FROM users WHERE id = ?').get(req.userId);
+  res.json({
+    id: out.id,
+    email: out.email,
+    role: out.role || 'student',
+    major: out.major,
+    majors: parseMajors(out.majors),
+    timezone: out.timezone || 'America/Chicago',
+    username: out.username,
+    bio: out.bio,
+    title: out.title,
+    image: out.image,
+    phone: out.phone,
+    country: out.country,
+    state: out.state,
+    city: out.city,
+    created_at: out.created_at,
+    target_year: out.target_year != null ? Number(out.target_year) : null,
   });
 });
 

@@ -132,8 +132,10 @@ router.get('/', (req, res) => {
     const cases = db.prepare(`
       SELECT c.id, c.case_id, c.status, c.created_at, c.submitted_at, c.due_at,
              c.assessed_at, c.approved_at, c.rejected_at, c.assigned_expert_id,
-             u.id AS student_id, u.email, u.major,
-             e.email AS expert_email, e.username AS expert_username
+             u.id AS student_id, u.email, u.username AS student_username, u.major,
+             e.email AS expert_email, e.username AS expert_username,
+             COALESCE(u.target_year, CASE WHEN c.case_id LIKE 'WL-____-%' AND length(c.case_id) >= 11
+                  THEN CAST(substr(c.case_id, 4, 4) AS INTEGER) END) AS target_year
       FROM cases c
       JOIN users u ON u.id = c.student_id
       LEFT JOIN users e ON e.id = c.assigned_expert_id

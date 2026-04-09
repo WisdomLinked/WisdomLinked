@@ -43,12 +43,17 @@ router.get('/students', (req, res) => {
   const isAdmin = req.userRole === 'admin';
   let students;
   const approvedCaseSubquery = `(SELECT COUNT(*) FROM cases c2 WHERE c2.student_id = u.id AND c2.status = '${CaseStatus.APPROVED}') AS has_approved_case`;
+  const targetYearFromLatestCase = `(SELECT CASE WHEN ca.case_id LIKE 'WL-____-%' AND length(ca.case_id) >= 11
+    THEN CAST(substr(ca.case_id, 4, 4) AS INTEGER) END
+    FROM cases ca WHERE ca.student_id = u.id ORDER BY ca.created_at DESC LIMIT 1)`;
+  const targetYearExpr = `COALESCE(u.target_year, ${targetYearFromLatestCase}) AS target_year`;
   if (isAdmin) {
     students = db.prepare(`
-      SELECT u.id, u.email, u.major, u.created_at, COALESCE(u.approved, 0) AS approved,
+      SELECT u.id, u.email, u.username, u.major, u.created_at, COALESCE(u.approved, 0) AS approved,
              (SELECT COUNT(*) FROM documents d WHERE d.user_id = u.id) AS doc_count,
              (SELECT COUNT(*) FROM messages m WHERE m.user_id = u.id) AS message_count,
-             ${approvedCaseSubquery}
+             ${approvedCaseSubquery},
+             ${targetYearExpr}
       FROM users u
       WHERE u.role = 'student'
       ORDER BY u.created_at DESC
@@ -59,10 +64,11 @@ router.get('/students', (req, res) => {
       students = [];
     } else {
       const allStudents = db.prepare(`
-        SELECT u.id, u.email, u.major, u.created_at, COALESCE(u.approved, 0) AS approved,
+        SELECT u.id, u.email, u.username, u.major, u.created_at, COALESCE(u.approved, 0) AS approved,
                (SELECT COUNT(*) FROM documents d WHERE d.user_id = u.id) AS doc_count,
                (SELECT COUNT(*) FROM messages m WHERE m.user_id = u.id) AS message_count,
-               ${approvedCaseSubquery}
+               ${approvedCaseSubquery},
+               ${targetYearExpr}
         FROM users u
         WHERE u.role = 'student' AND COALESCE(u.major,'') != ''
         ORDER BY u.created_at DESC
@@ -171,7 +177,13 @@ router.patch('/students/:id/approve', (req, res) => {
 
 router.get('/students/:id', (req, res) => {
   const studentId = parseInt(req.params.id, 10);
-  const student = db.prepare('SELECT id, email, major, created_at, COALESCE(approved, 0) AS approved, timezone, username, bio, title, image, phone, country, state, city FROM users WHERE id = ? AND role = ?').get(studentId, 'student');
+  const student = db.prepare(`
+    SELECT u.id, u.email, u.major, u.created_at, COALESCE(u.approved, 0) AS approved, u.timezone, u.username, u.bio, u.title, u.image, u.phone, u.country, u.state, u.city,
+           COALESCE(u.target_year, (SELECT CASE WHEN ca.case_id LIKE 'WL-____-%' AND length(ca.case_id) >= 11
+             THEN CAST(substr(ca.case_id, 4, 4) AS INTEGER) END
+             FROM cases ca WHERE ca.student_id = u.id ORDER BY ca.created_at DESC LIMIT 1)) AS target_year
+    FROM users u WHERE u.id = ? AND u.role = ?
+  `).get(studentId, 'student');
   if (!student) return res.status(404).json({ error: 'Student not found' });
   if (req.userRole !== 'admin') {
     const assigned = db.prepare('SELECT id FROM cases WHERE student_id = ? AND assigned_expert_id = ?').get(studentId, req.userId);
@@ -200,6 +212,7 @@ router.get('/students/:id', (req, res) => {
       id: student.id, email: student.email, major: student.major, created_at: student.created_at, approved: student.approved === 1,
       hasApprovedCase: !!approvedCase,
       timezone: student.timezone || 'America/Chicago', username: student.username, bio: student.bio, title: student.title, image: student.image, phone: student.phone, country: student.country, state: student.state, city: student.city,
+      target_year: student.target_year != null ? Number(student.target_year) : null,
     },
     documents,
     messages: messages || [],

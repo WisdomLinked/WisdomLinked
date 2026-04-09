@@ -29,6 +29,7 @@ export function initDb() {
     try { db.exec(`ALTER TABLE users ADD COLUMN ${col} TEXT`); } catch (_) {}
   });
   try { db.exec(`ALTER TABLE users ADD COLUMN approved INTEGER DEFAULT 0`); } catch (_) {}
+  try { db.exec('ALTER TABLE users ADD COLUMN target_year INTEGER'); } catch (_) {}
 
   db.exec(`UPDATE users SET role = 'student' WHERE role IS NULL`);
   db.exec(`UPDATE users SET role = 'expert' WHERE role = 'committee'`);

@@ -56,9 +56,13 @@ export default function CommitteeDashboard() {
   const [expertsForCase, setExpertsForCase] = useState(null);
   const [error, setError] = useState('');
   const [previewDoc, setPreviewDoc] = useState(null);
-  /** Admin case list filters (Cases tab) */
+  /** Admin list filters (Cases + Students tabs) */
   const [caseApprovalFilter, setCaseApprovalFilter] = useState('all');
   const [caseMajorFilter, setCaseMajorFilter] = useState('all');
+  const [caseTargetYearFilter, setCaseTargetYearFilter] = useState('all');
+  const [studentMajorFilter, setStudentMajorFilter] = useState('all');
+  const [studentTargetYearFilter, setStudentTargetYearFilter] = useState('all');
+  const [adminSearchQuery, setAdminSearchQuery] = useState('');
   const headers = () => ({ Authorization: `Bearer ${token}` });
 
   const MAJOR_FILTER_EMPTY = '__empty__';
@@ -75,9 +79,47 @@ export default function CommitteeDashboard() {
     return { majors: sorted, hasNoMajor };
   }, [cases]);
 
+  const uniqueMajorsFromStudents = useMemo(() => {
+    const set = new Set();
+    let hasNoMajor = false;
+    (students || []).forEach((s) => {
+      const m = (s.major || '').trim();
+      if (m) set.add(m);
+      else hasNoMajor = true;
+    });
+    return { majors: Array.from(set).sort((a, b) => a.localeCompare(b)), hasNoMajor };
+  }, [students]);
+
+  const uniqueTargetYears = useMemo(() => {
+    const ys = new Set();
+    (cases || []).forEach((c) => {
+      if (c.target_year != null && !Number.isNaN(Number(c.target_year))) ys.add(Number(c.target_year));
+    });
+    (students || []).forEach((s) => {
+      if (s.target_year != null && !Number.isNaN(Number(s.target_year))) ys.add(Number(s.target_year));
+    });
+    return Array.from(ys).sort((a, b) => b - a);
+  }, [cases, students]);
+
+  function matchesAdminSearchCase(c, q) {
+    if (!q) return true;
+    const n = q.toLowerCase();
+    const fields = [c.email, c.student_username, c.case_id, c.major].filter(Boolean);
+    return fields.some((f) => String(f).toLowerCase().includes(n));
+  }
+
+  function matchesAdminSearchStudent(s, q) {
+    if (!q) return true;
+    const n = q.toLowerCase();
+    const fields = [s.email, s.username, s.major].filter(Boolean);
+    return fields.some((f) => String(f).toLowerCase().includes(n));
+  }
+
   const filteredCases = useMemo(() => {
     if (!isAdmin) return cases;
+    const q = adminSearchQuery.trim();
     return (cases || []).filter((c) => {
+      if (!matchesAdminSearchCase(c, q)) return false;
       if (caseApprovalFilter === 'approved' && c.status !== 'approved') return false;
       if (caseApprovalFilter === 'not_approved' && c.status === 'approved') return false;
       if (caseMajorFilter !== 'all') {
@@ -86,9 +128,32 @@ export default function CommitteeDashboard() {
           if (m) return false;
         } else if (m !== caseMajorFilter) return false;
       }
+      if (caseTargetYearFilter !== 'all') {
+        const y = c.target_year != null ? Number(c.target_year) : null;
+        if (y !== Number(caseTargetYearFilter)) return false;
+      }
       return true;
     });
-  }, [cases, isAdmin, caseApprovalFilter, caseMajorFilter]);
+  }, [cases, isAdmin, caseApprovalFilter, caseMajorFilter, caseTargetYearFilter, adminSearchQuery]);
+
+  const filteredStudents = useMemo(() => {
+    if (!isAdmin) return students;
+    const q = adminSearchQuery.trim();
+    return (students || []).filter((s) => {
+      if (!matchesAdminSearchStudent(s, q)) return false;
+      if (studentMajorFilter !== 'all') {
+        const m = (s.major || '').trim();
+        if (studentMajorFilter === MAJOR_FILTER_EMPTY) {
+          if (m) return false;
+        } else if (m !== studentMajorFilter) return false;
+      }
+      if (studentTargetYearFilter !== 'all') {
+        const y = s.target_year != null ? Number(s.target_year) : null;
+        if (y !== Number(studentTargetYearFilter)) return false;
+      }
+      return true;
+    });
+  }, [students, isAdmin, studentMajorFilter, studentTargetYearFilter, adminSearchQuery]);
 
   function loadExpertsForCase(caseId) {
     if (!caseId || !isAdmin) return;
@@ -248,6 +313,12 @@ export default function CommitteeDashboard() {
     const list = isAdmin ? filteredCases : cases;
     if (!list.some((c) => c.id === selected.id)) setSelected(null);
   }, [activeTab, selected?.id, isAdmin, filteredCases, cases]);
+
+  useEffect(() => {
+    if (activeTab !== 'students' || !selected?.id) return;
+    const list = isAdmin ? filteredStudents : students;
+    if (!list.some((s) => s.id === selected.id)) setSelected(null);
+  }, [activeTab, selected?.id, isAdmin, filteredStudents, students]);
 
   useEffect(() => {
     if (activeTab === 'cases' && selected?.id) {
@@ -427,12 +498,113 @@ export default function CommitteeDashboard() {
         </div>
       )}
 
+      {isAdmin && (
+        <div className={styles.adminToolbar}>
+          <label className={styles.adminSearchField}>
+            <span className={styles.filterFieldLabel}>Search</span>
+            <input
+              type="search"
+              className={styles.adminSearchInput}
+              value={adminSearchQuery}
+              onChange={(e) => setAdminSearchQuery(e.target.value)}
+              placeholder={activeTab === 'cases' ? 'Student name, email, case ID…' : 'Student name or email…'}
+              aria-label="Search by student name, email, or case ID"
+            />
+          </label>
+          {activeTab === 'cases' && (
+            <div className={styles.caseFilters}>
+              <label className={styles.filterField}>
+                <span className={styles.filterFieldLabel}>Outcome</span>
+                <select
+                  className={styles.filterSelect}
+                  value={caseApprovalFilter}
+                  onChange={(e) => setCaseApprovalFilter(e.target.value)}
+                  aria-label="Filter cases by approval outcome"
+                >
+                  <option value="all">All cases</option>
+                  <option value="approved">Final approved</option>
+                  <option value="not_approved">Not final approved</option>
+                </select>
+              </label>
+              <label className={styles.filterField}>
+                <span className={styles.filterFieldLabel}>Major</span>
+                <select
+                  className={styles.filterSelect}
+                  value={caseMajorFilter}
+                  onChange={(e) => setCaseMajorFilter(e.target.value)}
+                  aria-label="Filter cases by student major"
+                >
+                  <option value="all">All majors</option>
+                  {uniqueMajorsFromCases.hasNoMajor && (
+                    <option value={MAJOR_FILTER_EMPTY}>No major listed</option>
+                  )}
+                  {uniqueMajorsFromCases.majors.map((m) => (
+                    <option key={m} value={m}>{m}</option>
+                  ))}
+                </select>
+              </label>
+              <label className={styles.filterField}>
+                <span className={styles.filterFieldLabel}>Target year</span>
+                <select
+                  className={styles.filterSelect}
+                  value={caseTargetYearFilter}
+                  onChange={(e) => setCaseTargetYearFilter(e.target.value)}
+                  aria-label="Filter cases by target year from case ID"
+                >
+                  <option value="all">All years</option>
+                  {uniqueTargetYears.map((y) => (
+                    <option key={y} value={String(y)}>{y}</option>
+                  ))}
+                </select>
+              </label>
+            </div>
+          )}
+          {activeTab === 'students' && (
+            <div className={styles.caseFilters}>
+              <label className={styles.filterField}>
+                <span className={styles.filterFieldLabel}>Major</span>
+                <select
+                  className={styles.filterSelect}
+                  value={studentMajorFilter}
+                  onChange={(e) => setStudentMajorFilter(e.target.value)}
+                  aria-label="Filter students by major"
+                >
+                  <option value="all">All majors</option>
+                  {uniqueMajorsFromStudents.hasNoMajor && (
+                    <option value={MAJOR_FILTER_EMPTY}>No major listed</option>
+                  )}
+                  {uniqueMajorsFromStudents.majors.map((m) => (
+                    <option key={m} value={m}>{m}</option>
+                  ))}
+                </select>
+              </label>
+              <label className={styles.filterField}>
+                <span className={styles.filterFieldLabel}>Target year</span>
+                <select
+                  className={styles.filterSelect}
+                  value={studentTargetYearFilter}
+                  onChange={(e) => setStudentTargetYearFilter(e.target.value)}
+                  aria-label="Filter students by target year from latest case ID"
+                >
+                  <option value="all">All years</option>
+                  {uniqueTargetYears.map((y) => (
+                    <option key={y} value={String(y)}>{y}</option>
+                  ))}
+                </select>
+              </label>
+            </div>
+          )}
+        </div>
+      )}
+
       <p className={styles.hint}>
         {activeTab === 'cases'
           ? (isAdmin
-            ? 'Filter by outcome and major, then click a case. Assign experts and grant Final Approval where appropriate.'
+            ? 'Use search and filters, then click a case. Assign experts and grant Final Approval where appropriate.'
             : 'Click a case to view documents. Approve or Reject when assigned.')
-          : 'Click a student to manage upload access. Experts and admins can enable or disable uploads (not for students with a final-approved case until an admin reopens the case).'}
+          : (isAdmin
+            ? 'Use search and filters, then click a student to manage upload access.'
+            : 'Click a student to manage upload access. Experts and admins can enable or disable uploads (not for students with a final-approved case until an admin reopens the case).')}
       </p>
 
       {error && <div className={styles.error}>{error}</div>}
@@ -452,43 +624,9 @@ export default function CommitteeDashboard() {
         <aside className={styles.sidebar}>
           {activeTab === 'cases' ? (
             <>
-              {isAdmin && (
-                <div className={styles.caseFilters}>
-                  <label className={styles.filterField}>
-                    <span className={styles.filterFieldLabel}>Outcome</span>
-                    <select
-                      className={styles.filterSelect}
-                      value={caseApprovalFilter}
-                      onChange={(e) => setCaseApprovalFilter(e.target.value)}
-                      aria-label="Filter cases by approval outcome"
-                    >
-                      <option value="all">All cases</option>
-                      <option value="approved">Final approved</option>
-                      <option value="not_approved">Not final approved</option>
-                    </select>
-                  </label>
-                  <label className={styles.filterField}>
-                    <span className={styles.filterFieldLabel}>Major</span>
-                    <select
-                      className={styles.filterSelect}
-                      value={caseMajorFilter}
-                      onChange={(e) => setCaseMajorFilter(e.target.value)}
-                      aria-label="Filter cases by student major"
-                    >
-                      <option value="all">All majors</option>
-                      {uniqueMajorsFromCases.hasNoMajor && (
-                        <option value={MAJOR_FILTER_EMPTY}>No major listed</option>
-                      )}
-                      {uniqueMajorsFromCases.majors.map((m) => (
-                        <option key={m} value={m}>{m}</option>
-                      ))}
-                    </select>
-                  </label>
-                </div>
-              )}
             <ul className={styles.studentList}>
               {filteredCases.length === 0 ? (
-                <li className={styles.empty}>{cases.length === 0 ? 'No cases yet' : 'No cases match the filters'}</li>
+                <li className={styles.empty}>{cases.length === 0 ? 'No cases yet' : 'No cases match your filters or search'}</li>
               ) : (
                 filteredCases.map((c) => (
                   <li key={c.id} className={styles.studentListItem}>
@@ -499,7 +637,7 @@ export default function CommitteeDashboard() {
                     >
                       <span className={styles.studentEmail}>{c.case_id}</span>
                       <span className={styles.studentMeta}>
-                        {c.email} · {c.major || '—'} · {STATUS_LABELS[c.status] || c.status}
+                        {[c.student_username, c.email].filter(Boolean).join(' · ')} · {c.major || '—'} · {STATUS_LABELS[c.status] || c.status}
                         {c.due_at && new Date(c.due_at) < new Date() && PENDING_STATUSES.includes(c.status) && (
                           <span className={styles.overdueBadge}> Overdue</span>
                         )}
@@ -541,10 +679,12 @@ export default function CommitteeDashboard() {
             </>
           ) : (
             <ul className={styles.studentList}>
-              {students.length === 0 ? (
-                <li className={styles.empty}>No students yet</li>
+              {(isAdmin ? filteredStudents : students).length === 0 ? (
+                <li className={styles.empty}>
+                  {students.length === 0 ? 'No students yet' : 'No students match your filters or search'}
+                </li>
               ) : (
-                students.map((s) => {
+                (isAdmin ? filteredStudents : students).map((s) => {
                   const approvedCaseLocked = !!s.has_approved_case;
                   return (
                   <li key={s.id} className={`${styles.studentListItem} ${isExpert && approvedCaseLocked ? styles.studentListItemGrey : ''}`}>
@@ -553,9 +693,13 @@ export default function CommitteeDashboard() {
                       className={selected?.id === s.id ? styles.studentBtnActive : styles.studentBtn}
                       onClick={() => setSelected(s)}
                     >
-                      <span className={styles.studentEmail}>{s.email}</span>
+                      <span className={styles.studentEmail}>{[s.username, s.email].filter(Boolean).join(' · ') || s.email}</span>
                       <span className={styles.studentMeta}>
-                        {s.major || 'No major'} · {s.approved ? '✓' : '–'} · {s.doc_count} doc{s.doc_count !== 1 ? 's' : ''}
+                        {s.major || 'No major'}
+                        {s.target_year != null && !Number.isNaN(Number(s.target_year)) && (
+                          <> · Target year {Number(s.target_year)}</>
+                        )}
+                        {' · '}{s.approved ? '✓' : '–'} · {s.doc_count} doc{s.doc_count !== 1 ? 's' : ''}
                         {approvedCaseLocked && <span className={styles.approvedCaseBadge}> Final approval</span>}
                       </span>
                     </button>
