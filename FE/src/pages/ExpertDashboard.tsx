@@ -21,13 +21,10 @@ import type { TopBarNotificationItem } from '../components/layout/TopBar';
 import StudentSettings from '../components/dashboard/StudentSettings';
 import { profileImageFetch } from '../api/api';
 import { useAppSelector } from '../store';
-import { connectWithSocketServer, UserDetails } from '../socket/socketConnection';
 import { logoutUser, updateMe } from '../actions/authActions';
 import { showAlert } from '../actions/alertActions';
 import { setChosenGroupChatDetails } from '../actions/chatActions';
 
-import IncomingCall from '../components/IncomingCall';
-import VideoChat from '../components/VideoChat';
 
 // Reuse existing expert dashboard feature pages (legacy MUI pages)
 import ExpertCalendar from './Dashboard/_ExpertDashboard/calendar';
@@ -99,9 +96,6 @@ export default function ExpertDashboard() {
 
   const {
     auth: { userDetails },
-    app: { connectedWithSocketServer },
-    videoChat: { localStream, otherUserId },
-    room: { isUserInRoom, localStreamRoom },
   } = useAppSelector((state) => state);
 
   const [activeItem, setActiveItem] = useState('dashboard');
@@ -150,10 +144,7 @@ export default function ExpertDashboard() {
       return;
     }
 
-    if (!connectedWithSocketServer) {
-      connectWithSocketServer(userDetailsRef.current as UserDetails);
       dispatch({
-        type: 'SetConnectedWithSocketServer',
         payload: true,
       });
     }
@@ -161,7 +152,6 @@ export default function ExpertDashboard() {
     userDetails?.email,
     userDetails?.role,
     userDetails?._id,
-    connectedWithSocketServer,
     dispatch,
   ]);
 
@@ -171,11 +161,9 @@ export default function ExpertDashboard() {
     if (!isLoggedIn || String(userDetails?.role).toLowerCase() !== 'expert') {
       return;
     }
-    if (!connectedWithSocketServer) return;
     dispatch(updateMe() as any);
   }, [
     location.pathname,
-    connectedWithSocketServer,
     userDetails?.email,
     userDetails?.role,
     dispatch,
@@ -353,7 +341,6 @@ export default function ExpertDashboard() {
   const content =
     activeItem === 'chat' ? (
       <div className="h-[calc(100vh-56px)] overflow-hidden bg-wl-chatGold">
-        <ModernChat videoChaton={!!(localStream || localStreamRoom)} />
       </div>
     ) : activeItem === 'clients' ? (
       <div className="h-[calc(100vh-56px)] overflow-y-auto bg-[#F5F3EF]">
@@ -607,9 +594,6 @@ export default function ExpertDashboard() {
           {activeItem !== 'chat' ? <Chatbot /> : null}
 
           {/* Keep call UX working in the new layout */}
-          <IncomingCall />
-          {(localStream || localStreamRoom) && (
-            <VideoChat role={userDetails?.role} otherUserId={otherUserId} />
           )}
         </main>
 

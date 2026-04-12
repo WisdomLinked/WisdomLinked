@@ -12,11 +12,9 @@ import { siteMap } from './actions/siteMap';
 import { isTheEventGoingOn } from './actions/common';
 import { autoLogin } from './actions/authActions';
 import 'swiper/swiper.min.css';
-import { checkLocalAudioVideoStreams } from './socket/webRTC';
 import LeaveFeedback from './components/LeaveFeedback';
 import VerifyEmail from './pages/VerifyEmail';
 import ForgotPassword from './pages/ForgotPassword';
-import { VideoChatProvider } from './components/VideoChat/VideoChatContext';
 
 // Lazy-loaded pages — only downloaded when the user navigates to them
 const StudentDashboard = React.lazy(() => import('./pages/StudentDashboard'));
@@ -248,7 +246,7 @@ function App() {
   return (
     <>
       <Suspense fallback={<LazyFallback />}>
-        <VideoChatProvider>
+        
           <Routes>
             <Route path={'/user/' + '*'} element={<AuthenticatedRoutes />} />
             <Route path={'/' + '*'} element={<UnauthenticatedRoutes />} />
@@ -256,7 +254,7 @@ function App() {
           <AlertNotification />
           <LeaveFeedback />
           <Loading loading={loading} />
-        </VideoChatProvider>
+        
       </Suspense>
     </>
   );

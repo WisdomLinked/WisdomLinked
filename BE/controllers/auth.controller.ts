@@ -9,7 +9,6 @@ const Service = require("../models/Service")
 const bcrypt = require("bcryptjs");
 const fs = require('fs')
 const path = require('path');
-const { updateActiveRoomsOfUsers } = require("../socket/activeRooms");
 const { getFullUserData } = require("../middlewares/requireAuth");
 const { createGeneralChatAndJoinGlobalChat } = require("./groupChat.controller");
 const { checkTitleNameInvalid } = require('../services/global')
@@ -414,8 +413,6 @@ const verifyRegistration = async (req: Request, res: Response) => {
             httpOnly: true
         });
 
-        // The user just joined, so groupChats might be empty, but it's safe to update
-        updateActiveRoomsOfUsers(user._id.toString(), user.groupChats || []);
 
         res.status(200).json({
             status: 'SUCCESS',
@@ -605,7 +602,6 @@ const confirmLoginByCode = async (req: Request, res: Response) => {
             name: user.username,
         }).catch(err => console.error('RC sync failed (login):', err.message));
 
-        updateActiveRoomsOfUsers(user._id.toString(), user.groupChats)
 
         return res.status(200).json({
             status: "SUCCESS",
@@ -782,7 +778,6 @@ const getMe = async (req: any, res: Response) => {
     try {
         const { userId, email } = req.user
         const user = await getFullUserData(email)
-        updateActiveRoomsOfUsers(userId, user.groupChats)
         return res.status(200).json({
             me: {
                 userId: user._id.toString(),

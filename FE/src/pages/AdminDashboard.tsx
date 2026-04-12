@@ -23,7 +23,6 @@ import { doGetAdminDashboardStats, type AdminDashboardStatsData } from '../api/a
 import StudentSettings from '../components/dashboard/StudentSettings';
 import { profileImageFetch } from '../api/api';
 import { useAppSelector } from '../store';
-import { connectWithSocketServer, UserDetails } from '../socket/socketConnection';
 import { logoutUser } from '../actions/authActions';
 
 import AdminChat from './AdminChat';
@@ -268,7 +267,7 @@ export default function AdminDashboard() {
 
   const {
     auth: { userDetails },
-    app: { connectedWithSocketServer },
+    app: { 
   } = useAppSelector(state => state);
 
   const [extraView, setExtraView] = useState<'profile' | 'settings' | null>(null);
@@ -314,11 +313,8 @@ export default function AdminDashboard() {
       dispatch(logoutUser());
       return;
     }
-    if (!connectedWithSocketServer) {
-      connectWithSocketServer(userDetails as UserDetails);
-      dispatch({ type: 'SetConnectedWithSocketServer', payload: true });
     }
-  }, [userDetails?.email, userDetails?.role, connectedWithSocketServer, dispatch, userDetails]);
+  }, [userDetails?.email, userDetails?.role,  userDetails]);
 
   useEffect(() => {
     setExtraView(null);

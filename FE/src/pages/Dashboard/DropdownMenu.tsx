@@ -6,14 +6,13 @@ import { IconButton } from "@mui/material";
 import MoreVertIcon from "@mui/icons-material/MoreVert";
 import { logoutUser } from "../../actions/authActions";
 import { useAppSelector } from "../../store";
-import { setAudioOnlyRoom } from "../../actions/roomActions";
 
 export default function DropDownMenu() {
     const [isDialogOpen, setIsDialogOpen] = useState(false);
     const [anchorEl, setAnchorEl] = React.useState<null | HTMLElement>(null);
     const open = Boolean(anchorEl);
     const dispatch = useDispatch();
-    const { auth: { userDetails }, room: { audioOnly, roomDetails, isUserInRoom, } } = useAppSelector(state => state)
+    const { auth: { userDetails } } = useAppSelector(state => state)
 
     const handleMenuClose = () => {
         setAnchorEl(null);

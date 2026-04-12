@@ -22,7 +22,6 @@ const meetingAnalyticsRoutes = require("./routes/meetingAnalyticsRoutes");
 
 const { appendDefaultServices, appendAdminUserAndGroupChat, initAppStates } = require('./initDB')
 
-const { createSocketServer } = require("./socket/socketServer");
 
 const PORT = process.env.PORT || 5000;
 
@@ -96,7 +95,6 @@ mongoose
         httpServer.listen(PORT, function () {
             console.log(`App listening on port ${PORT}.`);
         });
-        createSocketServer(httpServer);
     })
     .catch((err) => {
         console.error("Database connection failed — server not started.");

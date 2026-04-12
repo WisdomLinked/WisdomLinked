@@ -1,6 +1,5 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { connectWithSocketServer, UserDetails } from "../../../socket/socketConnection";
 import { useAppSelector } from "../../../store";
 import DashboardHeader from "../dashboardHeader";
 import CustomerDrawer from "./drawer";
@@ -8,7 +7,7 @@ import { useDispatch } from "react-redux";
 import { logoutUser, updateMe } from "../../../actions/authActions";
 
 const CustomerDashboard = () => {
-    const { auth: { userDetails }, videoChat: { localStream }, room: { isUserInRoom, localStreamRoom }, app: { connectedWithSocketServer } } = useAppSelector((state) => state);
+    const { auth: { userDetails } } = useAppSelector((state) => state);
     const navigate = useNavigate();
     const dispatch = useDispatch()
     const location = useLocation()
@@ -18,13 +17,6 @@ const CustomerDashboard = () => {
 
         if (!isLoggedIn || userDetails.role !== 'customer') {
             dispatch(logoutUser())
-        } else if (!connectedWithSocketServer) {
-            // connect to socket server
-            connectWithSocketServer(userDetails as UserDetails);
-            dispatch({
-                type: 'SetConnectedWithSocketServer',
-                payload: true
-            })
         } else {
             updateMe()
         }
@@ -41,7 +33,7 @@ const CustomerDashboard = () => {
             }
             <DashboardHeader userDetails={userDetails} />
             <div className={`w-full ${userDetails.status === 'review' ? 'h-[calc(100vh-119px)]' : 'h-[calc(100vh-63px)]'} flex`}>
-                <CustomerDrawer localStream={localStream || localStreamRoom} isUserInRoom={isUserInRoom} />
+                <CustomerDrawer />
             </div>
         </div>
     );

@@ -2,8 +2,6 @@ import React, { useState, useEffect } from "react";
 import { Routes, Route, Link } from "react-router-dom";
 import MenuIcon from "@mui/icons-material/Menu";
 import Close from "@mui/icons-material/Close";
-import VideoChat from "../../../components/VideoChat";
-import IncomingCall from "../../../components/IncomingCall";
 import Messenger from "../Messenger/Messenger";
 import FriendsList from "../FriendsSideBar/FriendsList/FriendsList";
 import ChatIcon from '@mui/icons-material/Chat';
@@ -19,8 +17,6 @@ import Availability from "./availability";
 import { useDispatch } from "react-redux";
 import { doGetMyEvents } from "../../../api/api";
 import { isTheEventGoingOn } from "../../../actions/common";
-import { cancelCallRequest, notifyChatLeft } from "../../../socket/socketConnection";
-import { clearVideoChat } from "../../../actions/videoChatActions";
 import ExpertProfile from "./profile";
 import JoinMeeting from "../joinMeeting"
 import FriendsTitle from "../FriendsSideBar/FriendsTitle";
@@ -29,21 +25,14 @@ import CastForEducationIcon from '@mui/icons-material/CastForEducation';
 import ExpertSeminar from "./seminar";
 import AddToPhotosIcon from '@mui/icons-material/AddToPhotos';
 import { actionTypes } from "../../../actions/types";
-import { leaveRoom } from "../../../socket/roomHandler";
 import GeneralChatList from "../FriendsSideBar/GeneralChatList";
 import CommunityChatList from "../FriendsSideBar/CommunityChatList";
 import PersonSearchIcon from '@mui/icons-material/PersonSearch';
 import Search from "./search";
 import CustomerList from "../FriendsSideBar/CustomerList";
 
-interface Props {
-    window?: () => Window;
-    localStream: MediaStream | null;
-    isUserInRoom: boolean;
-}
-
-export default function ExpertDrawer(props: Props) {
-    const { auth: { userDetails }, app: { location }, friends: { friends, groupChatList }, videoChat: { otherUserId, remoteStream }, room: { roomDetails, isUserInRoom }, chat: { currentEvent } } = useAppSelector((state) => state);
+export default function ExpertDrawer() {
+    const { auth: { userDetails }, app: { location }, friends: { friends, groupChatList }, chat: { currentEvent } } = useAppSelector((state) => state);
     const [leftNavActive, set_leftNavActive] = useState(false)
     const dispatch = useDispatch()
     const [events, set_events] = useState<any[]>([])
@@ -78,25 +67,8 @@ export default function ExpertDrawer(props: Props) {
         set_events([...temp])
     }
 
-    const closeAllCall = () => {
-        if (otherUserId && remoteStream) { // Close the current video Call
-            console.log("Call got closed due to the session expiration.")
-            notifyChatLeft(otherUserId, true);
-            dispatch(clearVideoChat("Call got closed due to the session expiration."));
-        }
-        if (roomDetails && isUserInRoom) { // Leave from the current room
-            leaveRoom()
-        }
-        cancelCallRequest({ otherUserId: otherUserId || '' })
-    }
-
     const setCurrentEvent = async () => {
         set_oldCurrentEvent(currentEvent)
-        if (currentEvent?.type === 'event') {
-            set_oldCurrentEventWasOngoing(remoteStream ? true : false)
-        } else {
-            set_oldCurrentEventWasOngoing(false)
-        }
 
         let _currentEvent = null
         for (let i = 0; i < events.length; i++) {
@@ -110,28 +82,6 @@ export default function ExpertDrawer(props: Props) {
             payload: _currentEvent
         })
     }
-
-    const openFeedbackModal = (otherUserId: any) => {
-        dispatch({
-            type: "SetFeedbackModalShow",
-            payload: otherUserId,
-        });
-    }
-
-    // Close all call when session expires ----------
-
-    // useEffect(() => {
-    //     if (oldCurrentEvent && !currentEvent) {
-    //         closeAllCall()
-    //         // OPENING FEEDBACK POPUP -----------
-    //         if (oldCurrentEventWasOngoing) {
-    //             if (oldCurrentEvent.type === 'event') {
-    //                 openFeedbackModal(otherUserId)
-    //             }
-    //         }
-
-    //     }
-    // }, [currentEvent])
 
     // Resetting current event --------------
 
@@ -215,11 +165,6 @@ export default function ExpertDrawer(props: Props) {
                     <div className="h-[250px] overflow-y-auto">
                         <CustomerList/>
                     </div>
-                    {/* <div className="flex items-center mt-2">
-                        <FriendsTitle title="Active Rooms" />
-                        <CreateRoomButton isUserInRoom={props.isUserInRoom} />
-                    </div>
-                    <ActiveRooms /> */}
                     <div className="bg-black w-full h-[1px]" />
                     <div className="flex items-center mb-4">
                         <FriendsTitle title="Individual Sessions" />
@@ -247,15 +192,13 @@ export default function ExpertDrawer(props: Props) {
                 <Routes>
                     <Route path="/timeslots" element={<Availability />} />
                     <Route path="/calendar" element={<Calendar />} />
-                    <Route path="/chat" element={<Messenger videoChaton = {!!props.localStream}/>} />
+                    <Route path="/chat" element={<Messenger videoChaton={false}/>} />
                     <Route path="/profile" element={<ExpertProfile userDetails={userDetails} />} />
                     <Route path="/seminar" element={<ExpertSeminar />} />
                     <Route path="/search" element={<Search />} />
                     <Route path ="/joinMeeting" element={<JoinMeeting />} />
                     <Route path="/*" element={<Dashboard />} />
                 </Routes>
-                {props.localStream && <VideoChat role = {userDetails.role} otherUserId ={otherUserId}/>}
-                <IncomingCall />
             </div>
         </div>
     );

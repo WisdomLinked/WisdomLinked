@@ -81,7 +81,6 @@ router.post("/getChatBotAnswer",requireAuth(false),getChatBotAnswer)
 // ── OAuth Routes ──────────────────────────────────────────
 const passport = require('passport');
 const jwt = require('jsonwebtoken');
-const { updateActiveRoomsOfUsers } = require('../socket/activeRooms');
 
 const oauthCallback = async (req: any, res: any) => {
     try {
@@ -127,7 +126,6 @@ const oauthCallback = async (req: any, res: any) => {
             httpOnly: true
         });
         
-        updateActiveRoomsOfUsers(user._id.toString(), user.groupChats);
 
         // Check for incomplete profile
         let isProfileIncomplete = false;

@@ -4,10 +4,7 @@ const User = require("../models/User");
 const GroupChat = require("../models/GroupChat");
 const PendingAppointmentToGroup = require("../models/PendingAppointmentToGroup");
 const PaymentHistory = require("../models/PaymentHistory");
-const {
-    updateUsersGroupChatList, updateRooms,
-} = require("../socketControllers/notifyConnectedSockets");
-const { updateActiveRoomsOfUsers } = require("../socket/activeRooms");
+// Socket notifications removed — Rocket.Chat handles real-time updates now
 const { checkPaymentIntentSucceeded, refundPaymentIntent } = require("./stripe.controller");
 const { appendPaymentHistory } = require("./payment.controller");
 const { getFullUserData } = require("../middlewares/requireAuth");
@@ -101,7 +98,7 @@ const createCommunityChat = async (req, res) => {
 
         // Update all participants' chat lists via socket
         participantsToUpdate.forEach(participantId => {
-            updateUsersGroupChatList(participantId.toString());
+            // [REMOVED] updateUsersGroupChatList(participantId.toString());
         });
 
         // Get full user data
@@ -194,11 +191,11 @@ const addParticipantsToCommunityChat = async (req, res) => {
 
         // Update all participants' chat lists via socket
         newParticipantIds.forEach(participantId => {
-            updateUsersGroupChatList(participantId.toString());
+            // [REMOVED] updateUsersGroupChatList(participantId.toString());
         });
 
         // Also update the admin's list
-        updateUsersGroupChatList(userId.toString());
+        // [REMOVED] updateUsersGroupChatList(userId.toString());
 
         // Get full user data
         const currentUser = await User.findById(userId);
@@ -259,7 +256,7 @@ const joinCommunityChat = async (req, res) => {
         }
 
         // Update user's chat list via socket
-        updateUsersGroupChatList(userId.toString());
+        // [REMOVED] updateUsersGroupChatList(userId.toString());
 
         // Get full user data
         const fullUser = await getFullUserData(currentUser.email);
@@ -429,8 +426,8 @@ const joinPrivateChat = async (req, res) => {
         await User.updateOne({ _id: personId }, { $addToSet: { generalChats: chat._id } }).exec();
 
         // 4) Notify socket helpers so both users' chat lists update in real-time
-        try { updateUsersGroupChatList(userId.toString()); } catch (e) { console.warn("updateUsersGroupChatList(user) failed:", e?.message || e); }
-        try { updateUsersGroupChatList(personId.toString()); } catch (e) { console.warn("updateUsersGroupChatList(person) failed:", e?.message || e); }
+        // [REMOVED] try { updateUsersGroupChatList(userId.toString()); } catch (e) { console.warn("updateUsersGroupChatList(user) failed:", e?.message || e); }
+        // [REMOVED] try { updateUsersGroupChatList(personId.toString()); } catch (e) { console.warn("updateUsersGroupChatList(person) failed:", e?.message || e); }
 
         // 5) Return populated user and chat so frontend can open the conversation immediately
         const userDoc = await User.findById(userId).select("email").exec();
@@ -491,13 +488,13 @@ const createGroupChatByUser = async (req, res) => {
         await currentUser.save();
         currentUser.populate(['events', 'keywords', 'services', 'groupChats'])
 
-        updateUsersGroupChatList(userId.toString());
+        // [REMOVED] updateUsersGroupChatList(userId.toString());
 
         expertUser.groupChats.push(chat._id);
         await expertUser.save();
         expertUser.populate(['events', 'keywords', 'services', 'groupChats'])
 
-        updateUsersGroupChatList(expert.toString());
+        // [REMOVED] updateUsersGroupChatList(expert.toString());
 
         await appendPaymentHistory({
             stripeMode: paymentIntentSucceeded_test ? 'test' : 'live',
@@ -555,7 +552,7 @@ const createGroupChat = async (req, res) => {
         currentUser.groupChats.push(chat._id);
         await currentUser.save();
 
-        updateUsersGroupChatList(userId.toString());
+        // [REMOVED] updateUsersGroupChatList(userId.toString());
 
         if (type === 'individual' && customerId) {
             const customer = await User.findById(customerId);
@@ -565,7 +562,7 @@ const createGroupChat = async (req, res) => {
             customer.groupChats.push(chat._id);
             await customer.save();
 
-            updateUsersGroupChatList(customerId.toString());
+            // [REMOVED] updateUsersGroupChatList(customerId.toString());
 
             sendEmailMeetingRequestToCustomer(customer.email, name, customer.username, start, duration, price, customer.timeZone)
 
@@ -662,14 +659,14 @@ const joinGroupChat = async (req, res) => {
         await currentUser.save();
         currentUser.populate(['events', 'keywords', 'services', 'groupChats'])
 
-        updateUsersGroupChatList(userId.toString());
+        // [REMOVED] updateUsersGroupChatList(userId.toString());
 
         groupChat.participants = [...groupChat.participants, userId]
         await groupChat.save();
 
         // update the chat list of all participants
         groupChat.participants.map(participantId => {
-            updateUsersGroupChatList(participantId.toString());
+            // [REMOVED] updateUsersGroupChatList(participantId.toString());
         })
 
         scheduleEmailReminder(currentUser.email, currentUser.username, groupChat.name, groupChat.start, groupChat.duration, currentUser.timeZone);
@@ -729,7 +726,7 @@ const updateGroupChat = async (req, res) => {
         // Update group chat with only provided fields
         await GroupChat.findByIdAndUpdate(groupId, updateFields, { new: true });
 
-        updateUsersGroupChatList(userId.toString());
+        // [REMOVED] updateUsersGroupChatList(userId.toString());
 
         const userDetails = await getFullUserData(req.user.email);
         userDetails.token = null;
@@ -935,7 +932,7 @@ const addMemberToGroup = async (req, res) => {
             customer.groupChats.push(groupChatId);
 
             // update the user's(user who has been added to the group) chat list
-            updateUsersGroupChatList(friendId.toString());
+            // [REMOVED] updateUsersGroupChatList(friendId.toString());
         }
 
         await customer.save();
@@ -944,11 +941,11 @@ const addMemberToGroup = async (req, res) => {
 
         // update the chat list of all participants
         groupChat.participants.map(userId => {
-            updateUsersGroupChatList(userId.toString());
+            // [REMOVED] updateUsersGroupChatList(userId.toString());
         })
 
         // Check if the room is enable in this group, if so, update active rooms of this user
-        updateActiveRoomsOfUsers(friendId, [groupChat])
+        // [REMOVED] updateActiveRoomsOfUsers(friendId, [groupChat])
 
         return res.status(200).send("Members added successfully!");
     } catch (err) {
@@ -991,11 +988,11 @@ const leaveGroup = async (req, res) => {
         await currentUser.save();
 
         // update the chat list of user who left the chat.
-        updateUsersGroupChatList(currentUser._id.toString());
+        // [REMOVED] updateUsersGroupChatList(currentUser._id.toString());
 
         groupChat.participants.forEach((participant) => {
             // update the participants chat list
-            updateUsersGroupChatList(participant.toString());
+            // [REMOVED] updateUsersGroupChatList(participant.toString());
         });
 
         return res.status(200).send("You have left the group!");
@@ -1043,7 +1040,7 @@ const deleteGroup = async (req, res) => {
                 await participant.save();
 
                 // update the users group chat list
-                updateUsersGroupChatList(friendId.toString());
+                // [REMOVED] updateUsersGroupChatList(friendId.toString());
             }
         });
 
@@ -1085,7 +1082,7 @@ const cancelIndividualAppointment = async (req, res) => {
                 await participant.save();
             }
             // update the users group chat list
-            updateUsersGroupChatList(participantId.toString());
+            // [REMOVED] updateUsersGroupChatList(participantId.toString());
         });
 
         if (groupChat.admin.toString() !== userId) {
@@ -1166,8 +1163,8 @@ const cancelPendingSeminar = async (req, res) => {
         await expert.save();
 
         // update the chat list of user who left the chat.
-        updateUsersGroupChatList(currentUser._id.toString());
-        updateUsersGroupChatList(expert._id.toString());
+        // [REMOVED] updateUsersGroupChatList(currentUser._id.toString());
+        // [REMOVED] updateUsersGroupChatList(expert._id.toString());
 
         const payment = await PaymentHistory.findOne({ pendingAppointmentToGroup: pendingSeminarId })
         if (payment) {
@@ -1226,11 +1223,11 @@ const leftSeminar = async (req, res) => {
         await currentUser.save();
 
         // update the chat list of user who left the chat.
-        updateUsersGroupChatList(userId);
+        // [REMOVED] updateUsersGroupChatList(userId);
 
         groupChat.participants.forEach((participant) => {
             // update the participants chat list
-            updateUsersGroupChatList(participant.toString());
+            // [REMOVED] updateUsersGroupChatList(participant.toString());
         });
 
         const pendingAppointmentToGroups = await PendingAppointmentToGroup.where({ groupChatId: seminarId, customerId: userId })

@@ -2,7 +2,6 @@ import React, { useState, useEffect, useRef } from "react";
 import MessagesHeader from "./Header";
 import Message from "./Message";
 import { useAppSelector } from "../../../../store";
-import { fetchDirectChatHistory, fetchGroupChatHistory, notifyChatLeft } from "../../../../socket/socketConnection";
 import { Message as MessageType } from "../../../../actions/types";
 import DateSeparator from "./DateSeparator";
 import {doGetEventsBetweenCustomerAndExpert, profileImageFetch} from "../../../../api/api";
@@ -19,7 +18,7 @@ const Messages = ({ theme = "dark" }: any) => {
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const audioRef = useRef<HTMLAudioElement>(null);
     const prevMessagesLength = useRef(0);
-    const { chat, auth: { userDetails }, videoChat: { otherUserId }, friends: { friends } } = useAppSelector((state) => state);
+    const { chat, auth: { userDetails },  friends: { friends } } = useAppSelector((state) => state);
     const { chosenChatDetails, messages, chosenGroupChatDetails, currentPage, gotAllChats, isNewMessage } = chat;
 
     const [scrollPosition, setScrollPosition] = useState(0);

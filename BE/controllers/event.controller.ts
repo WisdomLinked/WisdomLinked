@@ -3,7 +3,6 @@ const Event = require("../models/Event");
 const User = require("../models/User");
 const FriendInvitation = require("../models/FriendInvitation");
 const PaymentHistory = require("../models/PaymentHistory");
-const { updateUsersInvitations, updateUsersFriendsList } = require("../socketControllers/notifyConnectedSockets");
 const { getFullUserData } = require("../middlewares/requireAuth");
 const { checkPaymentIntentSucceeded, refundPaymentIntent } = require("./stripe.controller");
 const { appendPaymentHistory } = require("./payment.controller");
@@ -89,9 +88,6 @@ const createEventByExpert = async (req, res) => {
             events: [event._id]
         });
 
-        // after successfully creating the invitation, update the target user's pending invitation list
-        // with the new invitation in real time using sockets if the target user is online
-        updateUsersInvitations(expertUser._id.toString(), "new");
 
 
         return res.status(200).json({
@@ -186,14 +182,6 @@ const appendEvent = async (req, res) => {
                 await sender.save();
                 await receiver.save();
 
-                // update the user's(user accepting the invitation) pending invitations list
-                updateUsersFriendsList(expertUser._id.toString());
-
-                // update the user's(user accepting the invitation, receiver) friends list
-                updateUsersFriendsList(expertUser._id.toString());
-
-                // update the user's(user who has sent the invitation, sender) friends list
-                updateUsersFriendsList(customerUser._id.toString());
             }
             const userDetails = await getFullUserData(customer)
             return res.status(200).json({
@@ -273,9 +261,6 @@ const appendEvent = async (req, res) => {
                 events: [event._id]
             });
 
-            // after successfully creating the invitation, update the target user's pending invitation list
-            // with the new invitation in real time using sockets if the target user is online
-            updateUsersInvitations(expertUser._id.toString(), "new");
 
             return res.status(200).json({
                 result: 'Created new invitation',
@@ -391,14 +376,6 @@ const acceptEvent = async (req, res) => {
             await sender.save();
             await receiver.save();
 
-            // update the user's(user accepting the invitation) pending invitations list
-            updateUsersFriendsList(event.expert.toString());
-
-            // update the user's(user accepting the invitation, receiver) friends list
-            updateUsersFriendsList(event.expert.toString());
-
-            // update the user's(user who has sent the invitation, sender) friends list
-            updateUsersFriendsList(event.customer.toString());
         }
 
         res.status(200).json({
@@ -426,8 +403,6 @@ const declineEvent = async (req, res) => {
             // reject the invitation
             await FriendInvitation.findByIdAndDelete(invitationExists._id);
 
-            // update the user's pending invitations list
-            updateUsersInvitations(event.expert.toString());
         }
         res.status(200).json({
             result: updatedEvent
@@ -464,8 +439,6 @@ const cancelInvitation = async (req, res) => {
             // reject the invitation
             await FriendInvitation.findByIdAndDelete(invitationExists._id);
 
-            // update the user's pending invitations list
-            updateUsersInvitations(event.expert.toString());
         }
 
         res.status(200).json({

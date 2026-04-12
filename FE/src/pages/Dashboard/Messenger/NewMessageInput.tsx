@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Paperclip, Send } from "lucide-react";
 import { useAppSelector } from "../../../store";
-import { notifyTyping, sendDirectMessage, sendGroupMessage } from "../../../socket/socketConnection";
 import ReactQuill from 'react-quill'
 import 'react-quill/dist/quill.snow.css'
 import data from '@emoji-mart/data';

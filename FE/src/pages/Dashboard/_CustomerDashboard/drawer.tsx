@@ -2,8 +2,6 @@ import React, { useEffect, useState } from "react";
 import { Routes, Route, Link } from "react-router-dom";
 import MenuIcon from "@mui/icons-material/Menu";
 import Close from "@mui/icons-material/Close";
-import VideoChat from "../../../components/VideoChat";
-import IncomingCall from "../../../components/IncomingCall";
 import Messenger from "../Messenger/Messenger";
 import FriendsList from "../FriendsSideBar/FriendsList/FriendsList";
 import ChatIcon from '@mui/icons-material/Chat';
@@ -19,8 +17,6 @@ import { doGetMyEvents } from "../../../api/api";
 import { useDispatch } from "react-redux";
 import { actionTypes } from "../../../actions/types";
 import { isTheEventGoingOn } from "../../../actions/common";
-import { cancelCallRequest, notifyChatLeft } from "../../../socket/socketConnection";
-import { clearVideoChat } from "../../../actions/videoChatActions";
 import CustomerProfile from "./profile";
 import ManageAccounts from "@mui/icons-material/ManageAccounts";
 import MeetingRoomIcon from "@mui/icons-material/MeetingRoom";
@@ -28,24 +24,15 @@ import FriendsTitle from "../FriendsSideBar/FriendsTitle";
 import GroupChatList from "../FriendsSideBar/GroupChatList";
 import Seminars from "./seminars";
 import CastForEducationIcon from '@mui/icons-material/CastForEducation';
-import { leaveRoom } from "../../../socket/roomHandler";
 import GeneralChatList from "../FriendsSideBar/GeneralChatList";
 import CommunityChatList from "../FriendsSideBar/CommunityChatList";
 import CustomerPrivateExpertsList from "../FriendsSideBar/CustomerList/CustomerPrivateExpertsList";
 
-interface Props {
-    window?: () => Window;
-    localStream: MediaStream | null;
-    isUserInRoom: boolean;
-}
-
-export default function CustomerDrawer(props: Props) {
-    const { auth: { userDetails }, app: { location }, friends: { friends, groupChatList }, videoChat: { otherUserId, remoteStream }, chat: { currentEvent }, room: { roomDetails, isUserInRoom } } = useAppSelector((state) => state);
+export default function CustomerDrawer() {
+    const { auth: { userDetails }, app: { location }, friends: { friends, groupChatList }, chat: { currentEvent } } = useAppSelector((state) => state);
     const [leftNavActive, set_leftNavActive] = useState(false)
     const dispatch = useDispatch()
     const [events, set_events] = useState<any[]>([])
-    const [oldCurrentEvent, set_oldCurrentEvent] = useState<any>(currentEvent)
-    const [oldCurrentEventWasOngoing, set_oldCurrentEventWasOngoing] = useState<boolean>(false)
 
     const getEvents = async () => {
         const response = await doGetMyEvents()
@@ -74,28 +61,7 @@ export default function CustomerDrawer(props: Props) {
         set_events([...temp])
     }
 
-    const closeAllCall = () => {
-        if (otherUserId && remoteStream) { // Close the current video Call
-            console.log("Call got closed due to the session expiration.")
-            notifyChatLeft(otherUserId, true);
-            dispatch(clearVideoChat("Call got closed due to the session expiration."));
-        }
-        if (roomDetails && isUserInRoom) { // Leave from the current room
-            leaveRoom()
-        }
-        cancelCallRequest({ otherUserId: otherUserId || '' })
-    }
-
     const setCurrentEvent = async () => {
-        set_oldCurrentEvent(currentEvent)
-        if (currentEvent) {
-            if (currentEvent.type === 'seminar') {
-                set_oldCurrentEventWasOngoing(isUserInRoom)
-            } else if (currentEvent.type === 'event') {
-                set_oldCurrentEventWasOngoing(remoteStream ? true : false)
-            }
-        }
-
         let _currentEvent = null
         for (let i = 0; i < events.length; i++) {
             if (isTheEventGoingOn(events[i].start, events[i].end)) {
@@ -107,13 +73,6 @@ export default function CustomerDrawer(props: Props) {
             type: actionTypes.setCurrentEvent,
             payload: _currentEvent
         })
-    }
-
-    const openFeedbackModal = (otherUserId: any) => {
-        dispatch({
-            type: "SetFeedbackModalShow",
-            payload: otherUserId,
-        });
     }
 
     const [resetCurrentEventFlag, set_resetCurrentEventFlag] = useState(false)
@@ -132,8 +91,6 @@ export default function CustomerDrawer(props: Props) {
             clearInterval(intervalId);
         };
     }, [events])
-
-    // Getting all events and seminars ----------
 
     useEffect(() => {
         getEvents()
@@ -201,11 +158,6 @@ export default function CustomerDrawer(props: Props) {
                     ) : (
                     <FriendsList />
                     )}
-                    {/* <div className="flex items-center mt-2">
-                        <FriendsTitle title="Active Rooms" />
-                        <CreateRoomButton isUserInRoom={props.isUserInRoom} />
-                    </div>
-                    <ActiveRooms /> */}
                     <div className="bg-black w-full h-[1px]" />
                     <div className="flex items-center mb-4">
                         <FriendsTitle title="Individual Sessions" />
@@ -225,7 +177,7 @@ export default function CustomerDrawer(props: Props) {
             <div className={`w-full ${location === 'customerchat' ? 'lg:w-[calc(100%-370px)]' : 'lg:w-[calc(100%-70px)]'} h-full`}>
                 <Routes>
                     <Route path="/calendar" element={<Calendar />} />
-                    <Route path="/chat" element={<Messenger videoChaton = {!!props.localStream}/>} />
+                    <Route path="/chat" element={<Messenger videoChaton={false}/>} />
                     <Route path="/search" element={<Search />} />
                     <Route path="/seminar" element={<Seminars />} />
                     <Route path="/joinMeeting" element={<JoinMeeting />} />
@@ -233,8 +185,6 @@ export default function CustomerDrawer(props: Props) {
                     <Route path="/*" element={<Dashboard />} />
                 </Routes>
             </div>
-            {props.localStream && <VideoChat  role = {userDetails.role} otherUserId ={otherUserId}/>}
-            <IncomingCall />
         </div>
     );
 }

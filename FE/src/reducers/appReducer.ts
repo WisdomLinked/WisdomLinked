@@ -6,7 +6,7 @@ const initialState = {
     videoStreamAvailable: false,
     audioStreamAvailable: false,
     feedbackModalShow: false,
-    connectedWithSocketServer: false,
+    
     totalTimeSpent: null,
 };
 
@@ -34,27 +34,3 @@ const appReducer = (
                 feedbackModalShow: action.payload,
             }
         
-        case "SetConnectedWithSocketServer":
-            return {
-                ... state,
-                 connectedWithSocketServer: action.payload,
-            }
-        
-        case "SetLoadingStatus":
-            return {
-                ... state,
-                loading: action.payload,
-            }
-
-        case "SetTotalTimeSpent":
-            return {
-                ... state,
-                totalTimeSpent: action.payload,
-            }
-
-        default:
-            return state;
-    }
-};
-
-export { appReducer };

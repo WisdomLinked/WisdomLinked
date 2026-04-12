@@ -1,4 +1,4 @@
-import SimplePeer from "simple-peer";
+
 
 export enum actionTypes {
     authenticate,
@@ -28,28 +28,6 @@ export enum actionTypes {
     setCurrentEvent,
     setInitialTypingStatus,
 
-    setLocalStream,
-    setRemoteStream,
-    setOtherUserId,
-    setAudioOnly,
-    setLocalVideoAudioStatus,
-    setRemoteVideoAudioStatus,
-    setScreenSharingStream,
-    setScreenSharing,
-    setCallRequest,
-    setCallStatus,
-    resetVideoChatState,
-    resetRoomState,
-
-    openRoom,
-    setRoomDetails,
-    setActiveRooms,
-    setLocalStreamRoom,
-    setRemoteStreams,
-    setAudioOnlyRoom,
-    setScreenSharingStreamRoom,
-    setIsUserJoinedWithAudioOnly,
-
     setLocation,
     setLocalStreamAvailability
 }
@@ -57,7 +35,6 @@ export enum actionTypes {
 export interface CurrentUser {
     _id: string;
     email: string;
-    // token: string;
     username: string;
 }
 interface AuthSuccessAction {
@@ -65,7 +42,6 @@ interface AuthSuccessAction {
     payload: {
         _id: string;
         email: string;
-        // token: string;
         username: string;
     };
 }
@@ -107,7 +83,6 @@ export interface Friend {
 
 export interface OnlineUser {
     userId: string;
-    socketId: string;
 }
 
 export interface GroupChatDetails {
@@ -229,156 +204,6 @@ export interface SetInitialTypingStatus {
     payload: Array<Typing>;
 }
 
-interface SetLocalStream {
-    type: actionTypes.setLocalStream;
-    payload: MediaStream | null;
-}
-
-interface SetRemoteStream {
-    type: actionTypes.setRemoteStream;
-    payload: MediaStream | null;
-}
-
-interface SetCallRequest {
-    type: actionTypes.setCallRequest;
-    payload: {
-        callerName: string;
-        audioOnly: boolean;
-        callerUserId: string;
-        signal: SimplePeer.SignalData;
-    };
-}
-
-export type CallStatus = "ringing" | "accepted" | "rejected" | "left" | null;
-export interface SetCallStatus {
-    type: actionTypes.setCallStatus;
-    payload: {
-        status: CallStatus;
-    };
-}
-
-export interface ClearVideChatState {
-    type: actionTypes.resetVideoChatState;
-}
-
-export interface ClearRoomState {
-    type: actionTypes.resetRoomState;
-}
-
-interface setOtherUserId {
-    type: actionTypes.setOtherUserId;
-    payload: {
-        otherUserId: string | null;
-    };
-}
-
-interface setScreenSharingStream {
-    type: actionTypes.setScreenSharingStream;
-    payload: {
-        stream: MediaStream | null;
-        isScreenSharing: boolean;
-    };
-}
-
-interface SetAudioOnly {
-    type: actionTypes.setAudioOnly;
-    payload: {
-        audioOnly: boolean;
-    };
-}
-
-interface SetLocalVideoAudioStatus {
-    type: actionTypes.setLocalVideoAudioStatus;
-    payload: {
-        videoEnabled: boolean;
-        audioEnabled: boolean;
-    };
-}
-
-interface SetRemoteVideoAudioStatus {
-    type: actionTypes.setRemoteVideoAudioStatus;
-    payload: {
-        videoEnabled: boolean;
-        audioEnabled: boolean;
-    };
-}
-
-export type ActiveRoom = {
-    roomCreator: {
-        userId: string;
-        username: string;
-        socketId: string;
-    };
-    participants: {
-        userId: string;
-        socketId: string;
-        username: string;
-    }[];
-    kickedParticipants: string[]
-    mutedParticipants: string[]
-    selfMutedParticipants: string[]
-    roomId: string;
-    groupId: string;
-};
-
-interface SetIsUserJoinedOnlyWithAudio {
-    type: actionTypes.setIsUserJoinedWithAudioOnly;
-    payload: {
-        isUserJoinedWithOnlyAudio: boolean;
-    };
-}
-
-interface SetScreenSharingStreamRoom {
-    type: actionTypes.setScreenSharingStreamRoom;
-    payload: {
-        isScreenSharingActive: boolean;
-        screenSharingStream: MediaStream | null;
-    };
-}
-
-interface SetRemoteStreams {
-    type: actionTypes.setRemoteStreams;
-    payload: {
-        remoteStreams: MediaStream[];
-    };
-}
-
-interface SetAudioOnlyRoom {
-    type: actionTypes.setAudioOnlyRoom;
-    payload: {
-        audioOnly: boolean;
-    };
-}
-
-interface SetLocalStreamRoom {
-    type: actionTypes.setLocalStreamRoom;
-    payload: {
-        localStreamRoom: MediaStream | null;
-    };
-}
-
-interface SetActiveRooms {
-    type: actionTypes.setActiveRooms;
-    payload: {
-        activeRooms: ActiveRoom[];
-    };
-}
-
-interface SetOpenRoom {
-    type: actionTypes.openRoom;
-    payload: {
-        isUserRoomCreator: boolean;
-        isUserInRoom: boolean;
-    };
-}
-
-interface SetRoomDetails {
-    type: actionTypes.setRoomDetails;
-    payload: {
-        roomDetails: any;
-    };
-}
-
 // APP ACTION TYPES
 interface SetLocation {
     type: actionTypes.setLocation;
@@ -415,24 +240,3 @@ export type ChatActions =
     | SetCurrentEvent
     | SetInitialTypingStatus
     | ResetChat;
-export type VideoChatActions =
-    | SetLocalStream
-    | SetRemoteStream
-    | SetCallRequest
-    | SetCallStatus
-    | ClearVideChatState
-    | setOtherUserId
-    | setScreenSharingStream
-    | SetAudioOnly
-    | SetLocalVideoAudioStatus
-    | SetRemoteVideoAudioStatus;
-
-export type RoomActions =
-    | SetIsUserJoinedOnlyWithAudio
-    | SetActiveRooms
-    | SetAudioOnlyRoom
-    | SetLocalStreamRoom
-    | SetRemoteStreams
-    | SetOpenRoom
-    | SetRoomDetails
-    | SetScreenSharingStreamRoom;

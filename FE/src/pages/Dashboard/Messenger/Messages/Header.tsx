@@ -3,7 +3,6 @@ import IconButton from "@mui/material/IconButton";
 import AddIcCallIcon from "@mui/icons-material/AddIcCall";
 import VideoCallIcon from "@mui/icons-material/VideoCall";
 import { useAppSelector } from "../../../../store";
-import { callRequest } from "../../../../socket/socketConnection";
 import CalendarMonthIcon from '@mui/icons-material/CalendarMonth';
 import Avatar from "../../../../components/Avatar";
 import OverlayPortal from "../../../../components/OverayPortal";
@@ -19,7 +18,6 @@ import ClearIcon from '@mui/icons-material/Clear';
 import PeopleAltIcon from '@mui/icons-material/PeopleAlt';
 import LogoutIcon from '@mui/icons-material/Logout';
 import CastForEducationIcon from '@mui/icons-material/CastForEducation';
-import { createNewRoom, joinRoom } from "../../../../socket/roomHandler";
 import CloseIcon from '@mui/icons-material/Close';
 import EditIcon from '@mui/icons-material/Edit';
 import {doLeftSeminar, doUpdateProfile, getCustomerById, getExpertById, shareMeetingViaEmail} from "../../../../api/api";
@@ -39,7 +37,6 @@ const MessagesHeader = ({ scrollPosition, events, openCalendarModal, openSeminar
         auth: { userDetails },
         chat: { chosenChatDetails, chosenGroupChatDetails, currentEvent },
         friends: { onlineUsers },
-        room: { isUserInRoom, activeRooms, roomDetails }
     } = useAppSelector((state) => state);
 
     const navActiveStyle =
@@ -120,14 +117,8 @@ const MessagesHeader = ({ scrollPosition, events, openCalendarModal, openSeminar
     }
 
     const createNewRoomOrJoinRoom = () => {
-        if (activeRooms?.length) {
-            console.log('Join room')
-            joinRoom(activeRooms[0])
-        } else {
-            console.log('Creating a room')
-            createNewRoom(chosenGroupChatDetails?.groupId)
-        }
-
+        // TODO: Replace with Jitsi Meet integration
+        console.log('Seminar join — will open Jitsi room')
         if(userDetails.role === 'expert' && enabledEvent){
             SetTotalTimeSpent(Date.now());
         }
@@ -185,23 +176,8 @@ const MessagesHeader = ({ scrollPosition, events, openCalendarModal, openSeminar
     }, [chosenGroupChatDetails])
 
     useEffect(() => {
-        console.log("User Details:",userDetails);
-        if (activeRooms?.length && enabledEvent) {
-            // console.log(activeRooms)
-            const room = activeRooms.find(x => x.groupId === enabledEvent?._id)
-            const kicked = room?.kickedParticipants?.find(x => x === userDetails.userId)
-            set_kickedFromSeminar(!!kicked)
-        } else {
-            set_kickedFromSeminar(false)
-        }
-        // console.log('---------------------------\n',enabledEvent, isUserInRoom, userDetails, chosenGroupChatDetails, activeRooms)
-        // !enabledEvent ||
-        // isUserInRoom ||
-        // !(
-        //     userDetails?.userId === chosenGroupChatDetails?.admin?._id ||
-        //     enabledEvent?.participants?.findIndex((x:any) => x?._id === activeRooms?.[0]?.roomCreator?.userId) > -1
-        // )
-    }, [enabledEvent, isUserInRoom, userDetails, chosenGroupChatDetails, activeRooms])
+        set_kickedFromSeminar(false)
+    }, [enabledEvent, userDetails, chosenGroupChatDetails])
 
     const fetchProfileData=async ()=>{
 
@@ -287,7 +263,7 @@ const MessagesHeader = ({ scrollPosition, events, openCalendarModal, openSeminar
                                     SetTotalTimeSpent(Date.now());
                                 }
 
-                                callRequest({
+                                {
                                     audioOnly: true,
                                     callerName: userDetails
                                         ? userDetails.username
@@ -321,7 +297,7 @@ const MessagesHeader = ({ scrollPosition, events, openCalendarModal, openSeminar
                                     SetTotalTimeSpent(Date.now());
                                 }
 
-                                callRequest({
+                                {
                                     audioOnly: false,
                                     callerName: userDetails ? userDetails.username : "",
                                     receiverUserId: chosenChatDetails?.userId!,
@@ -351,10 +327,9 @@ const MessagesHeader = ({ scrollPosition, events, openCalendarModal, openSeminar
                                                 ? "bg-sky-600 hover:bg-sky-700 text-white"
                                                 : "bg-green text-white"
                                         }`}
-                                        title={!enabledEvent ? 'Seminar not started' : isUserInRoom ? 'You are already in the seminar' : kickedFromSeminar ? 'You are blocked from this seminar by the expert' : 'Join a seminar'}
+                                        title={!enabledEvent ? 'Seminar not started' : kickedFromSeminar ? 'You are blocked from this seminar by the expert' : 'Join a seminar'}
                                         disabled={
                                             !enabledEvent ||
-                                            isUserInRoom ||
                                             kickedFromSeminar
                                             // activeRooms?.kickedParticipants?.find(x => x === userDetails.userId)
                                             // !(

@@ -3,7 +3,6 @@ import { getMe, callLogout } from "../api/api";
 import { resetChatAction } from "./chatActions";
 import { resetFriendsAction } from "./friendActions";
 import { actionTypes, CurrentUser } from "./types";
-import { closeSocketConnection, emitLogOut } from "../socket/socketConnection";
 
 export const autoLogin = () => {
     return async (dispatch: Dispatch) => {
@@ -48,7 +47,7 @@ export const updateMe = () => {
 }
 
 export const logoutUser = () => {
-    return async (dispatch: Dispatch, getState: any) => {
+    return async (dispatch: Dispatch) => {
         await callLogout();
         localStorage.clear();
         dispatch({
@@ -59,34 +58,6 @@ export const logoutUser = () => {
         dispatch({
             type: actionTypes.resetChat
         })
-        const {
-            videoChat: { localStream, screenSharingStream },
-            room: { localStreamRoom, screenSharingStream: screenSharingStreamRoom },
-        } = getState();
-
-        // Clear local stream and screen sharing stream from the video chat
-        if (localStream) {
-            localStream?.getTracks().forEach((track: any) => track.stop());
-        }
-        if (screenSharingStream) {
-            screenSharingStream?.getTracks().forEach((track: any) => track.stop());
-        }
-        dispatch({
-            type: actionTypes.resetVideoChatState,
-        });
-
-        // Clear local stream and screen sharing stream from the room
-        if (localStreamRoom) {
-            localStreamRoom.getTracks().forEach((track: any) => track.stop());
-        }
-        if (screenSharingStreamRoom) {
-            screenSharingStreamRoom.getTracks().forEach((track: any) => track.stop());
-        }
-        dispatch({
-            type: actionTypes.resetRoomState,
-        });
-        emitLogOut()
-        closeSocketConnection()
         window.location.href = "/login";
     }
 }

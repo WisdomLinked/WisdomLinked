@@ -1,10 +1,6 @@
 import { Request, Response } from 'express';
 const FriendInvitation = require("../models/FriendInvitation");
 const User = require("../models/User");
-const {
-    updateUsersInvitations,
-    updateUsersFriendsList
-} = require("../socketControllers/notifyConnectedSockets");
 
 const inviteFriend = async (req, res) => {
     const { email: senderEmailAddress, userId } = req.user;
@@ -58,9 +54,6 @@ const inviteFriend = async (req, res) => {
         receiverId: targetUser._id,
     });
 
-    // after successfully creating the invitation, update the target user's pending invitation list
-    // with the new invitation in real time using sockets if the target user is online
-    updateUsersInvitations(targetUser._id.toString(), "new");
 
     return res.status(201).send("Invitation has been sent successfully");
 };
@@ -98,14 +91,6 @@ const acceptInvitation = async (req, res) => {
         await sender.save();
         await receiver.save();
 
-        // update the user's(user accepting the invitation) pending invitations list
-        updateUsersInvitations(req.user.userId.toString());
-
-        // update the user's(user accepting the invitation, receiver) friends list
-        updateUsersFriendsList(req.user.userId.toString());
-
-        // update the user's(user who has sent the invitation, sender) friends list
-        updateUsersFriendsList(deletedInvitation.senderId.toString());
 
 
         return res.status(200).send("Invitation accepted successfully!");
@@ -132,8 +117,6 @@ const rejectInvitation = async (req, res) => {
         // reject the invitation
         await FriendInvitation.findByIdAndDelete(invitationId);
 
-        // update the user's pending invitations list
-        updateUsersInvitations(req.user.userId);
 
         return res.status(200).send("Invitation rejected successfully!");
     } catch (err) {
@@ -169,9 +152,6 @@ const removeFriend = async (req, res) => {
         await friend.save();
         await currentUser.save();
 
-        // update both users friends list
-        updateUsersFriendsList(currentUser._id.toString());
-        updateUsersFriendsList(friend._id.toString());
 
         return res.status(200).send("Friend removed successfully!");
     } catch (err) {
