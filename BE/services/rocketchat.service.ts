@@ -1,8 +1,8 @@
 import axios from 'axios';
 
-const RC_URL = 'https://chat.wisdomlinked.com';
-const RC_USER = 'adminWisdomLinked';
-const RC_PASS = 'Password4author!';
+const RC_URL = process.env.ROCKETCHAT_URL || 'https://chat.wisdomlinked.com';
+const RC_USER = process.env.ROCKETCHAT_ADMIN_USER || '';
+const RC_PASS = process.env.ROCKETCHAT_ADMIN_PASS || '';
 
 let adminAuthToken = '';
 let adminUserId = '';

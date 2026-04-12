@@ -78,12 +78,13 @@ jobs:
           REACT_APP_SERVER_URL=https://api.wisdomlinked.com
           REACT_APP_API_BASE_URL=https://api.wisdomlinked.com/api
           REACT_APP_HOST_URL=https://wisdomlinked.com
-          REACT_APP_TURN_URL=${{ secrets.REACT_APP_TURN_URL }}
           REACT_APP_BASE_URL=/
           REACT_APP_AUTH_URL=/user/
           REACT_APP_PAYPAL_REAL_CLIENT_ID=${{ secrets.REACT_APP_PAYPAL_REAL_CLIENT_ID }}
           REACT_APP_STRIPE_PUBLISHABLE_KEY_LIVE=${{ secrets.REACT_APP_STRIPE_PUBLISHABLE_KEY_LIVE }}
           REACT_APP_STRIPE_PUBLISHABLE_KEY_TEST=${{ secrets.REACT_APP_STRIPE_PUBLISHABLE_KEY_TEST }}
+          REACT_APP_ROCKETCHAT_URL=${{ secrets.ROCKETCHAT_URL }}
+          REACT_APP_JITSI_DOMAIN=${{ secrets.JITSI_DOMAIN }}
           EOF
 
       - name: Set up Docker Buildx
@@ -108,12 +109,13 @@ jobs:
             REACT_APP_SERVER_URL=${{ secrets.REACT_APP_SERVER_URL }}
             REACT_APP_API_BASE_URL=${{ secrets.REACT_APP_API_BASE_URL }}
             REACT_APP_HOST_URL=${{ secrets.REACT_APP_HOST_URL }}
-            REACT_APP_TURN_URL=${{ secrets.REACT_APP_TURN_URL }}
             REACT_APP_BASE_URL=${{ secrets.REACT_APP_BASE_URL }}
             REACT_APP_AUTH_URL=${{ secrets.REACT_APP_AUTH_URL }}
             REACT_APP_PAYPAL_REAL_CLIENT_ID=${{ secrets.REACT_APP_PAYPAL_REAL_CLIENT_ID }}
             REACT_APP_STRIPE_PUBLISHABLE_KEY_LIVE=${{ secrets.REACT_APP_STRIPE_PUBLISHABLE_KEY_LIVE }}
             REACT_APP_STRIPE_PUBLISHABLE_KEY_TEST=${{ secrets.REACT_APP_STRIPE_PUBLISHABLE_KEY_TEST }}
+            REACT_APP_ROCKETCHAT_URL=${{ secrets.ROCKETCHAT_URL }}
+            REACT_APP_JITSI_DOMAIN=${{ secrets.JITSI_DOMAIN }}
 
   deploy:
     needs: [changes, build-and-push-backend, build-and-push-frontend]
@@ -170,6 +172,9 @@ jobs:
               -e ZOHONOREPLY_PASS="${{ secrets.ZOHONOREPLY_PASS }}" \
               -e ZOHOADMIN_USER="${{ secrets.ZOHOADMIN_USER }}" \
               -e ZOHOADMIN_PASS="${{ secrets.ZOHOADMIN_PASS }}" \
+              -e ROCKETCHAT_URL="${{ secrets.ROCKETCHAT_URL }}" \
+              -e ROCKETCHAT_ADMIN_USER="${{ secrets.ROCKETCHAT_ADMIN_USER }}" \
+              -e ROCKETCHAT_ADMIN_PASS="${{ secrets.ROCKETCHAT_ADMIN_PASS }}" \
               ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE }}:latest
 
             # Run the Frontend Production Container
