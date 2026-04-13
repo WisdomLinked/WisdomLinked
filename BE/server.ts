@@ -19,6 +19,8 @@ const customerRoutes = require("./routes/customerRoutes")
 const adminRoutes = require("./routes/adminRoutes")
 const contactRoutes = require("./routes/contactRoutes")
 const meetingAnalyticsRoutes = require("./routes/meetingAnalyticsRoutes");
+const chatRoutes = require("./routes/chatRoutes");
+const meetingRoutes = require("./routes/meetingRoutes");
 
 const { appendDefaultServices, appendAdminUserAndGroupChat, initAppStates } = require('./initDB')
 
@@ -75,6 +77,8 @@ app.use("/api/image-upload", imageUploadRoutes);
 app.use("/api/image-fetch", fetchImageRoute);
 app.use("/api", contactRoutes);
 app.use("/api/meeting-analytics", meetingAnalyticsRoutes);
+app.use("/api/chat", chatRoutes);
+app.use("/api/meeting", meetingRoutes);
 
 app.use(express.static('./uploads'));
 app.get('/uploads/*', (req, res) => {

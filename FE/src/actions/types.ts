@@ -29,7 +29,9 @@ export enum actionTypes {
     setInitialTypingStatus,
 
     setLocation,
-    setLocalStreamAvailability
+    setLocalStreamAvailability,
+
+    setChatChannelInfo,
 }
 
 export interface CurrentUser {
@@ -231,6 +233,14 @@ export type FriendsActions =
     | UpdateMissedChats
     | UpdateLastChatDate
     | ResetFriends;
+export interface SetChatChannelInfo {
+    type: actionTypes.setChatChannelInfo;
+    payload: {
+        conversationId: string;
+        rcChannelId: string | null;
+    };
+}
+
 export type ChatActions =
     | SetChosenChatDetails
     | SetChosenGroupChatDetails
@@ -239,4 +249,5 @@ export type ChatActions =
     | SetTyping
     | SetCurrentEvent
     | SetInitialTypingStatus
+    | SetChatChannelInfo
     | ResetChat;

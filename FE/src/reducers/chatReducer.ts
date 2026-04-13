@@ -25,8 +25,10 @@ interface ChatState {
     chatType: ChatTypes;
     chosenChatDetails: any;
     chosenGroupChatDetails: any;
+    conversationId: string | null;
+    rcChannelId: string | null;
     typing: Array<{
-        userId: string; // id of the user who's typing;
+        userId: string;
         typing: boolean;
         chatId: any;
     }>;
@@ -42,6 +44,8 @@ interface ChatState {
 const initialState = {
     chosenChatDetails: null,
     chosenGroupChatDetails: null,
+    conversationId: null,
+    rcChannelId: null,
     typing: [],
     groupTyping: [],
     chatType: ChatTypes.direct,
@@ -147,11 +151,20 @@ const chatReducer: Reducer<ChatState, ChatActions> = (
                 currentEvent: action.payload,
             };
 
+        case actionTypes.setChatChannelInfo:
+            return {
+                ...state,
+                conversationId: action.payload.conversationId,
+                rcChannelId: action.payload.rcChannelId,
+            };
+
         case actionTypes.resetChat:
             return {
                 ...state,
                 chosenChatDetails: null,
                 chosenGroupChatDetails: null,
+                conversationId: null,
+                rcChannelId: null,
                 messages: [],
                 currentPage: 0,
                 gotAllChats: false,

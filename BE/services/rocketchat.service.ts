@@ -38,6 +38,8 @@ const getAdminAuthHeaders = async () => {
     }
 };
 
+// ── User Management ─────────────────────────────────────────
+
 export const syncUserToRocketChat = async (userData: { email: string; username: string; name: string; password?: string }) => {
     try {
         const headers = await getAdminAuthHeaders();
@@ -69,12 +71,6 @@ export const syncUserToRocketChat = async (userData: { email: string; username: 
     } catch (err: any) {
         if (err.response?.data?.errorType === 'error-field-unavailable') {
             console.log(`User ${userData.username} or email ${userData.email} already exists in Rocket.Chat`);
-            // Attempt to get user ID by email
-            try {
-                const headers = await getAdminAuthHeaders();
-                // RC has a bit of weird mapping, but if we assume it exists we can just catch it
-                // It's mostly fine if it fails here, they can still login
-            } catch (e) {}
         } else {
             console.error('Failed to sync user to Rocket.Chat:', err.response?.data || err.message);
         }
@@ -97,3 +93,123 @@ export const getRocketAuthToken = async (userId: string) => {
     }
     return null;
 };
+
+/** Look up a RC user by their WL username. Returns RC userId or null. */
+export const getRCUserIdByUsername = async (username: string): Promise<string | null> => {
+    try {
+        const headers = await getAdminAuthHeaders();
+        const res = await axios.get(`${RC_URL}/api/v1/users.info?username=${username}`, { headers });
+        if (res.data.success && res.data.user) {
+            return res.data.user._id;
+        }
+    } catch (e: any) { /* user doesn't exist */ }
+    return null;
+};
+
+// ── DM Channel Management ───────────────────────────────────
+
+/** Create or get a DM channel between two RC usernames. Returns the RC room id. */
+export const getOrCreateDMChannel = async (usernameA: string, usernameB: string): Promise<string | null> => {
+    try {
+        const headers = await getAdminAuthHeaders();
+        const res = await axios.post(`${RC_URL}/api/v1/dm.create`, {
+            usernames: `${usernameA},${usernameB}`
+        }, { headers });
+
+        if (res.data.success && res.data.room) {
+            return res.data.room._id;
+        }
+    } catch (err: any) {
+        console.error('Failed to create/get DM channel:', err.response?.data || err.message);
+    }
+    return null;
+};
+
+// ── Group Channel Management ────────────────────────────────
+
+/** Create or get a group channel by name. Returns the RC room id. */
+export const getOrCreateGroupChannel = async (channelName: string, memberUsernames: string[]): Promise<string | null> => {
+    try {
+        const headers = await getAdminAuthHeaders();
+        // Try to find existing
+        try {
+            const infoRes = await axios.get(`${RC_URL}/api/v1/channels.info?roomName=${channelName}`, { headers });
+            if (infoRes.data.success && infoRes.data.channel) {
+                return infoRes.data.channel._id;
+            }
+        } catch (e: any) { /* doesn't exist, create it */ }
+
+        const createRes = await axios.post(`${RC_URL}/api/v1/channels.create`, {
+            name: channelName,
+            members: memberUsernames,
+        }, { headers });
+
+        if (createRes.data.success && createRes.data.channel) {
+            return createRes.data.channel._id;
+        }
+    } catch (err: any) {
+        // If channel name already exists, try to get it
+        if (err.response?.data?.errorType === 'error-duplicate-channel-name') {
+            try {
+                const headers = await getAdminAuthHeaders();
+                const infoRes = await axios.get(`${RC_URL}/api/v1/channels.info?roomName=${channelName}`, { headers });
+                if (infoRes.data.success) return infoRes.data.channel._id;
+            } catch (e) {}
+        }
+        console.error('Failed to create/get group channel:', err.response?.data || err.message);
+    }
+    return null;
+};
+
+// ── Messaging ───────────────────────────────────────────────
+
+/** Send a message to a RC channel (DM or group) on behalf of a user.
+ *  Uses admin credentials with `alias` to display the sender's name. */
+export const sendMessageToRC = async (roomId: string, text: string, senderUsername: string): Promise<boolean> => {
+    try {
+        const headers = await getAdminAuthHeaders();
+        const res = await axios.post(`${RC_URL}/api/v1/chat.sendMessage`, {
+            message: {
+                rid: roomId,
+                msg: text,
+                alias: senderUsername,
+            }
+        }, { headers });
+        return res.data.success === true;
+    } catch (err: any) {
+        console.error('Failed to send message to RC:', err.response?.data || err.message);
+        return false;
+    }
+};
+
+// ── Typing Indicator ────────────────────────────────────────
+
+/** Notify RC that a user is typing in a room. */
+export const notifyTypingRC = async (roomId: string, username: string, isTyping: boolean): Promise<void> => {
+    // RC doesn't have a REST endpoint for typing; this is handled client-side through DDP.
+    // This is a no-op placeholder — the frontend handles typing via the RC realtime client.
+};
+
+// ── Token for Frontend ──────────────────────────────────────
+
+/** Generate a login token for a WL user to connect to RC's realtime API from the frontend. */
+export const generateUserToken = async (username: string): Promise<{ authToken: string; userId: string } | null> => {
+    try {
+        const headers = await getAdminAuthHeaders();
+        const res = await axios.post(`${RC_URL}/api/v1/users.createToken`, {
+            username
+        }, { headers });
+
+        if (res.data.success) {
+            return {
+                authToken: res.data.data.authToken,
+                userId: res.data.data.userId
+            };
+        }
+    } catch (err: any) {
+        console.error('Failed to generate user token:', err.response?.data || err.message);
+    }
+    return null;
+};
+
+export { RC_URL };

@@ -1,63 +1,58 @@
 import React, { useState, useEffect } from "react";
 import gif from "../../../assets/images/typing.gif";
 import { useAppSelector } from "../../../store";
+import { onTyping } from "../../../services/rcRealtime";
 
 const Typing = ({ theme = "dark" }: any) => {
-    const { auth: { userDetails }, chat: { chosenChatDetails, typing, chosenGroupChatDetails, groupTyping } } = useAppSelector(state => state);
+    const { auth: { userDetails }, chat: { chosenChatDetails, chosenGroupChatDetails, rcChannelId } } = useAppSelector(state => state);
 
-    const [directChatTyping, set_directChatTyping] = useState<any>(null)
-    const [typingUsers, set_typingUsers] = useState<Array<any>>([])
+    const [typingUsers, set_typingUsers] = useState<string[]>([]);
 
     useEffect(() => {
-        if (typing && chosenChatDetails) {
-            set_directChatTyping(typing.find((item: any) => item.userId === chosenChatDetails?.userId))
-        } else if (groupTyping && chosenGroupChatDetails) {
-            const typing = groupTyping.find((item) => item.chatId === chosenGroupChatDetails?.groupId);
-            let temp: any = []
-            if (typing) {
-                for (let x in typing) {
-                    if (typing[x] === true && x !== userDetails.userId) {
-                        temp.push(chosenGroupChatDetails.participants?.find((item: any) => item._id === x)?.username)
-                    }
-                }
-            }
-            set_typingUsers([...temp])
+        if (!rcChannelId) {
+            set_typingUsers([]);
+            return;
         }
-    }, [typing, groupTyping, chosenChatDetails, chosenGroupChatDetails])
+
+        const unsub = onTyping(({ roomId, username, isTyping }) => {
+            // Ignore our own typing
+            if (username === userDetails?.username) return;
+
+            set_typingUsers(prev => {
+                if (isTyping) {
+                    return prev.includes(username) ? prev : [...prev, username];
+                } else {
+                    return prev.filter(u => u !== username);
+                }
+            });
+        });
+
+        // Clear when chat changes
+        set_typingUsers([]);
+
+        return () => {
+            unsub();
+            set_typingUsers([]);
+        };
+    }, [rcChannelId, userDetails?.username]);
+
+    if (typingUsers.length === 0) return null;
 
     return (
-        (directChatTyping?.typing) ?
-            <div className={`flex items-center font-semibold px-4 py-2 ${theme === "light" ? "text-slate-600" : "text-lightgrey"}`}>
-                <>
-                    {chosenChatDetails?.username}
-                    <img
-                        src={gif}
-                        alt="dots"
-                        className="w-[40px] h-auto ml-2"
-                    />
-                </>
-            </div> :
-            typingUsers?.length ?
-                <div className={`flex items-center font-semibold px-4 py-2 ${theme === "light" ? "text-slate-600" : "text-lightgrey"}`}>
-                    <>
-                        {
-                            typingUsers.map((item: any, index: number) => {
-                                return (
-                                    <span key={index} className="mr-2">
-                                        {item}{index !== typingUsers.length - 1 ? ',' : ''}
-                                    </span>
-                                )
-                            })
-                        }
-                        <img
-                            src={gif}
-                            alt="dots"
-                            className="w-[40px] h-auto ml-2"
-                        />
-                    </>
-                </div> :
-                null
-
+        <div className={`flex items-center font-semibold px-4 py-2 ${theme === "light" ? "text-slate-600" : "text-lightgrey"}`}>
+            <>
+                {typingUsers.map((username, index) => (
+                    <span key={username} className="mr-1">
+                        {username}{index !== typingUsers.length - 1 ? ',' : ''}
+                    </span>
+                ))}
+                <img
+                    src={gif}
+                    alt="dots"
+                    className="w-[40px] h-auto ml-2"
+                />
+            </>
+        </div>
     );
 };
 

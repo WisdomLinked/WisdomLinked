@@ -1,5 +1,5 @@
 // import { Dispatch } from "redux";
-import { actionTypes, SetChosenChatDetails, SetMessages, Message, SetTyping, AddNewMessage, SetInitialTypingStatus, Typing, GroupChatDetails, SetChosenGroupChatDetails, ResetChat } from "./types";
+import { actionTypes, SetChosenChatDetails, SetMessages, Message, SetTyping, AddNewMessage, SetInitialTypingStatus, Typing, GroupChatDetails, SetChosenGroupChatDetails, ResetChat, SetChatChannelInfo } from "./types";
 
 export const setChosenChatDetails = (chatDetails: {
     userId: string;
@@ -54,3 +54,10 @@ export const resetChatAction = (): ResetChat => {
         type: actionTypes.resetChat
     }
 }
+
+export const setChatChannelInfo = (info: { conversationId: string; rcChannelId: string | null }): SetChatChannelInfo => {
+    return {
+        type: actionTypes.setChatChannelInfo,
+        payload: info,
+    };
+};

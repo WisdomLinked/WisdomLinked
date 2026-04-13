@@ -12,6 +12,12 @@ import CloseIcon from '@mui/icons-material/Close';
 import SeminarDetails from "../../seminarDetails";
 import { deleteGroupAction } from "../../../../actions/groupChatActions";
 import ExpertSeminar from "../../_ExpertDashboard/seminar";
+import MeetingCard from "../../../../components/MeetingCard";
+
+// Chat API + realtime
+import { getOrCreateDM, fetchDirectHistory, fetchGroupHistory } from "../../../../api/chatApi";
+import { setChatChannelInfo, setMessages, addNewMessage } from "../../../../actions/chatActions";
+import { connectToRC, subscribeToRoom, unsubscribeFromRoom, onNewMessage, onTyping, isRCConnected } from "../../../../services/rcRealtime";
 
 const Messages = ({ theme = "dark" }: any) => {
     const dispatch = useDispatch()
@@ -19,7 +25,7 @@ const Messages = ({ theme = "dark" }: any) => {
     const audioRef = useRef<HTMLAudioElement>(null);
     const prevMessagesLength = useRef(0);
     const { chat, auth: { userDetails },  friends: { friends } } = useAppSelector((state) => state);
-    const { chosenChatDetails, messages, chosenGroupChatDetails, currentPage, gotAllChats, isNewMessage } = chat;
+    const { chosenChatDetails, messages, chosenGroupChatDetails, currentPage, gotAllChats, isNewMessage, conversationId, rcChannelId } = chat;
 
     const [scrollPosition, setScrollPosition] = useState(0);
     const [isScrollToTop, set_isScrollToTop] = useState(false)
@@ -42,24 +48,63 @@ const Messages = ({ theme = "dark" }: any) => {
         set_seminarDetailsModalShow(false);
     };
 
+    // ── RC Realtime Connection ──────────────────────────────
+    useEffect(() => {
+        const initRC = async () => {
+            if (!isRCConnected()) {
+                await connectToRC();
+            }
+        };
+        initRC();
+    }, []);
+
+    // Subscribe to RC room for live messages when chat changes
+    useEffect(() => {
+        if (!rcChannelId) return;
+        subscribeToRoom(rcChannelId);
+
+        const unsubMsg = onNewMessage((rcMsg: any) => {
+            // Ignore our own messages (we already added them optimistically)
+            if (rcMsg.u?.username === userDetails?.username) return;
+
+            // Convert RC message format to our format
+            const newMsg = {
+                _id: rcMsg._id || `rc-${Date.now()}`,
+                content: rcMsg.msg || '',
+                author: {
+                    _id: rcMsg.u?._id || 'unknown',
+                    username: rcMsg.alias || rcMsg.u?.username || 'Unknown',
+                    image: null,
+                    role: 'user',
+                    status: 'active',
+                },
+                createdAt: rcMsg.ts?.$date ? new Date(rcMsg.ts.$date).toISOString() : new Date().toISOString(),
+            };
+            dispatch(addNewMessage(newMsg as any));
+        });
+
+        return () => {
+            unsubMsg();
+            unsubscribeFromRoom(rcChannelId);
+        };
+    }, [rcChannelId, userDetails?.username]);
+
+    // ── Fetch History via REST ──────────────────────────────
     useEffect(() => {
         const processMessages = async () => {
             const tempProfiles = new Map<string, any>();
             const tempImages = new Map<string, string>();
-            console.log("inside processMessages");
 
             for (const message of messages) {
                 const { author, author:{_id} } = message;
 
-                // Check if userId is already processed
                 if (!tempProfiles.has(_id)) {
-                    tempProfiles.set(_id, author); // Save the profile in the map
+                    tempProfiles.set(_id, author);
 
-                    // Fetch the image if it exists
                     if (author.image) {
                         try {
                             const base64Image = await profileImageFetch(author.image, 'small');
-                            tempImages.set(_id, base64Image as string); // Save the Base64 image
+                            tempImages.set(_id, base64Image as string);
                         } catch (error) {
                             console.error(`Error fetching Base64 image for userId ${_id}:`, error);
                         }
@@ -67,7 +112,6 @@ const Messages = ({ theme = "dark" }: any) => {
                 }
             }
 
-            // Update states with the unique profiles and images
             setProfiles(tempProfiles);
             setProfileImages(tempImages);
         };
@@ -81,7 +125,6 @@ const Messages = ({ theme = "dark" }: any) => {
 
             for (const message of messages) {
                 const userId = message.author._id;
-                // If not fetched yet, fetch it
                 if (message.author.image && !tempImages.has(userId)) {
                     try {
                         const base64Image = await profileImageFetch(message.author.image, 'small');
@@ -119,20 +162,19 @@ const Messages = ({ theme = "dark" }: any) => {
             set_isScrollToTop(true)
     };
 
-    const getChatHistory = () => {
-        console.log(chosenChatDetails)
-        if (chosenChatDetails) {
-            fetchDirectChatHistory({
-                receiverUserId: chosenChatDetails.userId,
-                currentPage: currentPage
-            });
+    const getChatHistory = async () => {
+        if (chosenChatDetails && conversationId) {
+            const data = await fetchDirectHistory(conversationId, currentPage);
+            if (data?.messages) {
+                dispatch(setMessages(data.messages));
+            }
         }
 
         if (chosenGroupChatDetails) {
-            fetchGroupChatHistory({
-                groupChatId: chosenGroupChatDetails.groupId,
-                currentPage: currentPage
-            })
+            const data = await fetchGroupHistory(chosenGroupChatDetails.groupId, currentPage);
+            if (data?.messages) {
+                dispatch(setMessages(data.messages));
+            }
         }
     }
 
@@ -163,21 +205,49 @@ const Messages = ({ theme = "dark" }: any) => {
 
     useEffect(() => {
         if (isScrollToTop && !gotAllChats) {
-            console.log('SCROLL GETS TO TOP ------------------')
             getChatHistory()
         }
         set_isScrollToTop(false)
     }, [isScrollToTop])
 
+    // When a new chat is selected: get/create DM conversation + fetch history
     useEffect(() => {
-        getChatHistory()
-        set_isFirstLoad(true)
+        const initChat = async () => {
+            if (chosenChatDetails) {
+                const dmData = await getOrCreateDM(chosenChatDetails.userId);
+                if (dmData) {
+                    dispatch(setChatChannelInfo({
+                        conversationId: dmData.conversationId,
+                        rcChannelId: dmData.rcChannelId,
+                    }));
+                    // Fetch initial history
+                    const historyData = await fetchDirectHistory(dmData.conversationId, 0);
+                    if (historyData?.messages) {
+                        dispatch(setMessages(historyData.messages));
+                    }
+                }
+            }
+
+            if (chosenGroupChatDetails) {
+                // For group chats, use the groupChatId directly
+                // RC channel will be created on first message send
+                dispatch(setChatChannelInfo({
+                    conversationId: chosenGroupChatDetails.groupId,
+                    rcChannelId: `wl-group-${chosenGroupChatDetails.groupId}`,
+                }));
+                const historyData = await fetchGroupHistory(chosenGroupChatDetails.groupId, 0);
+                if (historyData?.messages) {
+                    dispatch(setMessages(historyData.messages));
+                }
+            }
+        };
+
+        set_isFirstLoad(true);
+        initChat();
     }, [chosenChatDetails, chosenGroupChatDetails]);
 
     useEffect(() => {
         if (messages.length > prevMessagesLength.current) {
-            console.log("New message detected. Playing audio...");
-
             if (!isFirstLoad && audioRef.current) {
                 audioRef.current.volume = 0.005;
                 audioRef.current
@@ -187,8 +257,21 @@ const Messages = ({ theme = "dark" }: any) => {
             }
             scrollToBottom();
         }
-        prevMessagesLength.current = messages.length; // Update the previous messages length
+        prevMessagesLength.current = messages.length;
     }, [messages]);
+
+    // Helper to parse meeting message content
+    const parseMeetingMessage = (content: string) => {
+        if (content.startsWith('__MEETING_STARTED__::')) {
+            const parts = content.split('::');
+            return { type: 'started', meetingThreadId: parts[1], jitsiRoomName: parts[2], starterName: parts[3] };
+        }
+        if (content.startsWith('__MEETING_ENDED__::')) {
+            const parts = content.split('::');
+            return { type: 'ended', meetingThreadId: parts[1], duration: parseInt(parts[2]) || 0, participantCount: parseInt(parts[3]) || 0 };
+        }
+        return null;
+    };
 
     return (
         <div
@@ -220,6 +303,40 @@ const Messages = ({ theme = "dark" }: any) => {
                     : null
             }
             {messages.map((message: any, index) => {
+                // Check if this is a meeting message
+                const meetingData = parseMeetingMessage(message.content);
+                if (meetingData) {
+                    if (meetingData.type === 'started') {
+                        return (
+                            <div key={message._id + index} style={{ width: "97%" }}>
+                                <MeetingCard
+                                    meetingThreadId={meetingData.meetingThreadId}
+                                    jitsiRoomName={meetingData.jitsiRoomName}
+                                    starterName={meetingData.starterName}
+                                    isEnded={false}
+                                    theme={theme}
+                                    onJoin={(url) => window.open(url, '_blank')}
+                                />
+                            </div>
+                        );
+                    }
+                    if (meetingData.type === 'ended') {
+                        return (
+                            <div key={message._id + index} style={{ width: "97%" }}>
+                                <MeetingCard
+                                    meetingThreadId={meetingData.meetingThreadId}
+                                    jitsiRoomName=""
+                                    starterName=""
+                                    isEnded={true}
+                                    duration={meetingData.duration}
+                                    participantCount={meetingData.participantCount}
+                                    theme={theme}
+                                />
+                            </div>
+                        );
+                    }
+                }
+
                 const thisMessageDate = new Date(
                     message.createdAt
                 ).toDateString();
@@ -263,8 +380,6 @@ const Messages = ({ theme = "dark" }: any) => {
                             content={message.content}
                             userId={message.author._id}
                             username={message.author.username}
-                            // image={chosenChatDetails.image}
-                            // image={participantImage} // Dynamically use image
                             image={profileImages.get(message.author._id)}
                             role={message.author.role}
                             status={message.author.status}
@@ -329,7 +444,6 @@ const Messages = ({ theme = "dark" }: any) => {
                                 canDeleteCommunityChat={
                                     (() => {
                                         if (chosenGroupChatDetails?.type !== "community") return false;
-                                        // Handle both populated and unpopulated admin field
                                         const adminId = typeof chosenGroupChatDetails?.admin === 'string' 
                                             ? chosenGroupChatDetails?.admin 
                                             : chosenGroupChatDetails?.admin?._id || chosenGroupChatDetails?.admin?.id;

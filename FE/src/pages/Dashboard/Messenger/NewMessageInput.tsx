@@ -8,6 +8,9 @@ import Picker from '@emoji-mart/react';
 import { callApi } from "../../../api/api";
 import { showAlert } from "../../../actions/alertActions";
 import { useDispatch } from "react-redux";
+import { addNewMessage } from "../../../actions/chatActions";
+import { sendDirectMessage as apiSendDM, sendGroupMessage as apiSendGroup } from "../../../api/chatApi";
+import { sendTyping } from "../../../services/rcRealtime";
 
 function plainTextToMessageHtml(text: string): string {
     const trimmed = text.trim();
@@ -42,31 +45,33 @@ const NewMessageInput: React.FC<any> = ({ theme = "dark" }: any) => {
 
     const onBlur = () => set_typing(0);
 
-    const { chat: { chosenChatDetails, chosenGroupChatDetails }, auth: { userDetails } } = useAppSelector((state) => state);
+    const { chat: { chosenChatDetails, chosenGroupChatDetails, conversationId, rcChannelId }, auth: { userDetails } } = useAppSelector((state) => state);
 
     const correctStyling = (text: any, tag: any) => {
         let temp1 = text.split(`<${tag}>`)
         let temp2 = temp1[0]
         for (let i = 1; i < temp1.length; i++) {
-            let val = temp1[i].replace('<li><br></li><<', `</${tag}><`)
+            let val = temp1[i].replace('<li><br></li><<', `</${tag}><<`)
             val = val.replace('<<', `</${tag}><`)
             temp2 += `<${tag}>${val}`
         }
         return temp2
     }
 
-    const dispatchOutgoingHtml = (message: string) => {
-        if (chosenChatDetails) {
-            sendDirectMessage({
-                message,
-                receiverUserId: chosenChatDetails.userId!,
-            });
+    const dispatchOutgoingHtml = async (message: string) => {
+        if (chosenChatDetails && conversationId) {
+            // Send DM via REST API
+            const result = await apiSendDM(conversationId, message);
+            if (result?.message) {
+                dispatch(addNewMessage(result.message));
+            }
         }
         if (chosenGroupChatDetails) {
-            sendGroupMessage({
-                message,
-                groupChatId: chosenGroupChatDetails.groupId,
-            });
+            // Send group message via REST API
+            const result = await apiSendGroup(chosenGroupChatDetails.groupId, message);
+            if (result?.message) {
+                dispatch(addNewMessage(result.message));
+            }
         }
         set_message("");
     };
@@ -101,11 +106,11 @@ const NewMessageInput: React.FC<any> = ({ theme = "dark" }: any) => {
                     temp1 = `<p>${arr1[i].slice(0, -4)}</p>` + temp1;
                 }
             }
-            let message: any = correctStyling(temp1, "ol");
-            message = correctStyling(message, "ul");
-            message = correctStyling(message, "h1");
-            message = correctStyling(message, "h2");
-            message = correctStyling(message, "h3");
+            let message: any = correctStyling(temp1, 'ol')
+            message = correctStyling(message, 'ul')
+            message = correctStyling(message, 'h1')
+            message = correctStyling(message, 'h2')
+            message = correctStyling(message, 'h3')
 
             dispatchOutgoingHtml(message);
         }
@@ -115,7 +120,6 @@ const NewMessageInput: React.FC<any> = ({ theme = "dark" }: any) => {
         if (e.key === 'Enter' || e.keyCode === 13) {
             if (!e.shiftKey && _message) {
                 let arr = _message.split('<p>')
-                console.log(arr)
                 let temp = ''
                 for (let i = 0; i < arr.length; i++) {
                     let val = arr[i].slice(0, -4)
@@ -150,27 +154,20 @@ const NewMessageInput: React.FC<any> = ({ theme = "dark" }: any) => {
         }
     };
 
+    // Typing indicator via RC realtime
     useEffect(() => {
-        if (chosenChatDetails?.userId && _message) {
-            console.log('00000')
-            notifyTyping({
-                chatId: null,
-                receiverId: chosenChatDetails.userId!,
-                typing: typing ? true : false,
-            });
-        } else if (chosenGroupChatDetails?.groupId && _message) {
-            console.log('11111', typing)
-            notifyTyping({
-                chatId: chosenGroupChatDetails?.groupId,
-                receiverId: null,
-                typing: typing ? true : false,
-            });
+        if (!rcChannelId || !userDetails?.username) return;
+        if (_message && typing > 0) {
+            sendTyping(rcChannelId, userDetails.username, true);
         }
-        let timer = setTimeout(() => {
-            set_typing(0)
-        }, 3000)
-        return (() => clearTimeout(timer))
-    }, [typing, chosenChatDetails?.userId, chosenGroupChatDetails?.groupId]);
+        const timer = setTimeout(() => {
+            if (rcChannelId && userDetails?.username) {
+                sendTyping(rcChannelId, userDetails.username, false);
+            }
+            set_typing(0);
+        }, 3000);
+        return () => clearTimeout(timer);
+    }, [typing, rcChannelId, userDetails?.username]);
 
     const [prevChosenChatDetails, set_prevChosenChatDetails] = useState(chosenChatDetails)
     const [prevChosenGroupChatDetails, set_prevChosenGroupChatDetails] = useState(chosenGroupChatDetails)
@@ -178,18 +175,9 @@ const NewMessageInput: React.FC<any> = ({ theme = "dark" }: any) => {
     useEffect(() => {
         set_message('')
         set_typing(0)
-        if (prevChosenChatDetails?.userId) {
-            notifyTyping({
-                chatId: null,
-                receiverId: prevChosenChatDetails.userId!,
-                typing: false,
-            });
-        } else if (prevChosenGroupChatDetails?.groupId) {
-            notifyTyping({
-                chatId: prevChosenGroupChatDetails?.groupId,
-                receiverId: null,
-                typing: false,
-            });
+        // Send stop-typing to the previous room
+        if (rcChannelId && userDetails?.username) {
+            sendTyping(rcChannelId, userDetails.username, false);
         }
         set_prevChosenChatDetails(chosenChatDetails)
         set_prevChosenGroupChatDetails(chosenGroupChatDetails)
@@ -203,18 +191,14 @@ const NewMessageInput: React.FC<any> = ({ theme = "dark" }: any) => {
                 if (response.status === 'SUCCESS') {
                     console.log('File uploaded successfully:', response.chatFile);
                     let message = "Chatfile: " + response.chatFile + "#####" + file.name;
-                    if (chosenChatDetails) {
-                        sendDirectMessage({
-                            message,
-                            receiverUserId: chosenChatDetails.userId!,
-                        });
+                    if (chosenChatDetails && conversationId) {
+                        const result = await apiSendDM(conversationId, message);
+                        if (result?.message) dispatch(addNewMessage(result.message));
                     }
     
                     if (chosenGroupChatDetails) {
-                        sendGroupMessage({
-                            message,
-                            groupChatId: chosenGroupChatDetails.groupId
-                        })
+                        const result = await apiSendGroup(chosenGroupChatDetails.groupId, message);
+                        if (result?.message) dispatch(addNewMessage(result.message));
                     }
                     set_message("");
                 } else {
