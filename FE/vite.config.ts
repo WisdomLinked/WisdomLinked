@@ -25,8 +25,7 @@ export default defineConfig(({ mode }) => {
                         'react-vendor': ['react', 'react-dom', 'react-router-dom', 'react-redux', '@reduxjs/toolkit'],
                         // MUI — heavy, only used in dashboard
                         'mui-vendor': ['@mui/material', '@mui/icons-material', '@emotion/react', '@emotion/styled'],
-                        // Real-time & video
-                        'socket-vendor': ['socket.io-client', 'simple-peer'],
+                        // Real-time & video (using DDP and Jitsi APIs directly)
                         // Payments
                         'payment-vendor': ['@stripe/stripe-js', '@stripe/react-stripe-js', '@paypal/react-paypal-js'],
                     }
