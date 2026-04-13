@@ -81,6 +81,7 @@ router.post("/getChatBotAnswer",requireAuth(false),getChatBotAnswer)
 // ── OAuth Routes ──────────────────────────────────────────
 const passport = require('passport');
 const jwt = require('jsonwebtoken');
+import { syncUserToRocketChat } from '../services/rocketchat.service';
 
 const oauthCallback = async (req: any, res: any) => {
     try {
@@ -126,6 +127,12 @@ const oauthCallback = async (req: any, res: any) => {
             httpOnly: true
         });
         
+        // Sync user to Rocket.Chat (fire-and-forget)
+        syncUserToRocketChat({
+            email: user.email,
+            username: user.username,
+            name: user.username,
+        }).catch(err => console.error('RC sync failed (oauth):', err.message));
 
         // Check for incomplete profile
         let isProfileIncomplete = false;
