@@ -140,13 +140,7 @@ export default function ExpertDashboard() {
   useEffect(() => {
     const isLoggedIn = !!userDetails?.email;
     if (!isLoggedIn || String(userDetails?.role).toLowerCase() !== 'expert') {
-      dispatch(logoutUser());
-      return;
-    }
-
-      dispatch({
-        payload: true,
-      });
+      dispatch(logoutUser() as any);
     }
   }, [
     userDetails?.email,
@@ -594,7 +588,6 @@ export default function ExpertDashboard() {
           {activeItem !== 'chat' ? <Chatbot /> : null}
 
           {/* Keep call UX working in the new layout */}
-          )}
         </main>
 
         {expertUpcomingModal ? (
