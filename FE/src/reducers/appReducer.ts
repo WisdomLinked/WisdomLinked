@@ -33,4 +33,10 @@ const appReducer = (
                 ... state,
                 feedbackModalShow: action.payload,
             }
-        
+
+        default:
+            return state;
+    }
+};
+
+export { appReducer };
