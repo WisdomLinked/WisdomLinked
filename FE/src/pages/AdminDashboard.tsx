@@ -267,7 +267,6 @@ export default function AdminDashboard() {
 
   const {
     auth: { userDetails },
-    app: { 
   } = useAppSelector(state => state);
 
   const [extraView, setExtraView] = useState<'profile' | 'settings' | null>(null);
@@ -312,7 +311,6 @@ export default function AdminDashboard() {
     if (!isLoggedIn || userDetails?.role !== 'admin') {
       dispatch(logoutUser());
       return;
-    }
     }
   }, [userDetails?.email, userDetails?.role,  userDetails]);
 
