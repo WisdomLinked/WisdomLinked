@@ -20,6 +20,7 @@ import LogoutIcon from '@mui/icons-material/Logout';
 import CastForEducationIcon from '@mui/icons-material/CastForEducation';
 import CloseIcon from '@mui/icons-material/Close';
 import EditIcon from '@mui/icons-material/Edit';
+import { startMeeting } from "../../../../api/chatApi";
 import {doLeftSeminar, doUpdateProfile, getCustomerById, getExpertById, shareMeetingViaEmail} from "../../../../api/api";
 import {SetLoadingStatus, SetTotalTimeSpent} from "../../../../actions/appActions";
 import { updateMe } from "../../../../actions/authActions";
@@ -258,20 +259,14 @@ const MessagesHeader = ({ scrollPosition, events, openCalendarModal, openSeminar
                             style={{ color: theme === "light" ? "#0f172a" : "white" }}
                             className="disabled:opacity-50"
                             disabled={(!isOnline(chosenChatDetails.userId) || !enabledEvent) && userDetails.role==="customer"}
-                            onClick={() => {
+                            onClick={async () => {
                                 if (enabledEvent) {
                                     SetTotalTimeSpent(Date.now());
                                 }
-
-                                {
-                                    audioOnly: true,
-                                    callerName: userDetails
-                                        ? userDetails.username
-                                        : "",
-                                    receiverUserId: chosenChatDetails?.userId!,
-                                    eventId: enabledEvent?._id,
-                                    userRole: userDetails?.role,
-                                });
+                                const res = await startMeeting({ conversationId: chosenChatDetails.conversationId || chosenChatDetails.userId });
+                                if (res?.jitsiUrl) {
+                                    window.open(res.jitsiUrl, "_blank");
+                                }
                             }}
                         >
                             <AddIcCallIcon />
@@ -281,29 +276,14 @@ const MessagesHeader = ({ scrollPosition, events, openCalendarModal, openSeminar
                             style={{ color: theme === "light" ? "#0f172a" : "white" }}
                             className="disabled:opacity-50"
                             disabled={(!isOnline(chosenChatDetails.userId) || !enabledEvent) && userDetails.role==="customer"}
-                            onClick={() => {
-                                console.log("Video call button clicked:", {
-                                    receiverUserId: chosenChatDetails?.userId,
-                                    audioOnly: false,
-                                    callerName: userDetails?.username,
-                                    eventId: enabledEvent?._id,
-                                });
-
-                                // if(userDetails.role === 'expert' && enabledEvent){
-                                //     SetTotalTimeSpent(Date.now());
-                                // }
-
+                            onClick={async () => {
                                 if (enabledEvent) {
                                     SetTotalTimeSpent(Date.now());
                                 }
-
-                                {
-                                    audioOnly: false,
-                                    callerName: userDetails ? userDetails.username : "",
-                                    receiverUserId: chosenChatDetails?.userId!,
-                                    eventId: enabledEvent?._id,
-                                    userRole: userDetails.role,
-                                });
+                                const res = await startMeeting({ conversationId: chosenChatDetails.conversationId || chosenChatDetails.userId });
+                                if (res?.jitsiUrl) {
+                                    window.open(res.jitsiUrl, "_blank");
+                                }
                             }}
                         >
                             <VideoCallIcon />
