@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
+import { getOrCreateDMChannel, getOrCreateGroupChannel, sendMessageToRC } from '../services/rocketchat.service';
 
 const MeetingThread = require('../models/MeetingThread');
-const Message = require('../models/Message');
 const Conversation = require('../models/Conversation');
 const GroupChat = require('../models/GroupChat');
 const User = require('../models/User');
@@ -22,7 +22,6 @@ export const startMeeting = async (req: any, res: Response) => {
             return res.status(400).json({ error: 'conversationId or groupChatId is required' });
         }
 
-        // Generate a unique Jitsi room name
         const roomSuffix = conversationId || groupChatId;
         const jitsiRoomName = `wl-${roomSuffix}-${Date.now()}`;
 
@@ -36,31 +35,40 @@ export const startMeeting = async (req: any, res: Response) => {
         });
         await meetingThread.save();
 
-        // Create a special "meeting started" message in the parent conversation/group
         const me = await User.findById(userId);
-        const meetingMessage = new Message({
-            author: userId,
-            content: `__MEETING_STARTED__::${meetingThread._id}::${jitsiRoomName}::${me?.username || 'Unknown'}`,
-            type: 'meeting',
-        });
-        await meetingMessage.save();
+        const meetingContent = `__MEETING_STARTED__::${meetingThread._id}::${jitsiRoomName}::${me?.username || 'Unknown'}`;
 
-        // Attach to the conversation or group
+        // Send exclusively to Rocket.Chat
         if (conversationId) {
-            await Conversation.findByIdAndUpdate(conversationId, {
-                $push: { messages: meetingMessage._id }
-            });
+            const conversation = await Conversation.findById(conversationId);
+            if (conversation) {
+                const otherUserId = conversation.participants.find((p: any) => p.toString() !== userId);
+                const other = await User.findById(otherUserId);
+                if (me && other) {
+                    const rcChannelId = await getOrCreateDMChannel(me.username, other.username);
+                    if (rcChannelId) await sendMessageToRC(rcChannelId, meetingContent, me.username);
+                }
+            }
         } else if (groupChatId) {
-            await GroupChat.findByIdAndUpdate(groupChatId, {
-                $push: { messages: meetingMessage._id }
-            });
+            if (me) {
+                const rcChannelId = await getOrCreateGroupChannel(`wl-group-${groupChatId}`, [me.username]);
+                if (rcChannelId) await sendMessageToRC(rcChannelId, meetingContent, me.username);
+            }
         }
+
+        const message = {
+            _id: `temp-${Date.now()}`,
+            content: meetingContent,
+            author: { _id: me._id, username: me.username, image: me.image, role: me.role, status: me.status },
+            createdAt: new Date(),
+            type: 'meeting',
+        };
 
         return res.status(200).json({
             meetingThreadId: meetingThread._id,
             jitsiRoomName,
             jitsiUrl: `https://${JITSI_DOMAIN}/${jitsiRoomName}`,
-            message: await Message.findById(meetingMessage._id).populate('author', 'username _id image role status'),
+            message,
         });
     } catch (err: any) {
         console.error('[meeting.start]', err.message);
@@ -78,7 +86,7 @@ export const endMeeting = async (req: any, res: Response) => {
         const { meetingThreadId } = req.body;
         if (!meetingThreadId) return res.status(400).json({ error: 'meetingThreadId is required' });
 
-        const meeting = await MeetingThread.findById(meetingThreadId);
+        const meeting = await MeetingThread.findById(meetingThreadId).populate('startedBy');
         if (!meeting) return res.status(404).json({ error: 'Meeting not found' });
         if (meeting.status === 'ended') return res.status(400).json({ error: 'Meeting already ended' });
 
@@ -87,27 +95,36 @@ export const endMeeting = async (req: any, res: Response) => {
         meeting.status = 'ended';
         await meeting.save();
 
-        // Create a "meeting ended" message in the parent conversation/group
-        const endMessage = new Message({
-            author: meeting.startedBy,
-            content: `__MEETING_ENDED__::${meetingThreadId}::${meeting.duration}::${meeting.participants.length}`,
-            type: 'meeting',
-        });
-        await endMessage.save();
+        const endContent = `__MEETING_ENDED__::${meetingThreadId}::${meeting.duration}::${meeting.participants.length}`;
+        const me = meeting.startedBy;
 
+        // Send exclusively to Rocket.Chat
         if (meeting.conversationId) {
-            await Conversation.findByIdAndUpdate(meeting.conversationId, {
-                $push: { messages: endMessage._id }
-            });
+            const conversation = await Conversation.findById(meeting.conversationId);
+            if (conversation) {
+                const otherUserId = conversation.participants.find((p: any) => p.toString() !== me._id.toString());
+                const other = await User.findById(otherUserId);
+                if (other) {
+                    const rcChannelId = await getOrCreateDMChannel(me.username, other.username);
+                    if (rcChannelId) await sendMessageToRC(rcChannelId, endContent, me.username);
+                }
+            }
         } else if (meeting.groupChatId) {
-            await GroupChat.findByIdAndUpdate(meeting.groupChatId, {
-                $push: { messages: endMessage._id }
-            });
+            const rcChannelId = await getOrCreateGroupChannel(`wl-group-${meeting.groupChatId}`, [me.username]);
+            if (rcChannelId) await sendMessageToRC(rcChannelId, endContent, me.username);
         }
+
+        const endMessage = {
+            _id: `temp-${Date.now()}`,
+            content: endContent,
+            author: { _id: me._id, username: me.username, image: me.image, role: me.role, status: me.status },
+            createdAt: new Date(),
+            type: 'meeting',
+        };
 
         return res.status(200).json({
             meeting,
-            endMessage: await Message.findById(endMessage._id).populate('author', 'username _id image role status'),
+            endMessage,
         });
     } catch (err: any) {
         console.error('[meeting.end]', err.message);
@@ -132,7 +149,6 @@ export const addTranscriptMessage = async (req: any, res: Response) => {
         const meeting = await MeetingThread.findById(meetingThreadId);
         if (!meeting) return res.status(404).json({ error: 'Meeting not found' });
 
-        // Add participant if not already in the list
         if (!meeting.participants.some((p: any) => p.toString() === userId)) {
             meeting.participants.push(userId);
         }

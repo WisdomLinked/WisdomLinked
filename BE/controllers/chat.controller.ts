@@ -1,19 +1,52 @@
 import { Request, Response } from 'express';
-import { getOrCreateDMChannel, getOrCreateGroupChannel, sendMessageToRC, generateUserToken, RC_URL } from '../services/rocketchat.service';
+import { 
+    getOrCreateDMChannel, 
+    getOrCreateGroupChannel, 
+    sendMessageToRC, 
+    getRCIMHistory,
+    getRCGroupHistory,
+    generateUserToken, 
+    RC_URL 
+} from '../services/rocketchat.service';
 
-const Message = require('../models/Message');
 const Conversation = require('../models/Conversation');
 const GroupChat = require('../models/GroupChat');
 const User = require('../models/User');
 
+// Helper to map Rocket.Chat messages to WisdomLinked format so the frontend React UI doesnt break
+const mapRCMessagesToWL = async (rcMessages: any[]) => {
+    // Collect all unique usernames
+    const usernames = [...new Set(rcMessages.map(m => m.alias || m.u?.username).filter(Boolean))];
+    const users = await User.find({ username: { $in: usernames } }).select('_id username image role status');
+    
+    const userMap = users.reduce((acc: any, user: any) => {
+        acc[user.username] = user;
+        return acc;
+    }, {});
+
+    return rcMessages.map(m => {
+        const username = m.alias || m.u?.username || 'Unknown';
+        const author = userMap[username] || {
+            _id: m.u?._id || 'unknown',
+            username,
+            image: null,
+            role: 'user',
+            status: 'active'
+        };
+
+        return {
+            _id: m._id,
+            content: m.msg,
+            author,
+            createdAt: m.ts,
+            type: m.t || 'message'
+        };
+    });
+};
+
+
 // ── DM Endpoints ────────────────────────────────────────────
 
-/**
- * POST /api/chat/dm
- * Get or create a DM conversation between the logged-in user and another user.
- * Body: { otherUserId }
- * Returns: { conversationId, rcChannelId }
- */
 export const getOrCreateDM = async (req: any, res: Response) => {
     try {
         const { userId } = req.user;
@@ -21,7 +54,7 @@ export const getOrCreateDM = async (req: any, res: Response) => {
 
         if (!otherUserId) return res.status(400).json({ error: 'otherUserId is required' });
 
-        // Find or create a Conversation between the two users
+        // Maintain the Conversation wrapper in our DB so we remember that two people have talked
         let conversation = await Conversation.findOne({
             participants: { $all: [userId, otherUserId], $size: 2 }
         });
@@ -34,7 +67,7 @@ export const getOrCreateDM = async (req: any, res: Response) => {
             await conversation.save();
         }
 
-        // Also ensure a RC DM channel exists
+        // Ensure a RC DM channel exists
         const me = await User.findById(userId);
         const other = await User.findById(otherUserId);
         let rcChannelId = null;
@@ -52,12 +85,6 @@ export const getOrCreateDM = async (req: any, res: Response) => {
     }
 };
 
-/**
- * POST /api/chat/send
- * Send a message in a DM conversation.
- * Body: { conversationId, content }
- * Saves to MongoDB AND forwards to Rocket.Chat for real-time delivery.
- */
 export const sendMessage = async (req: any, res: Response) => {
     try {
         const { userId } = req.user;
@@ -70,38 +97,31 @@ export const sendMessage = async (req: any, res: Response) => {
         const conversation = await Conversation.findById(conversationId);
         if (!conversation) return res.status(404).json({ error: 'Conversation not found' });
 
-        // Check user is a participant
         if (!conversation.participants.some((p: any) => p.toString() === userId)) {
             return res.status(403).json({ error: 'You are not a participant of this conversation' });
         }
 
-        // 1. Save to MongoDB
-        const newMessage = new Message({
-            author: userId,
-            content,
-            type: 'direct',
-        });
-        await newMessage.save();
-
-        conversation.messages.push(newMessage._id);
-        await conversation.save();
-
-        // Populate author for the response
-        const populatedMessage = await Message.findById(newMessage._id)
-            .populate('author', 'username _id image role status');
-
-        // 2. Forward to RC for real-time delivery (fire-and-forget)
         const me = await User.findById(userId);
         const otherUserId = conversation.participants.find((p: any) => p.toString() !== userId);
         const other = await User.findById(otherUserId);
+        
+        let rcChannelId = null;
         if (me && other) {
-            const rcChannelId = await getOrCreateDMChannel(me.username, other.username);
+            rcChannelId = await getOrCreateDMChannel(me.username, other.username);
             if (rcChannelId) {
-                sendMessageToRC(rcChannelId, content, me.username).catch(err =>
-                    console.error('[chat.send] RC forward failed:', err.message)
-                );
+                // EXCLUSIVELY send to RC. We no longer save to our MongoDB Message model!
+                await sendMessageToRC(rcChannelId, content, me.username);
             }
         }
+
+        // Build a fake message object just to satisfy the frontend's optimistic update
+        const populatedMessage = {
+            _id: `temp-${Date.now()}`,
+            content,
+            author: { _id: me._id, username: me.username, image: me.image, role: me.role, status: me.status },
+            createdAt: new Date(),
+            type: 'direct',
+        };
 
         return res.status(200).json({
             message: populatedMessage,
@@ -112,11 +132,6 @@ export const sendMessage = async (req: any, res: Response) => {
     }
 };
 
-/**
- * GET /api/chat/history/:conversationId
- * Fetch paginated message history from our MongoDB.
- * Query: ?page=0&limit=20
- */
 export const getDirectHistory = async (req: any, res: Response) => {
     try {
         const { userId } = req.user;
@@ -131,17 +146,22 @@ export const getDirectHistory = async (req: any, res: Response) => {
             return res.status(403).json({ error: 'You are not a participant' });
         }
 
-        // Get the last N message IDs (paginated from the end)
-        const totalMessages = conversation.messages.length;
-        const startIndex = Math.max(0, totalMessages - (page + 1) * limit);
-        const endIndex = Math.max(0, totalMessages - page * limit);
-        const messageIds = conversation.messages.slice(startIndex, endIndex);
+        const me = await User.findById(userId);
+        const otherUserId = conversation.participants.find((p: any) => p.toString() !== userId);
+        const other = await User.findById(otherUserId);
 
-        const messages = await Message.find({ _id: { $in: messageIds } })
-            .populate('author', 'username _id image role status')
-            .sort({ createdAt: 1 });
+        if (me && other) {
+            const rcChannelId = await getOrCreateDMChannel(me.username, other.username);
+            if (rcChannelId) {
+                // Fetch history direct from RC
+                const rcMessages = await getRCIMHistory(rcChannelId, limit, page * limit);
+                // Map it identically to how old Message model looked
+                const messages = await mapRCMessagesToWL(rcMessages);
+                return res.status(200).json({ messages: messages.reverse() });
+            }
+        }
 
-        return res.status(200).json({ messages });
+        return res.status(200).json({ messages: [] });
     } catch (err: any) {
         console.error('[chat.getDirectHistory]', err.message);
         return res.status(500).json({ error: err.message });
@@ -150,11 +170,6 @@ export const getDirectHistory = async (req: any, res: Response) => {
 
 // ── Group Chat Endpoints ────────────────────────────────────
 
-/**
- * POST /api/chat/group/send
- * Send a message to a group chat.
- * Body: { groupChatId, content }
- */
 export const sendGroupMessage = async (req: any, res: Response) => {
     try {
         const { userId } = req.user;
@@ -167,37 +182,27 @@ export const sendGroupMessage = async (req: any, res: Response) => {
         const groupChat = await GroupChat.findById(groupChatId);
         if (!groupChat) return res.status(404).json({ error: 'Group chat not found' });
 
-        // Check participant
         if (!groupChat.participants.some((p: any) => p.toString() === userId)) {
             return res.status(403).json({ error: 'You are not a participant of this group' });
         }
 
-        // 1. Save to MongoDB
-        const newMessage = new Message({
-            author: userId,
-            content,
-            type: 'group',
-        });
-        await newMessage.save();
-
-        groupChat.messages.push(newMessage._id);
-        await groupChat.save();
-
-        const populatedMessage = await Message.findById(newMessage._id)
-            .populate('author', 'username _id image role status');
-
-        // 2. Forward to RC group channel (fire-and-forget)
         const me = await User.findById(userId);
         if (me) {
-            // Build a clean RC channel name from the group
             const rcChannelName = `wl-group-${groupChatId}`;
             const rcChannelId = await getOrCreateGroupChannel(rcChannelName, [me.username]);
             if (rcChannelId) {
-                sendMessageToRC(rcChannelId, content, me.username).catch(err =>
-                    console.error('[chat.groupSend] RC forward failed:', err.message)
-                );
+                // Exclusively forward to RC
+                await sendMessageToRC(rcChannelId, content, me.username);
             }
         }
+
+        const populatedMessage = {
+            _id: `temp-${Date.now()}`,
+            content,
+            author: { _id: me._id, username: me.username, image: me.image, role: me.role, status: me.status },
+            createdAt: new Date(),
+            type: 'group',
+        };
 
         return res.status(200).json({
             message: populatedMessage,
@@ -208,11 +213,6 @@ export const sendGroupMessage = async (req: any, res: Response) => {
     }
 };
 
-/**
- * GET /api/chat/group/history/:groupChatId
- * Fetch paginated group chat history from our MongoDB.
- * Query: ?page=0&limit=20
- */
 export const getGroupHistory = async (req: any, res: Response) => {
     try {
         const { userId } = req.user;
@@ -227,16 +227,19 @@ export const getGroupHistory = async (req: any, res: Response) => {
             return res.status(403).json({ error: 'You are not a participant' });
         }
 
-        const totalMessages = groupChat.messages.length;
-        const startIndex = Math.max(0, totalMessages - (page + 1) * limit);
-        const endIndex = Math.max(0, totalMessages - page * limit);
-        const messageIds = groupChat.messages.slice(startIndex, endIndex);
+        const me = await User.findById(userId);
+        if (me) {
+            const rcChannelName = `wl-group-${groupChatId}`;
+            const rcChannelId = await getOrCreateGroupChannel(rcChannelName, [me.username]);
+            if (rcChannelId) {
+                // Fetch history direct from RC
+                const rcMessages = await getRCGroupHistory(rcChannelId, limit, page * limit);
+                const messages = await mapRCMessagesToWL(rcMessages);
+                return res.status(200).json({ messages: messages.reverse() });
+            }
+        }
 
-        const messages = await Message.find({ _id: { $in: messageIds } })
-            .populate('author', 'username _id image role status')
-            .sort({ createdAt: 1 });
-
-        return res.status(200).json({ messages });
+        return res.status(200).json({ messages: [] });
     } catch (err: any) {
         console.error('[chat.getGroupHistory]', err.message);
         return res.status(500).json({ error: err.message });
@@ -245,11 +248,6 @@ export const getGroupHistory = async (req: any, res: Response) => {
 
 // ── RC Token Endpoint ───────────────────────────────────────
 
-/**
- * GET /api/chat/rc-token
- * Generate a Rocket.Chat auth token for the logged-in user so the frontend
- * can connect to RC's realtime WebSocket for typing + live messages.
- */
 export const getRCToken = async (req: any, res: Response) => {
     try {
         const { userId } = req.user;

@@ -182,6 +182,35 @@ export const sendMessageToRC = async (roomId: string, text: string, senderUserna
     }
 };
 
+/** Fetch DM history from RC */
+export const getRCIMHistory = async (roomId: string, count: number = 20, offset: number = 0) => {
+    try {
+        const headers = await getAdminAuthHeaders();
+        const res = await axios.get(`${RC_URL}/api/v1/im.history?roomId=${roomId}&count=${count}&offset=${offset}`, { headers });
+        if (res.data.success) {
+            return res.data.messages;
+        }
+    } catch (err: any) {
+        console.error('Failed to get IM history:', err.response?.data || err.message);
+    }
+    return [];
+};
+
+/** Fetch Group/Channel history from RC */
+export const getRCGroupHistory = async (roomId: string, count: number = 20, offset: number = 0) => {
+    try {
+        const headers = await getAdminAuthHeaders();
+        // Since we created it with channels.create, we use channels.history
+        const res = await axios.get(`${RC_URL}/api/v1/channels.history?roomId=${roomId}&count=${count}&offset=${offset}`, { headers });
+        if (res.data.success) {
+            return res.data.messages;
+        }
+    } catch (err: any) {
+        console.error('Failed to get Group history:', err.response?.data || err.message);
+    }
+    return [];
+};
+
 // ── Typing Indicator ────────────────────────────────────────
 
 /** Notify RC that a user is typing in a room. */
