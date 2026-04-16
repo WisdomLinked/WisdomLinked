@@ -57,6 +57,13 @@ export async function sendStatusEmail(status, { studentEmail, expertEmail, caseI
         `Your application ${caseId} has been assessed. Please log in to view the outcome and any feedback.\n\n— ${appName}`
       );
       break;
+    case CaseStatus.WITHDRAWN:
+      if (studentEmail) await sendClarificationEmail(
+        studentEmail,
+        `[${caseId}] Application withdrawn – ${appName}`,
+        `Your application ${caseId} has been withdrawn. You will not be reviewed further for this submission.\n\n— ${appName}`
+      );
+      break;
     default:
       break;
   }

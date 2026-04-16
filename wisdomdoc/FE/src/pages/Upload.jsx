@@ -12,6 +12,46 @@ const DOC_TYPES = [
   { id: 'additional', label: 'Additional files' },
 ];
 
+/** Plain-language status for the student-facing progress area */
+function studentCaseProgressLine(c) {
+  if (!c?.status) return '';
+  switch (c.status) {
+    case 'draft':
+      return 'Your application draft is not submitted yet.';
+    case 'submitted':
+      return 'Waiting to be assigned to a professor.';
+    case 'assigned':
+      return 'Your materials are assigned; review will begin shortly.';
+    case 'under_review':
+    case 'resubmitted':
+      return 'Your materials are under review.';
+    case 'needs_info':
+      return 'Action needed: the professor or committee requested additional documents or information.';
+    case 'pending_admin_approval':
+      return 'A recommendation is in; final admission decision is pending.';
+    case 'overdue':
+      return 'Your case is past the review due date; the committee has been notified.';
+    case 'approved':
+      return 'Decision: Approved.';
+    case 'rejected':
+      return 'Decision: Not approved.';
+    case 'withdrawn':
+      return 'Withdrawn — you chose not to continue with this application.';
+    default:
+      return '';
+  }
+}
+
+const WITHDRAWABLE_STATUSES = [
+  'submitted',
+  'assigned',
+  'under_review',
+  'needs_info',
+  'resubmitted',
+  'overdue',
+  'pending_admin_approval',
+];
+
 export default function Upload() {
   const { token } = useAuth();
   const [previewDoc, setPreviewDoc] = useState(null);
@@ -30,6 +70,7 @@ export default function Upload() {
   const [myCases, setMyCases] = useState([]);
   const [submitting, setSubmitting] = useState(false);
   const [resubmitting, setResubmitting] = useState(false);
+  const [withdrawing, setWithdrawing] = useState(false);
   const [canUploadDocuments, setCanUploadDocuments] = useState(true);
   const [uploadDisabledReason, setUploadDisabledReason] = useState(null);
   const [additionalInputKey, setAdditionalInputKey] = useState(0);
@@ -60,10 +101,11 @@ export default function Upload() {
   const hasRequiredDocs = requiredTypes.every(
     (t) => documents.some((d) => d.type === t && !d.uploaded_by)
   );
-  const activeCase = myCases.find((c) => c.status !== 'approved' && c.status !== 'rejected');
+  const TERMINAL = ['approved', 'rejected', 'withdrawn'];
+  const activeCase = myCases.find((c) => !TERMINAL.includes(c.status));
   const hasFinalApprovedCase = myCases.some((c) => c.status === 'approved');
-  /** Before first submit (or after reject while preparing again) — not when a workflow case exists */
-  const showInProgressBanner = isApproved && !activeCase && !hasFinalApprovedCase;
+  /** Preparing documents before a workflow case exists (not while a prior case is closed and uploads are blocked) */
+  const showInProgressBanner = isApproved && !activeCase && !hasFinalApprovedCase && canUploadDocuments;
   /** Server-driven; falls back if older API */
   const uploadsLocked = !canUploadDocuments;
 
@@ -76,11 +118,11 @@ export default function Upload() {
     setTimezone(docsData.timezone || 'America/Chicago');
     setMyCases(cases);
     const hasApprovedCase = cases.some((c) => c.status === 'approved');
-    const act = cases.find((c) => c.status !== 'approved' && c.status !== 'rejected');
+    const act = cases.find((c) => !TERMINAL.includes(c.status));
+    const hasClosedOnly =
+      !act && cases.some((c) => c.status === 'rejected' || c.status === 'withdrawn');
     const fallbackCan =
-      approved &&
-      !hasApprovedCase &&
-      (!act || act.status === 'needs_info' || act.status === 'submitted');
+      approved && !hasApprovedCase && !hasClosedOnly && (act ? act.status === 'needs_info' : true);
     if (docsData.canUploadDocuments !== undefined) {
       setCanUploadDocuments(!!docsData.canUploadDocuments);
     } else {
@@ -224,6 +266,33 @@ export default function Upload() {
     }
   }
 
+  async function handleWithdraw(e) {
+    e?.preventDefault();
+    if (!activeCase || !WITHDRAWABLE_STATUSES.includes(activeCase.status)) return;
+    if (!window.confirm('Withdraw this application? You will not be reviewed further for this submission.')) return;
+    setError('');
+    setWithdrawing(true);
+    try {
+      const res = await fetch(`${API}/cases/${activeCase.id}/withdraw`, {
+        method: 'PATCH',
+        headers: headers(),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Withdraw failed');
+      const [docsRes, casesRes] = await Promise.all([
+        fetch(`${API}/documents`, { headers: headers() }),
+        fetch(`${API}/cases`, { headers: headers() }),
+      ]);
+      const docsData = await docsRes.json();
+      const casesData = casesRes.ok ? await casesRes.json() : { cases: [] };
+      ingestDocumentsPayload(docsData, casesData.cases || []);
+    } catch (err) {
+      setError(err.message || 'Withdraw failed');
+    } finally {
+      setWithdrawing(false);
+    }
+  }
+
   async function handleSaveMessage(e) {
     e.preventDefault();
     setError('');
@@ -255,7 +324,7 @@ export default function Upload() {
 
   const STATUS_LABELS = {
     draft: 'Draft',
-    submitted: 'Submitted',
+    submitted: 'Submitted - Open',
     assigned: 'Assigned',
     under_review: 'Under review',
     needs_info: 'Needs info',
@@ -263,6 +332,7 @@ export default function Upload() {
     pending_admin_approval: 'Pending admin approval',
     approved: 'Approved',
     rejected: 'Rejected',
+    withdrawn: 'Withdrawn',
     overdue: 'Overdue',
   };
   const BADGE_CLASS = {
@@ -275,9 +345,12 @@ export default function Upload() {
     pending_admin_approval: styles.badgePendingAdmin,
     approved: styles.badgeApproved,
     rejected: styles.badgeRejected,
+    withdrawn: styles.badgeWithdrawn,
     overdue: styles.badgeOverdue,
   };
-  const completedCases = myCases.filter((c) => c.status === 'approved' || c.status === 'rejected');
+  const completedCases = myCases.filter((c) =>
+    c.status === 'approved' || c.status === 'rejected' || c.status === 'withdrawn'
+  );
   const studentOwnedDocs = documents.filter((d) => !d.uploaded_by);
   /** New student: committee has not enabled upload and no files yet — simple prompt, no empty upload UI */
   const awaitingAdminFirstUpload = !isApproved && studentOwnedDocs.length === 0;
@@ -289,8 +362,17 @@ export default function Upload() {
     if (reason === 'final_approved') {
       return 'Your application has been approved. You can no longer upload or remove documents. You can still preview or download your files below.';
     }
+    if (reason === 'submitted_pending_assignment') {
+      return 'You have submitted your application. Your document package is locked until the committee asks for more information. You can still message the committee below.';
+    }
+    if (reason === 'application_rejected') {
+      return 'Uploads are closed after a decision on your application. Contact the committee if you need to start a new review cycle.';
+    }
+    if (reason === 'withdrawn') {
+      return 'This application was withdrawn. Uploads stay closed for this submission.';
+    }
     if (reason === 'case_in_review') {
-      return 'Your case has been assigned for review (or is in a review stage). Uploading is closed until the committee asks for more information. You can still send messages to the committee below, and preview or download your files.';
+      return 'Your case is in review. Uploading is closed until the committee asks for more information. You can still send messages to the committee below, and preview or download your files.';
     }
     return 'You cannot upload or remove documents right now. You can still message the committee below and preview or download your files.';
   }
@@ -373,7 +455,10 @@ export default function Upload() {
 
       {activeCase && (
         <div className={styles.caseStatusBanner}>
-          <span className={styles.caseStageLabel}>Case stage</span>
+          <span className={styles.caseStageLabel}>Your application</span>
+          <p className={styles.progressPlain} role="status">
+            {studentCaseProgressLine(activeCase)}
+          </p>
           <div className={styles.caseStatusHeader}>
             <span className={styles.caseIdPill}>{activeCase.case_id}</span>
             {activeCase.status === 'pending_admin_approval' ? (
@@ -416,15 +501,36 @@ export default function Upload() {
                 )}
               </>
             )}
+            {WITHDRAWABLE_STATUSES.includes(activeCase.status) && (
+              <button
+                type="button"
+                className={styles.withdrawBtn}
+                onClick={handleWithdraw}
+                disabled={withdrawing}
+              >
+                {withdrawing ? 'Withdrawing…' : 'Withdraw application'}
+              </button>
+            )}
           </div>
         </div>
       )}
       {completedCases.length > 0 && !activeCase && (
         <div className={styles.caseStatusBanner}>
-          <span className={styles.caseStageLabel}>Case stage</span>
+          <span className={styles.caseStageLabel}>Your application</span>
+          <p className={styles.progressPlain} role="status">
+            {studentCaseProgressLine(completedCases[0])}
+          </p>
           <div className={styles.caseStatusHeader}>
             <span className={styles.caseIdPill}>{completedCases[0].case_id}</span>
-            <span className={`${styles.statusBadge} ${completedCases[0].status === 'approved' ? styles.badgeApproved : styles.badgeRejected}`}>
+            <span
+              className={`${styles.statusBadge} ${
+                completedCases[0].status === 'approved'
+                  ? styles.badgeApproved
+                  : completedCases[0].status === 'withdrawn'
+                    ? styles.badgeWithdrawn
+                    : styles.badgeRejected
+              }`}
+            >
               {STATUS_LABELS[completedCases[0].status]}
             </span>
           </div>
@@ -434,6 +540,9 @@ export default function Upload() {
             )}
             {completedCases[0].rejected_at && (
               <span className={styles.caseRejectedAt}>Assessed {formatDate(completedCases[0].rejected_at, timezone)}</span>
+            )}
+            {completedCases[0].withdrawn_at && (
+              <span className={styles.caseWithdrawnAt}>Withdrawn {formatDate(completedCases[0].withdrawn_at, timezone)}</span>
             )}
           </div>
         </div>

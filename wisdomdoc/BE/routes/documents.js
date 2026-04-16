@@ -13,35 +13,54 @@ function hasApprovedCase(studentId) {
   return !!row;
 }
 
-/** Active case that is not terminal (approved/rejected) */
+/** In-progress case (not finally closed: approved, rejected, or withdrawn) */
 function getActiveNonTerminalCase(studentId) {
   return db.prepare(
-    'SELECT id, status FROM cases WHERE student_id = ? AND status NOT IN (?, ?)'
-  ).get(studentId, CaseStatus.APPROVED, CaseStatus.REJECTED);
+    'SELECT id, status FROM cases WHERE student_id = ? AND status NOT IN (?, ?, ?)'
+  ).get(studentId, CaseStatus.APPROVED, CaseStatus.REJECTED, CaseStatus.WITHDRAWN);
+}
+
+function hasRejectedOrWithdrawnCase(studentId) {
+  const row = db.prepare(
+    'SELECT id FROM cases WHERE student_id = ? AND status IN (?, ?) LIMIT 1'
+  ).get(studentId, CaseStatus.REJECTED, CaseStatus.WITHDRAWN);
+  return !!row;
 }
 
 /**
  * Upload/remove allowed when committee enabled upload, no final approval, and:
- * - no active case, or
- * - needs_info (committee asked for more), or
- * - submitted (application filed but not yet assigned to an examiner).
- * Once status is assigned or later (except needs_info), uploads are closed.
+ * - no in-progress case and no rejected/withdrawn-only history (still preparing first submission), or
+ * - needs_info (committee asked for more).
+ * After submit (submitted+), uploads stay locked until needs_info.
+ * Rejected or withdrawn cases with no newer in-progress case block uploads (no orphaned uploads).
  */
 function canStudentUploadDocuments(studentId) {
   const user = db.prepare('SELECT approved FROM users WHERE id = ?').get(studentId);
   if (!user || user.approved !== 1) return false;
   if (hasApprovedCase(studentId)) return false;
   const active = getActiveNonTerminalCase(studentId);
-  if (!active) return true;
-  if (active.status === CaseStatus.NEEDS_INFO) return true;
-  if (active.status === CaseStatus.SUBMITTED) return true;
-  return false;
+  if (active) {
+    if (active.status === CaseStatus.NEEDS_INFO) return true;
+    return false;
+  }
+  if (hasRejectedOrWithdrawnCase(studentId)) return false;
+  return true;
 }
 
 function uploadDisabledReasonFor(studentId, isApproved) {
   if (canStudentUploadDocuments(studentId)) return null;
   if (!isApproved) return 'committee_disabled';
   if (hasApprovedCase(studentId)) return 'final_approved';
+  const active = getActiveNonTerminalCase(studentId);
+  if (active) {
+    if (active.status === CaseStatus.SUBMITTED) return 'submitted_pending_assignment';
+    return 'case_in_review';
+  }
+  const r = db.prepare(
+    'SELECT status FROM cases WHERE student_id = ? AND status IN (?, ?) ORDER BY created_at DESC LIMIT 1'
+  ).get(studentId, CaseStatus.REJECTED, CaseStatus.WITHDRAWN);
+  if (r?.status === CaseStatus.REJECTED) return 'application_rejected';
+  if (r?.status === CaseStatus.WITHDRAWN) return 'withdrawn';
   return 'case_in_review';
 }
 
@@ -120,9 +139,25 @@ router.post('/upload', upload.single('file'), (req, res) => {
     if (hasApprovedCase(req.userId)) {
       return res.status(403).json({ error: 'Uploads are closed after your application has been approved.' });
     }
+    const active = getActiveNonTerminalCase(req.userId);
+    if (active?.status === CaseStatus.SUBMITTED) {
+      return res.status(403).json({
+        error:
+          'Uploads are closed after you submit your application. You can upload again only if the committee asks for more information.',
+      });
+    }
+    if (!active && hasRejectedOrWithdrawnCase(req.userId)) {
+      const r = db.prepare(
+        'SELECT status FROM cases WHERE student_id = ? AND status IN (?, ?) ORDER BY created_at DESC LIMIT 1'
+      ).get(req.userId, CaseStatus.REJECTED, CaseStatus.WITHDRAWN);
+      if (r?.status === CaseStatus.WITHDRAWN) {
+        return res.status(403).json({ error: 'Uploads are closed for withdrawn applications.' });
+      }
+      return res.status(403).json({ error: 'Uploads are closed after a decision on your application.' });
+    }
     return res.status(403).json({
       error:
-        'Uploads are closed after your case has been assigned for review. You can upload again when the committee asks for more information.',
+        'Uploads are closed while your case is under review. You can upload again when the committee asks for more information.',
     });
   }
   const type = (req.body.type || '').toLowerCase();
@@ -194,9 +229,19 @@ router.delete('/:id', (req, res) => {
     if (!user || user.approved !== 1) {
       return res.status(403).json({ error: 'Documents cannot be removed. Contact the committee.' });
     }
+    const active = getActiveNonTerminalCase(req.userId);
+    if (active?.status === CaseStatus.SUBMITTED) {
+      return res.status(403).json({
+        error:
+          'Documents cannot be changed after you submit your application until the committee asks for more information.',
+      });
+    }
+    if (!active && hasRejectedOrWithdrawnCase(req.userId)) {
+      return res.status(403).json({ error: 'Documents cannot be changed after a final decision or withdrawal.' });
+    }
     return res.status(403).json({
       error:
-        'Documents cannot be removed after your case has been assigned for review. You can remove or add files again when the committee asks for more information.',
+        'Documents cannot be removed while your case is under review. You can change files again when the committee asks for more information.',
     });
   }
   const id = parseInt(req.params.id, 10);

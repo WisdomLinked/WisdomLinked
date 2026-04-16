@@ -280,6 +280,47 @@
   border: 1px solid rgba(229, 115, 115, 0.5);
 }
 
+.badgeWithdrawn {
+  background: rgba(158, 158, 158, 0.22);
+  color: #9e9e9e;
+  border: 1px solid rgba(158, 158, 158, 0.45);
+}
+
+.progressPlain {
+  margin: 0 0 0.85rem;
+  font-size: 1rem;
+  line-height: 1.5;
+  font-weight: 500;
+  color: var(--text);
+}
+
+.withdrawBtn {
+  margin-top: 0.75rem;
+  padding: 0.5rem 1rem;
+  align-self: flex-start;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
+.withdrawBtn:hover:not(:disabled) {
+  border-color: #e57373;
+  color: #e57373;
+}
+
+.withdrawBtn:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+.caseWithdrawnAt {
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+
 .badgeOverdue {
   background: rgba(244, 67, 54, 0.25);
   color: #f44336;

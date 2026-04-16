@@ -1131,6 +1131,52 @@
   font-size: 0.9rem;
 }
 
+.profileTagsWrap {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.expertCaseList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.expertCaseRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.5rem 1rem;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.9rem;
+}
+
+.expertCaseRow:last-child {
+  border-bottom: none;
+}
+
+.expertCaseId {
+  font-weight: 600;
+  color: var(--text);
+  flex-shrink: 0;
+}
+
+.expertCaseMeta {
+  flex: 1;
+  min-width: 8rem;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+}
+
+.expertCaseStatus {
+  flex-shrink: 0;
+  font-size: 0.85rem;
+  color: var(--primary);
+  font-weight: 500;
+}
+
 .studentListItem {
   display: flex;
   align-items: stretch;

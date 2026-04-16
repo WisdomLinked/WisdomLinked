@@ -84,8 +84,8 @@ router.post('/', (req, res) => {
   if (!student.approved) return res.status(403).json({ error: 'Upload not enabled.' });
 
   const existing = db.prepare(
-    'SELECT id FROM cases WHERE student_id = ? AND status NOT IN (?, ?)'
-  ).get(req.userId, CaseStatus.APPROVED, CaseStatus.REJECTED);
+    'SELECT id FROM cases WHERE student_id = ? AND status NOT IN (?, ?, ?)'
+  ).get(req.userId, CaseStatus.APPROVED, CaseStatus.REJECTED, CaseStatus.WITHDRAWN);
   if (existing) return res.status(400).json({ error: 'You already have an active application.' });
 
   const requiredTypes = ['sop', 'lor', 'resume'];
@@ -120,7 +120,7 @@ router.get('/', (req, res) => {
   if (req.userRole === 'student') {
     const cases = db.prepare(`
       SELECT c.id, c.case_id, c.status, c.created_at, c.submitted_at, c.due_at,
-             c.assessed_at, c.approved_at, c.rejected_at, u.email, u.major
+             c.assessed_at, c.approved_at, c.rejected_at, c.withdrawn_at, u.email, u.major
       FROM cases c
       JOIN users u ON u.id = c.student_id
       WHERE c.student_id = ?
@@ -131,7 +131,7 @@ router.get('/', (req, res) => {
   if (req.userRole === 'admin') {
     const cases = db.prepare(`
       SELECT c.id, c.case_id, c.status, c.created_at, c.submitted_at, c.due_at,
-             c.assessed_at, c.approved_at, c.rejected_at, c.assigned_expert_id,
+             c.assessed_at, c.approved_at, c.rejected_at, c.withdrawn_at, c.assigned_expert_id,
              u.id AS student_id, u.email, u.username AS student_username, u.major,
              e.email AS expert_email, e.username AS expert_username,
              COALESCE(u.target_year, CASE WHEN c.case_id LIKE 'WL-____-%' AND length(c.case_id) >= 11
@@ -146,7 +146,7 @@ router.get('/', (req, res) => {
   if (req.userRole === 'expert') {
     const cases = db.prepare(`
       SELECT c.id, c.case_id, c.status, c.created_at, c.submitted_at, c.due_at,
-             c.assessed_at, c.approved_at, c.rejected_at,
+             c.assessed_at, c.approved_at, c.rejected_at, c.withdrawn_at,
              u.id AS student_id, u.email, u.major
       FROM cases c
       JOIN users u ON u.id = c.student_id
@@ -181,6 +181,35 @@ router.get('/experts', (req, res) => {
   res.json({ experts: withMajors });
 });
 
+/** Admin: expert profile + all cases assigned to this expert */
+router.get('/experts/:expertId', (req, res) => {
+  if (req.userRole !== 'admin') return res.status(403).json({ error: 'Admin only' });
+  const expertId = parseInt(req.params.expertId, 10);
+  if (Number.isNaN(expertId)) return res.status(400).json({ error: 'Invalid expert' });
+  const expert = db.prepare(
+    'SELECT id, email, username, title, bio, majors FROM users WHERE id = ? AND role = ?'
+  ).get(expertId, 'expert');
+  if (!expert) return res.status(404).json({ error: 'Expert not found' });
+  const cases = db.prepare(`
+    SELECT c.id, c.case_id, c.status, c.created_at, c.submitted_at, c.due_at,
+           c.assessed_at, c.approved_at, c.rejected_at, c.withdrawn_at,
+           u.id AS student_id, u.email, u.username AS student_username, u.major,
+           COALESCE(u.target_year, CASE WHEN c.case_id LIKE 'WL-____-%' AND length(c.case_id) >= 11
+                THEN CAST(substr(c.case_id, 4, 4) AS INTEGER) END) AS target_year
+    FROM cases c
+    JOIN users u ON u.id = c.student_id
+    WHERE c.assigned_expert_id = ?
+    ORDER BY c.created_at DESC
+  `).all(expertId);
+  res.json({
+    expert: {
+      ...expert,
+      majors: parseMajors(expert.majors),
+    },
+    cases,
+  });
+});
+
 /** Admin: assign expert */
 router.patch('/:id/assign', async (req, res) => {
   if (req.userRole !== 'admin') return res.status(403).json({ error: 'Admin only' });
@@ -188,7 +217,7 @@ router.patch('/:id/assign', async (req, res) => {
   const expertId = req.body.expertId != null ? parseInt(req.body.expertId, 10) : null;
   const caseRow = db.prepare('SELECT id, case_id, student_id, status, assigned_expert_id FROM cases WHERE id = ?').get(id);
   if (!caseRow) return res.status(404).json({ error: 'Case not found' });
-  if ([CaseStatus.APPROVED, CaseStatus.REJECTED].includes(caseRow.status)) {
+  if ([CaseStatus.APPROVED, CaseStatus.REJECTED, CaseStatus.WITHDRAWN].includes(caseRow.status)) {
     return res.status(400).json({ error: 'Case already completed' });
   }
 
@@ -246,6 +275,31 @@ router.patch('/:id/resubmit', async (req, res) => {
   res.json(updated);
 });
 
+/** Student: withdraw (close application without rejection) */
+router.patch('/:id/withdraw', async (req, res) => {
+  if (req.userRole !== 'student') return res.status(403).json({ error: 'Students only' });
+  const student = db.prepare('SELECT id, approved FROM users WHERE id = ? AND role = ?').get(req.userId, 'student');
+  if (!student) return res.status(403).json({ error: 'Not a student' });
+  if (!student.approved) return res.status(403).json({ error: 'Upload not enabled. Contact the committee.' });
+  const id = parseInt(req.params.id, 10);
+  const caseRow = db.prepare('SELECT id, case_id, student_id, status, assigned_expert_id FROM cases WHERE id = ?').get(id);
+  if (!caseRow) return res.status(404).json({ error: 'Case not found' });
+  if (caseRow.student_id !== req.userId) return res.status(403).json({ error: 'Not your case' });
+  if (!canTransition(caseRow.status, CaseStatus.WITHDRAWN)) {
+    return res.status(400).json({ error: 'This application cannot be withdrawn at this stage.' });
+  }
+
+  const now = new Date().toISOString();
+  db.prepare('UPDATE cases SET status = ?, withdrawn_at = ? WHERE id = ?').run(CaseStatus.WITHDRAWN, now, id);
+  logCaseUpdate(id, caseRow.status, CaseStatus.WITHDRAWN, req.userId, 'Student withdrew');
+  logEvent('case', id, 'withdrawn', req.userId, {});
+
+  const fullCase = { ...caseRow, status: CaseStatus.WITHDRAWN };
+  await triggerEmailIfNeeded(CaseStatus.WITHDRAWN, fullCase);
+
+  res.json(db.prepare('SELECT id, case_id, status, withdrawn_at FROM cases WHERE id = ?').get(id));
+});
+
 /** Admin/Expert: update status with validation */
 router.patch('/:id/status', async (req, res) => {
   const id = parseInt(req.params.id, 10);
@@ -260,11 +314,17 @@ router.patch('/:id/status', async (req, res) => {
   const isAdmin = req.userRole === 'admin';
   const isExpert = caseRow.assigned_expert_id === req.userId;
   if (!isAdmin && !isExpert) return res.status(403).json({ error: 'Forbidden' });
+  if (caseRow.status === CaseStatus.REJECTED && !isAdmin) {
+    return res.status(403).json({ error: 'Only an admin can reopen or change a rejected case' });
+  }
   if (caseRow.status === CaseStatus.APPROVED && !isAdmin) {
     return res.status(403).json({ error: 'Only admin can reopen or change a case after final approval' });
   }
   if (isExpert && !isAdmin && caseRow.status === CaseStatus.PENDING_ADMIN_APPROVAL) {
     return res.status(403).json({ error: 'Case is awaiting admin decision' });
+  }
+  if (isExpert && !isAdmin && status === CaseStatus.WITHDRAWN) {
+    return res.status(403).json({ error: 'Only admin can mark a case as withdrawn' });
   }
   if (isExpert && !isAdmin && ![CaseStatus.UNDER_REVIEW, CaseStatus.NEEDS_INFO, CaseStatus.REJECTED].includes(status)) {
     return res.status(403).json({ error: 'Experts can only set under_review, needs_info, or rejected' });
@@ -290,12 +350,21 @@ router.patch('/:id/status', async (req, res) => {
   } else if (status === CaseStatus.REJECTED) {
     updates.push('rejected_at = ?');
     params.push(now);
+  } else if (status === CaseStatus.WITHDRAWN) {
+    updates.push('withdrawn_at = ?');
+    params.push(now);
   } else if (status === CaseStatus.NEEDS_INFO && caseRow.status === CaseStatus.APPROVED) {
     updates.push('approved_at = NULL');
   } else if ([CaseStatus.UNDER_REVIEW, CaseStatus.ASSIGNED].includes(status)) {
     updates.push('assessed_at = NULL');
   }
-  if (status === CaseStatus.SUBMITTED) updates.push('assigned_expert_id = NULL');
+  if (status === CaseStatus.SUBMITTED) {
+    updates.push('assigned_expert_id = NULL');
+    if (caseRow.status === CaseStatus.REJECTED) {
+      updates.push('rejected_at = NULL');
+      updates.push('assessed_at = NULL');
+    }
+  }
   params.push(id);
   db.prepare(`UPDATE cases SET ${updates.join(', ')} WHERE id = ?`).run(...params);
 
@@ -316,7 +385,7 @@ router.patch('/:id/approve', async (req, res) => {
   const caseRow = db.prepare('SELECT id, case_id, student_id, assigned_expert_id, status FROM cases WHERE id = ?').get(id);
   if (!caseRow) return res.status(404).json({ error: 'Case not found' });
   if (caseRow.assigned_expert_id !== req.userId) return res.status(403).json({ error: 'Not assigned to you' });
-  if ([CaseStatus.APPROVED, CaseStatus.REJECTED, CaseStatus.PENDING_ADMIN_APPROVAL].includes(caseRow.status)) {
+  if ([CaseStatus.APPROVED, CaseStatus.REJECTED, CaseStatus.WITHDRAWN, CaseStatus.PENDING_ADMIN_APPROVAL].includes(caseRow.status)) {
     return res.status(400).json({ error: caseRow.status === CaseStatus.PENDING_ADMIN_APPROVAL ? 'Already recommended for approval' : 'Already processed' });
   }
   if (!canTransition(caseRow.status, CaseStatus.PENDING_ADMIN_APPROVAL)) {
@@ -341,7 +410,7 @@ router.patch('/:id/reject', async (req, res) => {
   const caseRow = db.prepare('SELECT id, case_id, student_id, assigned_expert_id, status FROM cases WHERE id = ?').get(id);
   if (!caseRow) return res.status(404).json({ error: 'Case not found' });
   if (caseRow.assigned_expert_id !== req.userId) return res.status(403).json({ error: 'Not assigned to you' });
-  if ([CaseStatus.APPROVED, CaseStatus.REJECTED].includes(caseRow.status)) return res.status(400).json({ error: 'Already processed' });
+  if ([CaseStatus.APPROVED, CaseStatus.REJECTED, CaseStatus.WITHDRAWN].includes(caseRow.status)) return res.status(400).json({ error: 'Already processed' });
   if (caseRow.status === CaseStatus.PENDING_ADMIN_APPROVAL) {
     return res.status(400).json({ error: 'Case is awaiting admin decision' });
   }

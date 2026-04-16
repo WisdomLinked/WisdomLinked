@@ -73,7 +73,7 @@ export function initDb() {
       FOREIGN KEY (assigned_expert_id) REFERENCES users(id)
     );
   `);
-  ['due_at', 'assessed_at', 'approved_at', 'rejected_at'].forEach(col => {
+  ['due_at', 'assessed_at', 'approved_at', 'rejected_at', 'withdrawn_at'].forEach(col => {
     try { db.exec(`ALTER TABLE cases ADD COLUMN ${col} TEXT`); } catch (_) {}
   });
 
@@ -94,6 +94,7 @@ export function initDb() {
           assessed_at TEXT,
           approved_at TEXT,
           rejected_at TEXT,
+          withdrawn_at TEXT,
           FOREIGN KEY (student_id) REFERENCES users(id),
           FOREIGN KEY (assigned_expert_id) REFERENCES users(id)
         )

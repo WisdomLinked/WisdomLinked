@@ -16,7 +16,7 @@ const DOC_LABELS = {
 const DOC_TYPE_ORDER = ['sop', 'lor', 'resume', 'transcript', 'additional'];
 const STATUS_LABELS = {
   draft: 'Draft',
-  submitted: 'Submitted',
+  submitted: 'Submitted - Open',
   assigned: 'Assigned',
   under_review: 'Under review',
   needs_info: 'Needs info',
@@ -24,9 +24,11 @@ const STATUS_LABELS = {
   pending_admin_approval: 'Pending admin approval',
   approved: 'Approved',
   rejected: 'Rejected',
+  withdrawn: 'Withdrawn',
   overdue: 'Overdue',
 };
 const PENDING_STATUSES = ['submitted', 'assigned', 'under_review', 'needs_info', 'resubmitted', 'pending_admin_approval'];
+const TERMINAL_CASE_STATUSES = ['approved', 'rejected', 'withdrawn'];
 
 export default function CommitteeDashboard() {
   const { token, user } = useAuth(); // user.id used to label expert’s own assigned cases
@@ -63,6 +65,10 @@ export default function CommitteeDashboard() {
   const [studentMajorFilter, setStudentMajorFilter] = useState('all');
   const [studentTargetYearFilter, setStudentTargetYearFilter] = useState('all');
   const [adminSearchQuery, setAdminSearchQuery] = useState('');
+  const [expertMajorFilter, setExpertMajorFilter] = useState('all');
+  const [expertNameQuery, setExpertNameQuery] = useState('');
+  const [expertDetail, setExpertDetail] = useState(null);
+  const [expertDetailLoading, setExpertDetailLoading] = useState(false);
   const headers = () => ({ Authorization: `Bearer ${token}` });
 
   const MAJOR_FILTER_EMPTY = '__empty__';
@@ -155,6 +161,35 @@ export default function CommitteeDashboard() {
     });
   }, [students, isAdmin, studentMajorFilter, studentTargetYearFilter, adminSearchQuery]);
 
+  const uniqueMajorsFromExperts = useMemo(() => {
+    const set = new Set();
+    let hasNoMajor = false;
+    (experts || []).forEach((ex) => {
+      const list = Array.isArray(ex.majors) ? ex.majors : [];
+      if (list.length === 0) hasNoMajor = true;
+      list.forEach((m) => {
+        const t = (m || '').trim();
+        if (t) set.add(t);
+      });
+    });
+    return { majors: Array.from(set).sort((a, b) => a.localeCompare(b)), hasNoMajor };
+  }, [experts]);
+
+  const filteredExperts = useMemo(() => {
+    if (!isAdmin) return experts;
+    const q = expertNameQuery.trim().toLowerCase();
+    return (experts || []).filter((ex) => {
+      if (q) {
+        const hay = [ex.email, ex.username, ex.title].filter(Boolean).join(' ').toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
+      if (expertMajorFilter === 'all') return true;
+      const list = Array.isArray(ex.majors) ? ex.majors.map((m) => (m || '').trim()).filter(Boolean) : [];
+      if (expertMajorFilter === MAJOR_FILTER_EMPTY) return list.length === 0;
+      return list.includes(expertMajorFilter);
+    });
+  }, [experts, isAdmin, expertMajorFilter, expertNameQuery]);
+
   function loadExpertsForCase(caseId) {
     if (!caseId || !isAdmin) return;
     fetch(`${API}/cases/experts?caseId=${caseId}`, { headers: headers() })
@@ -173,14 +208,6 @@ export default function CommitteeDashboard() {
     fetch(`${API}/committee/students`, { headers: headers() })
       .then(r => r.json())
       .then(data => setStudents(data.students || []));
-  }
-
-  function loadExperts() {
-    if (isAdmin) {
-      fetch(`${API}/cases/experts`, { headers: headers() })
-        .then(r => r.json())
-        .then(data => setExperts(data.experts || []));
-    }
   }
 
   useEffect(() => {
@@ -287,7 +314,9 @@ export default function CommitteeDashboard() {
 
   const studentIdForDetail = activeTab === 'cases' && selected?.student_id != null
     ? selected.student_id
-    : selected?.id;
+    : activeTab === 'students'
+      ? selected?.id
+      : null;
 
   useEffect(() => {
     if (!studentIdForDetail) { setDetail(null); return; }
@@ -319,6 +348,39 @@ export default function CommitteeDashboard() {
     const list = isAdmin ? filteredStudents : students;
     if (!list.some((s) => s.id === selected.id)) setSelected(null);
   }, [activeTab, selected?.id, isAdmin, filteredStudents, students]);
+
+  useEffect(() => {
+    if (activeTab !== 'experts' || !selected?.id) return;
+    if (!filteredExperts.some((e) => e.id === selected.id)) setSelected(null);
+  }, [activeTab, selected?.id, filteredExperts]);
+
+  useEffect(() => {
+    if (activeTab !== 'experts' || !selected?.id) {
+      setExpertDetail(null);
+      return;
+    }
+    let cancelled = false;
+    setExpertDetailLoading(true);
+    setError('');
+    fetch(`${API}/cases/experts/${selected.id}`, { headers: headers() })
+      .then((r) => {
+        if (!r.ok) throw new Error('Failed');
+        return r.json();
+      })
+      .then((data) => {
+        if (!cancelled) setExpertDetail(data);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setError('Could not load expert');
+          setExpertDetail(null);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setExpertDetailLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [activeTab, selected?.id, token]);
 
   useEffect(() => {
     if (activeTab === 'cases' && selected?.id) {
@@ -495,10 +557,19 @@ export default function CommitteeDashboard() {
           >
             Students (upload access)
           </button>
+          {isAdmin && (
+            <button
+              type="button"
+              className={activeTab === 'experts' ? styles.tabActive : styles.tab}
+              onClick={() => { setActiveTab('experts'); setSelected(null); }}
+            >
+              Experts
+            </button>
+          )}
         </div>
       )}
 
-      {isAdmin && (
+      {isAdmin && activeTab !== 'experts' && (
         <div className={styles.adminToolbar}>
           <label className={styles.adminSearchField}>
             <span className={styles.filterFieldLabel}>Search</span>
@@ -597,11 +668,48 @@ export default function CommitteeDashboard() {
         </div>
       )}
 
+      {isAdmin && activeTab === 'experts' && (
+        <div className={styles.adminToolbar}>
+          <label className={styles.adminSearchField}>
+            <span className={styles.filterFieldLabel}>Name</span>
+            <input
+              type="search"
+              className={styles.adminSearchInput}
+              value={expertNameQuery}
+              onChange={(e) => setExpertNameQuery(e.target.value)}
+              placeholder="Expert name, email, or title…"
+              aria-label="Search experts by name or email"
+            />
+          </label>
+          <div className={styles.caseFilters}>
+            <label className={styles.filterField}>
+              <span className={styles.filterFieldLabel}>Major</span>
+              <select
+                className={styles.filterSelect}
+                value={expertMajorFilter}
+                onChange={(e) => setExpertMajorFilter(e.target.value)}
+                aria-label="Filter experts by major"
+              >
+                <option value="all">All majors</option>
+                {uniqueMajorsFromExperts.hasNoMajor && (
+                  <option value={MAJOR_FILTER_EMPTY}>No majors listed</option>
+                )}
+                {uniqueMajorsFromExperts.majors.map((m) => (
+                  <option key={m} value={m}>{m}</option>
+                ))}
+              </select>
+            </label>
+          </div>
+        </div>
+      )}
+
       <p className={styles.hint}>
         {activeTab === 'cases'
           ? (isAdmin
             ? 'Use search and filters, then click a case. Assign experts and grant Final Approval where appropriate.'
             : 'Click a case to view documents. Approve or Reject when assigned.')
+          : activeTab === 'experts'
+            ? 'Filter by major and name, then click an expert to view their profile and assigned cases (active and completed).'
           : (isAdmin
             ? 'Use search and filters, then click a student to manage upload access.'
             : 'Click a student to manage upload access. Experts and admins can enable or disable uploads (not for students with a final-approved case until an admin reopens the case).')}
@@ -620,7 +728,7 @@ export default function CommitteeDashboard() {
         </div>
       )}
 
-      <div className={`${styles.grid} ${!isExpert ? styles.gridTwoCol : ''}`}>
+      <div className={`${styles.grid} ${!isExpert || activeTab === 'experts' ? styles.gridTwoCol : ''}`}>
         <aside className={styles.sidebar}>
           {activeTab === 'cases' ? (
             <>
@@ -677,6 +785,30 @@ export default function CommitteeDashboard() {
               )}
             </ul>
             </>
+          ) : activeTab === 'experts' ? (
+            <ul className={styles.studentList}>
+              {filteredExperts.length === 0 ? (
+                <li className={styles.empty}>
+                  {experts.length === 0 ? 'No experts yet' : 'No experts match your filters or search'}
+                </li>
+              ) : (
+                filteredExperts.map((ex) => (
+                  <li key={ex.id} className={styles.studentListItem}>
+                    <button
+                      type="button"
+                      className={selected?.id === ex.id ? styles.studentBtnActive : styles.studentBtn}
+                      onClick={() => setSelected(ex)}
+                    >
+                      <span className={styles.studentEmail}>{ex.username || ex.email}</span>
+                      <span className={styles.studentMeta}>
+                        {ex.email && ex.username ? `${ex.email} · ` : ''}
+                        {(ex.majors && ex.majors.length) ? ex.majors.join(', ') : 'No majors listed'}
+                      </span>
+                    </button>
+                  </li>
+                ))
+              )}
+            </ul>
           ) : (
             <ul className={styles.studentList}>
               {(isAdmin ? filteredStudents : students).length === 0 ? (
@@ -726,9 +858,95 @@ export default function CommitteeDashboard() {
           )}
         </aside>
         <section className={styles.detail}>
-          {!selected && <p className={styles.placeholder}>Select {activeTab === 'cases' ? 'a case' : 'a student'}</p>}
-          {selected && detailLoading && <p className={styles.placeholder}>Loading…</p>}
-          {selected && detail && !detailLoading && detail.student && (
+          {!selected && (
+            <p className={styles.placeholder}>
+              Select {activeTab === 'cases' ? 'a case' : activeTab === 'experts' ? 'an expert' : 'a student'}
+            </p>
+          )}
+          {activeTab === 'experts' && selected && expertDetailLoading && <p className={styles.placeholder}>Loading…</p>}
+          {activeTab === 'experts' && selected && !expertDetailLoading && expertDetail?.expert && (
+            <>
+              <div className={styles.detailHeader}>
+                <h3 className={styles.detailTitle}>Profile</h3>
+              </div>
+              <div className={styles.profilePanel}>
+                <div className={styles.profileRow}>
+                  <span className={styles.profileLabel}>Name</span>
+                  <span className={styles.profileValue}>{expertDetail.expert.username || '—'}</span>
+                </div>
+                <div className={styles.profileRow}>
+                  <span className={styles.profileLabel}>Email</span>
+                  <span className={styles.profileValue}>
+                    {expertDetail.expert.email ? (
+                      <a href={`mailto:${expertDetail.expert.email}`} className={styles.handledCasePanelEmail}>
+                        {expertDetail.expert.email}
+                      </a>
+                    ) : '—'}
+                  </span>
+                </div>
+                {expertDetail.expert.title && (
+                  <div className={styles.profileRow}>
+                    <span className={styles.profileLabel}>Title</span>
+                    <span className={styles.profileValue}>{expertDetail.expert.title}</span>
+                  </div>
+                )}
+                <div className={styles.profileRow}>
+                  <span className={styles.profileLabel}>Majors</span>
+                  <span className={styles.profileValue}>
+                    {expertDetail.expert.majors?.length ? (
+                      <span className={styles.profileTagsWrap}>
+                        {expertDetail.expert.majors.map((m) => (
+                          <span key={m} className={styles.profileTag}>{m}</span>
+                        ))}
+                      </span>
+                    ) : '—'}
+                  </span>
+                </div>
+                <div className={styles.profileRow}>
+                  <span className={styles.profileLabel}>Bio</span>
+                  <div className={styles.profileBio}>{expertDetail.expert.bio ? expertDetail.expert.bio : '—'}</div>
+                </div>
+              </div>
+
+              {(() => {
+                const all = expertDetail.cases || [];
+                const activeCases = all.filter((c) => !TERMINAL_CASE_STATUSES.includes(c.status));
+                const handledCases = all.filter((c) => TERMINAL_CASE_STATUSES.includes(c.status));
+                const renderCaseRow = (c) => (
+                  <li key={c.id} className={styles.expertCaseRow}>
+                    <span className={styles.expertCaseId}>{c.case_id}</span>
+                    <span className={styles.expertCaseMeta}>
+                      {[c.student_username, c.email].filter(Boolean).join(' · ') || c.email}
+                      {c.major ? ` · ${c.major}` : ''}
+                    </span>
+                    <span className={styles.expertCaseStatus}>{STATUS_LABELS[c.status] || c.status}</span>
+                  </li>
+                );
+                return (
+                  <>
+                    <div className={styles.section}>
+                      <h4 className={styles.sectionTitle}>Cases in progress</h4>
+                      {activeCases.length === 0 ? (
+                        <p className={styles.empty}>No active assigned cases</p>
+                      ) : (
+                        <ul className={styles.expertCaseList}>{activeCases.map(renderCaseRow)}</ul>
+                      )}
+                    </div>
+                    <div className={styles.section}>
+                      <h4 className={styles.sectionTitle}>Cases handled (completed)</h4>
+                      {handledCases.length === 0 ? (
+                        <p className={styles.empty}>No completed cases yet</p>
+                      ) : (
+                        <ul className={styles.expertCaseList}>{handledCases.map(renderCaseRow)}</ul>
+                      )}
+                    </div>
+                  </>
+                );
+              })()}
+            </>
+          )}
+          {selected && detailLoading && activeTab !== 'experts' && <p className={styles.placeholder}>Loading…</p>}
+          {selected && detail && !detailLoading && detail.student && activeTab !== 'experts' && (
             <>
               {detail.hasSubmittedApplication === false && (
                 <div className={styles.studentInProgressBanner} role="status">
@@ -785,7 +1003,7 @@ export default function CommitteeDashboard() {
                         disabled={updatingStatus === selected.id}
                         title="Admin: Update case status"
                       >
-                        <option value="submitted">Submitted</option>
+                        <option value="submitted">Submitted - Open</option>
                         <option value="assigned">Assigned</option>
                         <option value="under_review">Under review</option>
                         <option value="needs_info">Needs info</option>
@@ -793,6 +1011,7 @@ export default function CommitteeDashboard() {
                         <option value="pending_admin_approval">Pending admin approval</option>
                         <option value="approved">Final Approval - Offered</option>
                         <option value="rejected">Rejected</option>
+                        <option value="withdrawn">Withdrawn</option>
                         <option value="overdue">Overdue</option>
                       </select>
                     )}
@@ -852,7 +1071,7 @@ export default function CommitteeDashboard() {
                       </ul>
                     </div>
                   )}
-                  {isAdmin && selected.status !== 'approved' && selected.status !== 'rejected' && (
+                  {isAdmin && selected.status !== 'approved' && selected.status !== 'rejected' && selected.status !== 'withdrawn' && (
                     <div className={styles.assignSection}>
                       <h4 className={styles.assignTitle}>Assign expert</h4>
                       <p className={styles.assignHint}>Recommended experts match the student&apos;s major.</p>
