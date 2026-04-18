@@ -1,10 +1,11 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useDispatch } from 'react-redux';
-import { BookOpen, Clock, UserCheck, AlertCircle } from 'lucide-react';
+import { BookOpen, Clock, UserCheck, AlertCircle, MessageSquare } from 'lucide-react';
 import { useAppSelector } from '../store';
 import { doGetMyEvents, profileImageFetch } from '../api/api';
+import { fetchDmUnreadSnapshot } from '../api/chatApi';
 import Sidebar from '../components/layout/Sidebar';
-import TopBar from '../components/layout/TopBar';
+import TopBar, { TopBarNotificationItem } from '../components/layout/TopBar';
 import StatsGrid from '../components/dashboard/StatsGrid';
 import CarouselSection from '../components/dashboard/CarouselSection';
 import StudentProfile from '../components/dashboard/StudentProfile';
@@ -20,6 +21,11 @@ import UpcomingSessionModal from '../components/dashboard/UpcomingSessionModal';
 import ExpertProfile from '../components/dashboard/ExpertProfile';
 import StudentChat from '../components/dashboard/StudentChat';
 import type { MentorCardProps } from '../components/MentorCard';
+import {
+  connectToRC,
+  onSubscriptionChanged,
+  subscribeToRoom,
+} from '../services/rcRealtime';
 
 function deriveSessionCounts(u: any) {
   if (!u) {
@@ -44,7 +50,7 @@ function deriveSessionCounts(u: any) {
 export default function StudentDashboard() {
   const dispatch = useDispatch();
   const [activeItem, setActiveItem] = useState('dashboard');
-  const [hasNewChatMessage, setHasNewChatMessage] = useState(true);
+  const [dmUnreadByRid, setDmUnreadByRid] = useState<Record<string, number>>({});
   const [selectedExpert, setSelectedExpert] = useState<MentorCardProps | null>(null);
   const [followedMentorIds, setFollowedMentorIds] = useState<string[]>([]);
   const [followerCounts, setFollowerCounts] = useState<Record<string, number>>({});
@@ -140,9 +146,7 @@ export default function StudentDashboard() {
   }, [userDetails?.image]);
 
   useEffect(() => {
-    if (activeItem === 'chat') {
-      setHasNewChatMessage(false);
-    }
+    if (activeItem !== 'chat') return;
   }, [activeItem]);
 
   useEffect(() => {
@@ -158,6 +162,91 @@ export default function StudentDashboard() {
     };
   }, [dispatch]);
 
+  useEffect(() => {
+    let mounted = true;
+    const boot = async () => {
+      await connectToRC();
+      const snapshot = await fetchDmUnreadSnapshot();
+      if (!mounted) return;
+      if (snapshot?.success && snapshot.unreadByRid) {
+        setDmUnreadByRid(snapshot.unreadByRid);
+      } else {
+        setDmUnreadByRid({});
+      }
+    };
+    void boot();
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    const dcs = userDetails?.directConversations ?? [];
+    dcs.forEach((conv: any) => {
+      if (conv?.rcChannelId) subscribeToRoom(String(conv.rcChannelId));
+    });
+  }, [userDetails?.directConversations]);
+
+  const dmNameByRid = useMemo(() => {
+    const out: Record<string, string> = {};
+    const meId = String(userDetails?._id ?? userDetails?.id ?? userDetails?.userId ?? '');
+    const dcs = userDetails?.directConversations ?? [];
+    dcs.forEach((conv: any) => {
+      const rid = String(conv?.rcChannelId || '');
+      if (!rid) return;
+      const participants = Array.isArray(conv?.participants) ? conv.participants : [];
+      const other = participants.find(
+        (p: any) => String(p?._id ?? p?.id ?? '') && String(p?._id ?? p?.id ?? '') !== meId,
+      );
+      const fullName = String(other?.username || other?.name || other?.email || '').trim();
+      if (fullName) out[rid] = fullName;
+    });
+    return out;
+  }, [userDetails?._id, userDetails?.id, userDetails?.userId, userDetails?.directConversations]);
+
+  useEffect(() => {
+    const unsubSub = onSubscriptionChanged(({ roomId, type, unread }) => {
+      if (type && type !== 'd') return;
+      const rid = String(roomId || '');
+      if (!rid) return;
+      const nextUnread = Number(unread || 0);
+      setDmUnreadByRid(prev => {
+        const next = { ...prev };
+        if (nextUnread > 0) next[rid] = nextUnread;
+        else delete next[rid];
+        return next;
+      });
+    });
+    return () => {
+      unsubSub();
+    };
+  }, [userDetails?.email]);
+
+  const totalUnreadDm = useMemo(
+    () => Object.values(dmUnreadByRid).reduce((sum, n) => sum + (Number(n) || 0), 0),
+    [dmUnreadByRid],
+  );
+  const chatNotifications = useMemo<TopBarNotificationItem[]>(
+    () =>
+      Object.entries(dmUnreadByRid)
+        .filter(([, count]) => Number(count) > 0)
+        .map(([rid, count]) => {
+          const n = Number(count) || 0;
+          const senderLabel = dmNameByRid[rid] || 'Someone';
+          return {
+            id: `dm-${rid}`,
+            title: `${senderLabel} messaged you`,
+            meta: `${n > 99 ? '99+' : n} unread message${n > 1 ? 's' : ''}`,
+            icon: <MessageSquare className="h-3.5 w-3.5 text-[#1A3A4A]" aria-hidden />,
+            onClick: () => {
+              localStorage.setItem('wl_open_dm_rid', rid);
+              setActiveItem('chat');
+            },
+          };
+        }),
+    [dmUnreadByRid, dmNameByRid],
+  );
+
   return (
     <div className="min-h-screen bg-[#f8f7f4] text-[14px]">
       <div className="flex min-h-screen">
@@ -166,7 +255,7 @@ export default function StudentDashboard() {
           onNavigate={setActiveItem}
           studentName={studentName}
           avatarUrl={avatarUrl}
-          notifications={{ chat: hasNewChatMessage }}
+          notifications={{ chat: totalUnreadDm }}
         />
         <main className="flex-1 min-w-0 lg:ml-[220px]">
           <TopBar
@@ -193,6 +282,8 @@ export default function StudentDashboard() {
             avatarUrl={avatarUrl}
             onProfileClick={() => setActiveItem('profile')}
             onSettingsClick={() => setActiveItem('settings')}
+            notifications={chatNotifications}
+            notificationsEnabled={activeItem !== 'chat'}
           />
           {activeItem === 'chat' ? (
             <div className="h-[calc(100vh-56px)] bg-wl-chatGold">

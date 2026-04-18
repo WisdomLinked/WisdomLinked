@@ -20,10 +20,12 @@ import TopBar from '../components/layout/TopBar';
 import type { TopBarNotificationItem } from '../components/layout/TopBar';
 import StudentSettings from '../components/dashboard/StudentSettings';
 import { profileImageFetch } from '../api/api';
+import { fetchDmUnreadSnapshot } from '../api/chatApi';
 import { useAppSelector } from '../store';
 import { logoutUser, updateMe } from '../actions/authActions';
 import { showAlert } from '../actions/alertActions';
 import { setChosenGroupChatDetails } from '../actions/chatActions';
+import { connectToRC, onSubscriptionChanged, subscribeToRoom } from '../services/rcRealtime';
 
 
 // Reuse existing expert dashboard feature pages (legacy MUI pages)
@@ -99,8 +101,7 @@ export default function ExpertDashboard() {
   } = useAppSelector((state) => state);
 
   const [activeItem, setActiveItem] = useState('dashboard');
-  // Dummy unread indicator for sidebar showcase; replace with backend unread count later.
-  const [hasNewChatMessage, setHasNewChatMessage] = useState(true);
+  const [dmUnreadByRid, setDmUnreadByRid] = useState<Record<string, number>>({});
   const [range, setRange] = useState<'today' | 'week' | 'all'>('today');
   const [avatarUrl, setAvatarUrl] = useState<string | undefined>(undefined);
   const [expertUpcomingModal, setExpertUpcomingModal] = useState<{
@@ -110,30 +111,6 @@ export default function ExpertDashboard() {
 
   const userDetailsRef = useRef(userDetails);
   userDetailsRef.current = userDetails;
-
-  const expertNotifications: TopBarNotificationItem[] = useMemo(
-    () => [
-      {
-        id: 'e1',
-        title: 'New 1:1 session request',
-        meta: 'A student requested a session — review in Clients.',
-        icon: <Users className="h-3.5 w-3.5 text-[#234C6A]" aria-hidden />,
-      },
-      {
-        id: 'e2',
-        title: 'Student joined your seminar',
-        meta: 'Someone registered for your upcoming seminar.',
-        icon: <BookOpen className="h-3.5 w-3.5 text-[#234C6A]" aria-hidden />,
-      },
-      {
-        id: 'e3',
-        title: 'Reminder: session starting soon',
-        meta: 'You have a 1:1 or seminar in the next hour.',
-        icon: <Clock className="h-3.5 w-3.5 text-[#234C6A]" aria-hidden />,
-      },
-    ],
-    []
-  );
 
   // Auth + socket only. Do NOT call updateMe() when userDetails changes — that caused an
   // infinite loop (updateMe → new userDetails → effect → updateMe) and broke pages like Seminar.
@@ -178,10 +155,90 @@ export default function ExpertDashboard() {
   }, [userDetails?.image]);
 
   useEffect(() => {
-    if (activeItem === 'chat') {
-      setHasNewChatMessage(false);
-    }
+    if (activeItem !== 'chat') return;
   }, [activeItem]);
+
+  useEffect(() => {
+    let mounted = true;
+    const boot = async () => {
+      await connectToRC();
+      const snapshot = await fetchDmUnreadSnapshot();
+      if (!mounted) return;
+      if (snapshot?.success && snapshot.unreadByRid) setDmUnreadByRid(snapshot.unreadByRid);
+      else setDmUnreadByRid({});
+    };
+    void boot();
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    const dcs = userDetails?.directConversations ?? [];
+    dcs.forEach((conv: any) => {
+      if (conv?.rcChannelId) subscribeToRoom(String(conv.rcChannelId));
+    });
+  }, [userDetails?.directConversations]);
+
+  const dmNameByRid = useMemo(() => {
+    const out: Record<string, string> = {};
+    const meId = String(userDetails?._id ?? userDetails?.id ?? userDetails?.userId ?? '');
+    const dcs = userDetails?.directConversations ?? [];
+    dcs.forEach((conv: any) => {
+      const rid = String(conv?.rcChannelId || '');
+      if (!rid) return;
+      const participants = Array.isArray(conv?.participants) ? conv.participants : [];
+      const other = participants.find(
+        (p: any) => String(p?._id ?? p?.id ?? '') && String(p?._id ?? p?.id ?? '') !== meId,
+      );
+      const fullName = String(other?.username || other?.name || other?.email || '').trim();
+      if (fullName) out[rid] = fullName;
+    });
+    return out;
+  }, [userDetails?._id, userDetails?.id, userDetails?.userId, userDetails?.directConversations]);
+
+  useEffect(() => {
+    const unsubSub = onSubscriptionChanged(({ roomId, type, unread }) => {
+      if (type && type !== 'd') return;
+      const rid = String(roomId || '');
+      if (!rid) return;
+      const nextUnread = Number(unread || 0);
+      setDmUnreadByRid(prev => {
+        const next = { ...prev };
+        if (nextUnread > 0) next[rid] = nextUnread;
+        else delete next[rid];
+        return next;
+      });
+    });
+    return () => {
+      unsubSub();
+    };
+  }, [userDetails?.email]);
+
+  const totalUnreadDm = useMemo(
+    () => Object.values(dmUnreadByRid).reduce((sum, n) => sum + (Number(n) || 0), 0),
+    [dmUnreadByRid],
+  );
+  const chatNotifications = useMemo<TopBarNotificationItem[]>(
+    () =>
+      Object.entries(dmUnreadByRid)
+        .filter(([, count]) => Number(count) > 0)
+        .map(([rid, count]) => {
+          const n = Number(count) || 0;
+          const senderLabel = dmNameByRid[rid] || 'Someone';
+          return {
+            id: `dm-${rid}`,
+            title: `${senderLabel} messaged you`,
+            meta: `${n > 99 ? '99+' : n} unread message${n > 1 ? 's' : ''}`,
+            icon: <MessageSquare className="h-3.5 w-3.5 text-[#1A3A4A]" aria-hidden />,
+            onClick: () => {
+              localStorage.setItem('wl_open_dm_rid', rid);
+              setActiveItem('chat');
+            },
+          };
+        }),
+    [dmUnreadByRid, dmNameByRid],
+  );
 
   const navItems = useMemo(
     () => [
@@ -573,7 +630,7 @@ export default function ExpertDashboard() {
           navItems={navItems}
           studentName={expertName}
           roleLabel="Expert"
-          notifications={{ chat: hasNewChatMessage }}
+          notifications={{ chat: totalUnreadDm }}
         />
 
         <main className="flex-1 min-w-0 lg:ml-[220px]">
@@ -581,7 +638,8 @@ export default function ExpertDashboard() {
             title={title}
             userName={expertName}
             avatarUrl={avatarUrl}
-            notifications={expertNotifications}
+            notifications={chatNotifications}
+            notificationsEnabled={activeItem !== 'chat'}
             onProfileClick={() => setActiveItem('profile')}
             onSettingsClick={() => setActiveItem('settings')}
           />

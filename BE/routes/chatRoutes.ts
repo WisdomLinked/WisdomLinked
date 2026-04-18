@@ -10,6 +10,7 @@ import {
     getGroupHistory,
     getRCToken,
     markChatRead,
+    getDmUnreadSnapshot,
     getReadReceiptsBatch,
     deleteChatMessage,
     hideDmFromList,
@@ -28,6 +29,7 @@ router.get('/group/history/:groupChatId', requireAuth(false), getGroupHistory);
 // RC token for frontend realtime
 router.get('/rc-token', requireAuth(false), getRCToken);
 router.post('/mark-read', requireAuth(false), markChatRead);
+router.get('/dm-unread-snapshot', requireAuth(false), getDmUnreadSnapshot);
 router.post('/rc-read-receipts', requireAuth(false), getReadReceiptsBatch);
 router.post('/delete-message', requireAuth(false), deleteChatMessage);
 router.post('/dm/hide', requireAuth(false), hideDmFromList);

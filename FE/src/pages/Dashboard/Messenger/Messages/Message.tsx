@@ -8,10 +8,27 @@ import FilePreviewModal from "../../FilePreviewModal";
 function DeliveryTicks({ status, theme }: { status?: string; theme?: string }) {
     if (!status) return null;
     const mutedCls = theme === "light" ? "text-slate-400" : "text-slate-500";
+    const seenCls = "text-sky-500";
     if (status === "sending") {
         return (
             <span className={`shrink-0 text-[11px] leading-none ${mutedCls}`} aria-hidden>
                 …
+            </span>
+        );
+    }
+    if (status === "sent") {
+        return (
+            <span className={`shrink-0 ${mutedCls}`} aria-label="Sent">
+                <Check className="h-3.5 w-3.5" strokeWidth={2.5} />
+            </span>
+        );
+    }
+    if (status === "delivered" || status === "seen") {
+        const cls = status === "seen" ? seenCls : mutedCls;
+        return (
+            <span className={`relative inline-flex h-3.5 w-5 shrink-0 ${cls}`} aria-label={status === "seen" ? "Seen" : "Delivered"}>
+                <Check className="absolute left-0 h-3.5 w-3.5" strokeWidth={2.5} />
+                <Check className="absolute right-0 h-3.5 w-3.5" strokeWidth={2.5} />
             </span>
         );
     }
@@ -36,18 +53,20 @@ const Message = ({
     messageId,
     roomId,
     canDelete,
+    deleteForMeAvailable,
     onDeleteMessage,
 }: any) => {
 
     const [showPreview, setShowPreview] = useState(false);
     const [deleting, setDeleting] = useState(false);
+    const [showDeleteOptions, setShowDeleteOptions] = useState(false);
 
-    const tryDelete = async () => {
-        if (!onDeleteMessage || !messageId || !roomId) return;
-        if (!window.confirm('Delete this message for you? (Others may still see it depending on the server.)')) return;
+    const tryDelete = async (mode: 'me' | 'both') => {
+        if (!onDeleteMessage || !messageId) return;
         setDeleting(true);
         try {
-            await onDeleteMessage(String(messageId));
+            await onDeleteMessage(String(messageId), mode);
+            setShowDeleteOptions(false);
         } finally {
             setDeleting(false);
         }
@@ -84,6 +103,54 @@ const Message = ({
 
 
     if (!incomingMessage) {
+        const renderDeleteActions = () => {
+            if (!canDelete || !onDeleteMessage) return null;
+            if (!showDeleteOptions) {
+                return (
+                    <button
+                        type="button"
+                        disabled={deleting}
+                        onClick={() => setShowDeleteOptions(true)}
+                        className={`shrink-0 rounded p-1 ${theme === "light" ? "text-slate-500 hover:bg-slate-100" : "text-slate-400 hover:bg-white/10"}`}
+                        title="Delete message"
+                        aria-label="Delete message"
+                    >
+                        <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                );
+            }
+            return (
+                <div className={`flex items-center gap-1 rounded-md px-1 py-1 ${theme === "light" ? "bg-white border border-slate-200" : "bg-black/70 border border-white/10"}`}>
+                    {deleteForMeAvailable ? (
+                        <button
+                            type="button"
+                            disabled={deleting}
+                            onClick={() => void tryDelete('me')}
+                            className={`rounded px-2 py-1 text-[11px] ${theme === "light" ? "text-slate-700 hover:bg-slate-100" : "text-white hover:bg-white/10"}`}
+                        >
+                            Delete for me
+                        </button>
+                    ) : null}
+                    <button
+                        type="button"
+                        disabled={deleting}
+                        onClick={() => void tryDelete('both')}
+                        className={`rounded px-2 py-1 text-[11px] ${theme === "light" ? "text-rose-700 hover:bg-rose-50" : "text-rose-300 hover:bg-white/10"}`}
+                    >
+                        Delete for both
+                    </button>
+                    <button
+                        type="button"
+                        disabled={deleting}
+                        onClick={() => setShowDeleteOptions(false)}
+                        className={`rounded px-2 py-1 text-[11px] ${theme === "light" ? "text-slate-500 hover:bg-slate-100" : "text-slate-300 hover:bg-white/10"}`}
+                    >
+                        Cancel
+                    </button>
+                </div>
+            );
+        };
+
         // If it's a file message, show the file link
         if (isFile) {
             return (
@@ -94,18 +161,7 @@ const Message = ({
                         </div>
                     )}
                     <div className="flex items-end gap-1">
-                        {canDelete && onDeleteMessage && roomId ? (
-                            <button
-                                type="button"
-                                disabled={deleting}
-                                onClick={() => void tryDelete()}
-                                className={`shrink-0 rounded p-1 ${theme === "light" ? "text-slate-500 hover:bg-slate-100" : "text-slate-400 hover:bg-white/10"}`}
-                                title="Delete message"
-                                aria-label="Delete message"
-                            >
-                                <Trash2 className="h-3.5 w-3.5" />
-                            </button>
-                        ) : null}
+                        {renderDeleteActions()}
                         <div className="flex">
                             {/* Preview section */}
                             <button
@@ -186,18 +242,7 @@ const Message = ({
                         </div>
                     ) : null}
                     <div className="flex items-end gap-1">
-                        {canDelete && onDeleteMessage && roomId ? (
-                            <button
-                                type="button"
-                                disabled={deleting}
-                                onClick={() => void tryDelete()}
-                                className={`shrink-0 rounded p-1 ${theme === "light" ? "text-slate-500 hover:bg-slate-100" : "text-slate-400 hover:bg-white/10"}`}
-                                title="Delete message"
-                                aria-label="Delete message"
-                            >
-                                <Trash2 className="h-3.5 w-3.5" />
-                            </button>
-                        ) : null}
+                        {renderDeleteActions()}
                         <div className={`w-fit rounded-[13px] px-2 py-1.5 text-[14px] leading-[20px] shadow-sm ${theme === "light" ? "text-white bg-sky-600" : "text-white bg-gray-800"}`}>
                             {parseHtml(content)}
                         </div>

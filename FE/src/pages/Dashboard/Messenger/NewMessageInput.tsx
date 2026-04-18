@@ -28,6 +28,7 @@ const NewMessageInput: React.FC<any> = ({ theme = "dark" }: any) => {
     const dispatch = useDispatch();
     const [showEmojiPicker, setShowEmojiPicker] = useState(false);
     const [file, set_file] = useState<File | undefined>(undefined)
+    const [uploadingFile, setUploadingFile] = useState(false);
 
     const fileInputRef = useRef<HTMLInputElement | null>(null);
     const quillRef = useRef<ReactQuill | null>(null);
@@ -45,10 +46,17 @@ const NewMessageInput: React.FC<any> = ({ theme = "dark" }: any) => {
 
     const { chat: { chosenChatDetails, chosenGroupChatDetails, conversationId, rcChannelId }, auth: { userDetails } } = useAppSelector((state) => state);
     const rcTypingName = userDetails?.email ? toRocketChatUsername(userDetails.email) : '';
+    const typingStopTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const sentTypingOnRef = useRef(false);
 
     const onBlur = () => {
         if (rcChannelId && rcTypingName) {
             sendRoomTyping(rcChannelId, rcTypingName, false);
+            sentTypingOnRef.current = false;
+            if (typingStopTimerRef.current) {
+                clearTimeout(typingStopTimerRef.current);
+                typingStopTimerRef.current = null;
+            }
         }
     };
 
@@ -171,7 +179,13 @@ const NewMessageInput: React.FC<any> = ({ theme = "dark" }: any) => {
         }
     };
 
-    /** Quill + textarea: drive typing from message text (Quill previously never bumped `typing` state). */
+    // Ensure RC connection for typing whenever room/identity changes.
+    useEffect(() => {
+        if (!rcChannelId || !rcTypingName) return;
+        void connectToRC();
+    }, [rcChannelId, rcTypingName]);
+
+    /** Keep typing ON while user types; stop only after inactivity. */
     useEffect(() => {
         if (!rcChannelId || !rcTypingName) return;
         const plain = _message
@@ -179,20 +193,32 @@ const NewMessageInput: React.FC<any> = ({ theme = "dark" }: any) => {
             .replace(/&nbsp;/gi, ' ')
             .replace(/\s+/g, ' ')
             .trim();
-        let cancelled = false;
-        void (async () => {
-            await connectToRC();
-            if (cancelled) return;
-            if (plain) sendRoomTyping(rcChannelId, rcTypingName, true);
-            else sendRoomTyping(rcChannelId, rcTypingName, false);
-        })();
-        const timer = setTimeout(() => {
-            if (!cancelled && plain) sendRoomTyping(rcChannelId, rcTypingName, false);
-        }, 2200);
+
+        if (plain) {
+            if (!sentTypingOnRef.current) {
+                sendRoomTyping(rcChannelId, rcTypingName, true);
+                sentTypingOnRef.current = true;
+            }
+            if (typingStopTimerRef.current) clearTimeout(typingStopTimerRef.current);
+            typingStopTimerRef.current = setTimeout(() => {
+                sendRoomTyping(rcChannelId, rcTypingName, false);
+                sentTypingOnRef.current = false;
+                typingStopTimerRef.current = null;
+            }, 2000);
+        } else {
+            if (typingStopTimerRef.current) {
+                clearTimeout(typingStopTimerRef.current);
+                typingStopTimerRef.current = null;
+            }
+            if (sentTypingOnRef.current) {
+                sendRoomTyping(rcChannelId, rcTypingName, false);
+                sentTypingOnRef.current = false;
+            }
+        }
+
         return () => {
-            cancelled = true;
-            clearTimeout(timer);
-            sendRoomTyping(rcChannelId, rcTypingName, false);
+            // Intentionally avoid forcing `typing=false` on every keystroke rerender;
+            // inactivity timer or blur/chat-switch handles stop events smoothly.
         };
     }, [_message, rcChannelId, rcTypingName]);
 
@@ -203,6 +229,11 @@ const NewMessageInput: React.FC<any> = ({ theme = "dark" }: any) => {
         set_message('');
         if (rcChannelId && userDetails?.email) {
             sendRoomTyping(rcChannelId, toRocketChatUsername(userDetails.email), false);
+            sentTypingOnRef.current = false;
+            if (typingStopTimerRef.current) {
+                clearTimeout(typingStopTimerRef.current);
+                typingStopTimerRef.current = null;
+            }
         }
         set_prevChosenChatDetails(chosenChatDetails);
         set_prevChosenGroupChatDetails(chosenGroupChatDetails);
@@ -210,30 +241,47 @@ const NewMessageInput: React.FC<any> = ({ theme = "dark" }: any) => {
 
     useEffect(() => {
         const uploadFile = async () => {
-            if (file) {
-                console.log("Uploading file:", file);
+            if (!file || uploadingFile) return;
+            setUploadingFile(true);
+            try {
                 const response = await callApi('POST', 'auth/uploadChatFile', { email: userDetails.email }, file);
-                if (response.status === 'SUCCESS') {
-                    console.log('File uploaded successfully:', response.chatFile);
-                    let message = "Chatfile: " + response.chatFile + "#####" + file.name;
-                    if (chosenChatDetails && conversationId) {
-                        const result = await apiSendDM(conversationId, message);
-                        if (result?.message) dispatch(addNewMessage(result.message));
-                    }
-    
-                    if (chosenGroupChatDetails) {
-                        const result = await apiSendGroup(chosenGroupChatDetails.groupId, message);
-                        if (result?.message) dispatch(addNewMessage(result.message));
-                    }
-                    set_message("");
-                } else {
-                    dispatch(showAlert(response.error));
+                if (response?.status !== 'SUCCESS' || !response?.chatFile) {
+                    dispatch(showAlert(response?.error || 'Could not upload file'));
+                    return;
                 }
+                const message = `Chatfile: ${response.chatFile}#####${response.fileName || file.name}`;
+                if (chosenChatDetails) {
+                    let convId = conversationId;
+                    if (!convId) {
+                        const dm = await getOrCreateDM(chosenChatDetails.userId);
+                        if (dm?.conversationId) {
+                            convId = dm.conversationId;
+                            dispatch(
+                                setChatChannelInfo({
+                                    conversationId: dm.conversationId,
+                                    rcChannelId: dm.rcChannelId ?? null,
+                                })
+                            );
+                        }
+                    }
+                    if (convId) {
+                        const result = await apiSendDM(convId, message);
+                        if (result?.message) dispatch(addNewMessage(result.message));
+                    }
+                } else if (chosenGroupChatDetails) {
+                    const result = await apiSendGroup(chosenGroupChatDetails.groupId, message);
+                    if (result?.message) dispatch(addNewMessage(result.message));
+                }
+                set_message("");
+            } finally {
+                setUploadingFile(false);
+                set_file(undefined);
+                if (fileInputRef.current) fileInputRef.current.value = '';
             }
         };
     
-        uploadFile();
-    }, [file]);
+        void uploadFile();
+    }, [file, uploadingFile, userDetails?.email, chosenChatDetails, chosenGroupChatDetails, conversationId, dispatch]);
 
     const handleEmojiSelect = (emoji: any) => {
         set_message((prev) => prev + emoji.native);
@@ -336,7 +384,7 @@ const NewMessageInput: React.FC<any> = ({ theme = "dark" }: any) => {
                     <button
                         type="button"
                         onClick={sendPlainMessage}
-                        disabled={!_message.trim()}
+                        disabled={!_message.trim() || uploadingFile}
                         className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-wl-brand text-white shadow-sm transition hover:brightness-95 disabled:pointer-events-none disabled:opacity-35"
                         aria-label="Send message"
                     >

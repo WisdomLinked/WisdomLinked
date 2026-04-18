@@ -10,7 +10,8 @@ import {
     RC_URL,
     markRoomReadAsUser,
     syncRocketGroupChannelMembers,
-    getRCMessageReadReceipts,
+    getRoomLastSeenAsUser,
+    getDmUnreadByRoomAsUser,
     ensureBothWlUsersSyncedToRocketChat,
     deleteMessageAsUser,
     cleanRoomHistoryAsUser,
@@ -44,6 +45,17 @@ const wlAuthorFromUser = (u: any) => ({
     role: u.role,
     status: u.status,
 });
+
+const toDateMillis = (ts: any): number => new Date(normalizeRcMessageTs(ts)).getTime();
+
+const hiddenStateForUser = (conversation: any, userId: string) => {
+    const list = Array.isArray(conversation?.hiddenForParticipants) ? conversation.hiddenForParticipants : [];
+    const entry = list.find((x: any) => String(x?.userId) === String(userId));
+    return {
+        hiddenIds: new Set<string>(Array.isArray(entry?.messageIds) ? entry.messageIds.map((x: any) => String(x)) : []),
+        clearedAtMs: entry?.clearedAt ? new Date(entry.clearedAt).getTime() : null as number | null,
+    };
+};
 
 // Helper to map Rocket.Chat messages to WisdomLinked format so the frontend React UI doesnt break
 /** For DMs, pass `dmParticipants` so RC login slugs always resolve to Mongo `author._id` (fixes expert vs student mismatch). */
@@ -175,6 +187,12 @@ export const sendMessage = async (req: any, res: Response) => {
         const otherUserId = conversation.participants.find((p: any) => p.toString() !== userId);
         const other = await User.findById(otherUserId);
 
+        // If either side previously hid this DM, a new message should bring it back.
+        await User.updateOne({ _id: userId }, { $addToSet: { directConversations: conversation._id } }).exec();
+        if (otherUserId) {
+            await User.updateOne({ _id: otherUserId }, { $addToSet: { directConversations: conversation._id } }).exec();
+        }
+
         // Real RC `_id` enables `chat.getMessageReadReceipts` on the client; fallback if send fails.
         let sentId = `temp-${Date.now()}`;
         if (me && other && me.email && other.email) {
@@ -252,7 +270,14 @@ export const getDirectHistory = async (req: any, res: Response) => {
                         new Date(normalizeRcMessageTs(a.ts)).getTime() -
                         new Date(normalizeRcMessageTs(b.ts)).getTime()
                 );
-                const messages = await mapRCMessagesToWL(sorted, { me, other });
+                const { hiddenIds, clearedAtMs } = hiddenStateForUser(conversation, String(userId));
+                const visible = sorted.filter((m: any) => {
+                    const mid = String(m?._id ?? '');
+                    if (mid && hiddenIds.has(mid)) return false;
+                    if (clearedAtMs != null && toDateMillis(m?.ts) <= clearedAtMs) return false;
+                    return true;
+                });
+                const messages = await mapRCMessagesToWL(visible, { me, other });
                 return res.status(200).json({ messages });
             }
         }
@@ -373,6 +398,7 @@ export const getReadReceiptsBatch = async (req: any, res: Response) => {
     try {
         const { userId } = req.user;
         const messageIds = req.body?.messageIds;
+        const conversationId = req.body?.conversationId ? String(req.body.conversationId) : null;
         if (!Array.isArray(messageIds) || messageIds.length === 0) {
             return res.status(400).json({ error: 'messageIds must be a non-empty array (max 15)' });
         }
@@ -385,30 +411,77 @@ export const getReadReceiptsBatch = async (req: any, res: Response) => {
         const reader = { email: me.email, username: me.username, name: me.username };
         const tok = await generateUserToken(reader);
         const myRcUserId = tok?.userId || '';
-        const byMessageId: Record<string, { hasPeerRead: boolean; receipts: any[] }> = {};
-        for (const mid of ids) {
-            const data = await getRCMessageReadReceipts(mid, reader);
-            const receipts = data?.receipts || [];
-            const hasPeerRead = receipts.some(
-                (r: any) =>
-                    String(r.userId || r.user?._id || r.user?.id || '') !== String(myRcUserId)
-            );
-            byMessageId[mid] = { hasPeerRead, receipts };
+        let peerLastSeenMs: number | null = null;
+        if (conversationId) {
+            const conv = await Conversation.findById(conversationId);
+            if (conv?.participants?.some((p: any) => String(p) === String(userId))) {
+                let rid = String((conv as any).rcChannelId || '');
+                const otherUserId = conv.participants.find((p: any) => String(p) !== String(userId));
+                const other = otherUserId ? await User.findById(otherUserId) : null;
+                if (!rid && other?.email) {
+                    rid =
+                        (await getOrCreateDMChannel(
+                            toRocketChatUsername(me.email),
+                            toRocketChatUsername(other.email),
+                        )) || '';
+                    if (rid) {
+                        await Conversation.updateOne({ _id: conv._id }, { $set: { rcChannelId: rid } }).exec();
+                    }
+                }
+                if (rid && other?.email) {
+                    peerLastSeenMs = await getRoomLastSeenAsUser(rid, {
+                        email: other.email,
+                        username: other.username,
+                        name: other.username,
+                    });
+                }
+            }
         }
-        return res.status(200).json({ success: true, myRcUserId, byMessageId });
+        // We intentionally avoid per-message RC receipt calls here to prevent rate-limit storms.
+        // Frontend derives `seen` by comparing message.createdAt with peerLastSeenMs.
+        const byMessageId: Record<string, { hasPeerRead: boolean; receipts: any[] }> = {};
+        for (const mid of ids) byMessageId[mid] = { hasPeerRead: false, receipts: [] };
+        return res.status(200).json({ success: true, myRcUserId, byMessageId, peerLastSeenMs });
     } catch (err: any) {
         console.error('[chat.getReadReceiptsBatch]', err.message);
         return res.status(500).json({ error: err.message });
     }
 };
 
-/** POST body: { roomId, messageId } — deletes message in RC as the current user (own messages / allowed by RC). */
+/**
+ * POST body:
+ * - mode='both': { roomId, messageId } -> delete message in RC for everyone (subject to RC permissions).
+ * - mode='me':   { conversationId, messageId } -> hide only for current user.
+ */
 export const deleteChatMessage = async (req: any, res: Response) => {
     try {
         const { userId } = req.user;
-        const { roomId, messageId } = req.body || {};
-        if (!roomId || !messageId) {
-            return res.status(400).json({ error: 'roomId and messageId are required' });
+        const { roomId, messageId, conversationId, mode } = req.body || {};
+        const deleteMode = String(mode || 'both');
+        if (!messageId) {
+            return res.status(400).json({ error: 'messageId is required' });
+        }
+
+        if (deleteMode === 'me') {
+            if (!conversationId) return res.status(400).json({ error: 'conversationId is required for mode=me' });
+            const conv = await Conversation.findById(conversationId);
+            if (!conv) return res.status(404).json({ error: 'Conversation not found' });
+            if (!conv.participants.some((p: any) => p.toString() === String(userId))) {
+                return res.status(403).json({ error: 'Not a participant' });
+            }
+            await Conversation.updateOne(
+                { _id: conv._id, 'hiddenForParticipants.userId': userId },
+                { $addToSet: { 'hiddenForParticipants.$.messageIds': String(messageId) } },
+            ).exec();
+            await Conversation.updateOne(
+                { _id: conv._id, 'hiddenForParticipants.userId': { $ne: userId } },
+                { $push: { hiddenForParticipants: { userId, messageIds: [String(messageId)] } } },
+            ).exec();
+            return res.status(200).json({ success: true, mode: 'me' });
+        }
+
+        if (!roomId) {
+            return res.status(400).json({ error: 'roomId is required for mode=both' });
         }
         const me = await User.findById(userId);
         if (!me?.email) return res.status(400).json({ error: 'User not found' });
@@ -417,17 +490,14 @@ export const deleteChatMessage = async (req: any, res: Response) => {
             String(roomId),
             String(messageId)
         );
-        return res.status(200).json({ success: ok });
+        return res.status(200).json({ success: ok, mode: 'both' });
     } catch (err: any) {
         console.error('[chat.deleteChatMessage]', err.message);
         return res.status(500).json({ error: err.message });
     }
 };
 
-/**
- * Clear all messages in a DM’s Rocket.Chat room for the current user’s workspace.
- * Tries `rooms.cleanHistory` first (needs RC permission `clean-room-history`), then best-effort per-message delete.
- */
+/** Clear DM thread for current user only (does not delete server history for the other participant). */
 export const clearDmThread = async (req: any, res: Response) => {
     try {
         const { userId } = req.user;
@@ -439,51 +509,20 @@ export const clearDmThread = async (req: any, res: Response) => {
             return res.status(403).json({ error: 'Not a participant' });
         }
 
-        const me = await User.findById(userId);
-        const otherUserId = conv.participants.find((p: any) => p.toString() !== userId);
-        const other = await User.findById(otherUserId);
-        if (!me?.email || !other?.email) {
-            return res.status(400).json({ error: 'Missing participant email for Rocket.Chat' });
-        }
-
-        let rcChannelId = (conv as any).rcChannelId as string | undefined;
-        if (!rcChannelId) {
-            await ensureBothWlUsersSyncedToRocketChat(me, other);
-            rcChannelId = await getOrCreateDMChannel(
-                toRocketChatUsername(me.email),
-                toRocketChatUsername(other.email)
-            );
-            if (rcChannelId) {
-                await Conversation.updateOne({ _id: conv._id }, { $set: { rcChannelId } }).exec();
-            }
-        }
-        if (!rcChannelId) {
-            return res.status(502).json({ error: 'Could not resolve Rocket.Chat room for this conversation' });
-        }
-
-        const reader = { email: me.email, username: me.username, name: me.username };
-        const cleaned = await cleanRoomHistoryAsUser(reader, rcChannelId);
-        let fallbackDeleted = 0;
-        if (!cleaned) {
-            fallbackDeleted = await purgeRoomMessagesBestEffort(reader, rcChannelId);
-        }
-
-        if (!cleaned && fallbackDeleted === 0) {
-            return res.status(502).json({
-                error:
-                    'Rocket.Chat did not clear this thread. In Rocket.Chat Admin, enable permission **clean-room-history** for the user role (or use an RC version that allows it for DMs). As a fallback, only messages you are allowed to delete one-by-one were attempted.',
-                success: false,
-            });
-        }
-
-        /** Same as “remove from sidebar”: drop this conversation from the current user’s list. */
-        await User.updateOne({ _id: userId }, { $pull: { directConversations: conv._id } }).exec();
+        const now = new Date();
+        await Conversation.updateOne(
+            { _id: conv._id, 'hiddenForParticipants.userId': userId },
+            { $set: { 'hiddenForParticipants.$.clearedAt': now }, $setOnInsert: {} },
+        ).exec();
+        await Conversation.updateOne(
+            { _id: conv._id, 'hiddenForParticipants.userId': { $ne: userId } },
+            { $push: { hiddenForParticipants: { userId, messageIds: [], clearedAt: now } } },
+        ).exec();
 
         return res.status(200).json({
             success: true,
-            usedCleanHistory: cleaned,
-            fallbackDeletedCount: fallbackDeleted,
-            removedFromSidebar: true,
+            mode: 'me',
+            clearedAt: now.toISOString(),
         });
     } catch (err: any) {
         console.error('[chat.clearDmThread]', err.message);
@@ -527,6 +566,24 @@ export const markChatRead = async (req: any, res: Response) => {
         return res.status(200).json({ success: ok });
     } catch (err: any) {
         console.error('[chat.markChatRead]', err.message);
+        return res.status(500).json({ error: err.message });
+    }
+};
+
+/** One-shot snapshot for sidebar hydration when user opens chat section. */
+export const getDmUnreadSnapshot = async (req: any, res: Response) => {
+    try {
+        const { userId } = req.user;
+        const me = await User.findById(userId);
+        if (!me?.email) return res.status(400).json({ error: 'User not found' });
+        const unreadByRid = await getDmUnreadByRoomAsUser({
+            email: me.email,
+            username: me.username,
+            name: me.username,
+        });
+        return res.status(200).json({ success: true, unreadByRid });
+    } catch (err: any) {
+        console.error('[chat.getDmUnreadSnapshot]', err.message);
         return res.status(500).json({ error: err.message });
     }
 };

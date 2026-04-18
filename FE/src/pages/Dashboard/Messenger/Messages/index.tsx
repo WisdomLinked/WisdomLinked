@@ -15,7 +15,7 @@ import ExpertSeminar from "../../_ExpertDashboard/seminar";
 import MeetingCard from "../../../../components/MeetingCard";
 
 // Chat API + realtime
-import { getOrCreateDM, fetchDirectHistory, fetchGroupHistory, markChatRead, getRCToken, deleteChatMessage } from "../../../../api/chatApi";
+import { getOrCreateDM, fetchDirectHistory, fetchGroupHistory, markChatRead, getRCToken, deleteChatMessage, fetchReadReceiptsBatch } from "../../../../api/chatApi";
 import { notifyChatMessage, stripChatHtml } from "../../../../utils/chatBrowserNotifications";
 import {
     setChatChannelInfo,
@@ -71,12 +71,14 @@ function deliveryStatusForMessage(
     message: any,
     me: any,
     myRcUserId?: string | null,
-    dmOtherWlUserId?: string | null
-): "sending" | "sent" | undefined {
+    dmOtherWlUserId?: string | null,
+    hasPeerRead?: boolean
+): "sending" | "sent" | "delivered" | "seen" | undefined {
     if (!message || !isOutgoingAuthor(message, me, myRcUserId, dmOtherWlUserId)) return undefined;
     const id = String(message._id ?? "");
     if (id.startsWith("temp-")) return "sending";
-    return "sent";
+    if (hasPeerRead) return "seen";
+    return "delivered";
 }
 
 const Messages = ({ theme = "dark" }: any) => {
@@ -103,13 +105,24 @@ const Messages = ({ theme = "dark" }: any) => {
     );
 
     const handleDeleteMessage = React.useCallback(
-        async (messageId: string) => {
-            const rid = store.getState().chat.rcChannelId;
-            if (!rid) {
+        async (messageId: string, mode: 'me' | 'both') => {
+            const st = store.getState().chat;
+            const rid = st.rcChannelId;
+            const cid = st.conversationId;
+            if (mode === 'both' && !rid) {
                 dispatch(showAlert('Chat room not ready — try again.'));
                 return;
             }
-            const r = await deleteChatMessage(rid, messageId);
+            if (mode === 'me' && !cid) {
+                dispatch(showAlert('Conversation is not ready — try again.'));
+                return;
+            }
+            const r = await deleteChatMessage({
+                mode,
+                messageId,
+                roomId: rid || undefined,
+                conversationId: cid || undefined,
+            });
             if (r?.success) dispatch(removeChatMessage(messageId));
             else dispatch(showAlert((r as { error?: string })?.error || 'Could not delete message'));
         },
@@ -129,6 +142,11 @@ const Messages = ({ theme = "dark" }: any) => {
 
     /** Rocket.Chat user id for the logged-in account — matches `author._id` on history messages when WL user lookup missed. */
     const [myRcUserId, setMyRcUserId] = useState<string | null>(null);
+    const [peerReadByMessageId, setPeerReadByMessageId] = useState<Record<string, boolean>>({});
+    const [peerLastSeenMs, setPeerLastSeenMs] = useState<number | null>(null);
+    const lastMarkReadAtRef = useRef<number>(0);
+    const receiptFetchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const lastReceiptFetchAtRef = useRef<number>(0);
     useEffect(() => {
         let alive = true;
         getRCToken().then((d) => {
@@ -210,17 +228,80 @@ const Messages = ({ theme = "dark" }: any) => {
         };
     }, [rcChannelId, userDetails, dispatch]);
 
-    // Mark RC room read (debounced) so the other side can see read state in RC / subscriptions
+    // Mark RC room read with throttling (avoid RC rate-limit spam).
     useEffect(() => {
         if (!rcChannelId) return;
+        const last = displayMessages[displayMessages.length - 1];
+        if (!last) return;
+        const incomingLast = !isOutgoingAuthor(last, userDetails, myRcUserId, dmOtherWlUserId);
+        if (!incomingLast) return;
+        if (Date.now() - lastMarkReadAtRef.current < 8000) return;
         if (markReadTimerRef.current) clearTimeout(markReadTimerRef.current);
         markReadTimerRef.current = setTimeout(() => {
             markChatRead(rcChannelId);
-        }, 500);
+            lastMarkReadAtRef.current = Date.now();
+        }, 1200);
         return () => {
             if (markReadTimerRef.current) clearTimeout(markReadTimerRef.current);
         };
-    }, [rcChannelId, messages.length, messages[messages.length - 1]?._id]);
+    }, [rcChannelId, displayMessages, userDetails, myRcUserId, dmOtherWlUserId]);
+
+    // Event/dependency-driven receipt refresh (no polling interval).
+    useEffect(() => {
+        if (!chosenChatDetails || !rcChannelId) {
+            setPeerReadByMessageId({});
+            setPeerLastSeenMs(null);
+            return;
+        }
+        const outgoingIds = displayMessages
+            .filter((m: any) => isOutgoingAuthor(m, userDetails, myRcUserId, dmOtherWlUserId))
+            .map((m: any) => String(m?._id || ''))
+            .filter((id: string) => id && !id.startsWith('temp-'))
+            .slice(-15);
+        // Poll only messages not already seen to keep calls minimal and fast for fresh messages.
+        const pendingIds = outgoingIds.filter((id) => !peerReadByMessageId[id]);
+        if (pendingIds.length === 0) {
+            return;
+        }
+
+        let cancelled = false;
+        const fetchOnce = async () => {
+            const res = await fetchReadReceiptsBatch(pendingIds, conversationId || undefined);
+            if (cancelled || !res?.byMessageId) return;
+            const next: Record<string, boolean> = {};
+            Object.entries(res.byMessageId).forEach(([mid, data]: any) => {
+                next[String(mid)] = Boolean(data?.hasPeerRead);
+            });
+            // Never downgrade seen state on transient API failures/rate limits.
+            setPeerReadByMessageId((prev) => {
+                const merged: Record<string, boolean> = { ...prev };
+                Object.entries(next).forEach(([mid, seen]) => {
+                    merged[mid] = Boolean(merged[mid] || seen);
+                });
+                return merged;
+            });
+            if (typeof res?.peerLastSeenMs === 'number' && !Number.isNaN(res.peerLastSeenMs)) {
+                setPeerLastSeenMs((prev) =>
+                    prev == null ? res.peerLastSeenMs! : Math.max(prev, res.peerLastSeenMs!),
+                );
+            }
+            lastReceiptFetchAtRef.current = Date.now();
+        };
+        const now = Date.now();
+        const elapsed = now - lastReceiptFetchAtRef.current;
+        const delay = elapsed >= 3000 ? 250 : 3000 - elapsed;
+        if (receiptFetchTimerRef.current) clearTimeout(receiptFetchTimerRef.current);
+        receiptFetchTimerRef.current = setTimeout(() => {
+            void fetchOnce();
+        }, delay);
+        return () => {
+            cancelled = true;
+            if (receiptFetchTimerRef.current) {
+                clearTimeout(receiptFetchTimerRef.current);
+                receiptFetchTimerRef.current = null;
+            }
+        };
+    }, [chosenChatDetails, rcChannelId, conversationId, displayMessages, userDetails, myRcUserId, dmOtherWlUserId, peerReadByMessageId]);
 
     // ── Fetch History via REST ──────────────────────────────
     useEffect(() => {
@@ -560,10 +641,20 @@ const Messages = ({ theme = "dark" }: any) => {
                             myRole={userDetails?.role}
                             hideDate={isSameDay && isSameTime}
                             theme={theme}
-                            deliveryStatus={deliveryStatusForMessage(message, userDetails, myRcUserId, dmOtherWlUserId)}
+                            deliveryStatus={deliveryStatusForMessage(
+                                message,
+                                userDetails,
+                                myRcUserId,
+                                dmOtherWlUserId,
+                                peerReadByMessageId[String(message._id)] === true ||
+                                  (peerLastSeenMs != null &&
+                                    !Number.isNaN(new Date(message.createdAt).getTime()) &&
+                                    new Date(message.createdAt).getTime() <= peerLastSeenMs),
+                            )}
                             messageId={message._id}
                             roomId={rcChannelId}
                             canDelete={!incomingMessage && !String(message._id).startsWith('temp-')}
+                            deleteForMeAvailable={Boolean(chosenChatDetails && conversationId)}
                             onDeleteMessage={handleDeleteMessage}
                         />
                     </div>

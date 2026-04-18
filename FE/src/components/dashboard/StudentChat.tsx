@@ -1,11 +1,10 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useDispatch } from 'react-redux';
 import IconButton from '@mui/material/IconButton';
-import Menu from '@mui/material/Menu';
-import MenuItem from '@mui/material/MenuItem';
 import { MessageCircle, Users, Plus, X, CheckCircle2, MoreVertical } from 'lucide-react';
 import Messenger from '../../pages/Dashboard/Messenger/Messenger';
 import { useAppSelector } from '../../store';
+import { onSubscriptionChanged } from '../../services/rcRealtime';
 import {
   doGetMyEvents,
   getAllCommunityChats,
@@ -16,7 +15,7 @@ import {
   doFilterExperts,
   joinPrivateChat,
 } from '../../api/api';
-import { hideDmFromList } from '../../api/chatApi';
+import { clearDmThread, hideDmFromList, fetchDmUnreadSnapshot } from '../../api/chatApi';
 import {
   setChosenChatDetails,
   setChosenGroupChatDetails,
@@ -47,7 +46,7 @@ type PrivateRow =
       image?: string | null;
       /** When persisted on Conversation — used for unread badge. */
       rcChannelId?: string;
-      /** Mongo Conversation id — remove via `hideDmFromList`. */
+      /** Mongo Conversation id — needed for DM clear/delete actions. */
       conversationId?: string;
     }
   /** Expert: customer from directory search (not necessarily in friends yet). */
@@ -69,6 +68,7 @@ const StudentChat: React.FC = () => {
   const [privateRows, setPrivateRows] = useState<PrivateRow[]>([]);
   const [events, setEvents] = useState<any[]>([]);
   const [resetCurrentEventFlag, setResetCurrentEventFlag] = useState(false);
+  const [rcUnreadByRid, setRcUnreadByRid] = useState<Record<string, number>>({});
 
   const isCustomer =
     userDetails && String(userDetails.role || '').toLowerCase() === 'customer';
@@ -77,7 +77,7 @@ const StudentChat: React.FC = () => {
   const currentUserId = userDetails?._id ?? userDetails?.id ?? userDetails?.userId ?? null;
 
   const [createOpen, setCreateOpen] = useState(false);
-  const [privateDmMenuAnchor, setPrivateDmMenuAnchor] = useState<null | HTMLElement>(null);
+  const [privateDmMenuOpenId, setPrivateDmMenuOpenId] = useState<string | null>(null);
   const [privateDmMenuRow, setPrivateDmMenuRow] = useState<Extract<PrivateRow, { kind: 'privateDm' }> | null>(null);
   const [newName, setNewName] = useState('');
   const [newDescription, setNewDescription] = useState('');
@@ -151,6 +151,52 @@ const StudentChat: React.FC = () => {
   useEffect(() => {
     loadCommunityChats();
   }, [loadCommunityChats]);
+
+  // Hydrate DM unread/highlight state as soon as chat section opens (covers messages received while user was on another page).
+  useEffect(() => {
+    if (!isCustomer && !isExpert) return;
+    let cancelled = false;
+    (async () => {
+      const res = await fetchDmUnreadSnapshot();
+      if (cancelled) return;
+      if (res?.success && res.unreadByRid && typeof res.unreadByRid === 'object') {
+        setRcUnreadByRid(res.unreadByRid);
+      } else {
+        setRcUnreadByRid({});
+      }
+      // Also refresh directConversations list once on entry so newly-created DMs appear without click.
+      dispatch(updateMe() as any);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [dispatch, isCustomer, isExpert]);
+
+  // Event-driven refresh: react to RC user subscription updates (includes brand-new DMs not yet opened).
+  useEffect(() => {
+    if (!isCustomer && !isExpert) return;
+    let lastRefreshAt = 0;
+    const unsub = onSubscriptionChanged(({ roomId, type, unread }) => {
+      if (type && type !== 'd') return; // only direct messages
+      const rid = String(roomId || '');
+      if (!rid) return;
+      if (typeof unread === 'number') {
+        setRcUnreadByRid(prev => {
+          const next = { ...prev };
+          if (unread > 0) next[rid] = unread;
+          else delete next[rid];
+          return next;
+        });
+      }
+      const known = privateRows.some((r) => r.kind === 'privateDm' && String(r.rcChannelId || '') === rid);
+      if (known) return;
+      const now = Date.now();
+      if (now - lastRefreshAt < 3000) return;
+      lastRefreshAt = now;
+      dispatch(updateMe() as any);
+    });
+    return () => unsub();
+  }, [dispatch, isCustomer, isExpert, privateRows]);
 
   useEffect(() => {
     let cancelled = false;
@@ -487,6 +533,15 @@ const StudentChat: React.FC = () => {
   };
 
   const openPrivateDm = (row: Extract<PrivateRow, { kind: 'privateDm' }>) => {
+    if (row.rcChannelId) {
+      const rid = String(row.rcChannelId);
+      dispatch(clearDmUnreadRid(rid));
+      setRcUnreadByRid(prev => {
+        const next = { ...prev };
+        delete next[rid];
+        return next;
+      });
+    }
     dispatch(
       setChosenChatDetails({
         userId: row.otherUserId,
@@ -496,15 +551,31 @@ const StudentChat: React.FC = () => {
     );
   };
 
+  useEffect(() => {
+    const targetRid = localStorage.getItem('wl_open_dm_rid');
+    if (!targetRid) return;
+    const row = privateRows.find(
+      (r): r is Extract<PrivateRow, { kind: 'privateDm' }> =>
+        r.kind === 'privateDm' && String(r.rcChannelId || '') === String(targetRid),
+    );
+    if (!row) return;
+    openPrivateDm(row);
+    localStorage.removeItem('wl_open_dm_rid');
+  }, [privateRows]);
+
   const closePrivateDmMenu = () => {
-    setPrivateDmMenuAnchor(null);
+    setPrivateDmMenuOpenId(null);
     setPrivateDmMenuRow(null);
   };
 
-  const openPrivateDmMenu = (e: React.MouseEvent<HTMLElement>, row: Extract<PrivateRow, { kind: 'privateDm' }>) => {
+  const openPrivateDmMenu = (
+    e: React.MouseEvent<HTMLElement>,
+    row: Extract<PrivateRow, { kind: 'privateDm' }>,
+    menuId: string,
+  ) => {
     e.preventDefault();
     e.stopPropagation();
-    setPrivateDmMenuAnchor(e.currentTarget);
+    setPrivateDmMenuOpenId(menuId);
     setPrivateDmMenuRow(row);
   };
 
@@ -515,17 +586,22 @@ const StudentChat: React.FC = () => {
       dispatch(showAlert('This chat cannot be removed yet. Open it once so it syncs, then try again.'));
       return;
     }
-    if (!window.confirm(`Remove “${row.title}” from your private chats?`)) return;
-    const res = await hideDmFromList(row.conversationId);
-    if (res?.success) {
+    // "Delete chat" in sidebar = clear thread for me + remove row from sidebar.
+    const clearRes = await clearDmThread(row.conversationId);
+    if (!clearRes?.success) {
+      dispatch(showAlert((clearRes as { error?: string })?.error || 'Could not delete chat'));
+      return;
+    }
+    const hideRes = await hideDmFromList(row.conversationId);
+    if (hideRes?.success) {
       if (row.rcChannelId) dispatch(clearDmUnreadRid(String(row.rcChannelId)));
       if (chosenChatDetails?.userId && String(chosenChatDetails.userId) === String(row.otherUserId)) {
         dispatch(resetChatAction());
       }
       dispatch(updateMe() as any);
-      dispatch(showAlert('Chat removed from your list'));
+      dispatch(showAlert('Chat deleted for you'));
     } else {
-      dispatch(showAlert((res as { error?: string })?.error || 'Could not remove chat'));
+      dispatch(showAlert((hideRes as { error?: string })?.error || 'Chat was cleared, but removing from list failed'));
     }
   };
 
@@ -654,8 +730,10 @@ const StudentChat: React.FC = () => {
               <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">Private chats</p>
               {(() => {
                 const n = privateRows.reduce((acc, r) => {
-                  if (r.kind === 'privateDm' && r.rcChannelId && dmUnreadByRid?.[r.rcChannelId])
-                    return acc + (dmUnreadByRid[r.rcChannelId] || 0);
+                  if (r.kind === 'privateDm' && r.rcChannelId) {
+                    const rid = String(r.rcChannelId);
+                    return acc + Math.max(Number(dmUnreadByRid?.[rid] || 0), Number(rcUnreadByRid?.[rid] || 0));
+                  }
                   return acc;
                 }, 0);
                 return n > 0 ? (
@@ -701,7 +779,14 @@ const StudentChat: React.FC = () => {
                         ? isFriendActive(row.otherUserId)
                         : false;
                 const title = row.title;
-                const lastLine = row.lastLine;
+                const unreadCount =
+                  row.kind === 'privateDm' && row.rcChannelId
+                    ? Math.max(Number(dmUnreadByRid?.[row.rcChannelId] || 0), Number(rcUnreadByRid?.[row.rcChannelId] || 0))
+                    : 0;
+                const lastLine =
+                  row.kind === 'privateDm' && unreadCount > 0
+                    ? `${unreadCount > 99 ? '99+' : unreadCount}+ new message${unreadCount > 1 ? 's' : ''}`
+                    : row.lastLine;
                 const initials = title
                   .split(' ')
                   .map(w => w[0])
@@ -720,7 +805,9 @@ const StudentChat: React.FC = () => {
                           : `row`;
                 const rowTone = active
                   ? 'bg-[#E8EEF4] text-slate-900'
-                  : 'hover:bg-slate-100 text-slate-700';
+                  : row.kind === 'privateDm' && unreadCount > 0
+                    ? 'bg-amber-50/80 text-slate-900 ring-1 ring-amber-200/80 hover:bg-amber-50'
+                    : 'hover:bg-slate-100 text-slate-700';
 
                 const openRow = () => {
                   if (row.kind === 'friend') openFriend(row);
@@ -743,9 +830,9 @@ const StudentChat: React.FC = () => {
                           <span className="ml-1 shrink-0 rounded-full bg-emerald-500/20 px-1.5 text-[10px] text-emerald-600">
                             {row.missedChats}
                           </span>
-                        ) : row.kind === 'privateDm' && row.rcChannelId && dmUnreadByRid?.[row.rcChannelId] ? (
+                        ) : row.kind === 'privateDm' && unreadCount > 0 ? (
                           <span className="ml-1 shrink-0 rounded-full bg-amber-500/20 px-1.5 text-[10px] font-semibold text-amber-800">
-                            {dmUnreadByRid[row.rcChannelId] > 99 ? '99+' : dmUnreadByRid[row.rcChannelId]}
+                            {(unreadCount > 99 ? '99+' : unreadCount) + '+'}
                           </span>
                         ) : null}
                       </div>
@@ -755,10 +842,12 @@ const StudentChat: React.FC = () => {
                 );
 
                 if (row.kind === 'privateDm' && row.conversationId) {
+                  const menuId = row.conversationId ?? row.otherUserId;
+                  const menuOpen = privateDmMenuOpenId === menuId;
                   return (
                     <div
                       key={rowKey}
-                      className={`mb-1 flex w-full items-stretch overflow-hidden rounded-xl text-xs transition-colors ${rowTone}`}
+                      className={`relative mb-1 flex w-full items-stretch overflow-visible rounded-xl text-xs transition-colors ${rowTone}`}
                     >
                       <button
                         type="button"
@@ -771,10 +860,29 @@ const StudentChat: React.FC = () => {
                         size="small"
                         aria-label="Chat actions"
                         className="shrink-0 self-stretch rounded-none px-1 text-slate-600"
-                        onClick={e => openPrivateDmMenu(e, row)}
+                        onClick={e => {
+                          if (menuOpen) {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            closePrivateDmMenu();
+                            return;
+                          }
+                          openPrivateDmMenu(e, row, menuId);
+                        }}
                       >
                         <MoreVertical className="h-4 w-4" strokeWidth={2} />
                       </IconButton>
+                      {menuOpen ? (
+                        <div className="absolute right-2 top-[calc(100%+4px)] z-20 min-w-[150px] rounded-lg border border-slate-200 bg-white p-1 shadow-lg">
+                          <button
+                            type="button"
+                            className="w-full rounded-md px-3 py-2 text-left text-[12px] font-semibold text-rose-700 hover:bg-rose-50"
+                            onClick={() => void deletePrivateDmFromSidebar()}
+                          >
+                            Delete chat
+                          </button>
+                        </div>
+                      ) : null}
                     </div>
                   );
                 }
@@ -794,23 +902,6 @@ const StudentChat: React.FC = () => {
           </div>
         </div>
       </aside>
-
-      <Menu
-        anchorEl={privateDmMenuAnchor}
-        open={Boolean(privateDmMenuAnchor)}
-        onClose={closePrivateDmMenu}
-        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
-        transformOrigin={{ vertical: 'top', horizontal: 'right' }}
-      >
-        <MenuItem
-          onClick={() => {
-            void deletePrivateDmFromSidebar();
-          }}
-          sx={{ fontSize: '0.8125rem', color: 'error.main' }}
-        >
-          Delete chat
-        </MenuItem>
-      </Menu>
 
       <section className="flex flex-1 flex-col min-h-0 min-w-0 bg-wl-chatGold">
         <Messenger videoChaton={false} theme="light" />

@@ -15,9 +15,12 @@ let rcLoginComplete = false;
 let reconnectTimer: any = null;
 let messageCallbacks: Array<(msg: any) => void> = [];
 let typingCallbacks: Array<(data: { roomId: string; username: string; isTyping: boolean }) => void> = [];
+let subscriptionCallbacks: Array<(data: { roomId: string; unread?: number; type?: string }) => void> = [];
 const subscribedRooms = new Set<string>();
 const pendingRoomSubs = new Set<string>();
+const roomSubIds = new Map<string, { msgSubId: string; typingSubId: string; activitySubId: string }>();
 let activeLoginMethodId: string | null = null;
+let currentRcUserId: string | null = null;
 
 const nextId = () => String(++msgIdCounter);
 
@@ -29,25 +32,38 @@ const sendDDP = (data: any) => {
 
 const doSubscribeRoom = (roomId: string) => {
     if (!roomId || subscribedRooms.has(roomId)) return;
+    const msgSubId = nextId();
+    const typingSubId = nextId();
+    const activitySubId = nextId();
     sendDDP({
         msg: 'sub',
-        id: nextId(),
+        id: msgSubId,
         name: 'stream-room-messages',
         params: [roomId, false],
     });
     sendDDP({
         msg: 'sub',
-        id: nextId(),
+        id: typingSubId,
         name: 'stream-notify-room',
         params: [`${roomId}/typing`, false],
     });
     sendDDP({
         msg: 'sub',
-        id: nextId(),
+        id: activitySubId,
         name: 'stream-notify-room',
         params: [`${roomId}/user-activity`, false],
     });
+    roomSubIds.set(roomId, { msgSubId, typingSubId, activitySubId });
     subscribedRooms.add(roomId);
+};
+
+const doUnsubscribeRoom = (roomId: string) => {
+    const ids = roomSubIds.get(roomId);
+    if (!ids) return;
+    sendDDP({ msg: 'unsub', id: ids.msgSubId });
+    sendDDP({ msg: 'unsub', id: ids.typingSubId });
+    sendDDP({ msg: 'unsub', id: ids.activitySubId });
+    roomSubIds.delete(roomId);
 };
 
 const flushPendingRoomSubscriptions = () => {
@@ -62,6 +78,16 @@ const flushPendingRoomSubscriptions = () => {
 
 const emitTyping = (roomId: string, username: string, isTyping: boolean) => {
     typingCallbacks.forEach((cb) => cb({ roomId, username, isTyping }));
+};
+
+const subscribeToUserStream = () => {
+    if (!currentRcUserId) return;
+    sendDDP({
+        msg: 'sub',
+        id: nextId(),
+        name: 'stream-notify-user',
+        params: [`${currentRcUserId}/subscriptions-changed`, false],
+    });
 };
 
 /** Handle incoming DDP messages */
@@ -101,6 +127,20 @@ const handleDDPMessage = (data: any) => {
                 emitTyping(roomId, username, isTyping);
             }
             return;
+        }
+    }
+
+    if (data.msg === 'changed' && data.collection === 'stream-notify-user') {
+        const eventName = String(data.fields?.eventName || '');
+        if (eventName.endsWith('/subscriptions-changed')) {
+            const args = data.fields?.args;
+            const payload = Array.isArray(args) ? args[1] : null;
+            const rid = String(payload?.rid || '');
+            if (rid) {
+                const unread = Number(payload?.unread || 0);
+                const type = String(payload?.t || '');
+                subscriptionCallbacks.forEach((cb) => cb({ roomId: rid, unread, type }));
+            }
         }
     }
 };
@@ -152,6 +192,7 @@ export const connectToRC = async (): Promise<boolean> => {
 
                     if (data.msg === 'connected') {
                         isConnected = true;
+                        currentRcUserId = tokenData.rcUserId ? String(tokenData.rcUserId) : null;
                         activeLoginMethodId = nextId();
                         sendDDP({
                             msg: 'method',
@@ -170,6 +211,7 @@ export const connectToRC = async (): Promise<boolean> => {
                             return;
                         }
                         rcLoginComplete = true;
+                        subscribeToUserStream();
                         flushPendingRoomSubscriptions();
                         finish(true);
                         return;
@@ -215,8 +257,14 @@ export const subscribeToRoom = (roomId: string) => {
 };
 
 export const unsubscribeFromRoom = (roomId: string) => {
-    subscribedRooms.delete(String(roomId));
-    pendingRoomSubs.delete(String(roomId));
+    const rid = String(roomId);
+    pendingRoomSubs.delete(rid);
+    if (subscribedRooms.has(rid) && ws && ws.readyState === WebSocket.OPEN && rcLoginComplete) {
+        doUnsubscribeRoom(rid);
+    } else {
+        roomSubIds.delete(rid);
+    }
+    subscribedRooms.delete(rid);
 };
 
 /** Notify RC that the user is typing (legacy + modern streams). */
@@ -262,6 +310,15 @@ export const onTyping = (callback: (data: { roomId: string; username: string; is
     };
 };
 
+export const onSubscriptionChanged = (
+    callback: (data: { roomId: string; unread?: number; type?: string }) => void,
+) => {
+    subscriptionCallbacks.push(callback);
+    return () => {
+        subscriptionCallbacks = subscriptionCallbacks.filter((cb) => cb !== callback);
+    };
+};
+
 export const disconnectRC = () => {
     if (reconnectTimer) {
         clearTimeout(reconnectTimer);
@@ -275,8 +332,11 @@ export const disconnectRC = () => {
     rcLoginComplete = false;
     subscribedRooms.clear();
     pendingRoomSubs.clear();
+    roomSubIds.clear();
     messageCallbacks = [];
     typingCallbacks = [];
+    subscriptionCallbacks = [];
+    currentRcUserId = null;
 };
 
 export const isRCConnected = () => rcLoginComplete && ws !== null && ws.readyState === WebSocket.OPEN;

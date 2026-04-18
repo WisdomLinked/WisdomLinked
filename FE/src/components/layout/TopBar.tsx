@@ -17,6 +17,7 @@ export type TopBarNotificationItem = {
   title: string;
   meta: string;
   icon?: React.ReactNode;
+  onClick?: () => void;
 };
 
 const defaultNotifications: TopBarNotificationItem[] = [
@@ -47,6 +48,7 @@ export default function TopBar({
   onProfileClick,
   onSettingsClick,
   notifications: notificationsProp,
+  notificationsEnabled = true,
 }: {
   title?: string;
   userName?: string;
@@ -54,6 +56,7 @@ export default function TopBar({
   onProfileClick?: () => void;
   onSettingsClick?: () => void;
   notifications?: TopBarNotificationItem[];
+  notificationsEnabled?: boolean;
 }) {
   const dispatch = useDispatch();
   const [openMenu, setOpenMenu] = useState(false);
@@ -61,6 +64,7 @@ export default function TopBar({
   const [openNotifications, setOpenNotifications] = useState(false);
 
   const notifications = notificationsProp ?? defaultNotifications;
+  const notificationCount = notifications.length;
 
   useEffect(() => {
     if (!openMenu) {
@@ -72,7 +76,7 @@ export default function TopBar({
   }, [openMenu]);
 
   return (
-    <header className="sticky top-0 z-20 border-b border-[#e8e6e1] bg-white">
+    <header className="sticky top-0 z-50 border-b border-[#e8e6e1] bg-white">
       <div className="flex h-14 items-center justify-between px-6">
         <span className="font-sans text-[14px] font-semibold text-slate-800">
           {title}
@@ -81,6 +85,7 @@ export default function TopBar({
           <button
             type="button"
             onClick={() => {
+              if (!notificationsEnabled) return;
               setOpenNotifications(o => !o);
               setOpenMenu(false);
             }}
@@ -88,10 +93,14 @@ export default function TopBar({
             aria-label="Notifications"
           >
             <Bell className="h-4 w-4" aria-hidden="true" />
-            <span className="absolute right-1.5 top-1.5 inline-flex h-1.5 w-1.5 rounded-full bg-emerald-500" />
+            {notificationCount > 0 ? (
+              <span className="absolute -right-1 -top-1 inline-flex min-w-[16px] items-center justify-center rounded-full bg-rose-500 px-1 text-[9px] font-semibold leading-4 text-white">
+                {notificationCount > 99 ? '99+' : notificationCount}
+              </span>
+            ) : null}
           </button>
-          {openNotifications && (
-            <div className="absolute right-16 top-10 z-30 w-[320px] rounded-xl border border-[#E5E2DB] bg-white shadow-[0_16px_40px_rgba(0,0,0,0.10)]">
+          {openNotifications && notificationsEnabled && (
+            <div className="absolute right-16 top-10 z-[120] w-[320px] rounded-xl border border-[#E5E2DB] bg-white shadow-[0_16px_40px_rgba(0,0,0,0.14)]">
               <div className="border-b border-[#E5E2DB] px-4 py-3 flex items-center justify-between">
                 <p className="text-[12px] font-semibold uppercase tracking-[0.16em] text-[#7A7A72]">
                   Notifications
@@ -106,25 +115,35 @@ export default function TopBar({
                 </button>
               </div>
               <div className="max-h-72 overflow-y-auto p-2">
-                {notifications.map(item => (
-                  <button
-                    key={item.id}
-                    type="button"
-                    className="w-full rounded-lg px-2 py-2 text-left hover:bg-[#F5F3EF]"
-                  >
-                    <div className="flex items-start gap-2">
-                      <span className="mt-0.5 inline-flex h-6 w-6 items-center justify-center rounded-full bg-[#E8EEF4]">
-                        {item.icon}
-                      </span>
-                      <div className="min-w-0">
-                        <p className="text-[12px] font-semibold text-slate-900">
-                          {item.title}
-                        </p>
-                        <p className="mt-0.5 text-[11px] text-[#7A7A72]">{item.meta}</p>
+                {notifications.length === 0 ? (
+                  <div className="rounded-lg px-2 py-4 text-center text-[12px] text-slate-500">
+                    No new notifications
+                  </div>
+                ) : (
+                  notifications.map(item => (
+                    <button
+                      key={item.id}
+                      type="button"
+                      className="w-full rounded-lg px-2 py-2 text-left hover:bg-[#F5F3EF]"
+                    onClick={() => {
+                      item.onClick?.();
+                      setOpenNotifications(false);
+                    }}
+                    >
+                      <div className="flex items-start gap-2">
+                        <span className="mt-0.5 inline-flex h-6 w-6 items-center justify-center rounded-full bg-[#E8EEF4]">
+                          {item.icon}
+                        </span>
+                        <div className="min-w-0">
+                          <p className="text-[12px] font-semibold text-slate-900">
+                            {item.title}
+                          </p>
+                          <p className="mt-0.5 text-[11px] text-[#7A7A72]">{item.meta}</p>
+                        </div>
                       </div>
-                    </div>
-                  </button>
-                ))}
+                    </button>
+                  ))
+                )}
               </div>
             </div>
           )}

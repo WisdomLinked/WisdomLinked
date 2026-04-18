@@ -93,10 +93,23 @@ export const markChatRead = async (roomId: string) => {
     }
 };
 
-/** Delete a message in Rocket.Chat (as current user). */
-export const deleteChatMessage = async (roomId: string, messageId: string) => {
+/** One-shot RC DM unread snapshot by room id (used when opening chat sidebar). */
+export const fetchDmUnreadSnapshot = async () => {
     try {
-        const res = await api.post('chat/delete-message', { roomId, messageId });
+        const res = await api.get('chat/dm-unread-snapshot');
+        return res.data as { success?: boolean; unreadByRid?: Record<string, number>; error?: string };
+    } catch (err: any) {
+        console.error('[chatApi.fetchDmUnreadSnapshot]', err.message);
+        return null;
+    }
+};
+
+/** Delete a message: mode='me' hides for current user; mode='both' deletes in RC for all (permission-dependent). */
+export const deleteChatMessage = async (
+    data: { roomId?: string; conversationId?: string; messageId: string; mode: 'me' | 'both' },
+) => {
+    try {
+        const res = await api.post('chat/delete-message', data);
         return res.data as { success?: boolean; error?: string };
     } catch (err: any) {
         console.error('[chatApi.deleteChatMessage]', err.message);
@@ -104,15 +117,15 @@ export const deleteChatMessage = async (roomId: string, messageId: string) => {
     }
 };
 
-/** Clear all messages in a DM’s Rocket.Chat room (clean history + best-effort deletes). */
+/** Clear DM thread for current user only. */
 export const clearDmThread = async (conversationId: string) => {
     try {
         const res = await api.post('chat/dm/clear-thread', { conversationId });
         return res.data as {
             success?: boolean;
             error?: string;
-            usedCleanHistory?: boolean;
-            fallbackDeletedCount?: number;
+            mode?: 'me';
+            clearedAt?: string;
         };
     } catch (err: any) {
         console.error('[chatApi.clearDmThread]', err.message);
@@ -135,13 +148,14 @@ export const hideDmFromList = async (conversationId: string) => {
 };
 
 /** Rocket.Chat `chat.getMessageReadReceipts` batched (server uses your RC session). */
-export const fetchReadReceiptsBatch = async (messageIds: string[]) => {
+export const fetchReadReceiptsBatch = async (messageIds: string[], conversationId?: string) => {
     try {
-        const res = await api.post('chat/rc-read-receipts', { messageIds });
+        const res = await api.post('chat/rc-read-receipts', { messageIds, conversationId });
         return res.data as {
             success?: boolean;
             myRcUserId?: string;
             byMessageId?: Record<string, { hasPeerRead: boolean; receipts?: any[] }>;
+            peerLastSeenMs?: number | null;
         };
     } catch (err: any) {
         console.error('[chatApi.fetchReadReceiptsBatch]', err.message);

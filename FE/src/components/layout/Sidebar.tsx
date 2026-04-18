@@ -39,7 +39,7 @@ export default function Sidebar({
   studentName?: string;
   avatarUrl?: string;
   roleLabel?: string;
-  notifications?: Record<string, boolean>;
+  notifications?: Record<string, boolean | number>;
 }) {
   const [openMobile, setOpenMobile] = useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
@@ -71,6 +71,12 @@ export default function Sidebar({
         {mainNavItems.map(item => {
           const Icon = item.icon;
           const isActive = item.id === activeItem;
+          const notificationValue = notifications[item.id];
+          const hasDot = notificationValue === true;
+          const count =
+            typeof notificationValue === 'number' && Number.isFinite(notificationValue)
+              ? Math.max(0, Math.floor(notificationValue))
+              : 0;
           return (
             <button
               key={item.id}
@@ -88,7 +94,14 @@ export default function Sidebar({
               <Icon className="h-4 w-4" aria-hidden="true" />
               <span className="font-sans inline-flex items-center gap-2">
                 {item.label}
-                {notifications[item.id] ? (
+                {count > 0 ? (
+                  <span
+                    className="inline-flex min-w-[18px] items-center justify-center rounded-full bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-semibold text-amber-800"
+                    aria-label={`${item.label} has ${count} unread messages`}
+                  >
+                    {count > 99 ? '99+' : count}
+                  </span>
+                ) : hasDot ? (
                   <span
                     className="inline-block h-2.5 w-2.5 rounded-full bg-emerald-500"
                     aria-label={`${item.label} has new notification`}

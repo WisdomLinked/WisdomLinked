@@ -26,9 +26,16 @@ const { S3Client, PutObjectCommand, DeleteObjectCommand } = require('@aws-sdk/cl
 
 sgMail.setApiKey(process.env.SENDGRID_API_KEY);
 
-const doEndpoint = (process.env.DO_SPACES_ENDPOINT || '').startsWith('https://') 
-    ? process.env.DO_SPACES_ENDPOINT 
-    : `https://${process.env.DO_SPACES_ENDPOINT}`;
+const normalizeSpacesHost = (v: string = ''): string =>
+    String(v || '')
+        .replace(/^https?:\/\//i, '')
+        .replace(/\/+$/g, '')
+        .trim();
+
+const spacesEndpointHost = normalizeSpacesHost(process.env.DO_SPACES_ENDPOINT || '');
+const spacesPublicBaseHost = normalizeSpacesHost(process.env.DO_SPACES_PUBLIC_BASE_URL || '');
+
+const doEndpoint = spacesEndpointHost ? `https://${spacesEndpointHost}` : undefined;
 
 const s3 = new S3Client({
     endpoint: doEndpoint,
@@ -39,6 +46,19 @@ const s3 = new S3Client({
     },
     forcePathStyle: false,
 });
+
+const buildSpacesPublicUrl = (key: string): string => {
+    const bucket = String(process.env.DO_SPACES_BUCKET || '').trim();
+    if (!bucket) return '';
+    // Supports either:
+    // - DO_SPACES_ENDPOINT=nyc3.digitaloceanspaces.com
+    // - DO_SPACES_PUBLIC_BASE_URL=wisdomlinked-store.nyc3.digitaloceanspaces.com (or full https URL)
+    const endpointAlreadyBucketHost = spacesEndpointHost.startsWith(`${bucket}.`);
+    const host =
+        spacesPublicBaseHost ||
+        (endpointAlreadyBucketHost ? spacesEndpointHost : `${bucket}.${spacesEndpointHost}`);
+    return host ? `https://${host}/${key}` : '';
+};
 
 const checkRateLimit = (record: any) => {
     if (!record) return null;
@@ -988,8 +1008,12 @@ const uploadChatFile = async (req: Request, res: Response) => {
 
 const uploadFileToS3 = async (file: any, folder: string) => {
     try {
+        if (!file || !file.buffer) throw new Error('No file payload to upload');
         const timestamp = Date.now();
-        const key = `${folder}/${timestamp}_${file.originalname}`;
+        const safeName = String(file.originalname || 'file')
+            .replace(/[^\w.\-]/g, '_')
+            .replace(/_+/g, '_');
+        const key = `${folder}/${timestamp}_${safeName}`;
 
         await s3.send(new PutObjectCommand({
             Bucket: process.env.DO_SPACES_BUCKET,
@@ -999,11 +1023,12 @@ const uploadFileToS3 = async (file: any, folder: string) => {
             ContentType: file.mimetype,
         }));
 
-        const fileUrl = `https://${process.env.DO_SPACES_BUCKET}.${(process.env.DO_SPACES_ENDPOINT || '').replace('https://', '')}/${key}`;
+        const fileUrl = buildSpacesPublicUrl(key);
+        if (!fileUrl) throw new Error('DO Spaces public URL is not configured');
         return fileUrl;
     } catch (err: any) {
         console.log('Error uploading file', err.message);
-        return '';
+        throw new Error(err.message || 'Could not upload file');
     }
 }
 

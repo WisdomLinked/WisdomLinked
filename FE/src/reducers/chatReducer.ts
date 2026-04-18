@@ -67,21 +67,38 @@ const chatReducer: Reducer<ChatState, ChatActions> = (
 ) => {
     switch (action.type) {
         case actionTypes.setChosenChatDetails:
+            {
+            const next = action.payload;
+            const prev = state.chosenChatDetails;
+            const nextUid = String(next?.userId ?? '');
+            const prevUid = prev ? String(prev.userId ?? '') : '';
+            const sameDm = Boolean(nextUid && prevUid && nextUid === prevUid);
             return {
                 ...state,
                 chosenGroupChatDetails: null,
-                messages: [],
-                chosenChatDetails: {
-                    ...action.payload,
-                    typing: {
-                        typing: false,
-                        userId: "",
-                        chatId: ""
-                    },
-                },
-                gotAllChats: false,
-                currentPage: 0
+                chosenChatDetails: sameDm
+                    ? {
+                          ...state.chosenChatDetails,
+                          ...next,
+                          typing: state.chosenChatDetails?.typing || {
+                              typing: false,
+                              userId: "",
+                              chatId: ""
+                          },
+                      }
+                    : {
+                          ...next,
+                          typing: {
+                              typing: false,
+                              userId: "",
+                              chatId: ""
+                          },
+                      },
+                messages: sameDm ? state.messages : [],
+                gotAllChats: sameDm ? state.gotAllChats : false,
+                currentPage: sameDm ? state.currentPage : 0
             };
+            }
 
         case actionTypes.setChosenGroupChatDetails: {
             const next = action.payload;
@@ -149,6 +166,9 @@ const chatReducer: Reducer<ChatState, ChatActions> = (
         }
 
         case actionTypes.addNewMessage:
+            if (state.messages.some((m: any) => String(m?._id) === String(action.payload?._id))) {
+                return state;
+            }
             return {
                 ...state,
                 messages: [...state.messages, action.payload],

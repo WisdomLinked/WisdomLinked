@@ -355,6 +355,8 @@ export type RCParticipantSession = { email: string; username?: string; name?: st
 const skipReadReceiptsApi = (): boolean =>
     String(process.env.ROCKETCHAT_SKIP_READ_RECEIPTS || '').toLowerCase() === 'true';
 
+const roomLastSeenCache = new Map<string, { value: number; fetchedAt: number }>();
+
 /**
  * Clear all messages in a room (requires Rocket.Chat permission `clean-room-history` for that user/room).
  * Often only enabled for admins — use {@link purgeRoomMessagesBestEffort} as fallback.
@@ -500,6 +502,116 @@ export const getRCMessageReadReceipts = async (
         }
     }
     return { receipts: [] };
+};
+
+/** Fetch a single RC message by id as the given user session. */
+export const getRCMessageByIdAsUser = async (
+    messageId: string,
+    reader: RCParticipantSession
+): Promise<any | null> => {
+    const tok = await generateUserToken(reader);
+    if (!tok) return null;
+    const headers = {
+        'X-Auth-Token': tok.authToken,
+        'X-User-Id': tok.userId,
+        'Content-Type': 'application/json',
+    };
+    try {
+        const res = await axios.get(`${RC_URL}/api/v1/chat.getMessage`, {
+            params: { msgId: String(messageId) },
+            headers,
+        });
+        if (res.data?.success && res.data?.message) return res.data.message;
+    } catch (e: any) {
+        const st = e.response?.status;
+        if (st !== 404 && st !== 403) {
+            console.warn('[getRCMessageByIdAsUser]', messageId, st, e.response?.data || e.message);
+        }
+    }
+    return null;
+};
+
+/** Peer room read cursor (`ls`) for a user in a room. */
+export const getRoomLastSeenAsUser = async (
+    roomId: string,
+    reader: RCParticipantSession
+): Promise<number | null> => {
+    const cacheKey = `${String(reader?.email || '').toLowerCase()}::${String(roomId)}`;
+    const now = Date.now();
+    const cached = roomLastSeenCache.get(cacheKey);
+    if (cached && now - cached.fetchedAt < 45_000) {
+        return cached.value;
+    }
+
+    const cacheAndReturn = (ms: number | null) => {
+        if (ms != null && !Number.isNaN(ms)) {
+            roomLastSeenCache.set(cacheKey, { value: ms, fetchedAt: Date.now() });
+        }
+        return ms;
+    };
+
+    const tok = await generateUserToken(reader);
+    if (!tok) return null;
+    const headers = {
+        'X-Auth-Token': tok.authToken,
+        'X-User-Id': tok.userId,
+        'Content-Type': 'application/json',
+    };
+    try {
+        const one = await axios.get(`${RC_URL}/api/v1/subscriptions.getOne`, {
+            params: { roomId: String(roomId) },
+            headers,
+        });
+        const ls = one.data?.subscription?.ls;
+        if (ls) return cacheAndReturn(new Date(ls?.$date ?? ls).getTime());
+    } catch {
+        /* fallback below */
+    }
+    try {
+        const many = await axios.get(`${RC_URL}/api/v1/subscriptions.get`, { headers });
+        const list = Array.isArray(many.data?.update) ? many.data.update : [];
+        const row = list.find((s: any) => String(s?.rid) === String(roomId));
+        const ls = row?.ls;
+        if (ls) return cacheAndReturn(new Date(ls?.$date ?? ls).getTime());
+    } catch (e: any) {
+        const st = e.response?.status;
+        if (st !== 404 && st !== 403 && st !== 429) {
+            console.warn('[getRoomLastSeenAsUser]', roomId, st, e.response?.data || e.message);
+        }
+    }
+    if (cached) return cached.value;
+    return null;
+};
+
+/** Snapshot current user's DM unread counters by RC room id (no polling; use on UI entry/hydration). */
+export const getDmUnreadByRoomAsUser = async (
+    reader: RCParticipantSession
+): Promise<Record<string, number>> => {
+    const out: Record<string, number> = {};
+    const tok = await generateUserToken(reader);
+    if (!tok) return out;
+    const headers = {
+        'X-Auth-Token': tok.authToken,
+        'X-User-Id': tok.userId,
+        'Content-Type': 'application/json',
+    };
+    try {
+        const many = await axios.get(`${RC_URL}/api/v1/subscriptions.get`, { headers });
+        const list = Array.isArray(many.data?.update) ? many.data.update : [];
+        list.forEach((s: any) => {
+            if (String(s?.t || '') !== 'd') return;
+            const rid = String(s?.rid || '');
+            if (!rid) return;
+            const unread = Number(s?.unread || 0);
+            if (unread > 0) out[rid] = unread;
+        });
+    } catch (e: any) {
+        const st = e.response?.status;
+        if (st !== 404 && st !== 403 && st !== 429) {
+            console.warn('[getDmUnreadByRoomAsUser]', st, e.response?.data || e.message);
+        }
+    }
+    return out;
 };
 
 /**
