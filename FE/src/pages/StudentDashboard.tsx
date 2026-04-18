@@ -1,47 +1,69 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { useDispatch } from 'react-redux';
 import { BookOpen, Clock, UserCheck, AlertCircle } from 'lucide-react';
 import { useAppSelector } from '../store';
-import { profileImageFetch } from '../api/api';
+import { doGetMyEvents, profileImageFetch } from '../api/api';
 import Sidebar from '../components/layout/Sidebar';
 import TopBar from '../components/layout/TopBar';
 import StatsGrid from '../components/dashboard/StatsGrid';
 import CarouselSection from '../components/dashboard/CarouselSection';
-import StudentChat from '../components/dashboard/StudentChat';
 import StudentProfile from '../components/dashboard/StudentProfile';
 import StudentSettings from '../components/dashboard/StudentSettings';
 import StudentCalendar from '../components/dashboard/StudentCalendar';
 import JoinMeeting from '../components/dashboard/JoinMeeting';
 import StudentSeminars from '../components/dashboard/StudentSeminars';
-import FindExpertsPage, { INITIAL_FOLLOWER_COUNTS } from './FindExperts';
+import FindExpertsPage from './FindExperts';
 import Chatbot from '../components/chatbot';
 import ContactAdmin from './Dashboard/_ExpertDashboard/ContactAdmin';
 import UpcomingCountdownCard from '../components/dashboard/UpcomingCountdownCard';
 import UpcomingSessionModal from '../components/dashboard/UpcomingSessionModal';
 import ExpertProfile from '../components/dashboard/ExpertProfile';
+import StudentChat from '../components/dashboard/StudentChat';
 import type { MentorCardProps } from '../components/MentorCard';
 
+function deriveSessionCounts(u: any) {
+  if (!u) {
+    return { bookedSem: 0, pendSem: 0, bookedInd: 0, pendInd: 0 };
+  }
+  const events = u.events || [];
+  const pendInd = events.filter(
+    (e: any) => (e.status || '').toLowerCase() === 'pending',
+  ).length;
+  const bookedInd = events.filter((e: any) => {
+    const s = (e.status || '').toLowerCase();
+    return s === 'accepted' || s === 'confirmed' || s === 'approved';
+  }).length;
+  const gcs = u.groupChats || [];
+  const bookedSem = gcs.filter((g: any) => g.type === 'seminar').length;
+  const pendSem = (u.pendingGroupChats || []).filter(
+    (p: any) => p.groupChatId?.type === 'seminar',
+  ).length;
+  return { bookedSem, pendSem, bookedInd, pendInd };
+}
+
 export default function StudentDashboard() {
+  const dispatch = useDispatch();
   const [activeItem, setActiveItem] = useState('dashboard');
-  // Dummy unread indicator for sidebar showcase; replace with backend unread count later.
   const [hasNewChatMessage, setHasNewChatMessage] = useState(true);
   const [selectedExpert, setSelectedExpert] = useState<MentorCardProps | null>(null);
-  const [followedMentorIds, setFollowedMentorIds] = useState<number[]>([]);
-  const [followerCounts, setFollowerCounts] = useState<Record<number, number>>(
-    () => ({ ...INITIAL_FOLLOWER_COUNTS }),
-  );
+  const [followedMentorIds, setFollowedMentorIds] = useState<string[]>([]);
+  const [followerCounts, setFollowerCounts] = useState<Record<string, number>>({});
+  const [sessionStats, setSessionStats] = useState({
+    bookedSem: 0,
+    pendSem: 0,
+    bookedInd: 0,
+    pendInd: 0,
+  });
 
-  const toggleExpertFollow = useCallback((mentorId: number) => {
-    setFollowedMentorIds((prev: number[]) => {
-      const isFollowing = prev.includes(mentorId);
-      setFollowerCounts((fc: Record<number, number>) => ({
+  const toggleExpertFollow = useCallback((mentorId: string | number) => {
+    const id = String(mentorId);
+    setFollowedMentorIds(prev => {
+      const isFollowing = prev.includes(id);
+      setFollowerCounts(fc => ({
         ...fc,
-        [mentorId]:
-          (fc[mentorId] ?? INITIAL_FOLLOWER_COUNTS[mentorId] ?? 0) +
-          (isFollowing ? -1 : 1),
+        [id]: (fc[id] ?? 0) + (isFollowing ? -1 : 1),
       }));
-      return isFollowing
-        ? prev.filter((id: number) => id !== mentorId)
-        : [...prev, mentorId];
+      return isFollowing ? prev.filter(x => x !== id) : [...prev, id];
     });
   }, []);
   const [upcomingModal, setUpcomingModal] = useState<{
@@ -53,58 +75,48 @@ export default function StudentDashboard() {
     return hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
   }, []);
 
-  const cards: Array<{
-    id: string;
-    label: string;
-    value: number;
-    trend?: string;
-    subline?: string;
-    tooltip?: string;
-    icon: typeof BookOpen;
-    color: 'primary' | 'success' | 'warning' | 'neutral';
-    onClick?: () => void;
-  }> = [
-    {
-      id: 'booked-seminars',
-      label: 'Booked seminar sessions',
-      value: 8,
-      trend: '+12% this week',
-      subline: undefined,
-      icon: BookOpen,
-      color: 'success',
-      onClick: () => setUpcomingModal({ kind: 'seminar', status: 'booked' }),
-    },
-    {
-      id: 'pending-seminars',
-      label: 'Pending seminar sessions',
-      value: 3,
-      icon: Clock,
-      color: 'neutral',
-      tooltip: 'Pending seminar – awaiting approval',
-      onClick: () => setUpcomingModal({ kind: 'seminar', status: 'pending' }),
-    },
-    {
-      id: 'booked-individual',
-      label: 'Booked individual sessions',
-      value: 5,
-      trend: '+8% this week',
-      subline: undefined,
-      icon: UserCheck,
-      color: 'success',
-      onClick: () =>
-        setUpcomingModal({ kind: 'oneToOne', status: 'booked' }),
-    },
-    {
-      id: 'pending-individual',
-      label: 'Pending individual sessions',
-      value: 2,
-      icon: AlertCircle,
-      color: 'neutral',
-      tooltip: 'Pending 1:1 session – to be approved',
-      onClick: () =>
-        setUpcomingModal({ kind: 'oneToOne', status: 'pending' }),
-    },
-  ];
+  const cards = useMemo(
+    () =>
+      [
+        {
+          id: 'booked-seminars',
+          label: 'Booked seminar sessions',
+          value: sessionStats.bookedSem,
+          icon: BookOpen,
+          color: 'success' as const,
+          onClick: () => setUpcomingModal({ kind: 'seminar', status: 'booked' }),
+        },
+        {
+          id: 'pending-seminars',
+          label: 'Pending seminar sessions',
+          value: sessionStats.pendSem,
+          icon: Clock,
+          color: 'neutral' as const,
+          tooltip: 'Pending seminar – awaiting approval',
+          onClick: () => setUpcomingModal({ kind: 'seminar', status: 'pending' }),
+        },
+        {
+          id: 'booked-individual',
+          label: 'Booked individual sessions',
+          value: sessionStats.bookedInd,
+          icon: UserCheck,
+          color: 'success' as const,
+          onClick: () =>
+            setUpcomingModal({ kind: 'oneToOne', status: 'booked' }),
+        },
+        {
+          id: 'pending-individual',
+          label: 'Pending individual sessions',
+          value: sessionStats.pendInd,
+          icon: AlertCircle,
+          color: 'neutral' as const,
+          tooltip: 'Pending 1:1 session – to be approved',
+          onClick: () =>
+            setUpcomingModal({ kind: 'oneToOne', status: 'pending' }),
+        },
+      ] as const,
+    [sessionStats],
+  );
 
   const { auth: { userDetails } } = useAppSelector((state: any) => state);
   const studentName =
@@ -132,6 +144,19 @@ export default function StudentDashboard() {
       setHasNewChatMessage(false);
     }
   }, [activeItem]);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const res: any = await doGetMyEvents();
+      if (!res?.result || cancelled) return;
+      dispatch({ type: 'updateUserDetails', payload: res.result });
+      setSessionStats(deriveSessionCounts(res.result));
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [dispatch]);
 
   return (
     <div className="min-h-screen bg-[#f8f7f4] text-[14px]">
@@ -182,11 +207,11 @@ export default function StudentDashboard() {
               <ExpertProfile
                 mentor={selectedExpert}
                 followerCount={
-                  followerCounts[selectedExpert.id] ??
+                  followerCounts[String(selectedExpert.id)] ??
                   selectedExpert.followerCount ??
                   0
                 }
-                isFollowing={followedMentorIds.includes(selectedExpert.id)}
+                isFollowing={followedMentorIds.includes(String(selectedExpert.id))}
                 onToggleFollow={toggleExpertFollow}
                 onBack={() => setActiveItem('experts')}
               />

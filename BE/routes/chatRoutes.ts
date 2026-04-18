@@ -9,6 +9,11 @@ import {
     sendGroupMessage,
     getGroupHistory,
     getRCToken,
+    markChatRead,
+    getReadReceiptsBatch,
+    deleteChatMessage,
+    hideDmFromList,
+    clearDmThread,
 } from '../controllers/chat.controller';
 
 // DM routes
@@ -22,5 +27,10 @@ router.get('/group/history/:groupChatId', requireAuth(false), getGroupHistory);
 
 // RC token for frontend realtime
 router.get('/rc-token', requireAuth(false), getRCToken);
+router.post('/mark-read', requireAuth(false), markChatRead);
+router.post('/rc-read-receipts', requireAuth(false), getReadReceiptsBatch);
+router.post('/delete-message', requireAuth(false), deleteChatMessage);
+router.post('/dm/hide', requireAuth(false), hideDmFromList);
+router.post('/dm/clear-thread', requireAuth(false), clearDmThread);
 
 module.exports = router;

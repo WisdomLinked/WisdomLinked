@@ -18,7 +18,7 @@ import {
 } from '../../../api/api';
 import { showAlert } from '../../../actions/alertActions';
 import { updateMe } from '../../../actions/authActions';
-import { setChosenGroupChatDetails } from '../../../actions/chatActions';
+import { setChosenChatDetails, setChosenGroupChatDetails } from '../../../actions/chatActions';
 import Messenger from '../Messenger/Messenger';
 
 type Tab = 'community' | 'private';
@@ -146,28 +146,25 @@ export default function ModernChat({ videoChaton }: { videoChaton: boolean }) {
     const response: any = await joinPrivateChat(otherUserId);
     const payload = response?.data ?? response;
     const user = payload?.user ?? payload;
-    const chat = payload?.chat ?? user?.generalChats?.find((g: any) => {
-      const adminIdInChat = g?.admin?._id ?? g?.admin;
-      return String(adminIdInChat) === String(otherUserId);
-    });
+    const other = payload?.otherUser;
 
     if (user) {
       dispatch({ type: 'updateUserDetails', payload: user });
     }
-    if (chat) {
-      dispatch(setChosenGroupChatDetails({
-        ...chat,
-        groupId: chat._id ?? chat.groupId,
-        groupName: chat.name ?? chat.groupName,
-      } as any));
-    }
+    dispatch(
+      setChosenChatDetails({
+        userId: String(otherUserId),
+        username: other?.username ?? customer?.username,
+        image: other?.image ?? customer?.image,
+      }),
+    );
   };
 
   return (
-    <div className="h-[calc(100vh-56px)] bg-wl-chatGold">
-      <div className="h-full flex">
+    <div className="h-[calc(100vh-56px)] min-h-0 bg-wl-chatGold">
+      <div className="flex h-full min-h-0">
         {/* Left panel */}
-        <aside className="hidden md:flex md:w-80 lg:w-96 flex-col border-r border-slate-200 bg-white">
+        <aside className="hidden min-h-0 md:flex md:w-80 lg:w-96 flex-col border-r border-slate-200 bg-white">
           <div className="px-4 pt-4 pb-3 border-b border-slate-200">
             <div className="flex items-center justify-between gap-2">
               <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
@@ -280,7 +277,7 @@ export default function ModernChat({ videoChaton }: { videoChaton: boolean }) {
         </aside>
 
         {/* Right panel: existing real chat */}
-        <main className="flex-1 min-w-0">
+        <main className="flex min-h-0 min-w-0 flex-1 flex-col bg-wl-chatGold">
           <Messenger videoChaton={videoChaton} theme="light" />
         </main>
       </div>

@@ -1,9 +1,8 @@
 /**
  * Rocket.Chat Realtime (DDP) Client
- * 
- * Lightweight wrapper around RC's WebSocket-based DDP protocol.
- * Used for: real-time message events + typing indicators.
- * We do NOT write any WebSocket server code — this is a client connecting to RC's server.
+ *
+ * Subscriptions run after DDP `login` succeeds. Typing uses both legacy `/typing` and `/user-activity`
+ * (Rocket.Chat 4+) so indicators work across versions.
  */
 
 import { getRCToken } from '../api/chatApi';
@@ -12,10 +11,13 @@ let ws: WebSocket | null = null;
 let rcUrl = '';
 let msgIdCounter = 0;
 let isConnected = false;
+let rcLoginComplete = false;
 let reconnectTimer: any = null;
 let messageCallbacks: Array<(msg: any) => void> = [];
 let typingCallbacks: Array<(data: { roomId: string; username: string; isTyping: boolean }) => void> = [];
-let subscribedRooms = new Set<string>();
+const subscribedRooms = new Set<string>();
+const pendingRoomSubs = new Set<string>();
+let activeLoginMethodId: string | null = null;
 
 const nextId = () => String(++msgIdCounter);
 
@@ -25,12 +27,90 @@ const sendDDP = (data: any) => {
     }
 };
 
+const doSubscribeRoom = (roomId: string) => {
+    if (!roomId || subscribedRooms.has(roomId)) return;
+    sendDDP({
+        msg: 'sub',
+        id: nextId(),
+        name: 'stream-room-messages',
+        params: [roomId, false],
+    });
+    sendDDP({
+        msg: 'sub',
+        id: nextId(),
+        name: 'stream-notify-room',
+        params: [`${roomId}/typing`, false],
+    });
+    sendDDP({
+        msg: 'sub',
+        id: nextId(),
+        name: 'stream-notify-room',
+        params: [`${roomId}/user-activity`, false],
+    });
+    subscribedRooms.add(roomId);
+};
+
+const flushPendingRoomSubscriptions = () => {
+    if (!rcLoginComplete) return;
+    pendingRoomSubs.forEach((rid) => {
+        if (!subscribedRooms.has(rid)) {
+            doSubscribeRoom(rid);
+        }
+    });
+    pendingRoomSubs.clear();
+};
+
+const emitTyping = (roomId: string, username: string, isTyping: boolean) => {
+    typingCallbacks.forEach((cb) => cb({ roomId, username, isTyping }));
+};
+
+/** Handle incoming DDP messages */
+const handleDDPMessage = (data: any) => {
+    if (data.msg === 'ping') {
+        sendDDP({ msg: 'pong' });
+        return;
+    }
+
+    if (data.msg === 'changed' && data.collection === 'stream-room-messages') {
+        const raw = data.fields?.args;
+        const list = Array.isArray(raw) ? raw : raw != null ? [raw] : [];
+        list.forEach((msg: any) => {
+            if (msg) messageCallbacks.forEach((cb) => cb(msg));
+        });
+        return;
+    }
+
+    if (data.msg === 'changed' && data.collection === 'stream-notify-room') {
+        const eventName = String(data.fields?.eventName || '');
+        const args = data.fields?.args;
+
+        if (eventName.endsWith('/typing')) {
+            const roomId = eventName.slice(0, -'/typing'.length) || eventName.split('/')[0];
+            if (Array.isArray(args) && args.length >= 2) {
+                emitTyping(roomId, String(args[0] ?? ''), Boolean(args[1]));
+            }
+            return;
+        }
+
+        if (eventName.endsWith('/user-activity')) {
+            const roomId = eventName.slice(0, -'/user-activity'.length);
+            if (Array.isArray(args) && args.length >= 2) {
+                const username = String(args[0] ?? '');
+                const events = args[1];
+                const isTyping = Array.isArray(events) && events.includes('user-typing');
+                emitTyping(roomId, username, isTyping);
+            }
+            return;
+        }
+    }
+};
+
 /** Connect to Rocket.Chat's DDP WebSocket. Call once on app startup. */
 export const connectToRC = async (): Promise<boolean> => {
-    if (isConnected && ws && ws.readyState === WebSocket.OPEN) return true;
+    if (rcLoginComplete && ws && ws.readyState === WebSocket.OPEN) return true;
 
     const tokenData = await getRCToken();
-    if (!tokenData) {
+    if (!tokenData?.rcAuthToken) {
         console.error('[rcRealtime] Failed to get RC token');
         return false;
     }
@@ -38,36 +118,74 @@ export const connectToRC = async (): Promise<boolean> => {
     rcUrl = (tokenData.rcUrl || '').replace('https://', 'wss://').replace('http://', 'ws://');
     const wsUrl = `${rcUrl}/websocket`;
 
+    if (ws) {
+        try {
+            ws.close();
+        } catch {
+            /* noop */
+        }
+        ws = null;
+    }
+    rcLoginComplete = false;
+    subscribedRooms.forEach((r) => pendingRoomSubs.add(r));
+    subscribedRooms.clear();
+
     return new Promise((resolve) => {
+        let settled = false;
+        const finish = (ok: boolean) => {
+            if (settled) return;
+            settled = true;
+            activeLoginMethodId = null;
+            resolve(ok);
+        };
+
         try {
             ws = new WebSocket(wsUrl);
 
             ws.onopen = () => {
-                // 1. DDP connect
-                sendDDP({ msg: 'connect', version: '1', support: ['1'] });
+                sendDDP({ msg: 'connect', version: '1', support: ['1', 'pre2', 'pre1'] });
             };
 
             ws.onmessage = (event) => {
                 try {
                     const data = JSON.parse(event.data);
-                    handleDDPMessage(data, tokenData);
+
                     if (data.msg === 'connected') {
                         isConnected = true;
-                        // 2. Login with token
+                        activeLoginMethodId = nextId();
                         sendDDP({
                             msg: 'method',
                             method: 'login',
-                            id: nextId(),
-                            params: [{ resume: tokenData.rcAuthToken }]
+                            id: activeLoginMethodId,
+                            params: [{ resume: tokenData.rcAuthToken }],
                         });
-                        resolve(true);
+                        return;
                     }
-                } catch (e) { /* ignore parse errors */ }
+
+                    if (data.msg === 'result' && activeLoginMethodId && data.id === activeLoginMethodId) {
+                        if (data.error) {
+                            console.error('[rcRealtime] login error', data.error);
+                            rcLoginComplete = false;
+                            finish(false);
+                            return;
+                        }
+                        rcLoginComplete = true;
+                        flushPendingRoomSubscriptions();
+                        finish(true);
+                        return;
+                    }
+
+                    handleDDPMessage(data);
+                } catch {
+                    /* ignore */
+                }
             };
 
             ws.onclose = () => {
                 isConnected = false;
-                // Auto-reconnect after 5s
+                rcLoginComplete = false;
+                subscribedRooms.forEach((r) => pendingRoomSubs.add(r));
+                subscribedRooms.clear();
                 if (!reconnectTimer) {
                     reconnectTimer = setTimeout(() => {
                         reconnectTimer = null;
@@ -77,98 +195,73 @@ export const connectToRC = async (): Promise<boolean> => {
             };
 
             ws.onerror = () => {
-                resolve(false);
+                if (!rcLoginComplete) finish(false);
             };
         } catch (err) {
             console.error('[rcRealtime] Connection error:', err);
-            resolve(false);
+            finish(false);
         }
     });
 };
 
-/** Handle incoming DDP messages */
-const handleDDPMessage = (data: any, tokenData: any) => {
-    // Respond to pings to keep connection alive
-    if (data.msg === 'ping') {
-        sendDDP({ msg: 'pong' });
+export const subscribeToRoom = (roomId: string) => {
+    if (!roomId) return;
+    if (subscribedRooms.has(roomId)) return;
+    if (!rcLoginComplete || !ws || ws.readyState !== WebSocket.OPEN) {
+        pendingRoomSubs.add(String(roomId));
         return;
     }
-
-    // Handle subscription events (new messages, typing)
-    if (data.msg === 'changed' && data.collection === 'stream-room-messages') {
-        const messages = data.fields?.args || [];
-        messages.forEach((msg: any) => {
-            messageCallbacks.forEach(cb => cb(msg));
-        });
-    }
-
-    if (data.msg === 'changed' && data.collection === 'stream-notify-room') {
-        const args = data.fields?.args || [];
-        const eventName = data.fields?.eventName || '';
-        if (eventName.endsWith('/typing')) {
-            const roomId = eventName.split('/')[0];
-            const [username, isTyping] = args;
-            typingCallbacks.forEach(cb => cb({ roomId, username, isTyping }));
-        }
-    }
+    doSubscribeRoom(String(roomId));
 };
 
-/** Subscribe to new messages in a room */
-export const subscribeToRoom = (roomId: string) => {
-    if (subscribedRooms.has(roomId)) return;
-
-    sendDDP({
-        msg: 'sub',
-        id: nextId(),
-        name: 'stream-room-messages',
-        params: [roomId, false]
-    });
-
-    // Also subscribe to typing events
-    sendDDP({
-        msg: 'sub',
-        id: nextId(),
-        name: 'stream-notify-room',
-        params: [`${roomId}/typing`, false]
-    });
-
-    subscribedRooms.add(roomId);
-};
-
-/** Unsubscribe from a room (cleanup) */
 export const unsubscribeFromRoom = (roomId: string) => {
-    subscribedRooms.delete(roomId);
-    // DDP unsub would go here if needed; for now we just stop listening
+    subscribedRooms.delete(String(roomId));
+    pendingRoomSubs.delete(String(roomId));
 };
 
-/** Send typing indicator to a room */
-export const sendTyping = (roomId: string, username: string, isTyping: boolean) => {
+/** Notify RC that the user is typing (legacy + modern streams). */
+export const sendRoomTyping = (roomId: string, rcUsername: string, isTyping: boolean) => {
+    if (!roomId || !rcUsername) return;
     sendDDP({
         msg: 'method',
         method: 'stream-notify-room',
         id: nextId(),
-        params: [`${roomId}/typing`, username, isTyping]
+        params: [`${roomId}/typing`, rcUsername, isTyping],
     });
+    if (isTyping) {
+        sendDDP({
+            msg: 'method',
+            method: 'stream-notify-room',
+            id: nextId(),
+            params: [`${roomId}/user-activity`, rcUsername, ['user-typing'], {}],
+        });
+    } else {
+        sendDDP({
+            msg: 'method',
+            method: 'stream-notify-room',
+            id: nextId(),
+            params: [`${roomId}/user-activity`, rcUsername, [], {}],
+        });
+    }
 };
 
-/** Register a callback for new incoming messages */
+/** @deprecated use sendRoomTyping */
+export const sendTyping = sendRoomTyping;
+
 export const onNewMessage = (callback: (msg: any) => void) => {
     messageCallbacks.push(callback);
     return () => {
-        messageCallbacks = messageCallbacks.filter(cb => cb !== callback);
+        messageCallbacks = messageCallbacks.filter((cb) => cb !== callback);
     };
 };
 
-/** Register a callback for typing events */
 export const onTyping = (callback: (data: { roomId: string; username: string; isTyping: boolean }) => void) => {
-    typingCallbacks = typingCallbacks.filter(cb => cb !== callback);
     typingCallbacks.push(callback);
     return () => {
-        typingCallbacks = typingCallbacks.filter(cb => cb !== callback);
+        typingCallbacks = typingCallbacks.filter((cb) => cb !== callback);
     };
 };
 
-/** Disconnect from RC */
 export const disconnectRC = () => {
     if (reconnectTimer) {
         clearTimeout(reconnectTimer);
@@ -179,9 +272,11 @@ export const disconnectRC = () => {
         ws = null;
     }
     isConnected = false;
+    rcLoginComplete = false;
     subscribedRooms.clear();
+    pendingRoomSubs.clear();
     messageCallbacks = [];
     typingCallbacks = [];
 };
 
-export const isRCConnected = () => isConnected;
+export const isRCConnected = () => rcLoginComplete && ws !== null && ws.readyState === WebSocket.OPEN;

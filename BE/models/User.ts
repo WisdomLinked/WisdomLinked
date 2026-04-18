@@ -9,6 +9,8 @@ const userSchema = new mongoose.Schema(
             required: [true, "can't be blank"],
         },
         username: { type: String },
+        /** Sanitized Rocket.Chat login name derived from email (see rocketchat.service). */
+        rocketChatUsername: { type: String, sparse: true },
         phoneNumber: { type: String },
         country: { type: mongoose.Schema.Types.Mixed },
         state: { type: mongoose.Schema.Types.Mixed },
@@ -16,6 +18,8 @@ const userSchema = new mongoose.Schema(
         image: { type: String },
         role: { type: String, required: true, default: 'customer' },
         friends: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
+        /** 1:1 DM threads (Rocket.Chat IM); not used for community/group sessions. */
+        directConversations: [{ type: mongoose.Schema.Types.ObjectId, ref: "Conversation" }],
         groupChats: [{ type: mongoose.Schema.Types.ObjectId, ref: "GroupChat" }],
         generalChats: [{ type: mongoose.Schema.Types.ObjectId, ref: "GroupChat" }],
         pendingGroupChats: [{ type: mongoose.Schema.Types.ObjectId, ref: "PendingAppointmentToGroup" }],

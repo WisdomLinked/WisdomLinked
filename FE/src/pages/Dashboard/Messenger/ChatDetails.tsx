@@ -12,19 +12,26 @@ const ChatDetails = ({
             className={
                 videoChaton
                     ? "fixed top-[63px] right-0 w-[350px] h-[calc(100vh-63px-100px)]"
-                    : "w-full h-full flex flex-col relative"
+                    : "w-full h-full min-h-0 flex flex-col relative"
             }
         >
             <div
                 className={
                     theme === "light"
-                        ? "w-full h-full flex flex-col rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden"
-                        : "w-full h-full flex flex-col"
+                        ? "w-full h-full min-h-0 flex flex-col rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden"
+                        : "w-full h-full min-h-0 flex flex-col overflow-hidden"
                 }
             >
-                <Messages theme={theme} />
-                <Typing theme={theme} />
-                <NewMessageInput theme={theme} />
+                {/* One column width for header + thread + composer (avoids full-bleed bubbles vs skinny text) */}
+                <div className="mx-auto flex h-full min-h-0 w-full max-w-2xl flex-1 flex-col">
+                    <Messages theme={theme} />
+                    <div className="shrink-0">
+                        <Typing theme={theme} />
+                    </div>
+                    <div className="shrink-0">
+                        <NewMessageInput theme={theme} />
+                    </div>
+                </div>
             </div>
         </div>
     );

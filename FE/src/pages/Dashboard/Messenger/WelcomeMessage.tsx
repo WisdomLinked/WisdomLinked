@@ -1,5 +1,4 @@
 import React from "react";
-import Robot from "./robot.gif";
 
 const WelcomeMessage = ({ theme = "dark" }: any) => {
     return (
@@ -10,8 +9,7 @@ const WelcomeMessage = ({ theme = "dark" }: any) => {
                     : "w-full h-full flex flex-col items-center justify-center p-6 text-center"
             }
         >
-            <img src={Robot} alt="robot greeting welcome" className="h-56 w-auto" />
-            <div className={theme === "light" ? "mt-4 text-[15px] font-semibold text-wl-ink" : "mt-4 text-[15px] font-semibold text-white"}>
+            <div className={theme === "light" ? "text-[15px] font-semibold text-wl-ink" : "text-[15px] font-semibold text-white"}>
                 {theme === "light"
                   ? "Choose a chat from the list to get started."
                   : "To start chatting — select a chat from the left"}

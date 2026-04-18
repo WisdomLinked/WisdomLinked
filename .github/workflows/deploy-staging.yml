@@ -176,6 +176,7 @@ jobs:
               -e ROCKETCHAT_URL="${{ secrets.ROCKETCHAT_URL }}" \
               -e ROCKETCHAT_ADMIN_USER="${{ secrets.ROCKETCHAT_ADMIN_USER }}" \
               -e ROCKETCHAT_ADMIN_PASS="${{ secrets.ROCKETCHAT_ADMIN_PASS }}" \
+              -e ROCKETCHAT_CREATE_TOKENS_SECRET="${{ secrets.ROCKETCHAT_CREATE_TOKENS_SECRET }}" \
               ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE }}:staging
 
             # Run the Frontend Staging Container

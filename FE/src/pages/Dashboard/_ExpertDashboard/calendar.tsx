@@ -18,11 +18,9 @@ import { useAppSelector } from "../../../store";
 import { SetLoadingStatus } from "../../../actions/appActions";
 import { localizer } from "../../../actions/common";
 import { updateMe } from "../../../actions/authActions";
-import {
-  setChosenChatDetails,
-  setChosenGroupChatDetails,
-} from "../../../actions/chatActions";
+import { setChosenGroupChatDetails } from "../../../actions/chatActions";
 import { useNavigate } from "react-router-dom";
+import { openExpertChatWithUser } from "../../../utils/expertOpenChatWithUser";
 
 const ExpertCalendar: React.FC = () => {
   const {
@@ -122,16 +120,18 @@ const ExpertCalendar: React.FC = () => {
     }
   };
 
-  const navigateCustomer = (item: any) => {
+  const navigateCustomer = async (item: any) => {
     if (!item) return;
-    navigate(`${process.env.REACT_APP_AUTH_URL}expertdashboard/chat`);
-    dispatch(
-      setChosenChatDetails({
-        userId: item._id,
+    await openExpertChatWithUser({
+      dispatch,
+      navigate,
+      userDetails,
+      otherUser: {
+        _id: item._id,
         username: item.username,
         image: item.image,
-      })
-    );
+      },
+    });
   };
 
   const navigateSeminar = (item: any) => {

@@ -250,12 +250,11 @@ const ACCENT_SELECTED = 'bg-[#D9EAFD]/70 text-[#234C6A]';
 /* ─── Signup Page ────────────────────────────────────────────────────────── */
 
 function StudentSignupForm({ onBack, onClose, onGoLogin, inputNormal, inputError }: { onBack: () => void; onClose: () => void; onGoLogin: () => void; inputNormal: string; inputError: string }) {
+  const navigate = useNavigate();
   const [form, setForm] = useState({
     fullName: '', majors: [] as string[], services: '', country: '', countryCode: '+1', phone: '', email: '', password: '', confirmPassword: '', terms: false
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
-  const [submitting, setSubmitting] = useState(false);
-  const [submitted, setSubmitted] = useState(false);
   const [showMajorDrop, setShowMajorDrop] = useState(false);
   const [showServiceDrop, setShowServiceDrop] = useState(false);
   const [showCountryDrop, setShowCountryDrop] = useState(false);
@@ -278,7 +277,7 @@ function StudentSignupForm({ onBack, onClose, onGoLogin, inputNormal, inputError
 
   const toggleMajor = (m: string) => {
     setForm(f => ({ ...f, majors: f.majors.includes(m) ? f.majors.filter(x => x !== m) : [...f.majors, m] }));
-    setErrors(e => ({ ...e, majors: '' }));
+    setErrors(er => ({ ...er, majors: '' }));
   };
 
   const validate = () => {
@@ -301,29 +300,10 @@ function StudentSignupForm({ onBack, onClose, onGoLogin, inputNormal, inputError
   const handleSubmit = () => {
     const e = validate();
     if (Object.keys(e).length > 0) { setErrors(e); return; }
-    setSubmitting(true);
-    setTimeout(() => { setSubmitting(false); setSubmitted(true); }, 1500);
+    navigate('/customerregister');
   };
 
   const selectedCode = COUNTRY_CODES.find(c => c.code === form.countryCode) || COUNTRY_CODES[0];
-
-  if (submitted) {
-    return (
-      <div className="relative min-h-screen" style={{ backgroundColor: '#F8FAFC' }}>
-        <div className="auth-dots-layer auth-dots-layer--animate" aria-hidden="true" />
-        <div className="relative z-10 flex items-center justify-center p-6 min-h-screen">
-          <div className="w-full max-w-md rounded-3xl p-8 text-center shadow-xl border border-slate-200" style={{ background: 'linear-gradient(135deg, #ffffff 0%, #f0f7fc 100%)' }}>
-            <div className="w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-5" style={{ backgroundColor: '#D9EAFD' }}>
-              <CheckCircle size={40} style={{ color: '#234C6A' }} />
-            </div>
-            <h3 className="text-2xl font-bold text-slate-800 mb-2">Account Created!</h3>
-            <p className="text-slate-500 text-sm mb-6">Welcome, {form.fullName}. We've received your registration.</p>
-            <button onClick={onClose} className="px-8 py-3 rounded-2xl text-sm font-semibold text-white shadow-md" style={BTN_PRIMARY_STYLE}>Go to Home</button>
-          </div>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="relative min-h-screen py-12 px-4" style={{ backgroundColor: '#F8FAFC' }}>
@@ -467,10 +447,10 @@ function StudentSignupForm({ onBack, onClose, onGoLogin, inputNormal, inputError
               </div>
             </div>
 
-            <button onClick={handleSubmit} disabled={submitting}
-              className="mt-6 w-full flex items-center justify-center gap-2 px-6 py-3.5 rounded-2xl text-sm font-semibold text-white shadow-lg transition-all duration-200 disabled:opacity-70"
-              style={submitting ? { background: '#9AA6B2' } : BTN_PRIMARY_STYLE}>
-              {submitting ? (<><svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" /></svg>Creating account...</>) : 'Submit'}
+            <button onClick={handleSubmit}
+              className="mt-6 w-full flex items-center justify-center gap-2 px-6 py-3.5 rounded-2xl text-sm font-semibold text-white shadow-lg transition-all duration-200"
+              style={BTN_PRIMARY_STYLE}>
+              Continue to registration
             </button>
             <p className="text-center text-slate-500 text-sm mt-4">
               Already have an account? <button type="button" onClick={onGoLogin} className="font-semibold hover:underline" style={{ color: '#234C6A' }}>Log in</button>
@@ -483,12 +463,11 @@ function StudentSignupForm({ onBack, onClose, onGoLogin, inputNormal, inputError
 }
 
 function ExpertSignupForm({ onBack, onClose, onGoLogin, inputNormal, inputError }: { onBack: () => void; onClose: () => void; onGoLogin: () => void; inputNormal: string; inputError: string }) {
+  const navigate = useNavigate();
   const [form, setForm] = useState({
     fullName: '', title: '', bio: '', majors: [] as string[], servicesOffered: [] as string[], country: '', countryCode: '+1', phone: '', email: '', password: '', confirmPassword: '', resumeFile: null as File | null, terms: false
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
-  const [submitting, setSubmitting] = useState(false);
-  const [submitted, setSubmitted] = useState(false);
   const [showMajorDrop, setShowMajorDrop] = useState(false);
   const [showServicesDrop, setShowServicesDrop] = useState(false);
   const [showCountryDrop, setShowCountryDrop] = useState(false);
@@ -512,11 +491,11 @@ function ExpertSignupForm({ onBack, onClose, onGoLogin, inputNormal, inputError 
 
   const toggleMajor = (m: string) => {
     setForm(f => ({ ...f, majors: f.majors.includes(m) ? f.majors.filter(x => x !== m) : [...f.majors, m] }));
-    setErrors(e => ({ ...e, majors: '' }));
+    setErrors(er => ({ ...er, majors: '' }));
   };
   const toggleService = (s: string) => {
     setForm(f => ({ ...f, servicesOffered: f.servicesOffered.includes(s) ? f.servicesOffered.filter(x => x !== s) : [...f.servicesOffered, s] }));
-    setErrors(e => ({ ...e, servicesOffered: '' }));
+    setErrors(er => ({ ...er, servicesOffered: '' }));
   };
 
   const validate = () => {
@@ -542,29 +521,10 @@ function ExpertSignupForm({ onBack, onClose, onGoLogin, inputNormal, inputError 
   const handleSubmit = () => {
     const e = validate();
     if (Object.keys(e).length > 0) { setErrors(e); return; }
-    setSubmitting(true);
-    setTimeout(() => { setSubmitting(false); setSubmitted(true); }, 1500);
+    navigate('/expertregister');
   };
 
   const selectedCode = COUNTRY_CODES.find(c => c.code === form.countryCode) || COUNTRY_CODES[0];
-
-  if (submitted) {
-    return (
-      <div className="relative min-h-screen" style={{ backgroundColor: '#F8FAFC' }}>
-        <div className="auth-dots-layer auth-dots-layer--animate" aria-hidden="true" />
-        <div className="relative z-10 flex items-center justify-center p-6 min-h-screen">
-          <div className="w-full max-w-md rounded-3xl p-8 text-center shadow-xl border border-slate-200" style={{ background: 'linear-gradient(135deg, #ffffff 0%, #f0f7fc 100%)' }}>
-            <div className="w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-5" style={{ backgroundColor: '#D9EAFD' }}>
-              <CheckCircle size={40} style={{ color: '#234C6A' }} />
-            </div>
-            <h3 className="text-2xl font-bold text-slate-800 mb-2">Registration Received!</h3>
-            <p className="text-slate-500 text-sm mb-6">Thanks, {form.fullName}. We'll review your expert profile and get back to you soon.</p>
-            <button onClick={onClose} className="px-8 py-3 rounded-2xl text-sm font-semibold text-white shadow-md" style={BTN_PRIMARY_STYLE}>Go to Home</button>
-          </div>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="relative min-h-screen py-12 px-4" style={{ backgroundColor: '#F8FAFC' }}>
@@ -735,10 +695,10 @@ function ExpertSignupForm({ onBack, onClose, onGoLogin, inputNormal, inputError 
               </div>
             </div>
 
-            <button onClick={handleSubmit} disabled={submitting}
-              className="mt-6 w-full flex items-center justify-center gap-2 px-6 py-3.5 rounded-2xl text-sm font-semibold text-white shadow-lg transition-all duration-200 disabled:opacity-70"
-              style={submitting ? { background: '#9AA6B2' } : BTN_PRIMARY_STYLE}>
-              {submitting ? (<><svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" /></svg>Registering...</>) : 'Register'}
+            <button onClick={handleSubmit}
+              className="mt-6 w-full flex items-center justify-center gap-2 px-6 py-3.5 rounded-2xl text-sm font-semibold text-white shadow-lg transition-all duration-200"
+              style={BTN_PRIMARY_STYLE}>
+              Continue to registration
             </button>
             <p className="text-center text-slate-500 text-sm mt-4">
               Already have an account? <button type="button" onClick={onGoLogin} className="font-semibold hover:underline" style={{ color: '#234C6A' }}>Log in</button>
@@ -752,9 +712,9 @@ function ExpertSignupForm({ onBack, onClose, onGoLogin, inputNormal, inputError 
 
 /* ─── Login Page ────────────────────────────────────────────────────────── */
 function LoginPage({ onClose, onGoSignup }: { onClose: () => void; onGoSignup: () => void }) {
+  const navigate = useNavigate();
   const [form, setForm] = useState({ email: '', password: '' });
   const [errors, setErrors] = useState<Record<string, string>>({});
-  const [submitting, setSubmitting] = useState(false);
   const inputBase = `w-full rounded-xl border bg-white px-4 py-3 text-sm text-slate-800 placeholder-slate-400 outline-none transition-all duration-200 ${FOCUS_RING}`;
   const inputNormal = `${inputBase} border-slate-200`;
   const inputError = `${inputBase} border-red-300 focus:ring-red-300 focus:border-red-400 bg-red-50/30`;
@@ -770,8 +730,7 @@ function LoginPage({ onClose, onGoSignup }: { onClose: () => void; onGoSignup: (
   const handleSubmit = () => {
     const e = validate();
     if (Object.keys(e).length > 0) { setErrors(e); return; }
-    setSubmitting(true);
-    setTimeout(() => setSubmitting(false), 1200);
+    navigate('/login');
   };
 
   return (
@@ -799,10 +758,10 @@ function LoginPage({ onClose, onGoSignup }: { onClose: () => void; onGoSignup: (
                 {errors.password && <p className="mt-1 text-xs text-red-500 flex items-center gap-1"><AlertCircle size={11} />{errors.password}</p>}
               </div>
             </div>
-            <button onClick={handleSubmit} disabled={submitting}
-              className="mt-6 w-full flex items-center justify-center gap-2 px-6 py-3.5 rounded-2xl text-sm font-semibold text-white shadow-lg transition-all duration-200 disabled:opacity-70"
-              style={submitting ? { background: '#9AA6B2' } : BTN_PRIMARY_STYLE}>
-              {submitting ? (<><svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" /></svg>Signing in...</>) : 'Sign in'}
+            <button onClick={handleSubmit}
+              className="mt-6 w-full flex items-center justify-center gap-2 px-6 py-3.5 rounded-2xl text-sm font-semibold text-white shadow-lg transition-all duration-200"
+              style={BTN_PRIMARY_STYLE}>
+              Continue to sign in
             </button>
             <p className="text-center text-slate-500 text-sm mt-4">
               Don't have an account? <button type="button" onClick={onGoSignup} className="font-semibold hover:underline" style={{ color: '#234C6A' }}>Sign up</button>

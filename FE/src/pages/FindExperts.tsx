@@ -1,75 +1,36 @@
-import React, { useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { Search, Filter, ChevronDown } from 'lucide-react';
 import MentorCard, { MentorCardProps } from '../components/MentorCard';
+import { doFilterExperts, doGetKeywordsAndServices } from '../api/api';
+import { SetLoadingStatus } from '../actions/appActions';
 
-type Mentor = MentorCardProps;
+/** Placeholder follower UI until a backend endpoint exists. */
+export const INITIAL_FOLLOWER_COUNTS: Record<string, number> = {};
 
-const mentors: Mentor[] = [
-  {
-    id: 1,
-    name: 'Dr. Emily Chen',
-    title: 'Assistant Professor of Computer Science',
-    institution: 'Stanford University',
-    field: 'Computer Science',
-    experience: '8+ yrs',
-    services: ['1-on-1 session', 'Research guidance', 'Grad school mentoring'],
-    image: null,
-    isNew: true,
-  },
-  {
-    id: 2,
-    name: 'Prof. Daniel Ortiz',
-    title: 'Senior Lecturer in Civil Engineering',
-    institution: 'MIT',
-    field: 'Civil Engineering',
-    experience: '15+ yrs',
-    services: ['1-on-1 session', 'Career planning'],
-    image: null,
-    isNew: true,
-  },
-  {
-    id: 3,
-    name: 'Dr. Yuki Tanaka',
-    title: 'Research Scientist, AI for Healthcare',
-    institution: 'Tokyo Institute of Technology',
-    field: 'Biomedical Engineering',
-    experience: '10+ yrs',
-    services: ['Research guidance', 'Seminar'],
-    image: null,
-    isNew: false,
-  },
-  {
-    id: 4,
-    name: 'Sarah Johnson',
-    title: 'Senior Software Engineer',
-    institution: 'Google',
-    field: 'Computer Science',
-    experience: '7+ yrs',
-    services: ['1-on-1 session', 'Career planning', 'Interview prep'],
-    image: null,
-    isNew: false,
-  },
-  {
-    id: 5,
-    name: 'Ahmed Hassan',
-    title: 'Structural Engineer',
-    institution: 'Arup',
-    field: 'Civil Engineering',
-    experience: '9+ yrs',
-    services: ['1-on-1 session', 'Work abroad guidance'],
-    image: null,
-    isNew: false,
-  },
-];
-
-/** Baseline follower counts (mock); parent owns state and passes counts + toggle. */
-export const INITIAL_FOLLOWER_COUNTS: Record<number, number> = {
-  1: 142,
-  2: 89,
-  3: 256,
-  4: 67,
-  5: 198,
-};
+function mapExpertToMentor(expert: any): MentorCardProps {
+  const kw = (expert.keywords || []).map((k: any) => k?.value).filter(Boolean);
+  const svc = (expert.services || []).map((s: any) => s?.value ?? s?.name).filter(Boolean);
+  const field = kw[0] || 'General';
+  const created = expert.createdAt ? new Date(expert.createdAt).getTime() : 0;
+  const isNew = created > 0 && Date.now() - created < 30 * 24 * 60 * 60 * 1000;
+  return {
+    id: String(expert._id),
+    name: expert.username || expert.email || 'Expert',
+    title: expert.title || 'Expert',
+    institution:
+      (expert.description && String(expert.description).slice(0, 80)) ||
+      expert.specialNote ||
+      'WisdomLinked expert',
+    field,
+    experience:
+      typeof expert.rating === 'number' && expert.rating > 0
+        ? `${expert.rating.toFixed(1)}★`
+        : '—',
+    services: svc.length ? svc : ['1:1 session'],
+    image: expert.image || null,
+    isNew,
+  };
+}
 
 export default function FindExpertsPage({
   onViewExpert,
@@ -78,60 +39,77 @@ export default function FindExpertsPage({
   onToggleFollow,
 }: {
   onViewExpert?: (mentor: MentorCardProps) => void;
-  followedMentorIds: number[];
-  followerCounts: Record<number, number>;
-  onToggleFollow: (mentorId: number) => void;
+  followedMentorIds: Array<string | number>;
+  followerCounts: Record<string, number>;
+  onToggleFollow: (mentorId: string | number) => void;
 }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedMajor, setSelectedMajor] = useState<string>('all');
   const [selectedService, setSelectedService] = useState<string>('all');
+  const [mentors, setMentors] = useState<MentorCardProps[]>([]);
+  const [keywordOptions, setKeywordOptions] = useState<Array<{ _id: string; value: string }>>([]);
+  const [serviceOptions, setServiceOptions] = useState<Array<{ _id: string; value: string }>>([]);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
-  const majors = useMemo(
-    () => Array.from(new Set(mentors.map(m => m.field))).sort(),
-    [],
-  );
+  const loadKeywordsAndServices = useCallback(async () => {
+    const res: any = await doGetKeywordsAndServices();
+    if (res?.keywords) {
+      setKeywordOptions(
+        res.keywords.map((k: any) => ({ _id: String(k._id), value: k.value || '' })),
+      );
+    }
+    if (res?.services) {
+      setServiceOptions(
+        res.services.map((s: any) => ({ _id: String(s._id), value: s.value || s.name || '' })),
+      );
+    }
+  }, []);
 
-  const services = useMemo(
-    () =>
-      Array.from(
-        new Set(
-          mentors.flatMap(m => m.services),
-        ),
-      ).sort(),
-    [],
-  );
-
-  const filteredMentors = useMemo(() => {
-    const q = searchQuery.trim().toLowerCase();
-    return mentors.filter(m => {
-      const matchesSearch =
-        !q ||
-        m.name.toLowerCase().includes(q) ||
-        m.institution.toLowerCase().includes(q) ||
-        m.field.toLowerCase().includes(q);
-
-      const matchesMajor =
-        selectedMajor === 'all' ||
-        m.field.toLowerCase() === selectedMajor.toLowerCase();
-
-      const matchesService =
-        selectedService === 'all' ||
-        m.services.some(
-          s => s.toLowerCase() === selectedService.toLowerCase(),
-        );
-
-      return matchesSearch && matchesMajor && matchesService;
-    });
+  const fetchExperts = useCallback(async () => {
+    setLoadError(null);
+    SetLoadingStatus(true);
+    try {
+      const keywordsPayload =
+        selectedMajor !== 'all' ? [{ _id: selectedMajor }] : [];
+      const servicesPayload =
+        selectedService !== 'all' ? [{ _id: selectedService }] : [];
+      const res: any = await doFilterExperts({
+        username: searchQuery.trim(),
+        keywords: keywordsPayload,
+        services: servicesPayload,
+        sortBy: 'Name in ASC',
+      });
+      if (res?.result && Array.isArray(res.result)) {
+        setMentors(res.result.map(mapExpertToMentor));
+      } else {
+        setMentors([]);
+      }
+    } catch (e: any) {
+      setLoadError(e?.message || 'Failed to load experts');
+      setMentors([]);
+    } finally {
+      SetLoadingStatus(false);
+    }
   }, [searchQuery, selectedMajor, selectedService]);
 
-  const newlyJoined = filteredMentors.filter(m => m.isNew);
-  const others = filteredMentors.filter(m => !m.isNew);
+  useEffect(() => {
+    loadKeywordsAndServices();
+  }, [loadKeywordsAndServices]);
 
-  const hasResults = filteredMentors.length > 0;
+  useEffect(() => {
+    const t = window.setTimeout(() => {
+      fetchExperts();
+    }, 320);
+    return () => window.clearTimeout(t);
+  }, [fetchExperts]);
+
+  const newlyJoined = mentors.filter(m => m.isNew);
+  const others = mentors.filter(m => !m.isNew);
+
+  const hasResults = mentors.length > 0;
 
   return (
     <div className="min-h-screen bg-[#F5F3EF] px-6 py-8 text-[#1A3A4A]">
-      {/* Page header */}
       <header className="mb-6 border-b border-[#E5E2DB] pb-5">
         <h1 className="font-serif text-[2.5rem] font-medium leading-tight text-[#1A3A4A]">
           Find Experts
@@ -141,7 +119,6 @@ export default function FindExpertsPage({
         </p>
       </header>
 
-      {/* Filter bar */}
       <section className="mb-8 border-b border-[#E5E2DB] pb-4">
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div className="flex-1">
@@ -170,9 +147,9 @@ export default function FindExpertsPage({
                   className="w-full bg-transparent text-xs font-sans text-[#1A3A4A] outline-none appearance-none pr-5"
                 >
                   <option value="all">All majors</option>
-                  {majors.map(major => (
-                    <option key={major} value={major}>
-                      {major}
+                  {keywordOptions.map(k => (
+                    <option key={k._id} value={k._id}>
+                      {k.value}
                     </option>
                   ))}
                 </select>
@@ -192,9 +169,9 @@ export default function FindExpertsPage({
                   className="w-full bg-transparent text-xs font-sans text-[#1A3A4A] outline-none appearance-none pr-5"
                 >
                   <option value="all">All services</option>
-                  {services.map(service => (
-                    <option key={service} value={service}>
-                      {service}
+                  {serviceOptions.map(s => (
+                    <option key={s._id} value={s._id}>
+                      {s.value}
                     </option>
                   ))}
                 </select>
@@ -204,6 +181,12 @@ export default function FindExpertsPage({
           </div>
         </div>
       </section>
+
+      {loadError && (
+        <p className="mb-4 text-sm text-red-600" role="alert">
+          {loadError}
+        </p>
+      )}
 
       {!hasResults && (
         <section className="mt-16 flex flex-col items-center justify-center text-center text-[#7A7A72]">
@@ -220,7 +203,6 @@ export default function FindExpertsPage({
 
       {hasResults && (
         <>
-          {/* Newly joined mentors */}
           <section className="mb-10">
             <header className="mb-4">
               <p className="text-[0.65rem] font-semibold uppercase tracking-[0.3em] text-[#7A7A72]">
@@ -234,14 +216,16 @@ export default function FindExpertsPage({
             <div className="md:grid md:grid-cols-2 md:gap-4 lg:gap-6 md:space-x-0 -mx-2 flex gap-4 overflow-x-auto pb-2 md:mx-0 md:overflow-visible snap-x md:snap-none">
               {newlyJoined.map(mentor => (
                 <div
-                  key={mentor.id}
+                  key={String(mentor.id)}
                   className="snap-start min-w-[260px] md:min-w-0 md:w-auto"
                 >
                   <MentorCard
                     {...mentor}
-                    followerCount={followerCounts[mentor.id] ?? 0}
+                    followerCount={followerCounts[String(mentor.id)] ?? 0}
                     onViewProfile={onViewExpert}
-                    isFollowing={followedMentorIds.includes(mentor.id)}
+                    isFollowing={followedMentorIds.some(
+                      id => String(id) === String(mentor.id),
+                    )}
                     onToggleFollow={onToggleFollow}
                   />
                 </div>
@@ -254,7 +238,6 @@ export default function FindExpertsPage({
             </div>
           </section>
 
-          {/* Other mentors */}
           <section className="pb-10">
             <header className="mb-4">
               <p className="text-[0.65rem] font-semibold uppercase tracking-[0.3em] text-[#7A7A72]">
@@ -268,12 +251,14 @@ export default function FindExpertsPage({
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 lg:gap-6">
               {others.map(mentor => (
                 <MentorCard
-                  key={mentor.id}
+                  key={String(mentor.id)}
                   {...mentor}
                   compact
-                  followerCount={followerCounts[mentor.id] ?? 0}
+                  followerCount={followerCounts[String(mentor.id)] ?? 0}
                   onViewProfile={onViewExpert}
-                  isFollowing={followedMentorIds.includes(mentor.id)}
+                  isFollowing={followedMentorIds.some(
+                    id => String(id) === String(mentor.id),
+                  )}
                   onToggleFollow={onToggleFollow}
                 />
               ))}
@@ -284,4 +269,3 @@ export default function FindExpertsPage({
     </div>
   );
 }
-

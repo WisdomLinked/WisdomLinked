@@ -16,7 +16,7 @@ import { useAppSelector } from "../../../../store";
 import OverlayPortal from "../../../../components/OverayPortal";
 import { SetLoadingStatus } from "../../../../actions/appActions";
 import { useDispatch } from "react-redux";
-import { setChosenGroupChatDetails } from "../../../../actions/chatActions";
+import { setChosenChatDetails, setChosenGroupChatDetails } from "../../../../actions/chatActions";
 import { useNavigate } from "react-router-dom";
 
 const Customers = ({
@@ -123,24 +123,21 @@ const Customers = ({
           const response = await joinPrivateChat(customerId);
       
           if (response) {
-            const { user, chat } = response;
+            const { user, otherUser } = response as any;
       
-            // Update logged-in expert's details (includes new chat)
             dispatch({
               type: "updateUserDetails",
               payload: user,
             });
       
-            // Prepare chat details for opening
             dispatch(
-              setChosenGroupChatDetails({
-                ...chat,
-                groupId: chat._id,
-                groupName: chat.name,
+              setChosenChatDetails({
+                userId: customerId,
+                username: otherUser?.username,
+                image: otherUser?.image,
               })
             );
       
-            // Navigate to expert's chat page
             navigate(`${process.env.REACT_APP_AUTH_URL}expertdashboard/chat`);
           }
         } catch (err) {

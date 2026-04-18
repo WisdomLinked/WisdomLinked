@@ -14,7 +14,8 @@ import {
 import { updateMe } from "../../../actions/authActions";
 import { useDispatch } from "react-redux";
 import { SetLoadingStatus } from "../../../actions/appActions";
-import {setChosenChatDetails, setChosenGroupChatDetails} from "../../../actions/chatActions";
+import {setChosenGroupChatDetails} from "../../../actions/chatActions";
+import { openExpertChatWithUser } from "../../../utils/expertOpenChatWithUser";
 
 const Dashboard = () => {
 
@@ -63,10 +64,14 @@ const Dashboard = () => {
         SetLoadingStatus(false)
     }
 
-    const navigateCustomer = (item: any) => {
-        console.log("navigate events", item); // Use item here instead of event
-        navigate(`${process.env.REACT_APP_AUTH_URL}expertdashboard/chat`);
-        dispatch(setChosenChatDetails({ userId: item._id, username: item.username, image: item.image }));
+    const navigateCustomer = async (item: any) => {
+        console.log("navigate events", item);
+        await openExpertChatWithUser({
+            dispatch,
+            navigate,
+            userDetails,
+            otherUser: { _id: item._id, username: item.username, image: item.image },
+        });
         console.log("item", item);
     };
 

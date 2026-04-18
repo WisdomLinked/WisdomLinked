@@ -8,9 +8,10 @@ import Picker from '@emoji-mart/react';
 import { callApi } from "../../../api/api";
 import { showAlert } from "../../../actions/alertActions";
 import { useDispatch } from "react-redux";
-import { addNewMessage } from "../../../actions/chatActions";
-import { sendDirectMessage as apiSendDM, sendGroupMessage as apiSendGroup } from "../../../api/chatApi";
-import { sendTyping } from "../../../services/rcRealtime";
+import { addNewMessage, setChatChannelInfo } from "../../../actions/chatActions";
+import { getOrCreateDM, sendDirectMessage as apiSendDM, sendGroupMessage as apiSendGroup } from "../../../api/chatApi";
+import { sendRoomTyping, connectToRC } from "../../../services/rcRealtime";
+import { toRocketChatUsername } from "../../../utils/rocketchatUsername";
 
 function plainTextToMessageHtml(text: string): string {
     const trimmed = text.trim();
@@ -24,7 +25,6 @@ function plainTextToMessageHtml(text: string): string {
 
 const NewMessageInput: React.FC<any> = ({ theme = "dark" }: any) => {
     const [_message, set_message] = useState("");
-    const [typing, set_typing] = useState(0);
     const dispatch = useDispatch();
     const [showEmojiPicker, setShowEmojiPicker] = useState(false);
     const [file, set_file] = useState<File | undefined>(undefined)
@@ -43,9 +43,14 @@ const NewMessageInput: React.FC<any> = ({ theme = "dark" }: any) => {
         }
     };
 
-    const onBlur = () => set_typing(0);
-
     const { chat: { chosenChatDetails, chosenGroupChatDetails, conversationId, rcChannelId }, auth: { userDetails } } = useAppSelector((state) => state);
+    const rcTypingName = userDetails?.email ? toRocketChatUsername(userDetails.email) : '';
+
+    const onBlur = () => {
+        if (rcChannelId && rcTypingName) {
+            sendRoomTyping(rcChannelId, rcTypingName, false);
+        }
+    };
 
     const correctStyling = (text: any, tag: any) => {
         let temp1 = text.split(`<${tag}>`)
@@ -59,11 +64,25 @@ const NewMessageInput: React.FC<any> = ({ theme = "dark" }: any) => {
     }
 
     const dispatchOutgoingHtml = async (message: string) => {
-        if (chosenChatDetails && conversationId) {
-            // Send DM via REST API
-            const result = await apiSendDM(conversationId, message);
-            if (result?.message) {
-                dispatch(addNewMessage(result.message));
+        if (chosenChatDetails) {
+            let convId = conversationId;
+            if (!convId) {
+                const dm = await getOrCreateDM(chosenChatDetails.userId);
+                if (dm?.conversationId) {
+                    convId = dm.conversationId;
+                    dispatch(
+                        setChatChannelInfo({
+                            conversationId: dm.conversationId,
+                            rcChannelId: dm.rcChannelId ?? null,
+                        })
+                    );
+                }
+            }
+            if (convId) {
+                const result = await apiSendDM(convId, message);
+                if (result?.message) {
+                    dispatch(addNewMessage(result.message));
+                }
             }
         }
         if (chosenGroupChatDetails) {
@@ -149,39 +168,45 @@ const NewMessageInput: React.FC<any> = ({ theme = "dark" }: any) => {
 
                 dispatchOutgoingHtml(message);
             }
-        } else {
-            set_typing(typing + 1)
         }
     };
 
-    // Typing indicator via RC realtime
+    /** Quill + textarea: drive typing from message text (Quill previously never bumped `typing` state). */
     useEffect(() => {
-        if (!rcChannelId || !userDetails?.username) return;
-        if (_message && typing > 0) {
-            sendTyping(rcChannelId, userDetails.username, true);
-        }
+        if (!rcChannelId || !rcTypingName) return;
+        const plain = _message
+            .replace(/<[^>]+>/g, ' ')
+            .replace(/&nbsp;/gi, ' ')
+            .replace(/\s+/g, ' ')
+            .trim();
+        let cancelled = false;
+        void (async () => {
+            await connectToRC();
+            if (cancelled) return;
+            if (plain) sendRoomTyping(rcChannelId, rcTypingName, true);
+            else sendRoomTyping(rcChannelId, rcTypingName, false);
+        })();
         const timer = setTimeout(() => {
-            if (rcChannelId && userDetails?.username) {
-                sendTyping(rcChannelId, userDetails.username, false);
-            }
-            set_typing(0);
-        }, 3000);
-        return () => clearTimeout(timer);
-    }, [typing, rcChannelId, userDetails?.username]);
+            if (!cancelled && plain) sendRoomTyping(rcChannelId, rcTypingName, false);
+        }, 2200);
+        return () => {
+            cancelled = true;
+            clearTimeout(timer);
+            sendRoomTyping(rcChannelId, rcTypingName, false);
+        };
+    }, [_message, rcChannelId, rcTypingName]);
 
     const [prevChosenChatDetails, set_prevChosenChatDetails] = useState(chosenChatDetails)
     const [prevChosenGroupChatDetails, set_prevChosenGroupChatDetails] = useState(chosenGroupChatDetails)
 
     useEffect(() => {
-        set_message('')
-        set_typing(0)
-        // Send stop-typing to the previous room
-        if (rcChannelId && userDetails?.username) {
-            sendTyping(rcChannelId, userDetails.username, false);
+        set_message('');
+        if (rcChannelId && userDetails?.email) {
+            sendRoomTyping(rcChannelId, toRocketChatUsername(userDetails.email), false);
         }
-        set_prevChosenChatDetails(chosenChatDetails)
-        set_prevChosenGroupChatDetails(chosenGroupChatDetails)
-    }, [chosenChatDetails, chosenGroupChatDetails])
+        set_prevChosenChatDetails(chosenChatDetails);
+        set_prevChosenGroupChatDetails(chosenGroupChatDetails);
+    }, [chosenChatDetails, chosenGroupChatDetails, rcChannelId, userDetails?.email]);
 
     useEffect(() => {
         const uploadFile = async () => {
@@ -276,21 +301,20 @@ const NewMessageInput: React.FC<any> = ({ theme = "dark" }: any) => {
 
     if (theme === "light") {
         return (
-            <div className="w-full border-t border-wl-line bg-white px-3 py-2 sm:px-4 sm:pb-3">
-                <div className="flex items-end gap-2 rounded-full bg-slate-100 px-3 py-1.5">
+            <div className="w-full border-t border-slate-200 bg-white px-2 py-1.5 sm:px-3">
+                <div className="flex items-center gap-1.5 rounded-full border border-slate-200/80 bg-slate-50 px-2 py-0.5">
                     <button
                         type="button"
                         onClick={handleButtonClick}
-                        className="mb-0.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-wl-muted transition hover:bg-white hover:text-wl-brand"
+                        className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-wl-muted transition hover:bg-white hover:text-wl-brand"
                         aria-label="Attach file"
                     >
-                        <Paperclip className="h-4 w-4" />
+                        <Paperclip className="h-3.5 w-3.5" />
                     </button>
                     <textarea
                         value={_message}
                         onChange={(e) => {
                             set_message(e.target.value);
-                            set_typing((t) => t + 1);
                         }}
                         onKeyDown={(e) => {
                             if (e.key === "Enter" && !e.shiftKey) {
@@ -301,7 +325,7 @@ const NewMessageInput: React.FC<any> = ({ theme = "dark" }: any) => {
                         onBlur={onBlur}
                         placeholder="Type a message…"
                         rows={1}
-                        className="min-h-[40px] max-h-28 w-0 flex-1 resize-none bg-transparent text-xs text-wl-ink placeholder:text-slate-400 outline-none sm:text-sm"
+                        className="max-h-24 min-h-[2rem] w-0 flex-1 resize-none bg-transparent py-1 text-[13px] leading-5 text-wl-ink placeholder:text-slate-400 outline-none sm:text-sm"
                     />
                     <input
                         type="file"
@@ -313,10 +337,10 @@ const NewMessageInput: React.FC<any> = ({ theme = "dark" }: any) => {
                         type="button"
                         onClick={sendPlainMessage}
                         disabled={!_message.trim()}
-                        className="mb-0.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-wl-brand text-white shadow-sm transition hover:brightness-95 disabled:pointer-events-none disabled:opacity-35"
+                        className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-wl-brand text-white shadow-sm transition hover:brightness-95 disabled:pointer-events-none disabled:opacity-35"
                         aria-label="Send message"
                     >
-                        <Send className="h-4 w-4" strokeWidth={2.5} />
+                        <Send className="h-3.5 w-3.5" strokeWidth={2.5} />
                     </button>
                 </div>
             </div>

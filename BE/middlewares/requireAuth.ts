@@ -14,6 +14,13 @@ const getFullUserData = async (email) => {
                 path: "friends",
             },
             {
+                path: "directConversations",
+                populate: {
+                    path: "participants",
+                    select: "email username image role status",
+                },
+            },
+            {
                 path: "events",
                 populate: ['customer', 'expert']
             },

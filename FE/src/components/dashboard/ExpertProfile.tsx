@@ -24,7 +24,7 @@ export default function ExpertProfile({
   /** Live count from parent (list + profile stay in sync). */
   followerCount?: number;
   isFollowing?: boolean;
-  onToggleFollow?: (mentorId: number) => void;
+  onToggleFollow?: (mentorId: string | number) => void;
 }) {
   const { auth: { userDetails } } = useAppSelector((state: any) => state);
   const experienceYears = useMemo(

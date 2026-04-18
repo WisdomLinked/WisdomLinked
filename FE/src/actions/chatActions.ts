@@ -1,5 +1,22 @@
 // import { Dispatch } from "redux";
-import { actionTypes, SetChosenChatDetails, SetMessages, Message, SetTyping, AddNewMessage, SetInitialTypingStatus, Typing, GroupChatDetails, SetChosenGroupChatDetails, ResetChat, SetChatChannelInfo } from "./types";
+import {
+    actionTypes,
+    SetChosenChatDetails,
+    SetMessages,
+    Message,
+    SetTyping,
+    AddNewMessage,
+    SetInitialTypingStatus,
+    Typing,
+    GroupChatDetails,
+    SetChosenGroupChatDetails,
+    ResetChat,
+    SetChatChannelInfo,
+    ReplaceChatMessages,
+    IncrementDmUnreadRid,
+    ClearDmUnreadRid,
+    RemoveChatMessage,
+} from "./types";
 
 export const setChosenChatDetails = (chatDetails: {
     userId: string;
@@ -26,6 +43,27 @@ export const setMessages = (messages: Array<Message>): SetMessages => {
         payload: messages,
     };
 };
+
+export const replaceChatMessages = (messages: Array<Message>): ReplaceChatMessages => ({
+    type: actionTypes.replaceChatMessages,
+    payload: messages,
+});
+
+export const incrementDmUnreadRid = (rid: string): IncrementDmUnreadRid => ({
+    type: actionTypes.incrementDmUnreadRid,
+    payload: rid,
+});
+
+/** Pass `null` to clear all DM room unread badges. */
+export const clearDmUnreadRid = (rid: string | null): ClearDmUnreadRid => ({
+    type: actionTypes.clearDmUnreadRid,
+    payload: rid,
+});
+
+export const removeChatMessage = (messageId: string): RemoveChatMessage => ({
+    type: actionTypes.removeChatMessage,
+    payload: messageId,
+});
 
 export const addNewMessage = (message: Message): AddNewMessage => {
     return {

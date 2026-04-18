@@ -20,15 +20,14 @@ import LogoutIcon from '@mui/icons-material/Logout';
 import CastForEducationIcon from '@mui/icons-material/CastForEducation';
 import CloseIcon from '@mui/icons-material/Close';
 import EditIcon from '@mui/icons-material/Edit';
-import { startMeeting } from "../../../../api/chatApi";
+import { startMeeting, hideDmFromList, clearDmThread } from "../../../../api/chatApi";
 import {doLeftSeminar, doUpdateProfile, getCustomerById, getExpertById, shareMeetingViaEmail} from "../../../../api/api";
 import {SetLoadingStatus, SetTotalTimeSpent} from "../../../../actions/appActions";
 import { updateMe } from "../../../../actions/authActions";
 import { showAlert } from "../../../../actions/alertActions";
-import { resetChatAction, setChosenGroupChatDetails } from "../../../../actions/chatActions";
+import { resetChatAction, setChosenGroupChatDetails, clearDmUnreadRid } from "../../../../actions/chatActions";
 import ProfileModal from "./ProfileModal";
 import { ShareIcon } from "lucide-react";
-import { set } from "date-fns";
 
 const MessagesHeader = ({ scrollPosition, events, openCalendarModal, openSeminarModal, openEditSeminarModal, theme = "dark" }: any) => {
 
@@ -36,7 +35,7 @@ const MessagesHeader = ({ scrollPosition, events, openCalendarModal, openSeminar
     let navPosition = navRef.current?.getBoundingClientRect().top;
     const {
         auth: { userDetails },
-        chat: { chosenChatDetails, chosenGroupChatDetails, currentEvent },
+        chat: { chosenChatDetails, chosenGroupChatDetails, currentEvent, conversationId, rcChannelId },
         friends: { onlineUsers },
     } = useAppSelector((state) => state);
 
@@ -82,6 +81,51 @@ const MessagesHeader = ({ scrollPosition, events, openCalendarModal, openSeminar
         }
     }
 
+    const handleHideDmFromSidebar = async () => {
+        set_buttonsModalShow(false);
+        if (!conversationId) {
+            dispatch(showAlert('Chat is still loading — try again in a moment'));
+            return;
+        }
+        const res = await hideDmFromList(String(conversationId));
+        if (res?.success) {
+            if (rcChannelId) dispatch(clearDmUnreadRid(String(rcChannelId)));
+            dispatch(resetChatAction());
+            dispatch(updateMe());
+            dispatch(showAlert('Conversation removed from your list'));
+        } else {
+            dispatch(showAlert((res as { error?: string })?.error || 'Could not remove conversation'));
+        }
+    };
+
+    const handleDeleteEntireThread = async () => {
+        set_buttonsModalShow(false);
+        if (!conversationId) {
+            dispatch(showAlert('Chat is still loading — try again in a moment'));
+            return;
+        }
+        if (
+            !window.confirm(
+                'Delete the entire message history for this conversation on the chat server? This cannot be undone in WisdomLinked. (Rocket.Chat may require the “clean-room-history” permission for your role.)'
+            )
+        ) {
+            return;
+        }
+        const res = await clearDmThread(String(conversationId));
+        if (res?.success) {
+            if (rcChannelId) dispatch(clearDmUnreadRid(String(rcChannelId)));
+            dispatch(resetChatAction());
+            dispatch(updateMe());
+            const detail =
+                res.usedCleanHistory === true
+                    ? 'Thread cleared and removed from your private chats.'
+                    : `Removed ${res.fallbackDeletedCount ?? 0} message(s); this chat was removed from your private chats. If messages remain on the server, enable **clean-room-history** in Rocket.Chat for your role.`;
+            dispatch(showAlert(detail));
+        } else {
+            dispatch(showAlert((res as { error?: string })?.error || 'Could not clear this thread'));
+        }
+    };
+
     const handleParticipantsOpenDialog = () => {
         setParticipantsDialogOpen(true);
     };
@@ -117,11 +161,17 @@ const MessagesHeader = ({ scrollPosition, events, openCalendarModal, openSeminar
         return onlineUsers.find(user => user.userId === userId) ? true : false
     }
 
-    const createNewRoomOrJoinRoom = () => {
-        // TODO: Replace with Jitsi Meet integration
-        console.log('Seminar join — will open Jitsi room')
-        if(userDetails.role === 'expert' && enabledEvent){
+    const createNewRoomOrJoinRoom = async () => {
+        const gid = chosenGroupChatDetails?.groupId;
+        if (!gid) return;
+        if (userDetails.role === 'expert' && enabledEvent) {
             SetTotalTimeSpent(Date.now());
+        }
+        const res = await startMeeting({ groupChatId: gid });
+        if (res?.jitsiUrl) {
+            window.open(res.jitsiUrl, '_blank', 'noopener,noreferrer');
+        } else {
+            dispatch(showAlert(res?.error || 'Could not start the meeting room'));
         }
     }
 
@@ -258,14 +308,23 @@ const MessagesHeader = ({ scrollPosition, events, openCalendarModal, openSeminar
                         <IconButton
                             style={{ color: theme === "light" ? "#0f172a" : "white" }}
                             className="disabled:opacity-50"
-                            disabled={(!isOnline(chosenChatDetails.userId) || !enabledEvent) && userDetails.role==="customer"}
+                            disabled={
+                                !conversationId ||
+                                (((!isOnline(chosenChatDetails.userId) || !enabledEvent) && userDetails.role === 'customer'))
+                            }
                             onClick={async () => {
                                 if (enabledEvent) {
                                     SetTotalTimeSpent(Date.now());
                                 }
-                                const res = await startMeeting({ conversationId: chosenChatDetails.conversationId || chosenChatDetails.userId });
+                                if (!conversationId) {
+                                    dispatch(showAlert('Chat is still loading — try again in a moment'));
+                                    return;
+                                }
+                                const res = await startMeeting({ conversationId });
                                 if (res?.jitsiUrl) {
-                                    window.open(res.jitsiUrl, "_blank");
+                                    window.open(res.jitsiUrl, '_blank', 'noopener,noreferrer');
+                                } else {
+                                    dispatch(showAlert(res?.error || 'Could not start the call'));
                                 }
                             }}
                         >
@@ -275,14 +334,23 @@ const MessagesHeader = ({ scrollPosition, events, openCalendarModal, openSeminar
                         <IconButton
                             style={{ color: theme === "light" ? "#0f172a" : "white" }}
                             className="disabled:opacity-50"
-                            disabled={(!isOnline(chosenChatDetails.userId) || !enabledEvent) && userDetails.role==="customer"}
+                            disabled={
+                                !conversationId ||
+                                (((!isOnline(chosenChatDetails.userId) || !enabledEvent) && userDetails.role === 'customer'))
+                            }
                             onClick={async () => {
                                 if (enabledEvent) {
                                     SetTotalTimeSpent(Date.now());
                                 }
-                                const res = await startMeeting({ conversationId: chosenChatDetails.conversationId || chosenChatDetails.userId });
+                                if (!conversationId) {
+                                    dispatch(showAlert('Chat is still loading — try again in a moment'));
+                                    return;
+                                }
+                                const res = await startMeeting({ conversationId });
                                 if (res?.jitsiUrl) {
-                                    window.open(res.jitsiUrl, "_blank");
+                                    window.open(res.jitsiUrl, '_blank', 'noopener,noreferrer');
+                                } else {
+                                    dispatch(showAlert(res?.error || 'Could not start the call'));
                                 }
                             }}
                         >
@@ -334,12 +402,30 @@ const MessagesHeader = ({ scrollPosition, events, openCalendarModal, openSeminar
                 }
                 {
                     chosenGroupChatDetails && !chosenGroupChatDetails?.duration ? (
-                        <button
-                            className={theme === "light" ? "text-slate-900 hover:bg-slate-100 rounded-lg p-1" : "text-white"}
-                            onClick={() => set_buttonsModalShow(true)}
-                        >
-                            <MoreVertIcon />
-                        </button>
+                        <div className="flex items-center justify-end">
+                            <IconButton
+                                style={{ color: theme === "light" ? "#0f172a" : "white" }}
+                                title="Start a group video call (Jitsi)"
+                                onClick={async () => {
+                                    const gid = chosenGroupChatDetails?.groupId;
+                                    if (!gid) return;
+                                    const res = await startMeeting({ groupChatId: gid });
+                                    if (res?.jitsiUrl) {
+                                        window.open(res.jitsiUrl, '_blank', 'noopener,noreferrer');
+                                    } else {
+                                        dispatch(showAlert(res?.error || 'Could not start the meeting room'));
+                                    }
+                                }}
+                            >
+                                <VideoCallIcon />
+                            </IconButton>
+                            <button
+                                className={theme === "light" ? "text-slate-900 hover:bg-slate-100 rounded-lg p-1" : "text-white"}
+                                onClick={() => set_buttonsModalShow(true)}
+                            >
+                                <MoreVertIcon />
+                            </button>
+                        </div>
                     ) : null
                 }
             </div>
@@ -378,6 +464,26 @@ const MessagesHeader = ({ scrollPosition, events, openCalendarModal, openSeminar
                                         >
                                             <span>Remove {userDetails?.role === 'customer' ? 'Expert' : 'Customer'}</span>
                                             <PersonRemoveIcon />
+                                        </button>
+                                        <button
+                                            type="button"
+                                            className={`mt-1 w-full flex space-x-4 justify-between items-center rounded-lg px-2 py-2 ${
+                                                theme === "light" ? "hover:bg-slate-50 text-slate-800" : "hover:opacity-50"
+                                            }`}
+                                            onClick={() => void handleHideDmFromSidebar()}
+                                        >
+                                            <span>Remove from sidebar</span>
+                                            <ClearIcon />
+                                        </button>
+                                        <button
+                                            type="button"
+                                            className={`mt-1 w-full flex space-x-4 justify-between items-center rounded-lg px-2 py-2 ${
+                                                theme === "light" ? "hover:bg-rose-50 text-rose-800" : "hover:opacity-50 text-rose-300"
+                                            }`}
+                                            onClick={() => void handleDeleteEntireThread()}
+                                        >
+                                            <span>Delete entire thread…</span>
+                                            <ClearIcon />
                                         </button>
                                     </> :
                                     <>

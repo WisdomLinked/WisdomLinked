@@ -91,6 +91,20 @@ mongoose
     .connect(MONGO_URI, { serverSelectionTimeoutMS: 15_000 })
     .then(() => {
         console.log("Connected to MongoDB Server");
+        if (process.env.ROCKETCHAT_URL) {
+            const tokSecret = (
+                process.env.ROCKETCHAT_CREATE_TOKENS_SECRET ||
+                process.env.CREATE_TOKENS_FOR_USERS_SECRET ||
+                ''
+            ).trim();
+            if (!tokSecret) {
+                console.warn(
+                    '[Rocket.Chat] ROCKETCHAT_URL is set but ROCKETCHAT_CREATE_TOKENS_SECRET is empty. ' +
+                        'Set it to the same value as Rocket.Chat Admin → Workspace → Create Personal Access Tokens Secret ' +
+                        '(or CREATE_TOKENS_FOR_USERS_SECRET on the RC server). Without it, one side may see empty DM history in WL.'
+                );
+            }
+        }
         appendDefaultServices();
         appendAdminUserAndGroupChat();
         initAppStates();

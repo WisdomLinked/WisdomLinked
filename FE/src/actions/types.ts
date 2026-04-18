@@ -32,6 +32,11 @@ export enum actionTypes {
     setLocalStreamAvailability,
 
     setChatChannelInfo,
+    /** Replace thread messages (initial load / switch chat). Pagination still uses setMessages prepend. */
+    replaceChatMessages,
+    incrementDmUnreadRid,
+    clearDmUnreadRid,
+    removeChatMessage,
 }
 
 export interface CurrentUser {
@@ -174,6 +179,26 @@ export interface SetMessages {
     payload: Array<Message>;
 }
 
+export interface ReplaceChatMessages {
+    type: actionTypes.replaceChatMessages;
+    payload: Array<Message>;
+}
+
+export interface IncrementDmUnreadRid {
+    type: actionTypes.incrementDmUnreadRid;
+    payload: string;
+}
+
+export interface ClearDmUnreadRid {
+    type: actionTypes.clearDmUnreadRid;
+    payload: string | null;
+}
+
+export interface RemoveChatMessage {
+    type: actionTypes.removeChatMessage;
+    payload: string;
+}
+
 export interface AddNewMessage {
     type: actionTypes.addNewMessage;
     payload: Message;
@@ -245,9 +270,13 @@ export type ChatActions =
     | SetChosenChatDetails
     | SetChosenGroupChatDetails
     | SetMessages
+    | ReplaceChatMessages
     | AddNewMessage
     | SetTyping
     | SetCurrentEvent
     | SetInitialTypingStatus
     | SetChatChannelInfo
-    | ResetChat;
+    | ResetChat
+    | IncrementDmUnreadRid
+    | ClearDmUnreadRid
+    | RemoveChatMessage;

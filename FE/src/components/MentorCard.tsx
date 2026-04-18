@@ -2,7 +2,7 @@ import React from 'react';
 import { MapPin, Briefcase, GraduationCap, Users } from 'lucide-react';
 
 export interface MentorCardProps {
-  id: number;
+  id: string | number;
   name: string;
   title: string;
   institution: string;
@@ -16,7 +16,7 @@ export interface MentorCardProps {
   followerCount?: number;
   onViewProfile?: (mentor: MentorCardProps) => void;
   isFollowing?: boolean;
-  onToggleFollow?: (mentorId: number) => void;
+  onToggleFollow?: (mentorId: string | number) => void;
 }
 
 const serviceColorByIndex = (index: number) => {

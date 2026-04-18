@@ -34,7 +34,7 @@ import ExpertSearch from './Dashboard/_ExpertDashboard/search';
 import ExpertProfile from './Dashboard/_ExpertDashboard/profile';
 import ExpertRevenue from './Dashboard/_ExpertDashboard/ExpertRevenue';
 import ContactAdmin from './Dashboard/_ExpertDashboard/ContactAdmin';
-import ModernChat from './Dashboard/_ExpertDashboard/ModernChat';
+import StudentChat from '../components/dashboard/StudentChat';
 import StatCard from '../components/ui/StatCard';
 import Chatbot from '../components/chatbot';
 import UpcomingSessionModal, {
@@ -334,7 +334,8 @@ export default function ExpertDashboard() {
 
   const content =
     activeItem === 'chat' ? (
-      <div className="h-[calc(100vh-56px)] overflow-hidden bg-wl-chatGold">
+      <div className="h-[calc(100vh-56px)] bg-wl-chatGold">
+        <StudentChat />
       </div>
     ) : activeItem === 'clients' ? (
       <div className="h-[calc(100vh-56px)] overflow-y-auto bg-[#F5F3EF]">

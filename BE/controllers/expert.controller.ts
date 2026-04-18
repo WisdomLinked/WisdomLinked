@@ -87,6 +87,8 @@ const getCustomerById = async (req, res) => {
         return res.status(500).send(err.message);
     }
 }
+const escapeRegex = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
 const filterCustomers = async (req, res) => {
     try {
         const { email } = req.user
@@ -95,8 +97,15 @@ const filterCustomers = async (req, res) => {
         if (_id) {
             query.where({ _id: _id })
         } else {
-            if (username) {
-                query.where({ username: { '$regex': username, '$options': 'i' } })
+            const nameOrEmail = username && String(username).trim();
+            if (nameOrEmail) {
+                const term = escapeRegex(nameOrEmail);
+                query.where({
+                    $or: [
+                        { username: { $regex: term, $options: 'i' } },
+                        { email: { $regex: term, $options: 'i' } },
+                    ],
+                });
             }
             if (keywords?.length) {
                 let _keywords = []

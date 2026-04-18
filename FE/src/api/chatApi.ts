@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-let BASE_URL = process.env.REACT_APP_API_BASE_URL || '';
+let BASE_URL = process.env.REACT_APP_API_BASE_URL || '/api';
 if (BASE_URL && !BASE_URL.endsWith('/')) {
     BASE_URL += '/';
 }
@@ -62,10 +62,10 @@ export const sendGroupMessage = async (groupChatId: string, content: string) => 
 export const fetchGroupHistory = async (groupChatId: string, page: number = 0, limit: number = 20) => {
     try {
         const res = await api.get(`chat/group/history/${groupChatId}?page=${page}&limit=${limit}`);
-        return res.data; // { messages: [...] }
+        return res.data; // { messages: [...], rcChannelId?: string }
     } catch (err: any) {
         console.error('[chatApi.fetchGroupHistory]', err.message);
-        return { messages: [] };
+        return { messages: [], rcChannelId: null };
     }
 };
 
@@ -78,6 +78,73 @@ export const getRCToken = async () => {
         return res.data; // { rcUrl, rcAuthToken, rcUserId }
     } catch (err: any) {
         console.error('[chatApi.getRCToken]', err.message);
+        return null;
+    }
+};
+
+/** Mark Rocket.Chat room as read for the current user (clears unread; supports read cursor). */
+export const markChatRead = async (roomId: string) => {
+    try {
+        const res = await api.post('chat/mark-read', { roomId });
+        return res.data as { success?: boolean };
+    } catch (err: any) {
+        console.error('[chatApi.markChatRead]', err.message);
+        return null;
+    }
+};
+
+/** Delete a message in Rocket.Chat (as current user). */
+export const deleteChatMessage = async (roomId: string, messageId: string) => {
+    try {
+        const res = await api.post('chat/delete-message', { roomId, messageId });
+        return res.data as { success?: boolean; error?: string };
+    } catch (err: any) {
+        console.error('[chatApi.deleteChatMessage]', err.message);
+        return { success: false, error: err?.response?.data?.error || err.message };
+    }
+};
+
+/** Clear all messages in a DM’s Rocket.Chat room (clean history + best-effort deletes). */
+export const clearDmThread = async (conversationId: string) => {
+    try {
+        const res = await api.post('chat/dm/clear-thread', { conversationId });
+        return res.data as {
+            success?: boolean;
+            error?: string;
+            usedCleanHistory?: boolean;
+            fallbackDeletedCount?: number;
+        };
+    } catch (err: any) {
+        console.error('[chatApi.clearDmThread]', err.message);
+        return {
+            success: false,
+            error: err?.response?.data?.error || err.message,
+        };
+    }
+};
+
+/** Remove a DM from the current user's sidebar (Mongo only). */
+export const hideDmFromList = async (conversationId: string) => {
+    try {
+        const res = await api.post('chat/dm/hide', { conversationId });
+        return res.data as { success?: boolean; error?: string };
+    } catch (err: any) {
+        console.error('[chatApi.hideDmFromList]', err.message);
+        return { success: false, error: err?.response?.data?.error || err.message };
+    }
+};
+
+/** Rocket.Chat `chat.getMessageReadReceipts` batched (server uses your RC session). */
+export const fetchReadReceiptsBatch = async (messageIds: string[]) => {
+    try {
+        const res = await api.post('chat/rc-read-receipts', { messageIds });
+        return res.data as {
+            success?: boolean;
+            myRcUserId?: string;
+            byMessageId?: Record<string, { hasPeerRead: boolean; receipts?: any[] }>;
+        };
+    } catch (err: any) {
+        console.error('[chatApi.fetchReadReceiptsBatch]', err.message);
         return null;
     }
 };

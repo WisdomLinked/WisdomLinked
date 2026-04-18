@@ -34,6 +34,8 @@ interface ChatState {
     }>;
     groupTyping: Array<any>;
     messages: Array<Message>;
+    /** Rocket.Chat room id → unread count when that room is not the active thread. */
+    dmUnreadByRid: Record<string, number>;
     gotAllChats: Boolean;
     currentPage: number;
     isNewMessage: Boolean;
@@ -50,6 +52,7 @@ const initialState = {
     groupTyping: [],
     chatType: ChatTypes.direct,
     messages: [],
+    dmUnreadByRid: {} as Record<string, number>,
     gotAllChats: false,
     currentPage: 0,
     isNewMessage: false,
@@ -80,24 +83,70 @@ const chatReducer: Reducer<ChatState, ChatActions> = (
                 currentPage: 0
             };
 
-        case actionTypes.setChosenGroupChatDetails:
+        case actionTypes.setChosenGroupChatDetails: {
+            const next = action.payload;
+            const prev = state.chosenGroupChatDetails;
+            const nextGid = String(next?.groupId ?? next?._id ?? '');
+            const prevGid = prev ? String(prev.groupId ?? prev._id ?? '') : '';
+            const sameGroup = Boolean(nextGid && prevGid && nextGid === prevGid);
+
             return {
                 ...state,
                 chosenChatDetails: null,
-                messages: [],
-                chosenGroupChatDetails: action.payload,
-                gotAllChats: false,
-                currentPage: 0
+                chosenGroupChatDetails: next,
+                messages: sameGroup ? state.messages : [],
+                gotAllChats: sameGroup ? state.gotAllChats : false,
+                currentPage: sameGroup ? state.currentPage : 0,
             };
+        }
 
         case actionTypes.setMessages:
+            // Pagination: prepend older page (API returns chronological oldest-first for that page).
             return {
                 ...state,
-                messages: [...action.payload.reverse(), ...state.messages],
+                messages: [...action.payload, ...state.messages],
                 currentPage: state.currentPage + 1,
                 gotAllChats: action.payload.length < 20,
                 isNewMessage: false
             };
+
+        case actionTypes.replaceChatMessages:
+            return {
+                ...state,
+                messages: Array.isArray(action.payload) ? [...action.payload] : [],
+                currentPage: 1,
+                gotAllChats: !action.payload || action.payload.length < 20,
+                isNewMessage: false
+            };
+
+        case actionTypes.removeChatMessage: {
+            const id = String(action.payload ?? '');
+            return {
+                ...state,
+                messages: state.messages.filter((m: any) => String(m?._id) !== id),
+            };
+        }
+
+        case actionTypes.incrementDmUnreadRid: {
+            const rid = String(action.payload ?? '');
+            if (!rid) return state;
+            const prev = state.dmUnreadByRid[rid] || 0;
+            return {
+                ...state,
+                dmUnreadByRid: { ...state.dmUnreadByRid, [rid]: prev + 1 },
+            };
+        }
+
+        case actionTypes.clearDmUnreadRid: {
+            const rid = action.payload;
+            if (rid == null) {
+                return { ...state, dmUnreadByRid: {} };
+            }
+            const key = String(rid);
+            const next = { ...state.dmUnreadByRid };
+            delete next[key];
+            return { ...state, dmUnreadByRid: next };
+        }
 
         case actionTypes.addNewMessage:
             return {
@@ -166,6 +215,7 @@ const chatReducer: Reducer<ChatState, ChatActions> = (
                 conversationId: null,
                 rcChannelId: null,
                 messages: [],
+                dmUnreadByRid: {},
                 currentPage: 0,
                 gotAllChats: false,
                 isNewMessage: false

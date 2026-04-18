@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import gif from "../../../assets/images/typing.gif";
 import { useAppSelector } from "../../../store";
 import { onTyping } from "../../../services/rcRealtime";
+import { toRocketChatUsername } from "../../../utils/rocketchatUsername";
 
 const Typing = ({ theme = "dark" }: any) => {
     const { auth: { userDetails }, chat: { chosenChatDetails, chosenGroupChatDetails, rcChannelId } } = useAppSelector(state => state);
@@ -15,8 +16,10 @@ const Typing = ({ theme = "dark" }: any) => {
         }
 
         const unsub = onTyping(({ roomId, username, isTyping }) => {
-            // Ignore our own typing
-            if (username === userDetails?.username) return;
+            if (String(roomId) !== String(rcChannelId)) return;
+            const myRc = userDetails?.email ? toRocketChatUsername(userDetails.email) : "";
+            // RC sends email-derived slug for typing, not WL display name
+            if (myRc && String(username).toLowerCase() === myRc.toLowerCase()) return;
 
             set_typingUsers(prev => {
                 if (isTyping) {
@@ -34,7 +37,7 @@ const Typing = ({ theme = "dark" }: any) => {
             unsub();
             set_typingUsers([]);
         };
-    }, [rcChannelId, userDetails?.username]);
+    }, [rcChannelId, userDetails?.username, userDetails?.email]);
 
     if (typingUsers.length === 0) return null;
 

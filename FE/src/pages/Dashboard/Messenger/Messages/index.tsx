@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import MessagesHeader from "./Header";
 import Message from "./Message";
 import { useAppSelector } from "../../../../store";
@@ -15,17 +15,106 @@ import ExpertSeminar from "../../_ExpertDashboard/seminar";
 import MeetingCard from "../../../../components/MeetingCard";
 
 // Chat API + realtime
-import { getOrCreateDM, fetchDirectHistory, fetchGroupHistory } from "../../../../api/chatApi";
-import { setChatChannelInfo, setMessages, addNewMessage } from "../../../../actions/chatActions";
-import { connectToRC, subscribeToRoom, unsubscribeFromRoom, onNewMessage, onTyping, isRCConnected } from "../../../../services/rcRealtime";
+import { getOrCreateDM, fetchDirectHistory, fetchGroupHistory, markChatRead, getRCToken, deleteChatMessage } from "../../../../api/chatApi";
+import { notifyChatMessage, stripChatHtml } from "../../../../utils/chatBrowserNotifications";
+import {
+    setChatChannelInfo,
+    setMessages,
+    addNewMessage,
+    replaceChatMessages,
+    incrementDmUnreadRid,
+    clearDmUnreadRid,
+    removeChatMessage,
+} from "../../../../actions/chatActions";
+import { showAlert } from "../../../../actions/alertActions";
+import { store } from "../../../../store";
+import { connectToRC, subscribeToRoom, unsubscribeFromRoom, onNewMessage, isRCConnected } from "../../../../services/rcRealtime";
+import { toRocketChatUsername } from "../../../../utils/rocketchatUsername";
+
+/** RC `u.username` is email-derived; WL `userDetails.username` is display name — never equal. */
+function isRcStreamFromMe(rcMsg: any, me: any): boolean {
+    if (!rcMsg?.u?.username || !me?.email) return false;
+    return String(rcMsg.u.username).toLowerCase() === toRocketChatUsername(me.email).toLowerCase();
+}
+
+/**
+ * Outgoing = right. History from RC often has `author._id` = Rocket.Chat user id (not Mongo) when WL user lookup misses.
+ * Pass `myRcUserId` from GET /chat/rc-token so those messages still count as yours.
+ * For DMs, pass `dmOtherWlUserId` (chosen peer Mongo id) so we never treat their messages as yours when display names match.
+ */
+function isOutgoingAuthor(
+    message: any,
+    me: any,
+    myRcUserId?: string | null,
+    dmOtherWlUserId?: string | null
+): boolean {
+    if (!message?.author || !me) return false;
+    const aid = String(message.author._id ?? message.author.id ?? "");
+    const otherId = dmOtherWlUserId != null && dmOtherWlUserId !== '' ? String(dmOtherWlUserId) : '';
+    if (otherId && aid === otherId) return false;
+    if (myRcUserId && aid === String(myRcUserId)) return true;
+    const myIds = [me._id, me.id, me.userId].filter(Boolean).map((x: any) => String(x));
+    if (aid && myIds.includes(aid)) return true;
+    const rcSlug = me.email ? toRocketChatUsername(me.email).toLowerCase() : "";
+    const aUser = String(message.author.username ?? "").toLowerCase();
+    if (rcSlug && aUser === rcSlug) return true;
+    // In a 1:1 DM, never infer "me" from display name — expert and student often share the same name in tests.
+    if (!otherId) {
+        const display = String(me.username ?? "").trim().toLowerCase();
+        if (display && aUser === display) return true;
+    }
+    return false;
+}
+
+/** Single-tick “sent” only — Rocket.Chat read receipts are often unavailable on OSS / without enterprise. */
+function deliveryStatusForMessage(
+    message: any,
+    me: any,
+    myRcUserId?: string | null,
+    dmOtherWlUserId?: string | null
+): "sending" | "sent" | undefined {
+    if (!message || !isOutgoingAuthor(message, me, myRcUserId, dmOtherWlUserId)) return undefined;
+    const id = String(message._id ?? "");
+    if (id.startsWith("temp-")) return "sending";
+    return "sent";
+}
 
 const Messages = ({ theme = "dark" }: any) => {
     const dispatch = useDispatch()
     const messagesEndRef = useRef<HTMLDivElement>(null);
+    const scrollContainerRef = useRef<HTMLDivElement>(null);
     const audioRef = useRef<HTMLAudioElement>(null);
     const prevMessagesLength = useRef(0);
+    const markReadTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const { chat, auth: { userDetails },  friends: { friends } } = useAppSelector((state) => state);
-    const { chosenChatDetails, messages, chosenGroupChatDetails, currentPage, gotAllChats, isNewMessage, conversationId, rcChannelId } = chat;
+    const { chosenChatDetails, messages, chosenGroupChatDetails, gotAllChats, isNewMessage, conversationId, rcChannelId } = chat;
+
+    const dmOtherWlUserId = chosenChatDetails?.userId != null ? String(chosenChatDetails.userId) : null;
+
+    /** Backend returns chronological (oldest first); reducer must not re-reverse. Keep sorted for WS + pagination merges. */
+    const displayMessages = useMemo(
+        () =>
+            [...messages].sort(
+                (a, b) =>
+                    new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime() ||
+                    String(a._id).localeCompare(String(b._id)),
+            ),
+        [messages],
+    );
+
+    const handleDeleteMessage = React.useCallback(
+        async (messageId: string) => {
+            const rid = store.getState().chat.rcChannelId;
+            if (!rid) {
+                dispatch(showAlert('Chat room not ready — try again.'));
+                return;
+            }
+            const r = await deleteChatMessage(rid, messageId);
+            if (r?.success) dispatch(removeChatMessage(messageId));
+            else dispatch(showAlert((r as { error?: string })?.error || 'Could not delete message'));
+        },
+        [dispatch],
+    );
 
     const [scrollPosition, setScrollPosition] = useState(0);
     const [isScrollToTop, set_isScrollToTop] = useState(false)
@@ -37,6 +126,18 @@ const Messages = ({ theme = "dark" }: any) => {
     const [editSeminarModalShow, set_editSeminarModalShow] = useState(false)
     const [profiles, setProfiles] = useState(new Map<string, any>()); // Map to store unique user profiles
     const [profileImages, setProfileImages] = useState(new Map<string, string>()); // Map to store profile images in Base64
+
+    /** Rocket.Chat user id for the logged-in account — matches `author._id` on history messages when WL user lookup missed. */
+    const [myRcUserId, setMyRcUserId] = useState<string | null>(null);
+    useEffect(() => {
+        let alive = true;
+        getRCToken().then((d) => {
+            if (alive && d?.rcUserId) setMyRcUserId(String(d.rcUserId));
+        });
+        return () => {
+            alive = false;
+        };
+    }, []);
 
     const handleDeleteCommunityChat = () => {
         if (!chosenGroupChatDetails?.groupId) return;
@@ -64,8 +165,28 @@ const Messages = ({ theme = "dark" }: any) => {
         subscribeToRoom(rcChannelId);
 
         const unsubMsg = onNewMessage((rcMsg: any) => {
-            // Ignore our own messages (we already added them optimistically)
-            if (rcMsg.u?.username === userDetails?.username) return;
+            // Skip echoes of our own sends (REST already appended with Mongo author._id)
+            if (isRcStreamFromMe(rcMsg, userDetails)) return;
+
+            const activeRid = store.getState().chat.rcChannelId;
+            const msgRid = rcMsg.rid ? String(rcMsg.rid) : '';
+            if (msgRid && String(activeRid || '') !== msgRid) {
+                dispatch(incrementDmUnreadRid(msgRid));
+            }
+
+            const st = store.getState();
+            const peerName =
+                st.chat.chosenChatDetails?.username ||
+                st.chat.chosenGroupChatDetails?.groupName ||
+                'New message';
+            const bodyText = stripChatHtml(String(rcMsg.msg || ''));
+            const tabHidden = typeof document !== 'undefined' && document.visibilityState === 'hidden';
+            const otherRoom = Boolean(msgRid && String(activeRid || '') !== msgRid);
+            if (bodyText && (tabHidden || otherRoom)) {
+                notifyChatMessage(peerName, bodyText, msgRid || 'wl-chat', {
+                    allowWhenVisible: otherRoom,
+                });
+            }
 
             // Convert RC message format to our format
             const newMsg = {
@@ -87,7 +208,19 @@ const Messages = ({ theme = "dark" }: any) => {
             unsubMsg();
             unsubscribeFromRoom(rcChannelId);
         };
-    }, [rcChannelId, userDetails?.username]);
+    }, [rcChannelId, userDetails, dispatch]);
+
+    // Mark RC room read (debounced) so the other side can see read state in RC / subscriptions
+    useEffect(() => {
+        if (!rcChannelId) return;
+        if (markReadTimerRef.current) clearTimeout(markReadTimerRef.current);
+        markReadTimerRef.current = setTimeout(() => {
+            markChatRead(rcChannelId);
+        }, 500);
+        return () => {
+            if (markReadTimerRef.current) clearTimeout(markReadTimerRef.current);
+        };
+    }, [rcChannelId, messages.length, messages[messages.length - 1]?._id]);
 
     // ── Fetch History via REST ──────────────────────────────
     useEffect(() => {
@@ -145,15 +278,18 @@ const Messages = ({ theme = "dark" }: any) => {
         if (index === 0) {
             return false;
         }
-        return message.author._id === messages[index - 1].author._id;
+        return message.author._id === displayMessages[index - 1].author._id;
     }
 
-    const scrollToBottom = () => {
-        if (messagesEndRef.current) {
-            messagesEndRef?.current.scrollIntoView({ behavior: "smooth" });
-            if (isFirstLoad)
-                set_isFirstLoad(false)
+    const scrollToBottom = (behavior: ScrollBehavior = "smooth") => {
+        const el = scrollContainerRef.current;
+        if (!el) return;
+        if (behavior === "smooth" && typeof el.scrollTo === "function") {
+            el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+        } else {
+            el.scrollTop = el.scrollHeight;
         }
+        if (isFirstLoad) set_isFirstLoad(false);
     };
 
     const handleScroll = (e: React.UIEvent<HTMLDivElement, UIEvent>) => {
@@ -163,15 +299,15 @@ const Messages = ({ theme = "dark" }: any) => {
     };
 
     const getChatHistory = async () => {
-        if (chosenChatDetails && conversationId) {
-            const data = await fetchDirectHistory(conversationId, currentPage);
+        const st = store.getState().chat;
+        const page = st.currentPage;
+        if (st.chosenChatDetails && st.conversationId) {
+            const data = await fetchDirectHistory(st.conversationId, page);
             if (data?.messages) {
                 dispatch(setMessages(data.messages));
             }
-        }
-
-        if (chosenGroupChatDetails) {
-            const data = await fetchGroupHistory(chosenGroupChatDetails.groupId, currentPage);
+        } else if (st.chosenGroupChatDetails) {
+            const data = await fetchGroupHistory(st.chosenGroupChatDetails.groupId, page);
             if (data?.messages) {
                 dispatch(setMessages(data.messages));
             }
@@ -210,41 +346,69 @@ const Messages = ({ theme = "dark" }: any) => {
         set_isScrollToTop(false)
     }, [isScrollToTop])
 
-    // When a new chat is selected: get/create DM conversation + fetch history
+    // When a new chat is selected: get/create DM conversation + fetch history (replace, never merge with another thread)
     useEffect(() => {
+        let cancelled = false;
+        const dmPeerId = chosenChatDetails?.userId != null ? String(chosenChatDetails.userId) : null;
+        const groupId =
+            chosenGroupChatDetails?.groupId != null
+                ? String(chosenGroupChatDetails.groupId)
+                : chosenGroupChatDetails?._id != null
+                  ? String(chosenGroupChatDetails._id)
+                  : null;
+
         const initChat = async () => {
-            if (chosenChatDetails) {
+            if (chosenChatDetails && dmPeerId) {
                 const dmData = await getOrCreateDM(chosenChatDetails.userId);
-                if (dmData) {
-                    dispatch(setChatChannelInfo({
+                if (cancelled) return;
+                const stillPeer = String(store.getState().chat.chosenChatDetails?.userId ?? '') === dmPeerId;
+                if (!stillPeer || !dmData) return;
+                dispatch(
+                    setChatChannelInfo({
                         conversationId: dmData.conversationId,
-                        rcChannelId: dmData.rcChannelId,
-                    }));
-                    // Fetch initial history
-                    const historyData = await fetchDirectHistory(dmData.conversationId, 0);
-                    if (historyData?.messages) {
-                        dispatch(setMessages(historyData.messages));
-                    }
+                        rcChannelId: dmData.rcChannelId ?? null,
+                    }),
+                );
+                if (dmData.rcChannelId) {
+                    dispatch(clearDmUnreadRid(String(dmData.rcChannelId)));
                 }
+                const historyData = await fetchDirectHistory(dmData.conversationId, 0);
+                if (cancelled) return;
+                if (String(store.getState().chat.chosenChatDetails?.userId ?? '') !== dmPeerId) return;
+                dispatch(replaceChatMessages(Array.isArray(historyData?.messages) ? historyData.messages : []));
+                return;
             }
 
-            if (chosenGroupChatDetails) {
-                // For group chats, use the groupChatId directly
-                // RC channel will be created on first message send
-                dispatch(setChatChannelInfo({
-                    conversationId: chosenGroupChatDetails.groupId,
-                    rcChannelId: `wl-group-${chosenGroupChatDetails.groupId}`,
-                }));
+            if (chosenGroupChatDetails && groupId) {
                 const historyData = await fetchGroupHistory(chosenGroupChatDetails.groupId, 0);
-                if (historyData?.messages) {
-                    dispatch(setMessages(historyData.messages));
+                if (cancelled) return;
+                const stillGroup =
+                    String(
+                        store.getState().chat.chosenGroupChatDetails?.groupId ??
+                            store.getState().chat.chosenGroupChatDetails?._id ??
+                            '',
+                    ) === groupId;
+                if (!stillGroup) return;
+                const rcRid = historyData?.rcChannelId || null;
+                dispatch(
+                    setChatChannelInfo({
+                        conversationId: chosenGroupChatDetails.groupId,
+                        rcChannelId: rcRid,
+                    }),
+                );
+                if (rcRid) {
+                    dispatch(clearDmUnreadRid(String(rcRid)));
                 }
+                dispatch(replaceChatMessages(Array.isArray(historyData?.messages) ? historyData.messages : []));
             }
         };
 
         set_isFirstLoad(true);
         initChat();
-    }, [chosenChatDetails, chosenGroupChatDetails]);
+        return () => {
+            cancelled = true;
+        };
+    }, [chosenChatDetails, chosenGroupChatDetails, dispatch]);
 
     useEffect(() => {
         if (messages.length > prevMessagesLength.current) {
@@ -275,8 +439,7 @@ const Messages = ({ theme = "dark" }: any) => {
 
     return (
         <div
-            className={`w-full flex flex-col items-center h-full overflow-auto pb-[10px] ${theme === "light" ? "bg-white" : ""}`}
-            onScroll={handleScroll}
+            className={`relative flex min-h-0 w-full flex-1 flex-col ${theme === "light" ? "bg-white" : ""}`}
         >
             <audio ref={audioRef} preload="auto">
                 <source
@@ -285,14 +448,21 @@ const Messages = ({ theme = "dark" }: any) => {
                 />
                 Your browser does not support the audio element.
             </audio>
-            <MessagesHeader
-                events={events}
-                scrollPosition={scrollPosition}
-                openCalendarModal={() => set_eventsModalShow(true)}
-                openSeminarModal={() => set_seminarDetailsModalShow(true)}
-                openEditSeminarModal={() => set_editSeminarModalShow(true)}
-                theme={theme}
-            />
+            <div className="shrink-0">
+                <MessagesHeader
+                    events={events}
+                    scrollPosition={scrollPosition}
+                    openCalendarModal={() => set_eventsModalShow(true)}
+                    openSeminarModal={() => set_seminarDetailsModalShow(true)}
+                    openEditSeminarModal={() => set_editSeminarModalShow(true)}
+                    theme={theme}
+                />
+            </div>
+            <div
+                ref={scrollContainerRef}
+                className={`flex min-h-0 w-full flex-1 flex-col items-stretch overflow-y-auto overscroll-y-contain ${theme === "light" ? "bg-white" : ""}`}
+                onScroll={handleScroll}
+            >
             {
                 gotAllChats ?
                     <div className={`mt-[15px] text-[13px] text-center px-6 ${theme === "light" ? "text-slate-500" : "text-grey"}`}>
@@ -302,13 +472,13 @@ const Messages = ({ theme = "dark" }: any) => {
                     </div>
                     : null
             }
-            {messages.map((message: any, index) => {
+            {displayMessages.map((message: any, index) => {
                 // Check if this is a meeting message
                 const meetingData = parseMeetingMessage(message.content);
                 if (meetingData) {
                     if (meetingData.type === 'started') {
                         return (
-                            <div key={message._id + index} style={{ width: "97%" }}>
+                            <div key={message._id + index} className="w-full px-2 sm:px-3">
                                 <MeetingCard
                                     meetingThreadId={meetingData.meetingThreadId}
                                     jitsiRoomName={meetingData.jitsiRoomName}
@@ -322,7 +492,7 @@ const Messages = ({ theme = "dark" }: any) => {
                     }
                     if (meetingData.type === 'ended') {
                         return (
-                            <div key={message._id + index} style={{ width: "97%" }}>
+                            <div key={message._id + index} className="w-full px-2 sm:px-3">
                                 <MeetingCard
                                     meetingThreadId={meetingData.meetingThreadId}
                                     jitsiRoomName=""
@@ -342,17 +512,16 @@ const Messages = ({ theme = "dark" }: any) => {
                 ).toDateString();
                 const prevMessageDate =
                     index > 0 &&
-                    new Date(messages[index - 1]?.createdAt).toDateString();
+                    new Date(displayMessages[index - 1]?.createdAt).toDateString();
 
                 const isSameDay =
                     index > 0 ? thisMessageDate === prevMessageDate : true;
 
                 const thisMessageTime = formatDateHH_MM_AMPM(new Date(message.createdAt));
-                const prevMessageTime = index > 0 && formatDateHH_MM_AMPM(new Date(messages[index - 1]?.createdAt));
+                const prevMessageTime = index > 0 && formatDateHH_MM_AMPM(new Date(displayMessages[index - 1]?.createdAt));
                 const isSameTime = index > 0 ? thisMessageTime === prevMessageTime : false;
 
-                const incomingMessage =
-                    message.author._id !== (userDetails as any)._id;
+                const incomingMessage = !isOutgoingAuthor(message, userDetails, myRcUserId, dmOtherWlUserId);
 
                 // Handle direct chat and group chat scenarios
                 let participantImage = null;
@@ -371,7 +540,7 @@ const Messages = ({ theme = "dark" }: any) => {
                 const isFriend = friends.find((x: any) => (x._id === message.author._id))
                 const disableBookButton = message.author?.role === 'admin' || userDetails?.role === 'admin' || userDetails?.status === 'review' || message.author?.status === 'review'
                 return (
-                    <div key={message._id + index} style={{ width: "97%" }}>
+                    <div key={message._id + index} className="w-full px-2 sm:px-3">
                         {(!isSameDay || index === 0) && (
                             <DateSeparator date={message.createdAt} theme={theme} />
                         )}
@@ -391,11 +560,17 @@ const Messages = ({ theme = "dark" }: any) => {
                             myRole={userDetails?.role}
                             hideDate={isSameDay && isSameTime}
                             theme={theme}
+                            deliveryStatus={deliveryStatusForMessage(message, userDetails, myRcUserId, dmOtherWlUserId)}
+                            messageId={message._id}
+                            roomId={rcChannelId}
+                            canDelete={!incomingMessage && !String(message._id).startsWith('temp-')}
+                            onDeleteMessage={handleDeleteMessage}
                         />
                     </div>
                 );
             })}
-            <div ref={messagesEndRef} />
+            <div ref={messagesEndRef} className="h-px w-full shrink-0" aria-hidden />
+            </div>
             {
                 eventsModalShow ?
                     <div className={`absolute top-0 left-0 w-full h-full z-[1000] p-4 sm:p-8 ${theme === "light" ? "bg-black/30 backdrop-blur-sm" : "bg-white bg-opacity-10 backdrop-blur-sm"}`}>

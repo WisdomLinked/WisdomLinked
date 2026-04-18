@@ -11,6 +11,7 @@ import { updateLocation } from './actions/appActions';
 import { siteMap } from './actions/siteMap';
 import { isTheEventGoingOn } from './actions/common';
 import { autoLogin } from './actions/authActions';
+import { connectToRC, isRCConnected } from './services/rcRealtime';
 import 'swiper/swiper.min.css';
 import LeaveFeedback from './components/LeaveFeedback';
 import VerifyEmail from './pages/VerifyEmail';
@@ -185,6 +186,12 @@ function App() {
       dispatch(autoLogin());
     }
   }, [dispatch])
+
+  useEffect(() => {
+    if (!userDetails?.email) return;
+    if (isRCConnected()) return;
+    connectToRC().catch(() => {});
+  }, [userDetails?.email])
 
   useEffect(() => {
     if (!oldUserDetails && userDetails?.email) {

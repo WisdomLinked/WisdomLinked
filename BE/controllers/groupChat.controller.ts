@@ -8,6 +8,12 @@ const PaymentHistory = require("../models/PaymentHistory");
 const { checkPaymentIntentSucceeded, refundPaymentIntent } = require("./stripe.controller");
 const { appendPaymentHistory } = require("./payment.controller");
 const { getFullUserData } = require("../middlewares/requireAuth");
+const Conversation = require("../models/Conversation");
+const {
+    getOrCreateDMChannel,
+    toRocketChatUsername,
+    ensureBothWlUsersSyncedToRocketChat,
+} = require("../services/rocketchat.service");
 const { checkTitleNameInvalid } = require('../services/global')
 const { scheduleEmailReminder, sendEmailMeetingRequestToCustomer, sendEmailMeetingRequestToExpert, sendEmailMeetingAcceptance } = require('../services/notifications')
 const { assertBookingLeadTime } = require("../utils/bookingLeadTime");
@@ -388,48 +394,41 @@ const joinPrivateChat = async (req, res) => {
         if (String(userId) === String(personId)) return res.status(400).send("Cannot open chat with yourself");
 
         // Ensure the clicked person exists
-        const otherUser = await User.findById(personId).select("username email").exec();
+        const otherUser = await User.findById(personId).select("username email image").exec();
         if (!otherUser) return res.status(404).send("User not found");
 
-        // 1) Find existing individual chat shared by both users
-        let chat = await GroupChat.findOne({
-            type: "individual",
-            participants: { $all: [personId, userId] },
+        // 1:1 DM = Mongo Conversation + Rocket.Chat IM — not a GroupChat / wl-group-* channel.
+        let conversation = await Conversation.findOne({
+            $and: [
+                { participants: userId },
+                { participants: personId },
+                { participants: { $size: 2 } },
+            ],
         }).exec();
 
-        if (chat) {
-            // Defensive: ensure both participants present (no-op if already present)
-            await GroupChat.updateOne(
-                { _id: chat._id },
-                { $addToSet: { participants: { $each: [personId, userId] } } }
-            ).exec();
-
-            // reload canonical chat
-            chat = await GroupChat.findById(chat._id).exec();
-        } else {
-            // 2) Create a new individual chat between caller and clicked person
-            const createDoc = {
-                name: `Private Chat - ${otherUser.username || personId}`,
-                description: "",
-                participants: [personId, userId],
-                admin: personId,       // set admin to the profile user clicked (matches other create flows)
-                type: "individual",
-                status: "active",
-                createdBy: userId,     // the caller created the chat
-            };
-
-            chat = await GroupChat.create(createDoc);
+        if (!conversation) {
+            conversation = await Conversation.create({
+                participants: [userId, personId],
+                messages: [],
+            });
         }
 
-        // 3) Ensure both users reference this chat (no duplicates)
-        await User.updateOne({ _id: userId }, { $addToSet: { generalChats: chat._id } }).exec();
-        await User.updateOne({ _id: personId }, { $addToSet: { generalChats: chat._id } }).exec();
+        const me = await User.findById(userId).select("email username").exec();
+        if (me?.email && otherUser?.email) {
+            try {
+                await ensureBothWlUsersSyncedToRocketChat(me, otherUser);
+                await getOrCreateDMChannel(
+                    toRocketChatUsername(me.email),
+                    toRocketChatUsername(otherUser.email)
+                );
+            } catch (e: any) {
+                console.warn("[joinPrivateChat] getOrCreateDMChannel:", e?.message || e);
+            }
+        }
 
-        // 4) Notify socket helpers so both users' chat lists update in real-time
-        // [REMOVED] try { updateUsersGroupChatList(userId.toString()); } catch (e) { console.warn("updateUsersGroupChatList(user) failed:", e?.message || e); }
-        // [REMOVED] try { updateUsersGroupChatList(personId.toString()); } catch (e) { console.warn("updateUsersGroupChatList(person) failed:", e?.message || e); }
+        await User.updateOne({ _id: userId }, { $addToSet: { directConversations: conversation._id } }).exec();
+        await User.updateOne({ _id: personId }, { $addToSet: { directConversations: conversation._id } }).exec();
 
-        // 5) Return populated user and chat so frontend can open the conversation immediately
         const userDoc = await User.findById(userId).select("email").exec();
         const fullUser = await getFullUserData(userDoc.email);
         if (fullUser) {
@@ -437,9 +436,19 @@ const joinPrivateChat = async (req, res) => {
             fullUser.password = null;
         }
 
-        return res.status(200).json({ user: fullUser, chat });
+        return res.status(200).json({
+            user: fullUser,
+            conversationId: conversation._id,
+            otherUserId: personId,
+            otherUser: {
+                _id: otherUser._id,
+                username: otherUser.username,
+                email: otherUser.email,
+                image: otherUser.image,
+            },
+        });
     } catch (err) {
-        console.error("joinGeneralChat error:", err);
+        console.error("joinPrivateChat error:", err);
         return res.status(500).send(err.message || "Server error");
     }
 };

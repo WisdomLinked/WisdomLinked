@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { getOrCreateDMChannel, getOrCreateGroupChannel, sendMessageToRC } from '../services/rocketchat.service';
+import { getOrCreateDMChannel, sendMessageToRC, toRocketChatUsername, syncRocketGroupChannelMembers } from '../services/rocketchat.service';
 
 const MeetingThread = require('../models/MeetingThread');
 const Conversation = require('../models/Conversation');
@@ -44,15 +44,27 @@ export const startMeeting = async (req: any, res: Response) => {
             if (conversation) {
                 const otherUserId = conversation.participants.find((p: any) => p.toString() !== userId);
                 const other = await User.findById(otherUserId);
-                if (me && other) {
-                    const rcChannelId = await getOrCreateDMChannel(me.username, other.username);
-                    if (rcChannelId) await sendMessageToRC(rcChannelId, meetingContent, me.username);
+                if (me && other && me.email && other.email) {
+                    const rcChannelId = await getOrCreateDMChannel(
+                        toRocketChatUsername(me.email),
+                        toRocketChatUsername(other.email)
+                    );
+                    if (rcChannelId) await sendMessageToRC(rcChannelId, meetingContent, me.username, me.email);
                 }
             }
         } else if (groupChatId) {
-            if (me) {
-                const rcChannelId = await getOrCreateGroupChannel(`wl-group-${groupChatId}`, [me.username]);
-                if (rcChannelId) await sendMessageToRC(rcChannelId, meetingContent, me.username);
+            const groupChat = await GroupChat.findById(groupChatId)
+                .populate('participants', 'email')
+                .populate('admin', 'email');
+            if (me && me.email && groupChat) {
+                const emails: string[] = [];
+                for (const p of groupChat.participants || []) {
+                    if ((p as any)?.email) emails.push(String((p as any).email).toLowerCase());
+                }
+                const adm = groupChat.admin as any;
+                if (adm?.email) emails.push(String(adm.email).toLowerCase());
+                const rcChannelId = await syncRocketGroupChannelMembers(String(groupChatId), emails);
+                if (rcChannelId) await sendMessageToRC(rcChannelId, meetingContent, me.username, me.email);
             }
         }
 
@@ -104,14 +116,28 @@ export const endMeeting = async (req: any, res: Response) => {
             if (conversation) {
                 const otherUserId = conversation.participants.find((p: any) => p.toString() !== me._id.toString());
                 const other = await User.findById(otherUserId);
-                if (other) {
-                    const rcChannelId = await getOrCreateDMChannel(me.username, other.username);
-                    if (rcChannelId) await sendMessageToRC(rcChannelId, endContent, me.username);
+                if (other && me.email && other.email) {
+                    const rcChannelId = await getOrCreateDMChannel(
+                        toRocketChatUsername(me.email),
+                        toRocketChatUsername(other.email)
+                    );
+                    if (rcChannelId) await sendMessageToRC(rcChannelId, endContent, me.username, me.email);
                 }
             }
-        } else if (meeting.groupChatId) {
-            const rcChannelId = await getOrCreateGroupChannel(`wl-group-${meeting.groupChatId}`, [me.username]);
-            if (rcChannelId) await sendMessageToRC(rcChannelId, endContent, me.username);
+        } else if (meeting.groupChatId && me.email) {
+            const groupChat = await GroupChat.findById(meeting.groupChatId)
+                .populate('participants', 'email')
+                .populate('admin', 'email');
+            if (groupChat) {
+                const emails: string[] = [];
+                for (const p of groupChat.participants || []) {
+                    if ((p as any)?.email) emails.push(String((p as any).email).toLowerCase());
+                }
+                const adm = groupChat.admin as any;
+                if (adm?.email) emails.push(String(adm.email).toLowerCase());
+                const rcChannelId = await syncRocketGroupChannelMembers(String(meeting.groupChatId), emails);
+                if (rcChannelId) await sendMessageToRC(rcChannelId, endContent, me.username, me.email);
+            }
         }
 
         const endMessage = {

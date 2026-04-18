@@ -2,6 +2,8 @@ const mongoose = require("mongoose");
 
 const conversationSchema = new mongoose.Schema(
     {
+        /** Rocket.Chat DM / channel room id — persisted for unread badges and delete. */
+        rcChannelId: { type: String, default: null },
 
         participants: [
             {

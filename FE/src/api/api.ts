@@ -19,7 +19,7 @@ import { logoutUser } from "../actions/authActions";
 import { SetLoadingStatus } from "../actions/appActions";
 import { group } from "console";
 
-let BASE_URL = process.env.REACT_APP_API_BASE_URL || '';
+let BASE_URL = process.env.REACT_APP_API_BASE_URL || '/api';
 if (BASE_URL && !BASE_URL.endsWith('/')) {
     BASE_URL += '/';
 }
