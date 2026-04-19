@@ -110,6 +110,8 @@ const chatReducer: Reducer<ChatState, ChatActions> = (
             return {
                 ...state,
                 chosenChatDetails: null,
+                /** Group threads never use Mongo DM `conversationId`. */
+                conversationId: null,
                 chosenGroupChatDetails: next,
                 messages: sameGroup ? state.messages : [],
                 gotAllChats: sameGroup ? state.gotAllChats : false,
@@ -162,6 +164,26 @@ const chatReducer: Reducer<ChatState, ChatActions> = (
             const key = String(rid);
             const next = { ...state.dmUnreadByRid };
             delete next[key];
+            return { ...state, dmUnreadByRid: next };
+        }
+
+        case actionTypes.setDmUnreadByRidBulk: {
+            const raw = action.payload && typeof action.payload === 'object' ? action.payload : {};
+            const next: Record<string, number> = {};
+            Object.entries(raw).forEach(([k, v]) => {
+                const n = Number(v) || 0;
+                if (n > 0) next[String(k)] = n;
+            });
+            return { ...state, dmUnreadByRid: next };
+        }
+
+        case actionTypes.patchDmUnreadRid: {
+            const rid = String(action.payload?.rid || '');
+            if (!rid) return state;
+            const unread = Number(action.payload?.unread ?? 0);
+            const next = { ...state.dmUnreadByRid };
+            if (unread > 0) next[rid] = unread;
+            else delete next[rid];
             return { ...state, dmUnreadByRid: next };
         }
 

@@ -93,7 +93,7 @@ export default function TopBar({
             aria-label="Notifications"
           >
             <Bell className="h-4 w-4" aria-hidden="true" />
-            {notificationCount > 0 ? (
+            {notificationsEnabled && notificationCount > 0 ? (
               <span className="absolute -right-1 -top-1 inline-flex min-w-[16px] items-center justify-center rounded-full bg-rose-500 px-1 text-[9px] font-semibold leading-4 text-white">
                 {notificationCount > 99 ? '99+' : notificationCount}
               </span>

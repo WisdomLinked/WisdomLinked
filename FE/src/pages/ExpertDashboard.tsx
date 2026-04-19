@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { useDispatch } from 'react-redux';
 import {
@@ -19,12 +19,12 @@ import Sidebar from '../components/layout/Sidebar';
 import TopBar from '../components/layout/TopBar';
 import type { TopBarNotificationItem } from '../components/layout/TopBar';
 import StudentSettings from '../components/dashboard/StudentSettings';
-import { profileImageFetch } from '../api/api';
+import { getAllCommunityChats, profileImageFetch } from '../api/api';
 import { fetchDmUnreadSnapshot } from '../api/chatApi';
 import { useAppSelector } from '../store';
 import { logoutUser, updateMe } from '../actions/authActions';
 import { showAlert } from '../actions/alertActions';
-import { setChosenGroupChatDetails } from '../actions/chatActions';
+import { patchDmUnreadRid, setChosenGroupChatDetails, setDmUnreadByRidBulk } from '../actions/chatActions';
 import { connectToRC, onSubscriptionChanged, subscribeToRoom } from '../services/rcRealtime';
 
 
@@ -102,6 +102,8 @@ export default function ExpertDashboard() {
 
   const [activeItem, setActiveItem] = useState('dashboard');
   const [dmUnreadByRid, setDmUnreadByRid] = useState<Record<string, number>>({});
+  const [rcRoomNameByRid, setRcRoomNameByRid] = useState<Record<string, string>>({});
+  const [communityRidToName, setCommunityRidToName] = useState<Record<string, string>>({});
   const [range, setRange] = useState<'today' | 'week' | 'all'>('today');
   const [avatarUrl, setAvatarUrl] = useState<string | undefined>(undefined);
   const [expertUpcomingModal, setExpertUpcomingModal] = useState<{
@@ -158,6 +160,25 @@ export default function ExpertDashboard() {
     if (activeItem !== 'chat') return;
   }, [activeItem]);
 
+  const loadCommunityNotificationRooms = useCallback(async () => {
+    try {
+      const res: any = await getAllCommunityChats();
+      if (res === false || res?.status !== 'SUCCESS' || !Array.isArray(res.chats)) return;
+      const next: Record<string, string> = {};
+      res.chats.forEach((chat: any) => {
+        const rid =
+          chat?.rcChannelId != null && String(chat.rcChannelId).trim() !== ''
+            ? String(chat.rcChannelId)
+            : '';
+        if (!rid) return;
+        next[rid] = String(chat?.name || chat?.groupName || 'Community').trim() || 'Community';
+      });
+      setCommunityRidToName(next);
+    } catch {
+      /* noop */
+    }
+  }, []);
+
   useEffect(() => {
     let mounted = true;
     const boot = async () => {
@@ -166,19 +187,35 @@ export default function ExpertDashboard() {
       if (!mounted) return;
       if (snapshot?.success && snapshot.unreadByRid) setDmUnreadByRid(snapshot.unreadByRid);
       else setDmUnreadByRid({});
+      if (snapshot?.success && snapshot.nameByRid && typeof snapshot.nameByRid === 'object') {
+        setRcRoomNameByRid(snapshot.nameByRid);
+      } else {
+        setRcRoomNameByRid({});
+      }
+      await loadCommunityNotificationRooms();
     };
     void boot();
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [loadCommunityNotificationRooms, dispatch]);
+
+  useEffect(() => {
+    const uid = userDetails?._id ?? userDetails?.id ?? userDetails?.userId;
+    if (!uid) return;
+    void loadCommunityNotificationRooms();
+  }, [userDetails?._id, userDetails?.id, userDetails?.userId, loadCommunityNotificationRooms]);
 
   useEffect(() => {
     const dcs = userDetails?.directConversations ?? [];
     dcs.forEach((conv: any) => {
       if (conv?.rcChannelId) subscribeToRoom(String(conv.rcChannelId));
     });
-  }, [userDetails?.directConversations]);
+    const gcs = userDetails?.generalChats ?? [];
+    gcs.forEach((g: any) => {
+      if (g?.rcChannelId) subscribeToRoom(String(g.rcChannelId));
+    });
+  }, [userDetails?.directConversations, userDetails?.generalChats]);
 
   const dmNameByRid = useMemo(() => {
     const out: Record<string, string> = {};
@@ -197,9 +234,57 @@ export default function ExpertDashboard() {
     return out;
   }, [userDetails?._id, userDetails?.id, userDetails?.userId, userDetails?.directConversations]);
 
+  const dmRidSet = useMemo(() => {
+    const s = new Set<string>();
+    (userDetails?.directConversations ?? []).forEach((c: any) => {
+      if (c?.rcChannelId) s.add(String(c.rcChannelId));
+    });
+    return s;
+  }, [userDetails?.directConversations]);
+
+  const allowedChatRidSet = useMemo(() => {
+    const s = new Set<string>();
+    dmRidSet.forEach(rid => s.add(rid));
+    (userDetails?.generalChats ?? []).forEach((g: any) => {
+      if (g?.rcChannelId) s.add(String(g.rcChannelId));
+    });
+    (userDetails?.groupChats ?? []).forEach((g: any) => {
+      if (g?.rcChannelId) s.add(String(g.rcChannelId));
+    });
+    Object.keys(communityRidToName).forEach(rid => s.add(rid));
+    return s;
+  }, [dmRidSet, userDetails?.generalChats, userDetails?.groupChats, communityRidToName]);
+
+  const filteredUnreadByRid = useMemo(() => {
+    const out: Record<string, number> = {};
+    Object.entries(dmUnreadByRid).forEach(([rid, n]) => {
+      if (allowedChatRidSet.has(String(rid))) out[rid] = Number(n) || 0;
+    });
+    return out;
+  }, [dmUnreadByRid, allowedChatRidSet]);
+
+  const groupNameByRid = useMemo(() => {
+    const out: Record<string, string> = {};
+    const add = (g: any) => {
+      const rid = g?.rcChannelId ? String(g.rcChannelId) : '';
+      if (!rid) return;
+      const name = String(g?.name ?? g?.groupName ?? '').trim();
+      if (name) out[rid] = name;
+    };
+    (userDetails?.generalChats ?? []).forEach(add);
+    (userDetails?.groupChats ?? []).forEach(add);
+    return out;
+  }, [userDetails?.generalChats, userDetails?.groupChats]);
+
+  const roomLabelByRid = useMemo(
+    () => ({ ...rcRoomNameByRid, ...dmNameByRid, ...groupNameByRid, ...communityRidToName }),
+    [rcRoomNameByRid, dmNameByRid, groupNameByRid, communityRidToName],
+  );
+
   useEffect(() => {
+    let debounce: ReturnType<typeof setTimeout> | undefined;
     const unsubSub = onSubscriptionChanged(({ roomId, type, unread }) => {
-      if (type && type !== 'd') return;
+      if (type && !['d', 'c', 'p'].includes(type)) return;
       const rid = String(roomId || '');
       if (!rid) return;
       const nextUnread = Number(unread || 0);
@@ -209,35 +294,46 @@ export default function ExpertDashboard() {
         else delete next[rid];
         return next;
       });
+      dispatch(patchDmUnreadRid(rid, nextUnread));
+      if (type === 'c' || type === 'p') {
+        if (debounce) window.clearTimeout(debounce);
+        debounce = window.setTimeout(() => {
+          void loadCommunityNotificationRooms();
+        }, 450);
+      }
     });
     return () => {
       unsubSub();
+      if (debounce) window.clearTimeout(debounce);
     };
-  }, [userDetails?.email]);
+  }, [userDetails?.email, loadCommunityNotificationRooms, dispatch]);
 
   const totalUnreadDm = useMemo(
-    () => Object.values(dmUnreadByRid).reduce((sum, n) => sum + (Number(n) || 0), 0),
-    [dmUnreadByRid],
+    () => Object.values(filteredUnreadByRid).reduce((sum, n) => sum + (Number(n) || 0), 0),
+    [filteredUnreadByRid],
   );
   const chatNotifications = useMemo<TopBarNotificationItem[]>(
     () =>
-      Object.entries(dmUnreadByRid)
+      Object.entries(filteredUnreadByRid)
         .filter(([, count]) => Number(count) > 0)
         .map(([rid, count]) => {
           const n = Number(count) || 0;
-          const senderLabel = dmNameByRid[rid] || 'Someone';
+          const isDm = dmRidSet.has(rid);
+          const label = roomLabelByRid[rid] || (isDm ? 'Someone' : 'Chat');
           return {
-            id: `dm-${rid}`,
-            title: `${senderLabel} messaged you`,
-            meta: `${n > 99 ? '99+' : n} unread message${n > 1 ? 's' : ''}`,
+            id: `chat-${rid}`,
+            title: `${label} messaged you`,
+            meta: `${n > 99 ? '99+' : n} unread message${n !== 1 ? 's' : ''}`,
             icon: <MessageSquare className="h-3.5 w-3.5 text-[#1A3A4A]" aria-hidden />,
             onClick: () => {
-              localStorage.setItem('wl_open_dm_rid', rid);
+              if (isDm) localStorage.setItem('wl_open_dm_rid', rid);
+              else localStorage.setItem('wl_open_community_rc_rid', rid);
+              window.dispatchEvent(new Event('wl-open-chat-nav'));
               setActiveItem('chat');
             },
           };
         }),
-    [dmUnreadByRid, dmNameByRid],
+    [filteredUnreadByRid, roomLabelByRid, dmRidSet],
   );
 
   const navItems = useMemo(
@@ -630,7 +726,7 @@ export default function ExpertDashboard() {
           navItems={navItems}
           studentName={expertName}
           roleLabel="Expert"
-          notifications={{ chat: totalUnreadDm }}
+          notifications={{ chat: activeItem === 'chat' ? 0 : totalUnreadDm }}
         />
 
         <main className="flex-1 min-w-0 lg:ml-[220px]">
@@ -639,7 +735,7 @@ export default function ExpertDashboard() {
             userName={expertName}
             avatarUrl={avatarUrl}
             notifications={chatNotifications}
-            notificationsEnabled={activeItem !== 'chat'}
+            notificationsEnabled
             onProfileClick={() => setActiveItem('profile')}
             onSettingsClick={() => setActiveItem('settings')}
           />

@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useState } from "react";
+import React, { useRef, useEffect, useState, useMemo, useCallback } from "react";
 import IconButton from "@mui/material/IconButton";
 import AddIcCallIcon from "@mui/icons-material/AddIcCall";
 import VideoCallIcon from "@mui/icons-material/VideoCall";
@@ -12,6 +12,14 @@ import { useDispatch } from "react-redux";
 import { removeFriendAction } from "../../../../actions/friendActions";
 import { formatDateYYYY_MM_DD_h_m, isFutureEvent, isTheEventGoingOn } from "../../../../actions/common";
 import GroupParticipantsDialog from "./GroupParticipantsDialog";
+import ManageCommunityMembersDialog from "./ManageCommunityMembersDialog";
+import AddCommunityMembersDialog from "./AddCommunityMembersDialog";
+import PersonAddIcon from "@mui/icons-material/PersonAdd";
+import Dialog from "@mui/material/Dialog";
+import DialogTitle from "@mui/material/DialogTitle";
+import DialogContent from "@mui/material/DialogContent";
+import DialogActions from "@mui/material/DialogActions";
+import Button from "@mui/material/Button";
 import { deleteGroupAction, leaveGroupAction } from "../../../../actions/groupChatActions";
 import GroupsIcon from "@mui/icons-material/Groups";
 import ClearIcon from '@mui/icons-material/Clear';
@@ -27,7 +35,7 @@ import { updateMe } from "../../../../actions/authActions";
 import { showAlert } from "../../../../actions/alertActions";
 import { resetChatAction, setChosenGroupChatDetails } from "../../../../actions/chatActions";
 import ProfileModal from "./ProfileModal";
-import { ShareIcon } from "lucide-react";
+import { Bell, MessageSquare, ShareIcon, X } from "lucide-react";
 
 const MessagesHeader = ({ scrollPosition, events, openCalendarModal, openSeminarModal, openEditSeminarModal, theme = "dark" }: any) => {
 
@@ -35,9 +43,74 @@ const MessagesHeader = ({ scrollPosition, events, openCalendarModal, openSeminar
     let navPosition = navRef.current?.getBoundingClientRect().top;
     const {
         auth: { userDetails },
-        chat: { chosenChatDetails, chosenGroupChatDetails, currentEvent, conversationId },
+        chat: {
+            chosenChatDetails,
+            chosenGroupChatDetails,
+            currentEvent,
+            conversationId,
+            rcChannelId,
+            dmUnreadByRid,
+        },
         friends: { onlineUsers },
     } = useAppSelector((state) => state);
+
+    /** Same pattern as dashboard TopBar: one row per room with unread (not the open thread). */
+    const messengerChatNotifications = useMemo(() => {
+        const active = String(rcChannelId || "");
+        const dcs = userDetails?.directConversations ?? [];
+        const dmRids = new Set(
+            dcs.map((c: any) => String(c?.rcChannelId || "").trim()).filter(Boolean),
+        );
+        const meId = String(userDetails?._id ?? userDetails?.id ?? userDetails?.userId ?? "");
+        const labelForRid = (rid: string) => {
+            const conv = dcs.find((c: any) => String(c?.rcChannelId || "") === rid);
+            if (conv?.participants?.length) {
+                const other = conv.participants.find(
+                    (p: any) => String(p?._id ?? p?.id ?? "") && String(p?._id ?? p?.id ?? "") !== meId,
+                );
+                const nm = String(other?.username || other?.name || other?.email || "").trim();
+                if (nm) return nm;
+            }
+            const gcs = [...(userDetails?.generalChats ?? []), ...(userDetails?.groupChats ?? [])];
+            const g = gcs.find((x: any) => String(x?.rcChannelId || "") === rid);
+            if (g) return String(g?.name ?? g?.groupName ?? "Chat").trim() || "Chat";
+            return dmRids.has(rid) ? "Direct message" : "Chat";
+        };
+        return Object.entries(dmUnreadByRid || {})
+            .filter(([rid, n]) => String(rid) !== active && Number(n) > 0)
+            .map(([rid, count]) => {
+                const n = Number(count) || 0;
+                const isDm = dmRids.has(rid);
+                const label = labelForRid(rid);
+                return {
+                    id: rid,
+                    rid,
+                    isDm,
+                    title: `${label} messaged you`,
+                    meta: `${n > 99 ? "99+" : n} unread message${n !== 1 ? "s" : ""}`,
+                };
+            });
+    }, [dmUnreadByRid, rcChannelId, userDetails]);
+
+    const [openMessengerNotifs, setOpenMessengerNotifs] = useState(false);
+    const messengerNotifRef = useRef<HTMLDivElement>(null);
+
+    const openThreadFromMessengerNotif = useCallback((item: (typeof messengerChatNotifications)[0]) => {
+        if (item.isDm) localStorage.setItem("wl_open_dm_rid", item.rid);
+        else localStorage.setItem("wl_open_community_rc_rid", item.rid);
+        window.dispatchEvent(new Event("wl-open-chat-nav"));
+        setOpenMessengerNotifs(false);
+    }, []);
+
+    useEffect(() => {
+        if (!openMessengerNotifs) return;
+        const close = (e: MouseEvent) => {
+            const el = messengerNotifRef.current;
+            if (el && !el.contains(e.target as Node)) setOpenMessengerNotifs(false);
+        };
+        document.addEventListener("mousedown", close);
+        return () => document.removeEventListener("mousedown", close);
+    }, [openMessengerNotifs]);
 
     const navActiveStyle =
         scrollPosition >= navPosition!
@@ -60,6 +133,10 @@ const MessagesHeader = ({ scrollPosition, events, openCalendarModal, openSeminar
     const [showEmailInput, setShowEmailInput] = useState(false);
     const [emailAddress, setEmailAddress] = useState('');
     const [emailError, setEmailError] = useState('');
+    const [manageCommunityMembersOpen, setManageCommunityMembersOpen] = useState(false);
+    const [headerLeaveCommunityOpen, setHeaderLeaveCommunityOpen] = useState(false);
+    const [deleteCommunityConfirmOpen, setDeleteCommunityConfirmOpen] = useState(false);
+    const [addCommunityMembersOpen, setAddCommunityMembersOpen] = useState(false);
 
     const checkEnabledEvent = () => {
         let event = events.find((event: any) => event?._id === currentEvent?._id)
@@ -90,15 +167,26 @@ const MessagesHeader = ({ scrollPosition, events, openCalendarModal, openSeminar
     };
 
     const handleLeaveGroup = async () => {
-        SetLoadingStatus(true)
-        const response = await doLeftSeminar(chosenGroupChatDetails?.groupId)
-        if (response) {
-            dispatch(updateMe())
-            dispatch(showAlert('You left a seminar and your money refunded'))
-            dispatch(resetChatAction())
+        set_buttonsModalShow(false);
+        if (!chosenGroupChatDetails?.groupId) return;
+        if (chosenGroupChatDetails.type === 'community') {
+            setHeaderLeaveCommunityOpen(true);
+            return;
         }
-        set_buttonsModalShow(false)
-        SetLoadingStatus(false)
+        SetLoadingStatus(true);
+        const response = await doLeftSeminar(chosenGroupChatDetails.groupId);
+        if (response) {
+            dispatch(updateMe());
+            dispatch(showAlert('You left a seminar and your money refunded'));
+            dispatch(resetChatAction());
+        }
+        SetLoadingStatus(false);
+    };
+
+    const confirmLeaveCommunityFromHeader = () => {
+        setHeaderLeaveCommunityOpen(false);
+        if (!chosenGroupChatDetails?.groupId) return;
+        dispatch(leaveGroupAction({ groupChatId: chosenGroupChatDetails.groupId }));
     };
 
     const handleDeleteGroup = () => {
@@ -110,6 +198,16 @@ const MessagesHeader = ({ scrollPosition, events, openCalendarModal, openSeminar
                 })
             );
         }
+    };
+
+    const openDeleteCommunityConfirm = () => {
+        set_buttonsModalShow(false);
+        setDeleteCommunityConfirmOpen(true);
+    };
+
+    const confirmDeleteCommunityFromHeader = () => {
+        setDeleteCommunityConfirmOpen(false);
+        handleDeleteGroup();
     };
 
     const isOnline = (userId: any) => {
@@ -257,7 +355,93 @@ const MessagesHeader = ({ scrollPosition, events, openCalendarModal, openSeminar
                         </div> :
                         null
             }
-            <div className="w-[120px] flex items-center justify-end">
+            <div className="relative flex min-w-[120px] shrink-0 items-center justify-end gap-1" ref={messengerNotifRef}>
+                {messengerChatNotifications.length > 0 ? (
+                    <>
+                        <button
+                            type="button"
+                            onClick={() => setOpenMessengerNotifs((o) => !o)}
+                            className={`relative inline-flex h-8 w-8 items-center justify-center rounded-full border ${
+                                theme === "light"
+                                    ? "border-slate-200 bg-white text-slate-500 hover:bg-slate-50"
+                                    : "border-slate-600 bg-transparent text-white hover:bg-white/10"
+                            }`}
+                            aria-label="Chat notifications"
+                        >
+                            <Bell className="h-4 w-4" aria-hidden />
+                            <span className="absolute -right-1 -top-1 inline-flex min-w-[16px] items-center justify-center rounded-full bg-rose-500 px-1 text-[9px] font-semibold leading-4 text-white">
+                                {messengerChatNotifications.length > 99
+                                    ? "99+"
+                                    : messengerChatNotifications.length}
+                            </span>
+                        </button>
+                        {openMessengerNotifs ? (
+                            <div
+                                className={`absolute right-0 top-10 z-[130] w-[min(320px,calc(100vw-2rem))] rounded-xl border shadow-[0_16px_40px_rgba(0,0,0,0.14)] ${
+                                    theme === "light"
+                                        ? "border-[#E5E2DB] bg-white"
+                                        : "border-slate-600 bg-[#1a1a1a]"
+                                }`}
+                            >
+                                <div
+                                    className={`flex items-center justify-between border-b px-4 py-3 ${
+                                        theme === "light" ? "border-[#E5E2DB]" : "border-slate-600"
+                                    }`}
+                                >
+                                    <p
+                                        className={`text-[12px] font-semibold uppercase tracking-[0.16em] ${
+                                            theme === "light" ? "text-[#7A7A72]" : "text-slate-400"
+                                        }`}
+                                    >
+                                        Notifications
+                                    </p>
+                                    <button
+                                        type="button"
+                                        onClick={() => setOpenMessengerNotifs(false)}
+                                        className="inline-flex h-6 w-6 items-center justify-center rounded-md text-slate-500 hover:bg-slate-100 hover:text-slate-700"
+                                        aria-label="Close notifications"
+                                    >
+                                        <X className="h-4 w-4" aria-hidden />
+                                    </button>
+                                </div>
+                                <div className="max-h-72 overflow-y-auto p-2">
+                                    {messengerChatNotifications.map((item) => (
+                                        <button
+                                            key={item.id}
+                                            type="button"
+                                            onClick={() => openThreadFromMessengerNotif(item)}
+                                            className={`w-full rounded-lg px-2 py-2 text-left ${
+                                                theme === "light" ? "hover:bg-[#F5F3EF]" : "hover:bg-white/5"
+                                            }`}
+                                        >
+                                            <div className="flex items-start gap-2">
+                                                <span className="mt-0.5 inline-flex h-6 w-6 items-center justify-center rounded-full bg-[#E8EEF4]">
+                                                    <MessageSquare className="h-3.5 w-3.5 text-[#1A3A4A]" aria-hidden />
+                                                </span>
+                                                <div className="min-w-0">
+                                                    <p
+                                                        className={`text-[13px] font-semibold leading-snug ${
+                                                            theme === "light" ? "text-slate-900" : "text-white"
+                                                        }`}
+                                                    >
+                                                        {item.title}
+                                                    </p>
+                                                    <p
+                                                        className={`text-[11px] ${
+                                                            theme === "light" ? "text-slate-500" : "text-slate-400"
+                                                        }`}
+                                                    >
+                                                        {item.meta}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                        ) : null}
+                    </>
+                ) : null}
                 {chosenChatDetails && (
                     <div className="flex items-center justify-center">
                         <IconButton
@@ -388,10 +572,10 @@ const MessagesHeader = ({ scrollPosition, events, openCalendarModal, openSeminar
                 buttonsModalShow ?
                     <OverlayPortal closeModal={() => set_buttonsModalShow(false)}>
                         <div
-                            className={`absolute top-[130px] right-5 w-max rounded-2xl shadow-md p-4 ${
+                            className={`absolute top-[130px] right-5 min-w-[260px] max-w-[min(100vw-2rem,320px)] rounded-2xl border p-1 shadow-lg ${
                                 theme === "light"
-                                    ? "bg-white text-slate-900 border border-slate-200"
-                                    : "bg-black text-white"
+                                    ? "border-slate-200 bg-white text-slate-900"
+                                    : "border-slate-700 bg-[#141414] text-white"
                             }`}
                         >
                             {
@@ -423,27 +607,27 @@ const MessagesHeader = ({ scrollPosition, events, openCalendarModal, openSeminar
                                     </> :
                                     <>
                                         <button
-                                            className={`w-full flex space-x-4 justify-between items-center rounded-lg px-2 py-2 ${
-                                                theme === "light" ? "hover:bg-slate-50" : "hover:opacity-50"
-                                            } disabled:opacity-50`}
+                                            type="button"
+                                            className={`flex w-full items-center justify-between gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-medium ${
+                                                theme === "light" ? "text-slate-800 hover:bg-slate-50" : "hover:bg-white/10"
+                                            }`}
                                             onClick={handleParticipantsOpenDialog}
                                         >
                                             <span>View Participants ({chosenGroupChatDetails?.participants.length})</span>
-                                            <PeopleAltIcon />
+                                            <PeopleAltIcon fontSize="small" className="shrink-0 opacity-70" />
                                         </button>
                                         <button
-                                            className={`w-full mt-1 flex space-x-4 justify-between items-center rounded-lg px-2 py-2 ${
-                                                theme === "light" ? "hover:bg-slate-50" : "hover:opacity-50"
-                                            } disabled:opacity-50`}
+                                            type="button"
+                                            className={`mt-0.5 flex w-full items-center justify-between gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-medium ${
+                                                theme === "light" ? "text-slate-800 hover:bg-slate-50" : "hover:bg-white/10"
+                                            }`}
                                             onClick={() => {
                                                 set_buttonsModalShow(false)
                                                 openSeminarModal()
                                             }}
                                         >
-                                            <div>
-                                                Show Details
-                                            </div>
-                                            <CastForEducationIcon />
+                                            <span>Show Details</span>
+                                            <CastForEducationIcon fontSize="small" className="shrink-0 opacity-70" />
                                         </button>
                                         {
                                             (() => {
@@ -459,21 +643,23 @@ const MessagesHeader = ({ scrollPosition, events, openCalendarModal, openSeminar
                                                     return (
                                                         <>
                                                             <button
-                                                                className={`w-full mt-1 flex space-x-4 justify-between items-center rounded-lg px-2 py-2 ${
-                                                                    theme === "light" ? "hover:bg-slate-50" : "hover:opacity-50"
-                                                                } disabled:opacity-50`}
+                                                                type="button"
+                                                                className={`mt-0.5 flex w-full items-center justify-between gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-medium ${
+                                                                    theme === "light" ? "text-slate-800 hover:bg-slate-50" : "hover:bg-white/10"
+                                                                }`}
                                                                 onClick={() => {
                                                                     set_buttonsModalShow(false)
                                                                     set_show_meeting_id(true)
                                                                 }}
                                                             >
                                                                 <span>Share Meeting ID</span>
-                                                                <ShareIcon />
+                                                                <ShareIcon className="h-4 w-4 shrink-0 opacity-70" />
                                                             </button>
                                                             {!isCommunityChat && (
                                                                 <button
-                                                                    className={`w-full mt-1 flex space-x-4 justify-between items-center rounded-lg px-2 py-2 ${
-                                                                        theme === "light" ? "hover:bg-slate-50" : "hover:opacity-50"
+                                                                    type="button"
+                                                                    className={`mt-0.5 flex w-full items-center justify-between gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-medium ${
+                                                                        theme === "light" ? "text-slate-800 hover:bg-slate-50" : "hover:bg-white/10"
                                                                     } disabled:opacity-50`}
                                                                     disabled={chosenGroupChatDetails?.participants.length > 1}
                                                                     onClick={() => {
@@ -482,30 +668,102 @@ const MessagesHeader = ({ scrollPosition, events, openCalendarModal, openSeminar
                                                                     }}
                                                                 >
                                                                     <span>Edit Details</span>
-                                                                    <EditIcon />
+                                                                    <EditIcon fontSize="small" className="shrink-0 opacity-70" />
                                                                 </button>
                                                             )}
-                                                            <button
-                                                                className={`mt-1 w-full flex space-x-4 justify-between items-center rounded-lg px-2 py-2 ${
-                                                                    theme === "light" ? "hover:bg-slate-50" : "hover:opacity-50"
-                                                                } disabled:opacity-50 ${theme === "light" ? "text-rose-700" : ""}`}
-                                                                disabled={!isCommunityChat && chosenGroupChatDetails?.participants.length > 1}
-                                                                onClick={handleDeleteGroup}
-                                                            >
-                                                                <span>{isCommunityChat ? "Delete Community Chat" : "Delete Seminar"}</span>
-                                                                <ClearIcon />
-                                                            </button>
+                                                            {isCommunityChat ? (
+                                                                <>
+                                                                    <button
+                                                                        type="button"
+                                                                        className={`mt-0.5 flex w-full items-center justify-between gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-medium ${
+                                                                            theme === "light" ? "text-slate-800 hover:bg-slate-50" : "hover:bg-white/10"
+                                                                        }`}
+                                                                        onClick={() => {
+                                                                            set_buttonsModalShow(false);
+                                                                            setAddCommunityMembersOpen(true);
+                                                                        }}
+                                                                    >
+                                                                        <span>Add members</span>
+                                                                        <PersonAddIcon fontSize="small" className="shrink-0 opacity-70" />
+                                                                    </button>
+                                                                    <button
+                                                                        type="button"
+                                                                        className={`mt-0.5 flex w-full items-center justify-between gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-medium ${
+                                                                            theme === "light" ? "text-slate-800 hover:bg-slate-50" : "hover:bg-white/10"
+                                                                        }`}
+                                                                        onClick={() => {
+                                                                            set_buttonsModalShow(false);
+                                                                            setManageCommunityMembersOpen(true);
+                                                                        }}
+                                                                    >
+                                                                        <span>Remove members</span>
+                                                                        <PersonRemoveIcon fontSize="small" className="shrink-0 opacity-70" />
+                                                                    </button>
+                                                                    <button
+                                                                        type="button"
+                                                                        className={`mt-0.5 flex w-full items-center justify-between gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-semibold ${
+                                                                            theme === "light"
+                                                                                ? "text-rose-700 hover:bg-rose-50"
+                                                                                : "text-rose-300 hover:bg-white/10"
+                                                                        }`}
+                                                                        onClick={openDeleteCommunityConfirm}
+                                                                    >
+                                                                        <span>Delete community</span>
+                                                                        <ClearIcon fontSize="small" className="shrink-0 opacity-90" />
+                                                                    </button>
+                                                                    <button
+                                                                        type="button"
+                                                                        className={`mt-0.5 flex w-full items-center justify-between gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-semibold ${
+                                                                            theme === "light"
+                                                                                ? "text-slate-800 hover:bg-slate-50"
+                                                                                : "hover:bg-white/10"
+                                                                        }`}
+                                                                        onClick={() => {
+                                                                            set_buttonsModalShow(false);
+                                                                            setHeaderLeaveCommunityOpen(true);
+                                                                        }}
+                                                                    >
+                                                                        <span>Leave community</span>
+                                                                        <LogoutIcon fontSize="small" className="shrink-0 opacity-90" />
+                                                                    </button>
+                                                                </>
+                                                            ) : (
+                                                                <button
+                                                                    type="button"
+                                                                    className={`mt-0.5 flex w-full items-center justify-between gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-semibold ${
+                                                                        theme === "light"
+                                                                            ? "text-rose-700 hover:bg-rose-50"
+                                                                            : "text-rose-300 hover:bg-white/10"
+                                                                    } disabled:opacity-50`}
+                                                                    disabled={chosenGroupChatDetails?.participants.length > 1}
+                                                                    onClick={handleDeleteGroup}
+                                                                >
+                                                                    <span>Delete Seminar</span>
+                                                                    <ClearIcon fontSize="small" className="shrink-0 opacity-90" />
+                                                                </button>
+                                                            )}
                                                         </>
                                                     );
                                                 })() :
                                                 <button
-                                                    className={`mt-1 w-full flex space-x-4 justify-between items-center rounded-lg px-2 py-2 ${
-                                                        theme === "light" ? "hover:bg-slate-50" : "hover:opacity-50"
-                                                    } disabled:opacity-50`}
+                                                    type="button"
+                                                    className={`mt-0.5 flex w-full items-center justify-between gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-semibold ${
+                                                        chosenGroupChatDetails?.type === 'community'
+                                                            ? theme === "light"
+                                                                ? "text-rose-700 hover:bg-rose-50"
+                                                                : "text-rose-300 hover:bg-white/10"
+                                                            : theme === "light"
+                                                              ? "text-slate-800 hover:bg-slate-50"
+                                                              : "hover:bg-white/10"
+                                                    }`}
                                                     onClick={handleLeaveGroup}
                                                 >
-                                                    <span>Leave Group</span>
-                                                    <LogoutIcon />
+                                                    <span>
+                                                        {chosenGroupChatDetails?.type === 'community'
+                                                            ? 'Leave community'
+                                                            : 'Leave Group'}
+                                                    </span>
+                                                    <LogoutIcon fontSize="small" className="shrink-0 opacity-90" />
                                                 </button>
                                         }
                                     </>
@@ -521,7 +779,66 @@ const MessagesHeader = ({ scrollPosition, events, openCalendarModal, openSeminar
                         closeDialogHandler={handleParticipantsCloseDialog}
                         groupDetails={chosenGroupChatDetails}
                         currentUserId={userDetails?._id}
+                        theme={theme === "light" ? "light" : "dark"}
                     />
+                    {chosenGroupChatDetails?.type === "community" ? (
+                        <>
+                            <AddCommunityMembersDialog
+                                open={addCommunityMembersOpen}
+                                onClose={() => setAddCommunityMembersOpen(false)}
+                                groupDetails={chosenGroupChatDetails}
+                                theme={theme === "light" ? "light" : "dark"}
+                            />
+                            <ManageCommunityMembersDialog
+                                isDialogOpen={manageCommunityMembersOpen}
+                                closeDialogHandler={() => setManageCommunityMembersOpen(false)}
+                                groupDetails={chosenGroupChatDetails}
+                                currentUserId={userDetails._id}
+                                theme={theme === "light" ? "light" : "dark"}
+                            />
+                        </>
+                    ) : null}
+                    <Dialog
+                        open={headerLeaveCommunityOpen}
+                        onClose={() => setHeaderLeaveCommunityOpen(false)}
+                        maxWidth="xs"
+                        fullWidth
+                    >
+                        <DialogTitle>Leave this community?</DialogTitle>
+                        <DialogContent>
+                            <p className="text-sm text-slate-600">
+                                You won’t see this community in your list anymore. Others stay in the chat, and a short
+                                notice will appear that you left.
+                            </p>
+                        </DialogContent>
+                        <DialogActions sx={{ px: 3, pb: 2, gap: 1 }}>
+                            <Button onClick={() => setHeaderLeaveCommunityOpen(false)}>Cancel</Button>
+                            <Button variant="contained" color="error" onClick={confirmLeaveCommunityFromHeader}>
+                                Leave community
+                            </Button>
+                        </DialogActions>
+                    </Dialog>
+                    <Dialog
+                        open={deleteCommunityConfirmOpen}
+                        onClose={() => setDeleteCommunityConfirmOpen(false)}
+                        maxWidth="xs"
+                        fullWidth
+                    >
+                        <DialogTitle>Delete this community?</DialogTitle>
+                        <DialogContent>
+                            <p className="text-sm text-slate-600">
+                                This removes <strong>{chosenGroupChatDetails?.groupName}</strong> for{" "}
+                                <strong>everyone</strong>. All members will lose access and the chat history tied to this
+                                room.
+                            </p>
+                        </DialogContent>
+                        <DialogActions sx={{ px: 3, pb: 2, gap: 1 }}>
+                            <Button onClick={() => setDeleteCommunityConfirmOpen(false)}>Cancel</Button>
+                            <Button variant="contained" color="error" onClick={confirmDeleteCommunityFromHeader}>
+                                Delete community
+                            </Button>
+                        </DialogActions>
+                    </Dialog>
                 </>
             )}
             {

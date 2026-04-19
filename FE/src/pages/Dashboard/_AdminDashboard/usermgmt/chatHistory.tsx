@@ -159,7 +159,9 @@ const ChatHistory = ({
                         <div className="mt-[15px] text-[13px] text-grey text-center px-6">
                             {!selectedChat?.admin
                                 ? `This is the beginning of your conversation with ${selectedChat?.username}`
-                                : "This is the beginning of the conversation with your friends!"}
+                                : selectedChat?.type === 'community'
+                                  ? 'This is the beginning of the conversation with your community.'
+                                  : 'This is the beginning of the conversation with your friends!'}
                         </div>
                         : null
                 }

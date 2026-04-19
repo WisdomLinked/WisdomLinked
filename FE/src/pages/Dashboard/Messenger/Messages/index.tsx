@@ -4,6 +4,13 @@ import Message from "./Message";
 import { useAppSelector } from "../../../../store";
 import { Message as MessageType } from "../../../../actions/types";
 import DateSeparator from "./DateSeparator";
+import ChatSystemNotice from "./ChatSystemNotice";
+import {
+    WL_COMMUNITY_SYS_PREFIX,
+    parseCommunityGroupRealtimeMessage,
+    rewriteStaleCommunitySlugMessage,
+} from "../../../../utils/communityChatMessages";
+import { canonicalMembershipSide, wlRcSubtypeFromRocketType } from "../../../../utils/rcMembershipTypes";
 import {doGetEventsBetweenCustomerAndExpert, profileImageFetch} from "../../../../api/api";
 import { useDispatch } from "react-redux";
 import { formatDateHH_MM_AMPM, isTheEventGoingOn } from "../../../../actions/common";
@@ -15,20 +22,29 @@ import ExpertSeminar from "../../_ExpertDashboard/seminar";
 import MeetingCard from "../../../../components/MeetingCard";
 
 // Chat API + realtime
-import { getOrCreateDM, fetchDirectHistory, fetchGroupHistory, markChatRead, getRCToken, deleteChatMessage, fetchReadReceiptsBatch } from "../../../../api/chatApi";
+import { getOrCreateDM, fetchDirectHistory, fetchGroupHistory, fetchGroupMemberByRcSlug, markChatRead, getRCToken, deleteChatMessage, fetchReadReceiptsBatch, fetchDmUnreadSnapshot } from "../../../../api/chatApi";
 import { notifyChatMessage, stripChatHtml } from "../../../../utils/chatBrowserNotifications";
 import {
     setChatChannelInfo,
     setMessages,
     addNewMessage,
+    setChosenGroupChatDetails,
     replaceChatMessages,
     incrementDmUnreadRid,
     clearDmUnreadRid,
     removeChatMessage,
+    setDmUnreadByRidBulk,
 } from "../../../../actions/chatActions";
 import { showAlert } from "../../../../actions/alertActions";
 import { store } from "../../../../store";
-import { connectToRC, subscribeToRoom, unsubscribeFromRoom, onNewMessage, isRCConnected } from "../../../../services/rcRealtime";
+import {
+    connectToRC,
+    subscribeToRoom,
+    unsubscribeFromRoom,
+    onNewMessage,
+    isRCConnected,
+    normalizeRcStreamRoomMessage,
+} from "../../../../services/rcRealtime";
 import { toRocketChatUsername } from "../../../../utils/rocketchatUsername";
 
 /** RC `u.username` is email-derived; WL `userDetails.username` is display name — never equal. */
@@ -46,9 +62,11 @@ function isOutgoingAuthor(
     message: any,
     me: any,
     myRcUserId?: string | null,
-    dmOtherWlUserId?: string | null
+    dmOtherWlUserId?: string | null,
+    opts?: { isGroupChat?: boolean }
 ): boolean {
     if (!message?.author || !me) return false;
+    const isGroupChat = opts?.isGroupChat === true;
     const aid = String(message.author._id ?? message.author.id ?? "");
     const otherId = dmOtherWlUserId != null && dmOtherWlUserId !== '' ? String(dmOtherWlUserId) : '';
     if (otherId && aid === otherId) return false;
@@ -58,7 +76,9 @@ function isOutgoingAuthor(
     const rcSlug = me.email ? toRocketChatUsername(me.email).toLowerCase() : "";
     const aUser = String(message.author.username ?? "").toLowerCase();
     if (rcSlug && aUser === rcSlug) return true;
-    // In a 1:1 DM, never infer "me" from display name — expert and student often share the same name in tests.
+    // Group/community: RC uses email slug for u.username — never match WL display names (avoids wrong side).
+    if (isGroupChat) return false;
+    // In a 1:1 DM, infer "me" from display name only when safe.
     if (!otherId) {
         const display = String(me.username ?? "").trim().toLowerCase();
         if (display && aUser === display) return true;
@@ -72,9 +92,10 @@ function deliveryStatusForMessage(
     me: any,
     myRcUserId?: string | null,
     dmOtherWlUserId?: string | null,
-    hasPeerRead?: boolean
+    hasPeerRead?: boolean,
+    opts?: { isGroupChat?: boolean }
 ): "sending" | "sent" | "delivered" | "seen" | undefined {
-    if (!message || !isOutgoingAuthor(message, me, myRcUserId, dmOtherWlUserId)) return undefined;
+    if (!message || !isOutgoingAuthor(message, me, myRcUserId, dmOtherWlUserId, opts)) return undefined;
     const id = String(message._id ?? "");
     if (id.startsWith("temp-")) return "sending";
     if (hasPeerRead) return "seen";
@@ -93,28 +114,48 @@ const Messages = ({ theme = "dark" }: any) => {
 
     const dmOtherWlUserId = chosenChatDetails?.userId != null ? String(chosenChatDetails.userId) : null;
 
-    /** Backend returns chronological (oldest first); reducer must not re-reverse. Keep sorted for WS + pagination merges. */
-    const displayMessages = useMemo(
-        () =>
-            [...messages].sort(
-                (a, b) =>
-                    new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime() ||
-                    String(a._id).localeCompare(String(b._id)),
-            ),
-        [messages],
+    const groupAuthorOpts = useMemo(
+        () => ({ isGroupChat: Boolean(chosenGroupChatDetails) }),
+        [chosenGroupChatDetails],
     );
+
+    /** Backend returns chronological (oldest first); reducer must not re-reverse. Keep sorted for polling + pagination merges. */
+    const displayMessages = useMemo(() => {
+        const sorted = [...messages].sort(
+            (a, b) =>
+                new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime() ||
+                String(a._id).localeCompare(String(b._id)),
+        );
+        const extraForSlug = [userDetails, ...(friends || [])].filter(Boolean);
+        return sorted.map((m: any) => {
+            if (m.type === 'wl-community-sys') return m;
+            const c = String(m.content ?? '');
+            if (c.startsWith(WL_COMMUNITY_SYS_PREFIX)) {
+                return { ...m, content: c.slice(WL_COMMUNITY_SYS_PREFIX.length), type: 'wl-community-sys' };
+            }
+            let out = m;
+            if (chosenGroupChatDetails?.type === 'community') {
+                out = rewriteStaleCommunitySlugMessage(out, chosenGroupChatDetails, extraForSlug as any[]);
+            }
+            return out;
+        });
+    }, [messages, chosenGroupChatDetails, friends, userDetails]);
 
     const handleDeleteMessage = React.useCallback(
         async (messageId: string, mode: 'me' | 'both') => {
             const st = store.getState().chat;
             const rid = st.rcChannelId;
-            const cid = st.conversationId;
+            const g = st.chosenGroupChatDetails;
+            const gid = g?.groupId ?? g?._id;
+            /** Only send DM conversation id when a 1:1 thread is active (never reuse group id stored here by mistake). */
+            const cid = st.chosenChatDetails ? st.conversationId : null;
+            const groupIdStr = gid != null && gid !== '' ? String(gid) : '';
             if (mode === 'both' && !rid) {
                 dispatch(showAlert('Chat room not ready — try again.'));
                 return;
             }
-            if (mode === 'me' && !cid) {
-                dispatch(showAlert('Conversation is not ready — try again.'));
+            if (mode === 'me' && !cid && !groupIdStr) {
+                dispatch(showAlert('Chat is not ready — try again.'));
                 return;
             }
             const r = await deleteChatMessage({
@@ -122,9 +163,20 @@ const Messages = ({ theme = "dark" }: any) => {
                 messageId,
                 roomId: rid || undefined,
                 conversationId: cid || undefined,
+                groupChatId: groupIdStr || undefined,
             });
-            if (r?.success) dispatch(removeChatMessage(messageId));
-            else dispatch(showAlert((r as { error?: string })?.error || 'Could not delete message'));
+            if (!r?.success) {
+                dispatch(showAlert((r as { error?: string })?.error || 'Could not delete message'));
+                return;
+            }
+            if (groupIdStr) {
+                const historyData = await fetchGroupHistory(groupIdStr, 0);
+                dispatch(
+                    replaceChatMessages(Array.isArray(historyData?.messages) ? historyData.messages : []),
+                );
+            } else {
+                dispatch(removeChatMessage(messageId));
+            }
         },
         [dispatch],
     );
@@ -147,6 +199,7 @@ const Messages = ({ theme = "dark" }: any) => {
     const lastMarkReadAtRef = useRef<number>(0);
     const receiptFetchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const lastReceiptFetchAtRef = useRef<number>(0);
+
     useEffect(() => {
         let alive = true;
         getRCToken().then((d) => {
@@ -177,14 +230,34 @@ const Messages = ({ theme = "dark" }: any) => {
         initRC();
     }, []);
 
+    /** Align Redux unread map with RC (bell + header badge) when messenger mounts. */
+    useEffect(() => {
+        let cancelled = false;
+        (async () => {
+            const res = await fetchDmUnreadSnapshot();
+            if (cancelled || !res?.success) return;
+            const map =
+                res.unreadByRid && typeof res.unreadByRid === "object" ? res.unreadByRid : {};
+            dispatch(setDmUnreadByRidBulk(map));
+        })();
+        return () => {
+            cancelled = true;
+        };
+    }, [dispatch]);
+
     // Subscribe to RC room for live messages when chat changes
     useEffect(() => {
         if (!rcChannelId) return;
         subscribeToRoom(rcChannelId);
 
-        const unsubMsg = onNewMessage((rcMsg: any) => {
+        const unsubMsg = onNewMessage((rawRc: any) => {
+            void (async () => {
+            const rcMsg = normalizeRcStreamRoomMessage(rawRc);
             // Skip echoes of our own sends (REST already appended with Mongo author._id)
             if (isRcStreamFromMe(rcMsg, userDetails)) return;
+            if (rcMsg?._hidden) return;
+            const t = rcMsg?.t;
+            if (t === 'rm' || t === 'message_removed') return;
 
             const activeRid = store.getState().chat.rcChannelId;
             const msgRid = rcMsg.rid ? String(rcMsg.rid) : '';
@@ -200,40 +273,123 @@ const Messages = ({ theme = "dark" }: any) => {
             const bodyText = stripChatHtml(String(rcMsg.msg || ''));
             const tabHidden = typeof document !== 'undefined' && document.visibilityState === 'hidden';
             const otherRoom = Boolean(msgRid && String(activeRid || '') !== msgRid);
-            if (bodyText && (tabHidden || otherRoom)) {
+            const skipNotifyForRcSystem = canonicalMembershipSide(String(t || '')) != null;
+            const windowBlurred =
+                typeof document !== 'undefined' && typeof document.hasFocus === 'function' && !document.hasFocus();
+            const shouldNotify =
+                bodyText &&
+                !skipNotifyForRcSystem &&
+                (tabHidden || otherRoom || windowBlurred);
+            if (shouldNotify) {
                 notifyChatMessage(peerName, bodyText, msgRid || 'wl-chat', {
-                    allowWhenVisible: otherRoom,
+                    allowWhenVisible: otherRoom || windowBlurred,
                 });
             }
 
-            // Convert RC message format to our format
+            // Convert RC message format to our format (group: map RC slug → WL user from participants)
+            const stChat = store.getState().chat;
+            let gDetails = stChat.chosenGroupChatDetails;
+            const slugBody = String(rcMsg.msg || '').trim();
+            const groupId = gDetails?.groupId ?? gDetails?._id;
+            const maybeRcMembershipRow =
+                canonicalMembershipSide(rcMsg?.t ?? rcMsg?.type) != null;
+            let serverResolved: any = null;
+            if (groupId && slugBody && maybeRcMembershipRow) {
+                const r = await fetchGroupMemberByRcSlug(String(groupId), slugBody);
+                if (r?.user) {
+                    serverResolved = r.user;
+                    if (serverResolved?._id && gDetails) {
+                        const pid = String(serverResolved._id);
+                        const exists = (gDetails.participants || []).some(
+                            (p: any) => String(p?._id ?? p?.id) === pid,
+                        );
+                        if (!exists) {
+                            const next = {
+                                ...gDetails,
+                                participants: [...(gDetails.participants || []), serverResolved],
+                            };
+                            dispatch(setChosenGroupChatDetails(next as any));
+                            gDetails = next;
+                        }
+                    }
+                }
+            }
+
+            const rcSlug = String(rcMsg.u?.username || '').toLowerCase();
+            let author: any = {
+                _id: rcMsg.u?._id || 'unknown',
+                username: rcMsg.alias || rcMsg.u?.username || 'Unknown',
+                image: null,
+                role: 'user',
+                status: 'active',
+            };
+            const plistForAuthor = [...(gDetails?.participants || [])];
+            const admA = gDetails?.admin;
+            if (admA && typeof admA === 'object' && admA._id && !plistForAuthor.some((x: any) => String(x?._id) === String(admA._id))) {
+                plistForAuthor.push(admA);
+            }
+            if (serverResolved?._id) {
+                if (!plistForAuthor.some((x: any) => String(x?._id) === String(serverResolved._id))) {
+                    plistForAuthor.push(serverResolved);
+                }
+            }
+            const matchAuthor =
+                plistForAuthor.find(
+                    (x: any) => x?.email && toRocketChatUsername(String(x.email)).toLowerCase() === rcSlug,
+                ) || null;
+            if (matchAuthor) {
+                author = {
+                    _id: matchAuthor._id,
+                    username: matchAuthor.username,
+                    image: matchAuthor.image ?? null,
+                    role: matchAuthor.role ?? 'user',
+                    status: matchAuthor.status ?? 'active',
+                };
+            } else if (serverResolved?._id && canonicalMembershipSide(rcMsg?.t ?? rcMsg?.type)) {
+                /** RC bot may be `u`; attach author from resolved member for join/leave lines. */
+                author = {
+                    _id: serverResolved._id,
+                    username: serverResolved.username,
+                    image: serverResolved.image ?? null,
+                    role: serverResolved.role ?? 'user',
+                    status: serverResolved.status ?? 'active',
+                };
+            }
+
+            const extraUsers = [userDetails, ...(friends || [])].filter(Boolean);
+            const parsed = parseCommunityGroupRealtimeMessage(
+                String(rcMsg.msg || ''),
+                gDetails,
+                rcMsg?.t ?? rcMsg?.type,
+                rcMsg?.u?.username,
+                extraUsers,
+                serverResolved,
+            );
+            const wlRcSubtype = wlRcSubtypeFromRocketType(rcMsg?.t ?? rcMsg?.type);
             const newMsg = {
                 _id: rcMsg._id || `rc-${Date.now()}`,
-                content: rcMsg.msg || '',
-                author: {
-                    _id: rcMsg.u?._id || 'unknown',
-                    username: rcMsg.alias || rcMsg.u?.username || 'Unknown',
-                    image: null,
-                    role: 'user',
-                    status: 'active',
-                },
+                content: parsed.content,
+                author,
                 createdAt: rcMsg.ts?.$date ? new Date(rcMsg.ts.$date).toISOString() : new Date().toISOString(),
+                type: parsed.type,
+                ...(wlRcSubtype ? { wlRcSubtype } : {}),
             };
             dispatch(addNewMessage(newMsg as any));
+            })();
         });
 
         return () => {
             unsubMsg();
             unsubscribeFromRoom(rcChannelId);
         };
-    }, [rcChannelId, userDetails, dispatch]);
+    }, [rcChannelId, userDetails, friends, dispatch]);
 
     // Mark RC room read with throttling (avoid RC rate-limit spam).
     useEffect(() => {
         if (!rcChannelId) return;
         const last = displayMessages[displayMessages.length - 1];
         if (!last) return;
-        const incomingLast = !isOutgoingAuthor(last, userDetails, myRcUserId, dmOtherWlUserId);
+        const incomingLast = !isOutgoingAuthor(last, userDetails, myRcUserId, dmOtherWlUserId, groupAuthorOpts);
         if (!incomingLast) return;
         if (Date.now() - lastMarkReadAtRef.current < 8000) return;
         if (markReadTimerRef.current) clearTimeout(markReadTimerRef.current);
@@ -244,7 +400,7 @@ const Messages = ({ theme = "dark" }: any) => {
         return () => {
             if (markReadTimerRef.current) clearTimeout(markReadTimerRef.current);
         };
-    }, [rcChannelId, displayMessages, userDetails, myRcUserId, dmOtherWlUserId]);
+    }, [rcChannelId, displayMessages, userDetails, myRcUserId, dmOtherWlUserId, groupAuthorOpts]);
 
     // Event/dependency-driven receipt refresh (no polling interval).
     useEffect(() => {
@@ -254,7 +410,7 @@ const Messages = ({ theme = "dark" }: any) => {
             return;
         }
         const outgoingIds = displayMessages
-            .filter((m: any) => isOutgoingAuthor(m, userDetails, myRcUserId, dmOtherWlUserId))
+            .filter((m: any) => isOutgoingAuthor(m, userDetails, myRcUserId, dmOtherWlUserId, groupAuthorOpts))
             .map((m: any) => String(m?._id || ''))
             .filter((id: string) => id && !id.startsWith('temp-'))
             .slice(-15);
@@ -301,7 +457,7 @@ const Messages = ({ theme = "dark" }: any) => {
                 receiptFetchTimerRef.current = null;
             }
         };
-    }, [chosenChatDetails, rcChannelId, conversationId, displayMessages, userDetails, myRcUserId, dmOtherWlUserId, peerReadByMessageId]);
+    }, [chosenChatDetails, rcChannelId, conversationId, displayMessages, userDetails, myRcUserId, dmOtherWlUserId, peerReadByMessageId, groupAuthorOpts]);
 
     // ── Fetch History via REST ──────────────────────────────
     useEffect(() => {
@@ -359,8 +515,36 @@ const Messages = ({ theme = "dark" }: any) => {
         if (index === 0) {
             return false;
         }
-        return message.author._id === displayMessages[index - 1].author._id;
-    }
+        return String(message.author._id ?? '') === String(displayMessages[index - 1].author._id ?? '');
+    };
+
+    const groupSenderLabel = (message: any) => {
+        const aid = String(message?.author?._id ?? message?.author?.id ?? '');
+        const parts = chosenGroupChatDetails?.participants ?? [];
+        const admin = chosenGroupChatDetails?.admin;
+        const adminObj = admin && typeof admin === 'object' ? admin : null;
+        const all: any[] = [...parts];
+        if (
+            adminObj?._id &&
+            !all.some((x: any) => String(x?._id ?? x?.id) === String(adminObj._id))
+        ) {
+            all.push(adminObj);
+        }
+        let p = all.find((x: any) => String(x?._id ?? x?.id) === aid);
+        if (!p) {
+            const slug = String(message?.author?.username ?? '').toLowerCase();
+            p = all.find(
+                (x: any) =>
+                    x?.email && toRocketChatUsername(String(x.email)).toLowerCase() === slug,
+            );
+        }
+        const fromParticipant = String(p?.username ?? '').trim();
+        const adminId = adminObj ? String(adminObj._id ?? '') : String(admin ?? '');
+        const fromAdmin =
+            adminId && aid === adminId ? String(adminObj?.username ?? '').trim() : '';
+        const fromAuthor = String(message?.author?.username ?? '').trim();
+        return fromParticipant || fromAdmin || fromAuthor || 'Member';
+    };
 
     const scrollToBottom = (behavior: ScrollBehavior = "smooth") => {
         const el = scrollContainerRef.current;
@@ -473,7 +657,7 @@ const Messages = ({ theme = "dark" }: any) => {
                 const rcRid = historyData?.rcChannelId || null;
                 dispatch(
                     setChatChannelInfo({
-                        conversationId: chosenGroupChatDetails.groupId,
+                        conversationId: null,
                         rcChannelId: rcRid,
                     }),
                 );
@@ -549,7 +733,9 @@ const Messages = ({ theme = "dark" }: any) => {
                     <div className={`mt-[15px] text-[13px] text-center px-6 ${theme === "light" ? "text-slate-500" : "text-grey"}`}>
                         {chat.chosenChatDetails?.userId
                             ? `This is the beginning of your conversation with ${chat.chosenChatDetails?.username}`
-                            : "This is the beginning of the conversation with your friends!"}
+                            : chat.chosenGroupChatDetails?.type === 'community'
+                              ? 'This is the beginning of the conversation with your community.'
+                              : 'This is the beginning of the conversation with your friends!'}
                     </div>
                     : null
             }
@@ -602,7 +788,18 @@ const Messages = ({ theme = "dark" }: any) => {
                 const prevMessageTime = index > 0 && formatDateHH_MM_AMPM(new Date(displayMessages[index - 1]?.createdAt));
                 const isSameTime = index > 0 ? thisMessageTime === prevMessageTime : false;
 
-                const incomingMessage = !isOutgoingAuthor(message, userDetails, myRcUserId, dmOtherWlUserId);
+                if (message.type === 'wl-community-sys') {
+                    return (
+                        <div key={message._id + index} className="w-full px-2 sm:px-3">
+                            {(!isSameDay || index === 0) && (
+                                <DateSeparator date={message.createdAt} theme={theme} />
+                            )}
+                            <ChatSystemNotice text={message.content} theme={theme} />
+                        </div>
+                    );
+                }
+
+                const incomingMessage = !isOutgoingAuthor(message, userDetails, myRcUserId, dmOtherWlUserId, groupAuthorOpts);
 
                 // Handle direct chat and group chat scenarios
                 let participantImage = null;
@@ -613,18 +810,34 @@ const Messages = ({ theme = "dark" }: any) => {
                 } else if (chosenGroupChatDetails) {
                     // Group chat: Find the participant in the group
                     const participant = chosenGroupChatDetails?.participants?.find(
-                        (participant: any) => participant._id === message.author._id
+                        (participant: any) =>
+                            String(participant?._id ?? participant?.id) === String(message.author?._id ?? ''),
                     );
                     participantImage = participant?.image;
                 }
 
                 const isFriend = friends.find((x: any) => (x._id === message.author._id))
                 const disableBookButton = message.author?.role === 'admin' || userDetails?.role === 'admin' || userDetails?.status === 'review' || message.author?.status === 'review'
+                const showGroupSender =
+                    Boolean(chosenGroupChatDetails) &&
+                    incomingMessage &&
+                    !sameAuthor(message, index);
+
                 return (
                     <div key={message._id + index} className="w-full px-2 sm:px-3">
                         {(!isSameDay || index === 0) && (
                             <DateSeparator date={message.createdAt} theme={theme} />
                         )}
+
+                        {showGroupSender ? (
+                            <div
+                                className={`mb-0.5 pl-1 text-[11px] font-semibold ${
+                                    theme === 'light' ? 'text-slate-600' : 'text-slate-300'
+                                }`}
+                            >
+                                {groupSenderLabel(message)}
+                            </div>
+                        ) : null}
 
                         <Message
                             content={message.content}
@@ -650,11 +863,15 @@ const Messages = ({ theme = "dark" }: any) => {
                                   (peerLastSeenMs != null &&
                                     !Number.isNaN(new Date(message.createdAt).getTime()) &&
                                     new Date(message.createdAt).getTime() <= peerLastSeenMs),
+                                groupAuthorOpts,
                             )}
                             messageId={message._id}
                             roomId={rcChannelId}
                             canDelete={!incomingMessage && !String(message._id).startsWith('temp-')}
-                            deleteForMeAvailable={Boolean(chosenChatDetails && conversationId)}
+                            deleteForMeAvailable={Boolean(
+                                (chosenChatDetails && conversationId) ||
+                                    (chosenGroupChatDetails && (chosenGroupChatDetails.groupId || chosenGroupChatDetails._id)),
+                            )}
                             onDeleteMessage={handleDeleteMessage}
                         />
                     </div>

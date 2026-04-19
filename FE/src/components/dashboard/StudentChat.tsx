@@ -1,10 +1,15 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useDispatch } from 'react-redux';
 import IconButton from '@mui/material/IconButton';
+import Dialog from '@mui/material/Dialog';
+import DialogTitle from '@mui/material/DialogTitle';
+import DialogContent from '@mui/material/DialogContent';
+import DialogActions from '@mui/material/DialogActions';
+import Button from '@mui/material/Button';
 import { MessageCircle, Users, Plus, X, CheckCircle2, MoreVertical } from 'lucide-react';
 import Messenger from '../../pages/Dashboard/Messenger/Messenger';
 import { useAppSelector } from '../../store';
-import { onSubscriptionChanged } from '../../services/rcRealtime';
+import { onSubscriptionChanged, subscribeToRoom } from '../../services/rcRealtime';
 import {
   doGetMyEvents,
   getAllCommunityChats,
@@ -16,6 +21,7 @@ import {
   joinPrivateChat,
 } from '../../api/api';
 import { clearDmThread, hideDmFromList, fetchDmUnreadSnapshot } from '../../api/chatApi';
+import { setDmUnreadByRidBulk, patchDmUnreadRid } from '../../actions/chatActions';
 import {
   setChosenChatDetails,
   setChosenGroupChatDetails,
@@ -24,6 +30,7 @@ import {
 } from '../../actions/chatActions';
 import { showAlert } from '../../actions/alertActions';
 import { updateMe } from '../../actions/authActions';
+import { leaveGroupAction } from '../../actions/groupChatActions';
 import { actionTypes } from '../../actions/types';
 import { isTheEventGoingOn } from '../../actions/common';
 
@@ -78,11 +85,18 @@ const StudentChat: React.FC = () => {
 
   const [createOpen, setCreateOpen] = useState(false);
   const [privateDmMenuOpenId, setPrivateDmMenuOpenId] = useState<string | null>(null);
+  const [communityMenuOpenId, setCommunityMenuOpenId] = useState<string | null>(null);
+  const [communityMenuRow, setCommunityMenuRow] = useState<CommunityRow | null>(null);
+  const [leaveCommunityConfirmOpen, setLeaveCommunityConfirmOpen] = useState(false);
+  const [leaveCommunityRow, setLeaveCommunityRow] = useState<CommunityRow | null>(null);
   const [privateDmMenuRow, setPrivateDmMenuRow] = useState<Extract<PrivateRow, { kind: 'privateDm' }> | null>(null);
   const [newName, setNewName] = useState('');
   const [newDescription, setNewDescription] = useState('');
   const [newOpenToAll, setNewOpenToAll] = useState(true);
   const [creating, setCreating] = useState(false);
+  const [communityInviteQuery, setCommunityInviteQuery] = useState('');
+  const [communityInviteRows, setCommunityInviteRows] = useState<PrivateRow[]>([]);
+  const [communityInviteSelected, setCommunityInviteSelected] = useState<Array<{ id: string; title: string }>>([]);
   const [expertCustomerSearchRows, setExpertCustomerSearchRows] = useState<PrivateRow[]>([]);
   const [studentExpertSearchRows, setStudentExpertSearchRows] = useState<PrivateRow[]>([]);
 
@@ -124,7 +138,8 @@ const StudentChat: React.FC = () => {
   }, [userDetails, isCustomer, isExpert, currentUserId]);
 
   const loadCommunityChats = React.useCallback(async () => {
-    if (!userDetails?.userId) return;
+    const uid = userDetails?._id ?? userDetails?.id ?? userDetails?.userId;
+    if (!uid) return;
     try {
       const response = await getAllCommunityChats();
       if (response === false) return;
@@ -146,7 +161,7 @@ const StudentChat: React.FC = () => {
     } catch (e: any) {
       dispatch(showAlert(e?.message || 'Failed to fetch community chats'));
     }
-  }, [userDetails?.userId, userDetails?.missedChats, dispatch]);
+  }, [currentUserId, userDetails?.missedChats, dispatch]);
 
   useEffect(() => {
     loadCommunityChats();
@@ -161,8 +176,10 @@ const StudentChat: React.FC = () => {
       if (cancelled) return;
       if (res?.success && res.unreadByRid && typeof res.unreadByRid === 'object') {
         setRcUnreadByRid(res.unreadByRid);
+        dispatch(setDmUnreadByRidBulk(res.unreadByRid));
       } else {
         setRcUnreadByRid({});
+        dispatch(setDmUnreadByRidBulk({}));
       }
       // Also refresh directConversations list once on entry so newly-created DMs appear without click.
       dispatch(updateMe() as any);
@@ -172,12 +189,12 @@ const StudentChat: React.FC = () => {
     };
   }, [dispatch, isCustomer, isExpert]);
 
-  // Event-driven refresh: react to RC user subscription updates (includes brand-new DMs not yet opened).
+  // Event-driven refresh: react to RC user subscription updates (DMs + community channels/groups).
   useEffect(() => {
     if (!isCustomer && !isExpert) return;
     let lastRefreshAt = 0;
     const unsub = onSubscriptionChanged(({ roomId, type, unread }) => {
-      if (type && type !== 'd') return; // only direct messages
+      if (type && !['d', 'c', 'p'].includes(type)) return;
       const rid = String(roomId || '');
       if (!rid) return;
       if (typeof unread === 'number') {
@@ -187,16 +204,25 @@ const StudentChat: React.FC = () => {
           else delete next[rid];
           return next;
         });
+        dispatch(patchDmUnreadRid(rid, unread));
       }
-      const known = privateRows.some((r) => r.kind === 'privateDm' && String(r.rcChannelId || '') === rid);
-      if (known) return;
+      const knownDm = privateRows.some((r) => r.kind === 'privateDm' && String(r.rcChannelId || '') === rid);
+      const knownCommunity = communityChats.some((c) => String(c.raw?.rcChannelId || '') === rid);
+      if (knownDm || knownCommunity) return;
       const now = Date.now();
       if (now - lastRefreshAt < 3000) return;
       lastRefreshAt = now;
       dispatch(updateMe() as any);
     });
     return () => unsub();
-  }, [dispatch, isCustomer, isExpert, privateRows]);
+  }, [dispatch, isCustomer, isExpert, privateRows, communityChats]);
+
+  useEffect(() => {
+    communityChats.forEach(c => {
+      const rid = c.raw?.rcChannelId;
+      if (rid) subscribeToRoom(String(rid));
+    });
+  }, [communityChats]);
 
   useEffect(() => {
     let cancelled = false;
@@ -316,6 +342,53 @@ const StudentChat: React.FC = () => {
       window.clearTimeout(t);
     };
   }, [isExpert, privateQuery]);
+
+  useEffect(() => {
+    if (!isExpert || !createOpen || newOpenToAll) {
+      setCommunityInviteRows([]);
+      return;
+    }
+    const q = communityInviteQuery.trim();
+    if (!q) {
+      setCommunityInviteRows([]);
+      return;
+    }
+    let cancelled = false;
+    const t = window.setTimeout(async () => {
+      try {
+        const res: any = await doFilterCustomers({
+          username: q,
+          keywords: [],
+          services: [],
+          sortBy: 'Name in ASC',
+        });
+        if (cancelled) return;
+        const list = Array.isArray(res?.result) ? res.result : [];
+        const rows: PrivateRow[] = list.map((u: any) => ({
+          kind: 'expertCustomer' as const,
+          id: String(u._id),
+          title: String(u.username || u.email || 'User'),
+          lastLine: String(u.email || ''),
+          raw: u,
+        }));
+        setCommunityInviteRows(rows);
+      } catch {
+        if (!cancelled) setCommunityInviteRows([]);
+      }
+    }, 280);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(t);
+    };
+  }, [isExpert, createOpen, newOpenToAll, communityInviteQuery]);
+
+  useEffect(() => {
+    if (newOpenToAll) {
+      setCommunityInviteSelected([]);
+      setCommunityInviteQuery('');
+      setCommunityInviteRows([]);
+    }
+  }, [newOpenToAll]);
 
   useEffect(() => {
     if (!isCustomer) {
@@ -477,36 +550,53 @@ const StudentChat: React.FC = () => {
     });
   }, [privateRows, privateQuery, isExpert, isCustomer, expertCustomerSearchRows, studentExpertSearchRows]);
 
-  const openCommunity = async (row: CommunityRow) => {
-    if (isExpert) {
-      try {
-        const res: any = await joinCommunityChat(row._id);
-        if (res?.status === 'SUCCESS') {
-          dispatch(updateMe() as any);
-        } else if (res?.error) {
-          dispatch(showAlert(res.error));
-        }
-      } catch {
-        /* may already be a member */
+  const openCommunity = React.useCallback(
+    async (row: CommunityRow) => {
+      const rid = row.raw?.rcChannelId ? String(row.raw.rcChannelId) : '';
+      if (rid) {
+        dispatch(clearDmUnreadRid(rid));
+        setRcUnreadByRid(prev => {
+          const next = { ...prev };
+          delete next[rid];
+          return next;
+        });
       }
-    }
-    dispatch(
-      setChosenGroupChatDetails({
-        ...row.raw,
-        groupId: row._id,
-        groupName: row.name,
-        name: row.name,
-      } as any),
-    );
-    dispatch({
-      type: 'updateMissedChatsOfGeneralChat',
-      payload: { receiverId: row._id, count: 0 },
-    });
-  };
+      if (isExpert && !row.raw?.isJoined) {
+        try {
+          const res: any = await joinCommunityChat(row._id);
+          if (res?.status === 'SUCCESS') {
+            dispatch(updateMe() as any);
+            await loadCommunityChats();
+          } else if (res?.error) {
+            dispatch(showAlert(res.error));
+          }
+        } catch {
+          /* may already be a member */
+        }
+      }
+      dispatch(
+        setChosenGroupChatDetails({
+          ...row.raw,
+          groupId: row._id,
+          groupName: row.name,
+          name: row.name,
+        } as any),
+      );
+      dispatch({
+        type: 'updateMissedChatsOfGeneralChat',
+        payload: { receiverId: row._id, count: 0 },
+      });
+    },
+    [dispatch, isExpert, loadCommunityChats],
+  );
 
   const onCreateCommunity = async () => {
     if (!newName.trim()) {
       dispatch(showAlert('Community name is required'));
+      return;
+    }
+    if (!newOpenToAll && communityInviteSelected.length === 0) {
+      dispatch(showAlert('Add at least one member, or turn on “Open to all users”.'));
       return;
     }
     setCreating(true);
@@ -515,6 +605,7 @@ const StudentChat: React.FC = () => {
         name: newName.trim(),
         description: newDescription.trim() || undefined,
         isOpenToAll: newOpenToAll,
+        participants: !newOpenToAll ? communityInviteSelected.map(p => p.id) : undefined,
       });
       if (res?.status === 'SUCCESS') {
         dispatch(showAlert('Community created'));
@@ -522,6 +613,9 @@ const StudentChat: React.FC = () => {
         setNewName('');
         setNewDescription('');
         setNewOpenToAll(true);
+        setCommunityInviteSelected([]);
+        setCommunityInviteQuery('');
+        setCommunityInviteRows([]);
         dispatch(updateMe() as any);
         await loadCommunityChats();
       } else {
@@ -532,40 +626,91 @@ const StudentChat: React.FC = () => {
     }
   };
 
-  const openPrivateDm = (row: Extract<PrivateRow, { kind: 'privateDm' }>) => {
-    if (row.rcChannelId) {
-      const rid = String(row.rcChannelId);
-      dispatch(clearDmUnreadRid(rid));
-      setRcUnreadByRid(prev => {
-        const next = { ...prev };
-        delete next[rid];
-        return next;
-      });
+  const openPrivateDm = React.useCallback(
+    (row: Extract<PrivateRow, { kind: 'privateDm' }>) => {
+      if (row.rcChannelId) {
+        const rid = String(row.rcChannelId);
+        dispatch(clearDmUnreadRid(rid));
+        setRcUnreadByRid(prev => {
+          const next = { ...prev };
+          delete next[rid];
+          return next;
+        });
+      }
+      dispatch(
+        setChosenChatDetails({
+          userId: row.otherUserId,
+          username: row.title,
+          image: row.image,
+        }),
+      );
+    },
+    [dispatch],
+  );
+
+  const consumeStorageChatNav = React.useCallback(() => {
+    const dmRid = localStorage.getItem('wl_open_dm_rid');
+    if (dmRid) {
+      const row = privateRows.find(
+        (r): r is Extract<PrivateRow, { kind: 'privateDm' }> =>
+          r.kind === 'privateDm' && String(r.rcChannelId || '') === String(dmRid),
+      );
+      if (row) {
+        openPrivateDm(row);
+        localStorage.removeItem('wl_open_dm_rid');
+      }
     }
-    dispatch(
-      setChosenChatDetails({
-        userId: row.otherUserId,
-        username: row.title,
-        image: row.image,
-      }),
-    );
-  };
+    const comRid = localStorage.getItem('wl_open_community_rc_rid');
+    if (comRid) {
+      const row = communityChats.find(c => String(c.raw?.rcChannelId || '') === String(comRid));
+      if (row) {
+        void openCommunity(row);
+        localStorage.removeItem('wl_open_community_rc_rid');
+      }
+    }
+  }, [privateRows, communityChats, openPrivateDm, openCommunity]);
 
   useEffect(() => {
-    const targetRid = localStorage.getItem('wl_open_dm_rid');
-    if (!targetRid) return;
-    const row = privateRows.find(
-      (r): r is Extract<PrivateRow, { kind: 'privateDm' }> =>
-        r.kind === 'privateDm' && String(r.rcChannelId || '') === String(targetRid),
-    );
-    if (!row) return;
-    openPrivateDm(row);
-    localStorage.removeItem('wl_open_dm_rid');
-  }, [privateRows]);
+    consumeStorageChatNav();
+  }, [consumeStorageChatNav]);
+
+  useEffect(() => {
+    const onNav = () => consumeStorageChatNav();
+    window.addEventListener('wl-open-chat-nav', onNav);
+    return () => window.removeEventListener('wl-open-chat-nav', onNav);
+  }, [consumeStorageChatNav]);
 
   const closePrivateDmMenu = () => {
     setPrivateDmMenuOpenId(null);
     setPrivateDmMenuRow(null);
+  };
+
+  const closeCommunityMenu = () => {
+    setCommunityMenuOpenId(null);
+    setCommunityMenuRow(null);
+  };
+
+  const openCommunityMenu = (e: React.MouseEvent<HTMLElement>, row: CommunityRow, menuId: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setCommunityMenuOpenId(menuId);
+    setCommunityMenuRow(row);
+  };
+
+  const openLeaveCommunityConfirm = () => {
+    const row = communityMenuRow;
+    closeCommunityMenu();
+    if (!row?._id) return;
+    setLeaveCommunityRow(row);
+    setLeaveCommunityConfirmOpen(true);
+  };
+
+  const confirmLeaveCommunity = () => {
+    const row = leaveCommunityRow;
+    setLeaveCommunityConfirmOpen(false);
+    setLeaveCommunityRow(null);
+    if (!row?._id) return;
+    dispatch(leaveGroupAction({ groupChatId: String(row._id) }));
   };
 
   const openPrivateDmMenu = (
@@ -661,7 +806,15 @@ const StudentChat: React.FC = () => {
             {isExpert ? (
               <button
                 type="button"
-                onClick={() => setCreateOpen(true)}
+                onClick={() => {
+                  setNewName('');
+                  setNewDescription('');
+                  setNewOpenToAll(true);
+                  setCommunityInviteSelected([]);
+                  setCommunityInviteQuery('');
+                  setCommunityInviteRows([]);
+                  setCreateOpen(true);
+                }}
                 className="inline-flex shrink-0 items-center gap-1 rounded-full bg-[#234C6A] px-2.5 py-1 text-[10px] font-semibold text-white hover:brightness-95"
               >
                 <Plus className="h-3 w-3" aria-hidden />
@@ -692,17 +845,27 @@ const StudentChat: React.FC = () => {
             ) : (
               filteredCommunity.map(chat => {
                 const active = isCommunityActive(chat._id);
-                return (
-                  <button
-                    key={chat._id}
-                    type="button"
-                    onClick={() => void openCommunity(chat)}
-                    className={`w-full rounded-xl px-3 py-2 text-left text-xs mb-1 flex items-start gap-2 transition-colors ${
-                      active
-                        ? 'bg-[#E8EEF4] text-slate-900'
-                        : 'hover:bg-slate-100 text-slate-700'
-                    }`}
-                  >
+                const crid = chat.raw?.rcChannelId ? String(chat.raw.rcChannelId) : '';
+                const unreadFromRc = crid
+                  ? Math.max(
+                      Number(dmUnreadByRid?.[crid] || 0),
+                      Number(rcUnreadByRid?.[crid] || 0),
+                    )
+                  : 0;
+                const badge = Math.max(Number(chat.missedChats || 0), unreadFromRc);
+                const lastLine =
+                  unreadFromRc > 0 && crid
+                    ? `${unreadFromRc > 99 ? '99+' : unreadFromRc}+ new message${unreadFromRc > 1 ? 's' : ''}`
+                    : chat.lastLine;
+                const rowTone = active
+                  ? 'bg-[#E8EEF4] text-slate-900'
+                  : unreadFromRc > 0
+                    ? 'bg-amber-50/80 text-slate-900 ring-1 ring-amber-200/80 hover:bg-amber-50'
+                    : 'hover:bg-slate-100 text-slate-700';
+                const menuId = String(chat._id);
+                const menuOpen = communityMenuOpenId === menuId;
+                const inner = (
+                  <>
                     <div className="mt-0.5">
                       <span className="inline-flex h-6 w-6 items-center justify-center rounded-lg bg-slate-100 text-[#234C6A] text-[10px]">
                         <Users className="h-3.5 w-3.5" aria-hidden="true" />
@@ -711,15 +874,56 @@ const StudentChat: React.FC = () => {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between gap-2">
                         <p className="truncate font-semibold text-[11px]">{chat.name}</p>
-                        {chat.missedChats ? (
-                          <span className="ml-1 rounded-full bg-emerald-500/20 px-1.5 text-[10px] text-emerald-600">
-                            {chat.missedChats}
+                        {badge > 0 ? (
+                          <span className="ml-1 shrink-0 rounded-full bg-amber-500/20 px-1.5 text-[10px] font-semibold text-amber-800">
+                            {(badge > 99 ? '99+' : badge) + '+'}
                           </span>
                         ) : null}
                       </div>
-                      <p className="mt-0.5 line-clamp-2 text-[10px] text-slate-500">{chat.lastLine}</p>
+                      <p className="mt-0.5 line-clamp-2 text-[10px] text-slate-500">{lastLine}</p>
                     </div>
-                  </button>
+                  </>
+                );
+                return (
+                  <div
+                    key={chat._id}
+                    className={`relative mb-1 flex w-full items-stretch overflow-visible rounded-xl text-xs transition-colors ${rowTone}`}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => void openCommunity(chat)}
+                      className="flex min-w-0 flex-1 items-start gap-2 px-3 py-2 text-left"
+                    >
+                      {inner}
+                    </button>
+                    <IconButton
+                      size="small"
+                      aria-label="Community chat actions"
+                      className="shrink-0 self-stretch rounded-none px-1 text-slate-600"
+                      onClick={e => {
+                        if (menuOpen) {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          closeCommunityMenu();
+                          return;
+                        }
+                        openCommunityMenu(e, chat, menuId);
+                      }}
+                    >
+                      <MoreVertical className="h-4 w-4" strokeWidth={2} />
+                    </IconButton>
+                    {menuOpen ? (
+                      <div className="absolute right-2 top-[calc(100%+4px)] z-20 min-w-[150px] rounded-lg border border-slate-200 bg-white p-1 shadow-lg">
+                        <button
+                          type="button"
+                          className="w-full rounded-md px-3 py-2 text-left text-[12px] font-semibold text-slate-800 hover:bg-slate-50"
+                          onClick={() => openLeaveCommunityConfirm()}
+                        >
+                          Leave community
+                        </button>
+                      </div>
+                    ) : null}
+                  </div>
                 );
               })
             )}
@@ -907,6 +1111,37 @@ const StudentChat: React.FC = () => {
         <Messenger videoChaton={false} theme="light" />
       </section>
 
+      <Dialog
+        open={leaveCommunityConfirmOpen}
+        onClose={() => {
+          setLeaveCommunityConfirmOpen(false);
+          setLeaveCommunityRow(null);
+        }}
+        maxWidth="xs"
+        fullWidth
+      >
+        <DialogTitle>Leave this community?</DialogTitle>
+        <DialogContent>
+          <p className="text-sm text-slate-600">
+            You won’t see <strong>{leaveCommunityRow?.name ?? 'this community'}</strong> in your list anymore. Other
+            members remain in the chat, and a short notice will appear in the room that you left.
+          </p>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2, gap: 1 }}>
+          <Button
+            onClick={() => {
+              setLeaveCommunityConfirmOpen(false);
+              setLeaveCommunityRow(null);
+            }}
+          >
+            Cancel
+          </Button>
+          <Button variant="contained" color="error" onClick={confirmLeaveCommunity}>
+            Leave community
+          </Button>
+        </DialogActions>
+      </Dialog>
+
       {createOpen && isExpert ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 px-4">
           <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-5 shadow-xl">
@@ -917,7 +1152,12 @@ const StudentChat: React.FC = () => {
               </div>
               <button
                 type="button"
-                onClick={() => setCreateOpen(false)}
+                onClick={() => {
+                  setCreateOpen(false);
+                  setCommunityInviteSelected([]);
+                  setCommunityInviteQuery('');
+                  setCommunityInviteRows([]);
+                }}
                 className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 text-slate-600 hover:bg-slate-50"
                 aria-label="Close"
               >
@@ -952,11 +1192,84 @@ const StudentChat: React.FC = () => {
                 />
                 Open to all users
               </label>
+              {!newOpenToAll ? (
+                <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-3">
+                  <div className="mb-1 text-xs font-semibold text-slate-600">Invite members</div>
+                  <p className="mb-2 text-[11px] text-slate-500">
+                    Search your customers and add them to this community. At least one invite is required when the room is
+                    not open to everyone.
+                  </p>
+                  <input
+                    className="mb-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 outline-none focus:border-[#234C6A] focus:ring-2 focus:ring-[#234C6A]/60"
+                    value={communityInviteQuery}
+                    onChange={e => setCommunityInviteQuery(e.target.value)}
+                    placeholder="Search customers by name…"
+                    aria-label="Search customers to invite"
+                  />
+                  {communityInviteSelected.length > 0 ? (
+                    <div className="mb-2 flex flex-wrap gap-1.5">
+                      {communityInviteSelected.map(p => (
+                        <span
+                          key={p.id}
+                          className="inline-flex items-center gap-1 rounded-full bg-[#234C6A]/10 px-2 py-0.5 text-[11px] font-medium text-[#234C6A]"
+                        >
+                          {p.title}
+                          <button
+                            type="button"
+                            className="rounded-full p-0.5 hover:bg-[#234C6A]/20"
+                            aria-label={`Remove ${p.title}`}
+                            onClick={() =>
+                              setCommunityInviteSelected(prev => prev.filter(x => x.id !== p.id))
+                            }
+                          >
+                            <X className="h-3 w-3" />
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                  ) : null}
+                  <div className="max-h-36 overflow-y-auto rounded-xl border border-slate-200 bg-white">
+                    {communityInviteRows.length > 0 ? (
+                      communityInviteRows.map(r => {
+                        if (r.kind !== 'expertCustomer') return null;
+                        const selected = communityInviteSelected.some(x => x.id === r.id);
+                        return (
+                          <button
+                            key={r.id}
+                            type="button"
+                            disabled={selected}
+                            onClick={() =>
+                              setCommunityInviteSelected(prev =>
+                                prev.some(x => x.id === r.id)
+                                  ? prev
+                                  : [...prev, { id: r.id, title: r.title }],
+                              )
+                            }
+                            className="flex w-full items-center justify-between gap-2 border-b border-slate-100 px-3 py-2 text-left text-xs last:border-b-0 hover:bg-slate-50 disabled:opacity-50"
+                          >
+                            <span className="truncate font-medium text-slate-800">{r.title}</span>
+                            <span className="shrink-0 text-[10px] text-slate-500">{r.lastLine}</span>
+                          </button>
+                        );
+                      })
+                    ) : communityInviteQuery.trim() ? (
+                      <p className="px-3 py-3 text-[11px] text-slate-500">No matches.</p>
+                    ) : (
+                      <p className="px-3 py-3 text-[11px] text-slate-500">Type a name to search your customers.</p>
+                    )}
+                  </div>
+                </div>
+              ) : null}
             </div>
             <div className="mt-5 flex justify-end gap-2">
               <button
                 type="button"
-                onClick={() => setCreateOpen(false)}
+                onClick={() => {
+                  setCreateOpen(false);
+                  setCommunityInviteSelected([]);
+                  setCommunityInviteQuery('');
+                  setCommunityInviteRows([]);
+                }}
                 className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50"
               >
                 Cancel

@@ -3,6 +3,7 @@ import { createGroupChat, leaveGroup, deleteGroup } from "../api/api";
 import { AddMembersToGroupArgs, DeleteGroupArgs, LeaveGroupArgs } from "../api/types";
 import { showAlert } from "./alertActions";
 import { resetChatAction } from "./chatActions";
+import { updateMe } from "./authActions";
 // import { actionTypes, CurrentUser } from "./types";
 
 export const createGroupChatAction = (
@@ -25,9 +26,17 @@ export const leaveGroupAction = (
     return async (dispatch: Dispatch) => {
         const response = await leaveGroup(args);
 
-        if (response === "You have left the group!") {
+        if (
+            response === "You have left the group!" ||
+            (typeof response === 'string' && response.startsWith('The community was removed'))
+        ) {
             dispatch(showAlert(response));
-            dispatch(resetChatAction())
+            dispatch(resetChatAction());
+            dispatch(updateMe() as any);
+        } else if (typeof response === 'string' && response.length > 0) {
+            dispatch(showAlert(response));
+        } else {
+            dispatch(showAlert('Could not leave the community. Try again.'));
         }
     };
 };
@@ -36,9 +45,18 @@ export const deleteGroupAction = ({ groupChatId, groupChatName } : {groupChatId:
     return async (dispatch: Dispatch) => {
         const response = await deleteGroup({groupChatId});
 
-        if (response === "Group deleted successfully!") {
-            dispatch(showAlert(`You deleted the "${groupChatName}" group!`));
+        const ok =
+            response === "Group deleted successfully!" ||
+            (typeof response === "string" && response.includes("Group deleted successfully"));
+
+        if (ok) {
+            dispatch(showAlert(`You deleted the "${groupChatName}" community.`));
             dispatch(resetChatAction());
+            dispatch(updateMe() as any);
+        } else if (typeof response === 'string' && response.length > 0) {
+            dispatch(showAlert(response));
+        } else if (response !== false) {
+            dispatch(showAlert('Could not delete the community.'));
         }
     };
 };

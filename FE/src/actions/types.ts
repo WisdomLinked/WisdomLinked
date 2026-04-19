@@ -37,6 +37,10 @@ export enum actionTypes {
     incrementDmUnreadRid,
     clearDmUnreadRid,
     removeChatMessage,
+    /** Replace RC room unread map (e.g. REST subscriptions snapshot). */
+    setDmUnreadByRidBulk,
+    /** Single-room unread from RC `subscriptions-changed` (absolute count). */
+    patchDmUnreadRid,
 }
 
 export interface CurrentUser {
@@ -194,6 +198,16 @@ export interface ClearDmUnreadRid {
     payload: string | null;
 }
 
+export interface SetDmUnreadByRidBulk {
+    type: actionTypes.setDmUnreadByRidBulk;
+    payload: Record<string, number>;
+}
+
+export interface PatchDmUnreadRid {
+    type: actionTypes.patchDmUnreadRid;
+    payload: { rid: string; unread: number };
+}
+
 export interface RemoveChatMessage {
     type: actionTypes.removeChatMessage;
     payload: string;
@@ -261,7 +275,7 @@ export type FriendsActions =
 export interface SetChatChannelInfo {
     type: actionTypes.setChatChannelInfo;
     payload: {
-        conversationId: string;
+        conversationId: string | null;
         rcChannelId: string | null;
     };
 }
@@ -279,4 +293,6 @@ export type ChatActions =
     | ResetChat
     | IncrementDmUnreadRid
     | ClearDmUnreadRid
-    | RemoveChatMessage;
+    | RemoveChatMessage
+    | SetDmUnreadByRidBulk
+    | PatchDmUnreadRid;

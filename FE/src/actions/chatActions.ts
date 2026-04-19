@@ -16,6 +16,8 @@ import {
     IncrementDmUnreadRid,
     ClearDmUnreadRid,
     RemoveChatMessage,
+    SetDmUnreadByRidBulk,
+    PatchDmUnreadRid,
 } from "./types";
 
 export const setChosenChatDetails = (chatDetails: {
@@ -60,6 +62,16 @@ export const clearDmUnreadRid = (rid: string | null): ClearDmUnreadRid => ({
     payload: rid,
 });
 
+export const setDmUnreadByRidBulk = (map: Record<string, number>): SetDmUnreadByRidBulk => ({
+    type: actionTypes.setDmUnreadByRidBulk,
+    payload: map || {},
+});
+
+export const patchDmUnreadRid = (rid: string, unread: number): PatchDmUnreadRid => ({
+    type: actionTypes.patchDmUnreadRid,
+    payload: { rid, unread: Number(unread) || 0 },
+});
+
 export const removeChatMessage = (messageId: string): RemoveChatMessage => ({
     type: actionTypes.removeChatMessage,
     payload: messageId,
@@ -93,7 +105,10 @@ export const resetChatAction = (): ResetChat => {
     }
 }
 
-export const setChatChannelInfo = (info: { conversationId: string; rcChannelId: string | null }): SetChatChannelInfo => {
+export const setChatChannelInfo = (info: {
+    conversationId: string | null;
+    rcChannelId: string | null;
+}): SetChatChannelInfo => {
     return {
         type: actionTypes.setChatChannelInfo,
         payload: info,

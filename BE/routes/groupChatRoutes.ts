@@ -3,6 +3,7 @@ const router = express.Router();
 
 const {
     getGroupChat,
+    resolveGroupMemberByRcSlug,
     joinGroupChat,
     createGroupChat,
     createGroupChatByUser,
@@ -18,7 +19,8 @@ const {
     createCommunityChat,
     joinCommunityChat,
     addParticipantsToCommunityChat,
-    getAllCommunityChats
+    getAllCommunityChats,
+    removeMemberFromCommunityChat,
 } = require("../controllers/groupChat.controller");
 
 const { requireAuth, expertAuth } = require("../middlewares/requireAuth");
@@ -28,6 +30,12 @@ router.get(
     "/get-all-community-chats",
     requireAuth(false),
     getAllCommunityChats
+);
+
+router.get(
+    "/:groupChatId/resolve-participant",
+    requireAuth(true),
+    resolveGroupMemberByRcSlug
 );
 
 router.get(
@@ -118,11 +126,22 @@ router.post("/cancel-individual-appointment",
     cancelIndividualAppointment
 );
 
+router.post(
+    "/leave",
+    requireAuth(true),
+    leaveGroup
+);
 
-// delete a group
+router.post(
+    "/remove-community-member",
+    requireAuth(true),
+    removeMemberFromCommunityChat
+);
+
+// delete a group (controller checks admin; use requireAuth so community admin can be non-expert after transfer)
 router.post(
     "/delete",
-    expertAuth(false),
+    requireAuth(true),
     deleteGroup
 );
 

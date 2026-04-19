@@ -137,7 +137,7 @@ const Message = ({
                         onClick={() => void tryDelete('both')}
                         className={`rounded px-2 py-1 text-[11px] ${theme === "light" ? "text-rose-700 hover:bg-rose-50" : "text-rose-300 hover:bg-white/10"}`}
                     >
-                        Delete for both
+                        Delete for everyone
                     </button>
                     <button
                         type="button"
@@ -154,7 +154,8 @@ const Message = ({
         // If it's a file message, show the file link
         if (isFile) {
             return (
-                <div className="chat_value_container flex flex-col items-end px-1 py-1">
+                <div className="chat_value_container flex w-full justify-end pr-2 sm:pr-4">
+                <div className="flex max-w-[min(100%,36rem)] flex-col items-end px-1 py-1">
                     {!hideDate && (
                         <div className="text-grey text-[12px]">
                             {formatDate(new Date(date))}
@@ -193,12 +194,14 @@ const Message = ({
                         <DeliveryTicks status={deliveryStatus} theme={theme} />
                     </div>
                 </div>
+                </div>
             );
         }
         // If it's a call-duration message, show the special template
         if (isCallDurationMessage) {
             return (
-                <div className="chat_value_container flex flex-col items-end mt-1 pl-14">
+                <div className="chat_value_container flex w-full justify-end pr-2 sm:pr-4">
+                <div className="flex max-w-[min(100%,36rem)] flex-col items-end mt-1">
                     {!hideDate && (
                         <div className="text-grey text-[12px]">
                             {formatDate(new Date(date))}
@@ -229,13 +232,14 @@ const Message = ({
                         <DeliveryTicks status={deliveryStatus} theme={theme} />
                     </div>
                 </div>
+                </div>
             );
         }
 
-        // Else, render the normal outgoing message
+        // Else, render the normal outgoing message (right-aligned)
         return (
-            <div className="chat_value_container">
-                <div className="flex flex-col items-end mt-1 pl-14">
+            <div className="chat_value_container flex w-full justify-end pr-2 sm:pr-4">
+                <div className="flex max-w-[min(100%,36rem)] flex-col items-end mt-1">
                     {!hideDate ? (
                         <div className={`text-[12px] ${theme === "light" ? "text-slate-500" : "text-grey"}`}>
                             {formatDate(new Date(date))}
@@ -254,8 +258,8 @@ const Message = ({
     }
 
     return (
-        <div className="mt-1 w-full chat_value_container">
-            <div className="w-full min-w-0 max-w-[min(100%,36rem)] pr-2 sm:pr-4">
+        <div className="mt-1 flex w-full chat_value_container justify-start pl-2 sm:pl-4">
+            <div className="min-w-0 max-w-[min(100%,36rem)]">
                 {!hideDate && (
                     <div className={`text-[12px] ${theme === "light" ? "text-slate-500" : "text-grey"}`}>
                         {formatDate(new Date(date))}

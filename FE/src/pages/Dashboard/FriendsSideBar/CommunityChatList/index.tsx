@@ -411,7 +411,7 @@ const CommunityChatList = () => {
                             <GeneralChatListItem
                                 chat={chat}
                                 missedChats={chat.missedChats}
-                                lastChatDate={chat.updatedAt}
+                                lastChatDate={chat.lastMessageAt || chat.updatedAt}
                             />
                             {/* Join button - show for users who haven't joined */}
                             {!isJoined && (

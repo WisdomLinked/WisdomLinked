@@ -11,12 +11,13 @@ import {
     markRoomReadAsUser,
     syncRocketGroupChannelMembers,
     getRoomLastSeenAsUser,
-    getDmUnreadByRoomAsUser,
+    getChatUnreadSnapshotAsUser,
     ensureBothWlUsersSyncedToRocketChat,
     deleteMessageAsUser,
     cleanRoomHistoryAsUser,
     purgeRoomMessagesBestEffort,
 } from '../services/rocketchat.service';
+import { wlDisplayName } from '../utils/wlDisplayName';
 
 const Conversation = require('../models/Conversation');
 const GroupChat = require('../models/GroupChat');
@@ -40,7 +41,7 @@ const normalizeRcMessageTs = (ts: any): string => {
 
 const wlAuthorFromUser = (u: any) => ({
     _id: u._id,
-    username: u.username,
+    username: wlDisplayName(u),
     image: u.image,
     role: u.role,
     status: u.status,
@@ -48,8 +49,39 @@ const wlAuthorFromUser = (u: any) => ({
 
 const toDateMillis = (ts: any): number => new Date(normalizeRcMessageTs(ts)).getTime();
 
-const hiddenStateForUser = (conversation: any, userId: string) => {
-    const list = Array.isArray(conversation?.hiddenForParticipants) ? conversation.hiddenForParticipants : [];
+const WL_COMMUNITY_SYS_PREFIX = '__WL_COMMUNITY_SYS__::';
+
+/** RC uses `t` on messages; some payloads also expose `type`. */
+const normalizeRcMsgSubtype = (t: any): string => String(t ?? '').trim().toLowerCase() || 'message';
+
+/** Aligns varied Rocket.Chat system codes (`au`, `ru`, …) with join vs leave (see MessageTypes.ts). */
+const canonicalMembershipSide = (t: any): 'join' | 'leave' | null => {
+    const x = normalizeRcMsgSubtype(t);
+    if (!x || x === 'message') return null;
+    const join = new Set([
+        'uj',
+        'ujt',
+        'au',
+        'ui',
+        'ut',
+        'added-user-to-team',
+        'user-added-room-to-team',
+    ]);
+    const leave = new Set([
+        'ul',
+        'ult',
+        'ru',
+        'removed-user-from-team',
+        'user-removed-room-from-team',
+        'user-deleted-room-from-team',
+    ]);
+    if (join.has(x)) return 'join';
+    if (leave.has(x)) return 'leave';
+    return null;
+};
+
+const hiddenStateForUser = (doc: any, userId: string) => {
+    const list = Array.isArray(doc?.hiddenForParticipants) ? doc.hiddenForParticipants : [];
     const entry = list.find((x: any) => String(x?.userId) === String(userId));
     return {
         hiddenIds: new Set<string>(Array.isArray(entry?.messageIds) ? entry.messageIds.map((x: any) => String(x)) : []),
@@ -59,34 +91,102 @@ const hiddenStateForUser = (conversation: any, userId: string) => {
 
 // Helper to map Rocket.Chat messages to WisdomLinked format so the frontend React UI doesnt break
 /** For DMs, pass `dmParticipants` so RC login slugs always resolve to Mongo `author._id` (fixes expert vs student mismatch). */
+/** For group/community, pass `groupParticipants` (populated users with email) so RC slugs map to display names. */
 const mapRCMessagesToWL = async (
     rcMessages: any[],
-    dmParticipants?: { me?: any; other?: any }
+    dmParticipants?: { me?: any; other?: any },
+    groupParticipants?: any[]
 ) => {
-    // Collect all unique usernames
-    // Include both RC login (email-derived) and optional display alias so User lookup succeeds
+    const rcSystemSlugs = rcMessages
+        .filter((m: any) => canonicalMembershipSide(m.t ?? m.type) != null)
+        .flatMap((m: any) => {
+            const raw = String(m.msg ?? '').trim();
+            if (raw && !raw.includes(' ') && raw.length < 120) return [raw];
+            return [];
+        });
+
     const usernames = [
         ...new Set(
-            rcMessages.flatMap((m: any) => [m.u?.username, m.alias].filter(Boolean))
+            [
+                ...rcMessages.flatMap((m: any) => [m.u?.username, m.alias].filter(Boolean)),
+                ...rcSystemSlugs,
+            ].filter(Boolean),
         ),
     ];
-    const users = await User.find({
-        $or: [{ username: { $in: usernames } }, { rocketChatUsername: { $in: usernames } }]
-    }).select('_id username rocketChatUsername image role status email');
+
+    let users = usernames.length
+        ? await User.find({
+              $or: [{ username: { $in: usernames } }, { rocketChatUsername: { $in: usernames } }],
+          }).select('_id username rocketChatUsername image role status email')
+        : [];
+
+    const mergeUsersIntoMap = (list: any[], target: Record<string, any>) => {
+        list.forEach((user: any) => {
+            if (user.username) target[user.username] = user;
+            if (user.rocketChatUsername) target[user.rocketChatUsername] = user;
+            if (user.email) {
+                const slug = toRocketChatUsername(String(user.email));
+                target[slug] = wlAuthorFromUser(user);
+                target[slug.toLowerCase()] = wlAuthorFromUser(user);
+            }
+        });
+    };
 
     const userMap: Record<string, any> = {};
-    users.forEach((user: any) => {
-        if (user.username) userMap[user.username] = user;
-        if (user.rocketChatUsername) userMap[user.rocketChatUsername] = user;
-    });
+    mergeUsersIntoMap(users, userMap);
 
-    // Always map the two DM participants by their Rocket.Chat usernames (email-derived slugs)
+    const knownSlugKeys = new Set(
+        users.flatMap((u: any) => {
+            const out: string[] = [];
+            if (u.rocketChatUsername) out.push(String(u.rocketChatUsername).toLowerCase());
+            if (u.email) out.push(toRocketChatUsername(String(u.email)).toLowerCase());
+            return out;
+        }),
+    );
+    const missingSlugsForLookup = [...new Set(rcSystemSlugs)].filter(
+        (s) => s && !knownSlugKeys.has(String(s).toLowerCase()),
+    );
+    if (missingSlugsForLookup.length) {
+        const more = await User.find({ rocketChatUsername: { $in: missingSlugsForLookup } })
+            .select('_id username rocketChatUsername image role status email')
+            .lean();
+        users = [...users, ...more];
+        mergeUsersIntoMap(more, userMap);
+    }
+
     if (dmParticipants?.me?.email) {
         userMap[toRocketChatUsername(dmParticipants.me.email)] = wlAuthorFromUser(dmParticipants.me);
     }
     if (dmParticipants?.other?.email) {
         userMap[toRocketChatUsername(dmParticipants.other.email)] = wlAuthorFromUser(dmParticipants.other);
     }
+
+    const parts = Array.isArray(groupParticipants) ? groupParticipants : [];
+    parts.forEach((u: any) => {
+        if (!u || !u.email) return;
+        const wl = wlAuthorFromUser(u);
+        const slug = toRocketChatUsername(String(u.email));
+        userMap[slug] = wl;
+        userMap[slug.toLowerCase()] = wl;
+        if (u.rocketChatUsername) userMap[String(u.rocketChatUsername)] = wl;
+    });
+
+    const resolveSlugToSubject = (slugRaw: string | undefined | null): any => {
+        const s = String(slugRaw ?? '').trim();
+        if (!s || s.includes(' ') || s.length >= 120) return null;
+        const lower = s.toLowerCase();
+        for (const u of parts) {
+            if (u?.email && toRocketChatUsername(String(u.email)).toLowerCase() === lower) {
+                return u;
+            }
+        }
+        const direct = userMap[s] || userMap[lower];
+        if (direct) return direct;
+        const key = Object.keys(userMap).find((k) => k.toLowerCase() === lower);
+        return key ? userMap[key] : null;
+    };
+
+    const labelFromSubject = (subj: any): string => wlDisplayName(subj);
 
     return rcMessages.map(m => {
         const rcLogin = m.u?.username;
@@ -102,12 +202,46 @@ const mapRCMessagesToWL = async (
                 status: 'active',
             } as any);
 
+        const rcMetaType = normalizeRcMsgSubtype(m.t ?? m.type);
+        const membershipSide = canonicalMembershipSide(m.t ?? m.type);
+        let content = m.msg;
+        let msgType = rcMetaType;
+        if (typeof content === 'string' && content.startsWith(WL_COMMUNITY_SYS_PREFIX)) {
+            content = content.slice(WL_COMMUNITY_SYS_PREFIX.length);
+            msgType = 'wl-community-sys';
+        } else if (groupParticipants != null && dmParticipants == null) {
+            /** Community / group RC: join vs leave uses `t` (`uj`/`ul`/`au`/`ru`, …); `msg` is often the RC email-slug. */
+            const raw = String(content ?? '').trim();
+            let subj = resolveSlugToSubject(raw);
+            if (!subj && rcLogin) subj = resolveSlugToSubject(String(rcLogin));
+            const label = labelFromSubject(subj);
+            if (subj && membershipSide === 'join') {
+                content = `${label} has joined the community.`;
+                msgType = 'wl-community-sys';
+            } else if (subj && membershipSide === 'leave') {
+                content = `${label} has left the community.`;
+                msgType = 'wl-community-sys';
+            }
+        }
+
+        if (msgType !== 'wl-community-sys' && membershipSide != null) {
+            msgType = 'message';
+        }
+
+        const wlRcSubtype =
+            groupParticipants != null && dmParticipants == null && membershipSide != null
+                ? membershipSide === 'join'
+                    ? 'uj'
+                    : 'ul'
+                : undefined;
+
         return {
             _id: m._id,
-            content: m.msg,
+            content,
             author,
             createdAt: normalizeRcMessageTs(m.ts),
-            type: m.t || 'message'
+            type: msgType,
+            ...(wlRcSubtype ? { wlRcSubtype } : {}),
         };
     });
 };
@@ -203,7 +337,7 @@ export const sendMessage = async (req: any, res: Response) => {
             );
             if (rcChannelId) {
                 // EXCLUSIVELY send to RC. We no longer save to our MongoDB Message model!
-                const rid = await sendMessageToRC(rcChannelId, content, me.username, me.email);
+                const rid = await sendMessageToRC(rcChannelId, content, wlDisplayName(me), me.email);
                 if (rid) sentId = rid;
             }
         }
@@ -320,15 +454,26 @@ export const sendGroupMessage = async (req: any, res: Response) => {
             if (adm?.email) emails.push(String(adm.email).toLowerCase());
             const rcChannelId = await syncRocketGroupChannelMembers(String(groupChatId), emails);
             if (rcChannelId) {
-                const rid = await sendMessageToRC(rcChannelId, content, me.username, me.email);
+                const rid = await sendMessageToRC(rcChannelId, content, wlDisplayName(me), me.email);
                 if (rid) sentId = rid;
             }
+        }
+
+        if (String((groupChat as any).type) === 'community') {
+            const activityAt = new Date();
+            await GroupChat.updateOne({ _id: groupChat._id }, { $set: { lastMessageAt: activityAt } }).exec();
         }
 
         const populatedMessage = {
             _id: sentId,
             content,
-            author: { _id: me!._id, username: me!.username, image: me!.image, role: me!.role, status: me!.status },
+            author: {
+                _id: me!._id,
+                username: wlDisplayName(me!),
+                image: me!.image,
+                role: me!.role,
+                status: me!.status,
+            },
             createdAt: new Date().toISOString(),
             type: 'group',
         };
@@ -350,8 +495,8 @@ export const getGroupHistory = async (req: any, res: Response) => {
         const limit = parseInt(req.query.limit as string) || 20;
 
         const groupChat = await GroupChat.findById(groupChatId)
-            .populate('participants', 'email')
-            .populate('admin', 'email');
+            .populate('participants', 'email username rocketChatUsername image role status')
+            .populate('admin', 'email username rocketChatUsername image role status');
         if (!groupChat) return res.status(404).json({ error: 'Group chat not found' });
 
         if (!groupChat.participants.some((p: any) => String(p?._id ?? p) === String(userId))) {
@@ -368,6 +513,11 @@ export const getGroupHistory = async (req: any, res: Response) => {
             if (adm?.email) emails.push(String(adm.email).toLowerCase());
             const rcChannelId = await syncRocketGroupChannelMembers(String(groupChatId), emails);
             if (rcChannelId) {
+                await GroupChat.updateOne(
+                    { _id: groupChat._id },
+                    { $set: { rcChannelId } },
+                    { timestamps: false },
+                ).exec();
                 const rcMessages = await getRCGroupHistory(rcChannelId, limit, page * limit, {
                     email: me.email,
                     username: me.username,
@@ -378,7 +528,39 @@ export const getGroupHistory = async (req: any, res: Response) => {
                         new Date(normalizeRcMessageTs(a.ts)).getTime() -
                         new Date(normalizeRcMessageTs(b.ts)).getTime()
                 );
-                const messages = await mapRCMessagesToWL(sorted);
+                const { hiddenIds, clearedAtMs } = hiddenStateForUser(groupChat, String(userId));
+                const visible = sorted.filter((m: any) => {
+                    const mid = String(m?._id ?? '');
+                    if (mid && hiddenIds.has(mid)) return false;
+                    if (clearedAtMs != null && toDateMillis(m?.ts) <= clearedAtMs) return false;
+                    return true;
+                });
+                const parts = [...(groupChat.participants as any[])];
+                const adminDoc = groupChat.admin as any;
+                if (
+                    adminDoc &&
+                    adminDoc._id &&
+                    !parts.some((p: any) => String(p?._id ?? p) === String(adminDoc._id))
+                ) {
+                    parts.push(adminDoc);
+                }
+                const messages = await mapRCMessagesToWL(visible, undefined, parts);
+
+                if (String((groupChat as any).type) === 'community' && visible.length > 0) {
+                    let maxMs = 0;
+                    for (const m of visible) {
+                        const ms = new Date(normalizeRcMessageTs((m as any).ts)).getTime();
+                        if (!Number.isNaN(ms) && ms > maxMs) maxMs = ms;
+                    }
+                    if (maxMs > 0) {
+                        await GroupChat.updateOne(
+                            { _id: groupChat._id },
+                            { $max: { lastMessageAt: new Date(maxMs) } },
+                            { timestamps: false },
+                        ).exec();
+                    }
+                }
+
                 return res.status(200).json({
                     messages,
                     rcChannelId,
@@ -451,33 +633,53 @@ export const getReadReceiptsBatch = async (req: any, res: Response) => {
 /**
  * POST body:
  * - mode='both': { roomId, messageId } -> delete message in RC for everyone (subject to RC permissions).
- * - mode='me':   { conversationId, messageId } -> hide only for current user.
+ * - mode='me':   { conversationId, messageId } OR { groupChatId, messageId } -> hide only for current user.
  */
 export const deleteChatMessage = async (req: any, res: Response) => {
     try {
         const { userId } = req.user;
-        const { roomId, messageId, conversationId, mode } = req.body || {};
+        const { roomId, messageId, conversationId, groupChatId, mode } = req.body || {};
         const deleteMode = String(mode || 'both');
         if (!messageId) {
             return res.status(400).json({ error: 'messageId is required' });
         }
 
         if (deleteMode === 'me') {
-            if (!conversationId) return res.status(400).json({ error: 'conversationId is required for mode=me' });
-            const conv = await Conversation.findById(conversationId);
-            if (!conv) return res.status(404).json({ error: 'Conversation not found' });
-            if (!conv.participants.some((p: any) => p.toString() === String(userId))) {
-                return res.status(403).json({ error: 'Not a participant' });
+            if (conversationId) {
+                const conv = await Conversation.findById(conversationId);
+                if (!conv) return res.status(404).json({ error: 'Conversation not found' });
+                if (!conv.participants.some((p: any) => p.toString() === String(userId))) {
+                    return res.status(403).json({ error: 'Not a participant' });
+                }
+                await Conversation.updateOne(
+                    { _id: conv._id, 'hiddenForParticipants.userId': userId },
+                    { $addToSet: { 'hiddenForParticipants.$.messageIds': String(messageId) } },
+                ).exec();
+                await Conversation.updateOne(
+                    { _id: conv._id, 'hiddenForParticipants.userId': { $ne: userId } },
+                    { $push: { hiddenForParticipants: { userId, messageIds: [String(messageId)] } } },
+                ).exec();
+                return res.status(200).json({ success: true, mode: 'me' });
             }
-            await Conversation.updateOne(
-                { _id: conv._id, 'hiddenForParticipants.userId': userId },
-                { $addToSet: { 'hiddenForParticipants.$.messageIds': String(messageId) } },
-            ).exec();
-            await Conversation.updateOne(
-                { _id: conv._id, 'hiddenForParticipants.userId': { $ne: userId } },
-                { $push: { hiddenForParticipants: { userId, messageIds: [String(messageId)] } } },
-            ).exec();
-            return res.status(200).json({ success: true, mode: 'me' });
+            if (groupChatId) {
+                const gc = await GroupChat.findById(groupChatId);
+                if (!gc) return res.status(404).json({ error: 'Group chat not found' });
+                if (!gc.participants.some((p: any) => String(p) === String(userId))) {
+                    return res.status(403).json({ error: 'Not a participant' });
+                }
+                await GroupChat.updateOne(
+                    { _id: gc._id, 'hiddenForParticipants.userId': userId },
+                    { $addToSet: { 'hiddenForParticipants.$.messageIds': String(messageId) } },
+                    { timestamps: false },
+                ).exec();
+                await GroupChat.updateOne(
+                    { _id: gc._id, 'hiddenForParticipants.userId': { $ne: userId } },
+                    { $push: { hiddenForParticipants: { userId, messageIds: [String(messageId)] } } },
+                    { timestamps: false },
+                ).exec();
+                return res.status(200).json({ success: true, mode: 'me' });
+            }
+            return res.status(400).json({ error: 'conversationId or groupChatId is required for mode=me' });
         }
 
         if (!roomId) {
@@ -576,12 +778,12 @@ export const getDmUnreadSnapshot = async (req: any, res: Response) => {
         const { userId } = req.user;
         const me = await User.findById(userId);
         if (!me?.email) return res.status(400).json({ error: 'User not found' });
-        const unreadByRid = await getDmUnreadByRoomAsUser({
+        const { unreadByRid, nameByRid } = await getChatUnreadSnapshotAsUser({
             email: me.email,
             username: me.username,
             name: me.username,
         });
-        return res.status(200).json({ success: true, unreadByRid });
+        return res.status(200).json({ success: true, unreadByRid, nameByRid });
     } catch (err: any) {
         console.error('[chat.getDmUnreadSnapshot]', err.message);
         return res.status(500).json({ error: err.message });

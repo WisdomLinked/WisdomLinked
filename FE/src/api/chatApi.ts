@@ -69,6 +69,18 @@ export const fetchGroupHistory = async (groupChatId: string, page: number = 0, l
     }
 };
 
+/** Resolve Rocket.Chat email-slug → WL user for this group (DB may be ahead of stale Redux). */
+export const fetchGroupMemberByRcSlug = async (groupChatId: string, slug: string) => {
+    try {
+        const q = encodeURIComponent(String(slug).trim());
+        const res = await api.get(`group-chat/${encodeURIComponent(groupChatId)}/resolve-participant?slug=${q}`);
+        return res.data as { user?: any };
+    } catch (err: any) {
+        console.error('[chatApi.fetchGroupMemberByRcSlug]', err.message);
+        return { user: null as any };
+    }
+};
+
 // ── RC Token ────────────────────────────────────────────────
 
 /** Get a Rocket.Chat auth token so the frontend can connect to RC's realtime. */
@@ -93,11 +105,16 @@ export const markChatRead = async (roomId: string) => {
     }
 };
 
-/** One-shot RC DM unread snapshot by room id (used when opening chat sidebar). */
+/** One-shot RC unread snapshot by room id — DMs + channels/groups (used when opening chat sidebar). */
 export const fetchDmUnreadSnapshot = async () => {
     try {
         const res = await api.get('chat/dm-unread-snapshot');
-        return res.data as { success?: boolean; unreadByRid?: Record<string, number>; error?: string };
+        return res.data as {
+            success?: boolean;
+            unreadByRid?: Record<string, number>;
+            nameByRid?: Record<string, string>;
+            error?: string;
+        };
     } catch (err: any) {
         console.error('[chatApi.fetchDmUnreadSnapshot]', err.message);
         return null;
@@ -106,7 +123,13 @@ export const fetchDmUnreadSnapshot = async () => {
 
 /** Delete a message: mode='me' hides for current user; mode='both' deletes in RC for all (permission-dependent). */
 export const deleteChatMessage = async (
-    data: { roomId?: string; conversationId?: string; messageId: string; mode: 'me' | 'both' },
+    data: {
+        roomId?: string;
+        conversationId?: string;
+        groupChatId?: string;
+        messageId: string;
+        mode: 'me' | 'both';
+    },
 ) => {
     try {
         const res = await api.post('chat/delete-message', data);

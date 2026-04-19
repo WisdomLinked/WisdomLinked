@@ -90,6 +90,53 @@ const subscribeToUserStream = () => {
     });
 };
 
+/**
+ * Rocket.Chat streamer sends `fields.args` as `[message]` or `[message, allowedFlag]` (boolean).
+ * Older / bridged installs may omit `rid` on the message — recover from `eventName` when it is a room id.
+ */
+function extractRoomMessagesFromStreamerFields(fields: any): any[] {
+    if (!fields) return [];
+    const eventName = String(fields.eventName || '').replace(/\/.*$/, '').trim();
+    const ridHint =
+        /^[a-zA-Z0-9]{12,}$/.test(eventName) && !eventName.includes(' ') ? eventName : '';
+    const rawArgs = fields.args;
+    const arr = Array.isArray(rawArgs) ? rawArgs : rawArgs != null ? [rawArgs] : [];
+    const out: any[] = [];
+    for (const item of arr) {
+        if (item == null || typeof item !== 'object' || Array.isArray(item)) continue;
+        const o = item as Record<string, unknown>;
+        const looksLikeMessage =
+            o._id != null ||
+            typeof o.msg === 'string' ||
+            o.t != null ||
+            (o.u != null && typeof o.u === 'object');
+        if (!looksLikeMessage) continue;
+        const merged = { ...o } as any;
+        if (!merged.rid && ridHint) merged.rid = ridHint;
+        out.push(merged);
+    }
+    return out;
+}
+
+/** Normalize common Rocket.Chat / streamer field aliases before UI mapping. */
+export function normalizeRcStreamRoomMessage(msg: any): any {
+    if (!msg || typeof msg !== 'object') return msg;
+    const m = msg as Record<string, unknown>;
+    const t =
+        m.t ??
+        m.type ??
+        m.msgtype ??
+        (m.d as any)?.t ??
+        (m.message as any)?.t ??
+        (m.payload as any)?.t;
+    const body = m.msg ?? m.text ?? (m.message as any)?.msg;
+    return {
+        ...msg,
+        ...(t != null && String(t) !== '' ? { t } : {}),
+        ...(typeof body === 'string' ? { msg: body } : {}),
+    };
+}
+
 /** Handle incoming DDP messages */
 const handleDDPMessage = (data: any) => {
     if (data.msg === 'ping') {
@@ -98,10 +145,10 @@ const handleDDPMessage = (data: any) => {
     }
 
     if (data.msg === 'changed' && data.collection === 'stream-room-messages') {
-        const raw = data.fields?.args;
-        const list = Array.isArray(raw) ? raw : raw != null ? [raw] : [];
+        const list = extractRoomMessagesFromStreamerFields(data.fields);
         list.forEach((msg: any) => {
-            if (msg) messageCallbacks.forEach((cb) => cb(msg));
+            const normalized = normalizeRcStreamRoomMessage(msg);
+            messageCallbacks.forEach((cb) => cb(normalized));
         });
         return;
     }
@@ -134,7 +181,21 @@ const handleDDPMessage = (data: any) => {
         const eventName = String(data.fields?.eventName || '');
         if (eventName.endsWith('/subscriptions-changed')) {
             const args = data.fields?.args;
-            const payload = Array.isArray(args) ? args[1] : null;
+            let payload: any = null;
+            if (Array.isArray(args)) {
+                if (args.length >= 2 && args[1] != null && typeof args[1] === 'object') {
+                    payload = args[1];
+                } else if (
+                    args.length >= 1 &&
+                    args[0] != null &&
+                    typeof args[0] === 'object' &&
+                    (args[0] as any).rid
+                ) {
+                    payload = args[0];
+                }
+            } else if (args && typeof args === 'object' && !Array.isArray(args) && (args as any).rid) {
+                payload = args;
+            }
             const rid = String(payload?.rid || '');
             if (rid) {
                 const unread = Number(payload?.unread || 0);

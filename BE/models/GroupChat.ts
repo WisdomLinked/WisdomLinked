@@ -48,11 +48,35 @@ const groupChatSchema = new mongoose.Schema(
             default: false,
         },
 
+        /** Rocket.Chat room id once the channel is synced (used for unread + realtime). */
+        rcChannelId: {
+            type: String,
+            default: null,
+        },
+
+        /** Last real chat activity (RC message time). Used for community sidebar order — not bumped by RC sync alone. */
+        lastMessageAt: {
+            type: Date,
+            default: null,
+        },
+
         messages: [
             {
                 type: mongoose.Schema.Types.ObjectId,
                 ref: "Message",
                 required: true,
+            },
+        ],
+
+        /**
+         * Per-participant visibility for Rocket.Chat channel messages (same idea as DM Conversation).
+         * messageIds = RC message ids hidden only for this user ("delete for me").
+         */
+        hiddenForParticipants: [
+            {
+                userId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
+                messageIds: [{ type: String }],
+                clearedAt: { type: Date, default: null },
             },
         ],
     },

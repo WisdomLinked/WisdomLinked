@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import { wlDisplayName } from '../utils/wlDisplayName';
 const mongoose = require("mongoose");
 const User = require("../models/User");
 const GroupChat = require("../models/GroupChat");
@@ -13,7 +14,40 @@ const {
     getOrCreateDMChannel,
     toRocketChatUsername,
     ensureBothWlUsersSyncedToRocketChat,
+    sendMessageToRC,
+    kickUserFromGroupChannel,
+    syncRocketGroupChannelMembers,
 } = require("../services/rocketchat.service");
+
+/** Stored in RC; FE shows as centered pill (see ChatSystemNotice). */
+const WL_COMMUNITY_SYS_PREFIX = '__WL_COMMUNITY_SYS__::';
+
+async function syncCommunityRocketChannel(groupChatId: string) {
+    try {
+        const reloaded = await GroupChat.findById(groupChatId)
+            .populate('participants', 'email username rocketChatUsername image role status')
+            .populate('admin', 'email username rocketChatUsername image role status');
+        if (!reloaded) return null;
+        const emails: string[] = [];
+        for (const p of reloaded.participants || []) {
+            if (p?.email) emails.push(String(p.email).toLowerCase());
+        }
+        const adm = reloaded.admin as any;
+        if (adm?.email) emails.push(String(adm.email).toLowerCase());
+        const rcId = await syncRocketGroupChannelMembers(String(reloaded._id), emails);
+        if (rcId) {
+            await GroupChat.updateOne(
+                { _id: reloaded._id },
+                { $set: { rcChannelId: rcId } },
+                { timestamps: false },
+            ).exec();
+        }
+        return rcId;
+    } catch (e) {
+        console.warn('[syncCommunityRocketChannel]', e);
+        return null;
+    }
+}
 const { checkTitleNameInvalid } = require('../services/global')
 const { scheduleEmailReminder, sendEmailMeetingRequestToCustomer, sendEmailMeetingRequestToExpert, sendEmailMeetingAcceptance } = require('../services/notifications')
 const { assertBookingLeadTime } = require("../utils/bookingLeadTime");
@@ -67,19 +101,30 @@ const createCommunityChat = async (req, res) => {
             });
         }
 
-        // Prepare participants array - always include the creator (admin)
-        const participantsArray = Array.isArray(participants) ? participants : [];
-        const uniqueParticipants = [...new Set([userId, ...participantsArray])];
+        /**
+         * Open-to-all communities should appear for everyone in the list (handled by `getAllCommunityChats` query),
+         * but we must NOT attempt to store every user id inside `participants` or update every user's `generalChats`
+         * — that can exceed MongoDB document limits and fail for large user bases.
+         */
+        let finalParticipants: string[] = [];
+        if (isOpenToAll === true) {
+            finalParticipants = [String(userId)];
+        } else {
+            // Prepare participants array - always include the creator (admin)
+            const participantsArray = Array.isArray(participants) ? participants : [];
+            const uniqueParticipants = [...new Set([userId, ...participantsArray])];
 
-        // Validate that all participant IDs exist
-        const validParticipants = await User.find({
-            _id: { $in: uniqueParticipants }
-        }).select('_id');
+            // Validate that all participant IDs exist
+            const validParticipants = await User.find({
+                _id: { $in: uniqueParticipants }
+            }).select('_id');
 
-        const validParticipantIds = validParticipants.map(p => p._id.toString());
-        const finalParticipants = uniqueParticipants.filter(id => validParticipantIds.includes(id.toString()));
+            const validParticipantIds = validParticipants.map(p => p._id.toString());
+            finalParticipants = uniqueParticipants.filter(id => validParticipantIds.includes(id.toString()));
+        }
 
         // Create community chat
+        const now = new Date();
         const communityChat = await GroupChat.create({
             name: name.trim(),
             description: description || '',
@@ -93,14 +138,19 @@ const createCommunityChat = async (req, res) => {
             admin: userId,
             createdBy: userId,
             isOpenToAll: isOpenToAll === true,
+            lastMessageAt: now,
         });
 
-        // Add chat to all participants' generalChats arrays
+        // Add chat to the creator and any explicitly invited participants (not to all users).
         const participantsToUpdate = finalParticipants;
         await User.updateMany(
             { _id: { $in: participantsToUpdate } },
             { $addToSet: { generalChats: communityChat._id } }
         );
+
+        // For open-to-all we only need the RC channel created with the creator;
+        // others will be invited when they join.
+        await syncCommunityRocketChannel(String(communityChat._id));
 
         // Update all participants' chat lists via socket
         participantsToUpdate.forEach(participantId => {
@@ -189,6 +239,8 @@ const addParticipantsToCommunityChat = async (req, res) => {
         communityChat.participants = [...communityChat.participants, ...newParticipantIds];
         await communityChat.save();
 
+        await syncCommunityRocketChannel(String(communityChat._id));
+
         // Add chat to new participants' generalChats arrays
         await User.updateMany(
             { _id: { $in: newParticipantIds } },
@@ -261,6 +313,8 @@ const joinCommunityChat = async (req, res) => {
             await currentUser.save();
         }
 
+        await syncCommunityRocketChannel(String(communityChat._id));
+
         // Update user's chat list via socket
         // [REMOVED] updateUsersGroupChatList(userId.toString());
 
@@ -307,8 +361,13 @@ const getAllCommunityChats = async (req, res) => {
             .populate('admin', '_id email username role')
             .populate('participants', '_id email username')
             .populate('createdBy', '_id email username')
-            .sort({ updatedAt: -1 })
             .lean();
+
+        communityChats.sort((a: any, b: any) => {
+            const ta = new Date(a.lastMessageAt || a.updatedAt).getTime();
+            const tb = new Date(b.lastMessageAt || b.updatedAt).getTime();
+            return tb - ta;
+        });
 
         // Get current user to check which chats they're already in
         const currentUser = await User.findById(userId).select('generalChats').lean();
@@ -614,7 +673,80 @@ const getGroupChat = async (req, res) => {
             .status(500)
             .send(err.message);
     }
-}
+};
+
+/**
+ * Resolve a Rocket.Chat email-slug to a WisdomLinked user for the active group/community.
+ * Realtime subscription lines use `msg: "local_domain"` with `u` = RC bot; Redux participants can lag.
+ */
+const resolveGroupMemberByRcSlug = async (req: any, res: any) => {
+    try {
+        const { userId } = req.user;
+        const { groupChatId } = req.params;
+        const slug = String(req.query.slug || "").trim();
+        if (!groupChatId || groupChatId.length !== 24) {
+            return res.status(400).json({ error: "Invalid group chat id" });
+        }
+        if (!slug) {
+            return res.status(400).json({ error: "slug query is required" });
+        }
+
+        const groupChat = await GroupChat.findById(groupChatId)
+            .populate("participants", "email username rocketChatUsername image role status")
+            .populate("admin", "email username rocketChatUsername image role status");
+        if (!groupChat) {
+            return res.status(404).json({ error: "Group chat not found" });
+        }
+
+        const uid = String(userId);
+        const isParticipant = (groupChat.participants as any[]).some(
+            (p: any) => String(p?._id ?? p) === uid
+        );
+        if (!isParticipant) {
+            return res.status(403).json({ error: "Not a participant" });
+        }
+
+        const lower = slug.toLowerCase();
+        const pool: any[] = [...((groupChat.participants as any[]) || [])];
+        const adm = groupChat.admin as any;
+        if (adm && adm._id && !pool.some((p: any) => String(p?._id) === String(adm._id))) {
+            pool.push(adm);
+        }
+
+        let match =
+            pool.find(
+                (p: any) =>
+                    p?.email &&
+                    toRocketChatUsername(String(p.email)).toLowerCase() === lower
+            ) || null;
+
+        if (!match) {
+            match = await User.findOne({
+                $or: [{ rocketChatUsername: slug }, { rocketChatUsername: lower }],
+            })
+                .select("email username rocketChatUsername image role status")
+                .lean();
+        }
+
+        if (!match) {
+            return res.status(200).json({ user: null });
+        }
+
+        return res.status(200).json({
+            user: {
+                _id: match._id,
+                username: match.username,
+                email: match.email,
+                image: match.image,
+                role: match.role,
+                status: match.status,
+            },
+        });
+    } catch (err: any) {
+        console.error("[resolveGroupMemberByRcSlug]", err);
+        return res.status(500).json({ error: err.message });
+    }
+};
 
 const joinGroupChat = async (req, res) => {
     try {
@@ -968,7 +1100,6 @@ const leaveGroup = async (req, res) => {
         const { userId } = req.user;
         const { groupChatId } = req.body;
 
-        // check if groupChat exists
         const groupChat = await GroupChat.findOne({ _id: groupChatId });
 
         if (!groupChat) {
@@ -981,28 +1112,78 @@ const leaveGroup = async (req, res) => {
             return res.status(404).send("User not found");
         }
 
-        // remove user from the group
-        groupChat.participants = groupChat.participants.filter(
-            (participant) => {
-                return participant.toString() !== currentUser._id.toString();
-            }
+        const isCommunity = groupChat.type === 'community';
+        const wasAdmin = groupChat.admin && groupChat.admin.toString() === currentUser._id.toString();
+        const remainingParticipants = groupChat.participants.filter(
+            (participant) => participant.toString() !== currentUser._id.toString(),
         );
+
+        /** Last member leaves a community → remove the room for everyone (no orphan admin). */
+        if (isCommunity && remainingParticipants.length === 0) {
+            await User.updateMany(
+                {
+                    $or: [{ generalChats: groupChat._id }, { groupChats: groupChat._id }],
+                },
+                {
+                    $pull: {
+                        generalChats: groupChat._id,
+                        groupChats: groupChat._id,
+                    },
+                },
+            );
+            if (groupChat.rcChannelId && currentUser.email) {
+                try {
+                    await kickUserFromGroupChannel(String(groupChat.rcChannelId), String(currentUser.email));
+                } catch (e) {
+                    console.warn('[leaveGroup] RC kick (orphan)', e);
+                }
+            }
+            await GroupChat.deleteOne({ _id: groupChat._id });
+            return res
+                .status(200)
+                .send(
+                    'The community was removed because you were the only member. Create a new community to start again.',
+                );
+        }
+
+        /** Community admin leaves but others remain → promote a new admin so the room stays controlled. */
+        if (isCommunity && wasAdmin && remainingParticipants.length > 0) {
+            groupChat.admin = remainingParticipants[0];
+        }
+
+        groupChat.participants = remainingParticipants;
         await groupChat.save();
 
-        // remove groupChat from the list of user's groupChats
         currentUser.groupChats = currentUser.groupChats.filter((chat) => {
             return chat.toString() !== groupChat._id.toString();
         });
 
+        if (isCommunity && Array.isArray(currentUser.generalChats)) {
+            currentUser.generalChats = currentUser.generalChats.filter(
+                (chat: any) => chat.toString() !== groupChat._id.toString(),
+            );
+        }
+
         await currentUser.save();
 
-        // update the chat list of user who left the chat.
-        // [REMOVED] updateUsersGroupChatList(currentUser._id.toString());
-
-        groupChat.participants.forEach((participant) => {
-            // update the participants chat list
-            // [REMOVED] updateUsersGroupChatList(participant.toString());
-        });
+        if (isCommunity && groupChat.rcChannelId && currentUser.email) {
+            const rid = String(groupChat.rcChannelId);
+            const displayName = wlDisplayName(currentUser);
+            try {
+                await kickUserFromGroupChannel(rid, String(currentUser.email));
+            } catch (e) {
+                console.warn('[leaveGroup] RC kick', e);
+            }
+            try {
+                await sendMessageToRC(
+                    rid,
+                    `${WL_COMMUNITY_SYS_PREFIX}${displayName} has left the community.`,
+                    'Community',
+                );
+            } catch (e) {
+                console.warn('[leaveGroup] RC leave message', e);
+            }
+        }
 
         return res.status(200).send("You have left the group!");
     } catch (err) {
@@ -1013,55 +1194,122 @@ const leaveGroup = async (req, res) => {
     }
 };
 
+const removeMemberFromCommunityChat = async (req, res) => {
+    try {
+        const { userId } = req.user;
+        const { groupChatId, memberUserId } = req.body || {};
+
+        if (!groupChatId || !memberUserId) {
+            return res.status(400).json({ error: 'groupChatId and memberUserId are required' });
+        }
+
+        const groupChat = await GroupChat.findOne({ _id: groupChatId, type: 'community' });
+        if (!groupChat) {
+            return res.status(404).json({ error: 'Community chat not found' });
+        }
+
+        if (groupChat.admin.toString() !== userId.toString()) {
+            return res.status(403).json({ error: 'Only the community admin can remove members' });
+        }
+
+        if (String(memberUserId) === String(userId)) {
+            return res.status(400).json({ error: 'Use Leave community to leave yourself' });
+        }
+
+        const member = await User.findById(memberUserId);
+        if (!member) {
+            return res.status(404).json({ error: 'Member not found' });
+        }
+
+        const wasParticipant = groupChat.participants.some(
+            (p) => p.toString() === memberUserId.toString(),
+        );
+        if (!wasParticipant) {
+            return res.status(400).json({ error: 'User is not in this community' });
+        }
+
+        groupChat.participants = groupChat.participants.filter(
+            (p) => p.toString() !== memberUserId.toString(),
+        );
+        await groupChat.save();
+
+        if (Array.isArray(member.generalChats)) {
+            member.generalChats = member.generalChats.filter(
+                (c) => c.toString() !== groupChat._id.toString(),
+            );
+        }
+        member.groupChats = (member.groupChats || []).filter(
+            (c) => c.toString() !== groupChat._id.toString(),
+        );
+        await member.save();
+
+        const adminUser = await User.findById(userId);
+
+        if (groupChat.rcChannelId && member.email) {
+            try {
+                await kickUserFromGroupChannel(String(groupChat.rcChannelId), String(member.email));
+            } catch (e) {
+                console.warn('[removeMemberFromCommunityChat] RC kick', e);
+            }
+            const adminName = wlDisplayName(adminUser);
+            const memberName = wlDisplayName(member);
+            try {
+                await sendMessageToRC(
+                    String(groupChat.rcChannelId),
+                    `${WL_COMMUNITY_SYS_PREFIX}${memberName} has been removed from the community by ${adminName}.`,
+                    'Community',
+                );
+            } catch (e) {
+                console.warn('[removeMemberFromCommunityChat] RC message', e);
+            }
+        }
+
+        return res.status(200).json({ success: true });
+    } catch (err) {
+        console.error('[removeMemberFromCommunityChat]', err);
+        return res.status(500).json({ error: err.message });
+    }
+};
+
 const deleteGroup = async (req, res) => {
     try {
         const { userId } = req.user;
         const { groupChatId } = req.body;
 
-        // check if groupChat exists
         const groupChat = await GroupChat.findOne({ _id: groupChatId });
 
         if (!groupChat) {
             throw new Error("Sorry, the group chat doesn't exist");
         }
 
-        if (groupChat.admin.toString() !== userId) {
+        if (String(groupChat.admin) !== String(userId)) {
             throw new Error("Forbidden. Only group admins can delete a group.");
         }
 
-        // update groupChat list of all the participants
-        groupChat.participants.forEach(async (friendId) => {
+        const participantIds = Array.isArray(groupChat.participants) ? groupChat.participants : [];
+        for (const friendId of participantIds) {
             const participant = await User.findById(friendId);
+            if (!participant) continue;
 
-            if (participant) {
-                // Remove from groupChats array
-                participant.groupChats = participant.groupChats.filter(
-                    (chat) => chat.toString() !== groupChat._id.toString()
+            participant.groupChats = (participant.groupChats || []).filter(
+                (chat: any) => chat.toString() !== groupChat._id.toString(),
+            );
+
+            if (groupChat.type === 'community' && Array.isArray(participant.generalChats)) {
+                participant.generalChats = participant.generalChats.filter(
+                    (chat: any) => chat.toString() !== groupChat._id.toString(),
                 );
-
-                // For community chats, also remove from generalChats array
-                if (groupChat.type === 'community') {
-                    participant.generalChats = participant.generalChats.filter(
-                        (chat) => chat.toString() !== groupChat._id.toString()
-                    );
-                }
-
-                await participant.save();
-
-                // update the users group chat list
-                // [REMOVED] updateUsersGroupChatList(friendId.toString());
             }
-        });
 
-        // lastly delete the groupChat
-        groupChat.remove();
+            await participant.save();
+        }
+
+        await GroupChat.deleteOne({ _id: groupChat._id });
 
         return res.status(200).send("Group deleted successfully!");
-    } catch (err) {
+    } catch (err: any) {
         console.log(err);
-        return res
-            .status(500)
-            .send(err.message);
+        return res.status(500).send(err.message);
     }
 };
 
@@ -1273,6 +1521,7 @@ module.exports = {
     createGroupChat,
     createGroupChatByUser,
     getGroupChat,
+    resolveGroupMemberByRcSlug,
     joinGroupChat,
     updateGroupChat,
     addMemberToPendingGroup,
@@ -1289,5 +1538,6 @@ module.exports = {
     joinCommunityChat,
     addParticipantsToCommunityChat,
     getAllCommunityChats,
-    leftSeminar
+    leftSeminar,
+    removeMemberFromCommunityChat,
 };

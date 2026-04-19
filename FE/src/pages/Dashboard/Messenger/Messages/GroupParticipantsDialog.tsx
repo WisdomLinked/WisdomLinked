@@ -1,14 +1,10 @@
 import React, { Fragment } from "react";
 import Dialog from "@mui/material/Dialog";
-import DialogTitle from "@mui/material/DialogTitle";
 import DialogContent from "@mui/material/DialogContent";
-import DialogContentText from "@mui/material/DialogContentText";
 import List from "@mui/material/List";
 import ListItem from "@mui/material/ListItem";
-import Divider from "@mui/material/Divider";
 import ListItemText from "@mui/material/ListItemText";
 import ListItemAvatar from "@mui/material/ListItemAvatar";
-import Typography from "@mui/material/Typography";
 import Avatar from "../../../../components/Avatar";
 
 interface Props {
@@ -16,44 +12,45 @@ interface Props {
     closeDialogHandler: () => void;
     groupDetails: any;
     currentUserId: string;
+    theme?: "light" | "dark";
 }
 
 const GroupParticipantsDialog = ({
     isDialogOpen,
     closeDialogHandler,
     groupDetails,
-    currentUserId
+    currentUserId,
+    theme = "light",
 }: Props) => {
     const handleCloseDialog = () => {
         closeDialogHandler();
     };
 
+    const paperClass =
+        theme === "light" ? "rounded-2xl border border-slate-200 bg-white shadow-xl" : "";
+
     return (
         <div>
-            <Dialog open={isDialogOpen} onClose={handleCloseDialog}>
-                <DialogTitle>
-                    <Typography>{groupDetails.groupName}</Typography>
-                </DialogTitle>
-                <DialogContent>
-                    <DialogContentText>
-                        <Typography>
-                            {groupDetails.participants.length}{" "}
-                            {groupDetails.participants.length > 1
-                                ? "Participants"
-                                : "Participant"}
-                        </Typography>
-                    </DialogContentText>
-                    <List
-                        sx={{
-                            width: "100%",
-                            maxWidth: 300,
-                            bgcolor: "background.paper",
-                        }}
-                    >
-                        {groupDetails.participants.map((participant:any) => {
+            <Dialog
+                open={isDialogOpen}
+                onClose={handleCloseDialog}
+                maxWidth="sm"
+                fullWidth
+                PaperProps={{ className: paperClass }}
+            >
+                <div className="border-b border-slate-100 px-5 pt-5 pb-3">
+                    <h2 className="text-base font-semibold text-slate-900">{groupDetails.groupName}</h2>
+                    <p className="mt-1 text-sm text-slate-500">
+                        {groupDetails.participants.length}{" "}
+                        {groupDetails.participants.length > 1 ? "participants" : "participant"}
+                    </p>
+                </div>
+                <DialogContent className="px-2 pb-4 pt-2">
+                    <List sx={{ width: "100%", pt: 0 }}>
+                        {groupDetails.participants.map((participant: any) => {
                             return (
                                 <Fragment key={participant._id}>
-                                    <ListItem alignItems="flex-start">
+                                    <ListItem alignItems="flex-start" className="rounded-xl">
                                         <ListItemAvatar>
                                             <Avatar
                                                 username={participant.username}
@@ -62,34 +59,18 @@ const GroupParticipantsDialog = ({
                                         </ListItemAvatar>
                                         <ListItemText
                                             primary={`${participant.username} ${
-                                                participant._id ===
-                                                currentUserId
-                                                    ? "(You)"
-                                                    : ""
+                                                participant._id === currentUserId ? "(You)" : ""
                                             }`}
                                             secondary={
-                                                <React.Fragment>
-                                                    <Typography
-                                                        sx={{
-                                                            display: "inline",
-                                                        }}
-                                                        component="span"
-                                                        variant="body2"
-                                                        color="text.primary"
-                                                    >
-                                                        {participant.email}
-                                                    </Typography>
-                                                    {` ${
-                                                        participant._id ===
-                                                        groupDetails.admin?._id
-                                                            ? " — Group Admin"
-                                                            : ""
-                                                    }`}
-                                                </React.Fragment>
+                                                <span className="text-sm text-slate-600">
+                                                    {participant.email}
+                                                    {participant._id === groupDetails.admin?._id
+                                                        ? " — Group admin"
+                                                        : ""}
+                                                </span>
                                             }
                                         />
                                     </ListItem>
-                                    <Divider variant="inset" component="li" />
                                 </Fragment>
                             );
                         })}

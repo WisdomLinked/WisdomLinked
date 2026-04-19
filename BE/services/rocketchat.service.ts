@@ -569,7 +569,7 @@ export const getRoomLastSeenAsUser = async (
     }
     try {
         const many = await axios.get(`${RC_URL}/api/v1/subscriptions.get`, { headers });
-        const list = Array.isArray(many.data?.update) ? many.data.update : [];
+        const list = extractSubscriptionRowsFromRocketGet(many.data);
         const row = list.find((s: any) => String(s?.rid) === String(roomId));
         const ls = row?.ls;
         if (ls) return cacheAndReturn(new Date(ls?.$date ?? ls).getTime());
@@ -583,35 +583,59 @@ export const getRoomLastSeenAsUser = async (
     return null;
 };
 
-/** Snapshot current user's DM unread counters by RC room id (no polling; use on UI entry/hydration). */
-export const getDmUnreadByRoomAsUser = async (
+const ROOM_TYPES_WITH_UNREAD = new Set(['d', 'c', 'p']);
+
+/** RC `subscriptions.get` body shape varies by version (flat array vs `{ update: [...] }`). */
+function extractSubscriptionRowsFromRocketGet(body: any): any[] {
+    if (!body) return [];
+    if (Array.isArray(body)) return body;
+    if (Array.isArray(body.update)) return body.update;
+    if (Array.isArray(body.subscriptions)) return body.subscriptions;
+    if (Array.isArray(body.result)) return body.result;
+    if (body.result && Array.isArray(body.result.update)) return body.result.update;
+    return [];
+}
+
+/** Snapshot current user's unread counters and room labels by RC room id (DMs + channels/groups). */
+export const getChatUnreadSnapshotAsUser = async (
     reader: RCParticipantSession
-): Promise<Record<string, number>> => {
-    const out: Record<string, number> = {};
+): Promise<{ unreadByRid: Record<string, number>; nameByRid: Record<string, string> }> => {
+    const unreadByRid: Record<string, number> = {};
+    const nameByRid: Record<string, string> = {};
     const tok = await generateUserToken(reader);
-    if (!tok) return out;
+    if (!tok) return { unreadByRid, nameByRid };
     const headers = {
         'X-Auth-Token': tok.authToken,
         'X-User-Id': tok.userId,
         'Content-Type': 'application/json',
     };
     try {
-        const many = await axios.get(`${RC_URL}/api/v1/subscriptions.get`, { headers });
-        const list = Array.isArray(many.data?.update) ? many.data.update : [];
+        const res = await axios.get(`${RC_URL}/api/v1/subscriptions.get`, { headers });
+        const list = extractSubscriptionRowsFromRocketGet(res.data);
         list.forEach((s: any) => {
-            if (String(s?.t || '') !== 'd') return;
+            if (!ROOM_TYPES_WITH_UNREAD.has(String(s?.t || ''))) return;
             const rid = String(s?.rid || '');
             if (!rid) return;
             const unread = Number(s?.unread || 0);
-            if (unread > 0) out[rid] = unread;
+            if (unread > 0) unreadByRid[rid] = unread;
+            const label = String(s?.name || s?.fname || '').trim();
+            if (label) nameByRid[rid] = label;
         });
     } catch (e: any) {
         const st = e.response?.status;
         if (st !== 404 && st !== 403 && st !== 429) {
-            console.warn('[getDmUnreadByRoomAsUser]', st, e.response?.data || e.message);
+            console.warn('[getChatUnreadSnapshotAsUser]', st, e.response?.data || e.message);
         }
     }
-    return out;
+    return { unreadByRid, nameByRid };
+};
+
+/** @deprecated Prefer getChatUnreadSnapshotAsUser — kept for callers that only need counts. */
+export const getDmUnreadByRoomAsUser = async (
+    reader: RCParticipantSession
+): Promise<Record<string, number>> => {
+    const { unreadByRid } = await getChatUnreadSnapshotAsUser(reader);
+    return unreadByRid;
 };
 
 /**
@@ -743,6 +767,44 @@ export const syncRocketGroupChannelMembers = async (
         }
     }
     return roomId;
+};
+
+/**
+ * Remove a user from a `wl-group-*` channel (admin API). Used when someone leaves WL community or is removed by admin.
+ */
+export const kickUserFromGroupChannel = async (roomId: string, memberEmail: string): Promise<boolean> => {
+    const email = String(memberEmail || '')
+        .trim()
+        .toLowerCase();
+    if (!email || !roomId) return false;
+    const uname = toRocketChatUsername(email);
+    let rcUid = await getRCUserIdByUsername(uname);
+    if (!rcUid) {
+        const wlUser = await User.findOne({ email }).select('email username').lean();
+        if (wlUser) {
+            await syncUserToRocketChat({
+                email: wlUser.email,
+                username: wlUser.username || wlUser.email,
+                name: wlUser.username || wlUser.email,
+            });
+            rcUid = await getRCUserIdByUsername(uname);
+        }
+    }
+    if (!rcUid) return false;
+    try {
+        const headers = await getAdminAuthHeaders();
+        const res = await axios.post(
+            `${RC_URL}/api/v1/channels.kick`,
+            { roomId: String(roomId), userId: rcUid },
+            { headers },
+        );
+        return res.data?.success === true;
+    } catch (e: any) {
+        const raw = JSON.stringify(e.response?.data || '') + String(e.message || '');
+        if (/not-in-room|user-not-in-room|not a member/i.test(raw)) return true;
+        console.warn('[kickUserFromGroupChannel]', e.response?.data || e.message);
+        return false;
+    }
 };
 
 /**
