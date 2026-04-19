@@ -846,20 +846,20 @@ const StudentChat: React.FC = () => {
               filteredCommunity.map(chat => {
                 const active = isCommunityActive(chat._id);
                 const crid = chat.raw?.rcChannelId ? String(chat.raw.rcChannelId) : '';
-                const unreadFromRc = crid
+                /** Same unread source as private DM rows: Redux snapshot + live RC subscription. */
+                const unreadCount = crid
                   ? Math.max(
                       Number(dmUnreadByRid?.[crid] || 0),
                       Number(rcUnreadByRid?.[crid] || 0),
                     )
                   : 0;
-                const badge = Math.max(Number(chat.missedChats || 0), unreadFromRc);
                 const lastLine =
-                  unreadFromRc > 0 && crid
-                    ? `${unreadFromRc > 99 ? '99+' : unreadFromRc}+ new message${unreadFromRc > 1 ? 's' : ''}`
+                  crid && unreadCount > 0
+                    ? `${unreadCount > 99 ? '99+' : unreadCount}+ new message${unreadCount > 1 ? 's' : ''}`
                     : chat.lastLine;
                 const rowTone = active
                   ? 'bg-[#E8EEF4] text-slate-900'
-                  : unreadFromRc > 0
+                  : unreadCount > 0
                     ? 'bg-amber-50/80 text-slate-900 ring-1 ring-amber-200/80 hover:bg-amber-50'
                     : 'hover:bg-slate-100 text-slate-700';
                 const menuId = String(chat._id);
@@ -874,9 +874,9 @@ const StudentChat: React.FC = () => {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between gap-2">
                         <p className="truncate font-semibold text-[11px]">{chat.name}</p>
-                        {badge > 0 ? (
+                        {unreadCount > 0 ? (
                           <span className="ml-1 shrink-0 rounded-full bg-amber-500/20 px-1.5 text-[10px] font-semibold text-amber-800">
-                            {(badge > 99 ? '99+' : badge) + '+'}
+                            {(unreadCount > 99 ? '99+' : unreadCount) + '+'}
                           </span>
                         ) : null}
                       </div>

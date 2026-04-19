@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useState, useMemo, useCallback } from "react";
+import React, { useRef, useEffect, useState } from "react";
 import IconButton from "@mui/material/IconButton";
 import AddIcCallIcon from "@mui/icons-material/AddIcCall";
 import VideoCallIcon from "@mui/icons-material/VideoCall";
@@ -35,7 +35,7 @@ import { updateMe } from "../../../../actions/authActions";
 import { showAlert } from "../../../../actions/alertActions";
 import { resetChatAction, setChosenGroupChatDetails } from "../../../../actions/chatActions";
 import ProfileModal from "./ProfileModal";
-import { Bell, MessageSquare, ShareIcon, X } from "lucide-react";
+import { ShareIcon } from "lucide-react";
 
 const MessagesHeader = ({ scrollPosition, events, openCalendarModal, openSeminarModal, openEditSeminarModal, theme = "dark" }: any) => {
 
@@ -48,69 +48,9 @@ const MessagesHeader = ({ scrollPosition, events, openCalendarModal, openSeminar
             chosenGroupChatDetails,
             currentEvent,
             conversationId,
-            rcChannelId,
-            dmUnreadByRid,
         },
         friends: { onlineUsers },
     } = useAppSelector((state) => state);
-
-    /** Same pattern as dashboard TopBar: one row per room with unread (not the open thread). */
-    const messengerChatNotifications = useMemo(() => {
-        const active = String(rcChannelId || "");
-        const dcs = userDetails?.directConversations ?? [];
-        const dmRids = new Set(
-            dcs.map((c: any) => String(c?.rcChannelId || "").trim()).filter(Boolean),
-        );
-        const meId = String(userDetails?._id ?? userDetails?.id ?? userDetails?.userId ?? "");
-        const labelForRid = (rid: string) => {
-            const conv = dcs.find((c: any) => String(c?.rcChannelId || "") === rid);
-            if (conv?.participants?.length) {
-                const other = conv.participants.find(
-                    (p: any) => String(p?._id ?? p?.id ?? "") && String(p?._id ?? p?.id ?? "") !== meId,
-                );
-                const nm = String(other?.username || other?.name || other?.email || "").trim();
-                if (nm) return nm;
-            }
-            const gcs = [...(userDetails?.generalChats ?? []), ...(userDetails?.groupChats ?? [])];
-            const g = gcs.find((x: any) => String(x?.rcChannelId || "") === rid);
-            if (g) return String(g?.name ?? g?.groupName ?? "Chat").trim() || "Chat";
-            return dmRids.has(rid) ? "Direct message" : "Chat";
-        };
-        return Object.entries(dmUnreadByRid || {})
-            .filter(([rid, n]) => String(rid) !== active && Number(n) > 0)
-            .map(([rid, count]) => {
-                const n = Number(count) || 0;
-                const isDm = dmRids.has(rid);
-                const label = labelForRid(rid);
-                return {
-                    id: rid,
-                    rid,
-                    isDm,
-                    title: `${label} messaged you`,
-                    meta: `${n > 99 ? "99+" : n} unread message${n !== 1 ? "s" : ""}`,
-                };
-            });
-    }, [dmUnreadByRid, rcChannelId, userDetails]);
-
-    const [openMessengerNotifs, setOpenMessengerNotifs] = useState(false);
-    const messengerNotifRef = useRef<HTMLDivElement>(null);
-
-    const openThreadFromMessengerNotif = useCallback((item: (typeof messengerChatNotifications)[0]) => {
-        if (item.isDm) localStorage.setItem("wl_open_dm_rid", item.rid);
-        else localStorage.setItem("wl_open_community_rc_rid", item.rid);
-        window.dispatchEvent(new Event("wl-open-chat-nav"));
-        setOpenMessengerNotifs(false);
-    }, []);
-
-    useEffect(() => {
-        if (!openMessengerNotifs) return;
-        const close = (e: MouseEvent) => {
-            const el = messengerNotifRef.current;
-            if (el && !el.contains(e.target as Node)) setOpenMessengerNotifs(false);
-        };
-        document.addEventListener("mousedown", close);
-        return () => document.removeEventListener("mousedown", close);
-    }, [openMessengerNotifs]);
 
     const navActiveStyle =
         scrollPosition >= navPosition!
@@ -355,93 +295,7 @@ const MessagesHeader = ({ scrollPosition, events, openCalendarModal, openSeminar
                         </div> :
                         null
             }
-            <div className="relative flex min-w-[120px] shrink-0 items-center justify-end gap-1" ref={messengerNotifRef}>
-                {messengerChatNotifications.length > 0 ? (
-                    <>
-                        <button
-                            type="button"
-                            onClick={() => setOpenMessengerNotifs((o) => !o)}
-                            className={`relative inline-flex h-8 w-8 items-center justify-center rounded-full border ${
-                                theme === "light"
-                                    ? "border-slate-200 bg-white text-slate-500 hover:bg-slate-50"
-                                    : "border-slate-600 bg-transparent text-white hover:bg-white/10"
-                            }`}
-                            aria-label="Chat notifications"
-                        >
-                            <Bell className="h-4 w-4" aria-hidden />
-                            <span className="absolute -right-1 -top-1 inline-flex min-w-[16px] items-center justify-center rounded-full bg-rose-500 px-1 text-[9px] font-semibold leading-4 text-white">
-                                {messengerChatNotifications.length > 99
-                                    ? "99+"
-                                    : messengerChatNotifications.length}
-                            </span>
-                        </button>
-                        {openMessengerNotifs ? (
-                            <div
-                                className={`absolute right-0 top-10 z-[130] w-[min(320px,calc(100vw-2rem))] rounded-xl border shadow-[0_16px_40px_rgba(0,0,0,0.14)] ${
-                                    theme === "light"
-                                        ? "border-[#E5E2DB] bg-white"
-                                        : "border-slate-600 bg-[#1a1a1a]"
-                                }`}
-                            >
-                                <div
-                                    className={`flex items-center justify-between border-b px-4 py-3 ${
-                                        theme === "light" ? "border-[#E5E2DB]" : "border-slate-600"
-                                    }`}
-                                >
-                                    <p
-                                        className={`text-[12px] font-semibold uppercase tracking-[0.16em] ${
-                                            theme === "light" ? "text-[#7A7A72]" : "text-slate-400"
-                                        }`}
-                                    >
-                                        Notifications
-                                    </p>
-                                    <button
-                                        type="button"
-                                        onClick={() => setOpenMessengerNotifs(false)}
-                                        className="inline-flex h-6 w-6 items-center justify-center rounded-md text-slate-500 hover:bg-slate-100 hover:text-slate-700"
-                                        aria-label="Close notifications"
-                                    >
-                                        <X className="h-4 w-4" aria-hidden />
-                                    </button>
-                                </div>
-                                <div className="max-h-72 overflow-y-auto p-2">
-                                    {messengerChatNotifications.map((item) => (
-                                        <button
-                                            key={item.id}
-                                            type="button"
-                                            onClick={() => openThreadFromMessengerNotif(item)}
-                                            className={`w-full rounded-lg px-2 py-2 text-left ${
-                                                theme === "light" ? "hover:bg-[#F5F3EF]" : "hover:bg-white/5"
-                                            }`}
-                                        >
-                                            <div className="flex items-start gap-2">
-                                                <span className="mt-0.5 inline-flex h-6 w-6 items-center justify-center rounded-full bg-[#E8EEF4]">
-                                                    <MessageSquare className="h-3.5 w-3.5 text-[#1A3A4A]" aria-hidden />
-                                                </span>
-                                                <div className="min-w-0">
-                                                    <p
-                                                        className={`text-[13px] font-semibold leading-snug ${
-                                                            theme === "light" ? "text-slate-900" : "text-white"
-                                                        }`}
-                                                    >
-                                                        {item.title}
-                                                    </p>
-                                                    <p
-                                                        className={`text-[11px] ${
-                                                            theme === "light" ? "text-slate-500" : "text-slate-400"
-                                                        }`}
-                                                    >
-                                                        {item.meta}
-                                                    </p>
-                                                </div>
-                                            </div>
-                                        </button>
-                                    ))}
-                                </div>
-                            </div>
-                        ) : null}
-                    </>
-                ) : null}
+            <div className="w-[120px] flex items-center justify-end">
                 {chosenChatDetails && (
                     <div className="flex items-center justify-center">
                         <IconButton
