@@ -88,10 +88,10 @@ router.post('/', (req, res) => {
   ).get(req.userId, CaseStatus.APPROVED, CaseStatus.REJECTED, CaseStatus.WITHDRAWN);
   if (existing) return res.status(400).json({ error: 'You already have an active application.' });
 
-  const requiredTypes = ['sop', 'lor', 'resume'];
+  const requiredTypes = ['sop', 'lor', 'resume', 'transcript'];
   const docs = db.prepare('SELECT type FROM documents WHERE user_id = ? AND (uploaded_by IS NULL OR uploaded_by = 0)').all(req.userId);
   const hasTypes = requiredTypes.every((t) => docs.some((d) => d.type === t));
-  if (!hasTypes) return res.status(400).json({ error: 'Please upload SOP, LOR, and Resume before submitting.' });
+  if (!hasTypes) return res.status(400).json({ error: 'Please upload Statement of Purpose(SOP), Letter of recommendation(LOR), Resume, and Transcript before submitting.' });
 
   const submittedAt = new Date().toISOString();
   const dueAt = new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString();
@@ -181,6 +181,25 @@ router.get('/experts', (req, res) => {
   res.json({ experts: withMajors });
 });
 
+/** Admin: active case count per expert (non-terminal cases) for workload balancing */
+router.get('/experts/workload', (req, res) => {
+  if (req.userRole !== 'admin') return res.status(403).json({ error: 'Admin only' });
+  const terminal = [CaseStatus.APPROVED, CaseStatus.REJECTED, CaseStatus.WITHDRAWN];
+  const workload = db.prepare(`
+    SELECT u.id AS expert_id, u.email, u.username,
+      COALESCE(SUM(CASE
+        WHEN c.id IS NOT NULL AND c.status NOT IN ('${terminal[0]}', '${terminal[1]}', '${terminal[2]}') THEN 1
+        ELSE 0
+      END), 0) AS active_case_count
+    FROM users u
+    LEFT JOIN cases c ON c.assigned_expert_id = u.id
+    WHERE u.role = 'expert'
+    GROUP BY u.id
+    ORDER BY active_case_count DESC, u.username COLLATE NOCASE, u.email COLLATE NOCASE
+  `).all();
+  res.json({ workload });
+});
+
 /** Admin: expert profile + all cases assigned to this expert */
 router.get('/experts/:expertId', (req, res) => {
   if (req.userRole !== 'admin') return res.status(403).json({ error: 'Admin only' });
@@ -259,10 +278,10 @@ router.patch('/:id/resubmit', async (req, res) => {
   if (caseRow.student_id !== req.userId) return res.status(403).json({ error: 'Not your case' });
   if (caseRow.status !== CaseStatus.NEEDS_INFO) return res.status(400).json({ error: 'Only cases in Needs Info can be resubmitted' });
 
-  const requiredTypes = ['sop', 'lor', 'resume'];
+  const requiredTypes = ['sop', 'lor', 'resume', 'transcript'];
   const docs = db.prepare('SELECT type FROM documents WHERE user_id = ? AND (uploaded_by IS NULL OR uploaded_by = 0)').all(req.userId);
   const hasTypes = requiredTypes.every((t) => docs.some((d) => d.type === t));
-  if (!hasTypes) return res.status(400).json({ error: 'Please upload SOP, LOR, and Resume before resubmitting.' });
+  if (!hasTypes) return res.status(400).json({ error: 'Please upload Statement of Purpose(SOP), Letter of recommendation(LOR), Resume, and Transcript before resubmitting.' });
 
   const oldStatus = caseRow.status;
   db.prepare('UPDATE cases SET status = ? WHERE id = ?').run(CaseStatus.RESUBMITTED, id);

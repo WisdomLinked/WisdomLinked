@@ -5,8 +5,8 @@ import { formatDate } from '../utils/dateFormat';
 import styles from './CommitteeDashboard.module.css';
 
 const DOC_LABELS = {
-  sop: 'Statement of Purpose (SOP)',
-  lor: 'Letter of Recommendation (LOR)',
+  sop: 'Statement of Purpose(SOP)',
+  lor: 'Letter of recommendation(LOR)',
   resume: 'Resume',
   transcript: 'Transcript',
   additional: 'Additional files',
@@ -29,6 +29,30 @@ const STATUS_LABELS = {
 };
 const PENDING_STATUSES = ['submitted', 'assigned', 'under_review', 'needs_info', 'resubmitted', 'pending_admin_approval'];
 const TERMINAL_CASE_STATUSES = ['approved', 'rejected', 'withdrawn'];
+const CASE_EXPERT_UNASSIGNED = '__unassigned__';
+
+function isCasePendingListStatus(status) {
+  return status !== 'approved' && status !== 'rejected' && status !== 'withdrawn';
+}
+
+/** Local calendar date YYYY-MM-DD for submitted_at or created_at */
+function caseListDateKey(c) {
+  const iso = c.submitted_at || c.created_at;
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+function caseMatchesDateRange(c, fromStr, toStr) {
+  if (!fromStr && !toStr) return true;
+  const key = caseListDateKey(c);
+  if (!key) return false;
+  if (fromStr && key < fromStr) return false;
+  if (toStr && key > toStr) return false;
+  return true;
+}
 
 export default function CommitteeDashboard() {
   const { token, user } = useAuth(); // user.id used to label expert’s own assigned cases
@@ -59,7 +83,12 @@ export default function CommitteeDashboard() {
   const [error, setError] = useState('');
   const [previewDoc, setPreviewDoc] = useState(null);
   /** Admin list filters (Cases + Students tabs) */
-  const [caseApprovalFilter, setCaseApprovalFilter] = useState('all');
+  /** all | pending | approved | rejected | withdrawn */
+  const [caseStatusFilter, setCaseStatusFilter] = useState('all');
+  /** all | __unassigned__ | expert id */
+  const [caseExpertFilter, setCaseExpertFilter] = useState('all');
+  const [caseDateFrom, setCaseDateFrom] = useState('');
+  const [caseDateTo, setCaseDateTo] = useState('');
   const [caseMajorFilter, setCaseMajorFilter] = useState('all');
   const [caseTargetYearFilter, setCaseTargetYearFilter] = useState('all');
   const [studentMajorFilter, setStudentMajorFilter] = useState('all');
@@ -69,6 +98,8 @@ export default function CommitteeDashboard() {
   const [expertNameQuery, setExpertNameQuery] = useState('');
   const [expertDetail, setExpertDetail] = useState(null);
   const [expertDetailLoading, setExpertDetailLoading] = useState(false);
+  /** Admin: active (non-terminal) cases per expert */
+  const [expertWorkload, setExpertWorkload] = useState([]);
   const headers = () => ({ Authorization: `Bearer ${token}` });
 
   const MAJOR_FILTER_EMPTY = '__empty__';
@@ -121,13 +152,30 @@ export default function CommitteeDashboard() {
     return fields.some((f) => String(f).toLowerCase().includes(n));
   }
 
+  const expertsSortedForFilter = useMemo(() => {
+    return [...(experts || [])].sort((a, b) => {
+      const an = (a.username || a.email || '').toLowerCase();
+      const bn = (b.username || b.email || '').toLowerCase();
+      return an.localeCompare(bn);
+    });
+  }, [experts]);
+
   const filteredCases = useMemo(() => {
     if (!isAdmin) return cases;
     const q = adminSearchQuery.trim();
     return (cases || []).filter((c) => {
       if (!matchesAdminSearchCase(c, q)) return false;
-      if (caseApprovalFilter === 'approved' && c.status !== 'approved') return false;
-      if (caseApprovalFilter === 'not_approved' && c.status === 'approved') return false;
+      if (caseStatusFilter === 'pending' && !isCasePendingListStatus(c.status)) return false;
+      if (caseStatusFilter === 'approved' && c.status !== 'approved') return false;
+      if (caseStatusFilter === 'rejected' && c.status !== 'rejected') return false;
+      if (caseStatusFilter === 'withdrawn' && c.status !== 'withdrawn') return false;
+      if (caseExpertFilter === CASE_EXPERT_UNASSIGNED) {
+        if (c.assigned_expert_id != null && c.assigned_expert_id !== '') return false;
+      } else if (caseExpertFilter !== 'all') {
+        const want = Number(caseExpertFilter);
+        if (Number(c.assigned_expert_id) !== want) return false;
+      }
+      if (!caseMatchesDateRange(c, caseDateFrom, caseDateTo)) return false;
       if (caseMajorFilter !== 'all') {
         const m = (c.major || '').trim();
         if (caseMajorFilter === MAJOR_FILTER_EMPTY) {
@@ -140,7 +188,17 @@ export default function CommitteeDashboard() {
       }
       return true;
     });
-  }, [cases, isAdmin, caseApprovalFilter, caseMajorFilter, caseTargetYearFilter, adminSearchQuery]);
+  }, [
+    cases,
+    isAdmin,
+    caseStatusFilter,
+    caseExpertFilter,
+    caseDateFrom,
+    caseDateTo,
+    caseMajorFilter,
+    caseTargetYearFilter,
+    adminSearchQuery,
+  ]);
 
   const filteredStudents = useMemo(() => {
     if (!isAdmin) return students;
@@ -190,6 +248,14 @@ export default function CommitteeDashboard() {
     });
   }, [experts, isAdmin, expertMajorFilter, expertNameQuery]);
 
+  const workloadByExpertId = useMemo(() => {
+    const m = {};
+    (expertWorkload || []).forEach((w) => {
+      m[w.expert_id] = w.active_case_count;
+    });
+    return m;
+  }, [expertWorkload]);
+
   function loadExpertsForCase(caseId) {
     if (!caseId || !isAdmin) return;
     fetch(`${API}/cases/experts?caseId=${caseId}`, { headers: headers() })
@@ -202,6 +268,14 @@ export default function CommitteeDashboard() {
     fetch(`${API}/cases`, { headers: headers() })
       .then(r => r.json())
       .then(data => setCases(data.cases || []));
+  }
+
+  function loadExpertWorkload() {
+    if (!isAdmin) return;
+    fetch(`${API}/cases/experts/workload`, { headers: headers() })
+      .then((r) => r.json())
+      .then((data) => setExpertWorkload(data.workload || []))
+      .catch(() => setExpertWorkload([]));
   }
 
   function loadStudents() {
@@ -390,6 +464,10 @@ export default function CommitteeDashboard() {
     }
   }, [activeTab, selected?.id]);
 
+  useEffect(() => {
+    if (isAdmin) loadExpertWorkload();
+  }, [isAdmin, token]);
+
   async function handleAssignExpert(caseId, expertId) {
     setError('');
     setAssigningExpert(caseId);
@@ -416,6 +494,7 @@ export default function CommitteeDashboard() {
       setError(e.message || 'Failed to assign');
     } finally {
       setAssigningExpert(null);
+      loadExpertWorkload();
     }
   }
 
@@ -426,6 +505,7 @@ export default function CommitteeDashboard() {
       const res = await fetch(`${API}/cases/${caseId}/approve`, { method: 'PATCH', headers: headers() });
       if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'Failed');
       loadCases();
+      loadExpertWorkload();
       if (selected?.id === caseId) setSelected(prev => prev ? { ...prev, status: 'pending_admin_approval' } : null);
     } catch (e) {
       setError(e.message || 'Failed to approve');
@@ -441,6 +521,7 @@ export default function CommitteeDashboard() {
       const res = await fetch(`${API}/cases/${caseId}/reject`, { method: 'PATCH', headers: headers() });
       if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'Failed');
       loadCases();
+      loadExpertWorkload();
       if (selected?.id === caseId) setSelected(prev => prev ? { ...prev, status: 'rejected' } : null);
     } catch (e) {
       setError(e.message || 'Failed to reject');
@@ -460,6 +541,7 @@ export default function CommitteeDashboard() {
       });
       if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'Failed');
       loadCases();
+      loadExpertWorkload();
       if (selected?.id === caseId) setSelected(prev => prev ? { ...prev, status: newStatus } : null);
     } catch (e) {
       setError(e.message || 'Failed');
@@ -585,17 +667,56 @@ export default function CommitteeDashboard() {
           {activeTab === 'cases' && (
             <div className={styles.caseFilters}>
               <label className={styles.filterField}>
-                <span className={styles.filterFieldLabel}>Outcome</span>
+                <span className={styles.filterFieldLabel}>Status</span>
                 <select
                   className={styles.filterSelect}
-                  value={caseApprovalFilter}
-                  onChange={(e) => setCaseApprovalFilter(e.target.value)}
-                  aria-label="Filter cases by approval outcome"
+                  value={caseStatusFilter}
+                  onChange={(e) => setCaseStatusFilter(e.target.value)}
+                  aria-label="Filter cases by workflow status"
                 >
-                  <option value="all">All cases</option>
-                  <option value="approved">Final approved</option>
-                  <option value="not_approved">Not final approved</option>
+                  <option value="all">All statuses</option>
+                  <option value="pending">Pending (open)</option>
+                  <option value="approved">Approved</option>
+                  <option value="rejected">Rejected</option>
+                  <option value="withdrawn">Withdrawn</option>
                 </select>
+              </label>
+              <label className={styles.filterField}>
+                <span className={styles.filterFieldLabel}>Expert</span>
+                <select
+                  className={styles.filterSelect}
+                  value={caseExpertFilter}
+                  onChange={(e) => setCaseExpertFilter(e.target.value)}
+                  aria-label="Filter cases by assigned expert"
+                >
+                  <option value="all">All experts</option>
+                  <option value={CASE_EXPERT_UNASSIGNED}>Unassigned</option>
+                  {expertsSortedForFilter.map((ex) => (
+                    <option key={ex.id} value={String(ex.id)}>
+                      {ex.username || ex.email || `Expert ${ex.id}`}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className={styles.filterField}>
+                <span className={styles.filterFieldLabel}>Submitted from</span>
+                <input
+                  type="date"
+                  className={styles.filterDateInput}
+                  value={caseDateFrom}
+                  onChange={(e) => setCaseDateFrom(e.target.value)}
+                  aria-label="Filter cases submitted on or after this date"
+                />
+              </label>
+              <label className={styles.filterField}>
+                <span className={styles.filterFieldLabel}>Submitted to</span>
+                <input
+                  type="date"
+                  className={styles.filterDateInput}
+                  value={caseDateTo}
+                  onChange={(e) => setCaseDateTo(e.target.value)}
+                  aria-label="Filter cases submitted on or before this date"
+                />
               </label>
               <label className={styles.filterField}>
                 <span className={styles.filterFieldLabel}>Major</span>
@@ -703,6 +824,39 @@ export default function CommitteeDashboard() {
         </div>
       )}
 
+      {isAdmin && activeTab === 'experts' && (
+        <div className={styles.workloadPanel} role="region" aria-label="Expert workload">
+          <h3 className={styles.workloadTitle}>Expert workload</h3>
+          <p className={styles.workloadHint}>
+            Active cases are assigned applications not yet approved, rejected, or withdrawn. Use this table to spread work across experts.
+          </p>
+          {expertWorkload.length === 0 ? (
+            <p className={styles.workloadEmpty}>No experts or no workload data yet.</p>
+          ) : (
+            <div className={styles.workloadTableWrap}>
+              <table className={styles.workloadTable}>
+                <thead>
+                  <tr>
+                    <th scope="col">Expert</th>
+                    <th scope="col">Email</th>
+                    <th scope="col">Active cases</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {expertWorkload.map((w) => (
+                    <tr key={w.expert_id}>
+                      <td>{w.username || '—'}</td>
+                      <td>{w.email || '—'}</td>
+                      <td>{w.active_case_count}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
       <p className={styles.hint}>
         {activeTab === 'cases'
           ? (isAdmin
@@ -803,6 +957,14 @@ export default function CommitteeDashboard() {
                       <span className={styles.studentMeta}>
                         {ex.email && ex.username ? `${ex.email} · ` : ''}
                         {(ex.majors && ex.majors.length) ? ex.majors.join(', ') : 'No majors listed'}
+                        {workloadByExpertId[ex.id] != null && (
+                          <>
+                            {' · '}
+                            <span className={styles.activeCaseCount}>
+                              {workloadByExpertId[ex.id]} active {workloadByExpertId[ex.id] === 1 ? 'case' : 'cases'}
+                            </span>
+                          </>
+                        )}
                       </span>
                     </button>
                   </li>
@@ -1028,6 +1190,21 @@ export default function CommitteeDashboard() {
                     )}
                     {isExpert && (selected.status === 'assigned' || selected.status === 'under_review' || selected.status === 'needs_info' || selected.status === 'resubmitted' || selected.status === 'overdue') && (
                       <div className={styles.expertActions}>
+                        {(selected.status === 'assigned' || selected.status === 'resubmitted' || selected.status === 'overdue') && (
+                          <button
+                            type="button"
+                            className={styles.startReviewBtn}
+                            onClick={() => handleAdminStatusChange(selected.id, 'under_review')}
+                            disabled={
+                              updatingStatus === selected.id ||
+                              approvingCase === selected.id ||
+                              rejectingCase === selected.id
+                            }
+                            title="Mark that you have begun reviewing so the student sees Under review"
+                          >
+                            {updatingStatus === selected.id ? 'Updating…' : 'Start review'}
+                          </button>
+                        )}
                         <button
                           type="button"
                           className={styles.approveCaseBtnDetail}
@@ -1089,6 +1266,11 @@ export default function CommitteeDashboard() {
                                 <span className={styles.expertCardName}>{ex.username || ex.email}</span>
                                 {ex.title && <span className={styles.expertCardTitle}>{ex.title}</span>}
                                 <span className={styles.expertCardMajor}>{ex.majors?.join(', ') || '—'}</span>
+                                {workloadByExpertId[ex.id] != null && (
+                                  <span className={styles.expertCardWorkload}>
+                                    {workloadByExpertId[ex.id]} active {workloadByExpertId[ex.id] === 1 ? 'case' : 'cases'}
+                                  </span>
+                                )}
                                 {ex.bio && <span className={styles.expertCardBio}>{ex.bio.slice(0, 80)}{ex.bio.length > 80 ? '…' : ''}</span>}
                                 <span className={styles.recommendedBadge}>Recommended</span>
                               </button>
@@ -1104,6 +1286,11 @@ export default function CommitteeDashboard() {
                                 <span className={styles.expertCardName}>{ex.username || ex.email}</span>
                                 {ex.title && <span className={styles.expertCardTitle}>{ex.title}</span>}
                                 <span className={styles.expertCardMajor}>{ex.majors?.join(', ') || '—'}</span>
+                                {workloadByExpertId[ex.id] != null && (
+                                  <span className={styles.expertCardWorkload}>
+                                    {workloadByExpertId[ex.id]} active {workloadByExpertId[ex.id] === 1 ? 'case' : 'cases'}
+                                  </span>
+                                )}
                                 {ex.bio && <span className={styles.expertCardBio}>{ex.bio.slice(0, 80)}{ex.bio.length > 80 ? '…' : ''}</span>}
                               </button>
                             ))}

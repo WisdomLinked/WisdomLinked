@@ -5,42 +5,116 @@ import { formatDate } from '../utils/dateFormat';
 import styles from './Upload.module.css';
 
 const DOC_TYPES = [
-  { id: 'sop', label: 'Statement of Purpose (SOP)' },
-  { id: 'lor', label: 'Letter of Recommendation (LOR)' },
+  { id: 'sop', label: 'Statement of Purpose(SOP)' },
+  { id: 'lor', label: 'Letter of recommendation(LOR)' },
   { id: 'resume', label: 'Resume' },
   { id: 'transcript', label: 'Transcript' },
   { id: 'additional', label: 'Additional files' },
 ];
 
-/** Plain-language status for the student-facing progress area */
-function studentCaseProgressLine(c) {
-  if (!c?.status) return '';
-  switch (c.status) {
-    case 'draft':
-      return 'Your application draft is not submitted yet.';
+/** Fixed required slots for submission (same as server validation) */
+const REQUIRED_SUBMISSION_SLOTS = [
+  { id: 'sop', label: 'Statement of Purpose(SOP)' },
+  { id: 'lor', label: 'Letter of recommendation(LOR)' },
+  { id: 'resume', label: 'Resume' },
+  { id: 'transcript', label: 'Transcript' },
+];
+
+const EXPECTED_REVIEW_BUSINESS_DAYS = 10;
+
+/**
+ * Wang: complete student-facing status set — maps internal workflow to these phrases only.
+ */
+function studentCaseHeadline(status) {
+  if (!status) return '';
+  switch (status) {
     case 'submitted':
-      return 'Waiting to be assigned to a professor.';
+      return 'Awaiting Expert Assignment';
     case 'assigned':
-      return 'Your materials are assigned; review will begin shortly.';
+      return 'Expert Assigned';
+    case 'pending_admin_approval':
+      return 'Expert Approved';
     case 'under_review':
     case 'resubmitted':
-      return 'Your materials are under review.';
-    case 'needs_info':
-      return 'Action needed: the professor or committee requested additional documents or information.';
-    case 'pending_admin_approval':
-      return 'A recommendation is in; final admission decision is pending.';
     case 'overdue':
-      return 'Your case is past the review due date; the committee has been notified.';
+      return 'Your materials are under review';
+    case 'needs_info':
+      return 'Action needed: Expert requested additional documents';
     case 'approved':
-      return 'Decision: Approved.';
+      return 'Decision: Approved';
     case 'rejected':
-      return 'Decision: Not approved.';
+      return 'Decision: Rejected';
     case 'withdrawn':
-      return 'Withdrawn — you chose not to continue with this application.';
+      return 'Withdrawn';
     default:
       return '';
   }
 }
+
+/** Optional second line for states that need extra clarity */
+function studentCaseSubline(status) {
+  switch (status) {
+    case 'assigned':
+      return 'An expert is assigned - they have not started reviewing your materials yet.';
+    case 'pending_admin_approval':
+      return 'Expert has recommended a decision, final admission approval is pending.';
+    case 'overdue':
+      return 'This case is past the committee due date; the committee has been notified.';
+    default:
+      return '';
+  }
+}
+
+function studentTimelineHint(status) {
+  switch (status) {
+    case 'submitted':
+      return `Once an Expert begins reviewing, expect a decision within about ${EXPECTED_REVIEW_BUSINESS_DAYS} business days in most cases.`;
+    case 'assigned':
+      return `After review begins, most files are completed within ${EXPECTED_REVIEW_BUSINESS_DAYS} business days.`;
+    case 'under_review':
+    case 'resubmitted':
+      return `Expected review within ${EXPECTED_REVIEW_BUSINESS_DAYS} business days (typical).`;
+    case 'pending_admin_approval':
+      return 'You will be notified when final admission approval is complete.';
+    case 'overdue':
+      return `Expected review within ${EXPECTED_REVIEW_BUSINESS_DAYS} business days (typical), subject to committee scheduling.`;
+    default:
+      return '';
+  }
+}
+
+function countRequiredDocsUploaded(documents) {
+  const studentDocs = documents.filter((d) => !d.uploaded_by);
+  const uploaded = REQUIRED_SUBMISSION_SLOTS.filter((slot) =>
+    studentDocs.some((d) => d.type === slot.id)
+  ).length;
+  return { uploaded, total: REQUIRED_SUBMISSION_SLOTS.length };
+}
+
+/** Which step is highlighted on the progress track (0–4) */
+function studentProgressStepIndex(status) {
+  if (!status) return 0;
+  if (status === 'submitted' || status === 'assigned') return 0;
+  if (
+    status === 'under_review' ||
+    status === 'resubmitted' ||
+    status === 'pending_admin_approval' ||
+    status === 'overdue'
+  )
+    return 1;
+  if (status === 'needs_info') return 2;
+  if (status === 'approved' || status === 'rejected') return 3;
+  if (status === 'withdrawn') return 4;
+  return 0;
+}
+
+const PROGRESS_STEPS = [
+  { key: 'queue', label: 'Awaiting Expert Assignment' },
+  { key: 'review', label: 'Under review' },
+  { key: 'action', label: 'Action needed' },
+  { key: 'decision', label: 'Decision' },
+  { key: 'withdrawn', label: 'Withdrawn' },
+];
 
 const WITHDRAWABLE_STATUSES = [
   'submitted',
@@ -97,7 +171,7 @@ export default function Upload() {
   const previewUrl = (docId) =>
     `${API}/documents/${docId}/preview?token=${encodeURIComponent(token)}`;
 
-  const requiredTypes = ['sop', 'lor', 'resume'];
+  const requiredTypes = ['sop', 'lor', 'resume', 'transcript'];
   const hasRequiredDocs = requiredTypes.every(
     (t) => documents.some((d) => d.type === t && !d.uploaded_by)
   );
@@ -322,38 +396,38 @@ export default function Upload() {
     );
   }
 
-  const STATUS_LABELS = {
-    draft: 'Draft',
-    submitted: 'Submitted - Open',
-    assigned: 'Assigned',
-    under_review: 'Under review',
-    needs_info: 'Needs info',
-    resubmitted: 'Resubmitted',
-    pending_admin_approval: 'Pending admin approval',
-    approved: 'Approved',
-    rejected: 'Rejected',
-    withdrawn: 'Withdrawn',
-    overdue: 'Overdue',
-  };
-  const BADGE_CLASS = {
-    draft: styles.badgeDraft,
-    submitted: styles.badgeSubmitted,
-    assigned: styles.badgeAssigned,
-    under_review: styles.badgeUnderReview,
-    needs_info: styles.badgeNeedsInfo,
-    resubmitted: styles.badgeResubmitted,
-    pending_admin_approval: styles.badgePendingAdmin,
-    approved: styles.badgeApproved,
-    rejected: styles.badgeRejected,
-    withdrawn: styles.badgeWithdrawn,
-    overdue: styles.badgeOverdue,
-  };
+  function studentStatusBadgeClass(status) {
+    switch (status) {
+      case 'submitted':
+        return styles.badgeSubmitted;
+      case 'assigned':
+        return styles.badgeAssigned;
+      case 'under_review':
+      case 'resubmitted':
+      case 'overdue':
+        return styles.badgeUnderReview;
+      case 'pending_admin_approval':
+        return styles.badgePendingAdmin;
+      case 'needs_info':
+        return styles.badgeNeedsInfo;
+      case 'approved':
+        return styles.badgeApproved;
+      case 'rejected':
+        return styles.badgeRejected;
+      case 'withdrawn':
+        return styles.badgeWithdrawn;
+      default:
+        return styles.badgeDefault;
+    }
+  }
+
   const completedCases = myCases.filter((c) =>
     c.status === 'approved' || c.status === 'rejected' || c.status === 'withdrawn'
   );
   const studentOwnedDocs = documents.filter((d) => !d.uploaded_by);
   /** New student: committee has not enabled upload and no files yet — simple prompt, no empty upload UI */
   const awaitingAdminFirstUpload = !isApproved && studentOwnedDocs.length === 0;
+  const checklist = countRequiredDocsUploaded(documents);
 
   function uploadLockedCopy(reason) {
     if (reason === 'committee_disabled') {
@@ -440,9 +514,32 @@ export default function Upload() {
       )}
       <p className={styles.hint}>
         {isApproved
-          ? 'PDF, DOC, DOCX, or TXT (max 10MB each). Upload SOP, LOR, and Resume, then submit your application.'
+          ? 'PDF, DOC, DOCX, or TXT (max 10MB each). Upload Statement of Purpose(SOP), Letter of recommendation(LOR), Resume, and Transcript, then submit your application.'
           : 'You can view your submitted files and message the committee. Enable upload is controlled by the committee.'}
       </p>
+
+      <div className={styles.docChecklist} role="region" aria-label="Required documents">
+        <div className={styles.docChecklistHeader}>
+          <span className={styles.docChecklistTitle}>Document checklist</span>
+          <span className={styles.docChecklistCount}>
+            {checklist.uploaded} of {checklist.total} required documents uploaded
+          </span>
+        </div>
+        <ul className={styles.docChecklistList}>
+          {REQUIRED_SUBMISSION_SLOTS.map((slot) => {
+            const has = documents.some((d) => d.type === slot.id && !d.uploaded_by);
+            return (
+              <li
+                key={slot.id}
+                className={has ? styles.docChecklistItemDone : styles.docChecklistItemMissing}
+              >
+                <span className={styles.docChecklistMark} aria-hidden>{has ? '✓' : '○'}</span>
+                <span>{slot.label}</span>
+              </li>
+            );
+          })}
+        </ul>
+      </div>
 
       {showInProgressBanner && (
         <div className={styles.inProgressBanner} role="status">
@@ -456,21 +553,43 @@ export default function Upload() {
       {activeCase && (
         <div className={styles.caseStatusBanner}>
           <span className={styles.caseStageLabel}>Your application</span>
+          <div className={styles.progressTrack} role="list" aria-label="Application progress">
+            {PROGRESS_STEPS.map((step, i) => {
+              const current = studentProgressStepIndex(activeCase.status);
+              const done = i < current;
+              const active = i === current;
+              const stepLabel =
+                step.key === 'queue' && activeCase.status === 'assigned'
+                  ? 'Expert Assigned'
+                  : step.key === 'review' && activeCase.status === 'pending_admin_approval'
+                    ? 'Expert Approved'
+                    : step.label;
+              return (
+                <div
+                  key={step.key}
+                  role="listitem"
+                  className={`${styles.progressTrackStep} ${done ? styles.progressTrackStepDone : ''} ${active ? styles.progressTrackStepActive : ''}`}
+                >
+                  <span className={styles.progressTrackDot} aria-hidden />
+                  <span className={styles.progressTrackLabel}>{stepLabel}</span>
+                </div>
+              );
+            })}
+          </div>
           <p className={styles.progressPlain} role="status">
-            {studentCaseProgressLine(activeCase)}
+            {studentCaseHeadline(activeCase.status)}
           </p>
+          {studentCaseSubline(activeCase.status) && (
+            <p className={styles.progressSubline}>{studentCaseSubline(activeCase.status)}</p>
+          )}
+          {studentTimelineHint(activeCase.status) && (
+            <p className={styles.timelineHint}>{studentTimelineHint(activeCase.status)}</p>
+          )}
           <div className={styles.caseStatusHeader}>
             <span className={styles.caseIdPill}>{activeCase.case_id}</span>
-            {activeCase.status === 'pending_admin_approval' ? (
-              <div className={styles.dualStatusRow} role="status" aria-label="Examiner approved, pending admin">
-                <span className={styles.statusRectApproved}>Approved</span>
-                <span className={styles.statusRectPendingAdmin}>Pending Admin Approval</span>
-              </div>
-            ) : (
-              <span className={`${styles.statusBadge} ${BADGE_CLASS[activeCase.status] || styles.badgeDefault}`}>
-                {STATUS_LABELS[activeCase.status] || activeCase.status}
-              </span>
-            )}
+            <span className={`${styles.statusBadge} ${studentStatusBadgeClass(activeCase.status)}`}>
+              {studentCaseHeadline(activeCase.status)}
+            </span>
           </div>
           <div className={styles.caseStatusMeta}>
             {activeCase.due_at && (
@@ -480,11 +599,6 @@ export default function Upload() {
                   <span className={styles.overdueBadge}>Overdue</span>
                 )}
               </span>
-            )}
-            {activeCase.status === 'pending_admin_approval' && (
-              <p className={styles.tentativeApprovalHint}>
-                Examiner has approved your application. Final confirmation from the authority is still required. You will be notified when the decision is complete.
-              </p>
             )}
             {activeCase.status === 'needs_info' && (
               <>
@@ -518,20 +632,14 @@ export default function Upload() {
         <div className={styles.caseStatusBanner}>
           <span className={styles.caseStageLabel}>Your application</span>
           <p className={styles.progressPlain} role="status">
-            {studentCaseProgressLine(completedCases[0])}
+            {studentCaseHeadline(completedCases[0].status)}
           </p>
           <div className={styles.caseStatusHeader}>
             <span className={styles.caseIdPill}>{completedCases[0].case_id}</span>
             <span
-              className={`${styles.statusBadge} ${
-                completedCases[0].status === 'approved'
-                  ? styles.badgeApproved
-                  : completedCases[0].status === 'withdrawn'
-                    ? styles.badgeWithdrawn
-                    : styles.badgeRejected
-              }`}
+              className={`${styles.statusBadge} ${studentStatusBadgeClass(completedCases[0].status)}`}
             >
-              {STATUS_LABELS[completedCases[0].status]}
+              {studentCaseHeadline(completedCases[0].status)}
             </span>
           </div>
           <div className={styles.caseStatusMeta}>
@@ -725,7 +833,7 @@ export default function Upload() {
         {!activeCase && hasRequiredDocs && isApproved && canUploadDocuments && !myCases.some((c) => c.status === 'approved') && (
           <section className={styles.section}>
             <label className={styles.label}>Submit application</label>
-            <p className={styles.submitHint}>You have uploaded SOP, LOR, and Resume. Click to create your application case.</p>
+            <p className={styles.submitHint}>You have uploaded Statement of Purpose(SOP), Letter of recommendation(LOR), Resume, and Transcript. Click to create your application case.</p>
             <button
               type="button"
               className={styles.submitBtn}

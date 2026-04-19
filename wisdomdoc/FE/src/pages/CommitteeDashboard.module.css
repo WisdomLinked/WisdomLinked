@@ -212,6 +212,7 @@
 
 .expertActions {
   display: flex;
+  flex-wrap: wrap;
   gap: 0.5rem;
   margin-left: auto;
 }
@@ -460,6 +461,12 @@
   color: var(--text-muted);
 }
 
+.expertCardWorkload {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
 .expertCardBio {
   font-size: 0.75rem;
   color: var(--text-muted);
@@ -599,6 +606,17 @@
 
 .filterSelect {
   min-width: 11rem;
+  max-width: 100%;
+  padding: 0.45rem 0.6rem;
+  font-size: 0.88rem;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg-input);
+  color: var(--text);
+}
+
+.filterDateInput {
+  min-width: 10.5rem;
   max-width: 100%;
   padding: 0.45rem 0.6rem;
   font-size: 0.88rem;
@@ -1599,4 +1617,86 @@
   margin: 0;
   font-size: 0.8rem;
   color: var(--text-muted);
+}
+
+.workloadPanel {
+  margin-bottom: 1.25rem;
+  padding: 1rem 1.25rem;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.workloadTitle {
+  margin: 0 0 0.35rem;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.workloadHint {
+  margin: 0 0 0.75rem;
+  font-size: 0.85rem;
+  line-height: 1.45;
+  color: var(--text-muted);
+}
+
+.workloadEmpty {
+  margin: 0;
+  font-size: 0.9rem;
+  color: var(--text-muted);
+}
+
+.workloadTableWrap {
+  overflow-x: auto;
+}
+
+.workloadTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.88rem;
+}
+
+.workloadTable th,
+.workloadTable td {
+  padding: 0.5rem 0.65rem;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+}
+
+.workloadTable th {
+  font-weight: 600;
+  color: var(--text-muted);
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.workloadTable tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.activeCaseCount {
+  font-weight: 600;
+  color: var(--primary);
+}
+
+.startReviewBtn {
+  padding: 0.5rem 1rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+  background: rgba(255, 193, 7, 0.2);
+  border: 1px solid rgba(255, 193, 7, 0.55);
+  border-radius: 6px;
+  color: #ffc107;
+  cursor: pointer;
+}
+
+.startReviewBtn:hover:not(:disabled) {
+  background: rgba(255, 193, 7, 0.3);
+}
+
+.startReviewBtn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
