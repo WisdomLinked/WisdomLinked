@@ -132,7 +132,13 @@ const oauthCallback = async (req: any, res: any) => {
             email: user.email,
             username: user.username,
             name: user.username,
-        }).catch(err => console.error('RC sync failed (oauth):', err.message));
+        })
+            .then((rcUserId) => {
+                if (!rcUserId) {
+                    console.warn('RC sync returned no user id (oauth):', user.email);
+                }
+            })
+            .catch(err => console.error('RC sync failed (oauth):', err.message));
 
         // Check for incomplete profile
         let isProfileIncomplete = false;

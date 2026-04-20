@@ -31,6 +31,11 @@ const rcCreateTokensSecret = (): string =>
 let adminAuthToken = '';
 let adminUserId = '';
 
+const rcDebugEnabled = (): boolean => String(process.env.RC_DEBUG_TRACE || '').toLowerCase() === 'true';
+const rcDebug = (...args: any[]) => {
+    if (rcDebugEnabled()) console.log('[RC_DEBUG_TRACE]', ...args);
+};
+
 const getAdminAuthHeaders = async () => {
     if (adminAuthToken && adminUserId) {
         return {
@@ -103,6 +108,7 @@ const persistRocketChatUsername = async (email: string, rcUsername: string) => {
 export const syncUserToRocketChat = async (userData: { email: string; username: string; name: string; password?: string }) => {
     const rcUsername = toRocketChatUsername(userData.email);
     const displayName = userData.name || userData.username;
+    rcDebug('syncUserToRocketChat:start', { email: userData.email, rcUsername });
 
     try {
         const headers = await getAdminAuthHeaders();
@@ -114,11 +120,23 @@ export const syncUserToRocketChat = async (userData: { email: string; username: 
                 { headers }
             );
             if (checkRes.data.success && checkRes.data.user) {
+                rcDebug('syncUserToRocketChat:exists', {
+                    email: userData.email,
+                    rcUsername,
+                    rcUserId: checkRes.data.user?._id || null,
+                    rcUserName: checkRes.data.user?.username || null,
+                });
                 await persistRocketChatUsername(userData.email, rcUsername);
                 return checkRes.data.user._id;
             }
         } catch (e: any) {
             // 400 error usually means user doesn't exist, which is fine
+            rcDebug('syncUserToRocketChat:users.info-miss', {
+                email: userData.email,
+                rcUsername,
+                status: e?.response?.status || null,
+                error: e?.response?.data?.error || e?.message || 'unknown',
+            });
         }
 
         // 2. Create the user
@@ -133,16 +151,35 @@ export const syncUserToRocketChat = async (userData: { email: string; username: 
 
         if (createRes.data.success) {
             console.log(`Successfully synced user ${rcUsername} (${userData.email}) to Rocket.Chat`);
+            rcDebug('syncUserToRocketChat:created', {
+                email: userData.email,
+                rcUsername,
+                rcUserId: createRes.data.user?._id || null,
+                rcUserName: createRes.data.user?.username || null,
+            });
             await persistRocketChatUsername(userData.email, rcUsername);
             return createRes.data.user._id;
         }
     } catch (err: any) {
         if (err.response?.data?.errorType === 'error-field-unavailable') {
             console.log(`User ${rcUsername} or email ${userData.email} already exists in Rocket.Chat`);
+            rcDebug('syncUserToRocketChat:create-field-unavailable', {
+                email: userData.email,
+                rcUsername,
+                response: err.response?.data || null,
+            });
         } else {
             console.error('Failed to sync user to Rocket.Chat:', err.response?.data || err.message);
+            rcDebug('syncUserToRocketChat:create-failed', {
+                email: userData.email,
+                rcUsername,
+                status: err?.response?.status || null,
+                response: err?.response?.data || null,
+                error: err?.message || 'unknown',
+            });
         }
     }
+    rcDebug('syncUserToRocketChat:return-null', { email: userData.email, rcUsername });
     return null;
 };
 
@@ -212,15 +249,28 @@ export const getOrCreateDMChannel = async (usernameA: string, usernameB: string)
     try {
         const headers = await getAdminAuthHeaders();
         const [u1, u2] = [usernameA, usernameB].sort((a, b) => a.localeCompare(b));
+        rcDebug('getOrCreateDMChannel:start', { usernameA, usernameB, sorted: [u1, u2] });
         const res = await axios.post(`${RC_URL}/api/v1/dm.create`, {
             usernames: `${u1},${u2}`
         }, { headers });
 
         if (res.data.success && res.data.room) {
+            rcDebug('getOrCreateDMChannel:success', {
+                sorted: [u1, u2],
+                rid: res.data.room?._id || null,
+                userIds: Array.isArray(res.data.room?.userIds) ? res.data.room.userIds : null,
+            });
             return res.data.room._id;
         }
     } catch (err: any) {
         console.error('Failed to create/get DM channel:', err.response?.data || err.message);
+        rcDebug('getOrCreateDMChannel:failed', {
+            usernameA,
+            usernameB,
+            status: err?.response?.status || null,
+            response: err?.response?.data || null,
+            error: err?.message || 'unknown',
+        });
     }
     return null;
 };
@@ -303,6 +353,12 @@ export const sendMessageToRC = async (
 ): Promise<string | null> => {
     const msg = wlHtmlToPlainTextForRocketChat(text);
     if (!msg) return null;
+    rcDebug('sendMessageToRC:start', {
+        roomId,
+        senderUsername,
+        senderEmail: senderEmail || null,
+        msgLength: msg.length,
+    });
 
     const email = senderEmail?.trim();
     if (email) {
@@ -313,6 +369,11 @@ export const sendMessageToRC = async (
                 name: senderUsername,
             });
             if (tok) {
+                rcDebug('sendMessageToRC:user-token', {
+                    email,
+                    tokenUserId: tok.userId,
+                    roomId,
+                });
                 const userHeaders = {
                     'X-Auth-Token': tok.authToken,
                     'X-User-Id': tok.userId,
@@ -324,10 +385,25 @@ export const sendMessageToRC = async (
                     { headers: userHeaders }
                 );
                 const mid = res.data?.message?._id;
-                if (res.data.success && mid) return String(mid);
+                if (res.data.success && mid) {
+                    rcDebug('sendMessageToRC:user-success', { roomId, mid, tokenUserId: tok.userId });
+                    return String(mid);
+                }
+                rcDebug('sendMessageToRC:user-no-mid', {
+                    roomId,
+                    tokenUserId: tok.userId,
+                    response: res.data || null,
+                });
             }
         } catch (err: any) {
             console.error('Failed to send message to RC (as user):', err.response?.data || err.message);
+            rcDebug('sendMessageToRC:user-failed', {
+                roomId,
+                email,
+                status: err?.response?.status || null,
+                response: err?.response?.data || null,
+                error: err?.message || 'unknown',
+            });
         }
     }
 
@@ -341,10 +417,21 @@ export const sendMessageToRC = async (
             }
         }, { headers });
         const mid = res.data?.message?._id;
-        if (res.data.success === true && mid) return String(mid);
+        if (res.data.success === true && mid) {
+            rcDebug('sendMessageToRC:admin-success', { roomId, mid });
+            return String(mid);
+        }
+        rcDebug('sendMessageToRC:admin-no-mid', { roomId, response: res.data || null });
     } catch (err: any) {
         console.error('Failed to send message to RC (as admin):', err.response?.data || err.message);
+        rcDebug('sendMessageToRC:admin-failed', {
+            roomId,
+            status: err?.response?.status || null,
+            response: err?.response?.data || null,
+            error: err?.message || 'unknown',
+        });
     }
+    rcDebug('sendMessageToRC:return-null', { roomId, senderEmail: senderEmail || null });
     return null;
 };
 
@@ -888,7 +975,14 @@ export const generateUserToken = async (
     if (!email) return null;
 
     const rcUsername = toRocketChatUsername(email);
+    rcDebug('generateUserToken:start', {
+        email,
+        rcUsername,
+        usernameHint: params.username || null,
+        nameHint: params.name || null,
+    });
     let rcUserId = await getRCUserIdByUsername(rcUsername);
+    rcDebug('generateUserToken:lookup', { email, rcUsername, rcUserId: rcUserId || null });
 
     if (!rcUserId) {
         rcUserId = await syncUserToRocketChat({
@@ -896,6 +990,7 @@ export const generateUserToken = async (
             username: params.username || email,
             name: params.name || params.username || email.split('@')[0] || 'User',
         });
+        rcDebug('generateUserToken:after-sync', { email, rcUsername, rcUserId: rcUserId || null });
     }
 
     if (!rcUserId) {
@@ -904,6 +999,7 @@ export const generateUserToken = async (
 
     if (!rcUserId) {
         console.error('Failed to generate RC token: no Rocket.Chat user for', email);
+        rcDebug('generateUserToken:no-rc-user', { email, rcUsername });
         return null;
     }
 
@@ -925,6 +1021,12 @@ export const generateUserToken = async (
         );
 
         if (res.data.success) {
+            rcDebug('generateUserToken:success', {
+                email,
+                rcUsername,
+                rcUserId,
+                tokenUserId: res.data.data.userId || null,
+            });
             return {
                 authToken: res.data.data.authToken,
                 userId: res.data.data.userId
@@ -932,7 +1034,16 @@ export const generateUserToken = async (
         }
     } catch (err: any) {
         console.error('Failed to generate user token:', err.response?.data || err.message);
+        rcDebug('generateUserToken:failed', {
+            email,
+            rcUsername,
+            rcUserId,
+            status: err?.response?.status || null,
+            response: err?.response?.data || null,
+            error: err?.message || 'unknown',
+        });
     }
+    rcDebug('generateUserToken:return-null', { email, rcUsername, rcUserId });
     return null;
 };
 

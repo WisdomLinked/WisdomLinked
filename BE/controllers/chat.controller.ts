@@ -281,6 +281,14 @@ export const getOrCreateDM = async (req: any, res: Response) => {
         const other = await User.findById(otherUserId);
         let rcChannelId = null;
         if (me && other && me.email && other.email) {
+            if (String(process.env.RC_DEBUG_TRACE || '').toLowerCase() === 'true') {
+                console.log('[RC_DEBUG_TRACE] chat.getOrCreateDM:pair', {
+                    meEmail: me.email,
+                    meRcUsername: toRocketChatUsername(me.email),
+                    otherEmail: other.email,
+                    otherRcUsername: toRocketChatUsername(other.email),
+                });
+            }
             await ensureBothWlUsersSyncedToRocketChat(me, other);
             rcChannelId = await getOrCreateDMChannel(
                 toRocketChatUsername(me.email),
@@ -330,12 +338,27 @@ export const sendMessage = async (req: any, res: Response) => {
         // Real RC `_id` enables `chat.getMessageReadReceipts` on the client; fallback if send fails.
         let sentId = `temp-${Date.now()}`;
         if (me && other && me.email && other.email) {
+            if (String(process.env.RC_DEBUG_TRACE || '').toLowerCase() === 'true') {
+                console.log('[RC_DEBUG_TRACE] chat.sendMessage:pair', {
+                    meEmail: me.email,
+                    meRcUsername: toRocketChatUsername(me.email),
+                    otherEmail: other.email,
+                    otherRcUsername: toRocketChatUsername(other.email),
+                    conversationId: String(conversation._id),
+                });
+            }
             await ensureBothWlUsersSyncedToRocketChat(me, other);
             const rcChannelId = await getOrCreateDMChannel(
                 toRocketChatUsername(me.email),
                 toRocketChatUsername(other.email)
             );
             if (rcChannelId) {
+                if (String(process.env.RC_DEBUG_TRACE || '').toLowerCase() === 'true') {
+                    console.log('[RC_DEBUG_TRACE] chat.sendMessage:rid', {
+                        conversationId: String(conversation._id),
+                        rcChannelId,
+                    });
+                }
                 // EXCLUSIVELY send to RC. We no longer save to our MongoDB Message model!
                 const rid = await sendMessageToRC(rcChannelId, content, wlDisplayName(me), me.email);
                 if (rid) sentId = rid;

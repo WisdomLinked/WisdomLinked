@@ -412,7 +412,13 @@ const verifyRegistration = async (req: Request, res: Response) => {
             email: user.email,
             username: user.username,
             name: user.username,
-        }).catch(err => console.error('RC sync failed (registration):', err.message));
+        })
+            .then((rcUserId) => {
+                if (!rcUserId) {
+                    console.warn('RC sync returned no user id (registration):', user.email);
+                }
+            })
+            .catch(err => console.error('RC sync failed (registration):', err.message));
 
         //
         sendEmailNewUserAccountApproval(user.username)
@@ -620,7 +626,13 @@ const confirmLoginByCode = async (req: Request, res: Response) => {
             email: user.email,
             username: user.username,
             name: user.username,
-        }).catch(err => console.error('RC sync failed (login):', err.message));
+        })
+            .then((rcUserId) => {
+                if (!rcUserId) {
+                    console.warn('RC sync returned no user id (login):', user.email);
+                }
+            })
+            .catch(err => console.error('RC sync failed (login):', err.message));
 
 
         return res.status(200).json({
