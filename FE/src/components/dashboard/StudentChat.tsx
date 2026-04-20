@@ -193,6 +193,7 @@ const StudentChat: React.FC = () => {
   useEffect(() => {
     if (!isCustomer && !isExpert) return;
     let lastRefreshAt = 0;
+    let communityRefreshTimer: ReturnType<typeof setTimeout> | null = null;
     const unsub = onSubscriptionChanged(({ roomId, type, unread }) => {
       if (type && !['d', 'c', 'p'].includes(type)) return;
       const rid = String(roomId || '');
@@ -206,6 +207,13 @@ const StudentChat: React.FC = () => {
         });
         dispatch(patchDmUnreadRid(rid, unread));
       }
+      if (type === 'c' || type === 'p') {
+        if (communityRefreshTimer) window.clearTimeout(communityRefreshTimer);
+        /** Ensure community rid/name mapping stays hot so unread highlight appears without manual refresh. */
+        communityRefreshTimer = window.setTimeout(() => {
+          void loadCommunityChats();
+        }, 350);
+      }
       const knownDm = privateRows.some((r) => r.kind === 'privateDm' && String(r.rcChannelId || '') === rid);
       const knownCommunity = communityChats.some((c) => String(c.raw?.rcChannelId || '') === rid);
       if (knownDm || knownCommunity) return;
@@ -214,8 +222,11 @@ const StudentChat: React.FC = () => {
       lastRefreshAt = now;
       dispatch(updateMe() as any);
     });
-    return () => unsub();
-  }, [dispatch, isCustomer, isExpert, privateRows, communityChats]);
+    return () => {
+      unsub();
+      if (communityRefreshTimer) window.clearTimeout(communityRefreshTimer);
+    };
+  }, [dispatch, isCustomer, isExpert, privateRows, communityChats, loadCommunityChats]);
 
   useEffect(() => {
     communityChats.forEach(c => {

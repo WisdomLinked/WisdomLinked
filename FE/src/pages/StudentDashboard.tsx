@@ -184,6 +184,22 @@ export default function StudentDashboard() {
     }
   }, []);
 
+  const hydrateUnreadSnapshot = useCallback(async () => {
+    const snapshot = await fetchDmUnreadSnapshot();
+    if (snapshot?.success && snapshot.unreadByRid) {
+      setDmUnreadByRid(snapshot.unreadByRid);
+      dispatch(setDmUnreadByRidBulk(snapshot.unreadByRid));
+    } else {
+      setDmUnreadByRid({});
+      dispatch(setDmUnreadByRidBulk({}));
+    }
+    if (snapshot?.success && snapshot.nameByRid && typeof snapshot.nameByRid === 'object') {
+      setRcRoomNameByRid(snapshot.nameByRid);
+    } else {
+      setRcRoomNameByRid({});
+    }
+  }, [dispatch]);
+
   useEffect(() => {
     let mounted = true;
     const boot = async () => {
@@ -209,6 +225,24 @@ export default function StudentDashboard() {
       mounted = false;
     };
   }, [loadCommunityNotificationRooms, dispatch]);
+
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState !== 'visible') return;
+      void hydrateUnreadSnapshot();
+      void loadCommunityNotificationRooms();
+    };
+    const onFocus = () => {
+      void hydrateUnreadSnapshot();
+      void loadCommunityNotificationRooms();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('focus', onFocus);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('focus', onFocus);
+    };
+  }, [hydrateUnreadSnapshot, loadCommunityNotificationRooms]);
 
   useEffect(() => {
     const uid = userDetails?._id ?? userDetails?.id ?? userDetails?.userId;
@@ -256,8 +290,15 @@ export default function StudentDashboard() {
   const allowedChatRidSet = useMemo(() => {
     const s = new Set<string>();
     dmRidSet.forEach(rid => s.add(rid));
-    /** Include unread snapshot rooms so post-login missed messages show immediately. */
-    Object.keys(dmUnreadByRid || {}).forEach(rid => s.add(String(rid)));
+    /** Include unread snapshot rooms only for WL-style channel names (exclude default rooms like "general"). */
+    Object.entries(dmUnreadByRid || {}).forEach(([rid]) => {
+      const roomName = String(rcRoomNameByRid?.[rid] || '').trim().toLowerCase();
+      const looksLikeWlChannel =
+        roomName.startsWith('wl-group-') ||
+        roomName.startsWith('wl_') ||
+        roomName.includes('community');
+      if (looksLikeWlChannel) s.add(String(rid));
+    });
     (userDetails?.generalChats ?? []).forEach((g: any) => {
       if (g?.rcChannelId) s.add(String(g.rcChannelId));
     });
@@ -266,7 +307,7 @@ export default function StudentDashboard() {
     });
     Object.keys(communityRidToName).forEach(rid => s.add(rid));
     return s;
-  }, [dmRidSet, dmUnreadByRid, userDetails?.generalChats, userDetails?.groupChats, communityRidToName]);
+  }, [dmRidSet, dmUnreadByRid, rcRoomNameByRid, userDetails?.generalChats, userDetails?.groupChats, communityRidToName]);
 
   const filteredUnreadByRid = useMemo(() => {
     const out: Record<string, number> = {};
