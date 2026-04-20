@@ -11,6 +11,7 @@ import {
     getRCToken,
     markChatRead,
     getDmUnreadSnapshot,
+    searchPrivateChatUsers,
     getReadReceiptsBatch,
     deleteChatMessage,
     hideDmFromList,
@@ -30,6 +31,7 @@ router.get('/group/history/:groupChatId', requireAuth(false), getGroupHistory);
 router.get('/rc-token', requireAuth(false), getRCToken);
 router.post('/mark-read', requireAuth(false), markChatRead);
 router.get('/dm-unread-snapshot', requireAuth(false), getDmUnreadSnapshot);
+router.get('/search-users', requireAuth(false), searchPrivateChatUsers);
 router.post('/rc-read-receipts', requireAuth(false), getReadReceiptsBatch);
 router.post('/delete-message', requireAuth(false), deleteChatMessage);
 router.post('/dm/hide', requireAuth(false), hideDmFromList);

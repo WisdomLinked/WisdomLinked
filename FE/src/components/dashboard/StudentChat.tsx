@@ -17,7 +17,7 @@ import {
   createCommunityChat,
   joinCommunityChat,
   doFilterCustomers,
-  doFilterExperts,
+  searchPrivateChatUsers,
   joinPrivateChat,
 } from '../../api/api';
 import { clearDmThread, hideDmFromList, fetchDmUnreadSnapshot } from '../../api/chatApi';
@@ -328,12 +328,7 @@ const StudentChat: React.FC = () => {
     let cancelled = false;
     const t = window.setTimeout(async () => {
       try {
-        const res: any = await doFilterCustomers({
-          username: q,
-          keywords: [],
-          services: [],
-          sortBy: 'Name in ASC',
-        });
+        const res: any = await searchPrivateChatUsers(q);
         if (cancelled) return;
         const list = Array.isArray(res?.result) ? res.result : [];
         const rows: PrivateRow[] = list.map((u: any) => ({
@@ -414,12 +409,7 @@ const StudentChat: React.FC = () => {
     let cancelled = false;
     const t = window.setTimeout(async () => {
       try {
-        const res: any = await doFilterExperts({
-          username: q,
-          keywords: [],
-          services: [],
-          sortBy: 'Name in ASC',
-        });
+        const res: any = await searchPrivateChatUsers(q);
         if (cancelled) return;
         const list = Array.isArray(res?.result) ? res.result : [];
         const rows: PrivateRow[] = list.map((u: any) => ({
@@ -966,8 +956,8 @@ const StudentChat: React.FC = () => {
                 onChange={e => setPrivateQuery(e.target.value)}
                 placeholder={
                   isExpert
-                    ? 'Search friends or customers by name…'
-                    : 'Search chats or experts by name…'
+                    ? 'Search chats or users by name…'
+                    : 'Search chats or users by name…'
                 }
                 aria-label="Search private chats"
                 className="flex-1 min-w-0 bg-transparent outline-none text-xs text-slate-700 placeholder:text-slate-400"
@@ -977,11 +967,11 @@ const StudentChat: React.FC = () => {
               <p className="px-2 py-3 text-[11px] text-slate-500">
                 {privateQuery.trim()
                   ? isExpert
-                    ? 'No friends or customers match your search.'
-                    : 'No chats or experts match your search.'
+                    ? 'No chats or users match your search.'
+                    : 'No chats or users match your search.'
                   : isExpert
-                    ? 'Type a name to search customers, or open a friend or direct chat below.'
-                    : 'No private chats yet. Type an expert’s name to find them.'}
+                    ? 'Type a name to search users, or open a friend or direct chat below.'
+                    : 'No private chats yet. Type a name to find users.'}
               </p>
             ) : (
               filteredPrivate.map(row => {

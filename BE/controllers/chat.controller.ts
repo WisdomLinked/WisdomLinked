@@ -813,6 +813,33 @@ export const getDmUnreadSnapshot = async (req: any, res: Response) => {
     }
 };
 
+/** Authenticated private-chat target search (cross-role): experts + students, excluding self/blocked/admin. */
+export const searchPrivateChatUsers = async (req: any, res: Response) => {
+    try {
+        const { userId } = req.user;
+        const q = String(req.query.q || '').trim();
+        if (!q) return res.status(200).json({ success: true, result: [] });
+        const safe = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const users = await User.find({
+            _id: { $ne: userId },
+            role: { $in: ['expert', 'customer'] },
+            status: { $ne: 'blocked' },
+            $or: [
+                { username: { $regex: safe, $options: 'i' } },
+                { email: { $regex: safe, $options: 'i' } },
+            ],
+        })
+            .select('_id username email image role status')
+            .sort({ username: 1 })
+            .limit(30)
+            .lean();
+        return res.status(200).json({ success: true, result: users });
+    } catch (err: any) {
+        console.error('[chat.searchPrivateChatUsers]', err.message);
+        return res.status(500).json({ error: err.message });
+    }
+};
+
 // ── RC Token Endpoint ───────────────────────────────────────
 
 export const getRCToken = async (req: any, res: Response) => {

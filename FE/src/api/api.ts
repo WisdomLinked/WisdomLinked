@@ -894,6 +894,15 @@ export const doFilterCustomers = async (filter: any) => {
     }
 };
 
+export const searchPrivateChatUsers = async (q: string) => {
+    try {
+        const res = await api.get(`chat/search-users?q=${encodeURIComponent(String(q || ''))}`);
+        return res.data;
+    } catch (err: any) {
+        return checkForAuthorization(err);
+    }
+};
+
 export const getCustomerById = async (id: any) => {
     try {
         const res = await api.get(`expert/getUser/${id}`);
