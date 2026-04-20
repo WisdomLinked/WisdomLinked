@@ -245,6 +245,8 @@ export default function ExpertDashboard() {
   const allowedChatRidSet = useMemo(() => {
     const s = new Set<string>();
     dmRidSet.forEach(rid => s.add(rid));
+    /** Include unread snapshot rooms so post-login missed messages show immediately. */
+    Object.keys(dmUnreadByRid || {}).forEach(rid => s.add(String(rid)));
     (userDetails?.generalChats ?? []).forEach((g: any) => {
       if (g?.rcChannelId) s.add(String(g.rcChannelId));
     });
@@ -253,7 +255,7 @@ export default function ExpertDashboard() {
     });
     Object.keys(communityRidToName).forEach(rid => s.add(rid));
     return s;
-  }, [dmRidSet, userDetails?.generalChats, userDetails?.groupChats, communityRidToName]);
+  }, [dmRidSet, dmUnreadByRid, userDetails?.generalChats, userDetails?.groupChats, communityRidToName]);
 
   const filteredUnreadByRid = useMemo(() => {
     const out: Record<string, number> = {};
