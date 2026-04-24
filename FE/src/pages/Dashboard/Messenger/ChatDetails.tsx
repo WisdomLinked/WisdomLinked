@@ -22,8 +22,7 @@ const ChatDetails = ({
                         : "w-full h-full min-h-0 flex flex-col overflow-hidden"
                 }
             >
-                {/* One column width for header + thread + composer (avoids full-bleed bubbles vs skinny text) */}
-                <div className="mx-auto flex h-full min-h-0 w-full max-w-2xl flex-1 flex-col">
+                <div className="flex h-full min-h-0 w-full min-w-0 flex-1 flex-col">
                     <Messages theme={theme} />
                     <div className="shrink-0">
                         <Typing theme={theme} />

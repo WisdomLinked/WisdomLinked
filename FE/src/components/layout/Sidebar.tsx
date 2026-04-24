@@ -4,7 +4,6 @@ import {
   Users,
   BookOpen,
   Calendar,
-  Video,
   UserCircle,
   Settings,
   MessageSquareMore,
@@ -13,13 +12,17 @@ import {
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
+const VideoCallNavIcon = ({ className }: { className?: string }) => (
+  <img src="/icons/video-call.png" alt="" aria-hidden="true" className={className} />
+);
+
 const defaultNavItems = [
   { id: 'dashboard', label: 'Dashboard', icon: BookOpen },
   { id: 'chat', label: 'Chat', icon: MessageSquare },
   { id: 'experts', label: 'Find Experts', icon: Users },
   { id: 'seminars', label: 'Seminars', icon: BookOpen },
   { id: 'calendar', label: 'Calendar', icon: Calendar },
-  { id: 'join-meeting', label: 'Join Meeting', icon: Video },
+  { id: 'join-meeting', label: 'Join Meeting', icon: VideoCallNavIcon },
   { id: 'contact-admin', label: 'Contact admin', icon: MessageSquareMore },
   { id: 'settings', label: 'Settings', icon: Settings },
 ];

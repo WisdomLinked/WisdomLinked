@@ -902,7 +902,8 @@ const Messages = ({ theme = "dark" }: any) => {
                             className="absolute top-0 left-0 w-full h-full cursor-pointer"
                             onClick={() => set_seminarDetailsModalShow(false)}
                         />
-                        <div className={`w-full max-w-[560px] rounded-2xl p-6 relative shadow-xl ${theme === "light" ? "bg-white text-slate-900" : "bg-black text-white"}`}>
+                        <div className={`w-full max-w-[620px] rounded-2xl p-6 relative shadow-xl border ${theme === "light" ? "bg-white text-slate-900 border-slate-200" : "bg-black text-white border-slate-700"}`}>
+                            <div className={`h-1.5 w-full absolute left-0 top-0 rounded-t-2xl ${theme === "light" ? "bg-gradient-to-r from-[#234C6A] via-[#456882] to-[#234C6A]" : "bg-gradient-to-r from-slate-600 via-slate-500 to-slate-600"}`} />
                             <div className={`text-center text-2xl mb-6 font-semibold ${theme === "light" ? "text-slate-900" : "text-white"}`}>
                                 {chosenGroupChatDetails?.type === "community" ? "Chat Details" : "Seminar Details"}
                             </div>
@@ -934,6 +935,7 @@ const Messages = ({ theme = "dark" }: any) => {
                                     })()
                                 }
                                 onDeleteCommunityChat={handleDeleteCommunityChat}
+                                theme={theme}
                             />
                         </div>
                     </div> :

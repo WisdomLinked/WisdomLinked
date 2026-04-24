@@ -31,7 +31,7 @@ const ENGINEERING_MAJORS = [
     'Software Engineering', 'Systems Engineering', 'Other',
 ];
 
-const STUDENT_SERVICES = ['Study Abroad', 'Work Abroad', 'Research Guidance'];
+const STUDENT_SERVICES = ['Study abroad', 'Work abroad', 'Research guidance'];
 
 const COUNTRIES = [
     'United States', 'United Kingdom', 'Canada', 'Australia', 'Germany', 'France',

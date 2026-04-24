@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Video, Lock } from 'lucide-react';
+import { Lock } from 'lucide-react';
 
 export default function JoinMeeting() {
   const [code, setCode] = useState('');
@@ -16,7 +16,7 @@ export default function JoinMeeting() {
       <div className="w-full max-w-sm rounded-2xl border border-slate-200 bg-white p-6 shadow-[0_18px_45px_rgba(15,23,42,0.18)]">
         <div className="mb-4 flex items-center gap-3">
           <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#E8EEF4] text-[#234C6A]">
-            <Video className="h-4 w-4" aria-hidden />
+            <img src="/icons/video-call.png" alt="" aria-hidden className="h-4 w-4 object-contain" />
           </div>
           <div>
             <h1 className="text-sm font-semibold text-slate-900">

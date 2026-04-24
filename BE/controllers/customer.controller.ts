@@ -167,7 +167,7 @@ const getExpertById = async (req, res) => {
     try {
         console.log("inside getExpertById")
         const { id } = req.params
-        let query = await User.findById(id)
+        const query = await User.findById(id).populate(["keywords", "services"])
         console.log("inside getExpertById", query)
         return res.status(200).json({
             result: query

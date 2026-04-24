@@ -1,7 +1,6 @@
 import React, { useRef, useEffect, useState } from "react";
 import IconButton from "@mui/material/IconButton";
 import AddIcCallIcon from "@mui/icons-material/AddIcCall";
-import VideoCallIcon from "@mui/icons-material/VideoCall";
 import { useAppSelector } from "../../../../store";
 import CalendarMonthIcon from '@mui/icons-material/CalendarMonth';
 import Avatar from "../../../../components/Avatar";
@@ -35,6 +34,7 @@ import { updateMe } from "../../../../actions/authActions";
 import { showAlert } from "../../../../actions/alertActions";
 import { resetChatAction, setChosenGroupChatDetails } from "../../../../actions/chatActions";
 import ProfileModal from "./ProfileModal";
+import CommunityProfileModal from "./CommunityProfileModal";
 import { ShareIcon } from "lucide-react";
 
 const MessagesHeader = ({ scrollPosition, events, openCalendarModal, openSeminarModal, openEditSeminarModal, theme = "dark" }: any) => {
@@ -64,6 +64,7 @@ const MessagesHeader = ({ scrollPosition, events, openCalendarModal, openSeminar
     const [enabledEvent, set_enabledEvent] = useState<any>(null)
     const [buttonsModalShow, set_buttonsModalShow] = useState(false)
     const [profileModalShow, set_profileModalShow] = useState(false)
+    const [communityModalShow, set_communityModalShow] = useState(false)
     const [chosenProfileData, set_chosenProfileData] = useState<any>({})
     const [joinPopupBlocked, set_joinPopupBlocked] = useState(userDetails.joinPopupBlocked)
     const [joinPopupShow, set_joinPopupShow] = useState(false)
@@ -223,6 +224,12 @@ const MessagesHeader = ({ scrollPosition, events, openCalendarModal, openSeminar
         set_kickedFromSeminar(false)
     }, [enabledEvent, userDetails, chosenGroupChatDetails])
 
+    useEffect(() => {
+        if (chosenGroupChatDetails?.type !== "community") {
+            set_communityModalShow(false);
+        }
+    }, [chosenGroupChatDetails]);
+
     const fetchProfileData=async ()=>{
 
     }
@@ -237,6 +244,14 @@ const MessagesHeader = ({ scrollPosition, events, openCalendarModal, openSeminar
         set_chosenProfileData({})
         set_profileModalShow(false)
     }
+
+    const handleCommunityModalOpen = () => {
+        set_communityModalShow(true);
+    };
+
+    const handleCommunityModalClose = () => {
+        set_communityModalShow(false);
+    };
 
 
     return (
@@ -253,11 +268,28 @@ const MessagesHeader = ({ scrollPosition, events, openCalendarModal, openSeminar
                 chosenChatDetails ?
                     (
                         enabledEvent ?
-                            <div className={`w-[calc(100%-120px)] flex space-x-3 items-center ${theme === "light" ? "text-slate-700" : "text-lightgrey"}`}>
-                                <CalendarMonthIcon fontSize="large" />
-                                <div className="w-[calc(100%-48px)] flex flex-col" title={enabledEvent.title}>
-                                    <div className={`text-[18px] truncate font-semibold ${theme === "light" ? "text-slate-900" : ""}`}>{enabledEvent.title}</div>
-                                    <div className={`text-[12px] ${theme === "light" ? "text-slate-500" : ""}`}>( {formatDateYYYY_MM_DD_h_m(enabledEvent.start)?.split(' ')[1]} ~ {formatDateYYYY_MM_DD_h_m(enabledEvent.end)?.split(' ')[1]} )</div>
+                            <div
+                                className={`w-[calc(100%-120px)] flex items-center gap-3 rounded-xl border px-3 py-2 ${
+                                    theme === "light"
+                                        ? "border-slate-200 bg-gradient-to-r from-[#E8EEF4] to-white text-slate-700"
+                                        : "border-slate-700 bg-slate-900/80 text-lightgrey"
+                                }`}
+                            >
+                                <div className={`inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${theme === "light" ? "bg-white text-[#234C6A]" : "bg-slate-800 text-slate-200"}`}>
+                                    <CalendarMonthIcon fontSize="small" />
+                                </div>
+                                <div className="min-w-0 flex-1" title={enabledEvent.title}>
+                                    <div className="flex items-center gap-2">
+                                        <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] ${theme === "light" ? "bg-emerald-50 text-emerald-700 border border-emerald-200" : "bg-emerald-900/40 text-emerald-200 border border-emerald-700/60"}`}>
+                                            Live
+                                        </span>
+                                        <div className={`truncate text-[16px] font-semibold ${theme === "light" ? "text-slate-900" : "text-white"}`}>
+                                            {enabledEvent.title}
+                                        </div>
+                                    </div>
+                                    <div className={`mt-0.5 text-[12px] ${theme === "light" ? "text-slate-500" : "text-slate-300"}`}>
+                                        {formatDateYYYY_MM_DD_h_m(enabledEvent.start)?.split(' ')[1]} - {formatDateYYYY_MM_DD_h_m(enabledEvent.end)?.split(' ')[1]}
+                                    </div>
                                 </div>
                             </div> :
                             <div className="w-[calc(100%-120px)] flex items-center justify-start space-x-3 cursor-pointer" title={chosenChatDetails?.username}
@@ -268,30 +300,50 @@ const MessagesHeader = ({ scrollPosition, events, openCalendarModal, openSeminar
                                 <div className={`w-[calc(100%-48px)] text-[18px] mr-2 truncate font-semibold ${theme === "light" ? "text-slate-900" : "text-white"}`}>
                                     {chosenChatDetails?.username}
                                 </div>
-                                <ProfileModal
-                                    isOpen={profileModalShow}
-                                    onClose={handleProfileModalClose}
-                                    userDetails={chosenProfileData}
-                                />
                             </div>
                     ) :
                     chosenGroupChatDetails ?
-                        <div className={`w-[calc(100%-120px)] flex items-center justify-start space-x-3 ${theme === "light" ? "text-slate-900" : "text-white"}`} title={chosenGroupChatDetails?.groupName}>
-                            {
-                                enabledEvent ?
-                                    <CastForEducationIcon fontSize="large" /> :
+                        <div
+                            className={`w-[calc(100%-120px)] flex items-center justify-start space-x-3 ${theme === "light" ? "text-slate-900" : "text-white"} ${chosenGroupChatDetails?.type === "community" ? "cursor-pointer" : ""}`}
+                            title={chosenGroupChatDetails?.groupName}
+                            onClick={() => {
+                                if (chosenGroupChatDetails?.type === "community") handleCommunityModalOpen();
+                            }}
+                        >
+                            {enabledEvent ? (
+                                <>
+                                    <div className={`inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${theme === "light" ? "bg-white text-[#234C6A] border border-slate-200" : "bg-slate-800 text-slate-200"}`}>
+                                        <CastForEducationIcon fontSize="small" />
+                                    </div>
+                                    <div className="min-w-0 flex-1">
+                                        <div className="flex items-center gap-2">
+                                            <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] ${theme === "light" ? "bg-emerald-50 text-emerald-700 border border-emerald-200" : "bg-emerald-900/40 text-emerald-200 border border-emerald-700/60"}`}>
+                                                Live
+                                            </span>
+                                            <div className={`truncate font-semibold ${theme === "light" ? "text-[16px] text-slate-900" : "text-[18px] text-white"}`}>
+                                                {chosenGroupChatDetails?.groupName}
+                                            </div>
+                                        </div>
+                                        <div className={`mt-0.5 text-[12px] ${theme === "light" ? "text-slate-500" : "text-slate-300"}`}>
+                                            {formatDateYYYY_MM_DD_h_m(enabledEvent.start)?.split(' ')[1]} - {formatDateYYYY_MM_DD_h_m(enabledEvent.end)?.split(' ')[1]}
+                                        </div>
+                                    </div>
+                                </>
+                            ) : (
+                                <>
                                     <GroupsIcon />
-                            }
-                            <div className={`w-[calc(100%-48px)] mr-2 truncate font-semibold ${theme === "light" ? "text-[18px]" : "text-[20px]"}`}>
-                                {
-                                    chosenGroupChatDetails?.duration ?
-                                        chosenGroupChatDetails?.groupName :
-                                        userDetails.userId === chosenGroupChatDetails.admin?._id ?
-                                            chosenGroupChatDetails?.description :
-                                            chosenGroupChatDetails?.groupName
+                                    <div className={`w-[calc(100%-48px)] mr-2 truncate font-semibold ${theme === "light" ? "text-[18px]" : "text-[20px]"}`}>
+                                        {
+                                            chosenGroupChatDetails?.duration ?
+                                                chosenGroupChatDetails?.groupName :
+                                                userDetails.userId === chosenGroupChatDetails.admin?._id ?
+                                                    chosenGroupChatDetails?.description :
+                                                    chosenGroupChatDetails?.groupName
 
-                                }
-                            </div>
+                                        }
+                                    </div>
+                                </>
+                            )}
                         </div> :
                         null
             }
@@ -347,7 +399,12 @@ const MessagesHeader = ({ scrollPosition, events, openCalendarModal, openSeminar
                                 }
                             }}
                         >
-                            <VideoCallIcon />
+                            <img
+                                src="/icons/video-call.png"
+                                alt="Video call"
+                                className="h-4 w-4 object-contain"
+                                style={{ filter: theme === "light" ? "none" : "invert(1)" }}
+                            />
                         </IconButton>
                         <button
                             className={theme === "light" ? "text-slate-900 hover:bg-slate-100 rounded-lg p-1" : "text-white"}
@@ -410,7 +467,12 @@ const MessagesHeader = ({ scrollPosition, events, openCalendarModal, openSeminar
                                     }
                                 }}
                             >
-                                <VideoCallIcon />
+                                <img
+                                    src="/icons/video-call.png"
+                                    alt="Video call"
+                                    className="h-4 w-4 object-contain"
+                                    style={{ filter: theme === "light" ? "none" : "invert(1)" }}
+                                />
                             </IconButton>
                             <button
                                 className={theme === "light" ? "text-slate-900 hover:bg-slate-100 rounded-lg p-1" : "text-white"}
@@ -422,6 +484,24 @@ const MessagesHeader = ({ scrollPosition, events, openCalendarModal, openSeminar
                     ) : null
                 }
             </div>
+            {chosenChatDetails ? (
+                <ProfileModal
+                    isOpen={profileModalShow}
+                    onClose={handleProfileModalClose}
+                    userDetails={chosenProfileData}
+                    theme={theme}
+                    previewImage={chosenChatDetails.image}
+                />
+            ) : null}
+            {chosenGroupChatDetails?.type === "community" ? (
+                <CommunityProfileModal
+                    isOpen={communityModalShow}
+                    onClose={handleCommunityModalClose}
+                    communityDetails={chosenGroupChatDetails}
+                    theme={theme}
+                    onViewMembers={handleParticipantsOpenDialog}
+                />
+            ) : null}
             {
                 buttonsModalShow ?
                     <OverlayPortal closeModal={() => set_buttonsModalShow(false)}>
@@ -633,6 +713,7 @@ const MessagesHeader = ({ scrollPosition, events, openCalendarModal, openSeminar
                         closeDialogHandler={handleParticipantsCloseDialog}
                         groupDetails={chosenGroupChatDetails}
                         currentUserId={userDetails?._id}
+                        currentUserRole={userDetails?.role}
                         theme={theme === "light" ? "light" : "dark"}
                     />
                     {chosenGroupChatDetails?.type === "community" ? (

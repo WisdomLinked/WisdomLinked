@@ -6,7 +6,7 @@ import DialogTitle from '@mui/material/DialogTitle';
 import DialogContent from '@mui/material/DialogContent';
 import DialogActions from '@mui/material/DialogActions';
 import Button from '@mui/material/Button';
-import { MessageCircle, Users, Plus, X, CheckCircle2, MoreVertical } from 'lucide-react';
+import { MessageCircle, Users, Plus, X, CheckCircle2, MoreVertical, UserPlus } from 'lucide-react';
 import Messenger from '../../pages/Dashboard/Messenger/Messenger';
 import { useAppSelector } from '../../store';
 import { onSubscriptionChanged, subscribeToRoom } from '../../services/rcRealtime';
@@ -19,6 +19,7 @@ import {
   doFilterCustomers,
   searchPrivateChatUsers,
   joinPrivateChat,
+  addParticipantsToCommunityChat,
 } from '../../api/api';
 import { clearDmThread, hideDmFromList, fetchDmUnreadSnapshot } from '../../api/chatApi';
 import { setDmUnreadByRidBulk, patchDmUnreadRid } from '../../actions/chatActions';
@@ -90,6 +91,9 @@ const StudentChat: React.FC = () => {
   const [leaveCommunityConfirmOpen, setLeaveCommunityConfirmOpen] = useState(false);
   const [leaveCommunityRow, setLeaveCommunityRow] = useState<CommunityRow | null>(null);
   const [privateDmMenuRow, setPrivateDmMenuRow] = useState<Extract<PrivateRow, { kind: 'privateDm' }> | null>(null);
+  const [addToCommunityOpen, setAddToCommunityOpen] = useState(false);
+  const [addToCommunityTarget, setAddToCommunityTarget] = useState<Extract<PrivateRow, { kind: 'privateDm' }> | null>(null);
+  const [addingToCommunityId, setAddingToCommunityId] = useState<string | null>(null);
   const [newName, setNewName] = useState('');
   const [newDescription, setNewDescription] = useState('');
   const [newOpenToAll, setNewOpenToAll] = useState(true);
@@ -751,6 +755,50 @@ const StudentChat: React.FC = () => {
     }
   };
 
+  const openAddToCommunityDialog = () => {
+    const row = privateDmMenuRow;
+    closePrivateDmMenu();
+    if (!row?.otherUserId) return;
+    setAddToCommunityTarget(row);
+    setAddToCommunityOpen(true);
+  };
+
+  const closeAddToCommunityDialog = () => {
+    setAddToCommunityOpen(false);
+    setAddToCommunityTarget(null);
+    setAddingToCommunityId(null);
+  };
+
+  const isAlreadyInCommunity = (chat: CommunityRow, userId: string) => {
+    const participants = chat?.raw?.participants ?? [];
+    return participants.some((p: any) => String(p?._id ?? p?.id ?? p) === String(userId));
+  };
+
+  const addStudentToCommunity = async (chat: CommunityRow) => {
+    const target = addToCommunityTarget;
+    if (!target?.otherUserId) return;
+    const communityChatId = String(chat._id);
+    setAddingToCommunityId(communityChatId);
+    try {
+      const res: any = await addParticipantsToCommunityChat({
+        communityChatId,
+        participantIds: [String(target.otherUserId)],
+      });
+      if (res?.status === 'SUCCESS' || res?.success) {
+        dispatch(showAlert(`Added ${target.title} to ${chat.name}`));
+        await loadCommunityChats();
+        dispatch(updateMe() as any);
+        closeAddToCommunityDialog();
+      } else {
+        dispatch(showAlert(res?.error || res?.message || 'Could not add member to community'));
+      }
+    } catch (e: any) {
+      dispatch(showAlert(e?.response?.data?.error || e?.message || 'Could not add member to community'));
+    } finally {
+      setAddingToCommunityId(null);
+    }
+  };
+
   const openFriend = (row: Extract<PrivateRow, { kind: 'friend' }>) => {
     dispatch(setChosenChatDetails({ userId: row.id, username: row.title, image: row.image }));
     dispatch({
@@ -1079,6 +1127,15 @@ const StudentChat: React.FC = () => {
                       </IconButton>
                       {menuOpen ? (
                         <div className="absolute right-2 top-[calc(100%+4px)] z-20 min-w-[150px] rounded-lg border border-slate-200 bg-white p-1 shadow-lg">
+                          {isExpert ? (
+                            <button
+                              type="button"
+                              className="w-full rounded-md px-3 py-2 text-left text-[12px] font-semibold text-slate-800 hover:bg-slate-50"
+                              onClick={openAddToCommunityDialog}
+                            >
+                              Add to community
+                            </button>
+                          ) : null}
                           <button
                             type="button"
                             className="w-full rounded-md px-3 py-2 text-left text-[12px] font-semibold text-rose-700 hover:bg-rose-50"
@@ -1140,6 +1197,54 @@ const StudentChat: React.FC = () => {
           <Button variant="contained" color="error" onClick={confirmLeaveCommunity}>
             Leave community
           </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog
+        open={addToCommunityOpen}
+        onClose={closeAddToCommunityDialog}
+        maxWidth="xs"
+        fullWidth
+      >
+        <DialogTitle>Add to community</DialogTitle>
+        <DialogContent>
+          <p className="text-sm text-slate-600 mb-3">
+            Add <strong>{addToCommunityTarget?.title ?? 'this user'}</strong> to one of your communities.
+          </p>
+          <div className="space-y-2 max-h-72 overflow-y-auto">
+            {communityChats.length === 0 ? (
+              <p className="text-xs text-slate-500">No community chats available.</p>
+            ) : (
+              communityChats.map(chat => {
+                const already = addToCommunityTarget?.otherUserId
+                  ? isAlreadyInCommunity(chat, addToCommunityTarget.otherUserId)
+                  : false;
+                return (
+                  <div
+                    key={chat._id}
+                    className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 px-3 py-2"
+                  >
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-semibold text-slate-900">{chat.name}</p>
+                      <p className="truncate text-[11px] text-slate-500">{chat.lastLine}</p>
+                    </div>
+                    <button
+                      type="button"
+                      disabled={already || addingToCommunityId === chat._id}
+                      onClick={() => void addStudentToCommunity(chat)}
+                      className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-[11px] font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+                    >
+                      <UserPlus className="h-3.5 w-3.5" />
+                      {already ? 'Added' : addingToCommunityId === chat._id ? 'Adding…' : 'Add'}
+                    </button>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button onClick={closeAddToCommunityDialog}>Close</Button>
         </DialogActions>
       </Dialog>
 
