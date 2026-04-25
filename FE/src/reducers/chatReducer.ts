@@ -59,6 +59,8 @@ const initialState = {
     currentEvent: null
 };
 
+const CHAT_HISTORY_PAGE_SIZE = 50;
+
 
 
 const chatReducer: Reducer<ChatState, ChatActions> = (
@@ -125,7 +127,7 @@ const chatReducer: Reducer<ChatState, ChatActions> = (
                 ...state,
                 messages: [...action.payload, ...state.messages],
                 currentPage: state.currentPage + 1,
-                gotAllChats: action.payload.length < 20,
+                gotAllChats: action.payload.length < CHAT_HISTORY_PAGE_SIZE,
                 isNewMessage: false
             };
 
@@ -134,7 +136,7 @@ const chatReducer: Reducer<ChatState, ChatActions> = (
                 ...state,
                 messages: Array.isArray(action.payload) ? [...action.payload] : [],
                 currentPage: 1,
-                gotAllChats: !action.payload || action.payload.length < 20,
+                gotAllChats: !action.payload || action.payload.length < CHAT_HISTORY_PAGE_SIZE,
                 isNewMessage: false
             };
 

@@ -16,12 +16,14 @@ import {
     deleteChatMessage,
     hideDmFromList,
     clearDmThread,
+    getDirectCallHistory,
 } from '../controllers/chat.controller';
 
 // DM routes
 router.post('/dm', requireAuth(false), getOrCreateDM);
 router.post('/send', requireAuth(false), sendMessage);
 router.get('/history/:conversationId', requireAuth(false), getDirectHistory);
+router.get('/dm/call-history/:conversationId', requireAuth(false), getDirectCallHistory);
 
 // Group routes
 router.post('/group/send', requireAuth(false), sendGroupMessage);

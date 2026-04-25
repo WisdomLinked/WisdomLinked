@@ -249,7 +249,7 @@ const Message = ({
                         {renderDeleteActions()}
                         <div
                             className={`min-w-0 max-w-full rounded-[13px] px-2 py-1.5 text-[14px] leading-[20px] shadow-sm ${
-                                theme === "light" ? "text-white bg-sky-600" : "text-white bg-gray-800"
+                                theme === "light" ? "text-white bg-[#234C6A]" : "text-white bg-[#234C6A]"
                             }`}
                         >
                             <div className="break-words whitespace-pre-wrap">
@@ -326,7 +326,9 @@ const Message = ({
                     // Otherwise, show the regular incoming message bubble
                     <div
                         className={`min-w-0 max-w-full rounded-[13px] px-2 py-1.5 text-[14px] leading-[20px] shadow-sm ${
-                            theme === "light" ? "text-slate-900 bg-slate-50 border border-slate-200" : "text-white bg-black"
+                            theme === "light"
+                                ? "text-[#234C6A] bg-[#D9EAFD] border border-[#BCD6EA]"
+                                : "text-white bg-[#456882]"
                         }`}
                     >
                         <div className="break-words whitespace-pre-wrap">

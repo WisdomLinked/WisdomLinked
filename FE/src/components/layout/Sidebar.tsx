@@ -62,9 +62,9 @@ export default function Sidebar({
           <img
             src="/logos/main_gold_blue.svg"
             alt="WisdomLinked logo"
-            className="h-9 w-auto max-w-[200px] shrink-0 object-contain object-left"
+            className="h-11 w-auto max-w-[260px] shrink-0 object-contain object-left"
           />
-          <div className="font-serif font-bold text-[#234c6a] leading-tight text-lg tracking-tight">
+          <div className="font-serif font-bold text-[#234c6a] leading-tight text-xl tracking-tight">
             WisdomLinked
           </div>
         </div>

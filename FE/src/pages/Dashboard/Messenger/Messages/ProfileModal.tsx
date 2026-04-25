@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { X, Mail, MapPin, Clock, User } from "lucide-react";
-import { getTimezone, profileImageFetch } from "../../../../api/api";
+import { X, Mail, MapPin, User } from "lucide-react";
+import { profileImageFetch } from "../../../../api/api";
 import { getAvatarTitle } from "../../../../actions/common";
 
 interface ProfileModalProps {
@@ -41,6 +41,28 @@ function collectInterestLabels(user: Record<string, any> | null | undefined): st
     return out;
 }
 
+function maskEmailForPrivacy(email: unknown): string {
+    const raw = typeof email === "string" ? email.trim() : "";
+    if (!raw || !raw.includes("@")) return "—";
+    const [localPart, domain = ""] = raw.split("@");
+    if (!localPart || !domain) return "—";
+
+    const visibleLocal =
+        localPart.length <= 2
+            ? `${localPart.charAt(0)}*`
+            : `${localPart.slice(0, 2)}${"*".repeat(Math.max(2, localPart.length - 2))}`;
+
+    const domainParts = domain.split(".");
+    const firstDomain = domainParts[0] ?? "";
+    const tld = domainParts.slice(1).join(".");
+    const visibleDomain =
+        firstDomain.length <= 1
+            ? "*"
+            : `${firstDomain.charAt(0)}${"*".repeat(Math.max(2, firstDomain.length - 1))}`;
+
+    return `${visibleLocal}@${visibleDomain}${tld ? `.${tld}` : ""}`;
+}
+
 const ProfileModal: React.FC<ProfileModalProps> = ({
     isOpen,
     onClose,
@@ -48,7 +70,6 @@ const ProfileModal: React.FC<ProfileModalProps> = ({
     theme = "light",
     previewImage,
 }) => {
-    const [timezone, setTimezoneData] = useState<string>("");
     const [avatarSrc, setAvatarSrc] = useState<string | null>(null);
     const modalRef = useRef<HTMLDivElement>(null);
     const isLight = theme === "light";
@@ -85,31 +106,6 @@ const ProfileModal: React.FC<ProfileModalProps> = ({
     }, [isOpen, userDetails?.image, previewImage]);
 
     useEffect(() => {
-        const fetchTimezoneData = async () => {
-            const lat = userDetails?.country?.latitude;
-            const lng = userDetails?.country?.longitude;
-            if (lat == null || lng == null) {
-                setTimezoneData("");
-                return;
-            }
-            try {
-                const data: any = await getTimezone({ lat, lng });
-                const formatted =
-                    data?.response?.formatted ?? data?.formatted ?? data?.response?.timezone ?? "";
-                setTimezoneData(typeof formatted === "string" ? formatted : "");
-            } catch {
-                setTimezoneData("");
-            }
-        };
-
-        if (isOpen && userDetails?.country) {
-            void fetchTimezoneData();
-        } else {
-            setTimezoneData("");
-        }
-    }, [isOpen, userDetails]);
-
-    useEffect(() => {
         if (!isOpen) return;
         const handler = (e: MouseEvent) => {
             if (modalRef.current && !modalRef.current.contains(e.target as Node)) onClose();
@@ -121,7 +117,7 @@ const ProfileModal: React.FC<ProfileModalProps> = ({
     if (!isOpen) return null;
 
     const name = userDetails?.username ?? "—";
-    const email = userDetails?.email ?? "—";
+    const email = maskEmailForPrivacy(userDetails?.email);
     const countryName = userDetails?.country?.name ?? "—";
     const roleLine = roleLabelFromUser(userDetails?.role);
     const expertTitle =
@@ -229,12 +225,6 @@ const ProfileModal: React.FC<ProfileModalProps> = ({
                     <div className="flex flex-col gap-2.5">
                         <InfoRow
                             theme={theme}
-                            icon={User}
-                            label="Name"
-                            value={name}
-                        />
-                        <InfoRow
-                            theme={theme}
                             icon={Mail}
                             label="Email"
                             value={email}
@@ -245,12 +235,6 @@ const ProfileModal: React.FC<ProfileModalProps> = ({
                             icon={MapPin}
                             label="Country"
                             value={countryName}
-                        />
-                        <InfoRow
-                            theme={theme}
-                            icon={Clock}
-                            label="Timezone"
-                            value={timezone || "—"}
                         />
                     </div>
 

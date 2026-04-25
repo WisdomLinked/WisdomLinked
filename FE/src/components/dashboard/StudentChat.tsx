@@ -62,6 +62,11 @@ type PrivateRow =
   /** Student: expert from directory search (opens / ensures 1:1 DM). */
   | { kind: 'studentSearchedExpert'; id: string; title: string; lastLine: string; raw: any };
 
+const looksLikeImageUrl = (value: unknown): value is string => {
+  const v = typeof value === 'string' ? value.trim() : '';
+  return !!v && (/^https?:\/\//i.test(v) || /^data:image\//i.test(v) || /^blob:/i.test(v) || v.startsWith('/'));
+};
+
 const StudentChat: React.FC = () => {
   const dispatch = useDispatch();
   const {
@@ -241,73 +246,71 @@ const StudentChat: React.FC = () => {
 
   useEffect(() => {
     let cancelled = false;
+    const resolveProfileImage = async (imageRef: unknown): Promise<string | null> => {
+      const raw = typeof imageRef === 'string' ? imageRef.trim() : '';
+      if (!raw) return null;
+      if (looksLikeImageUrl(raw)) return raw;
+      try {
+        const fetched = (await profileImageFetch(raw, 'small')) as string;
+        return typeof fetched === 'string' && fetched.trim() ? fetched : null;
+      } catch {
+        return null;
+      }
+    };
+
     const loadPrivate = async () => {
       if (isCustomer) {
-        const rows: PrivateRow[] = privateDmSidebarDerived.map(p => ({
-          kind: 'privateDm' as const,
-          otherUserId: p.otherUserId,
-          title: p.title,
-          lastLine: p.lastLine,
-          image: p.image ?? null,
-          rcChannelId: p.rcChannelId,
-          conversationId: p.conversationId,
-        }));
+        const rows: PrivateRow[] = await Promise.all(
+          privateDmSidebarDerived.map(async p => ({
+            kind: 'privateDm' as const,
+            otherUserId: p.otherUserId,
+            title: p.title,
+            lastLine: p.lastLine,
+            image: await resolveProfileImage(p.image),
+            rcChannelId: p.rcChannelId,
+            conversationId: p.conversationId,
+          })),
+        );
         if (!cancelled) setPrivateRows(rows);
         return;
       }
       if (isExpert) {
         const friendRows: PrivateRow[] = await Promise.all(
           (friends || []).map(async (friend: any) => {
-            let image: string | null = null;
-            if (friend.image) {
-              try {
-                image = (await profileImageFetch(friend.image, 'small')) as string;
-              } catch {
-                image = null;
-              }
-            }
             return {
               kind: 'friend' as const,
               id: friend.id,
               title: friend.username,
               lastLine: friend.email || '',
               missedChats: friend.missedChats,
-              image,
+              image: await resolveProfileImage(friend.image),
             };
           }),
         );
         const friendIds = new Set(friendRows.map(f => f.id));
-        const dmRows: PrivateRow[] = privateDmSidebarDerived
-          .filter(p => !friendIds.has(p.otherUserId))
-          .map(p => ({
+        const dmRows: PrivateRow[] = await Promise.all(
+          privateDmSidebarDerived.filter(p => !friendIds.has(p.otherUserId)).map(async p => ({
             kind: 'privateDm' as const,
             otherUserId: p.otherUserId,
             title: p.title,
             lastLine: p.lastLine,
-            image: p.image ?? null,
+            image: await resolveProfileImage(p.image),
             rcChannelId: p.rcChannelId,
             conversationId: p.conversationId,
-          }));
+          })),
+        );
         if (!cancelled) setPrivateRows([...friendRows, ...dmRows]);
         return;
       }
       const updated = await Promise.all(
         (friends || []).map(async (friend: any) => {
-          let image: string | null = null;
-          if (friend.image) {
-            try {
-              image = (await profileImageFetch(friend.image, 'small')) as string;
-            } catch {
-              image = null;
-            }
-          }
           return {
             kind: 'friend' as const,
             id: friend.id,
             title: friend.username,
             lastLine: friend.email || '',
             missedChats: friend.missedChats,
-            image,
+            image: await resolveProfileImage(friend.image),
           };
         }),
       );
@@ -695,6 +698,36 @@ const StudentChat: React.FC = () => {
     setCommunityMenuRow(null);
   };
 
+  useEffect(() => {
+    const onPointerDown = (event: MouseEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (!target) return;
+
+      if (communityMenuOpenId) {
+        const insideCommunityMenu = target.closest('[data-community-menu-root="true"]');
+        if (!insideCommunityMenu) closeCommunityMenu();
+      }
+
+      if (privateDmMenuOpenId) {
+        const insidePrivateMenu = target.closest('[data-private-dm-menu-root="true"]');
+        if (!insidePrivateMenu) closePrivateDmMenu();
+      }
+    };
+
+    const onEscape = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      if (communityMenuOpenId) closeCommunityMenu();
+      if (privateDmMenuOpenId) closePrivateDmMenu();
+    };
+
+    document.addEventListener('mousedown', onPointerDown);
+    document.addEventListener('keydown', onEscape);
+    return () => {
+      document.removeEventListener('mousedown', onPointerDown);
+      document.removeEventListener('keydown', onEscape);
+    };
+  }, [communityMenuOpenId, privateDmMenuOpenId]);
+
   const openCommunityMenu = (e: React.MouseEvent<HTMLElement>, row: CommunityRow, menuId: string) => {
     e.preventDefault();
     e.stopPropagation();
@@ -885,6 +918,23 @@ const StudentChat: React.FC = () => {
         </div>
         <div className="flex-1 overflow-y-auto px-3 py-3 space-y-4">
           <div>
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">Communities</p>
+              {filteredCommunity.some(chat => {
+                const crid = chat.raw?.rcChannelId ? String(chat.raw.rcChannelId) : '';
+                const liveUnread = crid
+                  ? Math.max(Number(dmUnreadByRid?.[crid] || 0), Number(rcUnreadByRid?.[crid] || 0))
+                  : 0;
+                const persistedUnread = Math.max(Number(chat.missedChats || 0), 0);
+                return liveUnread > 0 || persistedUnread > 0;
+              }) ? (
+                <span
+                  className="inline-block h-2.5 w-2.5 rounded-full bg-red-500 ring-2 ring-white"
+                  title="New community messages"
+                  aria-label="New community messages"
+                />
+              ) : null}
+            </div>
             {filteredCommunity.length === 0 ? (
               <p className="px-2 py-3 text-[11px] text-slate-500">
                 {communityQuery.trim()
@@ -902,13 +952,12 @@ const StudentChat: React.FC = () => {
                       Number(rcUnreadByRid?.[crid] || 0),
                     )
                   : 0;
-                const lastLine =
-                  crid && unreadCount > 0
-                    ? `${unreadCount > 99 ? '99+' : unreadCount}+ new message${unreadCount > 1 ? 's' : ''}`
-                    : chat.lastLine;
+                const persistedUnread = Math.max(Number(chat.missedChats || 0), 0);
+                const hasUnread = unreadCount > 0 || persistedUnread > 0;
+                const lastLine = chat.lastLine;
                 const rowTone = active
                   ? 'bg-[#E8EEF4] text-slate-900'
-                  : unreadCount > 0
+                  : hasUnread
                     ? 'bg-amber-50/80 text-slate-900 ring-1 ring-amber-200/80 hover:bg-amber-50'
                     : 'hover:bg-slate-100 text-slate-700';
                 const menuId = String(chat._id);
@@ -923,10 +972,12 @@ const StudentChat: React.FC = () => {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between gap-2">
                         <p className="truncate font-semibold text-[11px]">{chat.name}</p>
-                        {unreadCount > 0 ? (
-                          <span className="ml-1 shrink-0 rounded-full bg-amber-500/20 px-1.5 text-[10px] font-semibold text-amber-800">
-                            {(unreadCount > 99 ? '99+' : unreadCount) + '+'}
-                          </span>
+                        {hasUnread ? (
+                          <span
+                            className="ml-1 inline-block h-2.5 w-2.5 shrink-0 rounded-full bg-red-500 ring-2 ring-white"
+                            title="New community messages"
+                            aria-label="New community messages"
+                          />
                         ) : null}
                       </div>
                       <p className="mt-0.5 line-clamp-2 text-[10px] text-slate-500">{lastLine}</p>
@@ -936,8 +987,12 @@ const StudentChat: React.FC = () => {
                 return (
                   <div
                     key={chat._id}
+                    data-community-menu-root="true"
                     className={`relative mb-1 flex w-full items-stretch overflow-visible rounded-xl text-xs transition-colors ${rowTone}`}
                   >
+                    {hasUnread ? (
+                      <span className="pointer-events-none absolute right-1.5 top-1.5 inline-block h-2.5 w-2.5 rounded-full bg-red-500 ring-2 ring-white" />
+                    ) : null}
                     <button
                       type="button"
                       onClick={() => void openCommunity(chat)}
@@ -1072,8 +1127,12 @@ const StudentChat: React.FC = () => {
                 const inner = (
                   <>
                     <div className="mt-0.5">
-                      <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-slate-800 text-[10px] text-white">
-                        {initials}
+                      <span className="inline-flex h-7 w-7 items-center justify-center overflow-hidden rounded-full border border-[#BCD6EA] bg-[#E8EEF4] text-[10px] font-semibold text-[#234C6A]">
+                        {row.image ? (
+                          <img src={row.image} alt={title} className="h-full w-full object-cover" />
+                        ) : (
+                          initials
+                        )}
                       </span>
                     </div>
                     <div className="flex-1 min-w-0">
@@ -1100,6 +1159,7 @@ const StudentChat: React.FC = () => {
                   return (
                     <div
                       key={rowKey}
+                      data-private-dm-menu-root="true"
                       className={`relative mb-1 flex w-full items-stretch overflow-visible rounded-xl text-xs transition-colors ${rowTone}`}
                     >
                       <button

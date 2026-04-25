@@ -15,8 +15,8 @@ export default function JoinMeeting() {
     <div className="h-[calc(100vh-56px)] flex items-center justify-center px-4 bg-[#F5F3EF]">
       <div className="w-full max-w-sm rounded-2xl border border-slate-200 bg-white p-6 shadow-[0_18px_45px_rgba(15,23,42,0.18)]">
         <div className="mb-4 flex items-center gap-3">
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#E8EEF4] text-[#234C6A]">
-            <img src="/icons/video-call.png" alt="" aria-hidden className="h-4 w-4 object-contain" />
+          <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#E8EEF4] text-[#234C6A]">
+            <img src="/icons/video-call.png" alt="" aria-hidden className="h-6 w-6 object-contain" />
           </div>
           <div>
             <h1 className="text-sm font-semibold text-slate-900">

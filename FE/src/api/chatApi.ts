@@ -10,6 +10,8 @@ const api = axios.create({
     baseURL: BASE_URL,
 });
 
+export const CHAT_HISTORY_PAGE_SIZE = 50;
+
 // ── DM ──────────────────────────────────────────────────────
 
 /** Get or create a DM conversation between the current user and another user. */
@@ -35,13 +37,28 @@ export const sendDirectMessage = async (conversationId: string, content: string)
 };
 
 /** Fetch paginated DM history from our MongoDB. */
-export const fetchDirectHistory = async (conversationId: string, page: number = 0, limit: number = 20) => {
+export const fetchDirectHistory = async (
+    conversationId: string,
+    page: number = 0,
+    limit: number = CHAT_HISTORY_PAGE_SIZE,
+) => {
     try {
         const res = await api.get(`chat/history/${conversationId}?page=${page}&limit=${limit}`);
         return res.data; // { messages: [...] }
     } catch (err: any) {
         console.error('[chatApi.fetchDirectHistory]', err.message);
         return { messages: [] };
+    }
+};
+
+/** Fetch expert/student DM call history (latest first). */
+export const fetchDirectCallHistory = async (conversationId: string, limit: number = 30) => {
+    try {
+        const res = await api.get(`chat/dm/call-history/${conversationId}?limit=${limit}`);
+        return res.data as { history?: Array<any>; error?: string };
+    } catch (err: any) {
+        console.error('[chatApi.fetchDirectCallHistory]', err.message);
+        return { history: [] };
     }
 };
 
@@ -59,7 +76,11 @@ export const sendGroupMessage = async (groupChatId: string, content: string) => 
 };
 
 /** Fetch paginated group chat history from our MongoDB. */
-export const fetchGroupHistory = async (groupChatId: string, page: number = 0, limit: number = 20) => {
+export const fetchGroupHistory = async (
+    groupChatId: string,
+    page: number = 0,
+    limit: number = CHAT_HISTORY_PAGE_SIZE,
+) => {
     try {
         const res = await api.get(`chat/group/history/${groupChatId}?page=${page}&limit=${limit}`);
         return res.data; // { messages: [...], rcChannelId?: string }

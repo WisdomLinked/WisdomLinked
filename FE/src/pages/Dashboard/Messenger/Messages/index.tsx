@@ -704,7 +704,7 @@ const Messages = ({ theme = "dark" }: any) => {
 
     return (
         <div
-            className={`relative flex min-h-0 w-full flex-1 flex-col ${theme === "light" ? "bg-white" : ""}`}
+            className={`relative flex min-h-0 w-full flex-1 flex-col ${theme === "light" ? "bg-[#F6FAFF]" : ""}`}
         >
             <audio ref={audioRef} preload="auto">
                 <source
@@ -725,7 +725,7 @@ const Messages = ({ theme = "dark" }: any) => {
             </div>
             <div
                 ref={scrollContainerRef}
-                className={`flex min-h-0 w-full flex-1 flex-col items-stretch overflow-y-auto overscroll-y-contain ${theme === "light" ? "bg-white" : ""}`}
+                className={`flex min-h-0 w-full flex-1 flex-col items-stretch overflow-y-auto overscroll-y-contain ${theme === "light" ? "bg-[#F6FAFF]" : ""}`}
                 onScroll={handleScroll}
             >
             {

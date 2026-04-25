@@ -27,7 +27,7 @@ import LogoutIcon from '@mui/icons-material/Logout';
 import CastForEducationIcon from '@mui/icons-material/CastForEducation';
 import CloseIcon from '@mui/icons-material/Close';
 import EditIcon from '@mui/icons-material/Edit';
-import { startMeeting } from "../../../../api/chatApi";
+import { fetchDirectCallHistory, startMeeting } from "../../../../api/chatApi";
 import {doLeftSeminar, doUpdateProfile, getCustomerById, getExpertById, shareMeetingViaEmail} from "../../../../api/api";
 import {SetLoadingStatus, SetTotalTimeSpent} from "../../../../actions/appActions";
 import { updateMe } from "../../../../actions/authActions";
@@ -35,7 +35,7 @@ import { showAlert } from "../../../../actions/alertActions";
 import { resetChatAction, setChosenGroupChatDetails } from "../../../../actions/chatActions";
 import ProfileModal from "./ProfileModal";
 import CommunityProfileModal from "./CommunityProfileModal";
-import { ShareIcon } from "lucide-react";
+import { History, ShareIcon } from "lucide-react";
 
 const MessagesHeader = ({ scrollPosition, events, openCalendarModal, openSeminarModal, openEditSeminarModal, theme = "dark" }: any) => {
 
@@ -78,6 +78,9 @@ const MessagesHeader = ({ scrollPosition, events, openCalendarModal, openSeminar
     const [headerLeaveCommunityOpen, setHeaderLeaveCommunityOpen] = useState(false);
     const [deleteCommunityConfirmOpen, setDeleteCommunityConfirmOpen] = useState(false);
     const [addCommunityMembersOpen, setAddCommunityMembersOpen] = useState(false);
+    const [callHistoryOpen, setCallHistoryOpen] = useState(false);
+    const [callHistoryLoading, setCallHistoryLoading] = useState(false);
+    const [callHistoryRows, setCallHistoryRows] = useState<Array<any>>([]);
 
     const checkEnabledEvent = () => {
         let event = events.find((event: any) => event?._id === currentEvent?._id)
@@ -98,6 +101,39 @@ const MessagesHeader = ({ scrollPosition, events, openCalendarModal, openSeminar
             }));
         }
     }
+
+    const formatCallDuration = (seconds: number) => {
+        const total = Math.max(0, Number(seconds) || 0);
+        const h = Math.floor(total / 3600);
+        const m = Math.floor((total % 3600) / 60);
+        const s = total % 60;
+        if (h > 0) return `${h}h ${m}m ${s}s`;
+        if (m > 0) return `${m}m ${s}s`;
+        return `${s}s`;
+    };
+
+    const formatCallDateTime = (iso: string | null | undefined) => {
+        if (!iso) return "—";
+        const d = new Date(iso);
+        if (Number.isNaN(d.getTime())) return "—";
+        return d.toLocaleString();
+    };
+
+    const handleOpenCallHistory = async () => {
+        if (!conversationId) {
+            dispatch(showAlert('Chat is still loading — try again in a moment'));
+            return;
+        }
+        set_buttonsModalShow(false);
+        setCallHistoryOpen(true);
+        setCallHistoryLoading(true);
+        try {
+            const res = await fetchDirectCallHistory(conversationId, 50);
+            setCallHistoryRows(Array.isArray(res?.history) ? res.history : []);
+        } finally {
+            setCallHistoryLoading(false);
+        }
+    };
 
     const handleParticipantsOpenDialog = () => {
         setParticipantsDialogOpen(true);
@@ -518,6 +554,15 @@ const MessagesHeader = ({ scrollPosition, events, openCalendarModal, openSeminar
                                         <button
                                             className={`w-full flex space-x-4 justify-between items-center rounded-lg px-2 py-2 ${
                                                 theme === "light" ? "hover:bg-slate-50" : "hover:opacity-50"
+                                            }`}
+                                            onClick={handleOpenCallHistory}
+                                        >
+                                            <span>Call History</span>
+                                            <History className="h-4 w-4" />
+                                        </button>
+                                        <button
+                                            className={`mt-1 w-full flex space-x-4 justify-between items-center rounded-lg px-2 py-2 ${
+                                                theme === "light" ? "hover:bg-slate-50" : "hover:opacity-50"
                                             } disabled:opacity-50`}
                                             disabled={!events?.length}
                                             onClick={handleShowEvents}
@@ -776,6 +821,55 @@ const MessagesHeader = ({ scrollPosition, events, openCalendarModal, openSeminar
                     </Dialog>
                 </>
             )}
+            <Dialog
+                open={callHistoryOpen}
+                onClose={() => setCallHistoryOpen(false)}
+                maxWidth="sm"
+                fullWidth
+                PaperProps={{
+                    className: "rounded-2xl border border-slate-200 shadow-xl overflow-hidden",
+                }}
+            >
+                <DialogTitle className="text-[22px] font-bold tracking-tight text-slate-900">
+                    Call history
+                </DialogTitle>
+                <DialogContent dividers className="bg-slate-50/40">
+                    {callHistoryLoading ? (
+                        <p className="text-sm font-medium text-slate-500">Loading call history...</p>
+                    ) : callHistoryRows.length === 0 ? (
+                        <p className="text-sm font-medium text-slate-500">No call history yet.</p>
+                    ) : (
+                        <div className="space-y-2.5">
+                            {callHistoryRows.map((row: any) => (
+                                <div key={row._id} className="rounded-xl border border-slate-200 bg-white px-3 py-3 shadow-sm">
+                                    <div className="text-[15px] font-semibold text-slate-900">
+                                        {row?.startedBy?.username ? `${row.startedBy.username} started the call` : 'Call'}
+                                    </div>
+                                    <div className="mt-1.5 text-xs font-medium text-slate-600">
+                                        Date: {formatCallDateTime(row.startedAt)}
+                                    </div>
+                                    <div className="mt-0.5 text-xs font-medium text-slate-600">
+                                        Ended: {formatCallDateTime(row.endedAt)}
+                                    </div>
+                                    <div className="mt-0.5 text-xs font-semibold text-[#234C6A]">
+                                        Duration: {formatCallDuration(row.duration)}
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </DialogContent>
+                <DialogActions sx={{ px: 3, pb: 2 }}>
+                    <button
+                        type="button"
+                        onClick={() => setCallHistoryOpen(false)}
+                        className="rounded-xl px-5 py-2 text-sm font-semibold text-white shadow-md transition hover:brightness-[1.03] active:brightness-95"
+                        style={{ background: "linear-gradient(135deg, #234C6A 0%, #456882 100%)" }}
+                    >
+                        Close
+                    </button>
+                </DialogActions>
+            </Dialog>
             {
                 chosenGroupChatDetails?.duration && joinPopupShow ?
                     <div
