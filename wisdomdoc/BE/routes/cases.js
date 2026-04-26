@@ -6,6 +6,7 @@ import { CaseStatus, CASE_STATUSES, STATUS_TRANSITIONS, EMAIL_TRIGGER_STATUSES }
 import { sendStatusEmail } from '../utils/emailTriggers.js';
 
 const MESSAGE_CAP_PER_CASE = 10;
+const PRIVATE_NOTE_CAP_PER_CASE = 100;
 const ADDITIONAL_FIELDS_LIMIT = 10;
 
 function parseMajors(s) {
@@ -190,7 +191,11 @@ router.get('/experts/workload', (req, res) => {
       COALESCE(SUM(CASE
         WHEN c.id IS NOT NULL AND c.status NOT IN ('${terminal[0]}', '${terminal[1]}', '${terminal[2]}') THEN 1
         ELSE 0
-      END), 0) AS active_case_count
+      END), 0) AS active_case_count,
+      COALESCE(SUM(CASE
+        WHEN c.id IS NOT NULL AND c.status IN ('${terminal[0]}', '${terminal[1]}', '${terminal[2]}') THEN 1
+        ELSE 0
+      END), 0) AS completed_case_count
     FROM users u
     LEFT JOIN cases c ON c.assigned_expert_id = u.id
     WHERE u.role = 'expert'
@@ -483,6 +488,48 @@ router.post('/:id/messages', (req, res) => {
   }
   const row = db.prepare('SELECT id, message, created_at FROM case_messages WHERE id = last_insert_rowid()').get();
   logEvent('case', caseId, 'message_added', req.userId, {});
+  res.status(201).json(row);
+});
+
+/** Private case notes: admin + assigned expert only (not visible to student) */
+router.get('/:id/private-notes', (req, res) => {
+  const caseId = parseInt(req.params.id, 10);
+  const caseRow = db.prepare('SELECT student_id, assigned_expert_id FROM cases WHERE id = ?').get(caseId);
+  if (!caseRow) return res.status(404).json({ error: 'Case not found' });
+  const allowed = req.userRole === 'admin' || caseRow.assigned_expert_id === req.userId;
+  if (!allowed) return res.status(403).json({ error: 'Forbidden' });
+
+  const notes = db.prepare(`
+    SELECT n.id, n.note, n.created_at, u.email AS from_email, u.role AS from_role
+    FROM case_private_notes n
+    JOIN users u ON u.id = n.user_id
+    WHERE n.case_id = ?
+    ORDER BY n.created_at DESC
+    LIMIT ?
+  `).all(caseId, PRIVATE_NOTE_CAP_PER_CASE);
+  res.json({ notes });
+});
+
+router.post('/:id/private-notes', (req, res) => {
+  const caseId = parseInt(req.params.id, 10);
+  const caseRow = db.prepare('SELECT student_id, assigned_expert_id FROM cases WHERE id = ?').get(caseId);
+  if (!caseRow) return res.status(404).json({ error: 'Case not found' });
+  const allowed = req.userRole === 'admin' || caseRow.assigned_expert_id === req.userId;
+  if (!allowed) return res.status(403).json({ error: 'Forbidden' });
+
+  const note = req.body.note != null ? String(req.body.note).trim().slice(0, 2000) : '';
+  if (!note) return res.status(400).json({ error: 'Note required' });
+
+  db.prepare('INSERT INTO case_private_notes (case_id, user_id, note) VALUES (?, ?, ?)').run(caseId, req.userId, note);
+  const count = db.prepare('SELECT COUNT(*) as c FROM case_private_notes WHERE case_id = ?').get(caseId).c;
+  if (count > PRIVATE_NOTE_CAP_PER_CASE) {
+    const toDel = count - PRIVATE_NOTE_CAP_PER_CASE;
+    db.prepare(
+      'DELETE FROM case_private_notes WHERE id IN (SELECT id FROM case_private_notes WHERE case_id = ? ORDER BY created_at ASC LIMIT ?)'
+    ).run(caseId, toDel);
+  }
+  const row = db.prepare('SELECT id, note, created_at FROM case_private_notes WHERE id = last_insert_rowid()').get();
+  logEvent('case', caseId, 'private_note_added', req.userId, {});
   res.status(201).json(row);
 });
 

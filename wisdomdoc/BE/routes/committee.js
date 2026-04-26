@@ -274,4 +274,109 @@ router.get('/students/:studentId/documents/:docId/preview', (req, res) => {
   res.sendFile(result.filePath);
 });
 
+function markTeamDmReadForPeer(viewerId, peerId) {
+  const row = db.prepare(`
+    SELECT COALESCE(MAX(id), 0) AS last_incoming_id
+    FROM team_messages
+    WHERE sender_id = ? AND receiver_id = ?
+  `).get(peerId, viewerId);
+  const lastIncomingId = row?.last_incoming_id ?? 0;
+  db.prepare(`
+    INSERT INTO team_dm_reads (user_id, peer_id, last_read_incoming_id)
+    VALUES (?, ?, ?)
+    ON CONFLICT(user_id, peer_id) DO UPDATE SET
+      last_read_incoming_id = excluded.last_read_incoming_id
+  `).run(viewerId, peerId, lastIncomingId);
+}
+
+/** Team messaging (admin + experts only), separate from case workflow */
+router.get('/team/contacts', (req, res) => {
+  const me = req.userId;
+  const contacts = db.prepare(`
+    SELECT u.id, u.email, u.username, u.role,
+      (
+        SELECT COUNT(*)
+        FROM team_messages tm
+        WHERE tm.sender_id = u.id
+          AND tm.receiver_id = ?
+          AND tm.id > COALESCE(
+            (SELECT last_read_incoming_id FROM team_dm_reads r
+             WHERE r.user_id = ? AND r.peer_id = u.id),
+            0
+          )
+      ) AS unread_count,
+      (
+        SELECT MAX(tm.created_at)
+        FROM team_messages tm
+        WHERE (tm.sender_id = u.id AND tm.receiver_id = ?)
+           OR (tm.sender_id = ? AND tm.receiver_id = u.id)
+      ) AS last_message_at
+    FROM users u
+    WHERE u.role IN ('admin', 'expert') AND u.id != ?
+    ORDER BY
+      unread_count DESC,
+      CASE WHEN last_message_at IS NULL THEN 1 ELSE 0 END,
+      datetime(last_message_at) DESC,
+      CASE WHEN u.role = 'admin' THEN 0 ELSE 1 END,
+      u.username COLLATE NOCASE,
+      u.email COLLATE NOCASE
+  `).all(me, me, me, me, me);
+  res.json({ contacts });
+});
+
+router.get('/team/messages/:otherUserId', (req, res) => {
+  const otherUserId = parseInt(req.params.otherUserId, 10);
+  if (Number.isNaN(otherUserId)) return res.status(400).json({ error: 'Invalid user' });
+
+  const other = db.prepare('SELECT id, role FROM users WHERE id = ?').get(otherUserId);
+  if (!other || (other.role !== 'admin' && other.role !== 'expert')) {
+    return res.status(404).json({ error: 'User not found' });
+  }
+
+  const messages = db.prepare(`
+    SELECT tm.id, tm.sender_id, tm.receiver_id, tm.message, tm.created_at,
+           su.email AS sender_email, su.username AS sender_username, su.role AS sender_role
+    FROM team_messages tm
+    JOIN users su ON su.id = tm.sender_id
+    WHERE
+      (tm.sender_id = ? AND tm.receiver_id = ?)
+      OR
+      (tm.sender_id = ? AND tm.receiver_id = ?)
+    ORDER BY tm.created_at ASC, tm.id ASC
+  `).all(req.userId, otherUserId, otherUserId, req.userId);
+
+  markTeamDmReadForPeer(req.userId, otherUserId);
+
+  res.json({ messages });
+});
+
+router.post('/team/messages/:otherUserId', (req, res) => {
+  const otherUserId = parseInt(req.params.otherUserId, 10);
+  if (Number.isNaN(otherUserId)) return res.status(400).json({ error: 'Invalid user' });
+
+  const other = db.prepare('SELECT id, role FROM users WHERE id = ?').get(otherUserId);
+  if (!other || (other.role !== 'admin' && other.role !== 'expert')) {
+    return res.status(404).json({ error: 'User not found' });
+  }
+
+  const message = req.body?.message != null ? String(req.body.message).trim().slice(0, 2000) : '';
+  if (!message) return res.status(400).json({ error: 'Message required' });
+
+  db.prepare('INSERT INTO team_messages (sender_id, receiver_id, message) VALUES (?, ?, ?)').run(
+    req.userId,
+    otherUserId,
+    message
+  );
+
+  const row = db.prepare(`
+    SELECT tm.id, tm.sender_id, tm.receiver_id, tm.message, tm.created_at,
+           su.email AS sender_email, su.username AS sender_username, su.role AS sender_role
+    FROM team_messages tm
+    JOIN users su ON su.id = tm.sender_id
+    WHERE tm.id = last_insert_rowid()
+  `).get();
+
+  res.status(201).json(row);
+});
+
 export default router;

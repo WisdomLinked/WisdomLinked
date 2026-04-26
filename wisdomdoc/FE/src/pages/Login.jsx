@@ -39,8 +39,6 @@ export default function Login() {
   const [regStudentCity, setRegStudentCity] = useState('');
   const [regStudentCountryCode, setRegStudentCountryCode] = useState('+1');
   const [regStudentPhone, setRegStudentPhone] = useState('');
-  const [forgotEmail, setForgotEmail] = useState('');
-  const [resetLink, setResetLink] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const { setAuth } = useAuth();
@@ -54,9 +52,7 @@ export default function Login() {
   function goBack() {
     if (view.startsWith('login')) setView('login');
     else if (view.startsWith('register')) setView('register');
-    else if (view === 'forgotPassword') setView('login');
     setError('');
-    setResetLink('');
   }
 
   function getStudentMajor() {
@@ -68,33 +64,14 @@ export default function Login() {
     return regExpertMajors.split(',').map(m => m.trim()).filter(Boolean);
   }
 
-  async function handleForgotPassword(e) {
-    e.preventDefault();
+  function handleQuickReset(emailValue) {
     setError('');
-    setLoading(true);
-    setResetLink('');
-    try {
-      const res = await fetch(`${API}/auth/forgot-password`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: forgotEmail.trim() }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        setError(data.error || 'Request failed');
-        return;
-      }
-      if (data.token) {
-        const base = window.location.origin + (import.meta.env.BASE_URL || '/').replace(/\/$/, '');
-        setResetLink(`${base}/reset-password?token=${data.token}`);
-      } else {
-        setResetLink('sent');
-      }
-    } catch (err) {
-      setError('Network error');
-    } finally {
-      setLoading(false);
+    const email = String(emailValue || '').trim();
+    if (!email) {
+      setError('Enter your email in the login form first.');
+      return;
     }
+    navigate(`/reset-password?email=${encodeURIComponent(email)}`);
   }
 
   async function handleStudentSubmit(e) {
@@ -335,43 +312,7 @@ export default function Login() {
             >
               Admin login
             </button>
-            <button type="button" className={styles.toggle} onClick={() => { setView('forgotPassword'); setError(''); setResetLink(''); }}>
-              Forgot password?
-            </button>
             <button type="button" className={styles.toggle} onClick={goToMain}>
-              ← Back
-            </button>
-          </div>
-        )}
-
-        {view === 'forgotPassword' && (
-          <div className={styles.section}>
-            <h2 className={styles.sectionTitle}>Forgot password</h2>
-            {!resetLink ? (
-              <form onSubmit={handleForgotPassword} className={styles.form}>
-                <input
-                  type="email"
-                  placeholder="Enter your email"
-                  value={forgotEmail}
-                  onChange={e => setForgotEmail(e.target.value)}
-                  className={styles.input}
-                  required
-                />
-                <button type="submit" className={styles.btn} disabled={loading}>
-                  {loading ? 'Sending…' : 'Send reset link'}
-                </button>
-              </form>
-            ) : resetLink === 'sent' ? (
-              <p className={styles.successMsg}>If that email exists, a reset link was sent. Check your email.</p>
-            ) : (
-              <div>
-                <p className={styles.choiceHint}>Use this link to reset your password (valid 1 hour):</p>
-                <a href={resetLink} className={styles.resetLink} target="_blank" rel="noopener noreferrer">
-                  Reset password
-                </a>
-              </div>
-            )}
-            <button type="button" className={styles.toggle} onClick={goBack}>
               ← Back
             </button>
           </div>
@@ -426,7 +367,7 @@ export default function Login() {
                 {loading ? 'Please wait…' : 'Login'}
               </button>
             </form>
-            <button type="button" className={styles.toggle} onClick={() => { setView('forgotPassword'); setError(''); setResetLink(''); }}>
+            <button type="button" className={styles.toggle} onClick={() => handleQuickReset(studentEmail)}>
               Forgot password?
             </button>
             <button type="button" className={styles.toggle} onClick={goBack}>
@@ -461,7 +402,7 @@ export default function Login() {
                 {loading ? 'Please wait…' : 'Login'}
               </button>
             </form>
-            <button type="button" className={styles.toggle} onClick={() => { setView('forgotPassword'); setError(''); setResetLink(''); }}>
+            <button type="button" className={styles.toggle} onClick={() => handleQuickReset(expertEmail)}>
               Forgot password?
             </button>
             <button type="button" className={styles.toggle} onClick={goBack}>
@@ -496,7 +437,7 @@ export default function Login() {
                 {loading ? 'Please wait…' : 'Login'}
               </button>
             </form>
-            <button type="button" className={styles.toggle} onClick={() => { setView('forgotPassword'); setError(''); setResetLink(''); }}>
+            <button type="button" className={styles.toggle} onClick={() => handleQuickReset(adminEmail)}>
               Forgot password?
             </button>
             <button type="button" className={styles.toggle} onClick={goBack}>

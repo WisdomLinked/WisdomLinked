@@ -139,6 +139,41 @@ export function initDb() {
   `);
 
   db.exec(`
+    CREATE TABLE IF NOT EXISTS case_private_notes (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      case_id INTEGER NOT NULL,
+      user_id INTEGER NOT NULL,
+      note TEXT NOT NULL,
+      created_at TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (case_id) REFERENCES cases(id),
+      FOREIGN KEY (user_id) REFERENCES users(id)
+    );
+  `);
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS team_messages (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      sender_id INTEGER NOT NULL,
+      receiver_id INTEGER NOT NULL,
+      message TEXT NOT NULL,
+      created_at TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (sender_id) REFERENCES users(id),
+      FOREIGN KEY (receiver_id) REFERENCES users(id)
+    );
+  `);
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS team_dm_reads (
+      user_id INTEGER NOT NULL,
+      peer_id INTEGER NOT NULL,
+      last_read_incoming_id INTEGER NOT NULL DEFAULT 0,
+      PRIMARY KEY (user_id, peer_id),
+      FOREIGN KEY (user_id) REFERENCES users(id),
+      FOREIGN KEY (peer_id) REFERENCES users(id)
+    );
+  `);
+
+  db.exec(`
     CREATE TABLE IF NOT EXISTS messages (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       user_id INTEGER NOT NULL,

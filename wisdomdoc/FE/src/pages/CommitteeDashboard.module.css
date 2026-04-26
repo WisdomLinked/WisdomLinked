@@ -50,6 +50,31 @@
   color: #0d0d0d;
 }
 
+.tabLabelWithBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.teamTabUnreadBadge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.35rem;
+  padding: 0.12rem 0.38rem;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  line-height: 1.15;
+  background: var(--primary);
+  color: #fff;
+}
+
+.tabActive .teamTabUnreadBadge {
+  background: #0d0d0d;
+  color: #fff;
+}
+
 .adminToolbar {
   margin-bottom: 1rem;
   padding: 0.75rem 1rem;
@@ -1105,6 +1130,32 @@
   margin-bottom: 1rem;
 }
 
+.detailHeaderActions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.profileActionBtn {
+  padding: 0.4rem 0.7rem;
+  border-radius: 6px;
+  border: 1px solid var(--primary);
+  background: transparent;
+  color: var(--primary);
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.profileActionBtn:hover:not(:disabled) {
+  background: rgba(49, 176, 153, 0.14);
+}
+
+.profileActionBtn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
 .profilePanel {
   display: flex;
   flex-direction: column;
@@ -1131,6 +1182,11 @@
 .profileValue {
   font-size: 0.95rem;
   color: var(--text);
+}
+
+.profileValueMuted {
+  font-size: 0.95rem;
+  color: var(--text-muted);
 }
 
 .profileBio {
@@ -1474,6 +1530,128 @@
   color: var(--text-muted);
 }
 
+.privateNotesList {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.privateNoteItem {
+  padding: 0.65rem 0.75rem;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.privateNoteText {
+  margin: 0 0 0.35rem;
+  font-size: 0.9rem;
+  line-height: 1.5;
+  color: var(--text);
+  white-space: pre-wrap;
+}
+
+.privateNoteMeta {
+  margin: 0;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+
+.privateNoteComposer {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.teamMessagePanel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+
+.teamMessageHeader {
+  padding-bottom: 0.65rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.teamMessageMeta {
+  font-size: 0.84rem;
+  color: var(--text-muted);
+}
+
+.teamContactTopRow {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  width: 100%;
+}
+
+.teamContactTopRow .studentEmail {
+  flex: 1;
+  min-width: 0;
+}
+
+.teamUnreadBadge {
+  flex-shrink: 0;
+  min-width: 1.25rem;
+  padding: 0.12rem 0.42rem;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  line-height: 1.15;
+  background: var(--primary);
+  color: #fff;
+}
+
+.teamContactHasUnread {
+  font-weight: 600;
+}
+
+.teamMessageList {
+  max-height: 50vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  padding-right: 0.2rem;
+}
+
+.teamMessageItem,
+.teamMessageItemMine {
+  max-width: 86%;
+  padding: 0.65rem 0.75rem;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--bg-input);
+}
+
+.teamMessageItemMine {
+  align-self: flex-end;
+  background: rgba(49, 176, 153, 0.16);
+  border-color: rgba(49, 176, 153, 0.5);
+}
+
+.teamMessageText {
+  margin: 0 0 0.3rem;
+  font-size: 0.92rem;
+  line-height: 1.45;
+  color: var(--text);
+  white-space: pre-wrap;
+}
+
+.teamMessageItemMeta {
+  margin: 0;
+  font-size: 0.76rem;
+  color: var(--text-muted);
+}
+
+.teamMessageComposer {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
 .clarifyForm {
   display: flex;
   flex-direction: column;
@@ -1627,6 +1805,29 @@
   border-radius: 10px;
 }
 
+.workloadHeader {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.workloadToggleBtn {
+  padding: 0.35rem 0.65rem;
+  border-radius: 6px;
+  border: 1px solid var(--primary);
+  background: transparent;
+  color: var(--primary);
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.workloadToggleBtn:hover {
+  background: rgba(49, 176, 153, 0.16);
+}
+
 .workloadTitle {
   margin: 0 0 0.35rem;
   font-size: 1rem;
@@ -1679,6 +1880,180 @@
 .activeCaseCount {
   font-weight: 600;
   color: var(--primary);
+}
+
+.studentProfileOverlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.48);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1050;
+  padding: 1rem;
+}
+
+.studentProfileModal {
+  width: min(780px, 96vw);
+  max-height: 88vh;
+  overflow: auto;
+  background: linear-gradient(180deg, rgba(49, 176, 153, 0.08) 0%, var(--bg-card) 24%);
+  border: 1px solid rgba(49, 176, 153, 0.35);
+  border-radius: 14px;
+  box-shadow: 0 14px 38px rgba(0, 0, 0, 0.42);
+}
+
+.studentProfileHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 1.05rem 1.2rem;
+  border-bottom: 1px solid rgba(49, 176, 153, 0.24);
+}
+
+.studentProfileTitle {
+  margin: 0;
+  font-size: 1.7rem;
+  font-weight: 700;
+  color: #ffffff;
+  letter-spacing: 0.01em;
+}
+
+.studentProfileClose {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.35rem;
+  height: 2.35rem;
+  border: 1px solid rgba(49, 176, 153, 0.35);
+  border-radius: 8px;
+  background: transparent;
+  color: #9aa0a6;
+  cursor: pointer;
+  font-size: 1.2rem;
+  line-height: 1;
+}
+
+.studentProfileClose:hover {
+  color: #ffffff;
+  border-color: var(--primary);
+  background: rgba(49, 176, 153, 0.14);
+}
+
+.studentProfileBody {
+  padding: 1.2rem 1.25rem 1.35rem;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.9rem 0.95rem;
+}
+
+@media (max-width: 760px) {
+  .studentProfileBody {
+    grid-template-columns: 1fr;
+  }
+}
+
+.studentProfileBody .profileRow {
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 10px;
+  padding: 0.72rem 0.8rem;
+  min-height: 5rem;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.studentProfileBody .profileLabel {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 700;
+  color: var(--primary);
+}
+
+.studentProfileBody .profileValue {
+  margin-top: 0.18rem;
+  font-size: 1.45rem;
+  line-height: 1.15;
+  color: #ffffff;
+  font-weight: 600;
+}
+
+.studentProfileBody .profileValueMuted {
+  margin-top: 0.18rem;
+  font-size: 1.22rem;
+  line-height: 1.2;
+  color: #a6adb8;
+  font-weight: 500;
+  word-break: break-word;
+}
+
+.studentProfileTop {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 0.75rem;
+  margin-bottom: 0.9rem;
+  padding-bottom: 0.85rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.studentProfileName {
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: var(--text);
+  line-height: 1.2;
+}
+
+.studentProfileEmail {
+  margin-top: 0.2rem;
+  font-size: 0.9rem;
+  color: var(--text-muted);
+  word-break: break-word;
+}
+
+.studentProfileBadges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.studentProfileBadge,
+.studentProfileBadgeMuted {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.2rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.studentProfileBadge {
+  border: 1px solid var(--primary);
+  background: rgba(49, 176, 153, 0.14);
+  color: var(--primary);
+}
+
+.studentProfileBadgeMuted {
+  border: 1px solid var(--border);
+  background: var(--bg-input);
+  color: var(--text-muted);
+}
+
+.studentProfileGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.7rem 1rem;
+  margin-bottom: 0.8rem;
+}
+
+@media (max-width: 680px) {
+  .studentProfileGrid {
+    grid-template-columns: 1fr;
+  }
 }
 
 .startReviewBtn {

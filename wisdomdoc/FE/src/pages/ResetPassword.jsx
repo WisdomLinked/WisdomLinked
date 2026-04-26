@@ -1,18 +1,24 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { API } from '../config';
 import styles from './Login.module.css';
 
 export default function ResetPassword() {
   const [searchParams] = useSearchParams();
-  const tokenFromUrl = searchParams.get('token') || '';
-  const [token, setToken] = useState(tokenFromUrl);
+  const [email, setEmail] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
+
+  useEffect(() => {
+    const fromUrl = searchParams.get('email');
+    if (fromUrl) {
+      setEmail(decodeURIComponent(fromUrl).trim());
+    }
+  }, [searchParams]);
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -25,16 +31,17 @@ export default function ResetPassword() {
       setError('Password must be at least 4 characters');
       return;
     }
-    if (!token.trim()) {
-      setError('Reset token is required');
+    const em = email.trim().toLowerCase();
+    if (!em) {
+      setError('Email is required');
       return;
     }
     setLoading(true);
     try {
-      const res = await fetch(`${API}/auth/reset-password`, {
+      const res = await fetch(`${API}/auth/reset-password-simple`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token: token.trim(), newPassword }),
+        body: JSON.stringify({ email: em, newPassword }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -67,20 +74,22 @@ export default function ResetPassword() {
         <h1 className={styles.title}>
           <span className="gradient_text">Reset password</span>
         </h1>
-        <p className={styles.choiceHint}>Enter your reset token and new password.</p>
+        <p className={styles.choiceHint}>Enter your account email and choose a new password.</p>
         <form onSubmit={handleSubmit} className={styles.form}>
           <input
-            type="text"
-            placeholder="Reset token (from email or forgot-password)"
-            value={token}
-            onChange={e => setToken(e.target.value)}
+            type="email"
+            placeholder="Email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
             className={styles.input}
+            required
+            autoComplete="email"
           />
           <input
             type="password"
             placeholder="New password"
             value={newPassword}
-            onChange={e => setNewPassword(e.target.value)}
+            onChange={(e) => setNewPassword(e.target.value)}
             className={styles.input}
             required
             minLength={4}
@@ -90,7 +99,7 @@ export default function ResetPassword() {
             type="password"
             placeholder="Confirm password"
             value={confirmPassword}
-            onChange={e => setConfirmPassword(e.target.value)}
+            onChange={(e) => setConfirmPassword(e.target.value)}
             className={styles.input}
             required
             minLength={4}

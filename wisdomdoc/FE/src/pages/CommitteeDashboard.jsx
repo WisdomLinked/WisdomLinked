@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { API } from '../config';
 import { formatDate } from '../utils/dateFormat';
@@ -100,6 +100,18 @@ export default function CommitteeDashboard() {
   const [expertDetailLoading, setExpertDetailLoading] = useState(false);
   /** Admin: active (non-terminal) cases per expert */
   const [expertWorkload, setExpertWorkload] = useState([]);
+  const [workloadExpanded, setWorkloadExpanded] = useState(false);
+  const [studentProfileModalOpen, setStudentProfileModalOpen] = useState(false);
+  const [privateNotes, setPrivateNotes] = useState([]);
+  const [privateNoteText, setPrivateNoteText] = useState('');
+  const [privateNotesLoading, setPrivateNotesLoading] = useState(false);
+  const [privateNoteSaving, setPrivateNoteSaving] = useState(false);
+  const [teamContacts, setTeamContacts] = useState([]);
+  const [teamMessages, setTeamMessages] = useState([]);
+  const [teamMessagesLoading, setTeamMessagesLoading] = useState(false);
+  const [teamMessageText, setTeamMessageText] = useState('');
+  const [teamMessageSending, setTeamMessageSending] = useState(false);
+  const teamMessageListRef = useRef(null);
   const headers = () => ({ Authorization: `Bearer ${token}` });
 
   const MAJOR_FILTER_EMPTY = '__empty__';
@@ -140,16 +152,16 @@ export default function CommitteeDashboard() {
 
   function matchesAdminSearchCase(c, q) {
     if (!q) return true;
-    const n = q.toLowerCase();
+    const n = q.trim().toLowerCase();
     const fields = [c.email, c.student_username, c.case_id, c.major].filter(Boolean);
-    return fields.some((f) => String(f).toLowerCase().includes(n));
+    return fields.some((f) => String(f).trim().toLowerCase().includes(n));
   }
 
   function matchesAdminSearchStudent(s, q) {
     if (!q) return true;
-    const n = q.toLowerCase();
+    const n = q.trim().toLowerCase();
     const fields = [s.email, s.username, s.major].filter(Boolean);
-    return fields.some((f) => String(f).toLowerCase().includes(n));
+    return fields.some((f) => String(f).trim().toLowerCase().includes(n));
   }
 
   const expertsSortedForFilter = useMemo(() => {
@@ -256,6 +268,27 @@ export default function CommitteeDashboard() {
     return m;
   }, [expertWorkload]);
 
+  const teamTotalUnread = useMemo(
+    () => (teamContacts || []).reduce((sum, c) => sum + Number(c.unread_count || 0), 0),
+    [teamContacts],
+  );
+
+  const selectedStudentSummary = useMemo(() => {
+    if (!selected || activeTab === 'experts') return null;
+    if (activeTab === 'cases') {
+      return {
+        username: selected.student_username || detail?.student?.username || '',
+        email: selected.email || detail?.student?.email || '',
+        major: selected.major || detail?.student?.major || '',
+      };
+    }
+    return {
+      username: selected.username || detail?.student?.username || '',
+      email: selected.email || detail?.student?.email || '',
+      major: selected.major || detail?.student?.major || '',
+    };
+  }, [selected, activeTab, detail]);
+
   function loadExpertsForCase(caseId) {
     if (!caseId || !isAdmin) return;
     fetch(`${API}/cases/experts?caseId=${caseId}`, { headers: headers() })
@@ -282,6 +315,32 @@ export default function CommitteeDashboard() {
     fetch(`${API}/committee/students`, { headers: headers() })
       .then(r => r.json())
       .then(data => setStudents(data.students || []));
+  }
+
+  function loadTeamContacts() {
+    fetch(`${API}/committee/team/contacts`, { headers: headers() })
+      .then((r) => r.json())
+      .then((data) => setTeamContacts(data.contacts || []))
+      .catch(() => setTeamContacts([]));
+  }
+
+  function loadTeamMessages(otherUserId) {
+    if (!otherUserId) {
+      setTeamMessages([]);
+      return;
+    }
+    setTeamMessagesLoading(true);
+    fetch(`${API}/committee/team/messages/${otherUserId}`, { headers: headers() })
+      .then((r) => {
+        if (!r.ok) throw new Error('Failed');
+        return r.json();
+      })
+      .then((data) => setTeamMessages(data.messages || []))
+      .catch(() => setTeamMessages([]))
+      .finally(() => {
+        setTeamMessagesLoading(false);
+        loadTeamContacts();
+      });
   }
 
   useEffect(() => {
@@ -459,10 +518,40 @@ export default function CommitteeDashboard() {
   useEffect(() => {
     if (activeTab === 'cases' && selected?.id) {
       loadCaseUpdates(selected.id);
+      loadPrivateNotes(selected.id);
     } else {
       setCaseUpdates([]);
+      setPrivateNotes([]);
+      setPrivateNoteText('');
     }
   }, [activeTab, selected?.id]);
+
+  useEffect(() => {
+    if (activeTab === 'team') {
+      loadTeamContacts();
+    }
+  }, [activeTab, token]);
+
+  useEffect(() => {
+    if (activeTab !== 'team') return undefined;
+    const intervalId = setInterval(() => loadTeamContacts(), 12000);
+    return () => clearInterval(intervalId);
+  }, [activeTab, token]);
+
+  useEffect(() => {
+    if (activeTab === 'team' && selected?.id) {
+      loadTeamMessages(selected.id);
+    } else if (activeTab !== 'team') {
+      setTeamMessages([]);
+      setTeamMessageText('');
+    }
+  }, [activeTab, selected?.id]);
+
+  useEffect(() => {
+    if (activeTab !== 'team' || teamMessagesLoading) return;
+    const el = teamMessageListRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [activeTab, teamMessages, teamMessagesLoading]);
 
   useEffect(() => {
     if (isAdmin) loadExpertWorkload();
@@ -558,6 +647,61 @@ export default function CommitteeDashboard() {
       .catch(() => setCaseUpdates([]));
   }
 
+  function loadPrivateNotes(caseId) {
+    if (!caseId) return;
+    setPrivateNotesLoading(true);
+    fetch(`${API}/cases/${caseId}/private-notes`, { headers: headers() })
+      .then((r) => {
+        if (!r.ok) throw new Error('Failed');
+        return r.json();
+      })
+      .then((data) => setPrivateNotes(data.notes || []))
+      .catch(() => setPrivateNotes([]))
+      .finally(() => setPrivateNotesLoading(false));
+  }
+
+  async function submitPrivateNote(caseId) {
+    if (!caseId || !privateNoteText.trim()) return;
+    setPrivateNoteSaving(true);
+    setError('');
+    try {
+      const res = await fetch(`${API}/cases/${caseId}/private-notes`, {
+        method: 'POST',
+        headers: { ...headers(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ note: privateNoteText.trim() }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Failed to save note');
+      setPrivateNoteText('');
+      loadPrivateNotes(caseId);
+    } catch (e) {
+      setError(e.message || 'Failed to save note');
+    } finally {
+      setPrivateNoteSaving(false);
+    }
+  }
+
+  async function sendTeamMessage() {
+    if (!selected?.id || !teamMessageText.trim()) return;
+    setTeamMessageSending(true);
+    setError('');
+    try {
+      const res = await fetch(`${API}/committee/team/messages/${selected.id}`, {
+        method: 'POST',
+        headers: { ...headers(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: teamMessageText.trim() }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Failed to send');
+      setTeamMessageText('');
+      loadTeamMessages(selected.id);
+    } catch (e) {
+      setError(e.message || 'Failed to send message');
+    } finally {
+      setTeamMessageSending(false);
+    }
+  }
+
   const downloadUrl = (studentId, docId) =>
     `${API}/committee/students/${studentId}/documents/${docId}/download?token=${encodeURIComponent(token)}`;
 
@@ -648,10 +792,24 @@ export default function CommitteeDashboard() {
               Experts
             </button>
           )}
+          <button
+            type="button"
+            className={activeTab === 'team' ? styles.tabActive : styles.tab}
+            onClick={() => { setActiveTab('team'); setSelected(null); }}
+          >
+            <span className={styles.tabLabelWithBadge}>
+              Team Messages
+              {teamTotalUnread > 0 && (
+                <span className={styles.teamTabUnreadBadge} title="Unread direct messages">
+                  {teamTotalUnread > 99 ? '99+' : teamTotalUnread}
+                </span>
+              )}
+            </span>
+          </button>
         </div>
       )}
 
-      {isAdmin && activeTab !== 'experts' && (
+      {isAdmin && activeTab !== 'experts' && activeTab !== 'team' && (
         <div className={styles.adminToolbar}>
           <label className={styles.adminSearchField}>
             <span className={styles.filterFieldLabel}>Search</span>
@@ -826,33 +984,47 @@ export default function CommitteeDashboard() {
 
       {isAdmin && activeTab === 'experts' && (
         <div className={styles.workloadPanel} role="region" aria-label="Expert workload">
-          <h3 className={styles.workloadTitle}>Expert workload</h3>
+          <div className={styles.workloadHeader}>
+            <h3 className={styles.workloadTitle}>Expert workload</h3>
+            <button
+              type="button"
+              className={styles.workloadToggleBtn}
+              onClick={() => setWorkloadExpanded((prev) => !prev)}
+              aria-expanded={workloadExpanded}
+            >
+              {workloadExpanded ? 'Hide' : 'Expert Workload'}
+            </button>
+          </div>
           <p className={styles.workloadHint}>
             Active cases are assigned applications not yet approved, rejected, or withdrawn. Use this table to spread work across experts.
           </p>
-          {expertWorkload.length === 0 ? (
-            <p className={styles.workloadEmpty}>No experts or no workload data yet.</p>
-          ) : (
-            <div className={styles.workloadTableWrap}>
-              <table className={styles.workloadTable}>
-                <thead>
-                  <tr>
-                    <th scope="col">Expert</th>
-                    <th scope="col">Email</th>
-                    <th scope="col">Active cases</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {expertWorkload.map((w) => (
-                    <tr key={w.expert_id}>
-                      <td>{w.username || '—'}</td>
-                      <td>{w.email || '—'}</td>
-                      <td>{w.active_case_count}</td>
+          {workloadExpanded && (
+            expertWorkload.length === 0 ? (
+              <p className={styles.workloadEmpty}>No experts or no workload data yet.</p>
+            ) : (
+              <div className={styles.workloadTableWrap}>
+                <table className={styles.workloadTable}>
+                  <thead>
+                    <tr>
+                      <th scope="col">Expert</th>
+                      <th scope="col">Email</th>
+                      <th scope="col">Active cases</th>
+                      <th scope="col">Completed cases</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody>
+                    {expertWorkload.map((w) => (
+                      <tr key={w.expert_id}>
+                        <td>{w.username || '—'}</td>
+                        <td>{w.email || '—'}</td>
+                        <td>{w.active_case_count}</td>
+                        <td>{w.completed_case_count ?? 0}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )
           )}
         </div>
       )}
@@ -864,6 +1036,8 @@ export default function CommitteeDashboard() {
             : 'Click a case to view documents. Approve or Reject when assigned.')
           : activeTab === 'experts'
             ? 'Filter by major and name, then click an expert to view their profile and assigned cases (active and completed).'
+          : activeTab === 'team'
+            ? 'Select a teammate and send direct internal messages (admin and experts only).'
           : (isAdmin
             ? 'Use search and filters, then click a student to manage upload access.'
             : 'Click a student to manage upload access. Experts and admins can enable or disable uploads (not for students with a final-approved case until an admin reopens the case).')}
@@ -882,7 +1056,7 @@ export default function CommitteeDashboard() {
         </div>
       )}
 
-      <div className={`${styles.grid} ${!isExpert || activeTab === 'experts' ? styles.gridTwoCol : ''}`}>
+      <div className={`${styles.grid} ${!isExpert || activeTab === 'experts' || activeTab === 'team' ? styles.gridTwoCol : ''}`}>
         <aside className={styles.sidebar}>
           {activeTab === 'cases' ? (
             <>
@@ -971,6 +1145,37 @@ export default function CommitteeDashboard() {
                 ))
               )}
             </ul>
+          ) : activeTab === 'team' ? (
+            <ul className={styles.studentList}>
+              {teamContacts.length === 0 ? (
+                <li className={styles.empty}>No teammates available</li>
+              ) : (
+                teamContacts.map((t) => {
+                  const unread = Number(t.unread_count) || 0;
+                  return (
+                  <li key={t.id} className={styles.studentListItem}>
+                    <button
+                      type="button"
+                      className={`${selected?.id === t.id ? styles.studentBtnActive : styles.studentBtn} ${unread > 0 ? styles.teamContactHasUnread : ''}`}
+                      onClick={() => setSelected(t)}
+                    >
+                      <span className={styles.teamContactTopRow}>
+                        <span className={styles.studentEmail}>{t.username || t.email}</span>
+                        {unread > 0 && (
+                          <span className={styles.teamUnreadBadge} aria-label={`${unread} unread messages`}>
+                            {unread > 99 ? '99+' : unread}
+                          </span>
+                        )}
+                      </span>
+                      <span className={styles.studentMeta}>
+                        {t.email} · {t.role === 'admin' ? 'Admin' : 'Expert'}
+                      </span>
+                    </button>
+                  </li>
+                  );
+                })
+              )}
+            </ul>
           ) : (
             <ul className={styles.studentList}>
               {(isAdmin ? filteredStudents : students).length === 0 ? (
@@ -1022,8 +1227,56 @@ export default function CommitteeDashboard() {
         <section className={styles.detail}>
           {!selected && (
             <p className={styles.placeholder}>
-              Select {activeTab === 'cases' ? 'a case' : activeTab === 'experts' ? 'an expert' : 'a student'}
+              Select {activeTab === 'cases' ? 'a case' : activeTab === 'experts' ? 'an expert' : activeTab === 'team' ? 'a teammate' : 'a student'}
             </p>
+          )}
+          {activeTab === 'team' && selected && (
+            <div className={styles.teamMessagePanel}>
+              <div className={styles.teamMessageHeader}>
+                <h3 className={styles.detailTitle}>{selected.username || selected.email}</h3>
+                <span className={styles.teamMessageMeta}>
+                  {selected.email} · {selected.role === 'admin' ? 'Admin' : 'Expert'}
+                </span>
+              </div>
+              <div ref={teamMessageListRef} className={styles.teamMessageList}>
+                {teamMessagesLoading ? (
+                  <p className={styles.empty}>Loading messages…</p>
+                ) : teamMessages.length === 0 ? (
+                  <p className={styles.empty}>No messages yet</p>
+                ) : (
+                  teamMessages.map((m) => {
+                    const isMine = m.sender_id === user?.id;
+                    return (
+                      <div key={m.id} className={isMine ? styles.teamMessageItemMine : styles.teamMessageItem}>
+                        <p className={styles.teamMessageText}>{m.message}</p>
+                        <p className={styles.teamMessageItemMeta}>
+                          {isMine ? 'You' : (m.sender_username || m.sender_email || 'Teammate')} · {formatDate(m.created_at, user?.timezone)}
+                        </p>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+              <div className={styles.teamMessageComposer}>
+                <textarea
+                  className={styles.clarifyTextarea}
+                  rows={3}
+                  maxLength={2000}
+                  placeholder="Write a message to your teammate..."
+                  value={teamMessageText}
+                  onChange={(e) => setTeamMessageText(e.target.value)}
+                  disabled={teamMessageSending}
+                />
+                <button
+                  type="button"
+                  className={styles.addTypeBtn}
+                  disabled={!teamMessageText.trim() || teamMessageSending}
+                  onClick={sendTeamMessage}
+                >
+                  {teamMessageSending ? 'Sending…' : 'Send Message'}
+                </button>
+              </div>
+            </div>
           )}
           {activeTab === 'experts' && selected && expertDetailLoading && <p className={styles.placeholder}>Loading…</p>}
           {activeTab === 'experts' && selected && !expertDetailLoading && expertDetail?.expert && (
@@ -1107,8 +1360,8 @@ export default function CommitteeDashboard() {
               })()}
             </>
           )}
-          {selected && detailLoading && activeTab !== 'experts' && <p className={styles.placeholder}>Loading…</p>}
-          {selected && detail && !detailLoading && detail.student && activeTab !== 'experts' && (
+          {selected && detailLoading && activeTab !== 'experts' && activeTab !== 'team' && <p className={styles.placeholder}>Loading…</p>}
+          {selected && detail && !detailLoading && detail.student && activeTab !== 'experts' && activeTab !== 'team' && (
             <>
               {detail.hasSubmittedApplication === false && (
                 <div className={styles.studentInProgressBanner} role="status">
@@ -1313,32 +1566,54 @@ export default function CommitteeDashboard() {
                 </>
               )}
               <div className={styles.detailHeader}>
-                <h3 className={styles.detailTitle}>Profile</h3>
-                {(isAdmin || isExpert) && (
+                <div className={styles.detailHeaderActions}>
                   <button
                     type="button"
-                    className={detail.student.approved ? styles.approveBtnOn : styles.approveBtn}
-                    onClick={() => toggleApproval(detail.student.id)}
-                    disabled={isExpert && detail.student.hasApprovedCase}
-                    title={
-                      isExpert && detail.student.hasApprovedCase
-                        ? 'Cannot change while the case is final-approved (admin must reopen)'
-                        : undefined
-                    }
+                    className={styles.profileActionBtn}
+                    onClick={() => setStudentProfileModalOpen(true)}
+                    disabled={!detail?.student}
+                    title="Open full student profile"
                   >
-                    {detail.student.approved ? 'Disable upload' : 'Enable upload'}
+                    Profile
                   </button>
-                )}
+                  {(isAdmin || isExpert) && (
+                    <button
+                      type="button"
+                      className={detail.student.approved ? styles.approveBtnOn : styles.approveBtn}
+                      onClick={() => toggleApproval(detail.student.id)}
+                      disabled={isExpert && detail.student.hasApprovedCase}
+                      title={
+                        isExpert && detail.student.hasApprovedCase
+                          ? 'Cannot change while the case is final-approved (admin must reopen)'
+                          : undefined
+                      }
+                    >
+                      {detail.student.approved ? 'Disable upload' : 'Enable upload'}
+                    </button>
+                  )}
+                </div>
               </div>
 
               <div className={styles.profilePanel}>
+                <div className={styles.profileRow}>
+                  <span className={styles.profileLabel}>Name</span>
+                  <span className={styles.profileValue}>{detail.student.username || selectedStudentSummary?.username || '—'}</span>
+                </div>
+                <div className={styles.profileRow}>
+                  <span className={styles.profileLabel}>Email</span>
+                  <span className={styles.profileValueMuted}>{detail.student.email || selectedStudentSummary?.email || '—'}</span>
+                </div>
                 <div className={styles.profileRow}>
                   <span className={styles.profileLabel}>Major</span>
                   <span className={styles.profileValue}>{detail.student.major ? <span className={styles.profileTag}>{detail.student.major}</span> : '—'}</span>
                 </div>
                 <div className={styles.profileRow}>
-                  <span className={styles.profileLabel}>Bio</span>
-                  <div className={styles.profileBio}>{detail.student.bio ? detail.student.bio : '—'}</div>
+                  <span className={styles.profileLabel}>Target year</span>
+                  <span className={styles.profileValue}>
+                    {detail.student.target_year != null && !Number.isNaN(Number(detail.student.target_year))
+                      ? Number(detail.student.target_year)
+                      : '—'}
+                  </span>
                 </div>
               </div>
 
@@ -1461,6 +1736,46 @@ export default function CommitteeDashboard() {
                   </div>
                 )}
               </div>
+
+              <div className={styles.section}>
+                <h4 className={styles.sectionTitle}>Private Case Notes</h4>
+                <p className={styles.extraHint}>Internal notes only. Students cannot view this section.</p>
+                {privateNotesLoading ? (
+                  <p className={styles.empty}>Loading notes…</p>
+                ) : privateNotes.length === 0 ? (
+                  <p className={styles.empty}>No private notes yet</p>
+                ) : (
+                  <div className={styles.privateNotesList}>
+                    {privateNotes.map((n) => (
+                      <div key={n.id} className={styles.privateNoteItem}>
+                        <p className={styles.privateNoteText}>{n.note}</p>
+                        <p className={styles.privateNoteMeta}>
+                          {n.from_email || 'Unknown'} · {formatDate(n.created_at, detail.student?.timezone)}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <div className={styles.privateNoteComposer}>
+                  <textarea
+                    placeholder="Add internal evaluation notes for expert/admin collaboration..."
+                    value={privateNoteText}
+                    onChange={(e) => setPrivateNoteText(e.target.value)}
+                    className={styles.clarifyTextarea}
+                    rows={3}
+                    disabled={privateNoteSaving}
+                    maxLength={2000}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => submitPrivateNote(selected.id)}
+                    className={styles.addTypeBtn}
+                    disabled={!privateNoteText.trim() || privateNoteSaving}
+                  >
+                    {privateNoteSaving ? 'Saving…' : 'Save Note'}
+                  </button>
+                </div>
+              </div>
             </>
           )}
         </section>
@@ -1476,6 +1791,72 @@ export default function CommitteeDashboard() {
               </form>
             </div>
           </aside>
+        )}
+
+        {studentProfileModalOpen && detail?.student && activeTab !== 'experts' && (
+          <div
+            className={styles.studentProfileOverlay}
+            onClick={() => setStudentProfileModalOpen(false)}
+            role="dialog"
+            aria-modal="true"
+            aria-label="Student profile details"
+          >
+            <div className={styles.studentProfileModal} onClick={(e) => e.stopPropagation()}>
+              <div className={styles.studentProfileHeader}>
+                <h4 className={styles.studentProfileTitle}>
+                  {(detail.student.username || selectedStudentSummary?.username || 'Student') + "'s Profile"}
+                </h4>
+                <button
+                  type="button"
+                  className={styles.studentProfileClose}
+                  onClick={() => setStudentProfileModalOpen(false)}
+                  aria-label="Close student profile"
+                >
+                  ×
+                </button>
+              </div>
+              <div className={styles.studentProfileBody}>
+                <div className={styles.profileRow}>
+                  <span className={styles.profileLabel}>Name</span>
+                  <span className={styles.profileValue}>{detail.student.username || selectedStudentSummary?.username || '—'}</span>
+                </div>
+                <div className={styles.profileRow}>
+                  <span className={styles.profileLabel}>Email</span>
+                  <span className={styles.profileValueMuted}>{detail.student.email || selectedStudentSummary?.email || '—'}</span>
+                </div>
+                <div className={styles.profileRow}>
+                  <span className={styles.profileLabel}>Major</span>
+                  <span className={styles.profileValue}>{detail.student.major || selectedStudentSummary?.major || '—'}</span>
+                </div>
+                <div className={styles.profileRow}>
+                  <span className={styles.profileLabel}>Title</span>
+                  <span className={styles.profileValue}>{detail.student.title || '—'}</span>
+                </div>
+                <div className={styles.profileRow}>
+                  <span className={styles.profileLabel}>Location</span>
+                  <span className={styles.profileValue}>
+                    {[detail.student.city, detail.student.state, detail.student.country].filter(Boolean).join(', ') || '—'}
+                  </span>
+                </div>
+                <div className={styles.profileRow}>
+                  <span className={styles.profileLabel}>Phone</span>
+                  <span className={styles.profileValue}>{detail.student.phone || '—'}</span>
+                </div>
+                <div className={styles.profileRow}>
+                  <span className={styles.profileLabel}>Target year</span>
+                  <span className={styles.profileValue}>
+                    {detail.student.target_year != null && !Number.isNaN(Number(detail.student.target_year))
+                      ? Number(detail.student.target_year)
+                      : '—'}
+                  </span>
+                </div>
+                <div className={styles.profileRow}>
+                  <span className={styles.profileLabel}>Bio</span>
+                  <div className={styles.profileBio}>{detail.student.bio || 'No bio provided.'}</div>
+                </div>
+              </div>
+            </div>
+          </div>
         )}
 
         {previewDoc && (

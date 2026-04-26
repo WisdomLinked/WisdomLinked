@@ -16,7 +16,8 @@ function parseMajors(s) {
 const router = Router();
 
 router.post('/login', (req, res) => {
-  const { email, password } = req.body;
+  const email = req.body?.email != null ? String(req.body.email).trim().toLowerCase() : '';
+  const password = req.body?.password != null ? String(req.body.password) : '';
   if (!email || !password) {
     return res.status(400).json({ error: 'Email and password required' });
   }
@@ -34,7 +35,9 @@ router.post('/login', (req, res) => {
 const VALID_TIMEZONES = ['America/Chicago', 'America/New_York', 'America/Denver', 'America/Los_Angeles', 'America/Phoenix', 'America/Anchorage', 'Pacific/Honolulu', 'UTC', 'Europe/London', 'Europe/Paris', 'Asia/Dubai', 'Asia/Kolkata', 'Asia/Shanghai', 'Asia/Tokyo', 'Australia/Sydney'];
 
 router.post('/register', (req, res) => {
-  const { email, password, role, major, majors, timezone, username, bio, title, country, state, city, phone } = req.body;
+  const email = req.body?.email != null ? String(req.body.email).trim().toLowerCase() : '';
+  const password = req.body?.password != null ? String(req.body.password) : '';
+  const { role, major, majors, timezone, username, bio, title, country, state, city, phone } = req.body;
   if (!email || !password) {
     return res.status(400).json({ error: 'Email and password required' });
   }
@@ -103,6 +106,20 @@ router.post('/reset-password', (req, res) => {
   }
   db.prepare('UPDATE users SET password_hash = ? WHERE email = ?').run(String(newPassword), row.email);
   db.prepare('DELETE FROM password_reset_tokens WHERE token = ?').run(token);
+  res.json({ success: true, message: 'Password updated' });
+});
+
+/** Simple reset (no token): email + new password — for internal / demo use */
+router.post('/reset-password-simple', (req, res) => {
+  const email = req.body?.email != null ? String(req.body.email).trim().toLowerCase() : '';
+  const newPassword = req.body?.newPassword != null ? String(req.body.newPassword) : '';
+  if (!email || !newPassword || newPassword.length < 4) {
+    return res.status(400).json({ error: 'Email and password (min 4 chars) required' });
+  }
+  const result = db.prepare('UPDATE users SET password_hash = ? WHERE email = ?').run(newPassword, email);
+  if (result.changes === 0) {
+    return res.status(404).json({ error: 'No account found for that email' });
+  }
   res.json({ success: true, message: 'Password updated' });
 });
 
