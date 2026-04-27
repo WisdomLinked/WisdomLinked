@@ -16,9 +16,19 @@ export type TopBarNotificationItem = {
   id: string;
   title: string;
   meta: string;
+  unreadCount?: number;
   icon?: React.ReactNode;
   onClick?: () => void;
 };
+
+export function getTopBarNotificationCount(items: TopBarNotificationItem[]): number {
+  const explicitTotal = (items || []).reduce((sum, item) => {
+    const n = Number(item?.unreadCount ?? 0);
+    return sum + (Number.isFinite(n) && n > 0 ? n : 0);
+  }, 0);
+  if (explicitTotal > 0) return explicitTotal;
+  return (items || []).length;
+}
 
 const defaultNotifications: TopBarNotificationItem[] = [
   {
@@ -64,7 +74,7 @@ export default function TopBar({
   const [openNotifications, setOpenNotifications] = useState(false);
 
   const notifications = notificationsProp ?? defaultNotifications;
-  const notificationCount = notifications.length;
+  const notificationCount = getTopBarNotificationCount(notifications);
 
   useEffect(() => {
     if (!openMenu) {
