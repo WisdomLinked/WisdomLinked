@@ -51,6 +51,7 @@ import {
     shouldRequestOlderMessages,
 } from "./historyPagination";
 import { resolveProfileImageSrc } from "../../../../utils/profileImage";
+import { parseMeetingMessageContent } from "../../../../utils/meetingMessage";
 
 /** RC `u.username` is email-derived; WL `userDetails.username` is display name — never equal. */
 function isRcStreamFromMe(rcMsg: any, me: any): boolean {
@@ -695,19 +696,6 @@ const Messages = ({ theme = "dark" }: any) => {
         prevMessagesLength.current = messages.length;
     }, [messages]);
 
-    // Helper to parse meeting message content
-    const parseMeetingMessage = (content: string) => {
-        if (content.startsWith('__MEETING_STARTED__::')) {
-            const parts = content.split('::');
-            return { type: 'started', meetingThreadId: parts[1], jitsiRoomName: parts[2], starterName: parts[3] };
-        }
-        if (content.startsWith('__MEETING_ENDED__::')) {
-            const parts = content.split('::');
-            return { type: 'ended', meetingThreadId: parts[1], duration: parseInt(parts[2]) || 0, participantCount: parseInt(parts[3]) || 0 };
-        }
-        return null;
-    };
-
     return (
         <div
             className={`relative flex min-h-0 w-full flex-1 flex-col ${theme === "light" ? "bg-[#F6FAFF]" : ""}`}
@@ -747,7 +735,7 @@ const Messages = ({ theme = "dark" }: any) => {
             }
             {displayMessages.map((message: any, index) => {
                 // Check if this is a meeting message
-                const meetingData = parseMeetingMessage(message.content);
+                const meetingData = parseMeetingMessageContent(String(message.content || ""));
                 if (meetingData) {
                     if (meetingData.type === 'started') {
                         return (
