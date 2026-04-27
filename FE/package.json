@@ -58,9 +58,9 @@
     "start": "vite",
     "build": "vite build",
     "build-stg": "env-cmd -f .env.stg vite build",
-    "test": "vitest run --config vitest.config.ts",
-    "test:watch": "vitest --config vitest.config.ts",
-    "test:coverage": "vitest run --config vitest.config.ts --coverage",
+    "test": "vitest run --config vitest.config.mts",
+    "test:watch": "vitest --config vitest.config.mts",
+    "test:coverage": "vitest run --config vitest.config.mts --coverage",
     "eject": "echo 'Not supported in Vite'",
     "start-stg": "env-cmd -f .env.stg vite"
   },
