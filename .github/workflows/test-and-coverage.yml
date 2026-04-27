@@ -1,0 +1,55 @@
+name: Test And Coverage
+
+on:
+  pull_request:
+    branches: [ "staging", "main" ]
+  push:
+    branches: [ "staging", "main" ]
+
+jobs:
+  backend-tests:
+    name: Backend tests + coverage
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: BE
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: BE/package-lock.json
+
+      - name: Install backend deps
+        run: npm ci
+
+      - name: Run backend coverage gate
+        run: npm run test:coverage
+
+  frontend-tests:
+    name: Frontend tests + coverage
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: FE
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: FE/package-lock.json
+
+      - name: Install frontend deps
+        run: npm ci
+
+      - name: Run frontend coverage gate
+        run: npm run test:coverage
+

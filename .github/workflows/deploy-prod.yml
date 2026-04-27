@@ -29,9 +29,55 @@ jobs:
             frontend:
               - 'FE/**'
 
-  build-and-push-backend:
+  backend-tests:
     needs: changes
     if: needs.changes.outputs.backend == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: BE/package-lock.json
+
+      - name: Install backend dependencies
+        working-directory: ./BE
+        run: npm ci
+
+      - name: Run backend coverage gate
+        working-directory: ./BE
+        run: npm run test:coverage
+
+  frontend-tests:
+    needs: changes
+    if: needs.changes.outputs.frontend == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: FE/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: ./FE
+        run: npm ci --legacy-peer-deps
+
+      - name: Run frontend coverage gate
+        working-directory: ./FE
+        run: npm run test:coverage
+
+  build-and-push-backend:
+    needs: [changes, backend-tests]
+    if: needs.changes.outputs.backend == 'true' && needs.backend-tests.result == 'success'
     runs-on: ubuntu-latest
     environment: production
     permissions:
@@ -61,8 +107,8 @@ jobs:
           cache-to: type=gha,mode=max
 
   build-and-push-frontend:
-    needs: changes
-    if: needs.changes.outputs.frontend == 'true'
+    needs: [changes, frontend-tests]
+    if: needs.changes.outputs.frontend == 'true' && needs.frontend-tests.result == 'success'
     runs-on: ubuntu-latest
     environment: production
     permissions:

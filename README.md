@@ -126,3 +126,22 @@ Ensure MongoDB is running before starting the backend server.
 For production, replace test keys and URLs with live credentials.
 
 Add appropriate error handling and logging for debugging purposes.
+
+Testing And Coverage
+
+Backend (BE):
+
+cd BE
+npm test
+npm run test:coverage
+
+Frontend (FE):
+
+cd FE
+npm test
+npm run test:coverage
+
+CI Policy:
+
+- Pull requests and pushes to `staging` and `main` run backend and frontend test+coverage workflows.
+- Coverage gates are enforced in CI to keep testing part of SDLC for all changes.
