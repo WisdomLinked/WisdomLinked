@@ -67,6 +67,15 @@ export default function WLExpertRegister() {
     const codeRef = useRef<HTMLDivElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
+    const getPasswordUnmetRules = (password: string) => {
+        const unmet: string[] = [];
+        if (password.length < 8) unmet.push('at least 8 characters');
+        if (!/[A-Z]/.test(password)) unmet.push('one uppercase letter');
+        if (!/[0-9]/.test(password)) unmet.push('one number');
+        if (!/[^A-Za-z0-9]/.test(password)) unmet.push('one special character');
+        return unmet;
+    };
+
     // ── Real-time field validation (same rules as customer form) ──
     const validateField = (field: string, value: any, currentForm = form) => {
         let error = '';
@@ -87,12 +96,14 @@ export default function WLExpertRegister() {
                 break;
             case 'password':
                 if (!value) error = 'Password is required';
-                else if (value.length < 8 || !/[A-Z]/.test(value) || !/[0-9]/.test(value) || !/[^A-Za-z0-9]/.test(value)) {
-                    error = 'Password does not meet requirements';
+                else {
+                    const unmet = getPasswordUnmetRules(String(value));
+                    if (unmet.length) error = `Password must include ${unmet.join(', ')}.`;
                 }
                 break;
             case 'confirmPassword':
-                if (value !== currentForm.password) error = 'Passwords do not match';
+                if (!value) error = 'Please confirm your password';
+                else if (value !== currentForm.password) error = 'Passwords do not match';
                 break;
             case 'majors': if (value.length === 0) error = 'Select at least one major'; break;
             case 'servicesOffered': if (value.length === 0) error = 'Select at least one service'; break;
@@ -172,9 +183,22 @@ export default function WLExpertRegister() {
         return e;
     };
 
+    const getValidationPopupMessage = (errorsMap: Record<string, string>) => {
+        if (errorsMap.password) return errorsMap.password;
+        if (errorsMap.confirmPassword) return errorsMap.confirmPassword;
+        if (errorsMap.email) return errorsMap.email;
+        if (errorsMap.phone) return errorsMap.phone;
+        const firstError = Object.values(errorsMap)[0];
+        return firstError || 'Please fix the highlighted fields before registering.';
+    };
+
     const handleSubmit = async () => {
         const e = validate();
-        if (Object.keys(e).length > 0) { setErrors(e); return; }
+        if (Object.keys(e).length > 0) {
+            setErrors(e);
+            dispatch(showAlert(getValidationPopupMessage(e)));
+            return;
+        }
         setSubmitting(true);
         try {
             const data = {
@@ -279,7 +303,7 @@ export default function WLExpertRegister() {
                                     onChange={(e) => handleChange('fullName', e.target.value)}
                                     onBlur={() => handleBlur('fullName')}
                                     className={(touched.fullName && errors.fullName) ? inputError : inputNormal} />
-                                {(touched.fullName && errors.fullName) && <p className="mt-1 text-xs text-red-500 flex items-center gap-1"><AlertCircle size={11} />{errors.fullName}</p>}
+                                {(touched.fullName && errors.fullName) && <p className="mt-1.5 text-xs text-red-500 flex items-center gap-1"><AlertCircle size={11} />{errors.fullName}</p>}
                             </div>
 
                             {/* Title */}
@@ -289,7 +313,7 @@ export default function WLExpertRegister() {
                                     onChange={(e) => handleChange('title', e.target.value)}
                                     onBlur={() => handleBlur('title')}
                                     className={(touched.title && errors.title) ? inputError : inputNormal} />
-                                {(touched.title && errors.title) && <p className="mt-1 text-xs text-red-500 flex items-center gap-1"><AlertCircle size={11} />{errors.title}</p>}
+                                {(touched.title && errors.title) && <p className="mt-1.5 text-xs text-red-500 flex items-center gap-1"><AlertCircle size={11} />{errors.title}</p>}
                             </div>
 
                             {/* Bio */}
@@ -299,7 +323,7 @@ export default function WLExpertRegister() {
                                     onChange={(e) => handleChange('bio', e.target.value)}
                                     onBlur={() => handleBlur('bio')}
                                     className={`${(touched.bio && errors.bio) ? inputError : inputNormal} resize-none`} style={{ lineHeight: 1.5 }} />
-                                <div className="flex justify-between mt-1"><span className="text-xs text-slate-400">Min. 30 characters</span>{(touched.bio && errors.bio) && <p className="text-xs text-red-500 flex items-center gap-1"><AlertCircle size={11} />{errors.bio}</p>}</div>
+                                <div className="flex justify-between mt-1.5"><span className="text-xs text-slate-400">Min. 30 characters</span>{(touched.bio && errors.bio) && <p className="text-xs text-red-500 flex items-center gap-1"><AlertCircle size={11} />{errors.bio}</p>}</div>
                             </div>
 
                             {/* Majors */}
@@ -337,7 +361,7 @@ export default function WLExpertRegister() {
                                         </div>
                                     </div>
                                 )}
-                                {(touched.majors && errors.majors) && <p className="mt-1 text-xs text-red-500 flex items-center gap-1"><AlertCircle size={11} />{errors.majors}</p>}
+                                {(touched.majors && errors.majors) && <p className="mt-1.5 text-xs text-red-500 flex items-center gap-1"><AlertCircle size={11} />{errors.majors}</p>}
                             </div>
 
                             {/* Services */}
@@ -358,7 +382,7 @@ export default function WLExpertRegister() {
                                         ))}
                                     </div>
                                 )}
-                                {(touched.servicesOffered && errors.servicesOffered) && <p className="mt-1 text-xs text-red-500 flex items-center gap-1"><AlertCircle size={11} />{errors.servicesOffered}</p>}
+                                {(touched.servicesOffered && errors.servicesOffered) && <p className="mt-1.5 text-xs text-red-500 flex items-center gap-1"><AlertCircle size={11} />{errors.servicesOffered}</p>}
                             </div>
 
                             {/* Country */}
@@ -377,7 +401,7 @@ export default function WLExpertRegister() {
                                         ))}
                                     </div>
                                 )}
-                                {(touched.country && errors.country) && <p className="mt-1 text-xs text-red-500 flex items-center gap-1"><AlertCircle size={11} />{errors.country}</p>}
+                                {(touched.country && errors.country) && <p className="mt-1.5 text-xs text-red-500 flex items-center gap-1"><AlertCircle size={11} />{errors.country}</p>}
                             </div>
 
                             {/* Phone */}
@@ -407,7 +431,7 @@ export default function WLExpertRegister() {
                                         onBlur={() => handleBlur('phone')}
                                         className={`flex-1 ${(touched.phone && errors.phone) ? inputError : inputNormal}`} />
                                 </div>
-                                {(touched.phone && errors.phone) && <p className="mt-1 text-xs text-red-500 flex items-center gap-1"><AlertCircle size={11} />{errors.phone}</p>}
+                                {(touched.phone && errors.phone) && <p className="mt-1.5 text-xs text-red-500 flex items-center gap-1"><AlertCircle size={11} />{errors.phone}</p>}
                             </div>
 
                             {/* Email */}
@@ -417,7 +441,7 @@ export default function WLExpertRegister() {
                                     onChange={(e) => handleChange('email', e.target.value)}
                                     onBlur={() => handleBlur('email')}
                                     className={(touched.email && errors.email) ? inputError : inputNormal} />
-                                {(touched.email && errors.email) && <p className="mt-1 text-xs text-red-500 flex items-center gap-1"><AlertCircle size={11} />{errors.email}</p>}
+                                {(touched.email && errors.email) && <p className="mt-1.5 text-xs text-red-500 flex items-center gap-1"><AlertCircle size={11} />{errors.email}</p>}
                             </div>
 
                             {/* Password with strength meter */}
@@ -465,7 +489,7 @@ export default function WLExpertRegister() {
                                         {showConfirmPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                                     </button>
                                 </div>
-                                {(touched.confirmPassword && errors.confirmPassword) && <p className="mt-1 text-xs text-red-500 flex items-center gap-1"><AlertCircle size={11} />{errors.confirmPassword}</p>}
+                                {(touched.confirmPassword && errors.confirmPassword) && <p className="mt-1.5 text-xs text-red-500 flex items-center gap-1"><AlertCircle size={11} />{errors.confirmPassword}</p>}
                             </div>
 
                             {/* Special Note */}
@@ -476,7 +500,7 @@ export default function WLExpertRegister() {
                                     onBlur={() => handleBlur('specialNote')}
                                     className={(touched.specialNote && errors.specialNote) ? inputError : inputNormal} />
                                 <div className="flex items-center justify-between mt-1">
-                                    {(touched.specialNote && errors.specialNote) && <p className="text-xs text-red-500 flex items-center gap-1"><AlertCircle size={11} />{errors.specialNote}</p>}
+                                    {(touched.specialNote && errors.specialNote) && <p className="mt-1.5 text-xs text-red-500 flex items-center gap-1"><AlertCircle size={11} />{errors.specialNote}</p>}
                                     <span className={`text-xs ml-auto ${form.specialNote.length >= 50 ? 'text-amber-600' : 'text-slate-400'}`}>{form.specialNote.length} / 50</span>
                                 </div>
                             </div>
@@ -501,7 +525,7 @@ export default function WLExpertRegister() {
                                         className={`mt-1 w-4 h-4 rounded border-slate-300 text-[#234C6A] focus:ring-[#234C6A] ${(touched.terms && errors.terms) ? 'ring-2 ring-red-400 outline-none' : ''}`} />
                                     <span className="text-sm text-slate-600">I agree to the <button type="button" onClick={(e) => { e.preventDefault(); setShowTermsModal(true); }} className="text-[#234C6A] font-semibold hover:underline">Terms and Conditions</button></span>
                                 </label>
-                                {(touched.terms && errors.terms) && <p className="mt-1 text-xs text-red-500 flex items-center gap-1"><AlertCircle size={11} />{errors.terms}</p>}
+                                {(touched.terms && errors.terms) && <p className="mt-1.5 text-xs text-red-500 flex items-center gap-1"><AlertCircle size={11} />{errors.terms}</p>}
                             </div>
                         </div>
 

@@ -1,6 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import Dialog from '@mui/material/Dialog';
-import Button from '@mui/material/Button';
 import { useDispatch, useSelector } from 'react-redux';
 import { addParticipantsToCommunityChat, doFilterCustomers } from '../../../../api/api';
 import { fetchGroupHistory } from '../../../../api/chatApi';
@@ -175,14 +174,14 @@ export default function AddCommunityMembersDialog({ open, onClose, groupDetails,
                                         type="button"
                                         onClick={() => toggle(r.id)}
                                         className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm transition ${
-                                            on ? 'bg-sky-50 ring-1 ring-sky-200' : 'hover:bg-slate-50'
+                                            on ? 'bg-[#E8EEF4] ring-1 ring-[#BCD6EA]' : 'hover:bg-slate-50'
                                         }`}
                                     >
                                         <input
                                             type="checkbox"
                                             readOnly
                                             checked={on}
-                                            className="h-4 w-4 rounded border-slate-300 text-sky-600"
+                                            className="h-4 w-4 rounded border-slate-300 text-[#234C6A]"
                                         />
                                         <Avatar username={r.username} image={r.image} />
                                         <span className="min-w-0 flex-1">
@@ -197,12 +196,23 @@ export default function AddCommunityMembersDialog({ open, onClose, groupDetails,
                 )}
             </div>
             <div className="flex justify-end gap-2 border-t border-slate-100 px-4 py-3">
-                <Button onClick={onClose} disabled={submitting}>
+                <button
+                    type="button"
+                    onClick={onClose}
+                    disabled={submitting}
+                    className="rounded-xl px-4 py-2 text-sm font-semibold text-[#234C6A] transition hover:bg-[#E8EEF4] disabled:cursor-not-allowed disabled:opacity-50"
+                >
                     Cancel
-                </Button>
-                <Button variant="contained" onClick={() => void handleAdd()} disabled={submitting || selected.size === 0}>
+                </button>
+                <button
+                    type="button"
+                    onClick={() => void handleAdd()}
+                    disabled={submitting || selected.size === 0}
+                    className="rounded-xl px-5 py-2 text-sm font-semibold text-white shadow-md transition hover:brightness-[1.03] active:brightness-95 disabled:cursor-not-allowed disabled:opacity-50"
+                    style={{ background: 'linear-gradient(135deg, #234C6A 0%, #456882 100%)' }}
+                >
                     {submitting ? 'Adding…' : 'Add'}
-                </Button>
+                </button>
             </div>
         </Dialog>
     );

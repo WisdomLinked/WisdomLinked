@@ -23,6 +23,40 @@ function plainTextToMessageHtml(text: string): string {
     return "<p>" + escaped.replace(/\n/g, "<br>") + "</p>";
 }
 
+const MAX_CHAT_FILE_SIZE_BYTES = 1024 * 1024; // 1 MB per file
+const ALLOWED_CHAT_FILE_EXTENSIONS = [
+    "pdf",
+    "doc",
+    "docx",
+    "txt",
+    "csv",
+    "jpg",
+    "jpeg",
+    "png",
+    "webp",
+    "gif",
+    "xls",
+    "xlsx",
+    "ppt",
+    "pptx",
+];
+const CHAT_FILE_REQUIREMENTS_MESSAGE =
+    "Allowed formats: PDF, DOC, DOCX, TXT, CSV, JPG, JPEG, PNG, WEBP, GIF, XLS, XLSX, PPT, PPTX. Max size: 1 MB per file.";
+
+function getFileExtension(name: string): string {
+    const value = (name || "").trim();
+    if (!value.includes(".")) return "";
+    return value.split(".").pop()?.toLowerCase() || "";
+}
+
+function formatBytes(bytes: number): string {
+    if (!Number.isFinite(bytes) || bytes <= 0) return "0 B";
+    if (bytes < 1024) return `${bytes} B`;
+    const kb = bytes / 1024;
+    if (kb < 1024) return `${kb.toFixed(0)} KB`;
+    return `${(kb / 1024).toFixed(2)} MB`;
+}
+
 const NewMessageInput: React.FC<any> = ({ theme = "dark" }: any) => {
     const [_message, set_message] = useState("");
     const dispatch = useDispatch();
@@ -39,9 +73,28 @@ const NewMessageInput: React.FC<any> = ({ theme = "dark" }: any) => {
 
     const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
         const selectedFile = event.target.files?.[0];
-        if (selectedFile) {
-            set_file(selectedFile);
+        if (!selectedFile) return;
+
+        const extension = getFileExtension(selectedFile.name);
+        if (!extension || !ALLOWED_CHAT_FILE_EXTENSIONS.includes(extension)) {
+            dispatch(showAlert(`Unsupported file format. ${CHAT_FILE_REQUIREMENTS_MESSAGE}`));
+            if (fileInputRef.current) fileInputRef.current.value = "";
+            set_file(undefined);
+            return;
         }
+
+        if (selectedFile.size > MAX_CHAT_FILE_SIZE_BYTES) {
+            dispatch(
+                showAlert(
+                    `File is too large (${formatBytes(selectedFile.size)}). Max allowed is 1 MB per file.`,
+                ),
+            );
+            if (fileInputRef.current) fileInputRef.current.value = "";
+            set_file(undefined);
+            return;
+        }
+
+        set_file(selectedFile);
     };
 
     const { chat: { chosenChatDetails, chosenGroupChatDetails, conversationId, rcChannelId }, auth: { userDetails } } = useAppSelector((state) => state);
@@ -246,7 +299,7 @@ const NewMessageInput: React.FC<any> = ({ theme = "dark" }: any) => {
             try {
                 const response = await callApi('POST', 'auth/uploadChatFile', { email: userDetails.email }, file);
                 if (response?.status !== 'SUCCESS' || !response?.chatFile) {
-                    dispatch(showAlert(response?.error || 'Could not upload file'));
+                    dispatch(showAlert(response?.error || `Could not upload file. ${CHAT_FILE_REQUIREMENTS_MESSAGE}`));
                     return;
                 }
                 const message = `Chatfile: ${response.chatFile}#####${response.fileName || file.name}`;
@@ -273,6 +326,8 @@ const NewMessageInput: React.FC<any> = ({ theme = "dark" }: any) => {
                     if (result?.message) dispatch(addNewMessage(result.message));
                 }
                 set_message("");
+            } catch {
+                dispatch(showAlert(`Could not upload file. ${CHAT_FILE_REQUIREMENTS_MESSAGE}`));
             } finally {
                 setUploadingFile(false);
                 set_file(undefined);
@@ -380,6 +435,7 @@ const NewMessageInput: React.FC<any> = ({ theme = "dark" }: any) => {
                         ref={fileInputRef}
                         className="hidden"
                         onChange={handleFileChange}
+                        accept={ALLOWED_CHAT_FILE_EXTENSIONS.map(ext => `.${ext}`).join(",")}
                     />
                     <button
                         type="button"
@@ -414,6 +470,7 @@ const NewMessageInput: React.FC<any> = ({ theme = "dark" }: any) => {
                     ref={fileInputRef}
                     style={{ display: "none" }}
                     onChange={handleFileChange}
+                    accept={ALLOWED_CHAT_FILE_EXTENSIONS.map(ext => `.${ext}`).join(",")}
                 />
 
                 {showEmojiPicker && (

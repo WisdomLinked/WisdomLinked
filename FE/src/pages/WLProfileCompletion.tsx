@@ -7,25 +7,16 @@ import { showAlert } from '../actions/alertActions';
 import { useAppSelector } from '../store';
 import { autoLogin } from '../actions/authActions';
 
-// Shared Constants
+// Same majors / services as WLCustomerRegister & WLExpertRegister (regular sign-up)
 const ENGINEERING_MAJORS = [
-    'Computer Science', 'Electrical Engineering', 'Mechanical Engineering',
-    'Civil Engineering', 'Chemical Engineering', 'Aerospace Engineering',
-    'Biomedical Engineering', 'Industrial Engineering', 'Materials Science',
-    'Environmental Engineering', 'Nuclear Engineering', 'Petroleum Engineering',
-    'Software Engineering', 'Systems Engineering', 'General Engineering',
-    'Undecided'
+    'Aerospace Engineering', 'Biomedical Engineering', 'Chemical Engineering',
+    'Civil Engineering', 'Computer Engineering', 'Electrical Engineering',
+    'Environmental Engineering', 'Industrial Engineering', 'Mechanical Engineering',
+    'Materials Science & Engineering', 'Nuclear Engineering', 'Petroleum Engineering',
+    'Software Engineering', 'Systems Engineering', 'Other',
 ];
 
-const EXPERT_SERVICES = [
-    '1:1 Advice', 'Mock Interviews', 'Resume Review',
-    'Essay Feedback', 'General Mentorship'
-];
-
-const CUSTOMER_SERVICES = [
-    'Job Advice', 'Internship Advice', 'Research Opportunities',
-    'Graduate Guidance', 'Other'
-];
+const SIGNUP_SERVICES = ['Study abroad', 'Work abroad', 'Research guidance'];
 
 const FOCUS_RING = "focus:ring-2 focus:ring-[#234C6A]/20 focus:border-[#234C6A]";
 
@@ -40,8 +31,8 @@ export default function WLProfileCompletion() {
 
     const [form, setForm] = useState({
         majors: [] as string[],
-        servicesOffered: [] as string[], // array for expert
-        services: '',                    // string for customer
+        servicesOffered: [] as string[], // expert
+        services: [] as string[],         // customer — same options as email/password sign-up
         title: '',                       // expert only
         bio: '',                         // expert only
         resumeFile: null as File | null, // expert only
@@ -67,7 +58,7 @@ export default function WLProfileCompletion() {
                 setShowMajorDrop(false);
             }
             if (serviceRef.current && !serviceRef.current.contains(e.target as Node)) {
-                if (showServiceDrop) handleBlur('services');
+                if (showServiceDrop) handleBlur(isExpert ? 'servicesOffered' : 'services');
                 setShowServiceDrop(false);
             }
         };
@@ -88,7 +79,7 @@ export default function WLProfileCompletion() {
             }
             if (field === 'servicesOffered') return value.length === 0 ? 'Select at least one service' : '';
         } else {
-            if (field === 'services') return !value ? 'Please select what you are looking for' : '';
+            if (field === 'services') return value.length === 0 ? 'Select at least one service' : '';
         }
         return '';
     };
@@ -128,6 +119,13 @@ export default function WLProfileCompletion() {
         handleChange('servicesOffered', newServices);
     };
 
+    const toggleCustomerService = (s: string) => {
+        const newServices = form.services.includes(s)
+            ? form.services.filter(x => x !== s)
+            : [...form.services, s];
+        handleChange('services', newServices);
+    };
+
     const validate = () => {
         const e: Record<string, string> = {};
         const fieldsToValidate = ['majors'];
@@ -158,7 +156,7 @@ export default function WLProfileCompletion() {
         try {
             const data = {
                 keywords: form.majors,
-                services: isExpert ? form.servicesOffered : [form.services],
+                services: isExpert ? form.servicesOffered : form.services,
                 ...(isExpert && { 
                     title: form.title, 
                     description: form.bio 
@@ -340,7 +338,7 @@ export default function WLProfileCompletion() {
                                     {errors.servicesOffered && <p className="mt-1.5 text-xs text-red-500 font-medium">{errors.servicesOffered}</p>}
                                     {showServiceDrop && (
                                         <div className="absolute top-full left-0 right-0 mt-2 bg-white border border-slate-200 rounded-xl shadow-xl overflow-hidden z-50 p-1.5">
-                                            {EXPERT_SERVICES.map(s => (
+                                            {SIGNUP_SERVICES.map(s => (
                                                 <button
                                                     key={s}
                                                     type="button"
@@ -355,30 +353,42 @@ export default function WLProfileCompletion() {
                                     )}
                                 </>
                             ) : (
-                                // Customer Services Single-select
+                                // Customer services — same options & multi-select behavior as WLCustomerRegister
                                 <>
                                     <div
                                         onClick={() => setShowServiceDrop(!showServiceDrop)}
-                                        className={`cursor-pointer h-[48px] flex items-center justify-between ${errors.services ? inputError : inputNormal}`}
+                                        className={`cursor-pointer min-h-[48px] flex flex-wrap items-center gap-2 ${errors.services ? inputError : inputNormal}`}
                                     >
-                                        <span className={form.services ? "text-slate-800 font-medium" : "text-slate-400"}>
-                                            {form.services || "Select your primary goal"}
-                                        </span>
-                                        <ChevronDown size={18} className="text-slate-400" />
+                                        {form.services.length === 0 ? (
+                                            <span className="text-slate-400">Select services</span>
+                                        ) : (
+                                            form.services.map(s => (
+                                                <span key={s} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-blue-50 text-blue-700 text-xs font-semibold border border-blue-100">
+                                                    {s}
+                                                    <button
+                                                        type="button"
+                                                        onClick={(e) => { e.stopPropagation(); toggleCustomerService(s); }}
+                                                        className="hover:text-blue-900 focus:outline-none"
+                                                    >
+                                                        &times;
+                                                    </button>
+                                                </span>
+                                            ))
+                                        )}
+                                        <ChevronDown size={18} className="text-slate-400 ml-auto flex-shrink-0" />
                                     </div>
                                     {errors.services && <p className="mt-1.5 text-xs text-red-500 font-medium">{errors.services}</p>}
                                     {showServiceDrop && (
                                         <div className="absolute top-full left-0 right-0 mt-2 bg-white border border-slate-200 rounded-xl shadow-xl overflow-hidden z-50 p-1.5">
-                                            {CUSTOMER_SERVICES.map(s => (
+                                            {SIGNUP_SERVICES.map(s => (
                                                 <button
                                                     key={s}
                                                     type="button"
-                                                    onClick={() => { handleChange('services', s); setShowServiceDrop(false); }}
-                                                    className={`w-full text-left px-3 py-2.5 rounded-lg text-sm transition-colors ${
-                                                        form.services === s ? "bg-blue-50 text-blue-700 font-semibold" : "text-slate-600 hover:bg-slate-50"
-                                                    }`}
+                                                    onClick={() => toggleCustomerService(s)}
+                                                    className="w-full flex items-center justify-between px-3 py-2.5 rounded-lg hover:bg-slate-50 text-sm text-left transition-colors"
                                                 >
-                                                    {s}
+                                                    <span className={form.services.includes(s) ? "font-semibold text-slate-800" : "text-slate-600"}>{s}</span>
+                                                    {form.services.includes(s) && <Check size={16} className="text-blue-500" />}
                                                 </button>
                                             ))}
                                         </div>

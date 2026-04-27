@@ -16,12 +16,14 @@ import {
     deleteMessageAsUser,
     cleanRoomHistoryAsUser,
     purgeRoomMessagesBestEffort,
+    getRocketOnlineUsernames,
 } from '../services/rocketchat.service';
 import { wlDisplayName } from '../utils/wlDisplayName';
 
 const Conversation = require('../models/Conversation');
 const GroupChat = require('../models/GroupChat');
 const User = require('../models/User');
+const MeetingThread = require('../models/MeetingThread');
 
 /** RC REST may return `ts` as ISO string or `{ $date: n }` — normalize for the React app. */
 const normalizeRcMessageTs = (ts: any): string => {
@@ -50,6 +52,14 @@ const wlAuthorFromUser = (u: any) => ({
 const toDateMillis = (ts: any): number => new Date(normalizeRcMessageTs(ts)).getTime();
 
 const WL_COMMUNITY_SYS_PREFIX = '__WL_COMMUNITY_SYS__::';
+const CHAT_HISTORY_PAGE_SIZE = 50;
+const CHAT_HISTORY_MAX_PAGE_SIZE = 100;
+
+export const filterOnlineUserIdsByAllowedSet = (users: any[], allowedIds: Set<string>) =>
+    (users || [])
+        .map((u: any) => String(u?._id || ''))
+        .filter((id: string) => !!id && allowedIds.has(id))
+        .map((id: string) => ({ userId: id }));
 
 /** RC uses `t` on messages; some payloads also expose `type`. */
 const normalizeRcMsgSubtype = (t: any): string => String(t ?? '').trim().toLowerCase() || 'message';
@@ -387,8 +397,11 @@ export const getDirectHistory = async (req: any, res: Response) => {
     try {
         const { userId } = req.user;
         const { conversationId } = req.params;
-        const page = parseInt(req.query.page as string) || 0;
-        const limit = parseInt(req.query.limit as string) || 20;
+        const page = Math.max(parseInt(req.query.page as string) || 0, 0);
+        const limit = Math.min(
+            Math.max(parseInt(req.query.limit as string) || CHAT_HISTORY_PAGE_SIZE, 1),
+            CHAT_HISTORY_MAX_PAGE_SIZE,
+        );
 
         const conversation = await Conversation.findById(conversationId);
         if (!conversation) return res.status(404).json({ error: 'Conversation not found' });
@@ -443,6 +456,128 @@ export const getDirectHistory = async (req: any, res: Response) => {
     } catch (err: any) {
         console.error('[chat.getDirectHistory]', err.message);
         return res.status(500).json({ error: err.message });
+    }
+};
+
+/** GET /api/chat/dm/call-history/:conversationId?limit=30 */
+export const getDirectCallHistory = async (req: any, res: Response) => {
+    try {
+        const { userId } = req.user;
+        const { conversationId } = req.params;
+        const limit = Math.min(
+            Math.max(parseInt(req.query.limit as string) || 30, 1),
+            200,
+        );
+
+        const conversation = await Conversation.findById(conversationId);
+        if (!conversation) return res.status(404).json({ error: 'Conversation not found' });
+
+        if (!conversation.participants.some((p: any) => p.toString() === String(userId))) {
+            return res.status(403).json({ error: 'You are not a participant' });
+        }
+
+        const rows = await MeetingThread.find({ conversationId })
+            .sort({ startedAt: -1 })
+            .limit(limit)
+            .populate('startedBy', 'username image role status');
+
+        const history = rows.map((m: any) => ({
+            _id: m._id,
+            startedAt: m.startedAt,
+            endedAt: m.endedAt || null,
+            duration: Number(m.duration || 0),
+            status: m.status,
+            startedBy: m.startedBy
+                ? {
+                      _id: m.startedBy._id,
+                      username: m.startedBy.username,
+                      image: m.startedBy.image,
+                      role: m.startedBy.role,
+                      status: m.startedBy.status,
+                  }
+                : null,
+        }));
+
+        return res.status(200).json({ history });
+    } catch (err: any) {
+        console.error('[chat.getDirectCallHistory]', err.message);
+        return res.status(500).json({ error: err.message });
+    }
+};
+
+/** GET /api/chat/online-users */
+export const getOnlineUsers = async (req: any, res: Response) => {
+    try {
+        const { userId } = req.user || {};
+        if (!userId) {
+            return res.status(401).json({ success: false, error: 'Unauthorized', onlineUsers: [] });
+        }
+
+        const me = await User.findById(userId)
+            .select('_id friends directConversations generalChats groupChats')
+            .populate({
+                path: 'directConversations',
+                select: 'participants',
+                populate: { path: 'participants', select: '_id' },
+            })
+            .populate({
+                path: 'generalChats',
+                select: 'participants admin',
+                populate: [
+                    { path: 'participants', select: '_id' },
+                    { path: 'admin', select: '_id' },
+                ],
+            })
+            .populate({
+                path: 'groupChats',
+                select: 'participants admin',
+                populate: [
+                    { path: 'participants', select: '_id' },
+                    { path: 'admin', select: '_id' },
+                ],
+            });
+
+        if (!me) {
+            return res.status(404).json({ success: false, error: 'User not found', onlineUsers: [] });
+        }
+
+        const allowedIds = new Set<string>();
+        const pushId = (v: any) => {
+            const s = String(v?._id ?? v?.id ?? v ?? '').trim();
+            if (s) allowedIds.add(s);
+        };
+        pushId(me._id);
+        (me.friends || []).forEach((f: any) => pushId(f));
+        (me.directConversations || []).forEach((conv: any) => {
+            (conv?.participants || []).forEach((p: any) => pushId(p));
+        });
+        (me.generalChats || []).forEach((chat: any) => {
+            (chat?.participants || []).forEach((p: any) => pushId(p));
+            pushId(chat?.admin);
+        });
+        (me.groupChats || []).forEach((chat: any) => {
+            (chat?.participants || []).forEach((p: any) => pushId(p));
+            pushId(chat?.admin);
+        });
+
+        const rcOnlineUsernames = await getRocketOnlineUsernames();
+        if (!rcOnlineUsernames.length) {
+            return res.status(200).json({ success: true, onlineUsers: [] });
+        }
+
+        const users = await User.find({
+            $or: [
+                { rocketChatUsername: { $in: rcOnlineUsernames } },
+                { username: { $in: rcOnlineUsernames } },
+            ],
+        }).select('_id');
+
+        const onlineUsers = filterOnlineUserIdsByAllowedSet(users, allowedIds);
+
+        return res.status(200).json({ success: true, onlineUsers });
+    } catch (err: any) {
+        console.error('[chat.getOnlineUsers]', err.message);
+        return res.status(500).json({ success: false, error: err.message, onlineUsers: [] });
     }
 };
 
@@ -514,8 +649,11 @@ export const getGroupHistory = async (req: any, res: Response) => {
     try {
         const { userId } = req.user;
         const { groupChatId } = req.params;
-        const page = parseInt(req.query.page as string) || 0;
-        const limit = parseInt(req.query.limit as string) || 20;
+        const page = Math.max(parseInt(req.query.page as string) || 0, 0);
+        const limit = Math.min(
+            Math.max(parseInt(req.query.limit as string) || CHAT_HISTORY_PAGE_SIZE, 1),
+            CHAT_HISTORY_MAX_PAGE_SIZE,
+        );
 
         const groupChat = await GroupChat.findById(groupChatId)
             .populate('participants', 'email username rocketChatUsername image role status')

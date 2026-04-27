@@ -47,6 +47,15 @@ const COUNTRIES = [
   'Netherlands', 'Switzerland', 'Sweden', 'Italy', 'Spain', 'Pakistan', 'Nigeria',
   'Egypt', 'Kenya', 'South Africa', 'Argentina', 'Thailand', 'Malaysia', 'Other',
 ];
+const CONTACT_MESSAGE_MAX_LENGTH = 100;
+const getPasswordUnmetRules = (password: string) => {
+  const unmet: string[] = [];
+  if (password.length < 8) unmet.push('at least 8 characters');
+  if (!/[A-Z]/.test(password)) unmet.push('one uppercase letter');
+  if (!/[0-9]/.test(password)) unmet.push('one number');
+  if (!/[^A-Za-z0-9]/.test(password)) unmet.push('one special character');
+  return unmet;
+};
 
 function ContactFormModal({ onClose }: { onClose: () => void }) {
   const [form, setForm] = useState({ name: '', email: '', countryCode: '+1', phone: '', subject: '', description: '' });
@@ -79,7 +88,7 @@ function ContactFormModal({ onClose }: { onClose: () => void }) {
     else if (!/^\d{6,15}$/.test(form.phone.replace(/\s/g, ''))) e.phone = 'Enter a valid phone number';
     if (!form.subject.trim()) e.subject = 'Subject is required';
     if (!form.description.trim()) e.description = 'Main message is required';
-    else if (form.description.trim().length > 50) e.description = 'Main message must be 50 characters or less';
+    else if (form.description.trim().length > CONTACT_MESSAGE_MAX_LENGTH) e.description = `Main message must be ${CONTACT_MESSAGE_MAX_LENGTH} characters or less`;
     return e;
   };
 
@@ -201,14 +210,14 @@ function ContactFormModal({ onClose }: { onClose: () => void }) {
                   <label className="block text-xs font-semibold text-slate-600 mb-1.5">
                     <span className="flex items-center gap-1.5"><FileText size={12} /> Main message</span>
                   </label>
-                  <textarea rows={3} placeholder="Brief message (max 50 characters)"
+                  <textarea rows={3} placeholder={`Brief message (max ${CONTACT_MESSAGE_MAX_LENGTH} characters)`}
                     value={form.description}
-                    maxLength={50}
+                    maxLength={CONTACT_MESSAGE_MAX_LENGTH}
                     onChange={e => { setForm(f => ({ ...f, description: e.target.value })); setErrors(er => ({ ...er, description: '' })); }}
                     className={`${errors.description ? inputError : inputNormal} resize-none`} style={{ lineHeight: 1.6 }} />
                   <div className="flex items-center justify-between mt-1">
                     {errors.description ? <p className="text-xs text-red-500 flex items-center gap-1"><AlertCircle size={11} />{errors.description}</p> : <span />}
-                    <span className={`text-xs ml-auto ${form.description.length >= 50 ? 'text-red-500' : form.description.length > 0 ? 'text-slate-500' : 'text-slate-400'}`}>{form.description.length} / 50</span>
+                    <span className={`text-xs ml-auto ${form.description.length >= CONTACT_MESSAGE_MAX_LENGTH ? 'text-red-500' : form.description.length > 0 ? 'text-slate-500' : 'text-slate-400'}`}>{form.description.length} / {CONTACT_MESSAGE_MAX_LENGTH}</span>
                   </div>
                 </div>
               </div>
@@ -291,8 +300,12 @@ function StudentSignupForm({ onBack, onClose, onGoLogin, inputNormal, inputError
     if (!form.email.trim()) e.email = 'Email is required';
     else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) e.email = 'Enter a valid email';
     if (!form.password) e.password = 'Password is required';
-    else if (form.password.length < 8) e.password = 'Password must be at least 8 characters';
-    if (form.password !== form.confirmPassword) e.confirmPassword = 'Passwords do not match';
+    else {
+      const unmet = getPasswordUnmetRules(form.password);
+      if (unmet.length) e.password = `Password must include ${unmet.join(', ')}.`;
+    }
+    if (!form.confirmPassword) e.confirmPassword = 'Please confirm your password';
+    else if (form.password !== form.confirmPassword) e.confirmPassword = 'Passwords do not match';
     if (!form.terms) e.terms = 'You must accept the terms and conditions';
     return e;
   };
@@ -512,8 +525,12 @@ function ExpertSignupForm({ onBack, onClose, onGoLogin, inputNormal, inputError 
     if (!form.email.trim()) e.email = 'Email is required';
     else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) e.email = 'Enter a valid email';
     if (!form.password) e.password = 'Password is required';
-    else if (form.password.length < 8) e.password = 'Password must be at least 8 characters';
-    if (form.password !== form.confirmPassword) e.confirmPassword = 'Passwords do not match';
+    else {
+      const unmet = getPasswordUnmetRules(form.password);
+      if (unmet.length) e.password = `Password must include ${unmet.join(', ')}.`;
+    }
+    if (!form.confirmPassword) e.confirmPassword = 'Please confirm your password';
+    else if (form.password !== form.confirmPassword) e.confirmPassword = 'Passwords do not match';
     if (!form.terms) e.terms = 'You must accept the terms and conditions';
     return e;
   };

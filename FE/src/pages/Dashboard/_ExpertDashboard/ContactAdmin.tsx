@@ -7,6 +7,7 @@ import { useAppSelector } from '../../../store';
 import { showAlert } from '../../../actions/alertActions';
 
 export default function ContactAdmin() {
+  const MAX_CONTACT_MESSAGE_LENGTH = 100;
   const dispatch = useDispatch();
   const {
     auth: { userDetails },
@@ -31,6 +32,10 @@ export default function ContactAdmin() {
     const body = message.trim();
     if (!body) {
       dispatch(showAlert('Please enter your message before submitting.'));
+      return;
+    }
+    if (body.length > MAX_CONTACT_MESSAGE_LENGTH) {
+      dispatch(showAlert(`Please keep the message within ${MAX_CONTACT_MESSAGE_LENGTH} characters.`));
       return;
     }
     if (!email) {
@@ -81,9 +86,15 @@ export default function ContactAdmin() {
                 value={message}
                 onChange={(e) => setMessage(e.target.value)}
                 rows={8}
-                placeholder="Write your issue, recommendation, or message to admin..."
+                placeholder={`Write your issue, recommendation, or message to admin (max ${MAX_CONTACT_MESSAGE_LENGTH} chars)...`}
+                maxLength={MAX_CONTACT_MESSAGE_LENGTH}
                 className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-800 outline-none transition focus:border-[#234C6A] focus:ring-2 focus:ring-[#234C6A]/20"
               />
+              <div className="mt-1 text-right">
+                <span className={`text-xs ${message.length >= MAX_CONTACT_MESSAGE_LENGTH ? 'text-red-500' : 'text-slate-500'}`}>
+                  {message.length} / {MAX_CONTACT_MESSAGE_LENGTH}
+                </span>
+              </div>
             </div>
 
             <div className="flex items-center justify-between gap-3">

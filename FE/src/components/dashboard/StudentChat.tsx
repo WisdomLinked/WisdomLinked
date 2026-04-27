@@ -6,7 +6,7 @@ import DialogTitle from '@mui/material/DialogTitle';
 import DialogContent from '@mui/material/DialogContent';
 import DialogActions from '@mui/material/DialogActions';
 import Button from '@mui/material/Button';
-import { MessageCircle, Users, Plus, X, CheckCircle2, MoreVertical } from 'lucide-react';
+import { MessageCircle, Users, Plus, X, CheckCircle2, MoreVertical, UserPlus } from 'lucide-react';
 import Messenger from '../../pages/Dashboard/Messenger/Messenger';
 import { useAppSelector } from '../../store';
 import { onSubscriptionChanged, subscribeToRoom } from '../../services/rcRealtime';
@@ -19,8 +19,10 @@ import {
   doFilterCustomers,
   searchPrivateChatUsers,
   joinPrivateChat,
+  addParticipantsToCommunityChat,
 } from '../../api/api';
-import { clearDmThread, hideDmFromList, fetchDmUnreadSnapshot } from '../../api/chatApi';
+import { clearDmThread, hideDmFromList, fetchDmUnreadSnapshot, fetchOnlineUsers } from '../../api/chatApi';
+import { setOnlineUsers } from '../../actions/friendActions';
 import { setDmUnreadByRidBulk, patchDmUnreadRid } from '../../actions/chatActions';
 import {
   setChosenChatDetails,
@@ -61,11 +63,16 @@ type PrivateRow =
   /** Student: expert from directory search (opens / ensures 1:1 DM). */
   | { kind: 'studentSearchedExpert'; id: string; title: string; lastLine: string; raw: any };
 
+const looksLikeImageUrl = (value: unknown): value is string => {
+  const v = typeof value === 'string' ? value.trim() : '';
+  return !!v && (/^https?:\/\//i.test(v) || /^data:image\//i.test(v) || /^blob:/i.test(v) || v.startsWith('/'));
+};
+
 const StudentChat: React.FC = () => {
   const dispatch = useDispatch();
   const {
     auth: { userDetails },
-    friends: { friends, groupChatList },
+    friends: { friends, groupChatList, onlineUsers },
     chat: { chosenChatDetails, chosenGroupChatDetails, dmUnreadByRid },
   } = useAppSelector((s: any) => s);
 
@@ -81,6 +88,19 @@ const StudentChat: React.FC = () => {
     userDetails && String(userDetails.role || '').toLowerCase() === 'customer';
   const isExpert = userDetails && String(userDetails.role || '').toLowerCase() === 'expert';
 
+  const onlineIdSet = useMemo(() => {
+    const ids = new Set<string>();
+    if (!Array.isArray(onlineUsers)) return ids;
+    onlineUsers.forEach((user: any) => {
+      const candidates = [user?.userId, user?.id, user?._id, user?.user?._id, user?.user?.id];
+      candidates.forEach((v: any) => {
+        const s = String(v ?? '').trim();
+        if (s) ids.add(s);
+      });
+    });
+    return ids;
+  }, [onlineUsers]);
+
   const currentUserId = userDetails?._id ?? userDetails?.id ?? userDetails?.userId ?? null;
 
   const [createOpen, setCreateOpen] = useState(false);
@@ -90,6 +110,9 @@ const StudentChat: React.FC = () => {
   const [leaveCommunityConfirmOpen, setLeaveCommunityConfirmOpen] = useState(false);
   const [leaveCommunityRow, setLeaveCommunityRow] = useState<CommunityRow | null>(null);
   const [privateDmMenuRow, setPrivateDmMenuRow] = useState<Extract<PrivateRow, { kind: 'privateDm' }> | null>(null);
+  const [addToCommunityOpen, setAddToCommunityOpen] = useState(false);
+  const [addToCommunityTarget, setAddToCommunityTarget] = useState<Extract<PrivateRow, { kind: 'privateDm' }> | null>(null);
+  const [addingToCommunityId, setAddingToCommunityId] = useState<string | null>(null);
   const [newName, setNewName] = useState('');
   const [newDescription, setNewDescription] = useState('');
   const [newOpenToAll, setNewOpenToAll] = useState(true);
@@ -189,6 +212,45 @@ const StudentChat: React.FC = () => {
     };
   }, [dispatch, isCustomer, isExpert]);
 
+  // Online presence: keep friend/direct-chat online ids fresh for green-dot indicators.
+  useEffect(() => {
+    if (!isCustomer && !isExpert) return;
+    let cancelled = false;
+    let timer: ReturnType<typeof setInterval> | null = null;
+
+    const pullOnlineUsers = async () => {
+      const res = await fetchOnlineUsers();
+      if (cancelled) return;
+      if (res?.success && Array.isArray(res.onlineUsers)) {
+        dispatch(setOnlineUsers(res.onlineUsers) as any);
+      } else {
+        // Avoid stale "online" dots when presence cannot be confirmed.
+        dispatch(setOnlineUsers([]) as any);
+      }
+    };
+
+    void pullOnlineUsers();
+    timer = setInterval(() => {
+      void pullOnlineUsers();
+    }, 20000);
+
+    const onFocus = () => {
+      void pullOnlineUsers();
+    };
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') void pullOnlineUsers();
+    };
+    window.addEventListener('focus', onFocus);
+    document.addEventListener('visibilitychange', onVisible);
+
+    return () => {
+      cancelled = true;
+      if (timer) clearInterval(timer);
+      window.removeEventListener('focus', onFocus);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, [dispatch, isCustomer, isExpert]);
+
   // Event-driven refresh: react to RC user subscription updates (DMs + community channels/groups).
   useEffect(() => {
     if (!isCustomer && !isExpert) return;
@@ -237,73 +299,71 @@ const StudentChat: React.FC = () => {
 
   useEffect(() => {
     let cancelled = false;
+    const resolveProfileImage = async (imageRef: unknown): Promise<string | null> => {
+      const raw = typeof imageRef === 'string' ? imageRef.trim() : '';
+      if (!raw) return null;
+      if (looksLikeImageUrl(raw)) return raw;
+      try {
+        const fetched = (await profileImageFetch(raw, 'small')) as string;
+        return typeof fetched === 'string' && fetched.trim() ? fetched : null;
+      } catch {
+        return null;
+      }
+    };
+
     const loadPrivate = async () => {
       if (isCustomer) {
-        const rows: PrivateRow[] = privateDmSidebarDerived.map(p => ({
-          kind: 'privateDm' as const,
-          otherUserId: p.otherUserId,
-          title: p.title,
-          lastLine: p.lastLine,
-          image: p.image ?? null,
-          rcChannelId: p.rcChannelId,
-          conversationId: p.conversationId,
-        }));
+        const rows: PrivateRow[] = await Promise.all(
+          privateDmSidebarDerived.map(async p => ({
+            kind: 'privateDm' as const,
+            otherUserId: p.otherUserId,
+            title: p.title,
+            lastLine: p.lastLine,
+            image: await resolveProfileImage(p.image),
+            rcChannelId: p.rcChannelId,
+            conversationId: p.conversationId,
+          })),
+        );
         if (!cancelled) setPrivateRows(rows);
         return;
       }
       if (isExpert) {
         const friendRows: PrivateRow[] = await Promise.all(
           (friends || []).map(async (friend: any) => {
-            let image: string | null = null;
-            if (friend.image) {
-              try {
-                image = (await profileImageFetch(friend.image, 'small')) as string;
-              } catch {
-                image = null;
-              }
-            }
             return {
               kind: 'friend' as const,
               id: friend.id,
               title: friend.username,
               lastLine: friend.email || '',
               missedChats: friend.missedChats,
-              image,
+              image: await resolveProfileImage(friend.image),
             };
           }),
         );
         const friendIds = new Set(friendRows.map(f => f.id));
-        const dmRows: PrivateRow[] = privateDmSidebarDerived
-          .filter(p => !friendIds.has(p.otherUserId))
-          .map(p => ({
+        const dmRows: PrivateRow[] = await Promise.all(
+          privateDmSidebarDerived.filter(p => !friendIds.has(p.otherUserId)).map(async p => ({
             kind: 'privateDm' as const,
             otherUserId: p.otherUserId,
             title: p.title,
             lastLine: p.lastLine,
-            image: p.image ?? null,
+            image: await resolveProfileImage(p.image),
             rcChannelId: p.rcChannelId,
             conversationId: p.conversationId,
-          }));
+          })),
+        );
         if (!cancelled) setPrivateRows([...friendRows, ...dmRows]);
         return;
       }
       const updated = await Promise.all(
         (friends || []).map(async (friend: any) => {
-          let image: string | null = null;
-          if (friend.image) {
-            try {
-              image = (await profileImageFetch(friend.image, 'small')) as string;
-            } catch {
-              image = null;
-            }
-          }
           return {
             kind: 'friend' as const,
             id: friend.id,
             title: friend.username,
             lastLine: friend.email || '',
             missedChats: friend.missedChats,
-            image,
+            image: await resolveProfileImage(friend.image),
           };
         }),
       );
@@ -691,6 +751,36 @@ const StudentChat: React.FC = () => {
     setCommunityMenuRow(null);
   };
 
+  useEffect(() => {
+    const onPointerDown = (event: MouseEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (!target) return;
+
+      if (communityMenuOpenId) {
+        const insideCommunityMenu = target.closest('[data-community-menu-root="true"]');
+        if (!insideCommunityMenu) closeCommunityMenu();
+      }
+
+      if (privateDmMenuOpenId) {
+        const insidePrivateMenu = target.closest('[data-private-dm-menu-root="true"]');
+        if (!insidePrivateMenu) closePrivateDmMenu();
+      }
+    };
+
+    const onEscape = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      if (communityMenuOpenId) closeCommunityMenu();
+      if (privateDmMenuOpenId) closePrivateDmMenu();
+    };
+
+    document.addEventListener('mousedown', onPointerDown);
+    document.addEventListener('keydown', onEscape);
+    return () => {
+      document.removeEventListener('mousedown', onPointerDown);
+      document.removeEventListener('keydown', onEscape);
+    };
+  }, [communityMenuOpenId, privateDmMenuOpenId]);
+
   const openCommunityMenu = (e: React.MouseEvent<HTMLElement>, row: CommunityRow, menuId: string) => {
     e.preventDefault();
     e.stopPropagation();
@@ -751,6 +841,50 @@ const StudentChat: React.FC = () => {
     }
   };
 
+  const openAddToCommunityDialog = () => {
+    const row = privateDmMenuRow;
+    closePrivateDmMenu();
+    if (!row?.otherUserId) return;
+    setAddToCommunityTarget(row);
+    setAddToCommunityOpen(true);
+  };
+
+  const closeAddToCommunityDialog = () => {
+    setAddToCommunityOpen(false);
+    setAddToCommunityTarget(null);
+    setAddingToCommunityId(null);
+  };
+
+  const isAlreadyInCommunity = (chat: CommunityRow, userId: string) => {
+    const participants = chat?.raw?.participants ?? [];
+    return participants.some((p: any) => String(p?._id ?? p?.id ?? p) === String(userId));
+  };
+
+  const addStudentToCommunity = async (chat: CommunityRow) => {
+    const target = addToCommunityTarget;
+    if (!target?.otherUserId) return;
+    const communityChatId = String(chat._id);
+    setAddingToCommunityId(communityChatId);
+    try {
+      const res: any = await addParticipantsToCommunityChat({
+        communityChatId,
+        participantIds: [String(target.otherUserId)],
+      });
+      if (res?.status === 'SUCCESS' || res?.success) {
+        dispatch(showAlert(`Added ${target.title} to ${chat.name}`));
+        await loadCommunityChats();
+        dispatch(updateMe() as any);
+        closeAddToCommunityDialog();
+      } else {
+        dispatch(showAlert(res?.error || res?.message || 'Could not add member to community'));
+      }
+    } catch (e: any) {
+      dispatch(showAlert(e?.response?.data?.error || e?.message || 'Could not add member to community'));
+    } finally {
+      setAddingToCommunityId(null);
+    }
+  };
+
   const openFriend = (row: Extract<PrivateRow, { kind: 'friend' }>) => {
     dispatch(setChosenChatDetails({ userId: row.id, username: row.title, image: row.image }));
     dispatch({
@@ -795,6 +929,10 @@ const StudentChat: React.FC = () => {
     String(chosenGroupChatDetails?._id) === String(id);
 
   const isFriendActive = (id: string) => String(chosenChatDetails?.userId) === String(id);
+  const isUserOnline = (userId: string) => {
+    const id = String(userId ?? '').trim();
+    return !!id && onlineIdSet.has(id);
+  };
 
   return (
     <div className="flex h-full bg-wl-chatGold text-slate-900">
@@ -837,6 +975,23 @@ const StudentChat: React.FC = () => {
         </div>
         <div className="flex-1 overflow-y-auto px-3 py-3 space-y-4">
           <div>
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">Communities</p>
+              {filteredCommunity.some(chat => {
+                const crid = chat.raw?.rcChannelId ? String(chat.raw.rcChannelId) : '';
+                const liveUnread = crid
+                  ? Math.max(Number(dmUnreadByRid?.[crid] || 0), Number(rcUnreadByRid?.[crid] || 0))
+                  : 0;
+                const persistedUnread = Math.max(Number(chat.missedChats || 0), 0);
+                return liveUnread > 0 || persistedUnread > 0;
+              }) ? (
+                <span
+                  className="inline-block h-2.5 w-2.5 rounded-full bg-red-500 ring-2 ring-white"
+                  title="New community messages"
+                  aria-label="New community messages"
+                />
+              ) : null}
+            </div>
             {filteredCommunity.length === 0 ? (
               <p className="px-2 py-3 text-[11px] text-slate-500">
                 {communityQuery.trim()
@@ -854,13 +1009,12 @@ const StudentChat: React.FC = () => {
                       Number(rcUnreadByRid?.[crid] || 0),
                     )
                   : 0;
-                const lastLine =
-                  crid && unreadCount > 0
-                    ? `${unreadCount > 99 ? '99+' : unreadCount}+ new message${unreadCount > 1 ? 's' : ''}`
-                    : chat.lastLine;
+                const persistedUnread = Math.max(Number(chat.missedChats || 0), 0);
+                const hasUnread = unreadCount > 0 || persistedUnread > 0;
+                const lastLine = chat.lastLine;
                 const rowTone = active
                   ? 'bg-[#E8EEF4] text-slate-900'
-                  : unreadCount > 0
+                  : hasUnread
                     ? 'bg-amber-50/80 text-slate-900 ring-1 ring-amber-200/80 hover:bg-amber-50'
                     : 'hover:bg-slate-100 text-slate-700';
                 const menuId = String(chat._id);
@@ -875,10 +1029,12 @@ const StudentChat: React.FC = () => {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between gap-2">
                         <p className="truncate font-semibold text-[11px]">{chat.name}</p>
-                        {unreadCount > 0 ? (
-                          <span className="ml-1 shrink-0 rounded-full bg-amber-500/20 px-1.5 text-[10px] font-semibold text-amber-800">
-                            {(unreadCount > 99 ? '99+' : unreadCount) + '+'}
-                          </span>
+                        {hasUnread ? (
+                          <span
+                            className="ml-1 inline-block h-2.5 w-2.5 shrink-0 rounded-full bg-red-500 ring-2 ring-white"
+                            title="New community messages"
+                            aria-label="New community messages"
+                          />
                         ) : null}
                       </div>
                       <p className="mt-0.5 line-clamp-2 text-[10px] text-slate-500">{lastLine}</p>
@@ -888,8 +1044,12 @@ const StudentChat: React.FC = () => {
                 return (
                   <div
                     key={chat._id}
+                    data-community-menu-root="true"
                     className={`relative mb-1 flex w-full items-stretch overflow-visible rounded-xl text-xs transition-colors ${rowTone}`}
                   >
+                    {hasUnread ? (
+                      <span className="pointer-events-none absolute right-1.5 top-1.5 inline-block h-2.5 w-2.5 rounded-full bg-red-500 ring-2 ring-white" />
+                    ) : null}
                     <button
                       type="button"
                       onClick={() => void openCommunity(chat)}
@@ -984,6 +1144,13 @@ const StudentChat: React.FC = () => {
                         ? isFriendActive(row.otherUserId)
                         : false;
                 const title = row.title;
+                const presenceUserId =
+                  row.kind === 'privateDm'
+                    ? row.otherUserId
+                    : row.kind === 'friend' || row.kind === 'expertCustomer' || row.kind === 'studentSearchedExpert'
+                      ? row.id
+                      : '';
+                const online = presenceUserId ? isUserOnline(presenceUserId) : false;
                 const unreadCount =
                   row.kind === 'privateDm' && row.rcChannelId
                     ? Math.max(Number(dmUnreadByRid?.[row.rcChannelId] || 0), Number(rcUnreadByRid?.[row.rcChannelId] || 0))
@@ -1024,13 +1191,26 @@ const StudentChat: React.FC = () => {
                 const inner = (
                   <>
                     <div className="mt-0.5">
-                      <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-slate-800 text-[10px] text-white">
-                        {initials}
+                      <span className="inline-flex h-7 w-7 items-center justify-center overflow-hidden rounded-full border border-[#BCD6EA] bg-[#E8EEF4] text-[10px] font-semibold text-[#234C6A]">
+                        {row.image ? (
+                          <img src={row.image} alt={title} className="h-full w-full object-cover" />
+                        ) : (
+                          initials
+                        )}
                       </span>
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between gap-2">
-                        <p className="truncate font-semibold text-[11px]">{title}</p>
+                        <p className="truncate font-semibold text-[11px] flex items-center gap-1">
+                          {title}
+                          {online ? (
+                            <span
+                              className="inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500"
+                              aria-label="Online"
+                              title="Online"
+                            />
+                          ) : null}
+                        </p>
                         {row.kind === 'friend' && row.missedChats ? (
                           <span className="ml-1 shrink-0 rounded-full bg-emerald-500/20 px-1.5 text-[10px] text-emerald-600">
                             {row.missedChats}
@@ -1052,6 +1232,7 @@ const StudentChat: React.FC = () => {
                   return (
                     <div
                       key={rowKey}
+                      data-private-dm-menu-root="true"
                       className={`relative mb-1 flex w-full items-stretch overflow-visible rounded-xl text-xs transition-colors ${rowTone}`}
                     >
                       <button
@@ -1079,6 +1260,15 @@ const StudentChat: React.FC = () => {
                       </IconButton>
                       {menuOpen ? (
                         <div className="absolute right-2 top-[calc(100%+4px)] z-20 min-w-[150px] rounded-lg border border-slate-200 bg-white p-1 shadow-lg">
+                          {isExpert ? (
+                            <button
+                              type="button"
+                              className="w-full rounded-md px-3 py-2 text-left text-[12px] font-semibold text-slate-800 hover:bg-slate-50"
+                              onClick={openAddToCommunityDialog}
+                            >
+                              Add to community
+                            </button>
+                          ) : null}
                           <button
                             type="button"
                             className="w-full rounded-md px-3 py-2 text-left text-[12px] font-semibold text-rose-700 hover:bg-rose-50"
@@ -1140,6 +1330,54 @@ const StudentChat: React.FC = () => {
           <Button variant="contained" color="error" onClick={confirmLeaveCommunity}>
             Leave community
           </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog
+        open={addToCommunityOpen}
+        onClose={closeAddToCommunityDialog}
+        maxWidth="xs"
+        fullWidth
+      >
+        <DialogTitle>Add to community</DialogTitle>
+        <DialogContent>
+          <p className="text-sm text-slate-600 mb-3">
+            Add <strong>{addToCommunityTarget?.title ?? 'this user'}</strong> to one of your communities.
+          </p>
+          <div className="space-y-2 max-h-72 overflow-y-auto">
+            {communityChats.length === 0 ? (
+              <p className="text-xs text-slate-500">No community chats available.</p>
+            ) : (
+              communityChats.map(chat => {
+                const already = addToCommunityTarget?.otherUserId
+                  ? isAlreadyInCommunity(chat, addToCommunityTarget.otherUserId)
+                  : false;
+                return (
+                  <div
+                    key={chat._id}
+                    className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 px-3 py-2"
+                  >
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-semibold text-slate-900">{chat.name}</p>
+                      <p className="truncate text-[11px] text-slate-500">{chat.lastLine}</p>
+                    </div>
+                    <button
+                      type="button"
+                      disabled={already || addingToCommunityId === chat._id}
+                      onClick={() => void addStudentToCommunity(chat)}
+                      className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-[11px] font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+                    >
+                      <UserPlus className="h-3.5 w-3.5" />
+                      {already ? 'Added' : addingToCommunityId === chat._id ? 'Adding…' : 'Add'}
+                    </button>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button onClick={closeAddToCommunityDialog}>Close</Button>
         </DialogActions>
       </Dialog>
 

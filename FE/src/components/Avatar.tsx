@@ -1,6 +1,5 @@
-import React, {useEffect, useState} from "react";
+import React from "react";
 import { getAvatarTitle } from "../actions/common";
-import {profileImageFetch} from "../api/api";
 
 const Avatar = ({ username, isOnline, image, size = 'small', borderClass = '' }: {
     username: string,
@@ -11,10 +10,16 @@ const Avatar = ({ username, isOnline, image, size = 'small', borderClass = '' }:
 }) => {
 
     return (
-        <div className={`${size === 'small' ? 'w-10 h-10' : 'w-14 h-14'} rounded-full !flex justify-center items-center border-2 ${borderClass ? borderClass : 'border-lightgrey'} text-lightgrey relative text-lg font-bold`}>
+        <div
+            className={`${
+                size === 'small' ? 'w-10 h-10 text-base' : 'w-14 h-14 text-xl'
+            } rounded-full !flex justify-center items-center border-2 ${
+                borderClass ? borderClass : 'border-[#BCD6EA]'
+            } bg-[#E8EEF4] text-[#234C6A] relative font-semibold shadow-inner`}
+        >
             {
                 image ?
-                    <div className="rounded-full overflow-hidden">
+                    <div className="w-full h-full rounded-full overflow-hidden">
                         <img src={image} className="w-full h-full object-center object-cover aspect-square" />
                     </div> :
                     getAvatarTitle(username || '')

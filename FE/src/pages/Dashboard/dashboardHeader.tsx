@@ -39,20 +39,20 @@ const DashboardHeader = ({ userDetails }: any) => {
 
             {
                 userDetails.role==="admin"? <Link to='/user/admindashboard' className={`w-fit flex items-center gap-2.5 font-black text-2xl ml-10 lg:ml-0`}>
-                    <img src="/logos/main_gold_blue.svg" className="h-9 w-auto max-w-[200px] shrink-0 object-contain object-left" alt="" />
+                    <img src="/logos/main_gold_blue.svg" className="h-11 w-auto max-w-[260px] shrink-0 object-contain object-left" alt="" />
                     <span className="tracking-[0.12em] uppercase">WisdomLinked</span>
                 </Link>
                     :  userDetails.role==="expert"? <Link to='/user/expertdashboard' className={`w-fit flex items-center gap-2.5 font-black text-2xl ml-10 lg:ml-0`}>
-                        <img src="/logos/main_gold_blue.svg" className="h-9 w-auto max-w-[200px] shrink-0 object-contain object-left" alt="" />
+                        <img src="/logos/main_gold_blue.svg" className="h-11 w-auto max-w-[260px] shrink-0 object-contain object-left" alt="" />
                         <span className="tracking-[0.12em] uppercase">WisdomLinked</span>
                     </Link>
                     :   userDetails.role==="customer"? <Link to='/user/studentdashboard' className={`w-fit flex items-center gap-2.5 font-black text-2xl ml-10 lg:ml-0`}>
-                        <img src="/logos/main_gold_blue.svg" className="h-9 w-auto max-w-[200px] shrink-0 object-contain object-left" alt="" />
+                        <img src="/logos/main_gold_blue.svg" className="h-11 w-auto max-w-[260px] shrink-0 object-contain object-left" alt="" />
                         <span className="tracking-[0.12em] uppercase">WisdomLinked</span>
                     </Link>
                         :
                         <Link to='/' className={`w-fit flex items-center gap-2.5 font-black text-2xl ml-10 lg:ml-0`}>
-                            <img src="/logos/main_gold_blue.svg" className="h-9 w-auto max-w-[200px] shrink-0 object-contain object-left" alt="" />
+                            <img src="/logos/main_gold_blue.svg" className="h-11 w-auto max-w-[260px] shrink-0 object-contain object-left" alt="" />
                             <span className="tracking-[0.12em] uppercase">WisdomLinked</span>
                         </Link>
             }

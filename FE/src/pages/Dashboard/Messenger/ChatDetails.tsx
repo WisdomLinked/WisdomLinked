@@ -18,12 +18,11 @@ const ChatDetails = ({
             <div
                 className={
                     theme === "light"
-                        ? "w-full h-full min-h-0 flex flex-col rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden"
+                        ? "w-full h-full min-h-0 flex flex-col rounded-2xl border border-slate-200 bg-[#F6FAFF] shadow-sm overflow-hidden"
                         : "w-full h-full min-h-0 flex flex-col overflow-hidden"
                 }
             >
-                {/* One column width for header + thread + composer (avoids full-bleed bubbles vs skinny text) */}
-                <div className="mx-auto flex h-full min-h-0 w-full max-w-2xl flex-1 flex-col">
+                <div className="flex h-full min-h-0 w-full min-w-0 flex-1 flex-col">
                     <Messages theme={theme} />
                     <div className="shrink-0">
                         <Typing theme={theme} />

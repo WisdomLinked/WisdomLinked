@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { Calendar, Clock, User, Video } from "lucide-react";
+import { Calendar, Clock, User } from "lucide-react";
 import { doGetAdminPlatformEvents, type AdminPlatformEventItem } from "../../../api/api";
 import { SetLoadingStatus } from "../../../actions/appActions";
 
@@ -203,7 +203,7 @@ export default function AdminUpcomingEvents() {
                     ) : null}
                     {row.customer ? (
                       <span className="inline-flex items-center gap-1.5 text-wl-ink/90">
-                        <Video className="h-4 w-4 shrink-0 text-wl-brand" aria-hidden />
+                        <img src="/icons/video-call.png" alt="" aria-hidden className="h-4 w-4 shrink-0 object-contain" />
                         <span className="text-wl-muted">Student:</span>{" "}
                         {row.customer.username || row.customer.email || "—"}
                       </span>

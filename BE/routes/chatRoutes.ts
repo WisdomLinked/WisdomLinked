@@ -16,12 +16,15 @@ import {
     deleteChatMessage,
     hideDmFromList,
     clearDmThread,
+    getDirectCallHistory,
+    getOnlineUsers,
 } from '../controllers/chat.controller';
 
 // DM routes
 router.post('/dm', requireAuth(false), getOrCreateDM);
 router.post('/send', requireAuth(false), sendMessage);
 router.get('/history/:conversationId', requireAuth(false), getDirectHistory);
+router.get('/dm/call-history/:conversationId', requireAuth(false), getDirectCallHistory);
 
 // Group routes
 router.post('/group/send', requireAuth(false), sendGroupMessage);
@@ -36,5 +39,6 @@ router.post('/rc-read-receipts', requireAuth(false), getReadReceiptsBatch);
 router.post('/delete-message', requireAuth(false), deleteChatMessage);
 router.post('/dm/hide', requireAuth(false), hideDmFromList);
 router.post('/dm/clear-thread', requireAuth(false), clearDmThread);
+router.get('/online-users', requireAuth(false), getOnlineUsers);
 
 module.exports = router;

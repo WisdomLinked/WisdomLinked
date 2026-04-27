@@ -169,13 +169,14 @@ export default function StudentSettings() {
               </div>
               <button
                 type="button"
-                onClick={() => setDarkMode(v => !v)}
-                className={toggleClass(darkMode)}
+                disabled
+                className={`${toggleClass(false)} cursor-not-allowed opacity-60`}
                 aria-pressed={darkMode}
+                aria-disabled="true"
               >
                 <span
                   className={`inline-block h-5 w-5 transform rounded-full bg-white transition-transform ${
-                    darkMode ? 'translate-x-5' : 'translate-x-1'
+                    false ? 'translate-x-5' : 'translate-x-1'
                   }`}
                 />
               </button>

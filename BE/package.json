@@ -6,7 +6,8 @@
   "scripts": {
     "start": "tsx server.ts",
     "start-stg": "env-cmd -f .env.stg tsx watch server.ts",
-    "dev": "tsx watch server.ts"
+    "dev": "tsx watch server.ts",
+    "test": "node --import tsx --test tests/**/*.test.ts"
   },
   "author": "Jin Wang",
   "license": "ISC",

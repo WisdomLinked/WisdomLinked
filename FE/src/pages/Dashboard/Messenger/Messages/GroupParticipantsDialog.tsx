@@ -1,17 +1,20 @@
-import React, { Fragment } from "react";
+import React, { useState } from "react";
 import Dialog from "@mui/material/Dialog";
 import DialogContent from "@mui/material/DialogContent";
-import List from "@mui/material/List";
-import ListItem from "@mui/material/ListItem";
-import ListItemText from "@mui/material/ListItemText";
-import ListItemAvatar from "@mui/material/ListItemAvatar";
 import Avatar from "../../../../components/Avatar";
+import { Crown, Mail, UserMinus, Users, X } from "lucide-react";
+import { useDispatch } from "react-redux";
+import { removeCommunityMember } from "../../../../api/api";
+import { showAlert } from "../../../../actions/alertActions";
+import { setChosenGroupChatDetails } from "../../../../actions/chatActions";
+import { updateMe } from "../../../../actions/authActions";
 
 interface Props {
     isDialogOpen: boolean;
     closeDialogHandler: () => void;
     groupDetails: any;
     currentUserId: string;
+    currentUserRole?: string;
     theme?: "light" | "dark";
 }
 
@@ -20,14 +23,54 @@ const GroupParticipantsDialog = ({
     closeDialogHandler,
     groupDetails,
     currentUserId,
+    currentUserRole,
     theme = "light",
 }: Props) => {
+    const dispatch = useDispatch();
+    const [removingId, setRemovingId] = useState<string | null>(null);
     const handleCloseDialog = () => {
         closeDialogHandler();
     };
 
-    const paperClass =
-        theme === "light" ? "rounded-2xl border border-slate-200 bg-white shadow-xl" : "";
+    const isLight = theme === "light";
+    const adminId =
+        typeof groupDetails?.admin === "string"
+            ? groupDetails.admin
+            : groupDetails?.admin?._id || groupDetails?.admin?.id;
+    const isCommunity = groupDetails?.type === "community";
+    const isExpert = String(currentUserRole || "").toLowerCase() === "expert";
+    const canManageMembers = isCommunity && isExpert && String(adminId || "") === String(currentUserId || "");
+
+    const handleRemove = async (memberUserId: string) => {
+        const gid = String(groupDetails?.groupId || groupDetails?._id || "");
+        if (!gid || !memberUserId) return;
+        setRemovingId(memberUserId);
+        try {
+            const res: any = await removeCommunityMember(gid, memberUserId);
+            if (res?.success) {
+                const nextParticipants = (groupDetails?.participants || []).filter(
+                    (p: any) => String(p?._id ?? p?.id ?? p) !== String(memberUserId),
+                );
+                dispatch(
+                    setChosenGroupChatDetails({
+                        ...groupDetails,
+                        participants: nextParticipants,
+                    }),
+                );
+                dispatch(showAlert("Member removed from the community"));
+                dispatch(updateMe() as any);
+            } else {
+                dispatch(showAlert(res?.error || "Could not remove member"));
+            }
+        } catch (e: any) {
+            dispatch(showAlert(e?.response?.data?.error || e?.message || "Could not remove member"));
+        } finally {
+            setRemovingId(null);
+        }
+    };
+    const paperClass = isLight
+        ? "rounded-2xl border border-slate-200 bg-white shadow-2xl"
+        : "rounded-2xl border border-slate-700 bg-slate-900 shadow-2xl";
 
     return (
         <div>
@@ -38,43 +81,87 @@ const GroupParticipantsDialog = ({
                 fullWidth
                 PaperProps={{ className: paperClass }}
             >
-                <div className="border-b border-slate-100 px-5 pt-5 pb-3">
-                    <h2 className="text-base font-semibold text-slate-900">{groupDetails.groupName}</h2>
-                    <p className="mt-1 text-sm text-slate-500">
-                        {groupDetails.participants.length}{" "}
-                        {groupDetails.participants.length > 1 ? "participants" : "participant"}
-                    </p>
+                <div className={`border-b px-5 pt-5 pb-3 ${isLight ? "border-slate-100" : "border-slate-700"}`}>
+                    <div className="flex items-start justify-between gap-3">
+                        <div>
+                            <h2 className={`text-base font-semibold ${isLight ? "text-slate-900" : "text-slate-100"}`}>
+                                {groupDetails.groupName}
+                            </h2>
+                            <p className={`mt-1 text-sm ${isLight ? "text-slate-500" : "text-slate-400"}`}>
+                                {groupDetails.participants.length}{" "}
+                                {groupDetails.participants.length > 1 ? "participants" : "participant"}
+                            </p>
+                        </div>
+                        <button
+                            type="button"
+                            onClick={handleCloseDialog}
+                            className={`inline-flex h-8 w-8 items-center justify-center rounded-full transition-colors ${isLight ? "text-slate-500 hover:bg-slate-100 hover:text-slate-800" : "text-slate-400 hover:bg-slate-800 hover:text-slate-200"}`}
+                            aria-label="Close participants"
+                        >
+                            <X className="h-4 w-4" />
+                        </button>
+                    </div>
                 </div>
-                <DialogContent className="px-2 pb-4 pt-2">
-                    <List sx={{ width: "100%", pt: 0 }}>
-                        {groupDetails.participants.map((participant: any) => {
+                <DialogContent className="px-4 pb-4 pt-3">
+                    <div className={`mb-2 flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-semibold uppercase tracking-[0.12em] ${isLight ? "bg-[#E8EEF4] text-[#234C6A]" : "bg-slate-800 text-slate-200"}`}>
+                        <Users className="h-3.5 w-3.5" />
+                        Members
+                    </div>
+                    <div className="max-h-[52vh] space-y-2 overflow-y-auto pr-1">
+                        {(groupDetails.participants || []).map((participant: any) => {
+                            const pid = String(participant?._id ?? participant?.id ?? "");
+                            const isMe = pid === String(currentUserId);
+                            const isAdmin = pid === String(adminId || "");
+                            const canRemove = canManageMembers && !isMe && !isAdmin;
                             return (
-                                <Fragment key={participant._id}>
-                                    <ListItem alignItems="flex-start" className="rounded-xl">
-                                        <ListItemAvatar>
-                                            <Avatar
-                                                username={participant.username}
-                                                image={participant.image}
-                                            />
-                                        </ListItemAvatar>
-                                        <ListItemText
-                                            primary={`${participant.username} ${
-                                                participant._id === currentUserId ? "(You)" : ""
-                                            }`}
-                                            secondary={
-                                                <span className="text-sm text-slate-600">
-                                                    {participant.email}
-                                                    {participant._id === groupDetails.admin?._id
-                                                        ? " — Group admin"
-                                                        : ""}
-                                                </span>
-                                            }
-                                        />
-                                    </ListItem>
-                                </Fragment>
+                                <div
+                                    key={pid}
+                                    className={`rounded-xl border px-3 py-2.5 ${isLight ? "border-slate-200 bg-white" : "border-slate-700 bg-slate-800/70"}`}
+                                >
+                                    <div className="flex items-start gap-3">
+                                        <Avatar username={participant.username} image={participant.image} />
+                                        <div className="min-w-0 flex-1">
+                                            <div className="flex flex-wrap items-center gap-1.5">
+                                                <p className={`truncate text-sm font-semibold ${isLight ? "text-slate-900" : "text-slate-100"}`}>
+                                                    {participant.username}
+                                                </p>
+                                                {isMe ? (
+                                                    <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${isLight ? "bg-sky-50 text-sky-700 border border-sky-200" : "bg-sky-900/50 text-sky-200 border border-sky-700"}`}>
+                                                        You
+                                                    </span>
+                                                ) : null}
+                                                {isAdmin ? (
+                                                    <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${isLight ? "bg-amber-50 text-amber-700 border border-amber-200" : "bg-amber-900/40 text-amber-200 border border-amber-700"}`}>
+                                                        <Crown className="h-3 w-3" />
+                                                        Admin
+                                                    </span>
+                                                ) : null}
+                                            </div>
+                                            <div className={`mt-1 flex items-center gap-1.5 text-xs ${isLight ? "text-slate-500" : "text-slate-400"}`}>
+                                                <Mail className="h-3.5 w-3.5 shrink-0" />
+                                                <span className="truncate">{participant.email}</span>
+                                            </div>
+                                        </div>
+                                        {canRemove ? (
+                                            <button
+                                                type="button"
+                                                disabled={removingId === pid}
+                                                onClick={() => void handleRemove(pid)}
+                                                className={`inline-flex shrink-0 items-center gap-1 rounded-lg px-2.5 py-1 text-[11px] font-semibold transition ${
+                                                    isLight
+                                                        ? "border border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100"
+                                                        : "border border-rose-700 bg-rose-900/30 text-rose-200 hover:bg-rose-900/50"
+                                                } disabled:opacity-60`}
+                                            >
+                                                <UserMinus className="h-3.5 w-3.5" />
+                                                {removingId === pid ? "Removing..." : "Remove"}
+                                            </button>
+                                        ) : null}
+                                    </div>
+                                </div>
                             );
                         })}
-                    </List>
+                    </div>
                 </DialogContent>
             </Dialog>
         </div>

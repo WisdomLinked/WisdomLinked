@@ -26,12 +26,12 @@ const AlertNotification: React.FC = () => {
 
   return (
     <div className="pointer-events-none fixed inset-x-0 bottom-0 z-[10000001] flex justify-center px-4 pb-6">
-      <div className="pointer-events-auto inline-flex max-w-md items-start gap-3 rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm shadow-lg shadow-black/10">
-        <div className="mt-0.5 flex h-7 w-7 items-center justify-center rounded-full bg-[#e8f0f8]">
+      <div className="pointer-events-auto inline-flex max-w-md items-center gap-3 rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm shadow-lg shadow-black/10">
+        <div className="flex h-7 w-7 items-center justify-center rounded-full bg-[#e8f0f8]">
           <AlertCircle className="h-4 w-4 text-[#234C6A]" />
         </div>
-        <div className="flex-1 min-w-0">
-          <p className="text-[13px] font-medium text-gray-900 break-words">{message}</p>
+        <div className="min-w-0 flex-1 self-center">
+          <p className="break-words text-[13px] font-medium leading-5 text-gray-900">{message}</p>
         </div>
         <button
           type="button"

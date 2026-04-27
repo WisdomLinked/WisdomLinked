@@ -36,7 +36,7 @@ const {
     getEventsBetweenCustomerAndExpert,
     getMyEvents
 } = require('../controllers/event.controller')
-const { uploads } = require("../middlewares/multerConfig");
+const { uploadsGeneral, uploadsChatFile } = require("../middlewares/multerConfig");
 const {
     stripePay,
     createStripePaymentIntent,
@@ -47,9 +47,9 @@ const {
     getChatBotAnswer
 } = require('../controllers/chatBotQA.controller')
 
-router.post("/register", uploads, register);
-router.post("/updateResume", uploads, updateResume);
-router.post("/uploadChatFile", uploads, uploadChatFile);
+router.post("/register", uploadsGeneral, register);
+router.post("/updateResume", uploadsGeneral, updateResume);
+router.post("/uploadChatFile", uploadsChatFile, uploadChatFile);
 router.post("/resendConfirmEmail", resendConfirmEmail);
 router.post("/verifyRegistration", verifyRegistration);
 router.get("/checkVerification", checkVerificationStatus);
@@ -62,11 +62,11 @@ router.post("/confirmPasswordResetByCode", confirmPasswordResetByCode);
 router.get("/getKeywordsAndServices", getKeywordsAndServices);
 router.post("/updateMissedChats", requireAuth(false), updateMissedChats);
 router.post("/updateProfile", requireAuth(false), updateProfile);
-router.put("/profile", requireAuth(false), uploads, updateProfile); // Used by complete profile flow
+router.put("/profile", requireAuth(false), uploadsGeneral, updateProfile); // Used by complete profile flow
 router.post("/getEventsBetweenCustomerAndExpert", requireAuth(false), getEventsBetweenCustomerAndExpert);
 router.get("/me", requireAuth(false), getMe);
 router.get("/getMyEvents", requireAuth(false), getMyEvents);
-router.post("/submit", uploads, handleSubmit)
+router.post("/submit", uploadsGeneral, handleSubmit)
 router.post("/leaveFeedback", requireAuth(false), leaveFeedback)
 router.post("/stripePay", requireAuth(false), stripePay)
 router.post("/createStripePaymentIntent", requireAuth(false), createStripePaymentIntent)

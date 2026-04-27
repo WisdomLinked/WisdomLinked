@@ -725,6 +725,29 @@ export const getDmUnreadByRoomAsUser = async (
     return unreadByRid;
 };
 
+/** Snapshot of online Rocket.Chat usernames (best-effort, admin-scoped). */
+export const getRocketOnlineUsernames = async (): Promise<string[]> => {
+    const out: string[] = [];
+    try {
+        const headers = await getAdminAuthHeaders();
+        const res = await axios.get(`${RC_URL}/api/v1/users.list`, {
+            params: { status: 'online', count: 500, offset: 0 },
+            headers,
+        });
+        const users = Array.isArray(res.data?.users) ? res.data.users : [];
+        users.forEach((u: any) => {
+            const uname = String(u?.username || '').trim();
+            if (uname) out.push(uname);
+        });
+    } catch (e: any) {
+        const st = e?.response?.status;
+        if (st !== 404 && st !== 403) {
+            console.warn('[getRocketOnlineUsernames]', st, e?.response?.data || e?.message);
+        }
+    }
+    return [...new Set(out)];
+};
+
 /**
  * Fetch DM history from Rocket.Chat.
  * Must use a participant's RC session: `im.history` does not return other users' DMs for the admin user.

@@ -12,7 +12,6 @@ import { Search as SearchIcon } from "lucide-react";
 import FilterListIcon from "@mui/icons-material/FilterList";
 import CloseIcon from "@mui/icons-material/Close";
 import SelectionWithCheckBox from "../../../../components/SelectionWithCheckBox";
-import { useAppSelector } from "../../../../store";
 import OverlayPortal from "../../../../components/OverayPortal";
 import { SetLoadingStatus } from "../../../../actions/appActions";
 import { useDispatch } from "react-redux";
@@ -27,7 +26,6 @@ const Customers = ({
 
     const dispatch = useDispatch()
     const navigate = useNavigate()
-    const { auth: { userDetails } } = useAppSelector((state) => state);
     const [keywords, set_keywords] = useState([])
     const [services, set_services] = useState([])
     const sorts = [
@@ -40,8 +38,8 @@ const Customers = ({
             label: "Name in DESC"
         }
     ]
-    const [selectedKeywords, set_selectedKeywords] = useState<Array<any>>(userDetails.keywords || [])
-    const [selectedServices, set_selectedServices] = useState<Array<any>>(userDetails.services || [])
+    const [selectedKeywords, set_selectedKeywords] = useState<Array<any>>([])
+    const [selectedServices, set_selectedServices] = useState<Array<any>>([])
     const [sortBy, set_sortBy] = useState(sorts[0])
     const [nameFilter, set_nameFilter] = useState('')
     const [customers, set_customers] = useState<Array<any>>([])
@@ -190,8 +188,8 @@ const Customers = ({
                             type="button"
                             className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[12px] font-medium text-slate-700 hover:bg-slate-50"
                             onClick={() => {
-                                set_selectedKeywords(userDetails.keywords || []);
-                                set_selectedServices(userDetails.services || []);
+                                set_selectedKeywords([]);
+                                set_selectedServices([]);
                                 set_sortBy(sorts[0]);
                                 set_nameFilter('');
                             }}

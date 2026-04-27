@@ -7,6 +7,7 @@ import {doContactUs, sendEmailToAdmin} from "../api/api"; // Import the new func
 import { SetLoadingStatus } from "../actions/appActions";
 
 const ContactUS = () => {
+    const CONTACT_MESSAGE_MAX_LENGTH = 100;
     const navigate = useNavigate(); // For programmatic navigation
 
     // State Variables
@@ -67,7 +68,7 @@ The WisdomLinked.com Team
             set_issueError(true);
             return;
         }
-        if (issue.trim().length > 50) {
+        if (issue.trim().length > CONTACT_MESSAGE_MAX_LENGTH) {
             set_issueError(true);
             return;
         }
@@ -130,7 +131,7 @@ The WisdomLinked.com Team
 
     // Enable Submit Button Only If Valid
     useEffect(() => {
-        if (name.length >= 3 && isValidEmail && subject.trim().length > 0 && issue.trim().length > 0 && issue.trim().length <= 50) {
+        if (name.length >= 3 && isValidEmail && subject.trim().length > 0 && issue.trim().length > 0 && issue.trim().length <= CONTACT_MESSAGE_MAX_LENGTH) {
             set_enableToSubmit(true);
             set_showError(false);
         } else {
@@ -210,21 +211,21 @@ The WisdomLinked.com Team
                     label="Subject is required."
                 />
 
-                {/* Main message Field (max 50 chars) */}
+                {/* Main message Field */}
                 <div className="mt-6 text-lightgrey text-[12px] leading-[19px]">Main message *</div>
                 <textarea
                     className="w-full bg-black rounded-[15px] h-[120px] mt-0.5 border text-white text-[14px] leading-[21px] p-[24px] resize-none"
-                    placeholder="Brief message (max 50 characters)"
+                    placeholder={`Brief message (max ${CONTACT_MESSAGE_MAX_LENGTH} characters)`}
                     value={issue}
-                    maxLength={50}
+                    maxLength={CONTACT_MESSAGE_MAX_LENGTH}
                     onChange={(e) => { set_issue(e.target.value); set_issueError(false); }}
                 />
                 <div className="flex items-center justify-between mt-1">
                     <ShowFieldError
                         show={issueError || (showError && issue.trim().length === 0)}
-                        label={issue.trim().length > 50 ? "Main message must be 50 characters or less." : "Main message is required."}
+                        label={issue.trim().length > CONTACT_MESSAGE_MAX_LENGTH ? `Main message must be ${CONTACT_MESSAGE_MAX_LENGTH} characters or less.` : "Main message is required."}
                     />
-                    <span className={`text-[12px] ml-auto ${issue.length >= 50 ? "text-red-500" : "text-lightgrey"}`}>{issue.length} / 50</span>
+                    <span className={`text-[12px] ml-auto ${issue.length >= CONTACT_MESSAGE_MAX_LENGTH ? "text-red-500" : "text-lightgrey"}`}>{issue.length} / {CONTACT_MESSAGE_MAX_LENGTH}</span>
                 </div>
 
                 {/* Send Button */}

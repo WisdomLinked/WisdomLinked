@@ -2,7 +2,6 @@ import React from 'react';
 import {
   Users,
   UserCircle,
-  Video,
   Presentation,
   Wallet,
   Undo2,
@@ -11,11 +10,13 @@ import type { AdminDashboardStatsData } from '../../api/api';
 
 function MetricTile({
   icon: Icon,
+  iconSrc,
   label,
   value,
   accent,
 }: {
   icon: React.ComponentType<{ className?: string; size?: number; 'aria-hidden'?: boolean }>;
+  iconSrc?: string;
   label: string;
   value: number;
   accent: 'brand' | 'teal' | 'slate';
@@ -34,7 +35,11 @@ function MetricTile({
           className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${ring}`}
           aria-hidden
         >
-          <Icon size={22} strokeWidth={2} />
+          {iconSrc ? (
+            <img src={iconSrc} alt="" aria-hidden className="h-[22px] w-[22px] object-contain" />
+          ) : (
+            <Icon size={22} strokeWidth={2} />
+          )}
         </div>
         <div className="min-w-0 flex-1 text-left">
           <div className="text-[12px] font-medium uppercase tracking-wide text-wl-muted">
@@ -96,7 +101,8 @@ export default function AdminMetricsPanel({ stats }: { stats: AdminDashboardStat
             </div>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <MetricTile
-                icon={Video}
+                icon={Presentation}
+                iconSrc="/icons/video-call.png"
                 label="1:1 sessions"
                 value={stats.oneOnOneSessions}
                 accent="brand"

@@ -227,7 +227,8 @@ export default function StudentCalendar({
             <button
               type="button"
               onClick={handlePrevMonth}
-              className="rounded-full border border-slate-200 bg-white px-2 py-1 text-xs text-slate-600 hover:bg-slate-50"
+              className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-[#BCD6EA] bg-[#E8EEF4] text-base font-bold leading-none text-[#234C6A] shadow-sm transition hover:bg-[#234C6A] hover:text-white"
+              aria-label="Previous month"
             >
               ‹
             </button>
@@ -238,7 +239,8 @@ export default function StudentCalendar({
             <button
               type="button"
               onClick={handleNextMonth}
-              className="rounded-full border border-slate-200 bg-white px-2 py-1 text-xs text-slate-600 hover:bg-slate-50"
+              className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-[#BCD6EA] bg-[#E8EEF4] text-base font-bold leading-none text-[#234C6A] shadow-sm transition hover:bg-[#234C6A] hover:text-white"
+              aria-label="Next month"
             >
               ›
             </button>

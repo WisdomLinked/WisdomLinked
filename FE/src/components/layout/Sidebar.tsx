@@ -4,14 +4,18 @@ import {
   Users,
   BookOpen,
   Calendar,
-  Video,
   UserCircle,
   Settings,
   MessageSquareMore,
+  Video,
   Menu,
   X,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+
+const VideoCallNavIcon = ({ className }: { className?: string }) => (
+  <Video aria-hidden="true" className={className || 'h-5 w-5'} />
+);
 
 const defaultNavItems = [
   { id: 'dashboard', label: 'Dashboard', icon: BookOpen },
@@ -19,7 +23,7 @@ const defaultNavItems = [
   { id: 'experts', label: 'Find Experts', icon: Users },
   { id: 'seminars', label: 'Seminars', icon: BookOpen },
   { id: 'calendar', label: 'Calendar', icon: Calendar },
-  { id: 'join-meeting', label: 'Join Meeting', icon: Video },
+  { id: 'join-meeting', label: 'Join Meeting', icon: VideoCallNavIcon },
   { id: 'contact-admin', label: 'Contact admin', icon: MessageSquareMore },
   { id: 'settings', label: 'Settings', icon: Settings },
 ];
@@ -59,9 +63,9 @@ export default function Sidebar({
           <img
             src="/logos/main_gold_blue.svg"
             alt="WisdomLinked logo"
-            className="h-9 w-auto max-w-[200px] shrink-0 object-contain object-left"
+            className="h-11 w-auto max-w-[260px] shrink-0 object-contain object-left"
           />
-          <div className="font-serif font-bold text-[#234c6a] leading-tight text-lg tracking-tight">
+          <div className="font-serif font-bold text-[#234c6a] leading-tight text-xl tracking-tight">
             WisdomLinked
           </div>
         </div>
@@ -91,7 +95,10 @@ export default function Sidebar({
                   : 'text-slate-600 hover:bg-white hover:text-slate-900 border-transparent'
               }`}
             >
-              <Icon className="h-4 w-4" aria-hidden="true" />
+              <Icon
+                className={item.id === 'join-meeting' ? 'h-5 w-5' : 'h-4 w-4'}
+                aria-hidden="true"
+              />
               <span className="font-sans inline-flex items-center gap-2">
                 {item.label}
                 {count > 0 ? (
