@@ -6,7 +6,7 @@ import DialogTitle from '@mui/material/DialogTitle';
 import DialogContent from '@mui/material/DialogContent';
 import DialogActions from '@mui/material/DialogActions';
 import Button from '@mui/material/Button';
-import { MessageCircle, Users, Plus, X, CheckCircle2, MoreVertical, UserPlus } from 'lucide-react';
+import { MessageCircle, Users, Plus, X, CheckCircle2, MoreVertical, UserPlus, ArrowLeft } from 'lucide-react';
 import Messenger from '../../pages/Dashboard/Messenger/Messenger';
 import { useAppSelector } from '../../store';
 import { onSubscriptionChanged, subscribeToRoom } from '../../services/rcRealtime';
@@ -36,6 +36,7 @@ import { leaveGroupAction } from '../../actions/groupChatActions';
 import { actionTypes } from '../../actions/types';
 import { isTheEventGoingOn } from '../../actions/common';
 import { resolveProfileImageSrc } from '../../utils/profileImage';
+import { shouldShowMobileMessenger } from '../../utils/mobileChatLayout';
 
 type CommunityRow = {
   raw: any;
@@ -921,10 +922,11 @@ const StudentChat: React.FC = () => {
     const id = String(userId ?? '').trim();
     return !!id && onlineIdSet.has(id);
   };
+  const showMobileMessenger = shouldShowMobileMessenger(chosenChatDetails, chosenGroupChatDetails);
 
   return (
     <div className="flex h-full bg-wl-chatGold text-slate-900">
-      <aside className="hidden md:flex md:w-80 lg:w-96 flex-col border-r border-slate-200 bg-white">
+      <aside className={`${showMobileMessenger ? 'hidden md:flex' : 'flex'} w-full md:w-80 lg:w-96 flex-col border-r border-slate-200 bg-white`}>
         <div className="px-4 pt-4 pb-3 border-b border-slate-200">
           <div className="flex items-center justify-between gap-2">
             <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
@@ -1286,7 +1288,18 @@ const StudentChat: React.FC = () => {
         </div>
       </aside>
 
-      <section className="flex flex-1 flex-col min-h-0 min-w-0 bg-wl-chatGold">
+      <section className={`${showMobileMessenger ? 'flex' : 'hidden md:flex'} flex-1 flex-col min-h-0 min-w-0 bg-wl-chatGold`}>
+        <div className="md:hidden border-b border-slate-200 bg-white px-3 py-2">
+          <button
+            type="button"
+            className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-[12px] font-semibold text-[#234C6A] hover:bg-slate-100"
+            onClick={() => dispatch(resetChatAction())}
+            aria-label="Back to chats"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Chats
+          </button>
+        </div>
         <Messenger videoChaton={false} theme="light" />
       </section>
 
