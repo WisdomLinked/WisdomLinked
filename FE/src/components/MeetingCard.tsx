@@ -43,10 +43,13 @@ const MeetingCard: React.FC<MeetingCardProps> = ({
     const [comment, setComment] = useState("");
     const [submittingRating, setSubmittingRating] = useState(false);
     const [inviteBusy, setInviteBusy] = useState(false);
+    const [joinBusy, setJoinBusy] = useState(false);
     const jitsiDomain = process.env.REACT_APP_JITSI_DOMAIN || 'meet.wisdomlinked.com';
     const fallbackJitsiUrl = `https://${jitsiDomain}/${jitsiRoomName}`;
     const handleJoin = async () => {
+        setJoinBusy(true);
         const info = await getMeetingJoinInfo(meetingThreadId);
+        setJoinBusy(false);
         if (info?.success && info?.jitsiUrl) {
             onJoin?.(info.jitsiUrl);
             return;
@@ -153,10 +156,10 @@ const MeetingCard: React.FC<MeetingCardProps> = ({
                         </button>
                         <button
                             onClick={() => void handleJoin()}
-                            className="px-3 py-1.5 text-[11px] font-semibold rounded-full border border-blue-300 text-blue-700 bg-white hover:bg-blue-50 transition-all"
+                            disabled={joinBusy}
+                            className="px-3 py-1.5 text-[11px] font-semibold rounded-full border border-blue-300 text-blue-700 bg-white hover:bg-blue-50 transition-all disabled:opacity-70 disabled:cursor-wait"
                         >
-                            Join Call
-                            
+                            {joinBusy ? 'Joining…' : 'Join Call'}
                         </button>
                     </div>
                 )}

@@ -164,8 +164,8 @@ jobs:
             REACT_APP_JITSI_DOMAIN=${{ secrets.JITSI_DOMAIN }}
 
   deploy:
-    needs: [changes, build-and-push-backend, build-and-push-frontend]
-    if: always() && (needs.build-and-push-backend.result == 'success' || needs.build-and-push-backend.result == 'skipped') && (needs.build-and-push-frontend.result == 'success' || needs.build-and-push-frontend.result == 'skipped') && (needs.changes.outputs.backend == 'true' || needs.changes.outputs.frontend == 'true')
+    needs: [changes, backend-tests, frontend-tests, build-and-push-backend, build-and-push-frontend]
+    if: always() && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') && (needs.changes.outputs.backend == 'true' || needs.changes.outputs.frontend == 'true')
     runs-on: ubuntu-latest
     environment: production
     
