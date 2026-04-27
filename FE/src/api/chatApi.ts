@@ -157,6 +157,17 @@ export const fetchOnlineUsers = async () => {
     }
 };
 
+/** Chat-target profile for header modal (role-agnostic endpoint). */
+export const fetchChatUserProfile = async (userId: string) => {
+    try {
+        const res = await api.get(`chat/user-profile/${encodeURIComponent(String(userId || '').trim())}`);
+        return res.data as { success?: boolean; result?: any; error?: string };
+    } catch (err: any) {
+        console.error('[chatApi.fetchChatUserProfile]', err.message);
+        return { success: false, error: err?.response?.data?.error || err.message };
+    }
+};
+
 /** Delete a message: mode='me' hides for current user; mode='both' deletes in RC for all (permission-dependent). */
 export const deleteChatMessage = async (
     data: {
