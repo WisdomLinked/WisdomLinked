@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { getMeetingThread, getMeetingRatingState, submitMeetingRating } from '../api/chatApi';
+import { createMeetingGuestInvite, getMeetingThread, getMeetingRatingState, submitMeetingRating } from '../api/chatApi';
 import { ExternalLink, Video } from "lucide-react";
 
 interface MeetingCardProps {
@@ -41,6 +41,7 @@ const MeetingCard: React.FC<MeetingCardProps> = ({
     const [score, setScore] = useState<number>(5);
     const [comment, setComment] = useState("");
     const [submittingRating, setSubmittingRating] = useState(false);
+    const [inviteBusy, setInviteBusy] = useState(false);
     const jitsiDomain = process.env.REACT_APP_JITSI_DOMAIN || 'meet.wisdomlinked.com';
     const jitsiUrl = `https://${jitsiDomain}/${jitsiRoomName}`;
 
@@ -87,6 +88,23 @@ const MeetingCard: React.FC<MeetingCardProps> = ({
         if (res?.success) setHasRated(true);
     };
 
+    const handleCopyGuestInvite = async () => {
+        setInviteBusy(true);
+        const res = await createMeetingGuestInvite(meetingThreadId, 2);
+        setInviteBusy(false);
+        if (res?.success && res.inviteUrl) {
+            try {
+                await navigator.clipboard.writeText(res.inviteUrl);
+                // keep lightweight here; alert is sufficient for now
+                window.alert('Guest invite link copied (valid up to 2 hours).');
+            } catch {
+                window.alert(res.inviteUrl);
+            }
+        } else {
+            window.alert(res?.error || 'Could not create guest invite link');
+        }
+    };
+
     return (
         <div className={`my-2 mx-auto max-w-[480px] rounded-xl border overflow-hidden ${
             isDark
@@ -115,12 +133,20 @@ const MeetingCard: React.FC<MeetingCardProps> = ({
                     </div>
                 </div>
                 {!isEnded && (
-                    <button
-                        onClick={() => onJoin?.(jitsiUrl)}
-                        className="px-4 py-1.5 text-xs font-semibold rounded-full bg-gradient-to-r from-green-500 to-emerald-500 text-white hover:brightness-110 transition-all shadow-sm"
-                    >
-                        Join call
-                    </button>
+                    <div className="flex items-center gap-2">
+                        <button
+                            onClick={handleCopyGuestInvite}
+                            className="px-3 py-1.5 text-[11px] font-semibold rounded-full border border-blue-300 text-blue-700 bg-white hover:bg-blue-50 transition-all"
+                        >
+                            {inviteBusy ? 'Creating…' : 'Copy guest invite'}
+                        </button>
+                        <button
+                            onClick={() => onJoin?.(jitsiUrl)}
+                            className="px-4 py-1.5 text-xs font-semibold rounded-full bg-gradient-to-r from-green-500 to-emerald-500 text-white hover:brightness-110 transition-all shadow-sm"
+                        >
+                            Join call
+                        </button>
+                    </div>
                 )}
             </div>
 

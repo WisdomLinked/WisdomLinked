@@ -311,3 +311,29 @@ export const submitMeetingRating = async (
         return { success: false, error: err?.response?.data?.error || err.message };
     }
 };
+
+/** Create temporary guest invite link for active meeting. */
+export const createMeetingGuestInvite = async (meetingThreadId: string, ttlHours: number = 2) => {
+    try {
+        const res = await api.post('meeting/guest-invite', { meetingThreadId, ttlHours });
+        return res.data as { success?: boolean; inviteUrl?: string; expiresAt?: string; error?: string };
+    } catch (err: any) {
+        console.error('[chatApi.createMeetingGuestInvite]', err.message);
+        return { success: false, error: err?.response?.data?.error || err.message };
+    }
+};
+
+/** Resolve guest invite token without authentication. */
+export const resolveMeetingGuestInvite = async (token: string) => {
+    try {
+        const base = process.env.REACT_APP_API_BASE_URL || '/api';
+        const normalized = base.endsWith('/') ? base.slice(0, -1) : base;
+        const res = await axios.get(`${normalized}/meeting/guest-invite/${encodeURIComponent(token)}`, {
+            withCredentials: false,
+        });
+        return res.data as { success?: boolean; jitsiUrl?: string; expiresAt?: string; loginUrl?: string; error?: string };
+    } catch (err: any) {
+        console.error('[chatApi.resolveMeetingGuestInvite]', err.message);
+        return { success: false, error: err?.response?.data?.error || err.message };
+    }
+};
