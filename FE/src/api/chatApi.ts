@@ -279,6 +279,24 @@ export const getMeetingThread = async (meetingThreadId: string) => {
     }
 };
 
+/** Get signed join URL and role for current authenticated user. */
+export const getMeetingJoinInfo = async (meetingThreadId: string) => {
+    try {
+        const res = await api.get(`meeting/${meetingThreadId}/join`);
+        return res.data as {
+            success?: boolean;
+            meetingThreadId?: string;
+            jitsiRoomName?: string;
+            role?: 'moderator' | 'participant';
+            jitsiUrl?: string;
+            error?: string;
+        };
+    } catch (err: any) {
+        console.error('[chatApi.getMeetingJoinInfo]', err.message);
+        return { success: false, error: err?.response?.data?.error || err.message };
+    }
+};
+
 /** Get current user's rating eligibility/state for a meeting. */
 export const getMeetingRatingState = async (meetingThreadId: string) => {
     try {
