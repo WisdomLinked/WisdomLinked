@@ -978,6 +978,30 @@ export const searchPrivateChatUsers = async (req: any, res: Response) => {
     }
 };
 
+/** Authenticated chat profile lookup for DM header/profile modal (role-agnostic). */
+export const getChatUserProfile = async (req: any, res: Response) => {
+    try {
+        const { userId } = req.user;
+        const targetId = String(req.params.userId || '').trim();
+        if (!targetId) return res.status(400).json({ error: 'userId is required' });
+        if (targetId === String(userId)) {
+            return res.status(400).json({ error: 'Cannot open own profile from DM target lookup' });
+        }
+        const user = await User.findOne({
+            _id: targetId,
+            role: { $in: ['expert', 'customer'] },
+            status: { $ne: 'blocked' },
+        })
+            .select('_id username email image role status title country keywords services specialNote')
+            .lean();
+        if (!user) return res.status(404).json({ error: 'User not found' });
+        return res.status(200).json({ success: true, result: user });
+    } catch (err: any) {
+        console.error('[chat.getChatUserProfile]', err.message);
+        return res.status(500).json({ error: err.message });
+    }
+};
+
 // ── RC Token Endpoint ───────────────────────────────────────
 
 export const getRCToken = async (req: any, res: Response) => {

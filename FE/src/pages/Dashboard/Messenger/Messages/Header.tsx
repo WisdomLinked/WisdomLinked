@@ -28,7 +28,8 @@ import CastForEducationIcon from '@mui/icons-material/CastForEducation';
 import CloseIcon from '@mui/icons-material/Close';
 import EditIcon from '@mui/icons-material/Edit';
 import { fetchDirectCallHistory, startMeeting } from "../../../../api/chatApi";
-import {doLeftSeminar, doUpdateProfile, getCustomerById, getExpertById, shareMeetingViaEmail} from "../../../../api/api";
+import { fetchChatUserProfile } from "../../../../api/chatApi";
+import {doLeftSeminar, doUpdateProfile, shareMeetingViaEmail} from "../../../../api/api";
 import {SetLoadingStatus, SetTotalTimeSpent} from "../../../../actions/appActions";
 import { updateMe } from "../../../../actions/authActions";
 import { showAlert } from "../../../../actions/alertActions";
@@ -36,6 +37,7 @@ import { resetChatAction, setChosenGroupChatDetails } from "../../../../actions/
 import ProfileModal from "./ProfileModal";
 import CommunityProfileModal from "./CommunityProfileModal";
 import { History, ShareIcon, Video } from "lucide-react";
+import { buildFallbackChatProfile, mergeChatProfile } from "../../../../utils/chatProfileModal";
 
 const MessagesHeader = ({ scrollPosition, events, openCalendarModal, openSeminarModal, openEditSeminarModal, theme = "dark" }: any) => {
 
@@ -278,14 +280,14 @@ const MessagesHeader = ({ scrollPosition, events, openCalendarModal, openSeminar
         }
     }, [chosenGroupChatDetails]);
 
-    const fetchProfileData=async ()=>{
-
-    }
-
     const handleProfileModalOpen= async (chosenChatDetails:any) =>{
-        const response = userDetails.role=="expert"? await getCustomerById(chosenChatDetails.userId): await getExpertById(chosenChatDetails.userId)
-        set_chosenProfileData(response.result)
+        const fallback = buildFallbackChatProfile(chosenChatDetails, String(userDetails?.role || ""));
+        set_chosenProfileData(fallback);
         set_profileModalShow(true)
+        const response = await fetchChatUserProfile(String(chosenChatDetails?.userId || ""));
+        if (response?.success && response?.result) {
+            set_chosenProfileData(mergeChatProfile(fallback, response.result));
+        }
     }
 
     const handleProfileModalClose= async () =>{
