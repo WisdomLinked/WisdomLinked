@@ -8,6 +8,7 @@ const GroupChat = require('../models/GroupChat');
 const User = require('../models/User');
 const MeetingGuestInvite = require('../models/MeetingGuestInvite');
 import { resolveMeetingRatingTargetUserId } from '../utils/meetingRatingRules';
+import { buildMeetingRoomName, canStartGroupMeeting } from '../utils/meetingModerationRules';
 
 const JITSI_DOMAIN = process.env.JITSI_DOMAIN || 'meet.wisdomlinked.com';
 const FRONTEND_BASE_URL = process.env.FRONTEND_BASE_URL || process.env.REACT_APP_URL || '';
@@ -26,8 +27,27 @@ export const startMeeting = async (req: any, res: Response) => {
             return res.status(400).json({ error: 'conversationId or groupChatId is required' });
         }
 
-        const roomSuffix = conversationId || groupChatId;
-        const jitsiRoomName = `wl-${roomSuffix}-${Date.now()}`;
+        const me = await User.findById(userId).select('email username image role status');
+        if (!me) return res.status(404).json({ error: 'User not found' });
+
+        let roomScope = String(conversationId || groupChatId || "");
+        if (conversationId) {
+            const conversation = await Conversation.findById(conversationId);
+            if (!conversation) return res.status(404).json({ error: 'Conversation not found' });
+            const isParticipant = (conversation.participants || []).some((p: any) => String(p) === String(userId));
+            if (!isParticipant) return res.status(403).json({ error: 'Only participants can start this call' });
+        }
+        if (groupChatId) {
+            const groupChat = await GroupChat.findById(groupChatId)
+                .populate('participants', 'email role')
+                .populate('admin', 'email role');
+            if (!groupChat) return res.status(404).json({ error: 'Group chat not found' });
+            if (!canStartGroupMeeting(groupChat, me)) {
+                return res.status(403).json({ error: 'Only the expert moderator can start this group call' });
+            }
+            roomScope = String(groupChatId);
+        }
+        const jitsiRoomName = buildMeetingRoomName(roomScope);
 
         const meetingThread = new MeetingThread({
             conversationId: conversationId || undefined,
@@ -39,7 +59,6 @@ export const startMeeting = async (req: any, res: Response) => {
         });
         await meetingThread.save();
 
-        const me = await User.findById(userId);
         const meetingContent = `__MEETING_STARTED__::${meetingThread._id}::${jitsiRoomName}::${me?.username || 'Unknown'}`;
 
         // Send exclusively to Rocket.Chat
