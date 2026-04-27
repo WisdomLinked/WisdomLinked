@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { getMeetingThread } from '../api/chatApi';
+import { getMeetingThread, getMeetingRatingState, submitMeetingRating } from '../api/chatApi';
 import { ExternalLink, Video } from "lucide-react";
 
 interface MeetingCardProps {
@@ -35,6 +35,12 @@ const MeetingCard: React.FC<MeetingCardProps> = ({
     const [expanded, setExpanded] = useState(false);
     const [transcript, setTranscript] = useState<any[]>([]);
     const [loading, setLoading] = useState(false);
+    const [canRate, setCanRate] = useState(false);
+    const [hasRated, setHasRated] = useState(false);
+    const [targetName, setTargetName] = useState<string>("");
+    const [score, setScore] = useState<number>(5);
+    const [comment, setComment] = useState("");
+    const [submittingRating, setSubmittingRating] = useState(false);
     const jitsiDomain = process.env.REACT_APP_JITSI_DOMAIN || 'meet.wisdomlinked.com';
     const jitsiUrl = `https://${jitsiDomain}/${jitsiRoomName}`;
 
@@ -53,6 +59,33 @@ const MeetingCard: React.FC<MeetingCardProps> = ({
     };
 
     const isDark = theme === 'dark';
+
+    useEffect(() => {
+        let cancelled = false;
+        const loadRatingState = async () => {
+            if (!isEnded || !meetingThreadId) return;
+            const state = await getMeetingRatingState(meetingThreadId);
+            if (cancelled) return;
+            setCanRate(Boolean(state?.canRate));
+            setHasRated(Boolean(state?.hasRated));
+            setTargetName(String(state?.targetUser?.username || ""));
+            if (state?.existingRating?.score) setScore(Number(state.existingRating.score));
+            if (typeof state?.existingRating?.comment === "string") {
+                setComment(state.existingRating.comment);
+            }
+        };
+        void loadRatingState();
+        return () => {
+            cancelled = true;
+        };
+    }, [isEnded, meetingThreadId]);
+
+    const handleRateSubmit = async () => {
+        setSubmittingRating(true);
+        const res = await submitMeetingRating(meetingThreadId, score, comment);
+        setSubmittingRating(false);
+        if (res?.success) setHasRated(true);
+    };
 
     return (
         <div className={`my-2 mx-auto max-w-[480px] rounded-xl border overflow-hidden ${
@@ -107,16 +140,60 @@ const MeetingCard: React.FC<MeetingCardProps> = ({
 
             {/* Transcript toggle */}
             {isEnded && (
-                <button
-                    onClick={loadTranscript}
-                    className={`w-full px-4 py-2 text-xs text-left transition-colors ${
-                        isDark
-                            ? 'text-blue-400 hover:bg-[#1e2a44]'
-                            : 'text-blue-600 hover:bg-blue-100'
-                    }`}
-                >
-                    {loading ? 'Loading...' : expanded ? '▼ Hide transcript' : '▶ Show meeting transcript'}
-                </button>
+                <div className={`w-full px-4 py-2 border-t ${isDark ? 'border-[#2a2a4a]' : 'border-blue-200'}`}>
+                    <button
+                        onClick={loadTranscript}
+                        className={`w-full py-1 text-xs text-left transition-colors ${
+                            isDark
+                                ? 'text-blue-400 hover:bg-[#1e2a44]'
+                                : 'text-blue-600 hover:bg-blue-100'
+                        }`}
+                    >
+                        {loading ? 'Loading...' : expanded ? '▼ Hide transcript' : '▶ Show meeting transcript'}
+                    </button>
+                    {canRate ? (
+                        <div className="mt-2">
+                            <div className={`text-xs font-semibold ${isDark ? 'text-slate-200' : 'text-slate-700'}`}>
+                                {targetName ? `Rate ${targetName}` : 'Rate this call'}
+                            </div>
+                            {hasRated ? (
+                                <div className={`mt-1 text-[11px] ${isDark ? 'text-emerald-300' : 'text-emerald-700'}`}>
+                                    Thanks, your rating was submitted.
+                                </div>
+                            ) : (
+                                <div className="mt-1 space-y-2">
+                                    <select
+                                        value={score}
+                                        onChange={(e) => setScore(Number(e.target.value))}
+                                        className={`w-full rounded-md border px-2 py-1 text-xs ${
+                                            isDark ? 'bg-slate-800 border-slate-600 text-slate-100' : 'bg-white border-slate-300 text-slate-900'
+                                        }`}
+                                    >
+                                        {[5, 4, 3, 2, 1].map((n) => (
+                                            <option key={n} value={n}>{n} / 5</option>
+                                        ))}
+                                    </select>
+                                    <textarea
+                                        value={comment}
+                                        onChange={(e) => setComment(e.target.value)}
+                                        placeholder="Optional feedback"
+                                        rows={2}
+                                        className={`w-full rounded-md border px-2 py-1 text-xs ${
+                                            isDark ? 'bg-slate-800 border-slate-600 text-slate-100' : 'bg-white border-slate-300 text-slate-900'
+                                        }`}
+                                    />
+                                    <button
+                                        onClick={handleRateSubmit}
+                                        disabled={submittingRating}
+                                        className="rounded-md bg-[#234C6A] px-3 py-1 text-[11px] font-semibold text-white disabled:opacity-60"
+                                    >
+                                        {submittingRating ? 'Submitting...' : 'Submit rating'}
+                                    </button>
+                                </div>
+                            )}
+                        </div>
+                    ) : null}
+                </div>
             )}
 
             {/* Transcript messages */}

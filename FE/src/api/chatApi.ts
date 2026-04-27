@@ -278,3 +278,36 @@ export const getMeetingThread = async (meetingThreadId: string) => {
         return null;
     }
 };
+
+/** Get current user's rating eligibility/state for a meeting. */
+export const getMeetingRatingState = async (meetingThreadId: string) => {
+    try {
+        const res = await api.get(`meeting/${meetingThreadId}/rating-state`);
+        return res.data as {
+            success?: boolean;
+            canRate?: boolean;
+            hasRated?: boolean;
+            existingRating?: { score: number; comment?: string } | null;
+            targetUser?: { _id: string; username: string } | null;
+            error?: string;
+        };
+    } catch (err: any) {
+        console.error('[chatApi.getMeetingRatingState]', err.message);
+        return { success: false, canRate: false, hasRated: false, error: err?.response?.data?.error || err.message };
+    }
+};
+
+/** Submit end-of-call rating. */
+export const submitMeetingRating = async (
+    meetingThreadId: string,
+    score: number,
+    comment: string = '',
+) => {
+    try {
+        const res = await api.post('meeting/rate', { meetingThreadId, score, comment });
+        return res.data as { success?: boolean; error?: string };
+    } catch (err: any) {
+        console.error('[chatApi.submitMeetingRating]', err.message);
+        return { success: false, error: err?.response?.data?.error || err.message };
+    }
+};
