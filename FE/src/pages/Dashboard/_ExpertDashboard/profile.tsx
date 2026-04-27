@@ -18,6 +18,7 @@ import CountrySelect from "../../../components/CountrySelection";
 import FileBrowser from "../../../components/fileBrowser";
 import { useDispatch } from "react-redux";
 import { showAlert } from "../../../actions/alertActions";
+import { updateMe } from "../../../actions/authActions";
 import ReactImagePickerEditor from 'react-image-picker-editor';
 import 'react-image-picker-editor/dist/index.css'
 import FilePreviewModal from "../FilePreviewModal";
@@ -164,6 +165,7 @@ const ExpertProfile = ({
         };
         if (!isFromAdminPanel) {
             await doUpdateProfile(updates);
+            await dispatch(updateMe() as any);
         } else {
             const res = await doUpdateProfileByAdmin(updates);
             if (res) updateOneUser(res.result);
@@ -192,36 +194,35 @@ const ExpertProfile = ({
     };
 
     useEffect(() => {
-        if (
-            name.length >= 3 && !checkTitleNameInvalid('Username', name) &&
-            title.length &&
-            description.length > 20 && description.length <= 100 &&
-            selectedKeywords.length >= 3 &&
-            selectedServices.length &&
+        const hasChanges =
+            !(imageSrc == oldImageSrc) ||
+            name !== userDetails.username ||
+            title !== userDetails.title ||
+            description !== userDetails.description ||
+            !arraysEqual(selectedKeywords || [], userDetails.keywords || []) ||
+            !arraysEqual(selectedServices || [], userDetails.services || []) ||
+            !userDetails.country?.name !== country?.name ||
+            !userDetails.state?.name !== state?.name ||
+            !userDetails.city?.name !== city?.name ||
+            phoneNumber !== userDetails.phoneNumber;
+
+        const hasValidCoreFields =
+            name.length >= 3 &&
+            !checkTitleNameInvalid('Username', name) &&
+            title.length > 0 &&
             country &&
             (!stateAvailable || (stateAvailable && state)) &&
             (!cityAvailable || (cityAvailable && city)) &&
-            phoneNumber &&
-            (
-                !(imageSrc == oldImageSrc) ||
-                name !== userDetails.username ||
-                title !== userDetails.title ||
-                description !== userDetails.description ||
-                !arraysEqual(selectedKeywords || [], userDetails.keywords || []) ||
-                !arraysEqual(selectedServices || [], userDetails.services || []) ||
-                !userDetails.country?.name !== country?.name ||
-                !userDetails.state?.name !== state?.name ||
-                !userDetails.city?.name !== city?.name ||
-                phoneNumber !== userDetails.phoneNumber
-            )
-        ) {
+            !!phoneNumber;
+
+        if (hasChanges && hasValidCoreFields) {
             set_enableToUpdate(true);
             set_showError(false);
         } else {
             set_enableToUpdate(false);
             set_showError(true);
         }
-    }, [imageSrc, name, title, description, selectedKeywords, selectedServices, country, state, stateAvailable, city, cityAvailable, phoneNumber]);
+    }, [imageSrc, oldImageSrc, name, title, description, selectedKeywords, selectedServices, country, state, stateAvailable, city, cityAvailable, phoneNumber, userDetails]);
 
     useEffect(() => {
         if (!fileError && file) updateResume();
@@ -360,10 +361,9 @@ const ExpertProfile = ({
                                     onChange={(e) => set_description(e.target.value)}
                                 />
                                 <div className="mt-1 flex items-center justify-between">
-                                    <ShowFieldError
-                                        show={!(description.length > 20 && description.length <= 100) && showError}
-                                        label="Bio should be 20–100 characters."
-                                    />
+                                    <span className="text-[11px] text-slate-400">
+                                        Bio can be edited freely.
+                                    </span>
                                     <span className={`text-[11px] ml-auto ${description.length > 100 ? 'text-rose-400' : 'text-slate-400'}`}>
                                         {description.length}/100
                                     </span>
@@ -379,10 +379,6 @@ const ExpertProfile = ({
                                         set_selectedOptions={set_selectedKeywords}
                                         placeholder="e.g. Civil Engineering…"
                                     />
-                                    <ShowFieldError
-                                        show={!(selectedKeywords.length >= 3) && showError}
-                                        label="Add at least 3 disciplines."
-                                    />
                                 </div>
                                 <div>
                                     <FieldLabel required>Services you offer</FieldLabel>
@@ -392,10 +388,6 @@ const ExpertProfile = ({
                                         set_selectedOptions={set_selectedServices}
                                         placeholder="Select services"
                                         isMulti={true}
-                                    />
-                                    <ShowFieldError
-                                        show={!selectedServices.length && showError}
-                                        label="Select at least one service."
                                     />
                                 </div>
                             </div>

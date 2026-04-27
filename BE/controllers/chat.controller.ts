@@ -55,6 +55,12 @@ const WL_COMMUNITY_SYS_PREFIX = '__WL_COMMUNITY_SYS__::';
 const CHAT_HISTORY_PAGE_SIZE = 50;
 const CHAT_HISTORY_MAX_PAGE_SIZE = 100;
 
+export const filterOnlineUserIdsByAllowedSet = (users: any[], allowedIds: Set<string>) =>
+    (users || [])
+        .map((u: any) => String(u?._id || ''))
+        .filter((id: string) => !!id && allowedIds.has(id))
+        .map((id: string) => ({ userId: id }));
+
 /** RC uses `t` on messages; some payloads also expose `type`. */
 const normalizeRcMsgSubtype = (t: any): string => String(t ?? '').trim().toLowerCase() || 'message';
 
@@ -500,8 +506,60 @@ export const getDirectCallHistory = async (req: any, res: Response) => {
 };
 
 /** GET /api/chat/online-users */
-export const getOnlineUsers = async (_req: any, res: Response) => {
+export const getOnlineUsers = async (req: any, res: Response) => {
     try {
+        const { userId } = req.user || {};
+        if (!userId) {
+            return res.status(401).json({ success: false, error: 'Unauthorized', onlineUsers: [] });
+        }
+
+        const me = await User.findById(userId)
+            .select('_id friends directConversations generalChats groupChats')
+            .populate({
+                path: 'directConversations',
+                select: 'participants',
+                populate: { path: 'participants', select: '_id' },
+            })
+            .populate({
+                path: 'generalChats',
+                select: 'participants admin',
+                populate: [
+                    { path: 'participants', select: '_id' },
+                    { path: 'admin', select: '_id' },
+                ],
+            })
+            .populate({
+                path: 'groupChats',
+                select: 'participants admin',
+                populate: [
+                    { path: 'participants', select: '_id' },
+                    { path: 'admin', select: '_id' },
+                ],
+            });
+
+        if (!me) {
+            return res.status(404).json({ success: false, error: 'User not found', onlineUsers: [] });
+        }
+
+        const allowedIds = new Set<string>();
+        const pushId = (v: any) => {
+            const s = String(v?._id ?? v?.id ?? v ?? '').trim();
+            if (s) allowedIds.add(s);
+        };
+        pushId(me._id);
+        (me.friends || []).forEach((f: any) => pushId(f));
+        (me.directConversations || []).forEach((conv: any) => {
+            (conv?.participants || []).forEach((p: any) => pushId(p));
+        });
+        (me.generalChats || []).forEach((chat: any) => {
+            (chat?.participants || []).forEach((p: any) => pushId(p));
+            pushId(chat?.admin);
+        });
+        (me.groupChats || []).forEach((chat: any) => {
+            (chat?.participants || []).forEach((p: any) => pushId(p));
+            pushId(chat?.admin);
+        });
+
         const rcOnlineUsernames = await getRocketOnlineUsernames();
         if (!rcOnlineUsernames.length) {
             return res.status(200).json({ success: true, onlineUsers: [] });
@@ -514,9 +572,7 @@ export const getOnlineUsers = async (_req: any, res: Response) => {
             ],
         }).select('_id');
 
-        const onlineUsers = users
-            .map((u: any) => ({ userId: String(u?._id || '') }))
-            .filter((u: any) => !!u.userId);
+        const onlineUsers = filterOnlineUserIdsByAllowedSet(users, allowedIds);
 
         return res.status(200).json({ success: true, onlineUsers });
     } catch (err: any) {

@@ -13,6 +13,7 @@ import {
   UserCheck,
   AlertCircle,
   MessageSquareMore,
+  Video,
 } from 'lucide-react';
 
 import Sidebar from '../components/layout/Sidebar';
@@ -37,6 +38,7 @@ import ExpertProfile from './Dashboard/_ExpertDashboard/profile';
 import ExpertRevenue from './Dashboard/_ExpertDashboard/ExpertRevenue';
 import ContactAdmin from './Dashboard/_ExpertDashboard/ContactAdmin';
 import StudentChat from '../components/dashboard/StudentChat';
+import JoinMeeting from '../components/dashboard/JoinMeeting';
 import StatCard from '../components/ui/StatCard';
 import Chatbot from '../components/chatbot';
 import UpcomingSessionModal, {
@@ -386,6 +388,7 @@ export default function ExpertDashboard() {
       { id: 'clients', label: 'Clients', icon: Users },
       { id: 'seminar', label: 'Seminar', icon: BookOpen },
       { id: 'calendar', label: 'Calendar', icon: Calendar },
+      { id: 'join-meeting', label: 'Join Meeting', icon: Video },
       { id: 'availability', label: 'Availability', icon: Clock },
       { id: 'contact-admin', label: 'Contact admin', icon: MessageSquareMore },
       { id: 'revenue', label: 'Revenue', icon: Wallet },
@@ -520,6 +523,8 @@ export default function ExpertDashboard() {
             ? 'Seminar'
             : activeItem === 'calendar'
               ? 'Calendar'
+              : activeItem === 'join-meeting'
+                ? 'Join meeting'
               : activeItem === 'availability'
                 ? 'Availability'
                 : activeItem === 'profile'
@@ -553,6 +558,8 @@ export default function ExpertDashboard() {
       <div className="h-[calc(100vh-56px)] overflow-y-auto bg-[#F5F3EF]">
         <ExpertCalendar />
       </div>
+    ) : activeItem === 'join-meeting' ? (
+      <JoinMeeting />
     ) : activeItem === 'availability' ? (
       <div className="h-[calc(100vh-56px)] overflow-y-auto bg-[#F5F3EF]">
         <ExpertAvailability />

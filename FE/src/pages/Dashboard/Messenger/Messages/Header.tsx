@@ -35,7 +35,7 @@ import { showAlert } from "../../../../actions/alertActions";
 import { resetChatAction, setChosenGroupChatDetails } from "../../../../actions/chatActions";
 import ProfileModal from "./ProfileModal";
 import CommunityProfileModal from "./CommunityProfileModal";
-import { History, ShareIcon } from "lucide-react";
+import { History, ShareIcon, Video } from "lucide-react";
 
 const MessagesHeader = ({ scrollPosition, events, openCalendarModal, openSeminarModal, openEditSeminarModal, theme = "dark" }: any) => {
 
@@ -454,12 +454,7 @@ const MessagesHeader = ({ scrollPosition, events, openCalendarModal, openSeminar
                                 }
                             }}
                         >
-                            <img
-                                src="/icons/video-call.png"
-                                alt="Video call"
-                                className="h-4 w-4 object-contain"
-                                style={{ filter: theme === "light" ? "none" : "invert(1)" }}
-                            />
+                            <Video className="h-5 w-5" strokeWidth={2} />
                         </IconButton>
                         <button
                             className={theme === "light" ? "text-slate-900 hover:bg-slate-100 rounded-lg p-1" : "text-white"}
@@ -518,12 +513,7 @@ const MessagesHeader = ({ scrollPosition, events, openCalendarModal, openSeminar
                                     }
                                 }}
                             >
-                                <img
-                                    src="/icons/video-call.png"
-                                    alt="Video call"
-                                    className="h-4 w-4 object-contain"
-                                    style={{ filter: theme === "light" ? "none" : "invert(1)" }}
-                                />
+                                <Video className="h-5 w-5" strokeWidth={2} />
                             </IconButton>
                             <button
                                 className={theme === "light" ? "text-slate-900 hover:bg-slate-100 rounded-lg p-1" : "text-white"}

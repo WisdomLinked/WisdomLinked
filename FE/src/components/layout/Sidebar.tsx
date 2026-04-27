@@ -7,13 +7,14 @@ import {
   UserCircle,
   Settings,
   MessageSquareMore,
+  Video,
   Menu,
   X,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 const VideoCallNavIcon = ({ className }: { className?: string }) => (
-  <img src="/icons/video-call.png" alt="" aria-hidden="true" className={className} />
+  <Video aria-hidden="true" className={className || 'h-5 w-5'} />
 );
 
 const defaultNavItems = [
@@ -94,7 +95,10 @@ export default function Sidebar({
                   : 'text-slate-600 hover:bg-white hover:text-slate-900 border-transparent'
               }`}
             >
-              <Icon className="h-4 w-4" aria-hidden="true" />
+              <Icon
+                className={item.id === 'join-meeting' ? 'h-5 w-5' : 'h-4 w-4'}
+                aria-hidden="true"
+              />
               <span className="font-sans inline-flex items-center gap-2">
                 {item.label}
                 {count > 0 ? (

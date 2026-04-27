@@ -223,6 +223,9 @@ const StudentChat: React.FC = () => {
       if (cancelled) return;
       if (res?.success && Array.isArray(res.onlineUsers)) {
         dispatch(setOnlineUsers(res.onlineUsers) as any);
+      } else {
+        // Avoid stale "online" dots when presence cannot be confirmed.
+        dispatch(setOnlineUsers([]) as any);
       }
     };
 

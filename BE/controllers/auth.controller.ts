@@ -878,10 +878,10 @@ const updateProfile = async (req: any, res: Response) => {
         if (username) {
             updates.username = username
         }
-        if (title) {
+        if (title !== undefined && title !== null) {
             updates.title = title
         }
-        if (description) {
+        if (description !== undefined && description !== null) {
             updates.description = description
         }
         if (image) {
@@ -904,7 +904,7 @@ const updateProfile = async (req: any, res: Response) => {
             updates.services = _services;
         }
 
-        if (price) {
+        if (price !== undefined && price !== null) {
             updates.price = price
         }
         
@@ -935,19 +935,19 @@ const updateProfile = async (req: any, res: Response) => {
             }
             updates.keywords = _keywords;
         }
-        if (country) {
+        if (country !== undefined && country !== null) {
             updates.country = country
         }
-        if (state) {
+        if (state !== undefined && state !== null) {
             updates.state = state
         }
-        if (city) {
+        if (city !== undefined && city !== null) {
             updates.city = city
         }
-        if (phoneNumber) {
+        if (phoneNumber !== undefined && phoneNumber !== null) {
             updates.phoneNumber = phoneNumber
         }
-        if (joinPopupBlocked) {
+        if (joinPopupBlocked !== undefined && joinPopupBlocked !== null) {
             updates.joinPopupBlocked = joinPopupBlocked
         }
         if (req.body.specialNote !== undefined && req.body.specialNote !== null) {
