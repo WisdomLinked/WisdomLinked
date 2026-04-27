@@ -21,6 +21,7 @@ const {
     addParticipantsToCommunityChat,
     getAllCommunityChats,
     removeMemberFromCommunityChat,
+    setCommunityCoModerator,
 } = require("../controllers/groupChat.controller");
 
 const { requireAuth, expertAuth } = require("../middlewares/requireAuth");
@@ -136,6 +137,12 @@ router.post(
     "/remove-community-member",
     requireAuth(true),
     removeMemberFromCommunityChat
+);
+
+router.post(
+    "/set-community-co-moderator",
+    requireAuth(true),
+    setCommunityCoModerator
 );
 
 // delete a group (controller checks admin; use requireAuth so community admin can be non-expert after transfer)

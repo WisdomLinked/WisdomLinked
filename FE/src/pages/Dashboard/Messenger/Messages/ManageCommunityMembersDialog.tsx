@@ -7,7 +7,7 @@ import ListItemText from '@mui/material/ListItemText';
 import ListItemAvatar from '@mui/material/ListItemAvatar';
 import Button from '@mui/material/Button';
 import Avatar from '../../../../components/Avatar';
-import { removeCommunityMember } from '../../../../api/api';
+import { removeCommunityMember, setCommunityCoModerator } from '../../../../api/api';
 import { useDispatch } from 'react-redux';
 import { showAlert } from '../../../../actions/alertActions';
 import { setChosenGroupChatDetails } from '../../../../actions/chatActions';
@@ -30,12 +30,41 @@ const ManageCommunityMembersDialog = ({
 }: Props) => {
     const dispatch = useDispatch();
     const [removingId, setRemovingId] = useState<string | null>(null);
+    const [savingCoModId, setSavingCoModId] = useState<string | null>(null);
 
     const adminId =
         typeof groupDetails?.admin === 'string'
             ? groupDetails.admin
             : groupDetails?.admin?._id || groupDetails?.admin?.id;
     const gid = groupDetails?.groupId || groupDetails?._id;
+    const isAdmin = String(adminId || '') === String(currentUserId || '');
+    const coModeratorIds = new Set(
+        (groupDetails?.coModerators || []).map((c: any) => String(c?._id ?? c?.id ?? c)).filter(Boolean),
+    );
+
+    const handleCoModeratorToggle = async (memberUserId: string, isCoModerator: boolean) => {
+        if (!gid || !isAdmin) return;
+        setSavingCoModId(memberUserId);
+        try {
+            const res: any = await setCommunityCoModerator(String(gid), String(memberUserId), isCoModerator);
+            if (res?.success) {
+                dispatch(
+                    setChosenGroupChatDetails({
+                        ...groupDetails,
+                        coModerators: Array.isArray(res?.coModerators) ? res.coModerators : [],
+                    }),
+                );
+                dispatch(showAlert(isCoModerator ? 'Co-moderator granted' : 'Co-moderator revoked'));
+                dispatch(updateMe() as any);
+            } else {
+                dispatch(showAlert(res?.error || 'Could not update co-moderator'));
+            }
+        } catch (e: any) {
+            dispatch(showAlert(e?.response?.data?.error || e?.message || 'Could not update co-moderator'));
+        } finally {
+            setSavingCoModId(null);
+        }
+    };
 
     const handleRemove = async (memberUserId: string) => {
         if (!gid) return;
@@ -88,6 +117,7 @@ const ManageCommunityMembersDialog = ({
                         const pid = String(participant._id ?? participant.id ?? '');
                         const isSelf = pid === String(currentUserId);
                         const isAdminMember = adminId && pid === String(adminId);
+                        const isCoModerator = coModeratorIds.has(pid);
                         const canRemove = !isSelf && !isAdminMember && pid;
                         return (
                             <Fragment key={pid}>
@@ -96,14 +126,30 @@ const ManageCommunityMembersDialog = ({
                                     className="rounded-xl"
                                     secondaryAction={
                                         canRemove ? (
-                                            <Button
-                                                size="small"
-                                                color="error"
-                                                disabled={removingId === pid}
-                                                onClick={() => void handleRemove(pid)}
-                                            >
-                                                {removingId === pid ? '…' : 'Remove'}
-                                            </Button>
+                                            <div className="flex items-center gap-2">
+                                                {isAdmin ? (
+                                                    <Button
+                                                        size="small"
+                                                        color="inherit"
+                                                        disabled={savingCoModId === pid}
+                                                        onClick={() => void handleCoModeratorToggle(pid, !isCoModerator)}
+                                                    >
+                                                        {savingCoModId === pid
+                                                            ? '…'
+                                                            : isCoModerator
+                                                              ? 'Revoke Co-mod'
+                                                              : 'Make Co-mod'}
+                                                    </Button>
+                                                ) : null}
+                                                <Button
+                                                    size="small"
+                                                    color="error"
+                                                    disabled={removingId === pid}
+                                                    onClick={() => void handleRemove(pid)}
+                                                >
+                                                    {removingId === pid ? '…' : 'Remove'}
+                                                </Button>
+                                            </div>
                                         ) : null
                                     }
                                 >
@@ -119,6 +165,7 @@ const ManageCommunityMembersDialog = ({
                                             <span className="text-sm text-slate-600">
                                                 {participant.email}
                                                 {isAdminMember ? ' — Community admin' : ''}
+                                                {!isAdminMember && isCoModerator ? ' — Co-moderator' : ''}
                                             </span>
                                         }
                                     />

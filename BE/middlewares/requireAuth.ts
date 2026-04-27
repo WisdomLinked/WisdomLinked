@@ -36,6 +36,10 @@ const getFullUserData = async (email) => {
                         select: 'email username image role status'
                     },
                     {
+                        path: 'coModerators',
+                        select: 'email username image role status'
+                    },
+                    {
                         path: 'createdBy',
                         select: 'email username image role status'
                     },
@@ -52,6 +56,10 @@ const getFullUserData = async (email) => {
                     },
                     {
                         path: 'participants',
+                        select: 'email username image role status'
+                    },
+                    {
+                        path: 'coModerators',
                         select: 'email username image role status'
                     },
                 ]

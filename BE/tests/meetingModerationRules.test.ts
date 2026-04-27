@@ -14,6 +14,11 @@ test("community/seminar start requires expert admin", () => {
     assert.equal(canStartGroupMeeting(group, { _id: "u1", role: "customer" }), false);
 });
 
+test("community co-moderator can start meeting", () => {
+    const group = { type: "community", admin: "u1", coModerators: ["u2"], participants: ["u1", "u2"] };
+    assert.equal(canStartGroupMeeting(group, { _id: "u2", role: "customer" }), true);
+});
+
 test("individual type allows participant starter", () => {
     const group = { type: "individual", admin: "u1", participants: ["u1", "u2"] };
     assert.equal(canStartGroupMeeting(group, { _id: "u2", role: "customer" }), true);

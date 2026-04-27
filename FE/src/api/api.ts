@@ -472,6 +472,23 @@ export const removeCommunityMember = async (
     }
 };
 
+export const setCommunityCoModerator = async (
+    groupChatId: string,
+    memberUserId: string,
+    isCoModerator: boolean,
+) => {
+    try {
+        const res = await api.post('group-chat/set-community-co-moderator', {
+            groupChatId,
+            memberUserId,
+            isCoModerator,
+        });
+        return res.data;
+    } catch (err: any) {
+        return checkForAuthorization(err);
+    }
+};
+
 export const deleteGroup = async (data: DeleteGroupArgs) => {
     try {
         const res = await api.post("group-chat/delete", {

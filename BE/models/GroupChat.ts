@@ -43,6 +43,12 @@ const groupChatSchema = new mongoose.Schema(
             ref: "User",
             required: true,
         },
+        coModerators: [
+            {
+                type: mongoose.Schema.Types.ObjectId,
+                ref: "User",
+            },
+        ],
         isOpenToAll: {
             type: Boolean,
             default: false,
