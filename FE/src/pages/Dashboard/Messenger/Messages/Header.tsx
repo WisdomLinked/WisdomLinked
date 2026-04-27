@@ -296,6 +296,19 @@ const MessagesHeader = ({ scrollPosition, events, openCalendarModal, openSeminar
         set_communityModalShow(false);
     };
 
+    const groupAdminId =
+        typeof chosenGroupChatDetails?.admin === "string"
+            ? chosenGroupChatDetails?.admin
+            : chosenGroupChatDetails?.admin?._id || chosenGroupChatDetails?.admin?.id;
+    const groupCoModeratorIds = new Set(
+        (chosenGroupChatDetails?.coModerators || [])
+            .map((c: any) => String(c?._id ?? c?.id ?? c))
+            .filter(Boolean),
+    );
+    const isGroupAdmin = !!groupAdminId && String(groupAdminId) === String(userDetails?._id);
+    const isCommunityModerator = chosenGroupChatDetails?.type === "community"
+        && (isGroupAdmin || groupCoModeratorIds.has(String(userDetails?._id || "")));
+
 
     return (
         <div
@@ -606,14 +619,7 @@ const MessagesHeader = ({ scrollPosition, events, openCalendarModal, openSeminar
                                             <CastForEducationIcon fontSize="small" className="shrink-0 opacity-70" />
                                         </button>
                                         {
-                                            (() => {
-                                                // Handle both populated and unpopulated admin field
-                                                const adminId = typeof chosenGroupChatDetails?.admin === 'string' 
-                                                    ? chosenGroupChatDetails?.admin 
-                                                    : chosenGroupChatDetails?.admin?._id || chosenGroupChatDetails?.admin?.id;
-                                                const isAdmin = adminId && adminId.toString() === userDetails?._id?.toString();
-                                                return isAdmin;
-                                            })() ?
+                                            (isGroupAdmin || isCommunityModerator) ?
                                                 (() => {
                                                     const isCommunityChat = chosenGroupChatDetails?.type === "community";
                                                     return (
@@ -649,44 +655,50 @@ const MessagesHeader = ({ scrollPosition, events, openCalendarModal, openSeminar
                                                             )}
                                                             {isCommunityChat ? (
                                                                 <>
-                                                                    <button
-                                                                        type="button"
-                                                                        className={`mt-0.5 flex w-full items-center justify-between gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-medium ${
-                                                                            theme === "light" ? "text-slate-800 hover:bg-slate-50" : "hover:bg-white/10"
-                                                                        }`}
-                                                                        onClick={() => {
-                                                                            set_buttonsModalShow(false);
-                                                                            setAddCommunityMembersOpen(true);
-                                                                        }}
-                                                                    >
-                                                                        <span>Add members</span>
-                                                                        <PersonAddIcon fontSize="small" className="shrink-0 opacity-70" />
-                                                                    </button>
-                                                                    <button
-                                                                        type="button"
-                                                                        className={`mt-0.5 flex w-full items-center justify-between gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-medium ${
-                                                                            theme === "light" ? "text-slate-800 hover:bg-slate-50" : "hover:bg-white/10"
-                                                                        }`}
-                                                                        onClick={() => {
-                                                                            set_buttonsModalShow(false);
-                                                                            setManageCommunityMembersOpen(true);
-                                                                        }}
-                                                                    >
-                                                                        <span>Remove members</span>
-                                                                        <PersonRemoveIcon fontSize="small" className="shrink-0 opacity-70" />
-                                                                    </button>
-                                                                    <button
-                                                                        type="button"
-                                                                        className={`mt-0.5 flex w-full items-center justify-between gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-semibold ${
-                                                                            theme === "light"
-                                                                                ? "text-rose-700 hover:bg-rose-50"
-                                                                                : "text-rose-300 hover:bg-white/10"
-                                                                        }`}
-                                                                        onClick={openDeleteCommunityConfirm}
-                                                                    >
-                                                                        <span>Delete community</span>
-                                                                        <ClearIcon fontSize="small" className="shrink-0 opacity-90" />
-                                                                    </button>
+                                                                    {isCommunityModerator ? (
+                                                                        <>
+                                                                            <button
+                                                                                type="button"
+                                                                                className={`mt-0.5 flex w-full items-center justify-between gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-medium ${
+                                                                                    theme === "light" ? "text-slate-800 hover:bg-slate-50" : "hover:bg-white/10"
+                                                                                }`}
+                                                                                onClick={() => {
+                                                                                    set_buttonsModalShow(false);
+                                                                                    setAddCommunityMembersOpen(true);
+                                                                                }}
+                                                                            >
+                                                                                <span>Add members</span>
+                                                                                <PersonAddIcon fontSize="small" className="shrink-0 opacity-70" />
+                                                                            </button>
+                                                                            <button
+                                                                                type="button"
+                                                                                className={`mt-0.5 flex w-full items-center justify-between gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-medium ${
+                                                                                    theme === "light" ? "text-slate-800 hover:bg-slate-50" : "hover:bg-white/10"
+                                                                                }`}
+                                                                                onClick={() => {
+                                                                                    set_buttonsModalShow(false);
+                                                                                    setManageCommunityMembersOpen(true);
+                                                                                }}
+                                                                            >
+                                                                                <span>Manage members</span>
+                                                                                <PersonRemoveIcon fontSize="small" className="shrink-0 opacity-70" />
+                                                                            </button>
+                                                                        </>
+                                                                    ) : null}
+                                                                    {isGroupAdmin ? (
+                                                                        <button
+                                                                            type="button"
+                                                                            className={`mt-0.5 flex w-full items-center justify-between gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-semibold ${
+                                                                                theme === "light"
+                                                                                    ? "text-rose-700 hover:bg-rose-50"
+                                                                                    : "text-rose-300 hover:bg-white/10"
+                                                                            }`}
+                                                                            onClick={openDeleteCommunityConfirm}
+                                                                        >
+                                                                            <span>Delete community</span>
+                                                                            <ClearIcon fontSize="small" className="shrink-0 opacity-90" />
+                                                                        </button>
+                                                                    ) : null}
                                                                     <button
                                                                         type="button"
                                                                         className={`mt-0.5 flex w-full items-center justify-between gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-semibold ${
@@ -755,7 +767,6 @@ const MessagesHeader = ({ scrollPosition, events, openCalendarModal, openSeminar
                         closeDialogHandler={handleParticipantsCloseDialog}
                         groupDetails={chosenGroupChatDetails}
                         currentUserId={userDetails?._id}
-                        currentUserRole={userDetails?.role}
                         theme={theme === "light" ? "light" : "dark"}
                     />
                     {chosenGroupChatDetails?.type === "community" ? (

@@ -22,6 +22,15 @@ const {
 /** Stored in RC; FE shows as centered pill (see ChatSystemNotice). */
 const WL_COMMUNITY_SYS_PREFIX = '__WL_COMMUNITY_SYS__::';
 
+const isCommunityModerator = (groupChat: any, userId: string): boolean => {
+    const me = String(userId || "");
+    if (!groupChat || !me) return false;
+    const adminId = String(groupChat?.admin?._id ?? groupChat?.admin ?? "");
+    if (adminId === me) return true;
+    const coMods = Array.isArray(groupChat?.coModerators) ? groupChat.coModerators : [];
+    return coMods.some((id: any) => String(id?._id ?? id) === me);
+};
+
 async function syncCommunityRocketChannel(groupChatId: string) {
     try {
         const reloaded = await GroupChat.findById(groupChatId)
@@ -210,11 +219,11 @@ const addParticipantsToCommunityChat = async (req, res) => {
             });
         }
 
-        // Only admin can add participants
-        if (communityChat.admin.toString() !== userId) {
+        // Community moderators can add participants
+        if (!isCommunityModerator(communityChat, userId)) {
             return res.status(403).json({
                 status: 'FAIL',
-                error: 'Only the admin can add participants to this community chat'
+                error: 'Only community moderators can add participants to this community chat'
             });
         }
 
@@ -361,6 +370,7 @@ const getAllCommunityChats = async (req, res) => {
         })
             .populate('admin', '_id email username role')
             .populate('participants', '_id email username')
+            .populate('coModerators', '_id email username role image')
             .populate('createdBy', '_id email username')
             .lean();
 
@@ -1209,8 +1219,8 @@ const removeMemberFromCommunityChat = async (req, res) => {
             return res.status(404).json({ error: 'Community chat not found' });
         }
 
-        if (groupChat.admin.toString() !== userId.toString()) {
-            return res.status(403).json({ error: 'Only the community admin can remove members' });
+        if (!isCommunityModerator(groupChat, userId)) {
+            return res.status(403).json({ error: 'Only community moderators can remove members' });
         }
 
         if (String(memberUserId) === String(userId)) {
@@ -1539,6 +1549,54 @@ const leftSeminar = async (req, res) => {
     }
 }
 
+const setCommunityCoModerator = async (req, res) => {
+    try {
+        const { userId } = req.user;
+        const { groupChatId, memberUserId, isCoModerator } = req.body || {};
+        if (!groupChatId || !memberUserId) {
+            return res.status(400).json({ error: "groupChatId and memberUserId are required" });
+        }
+
+        const groupChat = await GroupChat.findOne({ _id: groupChatId, type: "community" });
+        if (!groupChat) return res.status(404).json({ error: "Community chat not found" });
+
+        const adminId = String(groupChat?.admin?._id ?? groupChat?.admin ?? "");
+        if (String(userId) !== adminId) {
+            return res.status(403).json({ error: "Only the community admin can manage co-moderators" });
+        }
+        if (String(memberUserId) === adminId) {
+            return res.status(400).json({ error: "Community admin is already a moderator" });
+        }
+
+        const isParticipant = (groupChat.participants || []).some(
+            (p: any) => String(p?._id ?? p) === String(memberUserId),
+        );
+        if (!isParticipant) {
+            return res.status(400).json({ error: "Selected user is not a participant in this community" });
+        }
+
+        groupChat.coModerators = Array.isArray(groupChat.coModerators) ? groupChat.coModerators : [];
+        if (Boolean(isCoModerator)) {
+            if (!groupChat.coModerators.some((id: any) => String(id) === String(memberUserId))) {
+                groupChat.coModerators.push(memberUserId);
+            }
+        } else {
+            groupChat.coModerators = groupChat.coModerators.filter(
+                (id: any) => String(id) !== String(memberUserId),
+            );
+        }
+        await groupChat.save();
+        await groupChat.populate("coModerators", "_id username email image");
+
+        return res.status(200).json({
+            success: true,
+            coModerators: groupChat.coModerators || [],
+        });
+    } catch (err) {
+        return res.status(500).json({ error: err.message });
+    }
+};
+
 module.exports = {
     createGroupChat,
     createGroupChatByUser,
@@ -1562,4 +1620,5 @@ module.exports = {
     getAllCommunityChats,
     leftSeminar,
     removeMemberFromCommunityChat,
+    setCommunityCoModerator,
 };

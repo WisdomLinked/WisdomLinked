@@ -17,7 +17,6 @@ interface Props {
     closeDialogHandler: () => void;
     groupDetails: any;
     currentUserId: string;
-    currentUserRole?: string;
     theme?: "light" | "dark";
 }
 
@@ -26,7 +25,6 @@ const GroupParticipantsDialog = ({
     closeDialogHandler,
     groupDetails,
     currentUserId,
-    currentUserRole,
     theme = "light",
 }: Props) => {
     const dispatch = useDispatch();
@@ -45,8 +43,13 @@ const GroupParticipantsDialog = ({
             ? groupDetails.admin
             : groupDetails?.admin?._id || groupDetails?.admin?.id;
     const isCommunity = groupDetails?.type === "community";
-    const isExpert = String(currentUserRole || "").toLowerCase() === "expert";
-    const canManageMembers = isCommunity && isExpert && String(adminId || "") === String(currentUserId || "");
+    const coModeratorIds = new Set(
+        (groupDetails?.coModerators || []).map((c: any) => String(c?._id ?? c?.id ?? c)).filter(Boolean),
+    );
+    const canManageMembers = isCommunity && (
+        String(adminId || "") === String(currentUserId || "")
+        || coModeratorIds.has(String(currentUserId || ""))
+    );
 
     const handleRemove = async (memberUserId: string, reason: string) => {
         const gid = String(groupDetails?.groupId || groupDetails?._id || "");
@@ -136,6 +139,7 @@ const GroupParticipantsDialog = ({
                             const pid = String(participant?._id ?? participant?.id ?? "");
                             const isMe = pid === String(currentUserId);
                             const isAdmin = pid === String(adminId || "");
+                            const isCoModerator = coModeratorIds.has(pid);
                             const canRemove = canManageMembers && !isMe && !isAdmin;
                             return (
                                 <div
@@ -158,6 +162,11 @@ const GroupParticipantsDialog = ({
                                                     <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${isLight ? "bg-amber-50 text-amber-700 border border-amber-200" : "bg-amber-900/40 text-amber-200 border border-amber-700"}`}>
                                                         <Crown className="h-3 w-3" />
                                                         Admin
+                                                    </span>
+                                                ) : null}
+                                                {!isAdmin && isCoModerator ? (
+                                                    <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${isLight ? "bg-indigo-50 text-indigo-700 border border-indigo-200" : "bg-indigo-900/40 text-indigo-200 border border-indigo-700"}`}>
+                                                        Co-moderator
                                                     </span>
                                                 ) : null}
                                             </div>
