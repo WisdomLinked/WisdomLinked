@@ -292,7 +292,8 @@ export default function StudentProfile() {
     'rounded-2xl border border-slate-200 bg-white p-6 shadow-[0_10px_30px_rgba(0,0,0,0.06)]';
 
   return (
-    <div className="h-[calc(100vh-56px)] overflow-y-auto px-6 py-7 bg-[#F5F3EF]">
+    <div className="h-[calc(100vh-56px)] overflow-y-auto bg-[#F5F3EF] px-4 py-8 sm:px-6">
+      <div className="mx-auto w-full max-w-3xl">
       <h1 className="text-2xl font-semibold text-slate-900 mb-1">Profile</h1>
       <p className="text-sm text-slate-500 mb-6">
         Manage your account details, preferences, and security.
@@ -771,6 +772,7 @@ export default function StudentProfile() {
         </div>
       )}
 
+      </div>
     </div>
   );
 }

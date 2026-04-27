@@ -16,6 +16,7 @@ import {
     deleteMessageAsUser,
     cleanRoomHistoryAsUser,
     purgeRoomMessagesBestEffort,
+    getRocketOnlineUsernames,
 } from '../services/rocketchat.service';
 import { wlDisplayName } from '../utils/wlDisplayName';
 
@@ -495,6 +496,32 @@ export const getDirectCallHistory = async (req: any, res: Response) => {
     } catch (err: any) {
         console.error('[chat.getDirectCallHistory]', err.message);
         return res.status(500).json({ error: err.message });
+    }
+};
+
+/** GET /api/chat/online-users */
+export const getOnlineUsers = async (_req: any, res: Response) => {
+    try {
+        const rcOnlineUsernames = await getRocketOnlineUsernames();
+        if (!rcOnlineUsernames.length) {
+            return res.status(200).json({ success: true, onlineUsers: [] });
+        }
+
+        const users = await User.find({
+            $or: [
+                { rocketChatUsername: { $in: rcOnlineUsernames } },
+                { username: { $in: rcOnlineUsernames } },
+            ],
+        }).select('_id');
+
+        const onlineUsers = users
+            .map((u: any) => ({ userId: String(u?._id || '') }))
+            .filter((u: any) => !!u.userId);
+
+        return res.status(200).json({ success: true, onlineUsers });
+    } catch (err: any) {
+        console.error('[chat.getOnlineUsers]', err.message);
+        return res.status(500).json({ success: false, error: err.message, onlineUsers: [] });
     }
 };
 

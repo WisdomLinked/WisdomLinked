@@ -142,6 +142,21 @@ export const fetchDmUnreadSnapshot = async () => {
     }
 };
 
+/** Current online WL users (derived from Rocket.Chat presence). */
+export const fetchOnlineUsers = async () => {
+    try {
+        const res = await api.get('chat/online-users');
+        return res.data as {
+            success?: boolean;
+            onlineUsers?: Array<{ userId: string }>;
+            error?: string;
+        };
+    } catch (err: any) {
+        console.error('[chatApi.fetchOnlineUsers]', err.message);
+        return null;
+    }
+};
+
 /** Delete a message: mode='me' hides for current user; mode='both' deletes in RC for all (permission-dependent). */
 export const deleteChatMessage = async (
     data: {

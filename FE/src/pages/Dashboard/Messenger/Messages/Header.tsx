@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useState } from "react";
+import React, { useRef, useEffect, useMemo, useState } from "react";
 import IconButton from "@mui/material/IconButton";
 import AddIcCallIcon from "@mui/icons-material/AddIcCall";
 import { useAppSelector } from "../../../../store";
@@ -187,8 +187,20 @@ const MessagesHeader = ({ scrollPosition, events, openCalendarModal, openSeminar
         handleDeleteGroup();
     };
 
+    const onlineIdSet = useMemo(() => {
+        const ids = new Set<string>();
+        (onlineUsers || []).forEach((user: any) => {
+            [user?.userId, user?.id, user?._id, user?.user?._id, user?.user?.id].forEach((v: any) => {
+                const s = String(v ?? '').trim();
+                if (s) ids.add(s);
+            });
+        });
+        return ids;
+    }, [onlineUsers]);
+
     const isOnline = (userId: any) => {
-        return onlineUsers.find(user => user.userId === userId) ? true : false
+        const id = String(userId ?? '').trim();
+        return !!id && onlineIdSet.has(id);
     }
 
     const createNewRoomOrJoinRoom = async () => {
@@ -333,8 +345,15 @@ const MessagesHeader = ({ scrollPosition, events, openCalendarModal, openSeminar
                                      handleProfileModalOpen(chosenChatDetails)
                                  }}>
                                 <Avatar username={chosenChatDetails.username!} image={chosenChatDetails.image} />
-                                <div className={`w-[calc(100%-48px)] text-[18px] mr-2 truncate font-semibold ${theme === "light" ? "text-slate-900" : "text-white"}`}>
+                                <div className={`w-[calc(100%-48px)] mr-2 truncate font-semibold text-[18px] ${theme === "light" ? "text-slate-900" : "text-white"} flex items-center gap-1.5`}>
                                     {chosenChatDetails?.username}
+                                    {isOnline(chosenChatDetails.userId) ? (
+                                        <span
+                                            className="inline-block h-2 w-2 shrink-0 rounded-full bg-emerald-500"
+                                            aria-label="Online"
+                                            title="Online"
+                                        />
+                                    ) : null}
                                 </div>
                             </div>
                     ) :
@@ -456,11 +475,7 @@ const MessagesHeader = ({ scrollPosition, events, openCalendarModal, openSeminar
                             {
                                 chosenGroupChatDetails && (
                                     <button
-                                        className={`rounded-xl mr-4 py-1 px-4 text-sm font-semibold disabled:opacity-50 ${
-                                            theme === "light"
-                                                ? "bg-sky-600 hover:bg-sky-700 text-white"
-                                                : "bg-green text-white"
-                                        }`}
+                                        className="mr-4 rounded-xl bg-[#234C6A] px-4 py-1 text-sm font-semibold text-white shadow-sm transition hover:bg-[#1b3c53] disabled:cursor-not-allowed disabled:bg-[#89A6BC] disabled:text-white disabled:shadow-none"
                                         title={!enabledEvent ? 'Seminar not started' : kickedFromSeminar ? 'You are blocked from this seminar by the expert' : 'Join a seminar'}
                                         disabled={
                                             !enabledEvent ||

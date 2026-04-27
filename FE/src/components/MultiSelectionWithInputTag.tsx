@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import Select, { components } from "react-select";
+import Select, { components, StylesConfig } from "react-select";
 
 const InputOption = ({
     getStyles,
@@ -17,9 +17,9 @@ const InputOption = ({
     const onMouseLeave = () => set_isActive(false);
 
     // styles
-    let bg = "white";
-    if (isFocused) bg = "#eee";
-    if (isActive) bg = "#B2D4FF";
+    let bg = "#ffffff";
+    if (isFocused) bg = "#f8fafc";
+    if (isActive) bg = "#E8EEF4";
 
     const style = {
         alignItems: "center",
@@ -48,6 +48,73 @@ const InputOption = ({
             <span className="text-wl-ink">{children}</span>
         </components.Option>
     );
+};
+
+const selectStyles: StylesConfig<any, true> = {
+    control: (base, state) => ({
+        ...base,
+        minHeight: 50,
+        borderRadius: 15,
+        borderColor: "#DCE4E8",
+        backgroundColor: "#ffffff",
+        boxShadow: state.isFocused ? "0 0 0 1px #234C6A" : "none",
+        "&:hover": {
+            borderColor: "#DCE4E8",
+        },
+    }),
+    menu: (base) => ({
+        ...base,
+        backgroundColor: "#ffffff",
+        borderRadius: 12,
+        border: "1px solid #DCE4E8",
+        boxShadow: "0 10px 25px -5px rgb(0 0 0 / 0.1)",
+        overflow: "hidden",
+        zIndex: 30,
+    }),
+    menuList: (base) => ({
+        ...base,
+        padding: 6,
+        backgroundColor: "#ffffff",
+    }),
+    option: (base, state) => ({
+        ...base,
+        backgroundColor: state.isSelected ? "#E8EEF4" : state.isFocused ? "#f8fafc" : "#ffffff",
+        color: "#1a2d3a",
+        cursor: "pointer",
+        borderRadius: 8,
+    }),
+    placeholder: (base) => ({
+        ...base,
+        color: "#6C7278",
+    }),
+    input: (base) => ({
+        ...base,
+        color: "#1a2d3a",
+    }),
+    multiValue: (base) => ({
+        ...base,
+        backgroundColor: "#E8EEF4",
+        border: "1px solid #BCD6EA",
+        borderRadius: 8,
+    }),
+    multiValueLabel: (base) => ({
+        ...base,
+        color: "#234C6A",
+        fontWeight: 600,
+    }),
+    multiValueRemove: (base) => ({
+        ...base,
+        color: "#234C6A",
+        ":hover": {
+            backgroundColor: "#D9EAFD",
+            color: "#1b3c53",
+        },
+    }),
+    indicatorSeparator: () => ({ display: "none" }),
+    dropdownIndicator: (base) => ({
+        ...base,
+        color: "#234C6A",
+    }),
 };
 
 export default function MultiSelectionWithInputTag ({
@@ -128,6 +195,7 @@ export default function MultiSelectionWithInputTag ({
             onBlur={handleBlur}
             isSearchable={true}
             isMulti
+            styles={selectStyles}
             components={{
                 Option: InputOption
             }}

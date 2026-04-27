@@ -345,8 +345,15 @@ code {
   color: inherit !important;
 }
 
-.MultiSelection .css-1p3m7a8-multiValue {
-  background-color: rgba(49, 176, 153, 0.5333333333);
+.MultiSelection .css-1p3m7a8-multiValue,
+.MultiSelection .wl-select__multi-value {
+  background-color: #e8eef4 !important;
+  border: 1px solid #bcd6ea !important;
+}
+
+.MultiSelection .wl-select__multi-value__label {
+  color: #234c6a !important;
+  font-weight: 600;
 }
 
 .MultiSelection > div:hover {

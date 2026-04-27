@@ -21,7 +21,8 @@ import {
   joinPrivateChat,
   addParticipantsToCommunityChat,
 } from '../../api/api';
-import { clearDmThread, hideDmFromList, fetchDmUnreadSnapshot } from '../../api/chatApi';
+import { clearDmThread, hideDmFromList, fetchDmUnreadSnapshot, fetchOnlineUsers } from '../../api/chatApi';
+import { setOnlineUsers } from '../../actions/friendActions';
 import { setDmUnreadByRidBulk, patchDmUnreadRid } from '../../actions/chatActions';
 import {
   setChosenChatDetails,
@@ -71,7 +72,7 @@ const StudentChat: React.FC = () => {
   const dispatch = useDispatch();
   const {
     auth: { userDetails },
-    friends: { friends, groupChatList },
+    friends: { friends, groupChatList, onlineUsers },
     chat: { chosenChatDetails, chosenGroupChatDetails, dmUnreadByRid },
   } = useAppSelector((s: any) => s);
 
@@ -86,6 +87,19 @@ const StudentChat: React.FC = () => {
   const isCustomer =
     userDetails && String(userDetails.role || '').toLowerCase() === 'customer';
   const isExpert = userDetails && String(userDetails.role || '').toLowerCase() === 'expert';
+
+  const onlineIdSet = useMemo(() => {
+    const ids = new Set<string>();
+    if (!Array.isArray(onlineUsers)) return ids;
+    onlineUsers.forEach((user: any) => {
+      const candidates = [user?.userId, user?.id, user?._id, user?.user?._id, user?.user?.id];
+      candidates.forEach((v: any) => {
+        const s = String(v ?? '').trim();
+        if (s) ids.add(s);
+      });
+    });
+    return ids;
+  }, [onlineUsers]);
 
   const currentUserId = userDetails?._id ?? userDetails?.id ?? userDetails?.userId ?? null;
 
@@ -195,6 +209,42 @@ const StudentChat: React.FC = () => {
     })();
     return () => {
       cancelled = true;
+    };
+  }, [dispatch, isCustomer, isExpert]);
+
+  // Online presence: keep friend/direct-chat online ids fresh for green-dot indicators.
+  useEffect(() => {
+    if (!isCustomer && !isExpert) return;
+    let cancelled = false;
+    let timer: ReturnType<typeof setInterval> | null = null;
+
+    const pullOnlineUsers = async () => {
+      const res = await fetchOnlineUsers();
+      if (cancelled) return;
+      if (res?.success && Array.isArray(res.onlineUsers)) {
+        dispatch(setOnlineUsers(res.onlineUsers) as any);
+      }
+    };
+
+    void pullOnlineUsers();
+    timer = setInterval(() => {
+      void pullOnlineUsers();
+    }, 20000);
+
+    const onFocus = () => {
+      void pullOnlineUsers();
+    };
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') void pullOnlineUsers();
+    };
+    window.addEventListener('focus', onFocus);
+    document.addEventListener('visibilitychange', onVisible);
+
+    return () => {
+      cancelled = true;
+      if (timer) clearInterval(timer);
+      window.removeEventListener('focus', onFocus);
+      document.removeEventListener('visibilitychange', onVisible);
     };
   }, [dispatch, isCustomer, isExpert]);
 
@@ -876,6 +926,10 @@ const StudentChat: React.FC = () => {
     String(chosenGroupChatDetails?._id) === String(id);
 
   const isFriendActive = (id: string) => String(chosenChatDetails?.userId) === String(id);
+  const isUserOnline = (userId: string) => {
+    const id = String(userId ?? '').trim();
+    return !!id && onlineIdSet.has(id);
+  };
 
   return (
     <div className="flex h-full bg-wl-chatGold text-slate-900">
@@ -1087,6 +1141,13 @@ const StudentChat: React.FC = () => {
                         ? isFriendActive(row.otherUserId)
                         : false;
                 const title = row.title;
+                const presenceUserId =
+                  row.kind === 'privateDm'
+                    ? row.otherUserId
+                    : row.kind === 'friend' || row.kind === 'expertCustomer' || row.kind === 'studentSearchedExpert'
+                      ? row.id
+                      : '';
+                const online = presenceUserId ? isUserOnline(presenceUserId) : false;
                 const unreadCount =
                   row.kind === 'privateDm' && row.rcChannelId
                     ? Math.max(Number(dmUnreadByRid?.[row.rcChannelId] || 0), Number(rcUnreadByRid?.[row.rcChannelId] || 0))
@@ -1137,7 +1198,16 @@ const StudentChat: React.FC = () => {
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between gap-2">
-                        <p className="truncate font-semibold text-[11px]">{title}</p>
+                        <p className="truncate font-semibold text-[11px] flex items-center gap-1">
+                          {title}
+                          {online ? (
+                            <span
+                              className="inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500"
+                              aria-label="Online"
+                              title="Online"
+                            />
+                          ) : null}
+                        </p>
                         {row.kind === 'friend' && row.missedChats ? (
                           <span className="ml-1 shrink-0 rounded-full bg-emerald-500/20 px-1.5 text-[10px] text-emerald-600">
                             {row.missedChats}

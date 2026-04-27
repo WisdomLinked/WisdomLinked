@@ -191,14 +191,14 @@ const CustomerProfile = ({
     }, [])
 
     return (
-        <div className={`w-full h-full overflow-y-auto relative ${isFromAdminPanel ? 'py-0' : 'py-6'}`}>
-            <div className={`w-full max-w-[400px] p-6 mx-auto flex flex-col items-center ${isFromAdminPanel ? 'p-0' : 'p-6'}`}>
+        <div className={`w-full h-full overflow-y-auto relative bg-[#F5F3EF] ${isFromAdminPanel ? 'py-0' : 'py-6'}`}>
+            <div className={`w-full max-w-3xl mx-auto flex flex-col items-stretch ${isFromAdminPanel ? 'p-0' : 'px-4 py-8 sm:px-6'}`}>
                 {
                     !isFromAdminPanel ?
                         <>
                             <div className="w-full flex">
                                 <button
-                                    className="w-6 h-6 text-white hover:opacity-50"
+                                    className="w-6 h-6 text-slate-700 hover:opacity-70"
                                     onClick={() => navigate(-1)}
                                 >
                                     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -207,14 +207,16 @@ const CustomerProfile = ({
                                     </svg>
                                 </button>
                             </div>
-                            <div className="text-center text-white text-3xl">Edit Profile</div>
+                            <div className="text-center text-slate-900 text-3xl font-semibold">Edit Profile</div>
                         </> :
                         null
                 }
 
-                <div className="w-full text-white flex flex-col justify-center items-center mt-8">
-                    <ImagePicker key={imagePickerKey} initialImage={originalImageSrc} on_imageChange={on_imageChange} validator={validateImageSize} />
-                    <div className="w-full max-w-[400px] mt-6">
+                <div className="w-full flex flex-col justify-center items-stretch mt-2 rounded-2xl border border-slate-200 bg-white px-6 py-6 shadow-sm">
+                    <div className="mx-auto">
+                        <ImagePicker key={imagePickerKey} initialImage={originalImageSrc} on_imageChange={on_imageChange} validator={validateImageSize} />
+                    </div>
+                    <div className="w-full mt-6">
                         {
                             isFromAdminPanel ?
                                 <>
@@ -282,15 +284,15 @@ const CustomerProfile = ({
                         />
                     </div>
                 </div>
-                <div className="w-full h-10 flex justify-between mt-14 text-lightgrey">
+                <div className="w-full h-10 flex justify-end gap-3 mt-8 text-slate-600">
                     <button
-                        className="w-[calc(50%-8px)] rounded-lg border border-lightgrey flex items-center justify-center"
+                        className="w-[170px] rounded-lg border border-slate-300 flex items-center justify-center hover:bg-slate-50 transition"
                         onClick={reset}
                     >
                         Reset
                     </button>
                     <button
-                        className="w-[calc(50%-8px)] bg-green rounded-lg flex items-center justify-center disabled:opacity-50"
+                        className="w-[170px] bg-[#234C6A] text-white rounded-lg flex items-center justify-center hover:bg-[#1b3c53] disabled:opacity-50 transition"
                         disabled={!enableToUpdate}
                         onClick={updateProfile}
                     >

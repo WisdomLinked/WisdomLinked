@@ -17,6 +17,7 @@ import {
     hideDmFromList,
     clearDmThread,
     getDirectCallHistory,
+    getOnlineUsers,
 } from '../controllers/chat.controller';
 
 // DM routes
@@ -38,5 +39,6 @@ router.post('/rc-read-receipts', requireAuth(false), getReadReceiptsBatch);
 router.post('/delete-message', requireAuth(false), deleteChatMessage);
 router.post('/dm/hide', requireAuth(false), hideDmFromList);
 router.post('/dm/clear-thread', requireAuth(false), clearDmThread);
+router.get('/online-users', requireAuth(false), getOnlineUsers);
 
 module.exports = router;
