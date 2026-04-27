@@ -48,7 +48,7 @@ jobs:
           cache-dependency-path: FE/package-lock.json
 
       - name: Install frontend deps
-        run: npm ci
+        run: npm ci --legacy-peer-deps
 
       - name: Run frontend coverage gate
         run: npm run test:coverage
