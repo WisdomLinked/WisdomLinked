@@ -379,6 +379,7 @@ export default function StudentDashboard() {
             id: `chat-${rid}`,
             title: `${label} messaged you`,
             meta: `${n > 99 ? '99+' : n} unread message${n !== 1 ? 's' : ''}`,
+            unreadCount: n,
             icon: <MessageSquare className="h-3.5 w-3.5 text-[#1A3A4A]" aria-hidden />,
             onClick: () => {
               if (isDm) localStorage.setItem('wl_open_dm_rid', rid);
