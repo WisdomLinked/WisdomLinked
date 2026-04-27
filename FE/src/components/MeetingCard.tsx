@@ -153,9 +153,10 @@ const MeetingCard: React.FC<MeetingCardProps> = ({
                         </button>
                         <button
                             onClick={() => void handleJoin()}
-                            className="px-4 py-1.5 text-xs font-semibold rounded-full bg-gradient-to-r from-green-500 to-emerald-500 text-white hover:brightness-110 transition-all shadow-sm"
+                            className="px-3 py-1.5 text-[11px] font-semibold rounded-full border border-blue-300 text-blue-700 bg-white hover:bg-blue-50 transition-all"
                         >
-                            Join call
+                            {inviteBusy ? 'Joining…' : 'Join Call'}
+                            
                         </button>
                     </div>
                 )}
