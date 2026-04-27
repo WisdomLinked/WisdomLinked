@@ -37,6 +37,7 @@ import { actionTypes } from '../../actions/types';
 import { isTheEventGoingOn } from '../../actions/common';
 import { resolveProfileImageSrc } from '../../utils/profileImage';
 import { shouldShowMobileMessenger } from '../../utils/mobileChatLayout';
+import { buildOnlineUserIdSet, hasOnlineUserId } from '../../utils/onlinePresence';
 
 type CommunityRow = {
   raw: any;
@@ -86,16 +87,7 @@ const StudentChat: React.FC = () => {
   const isExpert = userDetails && String(userDetails.role || '').toLowerCase() === 'expert';
 
   const onlineIdSet = useMemo(() => {
-    const ids = new Set<string>();
-    if (!Array.isArray(onlineUsers)) return ids;
-    onlineUsers.forEach((user: any) => {
-      const candidates = [user?.userId, user?.id, user?._id, user?.user?._id, user?.user?.id];
-      candidates.forEach((v: any) => {
-        const s = String(v ?? '').trim();
-        if (s) ids.add(s);
-      });
-    });
-    return ids;
+    return buildOnlineUserIdSet(onlineUsers);
   }, [onlineUsers]);
 
   const currentUserId = userDetails?._id ?? userDetails?.id ?? userDetails?.userId ?? null;
@@ -919,8 +911,7 @@ const StudentChat: React.FC = () => {
 
   const isFriendActive = (id: string) => String(chosenChatDetails?.userId) === String(id);
   const isUserOnline = (userId: string) => {
-    const id = String(userId ?? '').trim();
-    return !!id && onlineIdSet.has(id);
+    return hasOnlineUserId(onlineIdSet, userId);
   };
   const showMobileMessenger = shouldShowMobileMessenger(chosenChatDetails, chosenGroupChatDetails);
 
@@ -1181,7 +1172,14 @@ const StudentChat: React.FC = () => {
                 const inner = (
                   <>
                     <div className="mt-0.5">
-                      <span className="inline-flex h-7 w-7 items-center justify-center overflow-hidden rounded-full border border-[#BCD6EA] bg-[#E8EEF4] text-[10px] font-semibold text-[#234C6A]">
+                      <span className="relative inline-flex h-7 w-7 items-center justify-center overflow-hidden rounded-full border border-[#BCD6EA] bg-[#E8EEF4] text-[10px] font-semibold text-[#234C6A]">
+                        {online ? (
+                          <span
+                            className="absolute left-0 top-0 h-2 w-2 rounded-full bg-emerald-500 ring-2 ring-white"
+                            aria-label="Online"
+                            title="Online"
+                          />
+                        ) : null}
                         {row.image ? (
                           <img src={row.image} alt={title} className="h-full w-full object-cover" />
                         ) : (
@@ -1193,13 +1191,6 @@ const StudentChat: React.FC = () => {
                       <div className="flex items-center justify-between gap-2">
                         <p className="truncate font-semibold text-[11px] flex items-center gap-1">
                           {title}
-                          {online ? (
-                            <span
-                              className="inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500"
-                              aria-label="Online"
-                              title="Online"
-                            />
-                          ) : null}
                         </p>
                         {row.kind === 'friend' && row.missedChats ? (
                           <span className="ml-1 shrink-0 rounded-full bg-emerald-500/20 px-1.5 text-[10px] text-emerald-600">

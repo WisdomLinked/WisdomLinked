@@ -38,6 +38,7 @@ import ProfileModal from "./ProfileModal";
 import CommunityProfileModal from "./CommunityProfileModal";
 import { History, ShareIcon, Video } from "lucide-react";
 import { buildFallbackChatProfile, mergeChatProfile } from "../../../../utils/chatProfileModal";
+import { buildOnlineUserIdSet, hasOnlineUserId } from "../../../../utils/onlinePresence";
 
 const MessagesHeader = ({ scrollPosition, events, openCalendarModal, openSeminarModal, openEditSeminarModal, theme = "dark" }: any) => {
 
@@ -190,19 +191,11 @@ const MessagesHeader = ({ scrollPosition, events, openCalendarModal, openSeminar
     };
 
     const onlineIdSet = useMemo(() => {
-        const ids = new Set<string>();
-        (onlineUsers || []).forEach((user: any) => {
-            [user?.userId, user?.id, user?._id, user?.user?._id, user?.user?.id].forEach((v: any) => {
-                const s = String(v ?? '').trim();
-                if (s) ids.add(s);
-            });
-        });
-        return ids;
+        return buildOnlineUserIdSet(onlineUsers);
     }, [onlineUsers]);
 
     const isOnline = (userId: any) => {
-        const id = String(userId ?? '').trim();
-        return !!id && onlineIdSet.has(id);
+        return hasOnlineUserId(onlineIdSet, userId);
     }
 
     const createNewRoomOrJoinRoom = async () => {
@@ -346,16 +339,13 @@ const MessagesHeader = ({ scrollPosition, events, openCalendarModal, openSeminar
                                  onClick={()=>{
                                      handleProfileModalOpen(chosenChatDetails)
                                  }}>
-                                <Avatar username={chosenChatDetails.username!} image={chosenChatDetails.image} />
+                                <Avatar
+                                    username={chosenChatDetails.username!}
+                                    image={chosenChatDetails.image}
+                                    isOnline={isOnline(chosenChatDetails.userId)}
+                                />
                                 <div className={`w-[calc(100%-48px)] mr-2 truncate font-semibold text-[18px] ${theme === "light" ? "text-slate-900" : "text-white"} flex items-center gap-1.5`}>
                                     {chosenChatDetails?.username}
-                                    {isOnline(chosenChatDetails.userId) ? (
-                                        <span
-                                            className="inline-block h-2 w-2 shrink-0 rounded-full bg-emerald-500"
-                                            aria-label="Online"
-                                            title="Online"
-                                        />
-                                    ) : null}
                                 </div>
                             </div>
                     ) :
