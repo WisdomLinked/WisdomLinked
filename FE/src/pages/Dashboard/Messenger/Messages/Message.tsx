@@ -211,20 +211,21 @@ const Message = ({
                       Special Template for "Call Lasted for" or "Seminar Lasted for"
                       using MUI Card
                     */}
-                    <div className="mt-0.5 flex items-end gap-1">
+                    <div className="mt-0.5 flex min-w-0 items-end gap-1">
+                        {renderDeleteActions()}
                         <Card
                             sx={{
                                 backgroundColor: "#333333",
                                 color: "#ffffff",
                                 borderRadius: "10px",
-                                maxWidth: "250px",
+                                maxWidth: "min(100%, 36rem)",
                                 mt: 0.5,
                                 overflow: "hidden",
                                 border: "1px solid #31B099",
                             }}
                         >
                             <CardContent>
-                                <Typography sx={{ fontSize: 14, fontWeight: 600 }}>
+                                <Typography sx={{ fontSize: 14, fontWeight: 600, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
                                     {parseHtml(content)}
                                 </Typography>
                             </CardContent>
