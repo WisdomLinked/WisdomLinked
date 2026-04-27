@@ -3,6 +3,7 @@ import { wlDisplayName } from '../utils/wlDisplayName';
 const mongoose = require("mongoose");
 const User = require("../models/User");
 const GroupChat = require("../models/GroupChat");
+const MeetingThread = require("../models/MeetingThread");
 const PendingAppointmentToGroup = require("../models/PendingAppointmentToGroup");
 const PaymentHistory = require("../models/PaymentHistory");
 // Socket notifications removed — Rocket.Chat handles real-time updates now
@@ -1255,6 +1256,20 @@ const removeMemberFromCommunityChat = async (req, res) => {
             createdAt: new Date(),
         });
         await groupChat.save();
+
+        await MeetingThread.updateMany(
+            { groupChatId: groupChat._id, status: 'active' },
+            {
+                $addToSet: {
+                    removedParticipants: {
+                        userId: memberUserId,
+                        removedBy: userId,
+                        reason: normalizedReason,
+                        removedAt: new Date(),
+                    },
+                },
+            },
+        );
 
         if (Array.isArray(member.generalChats)) {
             member.generalChats = member.generalChats.filter(
