@@ -51,6 +51,7 @@ async function syncCommunityRocketChannel(groupChatId: string) {
 const { checkTitleNameInvalid } = require('../services/global')
 const { scheduleEmailReminder, sendEmailMeetingRequestToCustomer, sendEmailMeetingRequestToExpert, sendEmailMeetingAcceptance } = require('../services/notifications')
 const { assertBookingLeadTime } = require("../utils/bookingLeadTime");
+import { buildRemovedUserNotice, normalizeModerationReason } from '../utils/videoModerationNotice';
 
 const createGeneralChatAndJoinGlobalChat = async (expertId) => {
     try {
@@ -1197,7 +1198,7 @@ const leaveGroup = async (req, res) => {
 const removeMemberFromCommunityChat = async (req, res) => {
     try {
         const { userId } = req.user;
-        const { groupChatId, memberUserId } = req.body || {};
+        const { groupChatId, memberUserId, reason } = req.body || {};
 
         if (!groupChatId || !memberUserId) {
             return res.status(400).json({ error: 'groupChatId and memberUserId are required' });
@@ -1228,9 +1229,21 @@ const removeMemberFromCommunityChat = async (req, res) => {
             return res.status(400).json({ error: 'User is not in this community' });
         }
 
+        const normalizedReason = normalizeModerationReason(reason);
+
         groupChat.participants = groupChat.participants.filter(
             (p) => p.toString() !== memberUserId.toString(),
         );
+        groupChat.moderationNotes = Array.isArray(groupChat.moderationNotes)
+            ? groupChat.moderationNotes
+            : [];
+        groupChat.moderationNotes.push({
+            action: 'remove_member',
+            by: userId,
+            target: memberUserId,
+            reason: normalizedReason,
+            createdAt: new Date(),
+        });
         await groupChat.save();
 
         if (Array.isArray(member.generalChats)) {
@@ -1253,10 +1266,16 @@ const removeMemberFromCommunityChat = async (req, res) => {
             }
             const adminName = wlDisplayName(adminUser);
             const memberName = wlDisplayName(member);
+            const userFacingNotice = buildRemovedUserNotice(normalizedReason);
             try {
                 await sendMessageToRC(
                     String(groupChat.rcChannelId),
-                    `${WL_COMMUNITY_SYS_PREFIX}${memberName} has been removed from the community by ${adminName}.`,
+                    `${WL_COMMUNITY_SYS_PREFIX}${memberName} has been removed from the community by ${adminName}. Reason: ${normalizedReason}.`,
+                    'Community',
+                );
+                await sendMessageToRC(
+                    String(groupChat.rcChannelId),
+                    `${WL_COMMUNITY_SYS_PREFIX}${memberName}: ${userFacingNotice}`,
                     'Community',
                 );
             } catch (e) {
@@ -1264,7 +1283,10 @@ const removeMemberFromCommunityChat = async (req, res) => {
             }
         }
 
-        return res.status(200).json({ success: true });
+        return res.status(200).json({
+            success: true,
+            notice: buildRemovedUserNotice(normalizedReason),
+        });
     } catch (err) {
         console.error('[removeMemberFromCommunityChat]', err);
         return res.status(500).json({ error: err.message });

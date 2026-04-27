@@ -1,6 +1,9 @@
 import React, { useState } from "react";
 import Dialog from "@mui/material/Dialog";
 import DialogContent from "@mui/material/DialogContent";
+import DialogTitle from "@mui/material/DialogTitle";
+import DialogActions from "@mui/material/DialogActions";
+import Button from "@mui/material/Button";
 import Avatar from "../../../../components/Avatar";
 import { Crown, Mail, UserMinus, Users, X } from "lucide-react";
 import { useDispatch } from "react-redux";
@@ -28,6 +31,10 @@ const GroupParticipantsDialog = ({
 }: Props) => {
     const dispatch = useDispatch();
     const [removingId, setRemovingId] = useState<string | null>(null);
+    const [removeReasonOpen, setRemoveReasonOpen] = useState(false);
+    const [removeReason, setRemoveReason] = useState("");
+    const [pendingRemoveMemberId, setPendingRemoveMemberId] = useState<string | null>(null);
+    const [pendingRemoveMemberName, setPendingRemoveMemberName] = useState<string>("");
     const handleCloseDialog = () => {
         closeDialogHandler();
     };
@@ -41,12 +48,12 @@ const GroupParticipantsDialog = ({
     const isExpert = String(currentUserRole || "").toLowerCase() === "expert";
     const canManageMembers = isCommunity && isExpert && String(adminId || "") === String(currentUserId || "");
 
-    const handleRemove = async (memberUserId: string) => {
+    const handleRemove = async (memberUserId: string, reason: string) => {
         const gid = String(groupDetails?.groupId || groupDetails?._id || "");
         if (!gid || !memberUserId) return;
         setRemovingId(memberUserId);
         try {
-            const res: any = await removeCommunityMember(gid, memberUserId);
+            const res: any = await removeCommunityMember(gid, memberUserId, reason);
             if (res?.success) {
                 const nextParticipants = (groupDetails?.participants || []).filter(
                     (p: any) => String(p?._id ?? p?.id ?? p) !== String(memberUserId),
@@ -67,6 +74,23 @@ const GroupParticipantsDialog = ({
         } finally {
             setRemovingId(null);
         }
+    };
+
+    const openRemoveReasonDialog = (memberUserId: string, username: string) => {
+        setPendingRemoveMemberId(memberUserId);
+        setPendingRemoveMemberName(username || "this user");
+        setRemoveReason("");
+        setRemoveReasonOpen(true);
+    };
+
+    const confirmRemoveWithReason = async () => {
+        if (!pendingRemoveMemberId) return;
+        const reason = removeReason.trim();
+        if (!reason) return;
+        setRemoveReasonOpen(false);
+        const memberId = pendingRemoveMemberId;
+        setPendingRemoveMemberId(null);
+        await handleRemove(memberId, reason);
     };
     const paperClass = isLight
         ? "rounded-2xl border border-slate-200 bg-white shadow-2xl"
@@ -146,7 +170,7 @@ const GroupParticipantsDialog = ({
                                             <button
                                                 type="button"
                                                 disabled={removingId === pid}
-                                                onClick={() => void handleRemove(pid)}
+                                                onClick={() => openRemoveReasonDialog(pid, participant.username)}
                                                 className={`inline-flex shrink-0 items-center gap-1 rounded-lg px-2.5 py-1 text-[11px] font-semibold transition ${
                                                     isLight
                                                         ? "border border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100"
@@ -163,6 +187,40 @@ const GroupParticipantsDialog = ({
                         })}
                     </div>
                 </DialogContent>
+            </Dialog>
+            <Dialog
+                open={removeReasonOpen}
+                onClose={() => setRemoveReasonOpen(false)}
+                maxWidth="xs"
+                fullWidth
+            >
+                <DialogTitle>Decline participant from call?</DialogTitle>
+                <DialogContent>
+                    <p className="text-sm text-slate-600 mb-3">
+                        {`The following message will be sent to ${pendingRemoveMemberName}:`}
+                    </p>
+                    <textarea
+                        value={removeReason}
+                        onChange={(e) => setRemoveReason(e.target.value)}
+                        rows={4}
+                        placeholder="Reason (e.g., being disruptive, unpaid seminar, stranger account)"
+                        className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-200"
+                    />
+                    <p className="mt-2 text-xs text-slate-500">
+                        {`The moderator declined you from participating in the video call because ${removeReason.trim() || "[reason]"}. Later communication with you will ensue when needed.`}
+                    </p>
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={() => setRemoveReasonOpen(false)}>Cancel</Button>
+                    <Button
+                        variant="contained"
+                        color="error"
+                        disabled={!removeReason.trim()}
+                        onClick={() => void confirmRemoveWithReason()}
+                    >
+                        Remove participant
+                    </Button>
+                </DialogActions>
             </Dialog>
         </div>
     );
