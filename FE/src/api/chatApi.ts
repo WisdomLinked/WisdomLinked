@@ -304,6 +304,7 @@ export const getMeetingRatingState = async (meetingThreadId: string) => {
         return res.data as {
             success?: boolean;
             canRate?: boolean;
+            ratingBlockedReason?: string;
             hasRated?: boolean;
             existingRating?: { score: number; comment?: string } | null;
             targetUser?: { _id: string; username: string } | null;
@@ -312,6 +313,21 @@ export const getMeetingRatingState = async (meetingThreadId: string) => {
     } catch (err: any) {
         console.error('[chatApi.getMeetingRatingState]', err.message);
         return { success: false, canRate: false, hasRated: false, error: err?.response?.data?.error || err.message };
+    }
+};
+
+/** Revoke a participant from re-joining an active meeting. */
+export const revokeMeetingParticipant = async (
+    meetingThreadId: string,
+    targetUserId: string,
+    reason: string = '',
+) => {
+    try {
+        const res = await api.post('meeting/revoke-participant', { meetingThreadId, targetUserId, reason });
+        return res.data as { success?: boolean; error?: string };
+    } catch (err: any) {
+        console.error('[chatApi.revokeMeetingParticipant]', err.message);
+        return { success: false, error: err?.response?.data?.error || err.message };
     }
 };
 

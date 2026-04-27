@@ -96,6 +96,23 @@ const canUserJoinMeeting = async (meeting: any, userId: string): Promise<{ allow
     return { allowed: false, moderator: false };
 };
 
+const isRemovedFromMeeting = (meeting: any, userId: string): boolean => {
+    const uid = String(userId || '');
+    if (!uid) return false;
+    return Array.isArray(meeting?.removedParticipants) && meeting.removedParticipants.some(
+        (r: any) => normalizeId(r?.userId) === uid,
+    );
+};
+
+const hasJoinedMeeting = (meeting: any, userId: string): boolean => {
+    const uid = String(userId || '');
+    if (!uid) return false;
+    if (Array.isArray(meeting?.joinEvents) && meeting.joinEvents.some((j: any) => normalizeId(j?.userId) === uid)) {
+        return true;
+    }
+    return Array.isArray(meeting?.participants) && meeting.participants.some((p: any) => normalizeId(p) === uid);
+};
+
 /**
  * POST /api/meeting/start
  * Start a Jitsi meeting and create a meeting thread linked to a conversation or group.
@@ -138,6 +155,7 @@ export const startMeeting = async (req: any, res: Response) => {
             jitsiRoomName,
             startedBy: userId,
             participants: [userId],
+            joinEvents: [{ userId, joinedAt: new Date(), source: 'start' }],
             status: 'active',
         });
         await meetingThread.save();
@@ -339,6 +357,7 @@ export const getMeetingRatingState = async (req: any, res: Response) => {
             .populate('participants', 'username _id');
         if (!meeting) return res.status(404).json({ error: 'Meeting not found' });
         const targetId = resolveMeetingRatingTargetUserId(meeting, String(userId));
+        const hasPresence = !!targetId && hasJoinedMeeting(meeting, String(userId)) && hasJoinedMeeting(meeting, String(targetId));
         const existing = (meeting.ratings || []).find(
             (r: any) => String(r?.rater?._id ?? r?.rater) === String(userId),
         );
@@ -347,7 +366,15 @@ export const getMeetingRatingState = async (req: any, res: Response) => {
             (targetId && String(meeting.startedBy?._id) === String(targetId) ? meeting.startedBy : null);
         return res.status(200).json({
             success: true,
-            canRate: meeting.status === 'ended' && !!targetId,
+            canRate: meeting.status === 'ended' && !!targetId && hasPresence,
+            ratingBlockedReason:
+                meeting.status !== 'ended'
+                    ? 'Meeting must be ended before rating'
+                    : !targetId
+                      ? 'You cannot rate this meeting'
+                      : !hasPresence
+                        ? 'Both users must join the Jitsi call before rating'
+                        : '',
             hasRated: Boolean(existing),
             existingRating: existing
                 ? { score: existing.score, comment: String(existing.comment || '') }
@@ -382,6 +409,9 @@ export const submitMeetingRating = async (req: any, res: Response) => {
         if (meeting.status !== 'ended') return res.status(400).json({ error: 'Meeting must be ended before rating' });
         const targetId = resolveMeetingRatingTargetUserId(meeting, String(userId));
         if (!targetId) return res.status(403).json({ error: 'You cannot rate this meeting' });
+        if (!hasJoinedMeeting(meeting, String(userId)) || !hasJoinedMeeting(meeting, String(targetId))) {
+            return res.status(403).json({ error: 'Both users must join the Jitsi call before rating' });
+        }
 
         const existingIdx = (meeting.ratings || []).findIndex(
             (r: any) => String(r?.rater?._id ?? r?.rater) === String(userId),
@@ -522,9 +552,12 @@ export const getMeetingJoinInfo = async (req: any, res: Response) => {
         const { userId } = req.user;
         const { meetingThreadId } = req.params;
         if (!meetingThreadId) return res.status(400).json({ error: 'meetingThreadId is required' });
-        const meeting = await MeetingThread.findById(meetingThreadId).select('jitsiRoomName status conversationId groupChatId');
+        const meeting = await MeetingThread.findById(meetingThreadId).select('jitsiRoomName status conversationId groupChatId removedParticipants joinEvents participants');
         if (!meeting) return res.status(404).json({ error: 'Meeting not found' });
         if (meeting.status !== 'active') return res.status(400).json({ error: 'Meeting is no longer active' });
+        if (isRemovedFromMeeting(meeting, String(userId))) {
+            return res.status(403).json({ error: 'You were removed from this active call by a moderator' });
+        }
 
         const me = await User.findById(userId).select('_id username email image');
         if (!me) return res.status(404).json({ error: 'User not found' });
@@ -535,6 +568,19 @@ export const getMeetingJoinInfo = async (req: any, res: Response) => {
             moderator: auth.moderator,
             guest: false,
         });
+        meeting.joinEvents = Array.isArray(meeting.joinEvents) ? meeting.joinEvents : [];
+        meeting.joinEvents.push({
+            userId: me._id,
+            joinedAt: new Date(),
+            source: 'join-link',
+        });
+        if (!Array.isArray(meeting.participants)) {
+            meeting.participants = [];
+        }
+        if (!meeting.participants.some((p: any) => normalizeId(p) === normalizeId(me._id))) {
+            meeting.participants.push(me._id);
+        }
+        await meeting.save();
         return res.status(200).json({
             success: true,
             meetingThreadId,
@@ -544,6 +590,52 @@ export const getMeetingJoinInfo = async (req: any, res: Response) => {
         });
     } catch (err: any) {
         console.error('[meeting.joinInfo]', err.message);
+        return res.status(500).json({ error: err.message });
+    }
+};
+
+/**
+ * POST /api/meeting/revoke-participant
+ * Body: { meetingThreadId, targetUserId, reason? }
+ */
+export const revokeMeetingParticipant = async (req: any, res: Response) => {
+    try {
+        const { userId } = req.user;
+        const { meetingThreadId, targetUserId, reason } = req.body || {};
+        if (!meetingThreadId || !targetUserId) {
+            return res.status(400).json({ error: 'meetingThreadId and targetUserId are required' });
+        }
+        const meeting = await MeetingThread.findById(meetingThreadId).select(
+            'status groupChatId conversationId removedParticipants participants startedBy',
+        );
+        if (!meeting) return res.status(404).json({ error: 'Meeting not found' });
+        if (meeting.status !== 'active') return res.status(400).json({ error: 'Meeting is not active' });
+
+        const auth = await canUserJoinMeeting(meeting, String(userId));
+        if (!auth.moderator) {
+            return res.status(403).json({ error: 'Only moderators can revoke participant call access' });
+        }
+        if (String(targetUserId) === String(userId)) {
+            return res.status(400).json({ error: 'Moderator cannot revoke own access' });
+        }
+        const targetIsEligible = await canUserJoinMeeting(meeting, String(targetUserId));
+        if (!targetIsEligible.allowed) {
+            return res.status(400).json({ error: 'Target user is not eligible for this meeting' });
+        }
+        meeting.removedParticipants = Array.isArray(meeting.removedParticipants) ? meeting.removedParticipants : [];
+        if (!isRemovedFromMeeting(meeting, String(targetUserId))) {
+            meeting.removedParticipants.push({
+                userId: targetUserId,
+                removedBy: userId,
+                removedAt: new Date(),
+                reason: String(reason || '').trim(),
+            });
+            await meeting.save();
+        }
+
+        return res.status(200).json({ success: true });
+    } catch (err: any) {
+        console.error('[meeting.revokeParticipant]', err.message);
         return res.status(500).json({ error: err.message });
     }
 };

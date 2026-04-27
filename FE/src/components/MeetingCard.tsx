@@ -37,6 +37,7 @@ const MeetingCard: React.FC<MeetingCardProps> = ({
     const [loading, setLoading] = useState(false);
     const [canRate, setCanRate] = useState(false);
     const [hasRated, setHasRated] = useState(false);
+    const [ratingBlockedReason, setRatingBlockedReason] = useState<string>("");
     const [targetName, setTargetName] = useState<string>("");
     const [score, setScore] = useState<number>(5);
     const [comment, setComment] = useState("");
@@ -77,6 +78,7 @@ const MeetingCard: React.FC<MeetingCardProps> = ({
             const state = await getMeetingRatingState(meetingThreadId);
             if (cancelled) return;
             setCanRate(Boolean(state?.canRate));
+            setRatingBlockedReason(String(state?.ratingBlockedReason || ""));
             setHasRated(Boolean(state?.hasRated));
             setTargetName(String(state?.targetUser?.username || ""));
             if (state?.existingRating?.score) setScore(Number(state.existingRating.score));
@@ -227,7 +229,11 @@ const MeetingCard: React.FC<MeetingCardProps> = ({
                                 </div>
                             )}
                         </div>
-                    ) : null}
+                    ) : (
+                        <div className={`mt-2 text-[11px] ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                            {ratingBlockedReason || 'Rating is unavailable for this call.'}
+                        </div>
+                    )}
                 </div>
             )}
 

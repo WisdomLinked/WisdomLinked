@@ -30,6 +30,42 @@ const meetingThreadSchema = new mongoose.Schema(
                 ref: "User",
             },
         ],
+        joinEvents: [
+            {
+                userId: {
+                    type: mongoose.Schema.Types.ObjectId,
+                    ref: "User",
+                },
+                joinedAt: {
+                    type: Date,
+                    default: Date.now,
+                },
+                source: {
+                    type: String,
+                    default: "join-link",
+                },
+            },
+        ],
+        removedParticipants: [
+            {
+                userId: {
+                    type: mongoose.Schema.Types.ObjectId,
+                    ref: "User",
+                },
+                removedBy: {
+                    type: mongoose.Schema.Types.ObjectId,
+                    ref: "User",
+                },
+                reason: {
+                    type: String,
+                    default: "",
+                },
+                removedAt: {
+                    type: Date,
+                    default: Date.now,
+                },
+            },
+        ],
 
         startedAt: {
             type: Date,
