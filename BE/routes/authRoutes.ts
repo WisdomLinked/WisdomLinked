@@ -37,6 +37,7 @@ const {
     getMyEvents
 } = require('../controllers/event.controller')
 const { uploadsGeneral, uploadsChatFile } = require("../middlewares/multerConfig");
+const { mapChatUploadMulterError } = require("../middlewares/multerConfig");
 const {
     stripePay,
     createStripePaymentIntent,
@@ -49,7 +50,17 @@ const {
 
 router.post("/register", uploadsGeneral, register);
 router.post("/updateResume", uploadsGeneral, updateResume);
-router.post("/uploadChatFile", uploadsChatFile, uploadChatFile);
+router.post("/uploadChatFile", (req: any, res: any, next: any) => {
+    uploadsChatFile(req, res, (err: any) => {
+        if (err) {
+            return res.status(400).json({
+                status: "FAIL",
+                error: mapChatUploadMulterError(err),
+            });
+        }
+        return next();
+    });
+}, uploadChatFile);
 router.post("/resendConfirmEmail", resendConfirmEmail);
 router.post("/verifyRegistration", verifyRegistration);
 router.get("/checkVerification", checkVerificationStatus);
