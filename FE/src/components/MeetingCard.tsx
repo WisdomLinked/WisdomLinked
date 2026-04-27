@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { getMeetingThread } from '../api/chatApi';
+import { ExternalLink, Video } from "lucide-react";
 
 interface MeetingCardProps {
     meetingThreadId: string;
@@ -35,6 +36,7 @@ const MeetingCard: React.FC<MeetingCardProps> = ({
     const [transcript, setTranscript] = useState<any[]>([]);
     const [loading, setLoading] = useState(false);
     const jitsiDomain = process.env.REACT_APP_JITSI_DOMAIN || 'meet.wisdomlinked.com';
+    const jitsiUrl = `https://${jitsiDomain}/${jitsiRoomName}`;
 
     const loadTranscript = async () => {
         if (transcript.length > 0) {
@@ -67,7 +69,7 @@ const MeetingCard: React.FC<MeetingCardProps> = ({
                         ? (isDark ? 'bg-gray-700' : 'bg-gray-200')
                         : 'bg-gradient-to-r from-green-500 to-emerald-500'
                 }`}>
-                    🎥
+                    <Video className={`h-4 w-4 ${isEnded ? (isDark ? "text-gray-300" : "text-gray-700") : "text-white"}`} />
                 </div>
                 <div className="flex-1 min-w-0">
                     <div className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>
@@ -81,13 +83,27 @@ const MeetingCard: React.FC<MeetingCardProps> = ({
                 </div>
                 {!isEnded && (
                     <button
-                        onClick={() => onJoin?.(`https://${jitsiDomain}/${jitsiRoomName}`)}
+                        onClick={() => onJoin?.(jitsiUrl)}
                         className="px-4 py-1.5 text-xs font-semibold rounded-full bg-gradient-to-r from-green-500 to-emerald-500 text-white hover:brightness-110 transition-all shadow-sm"
                     >
-                        Join
+                        Join call
                     </button>
                 )}
             </div>
+
+            {jitsiRoomName ? (
+                <div className={`px-4 py-2 text-xs flex items-center gap-1.5 ${isDark ? "text-blue-300" : "text-blue-700"}`}>
+                    <ExternalLink className="h-3.5 w-3.5" />
+                    <a
+                        href={jitsiUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="underline underline-offset-2 hover:opacity-80"
+                    >
+                        {jitsiUrl}
+                    </a>
+                </div>
+            ) : null}
 
             {/* Transcript toggle */}
             {isEnded && (
