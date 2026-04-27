@@ -5,6 +5,7 @@ const MeetingThread = require('../models/MeetingThread');
 const Conversation = require('../models/Conversation');
 const GroupChat = require('../models/GroupChat');
 const User = require('../models/User');
+import { resolveMeetingRatingTargetUserId } from '../utils/meetingRatingRules';
 
 const JITSI_DOMAIN = process.env.JITSI_DOMAIN || 'meet.wisdomlinked.com';
 
@@ -212,6 +213,107 @@ export const getMeetingThread = async (req: any, res: Response) => {
         return res.status(200).json({ meeting });
     } catch (err: any) {
         console.error('[meeting.get]', err.message);
+        return res.status(500).json({ error: err.message });
+    }
+};
+
+/**
+ * GET /api/meeting/:meetingThreadId/rating-state
+ * Return whether the current user can rate and if already rated.
+ */
+export const getMeetingRatingState = async (req: any, res: Response) => {
+    try {
+        const { userId } = req.user;
+        const { meetingThreadId } = req.params;
+        const meeting = await MeetingThread.findById(meetingThreadId)
+            .populate('startedBy', 'username _id')
+            .populate('participants', 'username _id');
+        if (!meeting) return res.status(404).json({ error: 'Meeting not found' });
+        const targetId = resolveMeetingRatingTargetUserId(meeting, String(userId));
+        const existing = (meeting.ratings || []).find(
+            (r: any) => String(r?.rater?._id ?? r?.rater) === String(userId),
+        );
+        const targetUser =
+            targetId && (meeting.participants || []).find((p: any) => String(p?._id) === String(targetId)) ||
+            (targetId && String(meeting.startedBy?._id) === String(targetId) ? meeting.startedBy : null);
+        return res.status(200).json({
+            success: true,
+            canRate: meeting.status === 'ended' && !!targetId,
+            hasRated: Boolean(existing),
+            existingRating: existing
+                ? { score: existing.score, comment: String(existing.comment || '') }
+                : null,
+            targetUser: targetUser
+                ? { _id: targetUser._id, username: targetUser.username }
+                : null,
+        });
+    } catch (err: any) {
+        console.error('[meeting.ratingState]', err.message);
+        return res.status(500).json({ error: err.message });
+    }
+};
+
+/**
+ * POST /api/meeting/rate
+ * Body: { meetingThreadId, score, comment? }
+ */
+export const submitMeetingRating = async (req: any, res: Response) => {
+    try {
+        const { userId } = req.user;
+        const { meetingThreadId, score, comment } = req.body;
+        const numericScore = Number(score);
+        if (!meetingThreadId) return res.status(400).json({ error: 'meetingThreadId is required' });
+        if (!Number.isFinite(numericScore) || numericScore < 1 || numericScore > 5) {
+            return res.status(400).json({ error: 'score must be between 1 and 5' });
+        }
+        const meeting = await MeetingThread.findById(meetingThreadId)
+            .populate('startedBy', 'username _id')
+            .populate('participants', 'username _id');
+        if (!meeting) return res.status(404).json({ error: 'Meeting not found' });
+        if (meeting.status !== 'ended') return res.status(400).json({ error: 'Meeting must be ended before rating' });
+        const targetId = resolveMeetingRatingTargetUserId(meeting, String(userId));
+        if (!targetId) return res.status(403).json({ error: 'You cannot rate this meeting' });
+
+        const existingIdx = (meeting.ratings || []).findIndex(
+            (r: any) => String(r?.rater?._id ?? r?.rater) === String(userId),
+        );
+        const payload = {
+            rater: userId,
+            target: targetId,
+            score: Math.round(numericScore),
+            comment: String(comment || '').trim(),
+            updatedAt: new Date(),
+        };
+        if (existingIdx >= 0) {
+            meeting.ratings[existingIdx] = {
+                ...meeting.ratings[existingIdx],
+                ...payload,
+            };
+        } else {
+            meeting.ratings.push({ ...payload, createdAt: new Date() });
+        }
+        await meeting.save();
+
+        const ratingsForTarget = (meeting.ratings || []).filter(
+            (r: any) => String(r?.target?._id ?? r?.target) === String(targetId),
+        );
+        const averageScore = ratingsForTarget.length
+            ? ratingsForTarget.reduce((sum: number, r: any) => sum + Number(r.score || 0), 0) / ratingsForTarget.length
+            : 0;
+
+        return res.status(200).json({
+            success: true,
+            rating: {
+                score: Math.round(numericScore),
+                comment: String(comment || '').trim(),
+            },
+            summary: {
+                count: ratingsForTarget.length,
+                averageScore: Number(averageScore.toFixed(2)),
+            },
+        });
+    } catch (err: any) {
+        console.error('[meeting.rate]', err.message);
         return res.status(500).json({ error: err.message });
     }
 };
