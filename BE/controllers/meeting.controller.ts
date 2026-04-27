@@ -1,13 +1,16 @@
 import { Request, Response } from 'express';
 import { getOrCreateDMChannel, sendMessageToRC, toRocketChatUsername, syncRocketGroupChannelMembers } from '../services/rocketchat.service';
+import crypto from 'crypto';
 
 const MeetingThread = require('../models/MeetingThread');
 const Conversation = require('../models/Conversation');
 const GroupChat = require('../models/GroupChat');
 const User = require('../models/User');
+const MeetingGuestInvite = require('../models/MeetingGuestInvite');
 import { resolveMeetingRatingTargetUserId } from '../utils/meetingRatingRules';
 
 const JITSI_DOMAIN = process.env.JITSI_DOMAIN || 'meet.wisdomlinked.com';
+const FRONTEND_BASE_URL = process.env.FRONTEND_BASE_URL || process.env.REACT_APP_URL || '';
 
 /**
  * POST /api/meeting/start
@@ -314,6 +317,82 @@ export const submitMeetingRating = async (req: any, res: Response) => {
         });
     } catch (err: any) {
         console.error('[meeting.rate]', err.message);
+        return res.status(500).json({ error: err.message });
+    }
+};
+
+const hashInviteToken = (token: string) => crypto.createHash('sha256').update(token).digest('hex');
+
+/**
+ * POST /api/meeting/guest-invite
+ * Body: { meetingThreadId, ttlHours? } -> { inviteUrl, expiresAt }
+ */
+export const createMeetingGuestInvite = async (req: any, res: Response) => {
+    try {
+        const { userId } = req.user;
+        const { meetingThreadId, ttlHours } = req.body || {};
+        if (!meetingThreadId) return res.status(400).json({ error: 'meetingThreadId is required' });
+        const meeting = await MeetingThread.findById(meetingThreadId);
+        if (!meeting) return res.status(404).json({ error: 'Meeting not found' });
+        if (meeting.status !== 'active') return res.status(400).json({ error: 'Guest invites are only allowed for active meetings' });
+        const isParticipant = (meeting.participants || []).some((p: any) => String(p) === String(userId));
+        if (!isParticipant) return res.status(403).json({ error: 'Only meeting participants can create guest invites' });
+        const maxHours = 2;
+        const finalHours = Math.max(1, Math.min(maxHours, Number(ttlHours) || 2));
+        const expiresAt = new Date(Date.now() + finalHours * 60 * 60 * 1000);
+        const rawToken = crypto.randomBytes(24).toString('hex');
+        const tokenHash = hashInviteToken(rawToken);
+
+        await MeetingGuestInvite.create({
+            meetingThreadId,
+            invitedBy: userId,
+            tokenHash,
+            expiresAt,
+        });
+
+        const base = String(FRONTEND_BASE_URL || '').replace(/\/$/, '');
+        const invitePath = `/meeting/invite/${rawToken}`;
+        const inviteUrl = base ? `${base}${invitePath}` : invitePath;
+        return res.status(200).json({
+            success: true,
+            inviteUrl,
+            expiresAt,
+            ttlHours: finalHours,
+        });
+    } catch (err: any) {
+        console.error('[meeting.createGuestInvite]', err.message);
+        return res.status(500).json({ error: err.message });
+    }
+};
+
+/**
+ * GET /api/meeting/guest-invite/:token
+ * Public endpoint to resolve a guest invite.
+ */
+export const resolveMeetingGuestInvite = async (req: Request, res: Response) => {
+    try {
+        const rawToken = String((req.params as any).token || '').trim();
+        if (!rawToken) return res.status(400).json({ error: 'token is required' });
+        const tokenHash = hashInviteToken(rawToken);
+        const invite = await MeetingGuestInvite.findOne({ tokenHash }).lean();
+        if (!invite) return res.status(404).json({ error: 'Invite not found' });
+        if (invite.revokedAt) return res.status(410).json({ error: 'Invite is no longer valid' });
+        if (new Date(invite.expiresAt).getTime() <= Date.now()) {
+            return res.status(410).json({ error: 'Invite has expired' });
+        }
+        const meeting = await MeetingThread.findById(invite.meetingThreadId).lean();
+        if (!meeting || meeting.status !== 'active') {
+            return res.status(410).json({ error: 'Meeting is no longer active' });
+        }
+        const jitsiUrl = `https://${JITSI_DOMAIN}/${meeting.jitsiRoomName}`;
+        return res.status(200).json({
+            success: true,
+            jitsiUrl,
+            expiresAt: invite.expiresAt,
+            loginUrl: '/login',
+        });
+    } catch (err: any) {
+        console.error('[meeting.resolveGuestInvite]', err.message);
         return res.status(500).json({ error: err.message });
     }
 };

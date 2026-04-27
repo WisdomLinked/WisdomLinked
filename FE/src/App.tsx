@@ -30,6 +30,7 @@ const Services = React.lazy(() => import('./pages/Services'));
 const ContactUS = React.lazy(() => import('./pages/ContactUS'));
 const OAuthCallback = React.lazy(() => import('./pages/OAuthCallback'));
 const WLProfileCompletion = React.lazy(() => import('./pages/WLProfileCompletion'));
+const MeetingGuestInvite = React.lazy(() => import('./pages/MeetingGuestInvite'));
 
 // Heavy dashboard chunks — MUI, calendars, quill, etc. only load after login
 const LegacyExpertDashboard = React.lazy(() => import('./pages/Dashboard/_ExpertDashboard'));
@@ -54,6 +55,7 @@ const UnauthenticatedRoutes = () => {
         <Route path="/expertregister" element={<WLExpertRegister />} />
         <Route path="/forgotpassword" element={<ForgotPassword />} />
         <Route path="/verification/:email/:confirmCode" element={<VerifyEmail />} />
+        <Route path="/meeting/invite/:token" element={<MeetingGuestInvite />} />
         <Route path="/login" element={<WLLogin />} />
         <Route path="/aboutus" element={
           <React.Fragment>
