@@ -37,7 +37,7 @@ export default function MeetingGuestInvite() {
   return (
     <div className="min-h-screen bg-[#F5F3EF] flex items-center justify-center p-4">
       <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-xl">
-        <h1 className="text-xl font-semibold text-slate-900">Meeting invite</h1>
+        <h1 className="text-xl font-semibold text-slate-900">WisdomLinked Meet invite</h1>
         {loading ? (
           <p className="mt-3 text-sm text-slate-600">Validating invite…</p>
         ) : error ? (

@@ -131,11 +131,11 @@ sendEmailMeetingRequestToCustomer = (targetEmail, name, customerName,start,durat
 }
 
 shareMeetingId = (targetEmail, name, meetingId, title) =>{
-    subject = "Meeting invitation";
+    subject = "WisdomLinked Meet invitation";
     html = `
         <p>Dear ${name},</p>
-        <p>You are invited to join the meeting: ${title}.</p>
-        <p>Use the meeting ID below to join the meeting.</p>
+        <p>You are invited to join a WisdomLinked Meet session: ${title}.</p>
+        <p>Use the meeting ID below to join the session.</p>
         <p>Meeting Id : ${meetingId}</p>
         <p>Please log in to the website to join the meeting.</p>
         <p>
