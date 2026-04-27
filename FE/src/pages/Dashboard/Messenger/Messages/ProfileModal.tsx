@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { X, Mail, MapPin, User } from "lucide-react";
 import { profileImageFetch } from "../../../../api/api";
 import { getAvatarTitle } from "../../../../actions/common";
+import { resolveProfileImageSrc } from "../../../../utils/profileImage";
 
 interface ProfileModalProps {
     isOpen: boolean;
@@ -82,22 +83,12 @@ const ProfileModal: React.FC<ProfileModalProps> = ({
     useEffect(() => {
         let cancelled = false;
         const run = async () => {
-            const img = userDetails?.image;
-            if (!img) {
-                setAvatarSrc(previewImage || null);
-                return;
-            }
-            if (typeof img === "string" && (img.startsWith("http") || img.startsWith("blob:"))) {
-                setAvatarSrc(img);
-                return;
-            }
-            try {
-                const url = await profileImageFetch(String(img), "medium");
-                if (!cancelled)
-                    setAvatarSrc(typeof url === "string" ? url : previewImage || null);
-            } catch {
-                if (!cancelled) setAvatarSrc(previewImage || null);
-            }
+            const resolved = await resolveProfileImageSrc(
+                userDetails?.image,
+                "medium",
+                profileImageFetch as any,
+            );
+            if (!cancelled) setAvatarSrc(resolved || previewImage || null);
         };
         if (isOpen) void run();
         return () => {

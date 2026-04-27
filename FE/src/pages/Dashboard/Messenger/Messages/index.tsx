@@ -50,6 +50,7 @@ import {
     preservedScrollTopAfterPrepend,
     shouldRequestOlderMessages,
 } from "./historyPagination";
+import { resolveProfileImageSrc } from "../../../../utils/profileImage";
 
 /** RC `u.username` is email-derived; WL `userDetails.username` is display name — never equal. */
 function isRcStreamFromMe(rcMsg: any, me: any): boolean {
@@ -194,7 +195,6 @@ const Messages = ({ theme = "dark" }: any) => {
     const [eventsModalShow, set_eventsModalShow] = useState(false)
     const [seminarDetailsModalShow, set_seminarDetailsModalShow] = useState(false)
     const [editSeminarModalShow, set_editSeminarModalShow] = useState(false)
-    const [profiles, setProfiles] = useState(new Map<string, any>()); // Map to store unique user profiles
     const [profileImages, setProfileImages] = useState(new Map<string, string>()); // Map to store profile images in Base64
 
     /** Rocket.Chat user id for the logged-in account — matches `author._id` on history messages when WL user lookup missed. */
@@ -464,56 +464,30 @@ const Messages = ({ theme = "dark" }: any) => {
         };
     }, [chosenChatDetails, rcChannelId, conversationId, displayMessages, userDetails, myRcUserId, dmOtherWlUserId, peerReadByMessageId, groupAuthorOpts]);
 
-    // ── Fetch History via REST ──────────────────────────────
     useEffect(() => {
-        const processMessages = async () => {
-            const tempProfiles = new Map<string, any>();
-            const tempImages = new Map<string, string>();
-
-            for (const message of messages) {
-                const { author, author:{_id} } = message;
-
-                if (!tempProfiles.has(_id)) {
-                    tempProfiles.set(_id, author);
-
-                    if (author.image) {
-                        try {
-                            const base64Image = await profileImageFetch(author.image, 'small');
-                            tempImages.set(_id, base64Image as string);
-                        } catch (error) {
-                            console.error(`Error fetching Base64 image for userId ${_id}:`, error);
-                        }
-                    }
-                }
-            }
-
-            setProfiles(tempProfiles);
-            setProfileImages(tempImages);
-        };
-
-        processMessages();
-    }, []);
-
-    useEffect(() => {
+        let cancelled = false;
         const processMessages = async () => {
             const tempImages = new Map<string, string>();
 
             for (const message of messages) {
                 const userId = message.author._id;
                 if (message.author.image && !tempImages.has(userId)) {
-                    try {
-                        const base64Image = await profileImageFetch(message.author.image, 'small');
-                        tempImages.set(userId, base64Image as string);
-                    } catch (error) {
-                        console.error(`Error fetching Base64 image for userId ${userId}:`, error);
-                    }
+                    const resolved = await resolveProfileImageSrc(
+                        message.author.image,
+                        'small',
+                        profileImageFetch as any,
+                    );
+                    if (resolved) tempImages.set(userId, resolved);
                 }
             }
 
-            setProfileImages(tempImages);
+            if (!cancelled) setProfileImages(tempImages);
         };
 
-        processMessages();
+        void processMessages();
+        return () => {
+            cancelled = true;
+        };
     }, [messages]);
 
     const sameAuthor = (message: MessageType, index: number) => {
