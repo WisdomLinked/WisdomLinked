@@ -414,8 +414,7 @@ const MessagesHeader = ({ scrollPosition, events, openCalendarModal, openSeminar
                             style={{ color: theme === "light" ? "#0f172a" : "white" }}
                             className="disabled:opacity-50"
                             disabled={
-                                !conversationId ||
-                                (((!isOnline(chosenChatDetails.userId) || !enabledEvent) && userDetails.role === 'customer'))
+                                !conversationId
                             }
                             onClick={async () => {
                                 if (enabledEvent) {
@@ -440,8 +439,7 @@ const MessagesHeader = ({ scrollPosition, events, openCalendarModal, openSeminar
                             style={{ color: theme === "light" ? "#0f172a" : "white" }}
                             className="disabled:opacity-50"
                             disabled={
-                                !conversationId ||
-                                (((!isOnline(chosenChatDetails.userId) || !enabledEvent) && userDetails.role === 'customer'))
+                                !conversationId
                             }
                             onClick={async () => {
                                 if (enabledEvent) {
