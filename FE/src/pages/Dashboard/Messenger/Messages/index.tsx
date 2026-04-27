@@ -46,6 +46,10 @@ import {
     normalizeRcStreamRoomMessage,
 } from "../../../../services/rcRealtime";
 import { toRocketChatUsername } from "../../../../utils/rocketchatUsername";
+import {
+    preservedScrollTopAfterPrepend,
+    shouldRequestOlderMessages,
+} from "./historyPagination";
 
 /** RC `u.username` is email-derived; WL `userDetails.username` is display name — never equal. */
 function isRcStreamFromMe(rcMsg: any, me: any): boolean {
@@ -109,6 +113,7 @@ const Messages = ({ theme = "dark" }: any) => {
     const audioRef = useRef<HTMLAudioElement>(null);
     const prevMessagesLength = useRef(0);
     const markReadTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const loadingOlderRef = useRef(false);
     const { chat, auth: { userDetails },  friends: { friends } } = useAppSelector((state) => state);
     const { chosenChatDetails, messages, chosenGroupChatDetails, gotAllChats, isNewMessage, conversationId, rcChannelId } = chat;
 
@@ -559,25 +564,52 @@ const Messages = ({ theme = "dark" }: any) => {
 
     const handleScroll = (e: React.UIEvent<HTMLDivElement, UIEvent>) => {
         setScrollPosition(e.currentTarget.scrollTop);
-        if (e.currentTarget.scrollTop === 0 && e.currentTarget.scrollHeight !== e.currentTarget.clientHeight)
-            set_isScrollToTop(true)
+        if (
+            !loadingOlderRef.current &&
+            shouldRequestOlderMessages(
+                e.currentTarget.scrollTop,
+                e.currentTarget.scrollHeight,
+                e.currentTarget.clientHeight,
+            )
+        ) {
+            set_isScrollToTop(true);
+        }
     };
 
     const getChatHistory = async () => {
+        if (loadingOlderRef.current) return;
+        const el = scrollContainerRef.current;
+        const prevHeight = el?.scrollHeight ?? 0;
+        const prevTop = el?.scrollTop ?? 0;
+        loadingOlderRef.current = true;
         const st = store.getState().chat;
         const page = st.currentPage;
-        if (st.chosenChatDetails && st.conversationId) {
-            const data = await fetchDirectHistory(st.conversationId, page);
-            if (data?.messages) {
-                dispatch(setMessages(data.messages));
+        try {
+            if (st.chosenChatDetails && st.conversationId) {
+                const data = await fetchDirectHistory(st.conversationId, page);
+                if (data?.messages) {
+                    dispatch(setMessages(data.messages));
+                }
+            } else if (st.chosenGroupChatDetails) {
+                const data = await fetchGroupHistory(st.chosenGroupChatDetails.groupId, page);
+                if (data?.messages) {
+                    dispatch(setMessages(data.messages));
+                }
             }
-        } else if (st.chosenGroupChatDetails) {
-            const data = await fetchGroupHistory(st.chosenGroupChatDetails.groupId, page);
-            if (data?.messages) {
-                dispatch(setMessages(data.messages));
-            }
+        } finally {
+            requestAnimationFrame(() => {
+                const node = scrollContainerRef.current;
+                if (node) {
+                    node.scrollTop = preservedScrollTopAfterPrepend(
+                        prevHeight,
+                        node.scrollHeight,
+                        prevTop,
+                    );
+                }
+                loadingOlderRef.current = false;
+            });
         }
-    }
+    };
 
     const setEvents = async () => {
         const expertId = userDetails?.role === 'expert' ? userDetails?._id : chosenChatDetails?.userId
