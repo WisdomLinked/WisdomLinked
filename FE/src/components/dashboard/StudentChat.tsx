@@ -17,6 +17,7 @@ import {
   createCommunityChat,
   joinCommunityChat,
   doFilterCustomers,
+  doFilterExperts,
   searchPrivateChatUsers,
   joinPrivateChat,
   addParticipantsToCommunityChat,
@@ -38,6 +39,7 @@ import { isTheEventGoingOn } from '../../actions/common';
 import { resolveProfileImageSrc } from '../../utils/profileImage';
 import { shouldShowMobileMessenger } from '../../utils/mobileChatLayout';
 import { buildOnlineUserIdSet, hasOnlineUserId } from '../../utils/onlinePresence';
+import { canAdminInitiateDmWithRole } from '../../utils/adminChatRules';
 
 type CommunityRow = {
   raw: any;
@@ -64,7 +66,9 @@ type PrivateRow =
   /** Expert: customer from directory search (not necessarily in friends yet). */
   | { kind: 'expertCustomer'; id: string; title: string; lastLine: string; raw: any }
   /** Student: expert from directory search (opens / ensures 1:1 DM). */
-  | { kind: 'studentSearchedExpert'; id: string; title: string; lastLine: string; raw: any };
+  | { kind: 'studentSearchedExpert'; id: string; title: string; lastLine: string; raw: any }
+  /** Admin: expert from directory search (admins cannot initiate with students). */
+  | { kind: 'adminSearchedExpert'; id: string; title: string; lastLine: string; raw: any };
 
 const StudentChat: React.FC = () => {
   const dispatch = useDispatch();
@@ -85,6 +89,7 @@ const StudentChat: React.FC = () => {
   const isCustomer =
     userDetails && String(userDetails.role || '').toLowerCase() === 'customer';
   const isExpert = userDetails && String(userDetails.role || '').toLowerCase() === 'expert';
+  const isAdmin = userDetails && String(userDetails.role || '').toLowerCase() === 'admin';
 
   const onlineIdSet = useMemo(() => {
     return buildOnlineUserIdSet(onlineUsers);
@@ -114,7 +119,7 @@ const StudentChat: React.FC = () => {
 
   /** 1:1 DM sidebar: Rocket.Chat-backed `Conversation` rows only (no legacy GroupChat / generalChats merge). */
   const privateDmSidebarDerived = useMemo(() => {
-    if (!userDetails || (!isCustomer && !isExpert)) return [];
+    if (!userDetails || (!isCustomer && !isExpert && !isAdmin)) return [];
     const pid = (v: any) => (v == null || v === '' ? '' : String(v).trim());
     const me = pid(currentUserId);
     const seen = new Set<string>();
@@ -147,7 +152,7 @@ const StudentChat: React.FC = () => {
     }
 
     return results;
-  }, [userDetails, isCustomer, isExpert, currentUserId]);
+  }, [userDetails, isCustomer, isExpert, isAdmin, currentUserId]);
 
   const loadCommunityChats = React.useCallback(async () => {
     const uid = userDetails?._id ?? userDetails?.id ?? userDetails?.userId;
@@ -181,7 +186,7 @@ const StudentChat: React.FC = () => {
 
   // Hydrate DM unread/highlight state as soon as chat section opens (covers messages received while user was on another page).
   useEffect(() => {
-    if (!isCustomer && !isExpert) return;
+    if (!isCustomer && !isExpert && !isAdmin) return;
     let cancelled = false;
     (async () => {
       const res = await fetchDmUnreadSnapshot();
@@ -199,11 +204,11 @@ const StudentChat: React.FC = () => {
     return () => {
       cancelled = true;
     };
-  }, [dispatch, isCustomer, isExpert]);
+  }, [dispatch, isCustomer, isExpert, isAdmin]);
 
   // Online presence: keep friend/direct-chat online ids fresh for green-dot indicators.
   useEffect(() => {
-    if (!isCustomer && !isExpert) return;
+    if (!isCustomer && !isExpert && !isAdmin) return;
     let cancelled = false;
     let timer: ReturnType<typeof setInterval> | null = null;
 
@@ -238,11 +243,11 @@ const StudentChat: React.FC = () => {
       window.removeEventListener('focus', onFocus);
       document.removeEventListener('visibilitychange', onVisible);
     };
-  }, [dispatch, isCustomer, isExpert]);
+  }, [dispatch, isCustomer, isExpert, isAdmin]);
 
   // Event-driven refresh: react to RC user subscription updates (DMs + community channels/groups).
   useEffect(() => {
-    if (!isCustomer && !isExpert) return;
+    if (!isCustomer && !isExpert && !isAdmin) return;
     let lastRefreshAt = 0;
     let communityRefreshTimer: ReturnType<typeof setTimeout> | null = null;
     const unsub = onSubscriptionChanged(({ roomId, type, unread }) => {
@@ -277,7 +282,7 @@ const StudentChat: React.FC = () => {
       unsub();
       if (communityRefreshTimer) window.clearTimeout(communityRefreshTimer);
     };
-  }, [dispatch, isCustomer, isExpert, privateRows, communityChats, loadCommunityChats]);
+  }, [dispatch, isCustomer, isExpert, isAdmin, privateRows, communityChats, loadCommunityChats]);
 
   useEffect(() => {
     communityChats.forEach(c => {
@@ -336,6 +341,21 @@ const StudentChat: React.FC = () => {
         if (!cancelled) setPrivateRows([...friendRows, ...dmRows]);
         return;
       }
+      if (isAdmin) {
+        const rows: PrivateRow[] = await Promise.all(
+          privateDmSidebarDerived.map(async p => ({
+            kind: 'privateDm' as const,
+            otherUserId: p.otherUserId,
+            title: p.title,
+            lastLine: p.lastLine,
+            image: await resolveProfileImage(p.image),
+            rcChannelId: p.rcChannelId,
+            conversationId: p.conversationId,
+          })),
+        );
+        if (!cancelled) setPrivateRows(rows);
+        return;
+      }
       const updated = await Promise.all(
         (friends || []).map(async (friend: any) => {
           return {
@@ -354,7 +374,7 @@ const StudentChat: React.FC = () => {
     return () => {
       cancelled = true;
     };
-  }, [isCustomer, isExpert, privateDmSidebarDerived, friends]);
+  }, [isCustomer, isExpert, isAdmin, privateDmSidebarDerived, friends]);
 
   useEffect(() => {
     if (!isExpert) {
@@ -471,6 +491,46 @@ const StudentChat: React.FC = () => {
     };
   }, [isCustomer, privateQuery]);
 
+  useEffect(() => {
+    if (!isAdmin) {
+      return;
+    }
+    const q = privateQuery.trim();
+    if (!q) {
+      setStudentExpertSearchRows([]);
+      return;
+    }
+    let cancelled = false;
+    const t = window.setTimeout(async () => {
+      try {
+        const res: any = await doFilterExperts({
+          username: q,
+          keywords: [],
+          services: [],
+          sortBy: 'Name in ASC',
+        });
+        if (cancelled) return;
+        const list = Array.isArray(res?.result) ? res.result : [];
+        const rows: PrivateRow[] = list
+          .filter((u: any) => canAdminInitiateDmWithRole(u?.role ?? 'expert'))
+          .map((u: any) => ({
+            kind: 'adminSearchedExpert' as const,
+            id: String(u._id),
+            title: String(u.username || u.email || 'Expert'),
+            lastLine: String(u.email || ''),
+            raw: u,
+          }));
+        setStudentExpertSearchRows(rows);
+      } catch {
+        if (!cancelled) setStudentExpertSearchRows([]);
+      }
+    }, 280);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(t);
+    };
+  }, [isAdmin, privateQuery]);
+
   const getEvents = async () => {
     const response = await doGetMyEvents();
     if (!response?.result) return;
@@ -557,7 +617,7 @@ const StudentChat: React.FC = () => {
       return [...friendFiltered, ...dmFiltered, ...extras];
     }
 
-    if (isCustomer) {
+    if (isCustomer || isAdmin) {
       const localFiltered = !q
         ? privateRows
         : privateRows.filter(row => {
@@ -574,8 +634,8 @@ const StudentChat: React.FC = () => {
         localFiltered.map(r => (r.kind === 'privateDm' ? r.otherUserId : r.id)),
       );
       const extras = studentExpertSearchRows.filter(
-        (r): r is Extract<PrivateRow, { kind: 'studentSearchedExpert' }> =>
-          r.kind === 'studentSearchedExpert' && !existingIds.has(r.id),
+        (r): r is Extract<PrivateRow, { kind: 'studentSearchedExpert' | 'adminSearchedExpert' }> =>
+          (r.kind === 'studentSearchedExpert' || r.kind === 'adminSearchedExpert') && !existingIds.has(r.id),
       );
       return [...localFiltered, ...extras];
     }
@@ -590,7 +650,7 @@ const StudentChat: React.FC = () => {
       }
       return row.title.toLowerCase().includes(q) || row.lastLine.toLowerCase().includes(q);
     });
-  }, [privateRows, privateQuery, isExpert, isCustomer, expertCustomerSearchRows, studentExpertSearchRows]);
+  }, [privateRows, privateQuery, isExpert, isCustomer, isAdmin, expertCustomerSearchRows, studentExpertSearchRows]);
 
   const openCommunity = React.useCallback(
     async (row: CommunityRow) => {
@@ -904,6 +964,9 @@ const StudentChat: React.FC = () => {
   const openStudentSearchedExpert = async (row: Extract<PrivateRow, { kind: 'studentSearchedExpert' }>) => {
     await openDmWithOtherUser(row);
   };
+  const openAdminSearchedExpert = async (row: Extract<PrivateRow, { kind: 'adminSearchedExpert' }>) => {
+    await openDmWithOtherUser(row);
+  };
 
   const isCommunityActive = (id: string) =>
     String(chosenGroupChatDetails?.groupId) === String(id) ||
@@ -1109,17 +1172,21 @@ const StudentChat: React.FC = () => {
                 {privateQuery.trim()
                   ? isExpert
                     ? 'No chats or users match your search.'
-                    : 'No chats or users match your search.'
+                    : isAdmin
+                      ? 'No chats or experts match your search.'
+                      : 'No chats or users match your search.'
                   : isExpert
                     ? 'Type a name to search users, or open a friend or direct chat below.'
-                    : 'No private chats yet. Type a name to find users.'}
+                    : isAdmin
+                      ? 'No private chats yet. Type an expert name to start one.'
+                      : 'No private chats yet. Type a name to find users.'}
               </p>
             ) : (
               filteredPrivate.map(row => {
                 const active =
                   row.kind === 'friend'
                     ? isFriendActive(row.id)
-                    : row.kind === 'expertCustomer' || row.kind === 'studentSearchedExpert'
+                    : row.kind === 'expertCustomer' || row.kind === 'studentSearchedExpert' || row.kind === 'adminSearchedExpert'
                       ? isFriendActive(row.id)
                       : row.kind === 'privateDm'
                         ? isFriendActive(row.otherUserId)
@@ -1128,7 +1195,7 @@ const StudentChat: React.FC = () => {
                 const presenceUserId =
                   row.kind === 'privateDm'
                     ? row.otherUserId
-                    : row.kind === 'friend' || row.kind === 'expertCustomer' || row.kind === 'studentSearchedExpert'
+                    : row.kind === 'friend' || row.kind === 'expertCustomer' || row.kind === 'studentSearchedExpert' || row.kind === 'adminSearchedExpert'
                       ? row.id
                       : '';
                 const online = presenceUserId ? isUserOnline(presenceUserId) : false;
@@ -1153,6 +1220,8 @@ const StudentChat: React.FC = () => {
                       ? `c-${row.id}`
                       : row.kind === 'studentSearchedExpert'
                         ? `s-${row.id}`
+                        : row.kind === 'adminSearchedExpert'
+                          ? `a-${row.id}`
                         : row.kind === 'privateDm'
                           ? `dm-${row.conversationId ?? row.otherUserId}`
                           : `row`;
@@ -1166,6 +1235,7 @@ const StudentChat: React.FC = () => {
                   if (row.kind === 'friend') openFriend(row);
                   else if (row.kind === 'expertCustomer') void openExpertCustomer(row);
                   else if (row.kind === 'studentSearchedExpert') void openStudentSearchedExpert(row);
+                  else if (row.kind === 'adminSearchedExpert') void openAdminSearchedExpert(row);
                   else if (row.kind === 'privateDm') openPrivateDm(row);
                 };
 
