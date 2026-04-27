@@ -79,6 +79,15 @@ const groupChatSchema = new mongoose.Schema(
                 clearedAt: { type: Date, default: null },
             },
         ],
+        moderationNotes: [
+            {
+                action: { type: String, default: "remove_member" },
+                by: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
+                target: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
+                reason: { type: String, default: "" },
+                createdAt: { type: Date, default: Date.now },
+            },
+        ],
     },
     { timestamps: true }
 );

@@ -455,11 +455,16 @@ export const removeFriend = async (data: RemoveFriendArgs) => {
     }
 };
 
-export const removeCommunityMember = async (groupChatId: string, memberUserId: string) => {
+export const removeCommunityMember = async (
+    groupChatId: string,
+    memberUserId: string,
+    reason: string = '',
+) => {
     try {
         const res = await api.post('group-chat/remove-community-member', {
             groupChatId,
             memberUserId,
+            reason,
         });
         return res.data;
     } catch (err: any) {
