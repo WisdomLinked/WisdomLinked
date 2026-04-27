@@ -31,6 +31,8 @@ const ALLOWED_CHAT_FILE_EXTENSIONS = new Set([
 ]);
 const CHAT_FILE_REQUIREMENTS_MESSAGE =
   "Unsupported file. Allowed formats: PDF, DOC, DOCX, TXT, CSV, JPG, JPEG, PNG, WEBP, GIF, XLS, XLSX, PPT, PPTX. Max size: 1 MB per file.";
+const CHAT_FILE_SIZE_EXCEEDED_MESSAGE =
+  "File is too large. Max size: 1 MB per file.";
 
 const isAllowedChatFileExtension = (originalName: unknown): boolean => {
   const name = String(originalName || "");
@@ -50,6 +52,19 @@ const uploadsChatFile = multer({
   },
 }).single("media");
 
+const mapChatUploadMulterError = (err: any): string => {
+  if (!err) return CHAT_FILE_REQUIREMENTS_MESSAGE;
+  if (
+    (err instanceof multer.MulterError && err.code === "LIMIT_FILE_SIZE") ||
+    String(err?.code || "") === "LIMIT_FILE_SIZE"
+  ) {
+    return CHAT_FILE_SIZE_EXCEEDED_MESSAGE;
+  }
+  const msg = String(err?.message || "").trim();
+  if (msg) return msg;
+  return CHAT_FILE_REQUIREMENTS_MESSAGE;
+};
+
 module.exports = {
     uploadsGeneral,
     uploadsChatFile,
@@ -57,5 +72,7 @@ module.exports = {
     MAX_CHAT_FILE_SIZE_BYTES,
     ALLOWED_CHAT_FILE_EXTENSIONS,
     CHAT_FILE_REQUIREMENTS_MESSAGE,
+    CHAT_FILE_SIZE_EXCEEDED_MESSAGE,
     isAllowedChatFileExtension,
+    mapChatUploadMulterError,
 };

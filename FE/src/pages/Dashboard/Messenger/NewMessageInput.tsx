@@ -42,6 +42,7 @@ const ALLOWED_CHAT_FILE_EXTENSIONS = [
 ];
 const CHAT_FILE_REQUIREMENTS_MESSAGE =
     "Allowed formats: PDF, DOC, DOCX, TXT, CSV, JPG, JPEG, PNG, WEBP, GIF, XLS, XLSX, PPT, PPTX. Max size: 1 MB per file.";
+const CHAT_FILE_SIZE_EXCEEDED_MESSAGE = "File is too large. Max size: 1 MB per file.";
 
 function getFileExtension(name: string): string {
     const value = (name || "").trim();
@@ -55,6 +56,13 @@ function formatBytes(bytes: number): string {
     const kb = bytes / 1024;
     if (kb < 1024) return `${kb.toFixed(0)} KB`;
     return `${(kb / 1024).toFixed(2)} MB`;
+}
+
+function resolveUploadErrorMessage(response: any): string {
+    const raw = String(response?.error || response?.message || "").trim();
+    if (!raw) return `Could not upload file. ${CHAT_FILE_REQUIREMENTS_MESSAGE}`;
+    if (raw.toLowerCase().includes("file too large")) return CHAT_FILE_SIZE_EXCEEDED_MESSAGE;
+    return raw;
 }
 
 const NewMessageInput: React.FC<any> = ({ theme = "dark" }: any) => {
@@ -299,7 +307,7 @@ const NewMessageInput: React.FC<any> = ({ theme = "dark" }: any) => {
             try {
                 const response = await callApi('POST', 'auth/uploadChatFile', { email: userDetails.email }, file);
                 if (response?.status !== 'SUCCESS' || !response?.chatFile) {
-                    dispatch(showAlert(response?.error || `Could not upload file. ${CHAT_FILE_REQUIREMENTS_MESSAGE}`));
+                    dispatch(showAlert(resolveUploadErrorMessage(response)));
                     return;
                 }
                 const message = `Chatfile: ${response.chatFile}#####${response.fileName || file.name}`;
@@ -326,8 +334,8 @@ const NewMessageInput: React.FC<any> = ({ theme = "dark" }: any) => {
                     if (result?.message) dispatch(addNewMessage(result.message));
                 }
                 set_message("");
-            } catch {
-                dispatch(showAlert(`Could not upload file. ${CHAT_FILE_REQUIREMENTS_MESSAGE}`));
+            } catch (e: any) {
+                dispatch(showAlert(resolveUploadErrorMessage(e)));
             } finally {
                 setUploadingFile(false);
                 set_file(undefined);
