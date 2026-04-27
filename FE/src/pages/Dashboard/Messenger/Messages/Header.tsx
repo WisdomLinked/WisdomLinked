@@ -506,7 +506,7 @@ const MessagesHeader = ({ scrollPosition, events, openCalendarModal, openSeminar
                         <div className="flex items-center justify-end">
                             <IconButton
                                 style={{ color: theme === "light" ? "#0f172a" : "white" }}
-                                title="Start a group video call (Jitsi)"
+                                title="Start a group video call (WisdomLinked Meet)"
                                 onClick={async () => {
                                     const gid = chosenGroupChatDetails?.groupId;
                                     if (!gid) return;

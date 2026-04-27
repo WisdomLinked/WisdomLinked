@@ -15,7 +15,7 @@ describe("MeetingCard", () => {
     );
 
     expect(screen.getByText("Join call")).toBeInTheDocument();
-    const link = screen.getByRole("link", { name: /https:\/\/meet\.wisdomlinked\.com\/wl-room-xyz/i });
+    const link = screen.getByRole("link", { name: /wisdomlinked meet/i });
     expect(link).toBeInTheDocument();
   });
 });

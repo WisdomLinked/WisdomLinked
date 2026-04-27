@@ -135,7 +135,7 @@ const MeetingCard: React.FC<MeetingCardProps> = ({
                 </div>
                 <div className="flex-1 min-w-0">
                     <div className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>
-                        {isEnded ? 'Meeting Ended' : 'Meeting in Progress'}
+                        {isEnded ? 'WisdomLinked Meet ended' : 'WisdomLinked Meet in progress'}
                     </div>
                     <div className={`text-xs ${isDark ? 'text-gray-400' : 'text-slate-500'}`}>
                         Started by {starterName}
@@ -170,7 +170,7 @@ const MeetingCard: React.FC<MeetingCardProps> = ({
                         rel="noreferrer"
                         className="underline underline-offset-2 hover:opacity-80"
                     >
-                        {fallbackJitsiUrl}
+                        WisdomLinked Meet
                     </a>
                 </div>
             ) : null}
