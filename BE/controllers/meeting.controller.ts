@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { getOrCreateDMChannel, sendMessageToRC, toRocketChatUsername, syncRocketGroupChannelMembers } from '../services/rocketchat.service';
 import crypto from 'crypto';
+import jwt from 'jsonwebtoken';
 
 const MeetingThread = require('../models/MeetingThread');
 const Conversation = require('../models/Conversation');
@@ -12,6 +13,88 @@ import { buildMeetingRoomName, canStartGroupMeeting } from '../utils/meetingMode
 
 const JITSI_DOMAIN = process.env.JITSI_DOMAIN || 'meet.wisdomlinked.com';
 const FRONTEND_BASE_URL = process.env.FRONTEND_BASE_URL || process.env.REACT_APP_URL || '';
+const JITSI_JWT_SECRET = process.env.JITSI_JWT_SECRET || '';
+const JITSI_APP_ID = process.env.JITSI_APP_ID || 'wisdomlinked';
+const JITSI_AUD = process.env.JITSI_AUD || 'jitsi';
+const JITSI_ISS = process.env.JITSI_ISS || JITSI_APP_ID;
+
+const normalizeId = (v: any): string => String(v?._id ?? v?.id ?? v ?? '').trim();
+
+const buildSignedJitsiUrl = (
+    roomName: string,
+    userLike: any,
+    opts?: { moderator?: boolean; guest?: boolean; expiresInSeconds?: number },
+): string => {
+    const base = `https://${JITSI_DOMAIN}/${roomName}`;
+    if (!JITSI_JWT_SECRET) return base;
+    const nowSec = Math.floor(Date.now() / 1000);
+    const exp = nowSec + Number(opts?.expiresInSeconds || 2 * 60 * 60);
+    const userId = normalizeId(userLike?._id || userLike?.id || userLike?.userId);
+    const displayName = String(userLike?.username || userLike?.name || 'Guest');
+    const email = String(userLike?.email || '').trim().toLowerCase();
+    const avatar = String(userLike?.image || '').trim();
+    const moderator = Boolean(opts?.moderator);
+    const guest = Boolean(opts?.guest);
+
+    const token = jwt.sign(
+        {
+            aud: JITSI_AUD,
+            iss: JITSI_ISS,
+            sub: JITSI_DOMAIN,
+            room: roomName,
+            nbf: nowSec - 10,
+            exp,
+            moderator,
+            context: {
+                user: {
+                    id: userId || undefined,
+                    name: displayName,
+                    email: email || undefined,
+                    avatar: avatar || undefined,
+                    moderator,
+                    role: moderator ? 'moderator' : guest ? 'guest' : 'participant',
+                },
+                features: {
+                    livestreaming: false,
+                    recording: moderator,
+                    transcription: moderator,
+                    outbound_call: false,
+                },
+            },
+        },
+        JITSI_JWT_SECRET,
+        { algorithm: 'HS256', header: { kid: JITSI_APP_ID } },
+    );
+    return `${base}?jwt=${encodeURIComponent(token)}`;
+};
+
+const canUserJoinMeeting = async (meeting: any, userId: string): Promise<{ allowed: boolean; moderator: boolean }> => {
+    const uid = String(userId || '').trim();
+    if (!meeting || !uid) return { allowed: false, moderator: false };
+    if (meeting.conversationId) {
+        const conversation = await Conversation.findById(meeting.conversationId).select('participants').lean();
+        const isParticipant = Array.isArray(conversation?.participants)
+            && conversation.participants.some((p: any) => normalizeId(p) === uid);
+        return { allowed: isParticipant, moderator: false };
+    }
+    if (meeting.groupChatId) {
+        const groupChat = await GroupChat.findById(meeting.groupChatId)
+            .select('admin participants coModerators')
+            .lean();
+        if (!groupChat) return { allowed: false, moderator: false };
+        const adminId = normalizeId(groupChat?.admin);
+        const participantIds = Array.isArray(groupChat?.participants)
+            ? groupChat.participants.map((p: any) => normalizeId(p))
+            : [];
+        const coModeratorIds = Array.isArray(groupChat?.coModerators)
+            ? groupChat.coModerators.map((p: any) => normalizeId(p))
+            : [];
+        const allowed = participantIds.includes(uid) || adminId === uid || coModeratorIds.includes(uid);
+        const moderator = adminId === uid || coModeratorIds.includes(uid);
+        return { allowed, moderator };
+    }
+    return { allowed: false, moderator: false };
+};
 
 /**
  * POST /api/meeting/start
@@ -99,10 +182,14 @@ export const startMeeting = async (req: any, res: Response) => {
             type: 'meeting',
         };
 
+        const signedUrl = buildSignedJitsiUrl(jitsiRoomName, me, {
+            moderator: true,
+            guest: false,
+        });
         return res.status(200).json({
             meetingThreadId: meetingThread._id,
             jitsiRoomName,
-            jitsiUrl: `https://${JITSI_DOMAIN}/${jitsiRoomName}`,
+            jitsiUrl: signedUrl,
             message,
         });
     } catch (err: any) {
@@ -403,7 +490,17 @@ export const resolveMeetingGuestInvite = async (req: Request, res: Response) => 
         if (!meeting || meeting.status !== 'active') {
             return res.status(410).json({ error: 'Meeting is no longer active' });
         }
-        const jitsiUrl = `https://${JITSI_DOMAIN}/${meeting.jitsiRoomName}`;
+        const guestIdentity = {
+            username: 'Guest participant',
+            email: '',
+            image: '',
+            _id: `guest-${String(invite._id)}`,
+        };
+        const jitsiUrl = buildSignedJitsiUrl(String(meeting.jitsiRoomName), guestIdentity, {
+            guest: true,
+            moderator: false,
+            expiresInSeconds: Math.max(5 * 60, Math.floor((new Date(invite.expiresAt).getTime() - Date.now()) / 1000)),
+        });
         return res.status(200).json({
             success: true,
             jitsiUrl,
@@ -412,6 +509,41 @@ export const resolveMeetingGuestInvite = async (req: Request, res: Response) => 
         });
     } catch (err: any) {
         console.error('[meeting.resolveGuestInvite]', err.message);
+        return res.status(500).json({ error: err.message });
+    }
+};
+
+/**
+ * GET /api/meeting/:meetingThreadId/join
+ * Return signed Jitsi URL for authenticated participants.
+ */
+export const getMeetingJoinInfo = async (req: any, res: Response) => {
+    try {
+        const { userId } = req.user;
+        const { meetingThreadId } = req.params;
+        if (!meetingThreadId) return res.status(400).json({ error: 'meetingThreadId is required' });
+        const meeting = await MeetingThread.findById(meetingThreadId).select('jitsiRoomName status conversationId groupChatId');
+        if (!meeting) return res.status(404).json({ error: 'Meeting not found' });
+        if (meeting.status !== 'active') return res.status(400).json({ error: 'Meeting is no longer active' });
+
+        const me = await User.findById(userId).select('_id username email image');
+        if (!me) return res.status(404).json({ error: 'User not found' });
+
+        const auth = await canUserJoinMeeting(meeting, String(userId));
+        if (!auth.allowed) return res.status(403).json({ error: 'You do not have access to this meeting' });
+        const jitsiUrl = buildSignedJitsiUrl(String(meeting.jitsiRoomName), me, {
+            moderator: auth.moderator,
+            guest: false,
+        });
+        return res.status(200).json({
+            success: true,
+            meetingThreadId,
+            jitsiRoomName: meeting.jitsiRoomName,
+            role: auth.moderator ? 'moderator' : 'participant',
+            jitsiUrl,
+        });
+    } catch (err: any) {
+        console.error('[meeting.joinInfo]', err.message);
         return res.status(500).json({ error: err.message });
     }
 };

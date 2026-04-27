@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { createMeetingGuestInvite, getMeetingThread, getMeetingRatingState, submitMeetingRating } from '../api/chatApi';
+import { createMeetingGuestInvite, getMeetingJoinInfo, getMeetingThread, getMeetingRatingState, submitMeetingRating } from '../api/chatApi';
 import { ExternalLink, Video } from "lucide-react";
 
 interface MeetingCardProps {
@@ -43,7 +43,16 @@ const MeetingCard: React.FC<MeetingCardProps> = ({
     const [submittingRating, setSubmittingRating] = useState(false);
     const [inviteBusy, setInviteBusy] = useState(false);
     const jitsiDomain = process.env.REACT_APP_JITSI_DOMAIN || 'meet.wisdomlinked.com';
-    const jitsiUrl = `https://${jitsiDomain}/${jitsiRoomName}`;
+    const fallbackJitsiUrl = `https://${jitsiDomain}/${jitsiRoomName}`;
+    const handleJoin = async () => {
+        const info = await getMeetingJoinInfo(meetingThreadId);
+        if (info?.success && info?.jitsiUrl) {
+            onJoin?.(info.jitsiUrl);
+            return;
+        }
+        onJoin?.(fallbackJitsiUrl);
+    };
+
 
     const loadTranscript = async () => {
         if (transcript.length > 0) {
@@ -141,7 +150,7 @@ const MeetingCard: React.FC<MeetingCardProps> = ({
                             {inviteBusy ? 'Creating…' : 'Copy guest invite'}
                         </button>
                         <button
-                            onClick={() => onJoin?.(jitsiUrl)}
+                            onClick={() => void handleJoin()}
                             className="px-4 py-1.5 text-xs font-semibold rounded-full bg-gradient-to-r from-green-500 to-emerald-500 text-white hover:brightness-110 transition-all shadow-sm"
                         >
                             Join call
@@ -154,12 +163,12 @@ const MeetingCard: React.FC<MeetingCardProps> = ({
                 <div className={`px-4 py-2 text-xs flex items-center gap-1.5 ${isDark ? "text-blue-300" : "text-blue-700"}`}>
                     <ExternalLink className="h-3.5 w-3.5" />
                     <a
-                        href={jitsiUrl}
+                        href={fallbackJitsiUrl}
                         target="_blank"
                         rel="noreferrer"
                         className="underline underline-offset-2 hover:opacity-80"
                     >
-                        {jitsiUrl}
+                        {fallbackJitsiUrl}
                     </a>
                 </div>
             ) : null}
