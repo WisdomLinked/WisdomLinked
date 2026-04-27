@@ -35,6 +35,7 @@ import { updateMe } from '../../actions/authActions';
 import { leaveGroupAction } from '../../actions/groupChatActions';
 import { actionTypes } from '../../actions/types';
 import { isTheEventGoingOn } from '../../actions/common';
+import { resolveProfileImageSrc } from '../../utils/profileImage';
 
 type CommunityRow = {
   raw: any;
@@ -62,11 +63,6 @@ type PrivateRow =
   | { kind: 'expertCustomer'; id: string; title: string; lastLine: string; raw: any }
   /** Student: expert from directory search (opens / ensures 1:1 DM). */
   | { kind: 'studentSearchedExpert'; id: string; title: string; lastLine: string; raw: any };
-
-const looksLikeImageUrl = (value: unknown): value is string => {
-  const v = typeof value === 'string' ? value.trim() : '';
-  return !!v && (/^https?:\/\//i.test(v) || /^data:image\//i.test(v) || /^blob:/i.test(v) || v.startsWith('/'));
-};
 
 const StudentChat: React.FC = () => {
   const dispatch = useDispatch();
@@ -300,15 +296,7 @@ const StudentChat: React.FC = () => {
   useEffect(() => {
     let cancelled = false;
     const resolveProfileImage = async (imageRef: unknown): Promise<string | null> => {
-      const raw = typeof imageRef === 'string' ? imageRef.trim() : '';
-      if (!raw) return null;
-      if (looksLikeImageUrl(raw)) return raw;
-      try {
-        const fetched = (await profileImageFetch(raw, 'small')) as string;
-        return typeof fetched === 'string' && fetched.trim() ? fetched : null;
-      } catch {
-        return null;
-      }
+      return resolveProfileImageSrc(imageRef, 'small', profileImageFetch as any);
     };
 
     const loadPrivate = async () => {
