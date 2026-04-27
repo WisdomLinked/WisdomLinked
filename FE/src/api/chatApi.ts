@@ -280,17 +280,17 @@ export const getMeetingThread = async (meetingThreadId: string) => {
 };
 
 /** Get signed join URL and role for current authenticated user. */
-export const getMeetingJoinInfo = async (meetingThreadId: string) => {
+export const getMeetingJoinInfo = async (meetingThreadId: string): Promise<{
+    success?: boolean;
+    meetingThreadId?: string;
+    jitsiRoomName?: string;
+    role?: 'moderator' | 'participant';
+    jitsiUrl?: string;
+    error?: string;
+}> => {
     try {
         const res = await api.get(`meeting/${meetingThreadId}/join`);
-        return res.data as {
-            success?: boolean;
-            meetingThreadId?: string;
-            jitsiRoomName?: string;
-            role?: 'moderator' | 'participant';
-            jitsiUrl?: string;
-            error?: string;
-        };
+        return res.data;
     } catch (err: any) {
         console.error('[chatApi.getMeetingJoinInfo]', err.message);
         return { success: false, error: err?.response?.data?.error || err.message };
@@ -298,18 +298,18 @@ export const getMeetingJoinInfo = async (meetingThreadId: string) => {
 };
 
 /** Get current user's rating eligibility/state for a meeting. */
-export const getMeetingRatingState = async (meetingThreadId: string) => {
+export const getMeetingRatingState = async (meetingThreadId: string): Promise<{
+    success?: boolean;
+    canRate?: boolean;
+    ratingBlockedReason?: string;
+    hasRated?: boolean;
+    existingRating?: { score: number; comment?: string } | null;
+    targetUser?: { _id: string; username: string } | null;
+    error?: string;
+}> => {
     try {
         const res = await api.get(`meeting/${meetingThreadId}/rating-state`);
-        return res.data as {
-            success?: boolean;
-            canRate?: boolean;
-            ratingBlockedReason?: string;
-            hasRated?: boolean;
-            existingRating?: { score: number; comment?: string } | null;
-            targetUser?: { _id: string; username: string } | null;
-            error?: string;
-        };
+        return res.data;
     } catch (err: any) {
         console.error('[chatApi.getMeetingRatingState]', err.message);
         return { success: false, canRate: false, hasRated: false, error: err?.response?.data?.error || err.message };
@@ -347,10 +347,15 @@ export const submitMeetingRating = async (
 };
 
 /** Create temporary guest invite link for active meeting. */
-export const createMeetingGuestInvite = async (meetingThreadId: string, ttlHours: number = 2) => {
+export const createMeetingGuestInvite = async (meetingThreadId: string, ttlHours: number = 2): Promise<{
+    success?: boolean;
+    inviteUrl?: string;
+    expiresAt?: string;
+    error?: string;
+}> => {
     try {
         const res = await api.post('meeting/guest-invite', { meetingThreadId, ttlHours });
-        return res.data as { success?: boolean; inviteUrl?: string; expiresAt?: string; error?: string };
+        return res.data;
     } catch (err: any) {
         console.error('[chatApi.createMeetingGuestInvite]', err.message);
         return { success: false, error: err?.response?.data?.error || err.message };
@@ -358,14 +363,20 @@ export const createMeetingGuestInvite = async (meetingThreadId: string, ttlHours
 };
 
 /** Resolve guest invite token without authentication. */
-export const resolveMeetingGuestInvite = async (token: string) => {
+export const resolveMeetingGuestInvite = async (token: string): Promise<{
+    success?: boolean;
+    jitsiUrl?: string;
+    expiresAt?: string;
+    loginUrl?: string;
+    error?: string;
+}> => {
     try {
         const base = process.env.REACT_APP_API_BASE_URL || '/api';
         const normalized = base.endsWith('/') ? base.slice(0, -1) : base;
         const res = await axios.get(`${normalized}/meeting/guest-invite/${encodeURIComponent(token)}`, {
             withCredentials: false,
         });
-        return res.data as { success?: boolean; jitsiUrl?: string; expiresAt?: string; loginUrl?: string; error?: string };
+        return res.data;
     } catch (err: any) {
         console.error('[chatApi.resolveMeetingGuestInvite]', err.message);
         return { success: false, error: err?.response?.data?.error || err.message };
