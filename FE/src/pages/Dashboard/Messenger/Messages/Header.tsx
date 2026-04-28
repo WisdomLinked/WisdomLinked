@@ -33,12 +33,18 @@ import {doLeftSeminar, doUpdateProfile, shareMeetingViaEmail} from "../../../../
 import {SetLoadingStatus, SetTotalTimeSpent} from "../../../../actions/appActions";
 import { updateMe } from "../../../../actions/authActions";
 import { showAlert } from "../../../../actions/alertActions";
-import { resetChatAction, setChosenGroupChatDetails } from "../../../../actions/chatActions";
+import { addNewMessage, resetChatAction, setChosenGroupChatDetails } from "../../../../actions/chatActions";
 import ProfileModal from "./ProfileModal";
 import CommunityProfileModal from "./CommunityProfileModal";
 import { History, ShareIcon, Video } from "lucide-react";
 import { buildFallbackChatProfile, mergeChatProfile } from "../../../../utils/chatProfileModal";
 import { buildOnlineUserIdSet, hasOnlineUserId } from "../../../../utils/onlinePresence";
+
+export const appendMeetingStartMessage = (res: any, dispatch: any) => {
+    if (res?.message) {
+        dispatch(addNewMessage(res.message));
+    }
+};
 
 const MessagesHeader = ({ scrollPosition, events, openCalendarModal, openSeminarModal, openEditSeminarModal, theme = "dark" }: any) => {
 
@@ -220,6 +226,7 @@ const MessagesHeader = ({ scrollPosition, events, openCalendarModal, openSeminar
         }
         const res = await startMeeting({ groupChatId: gid });
         if (res?.jitsiUrl) {
+            appendMeetingStartMessage(res, dispatch);
             openMeetingUrl(res.jitsiUrl, pendingWindow);
         } else {
             if (pendingWindow && !pendingWindow.closed) pendingWindow.close();
@@ -443,6 +450,7 @@ const MessagesHeader = ({ scrollPosition, events, openCalendarModal, openSeminar
                                 }
                                 const res = await startMeeting({ conversationId });
                                 if (res?.jitsiUrl) {
+                                    appendMeetingStartMessage(res, dispatch);
                                     openMeetingUrl(res.jitsiUrl, pendingWindow);
                                 } else {
                                     if (pendingWindow && !pendingWindow.closed) pendingWindow.close();
@@ -471,6 +479,7 @@ const MessagesHeader = ({ scrollPosition, events, openCalendarModal, openSeminar
                                 }
                                 const res = await startMeeting({ conversationId });
                                 if (res?.jitsiUrl) {
+                                    appendMeetingStartMessage(res, dispatch);
                                     openMeetingUrl(res.jitsiUrl, pendingWindow);
                                 } else {
                                     if (pendingWindow && !pendingWindow.closed) pendingWindow.close();
@@ -535,6 +544,7 @@ const MessagesHeader = ({ scrollPosition, events, openCalendarModal, openSeminar
                                     }
                                     const res = await startMeeting({ groupChatId: gid });
                                     if (res?.jitsiUrl) {
+                                        appendMeetingStartMessage(res, dispatch);
                                         openMeetingUrl(res.jitsiUrl, pendingWindow);
                                     } else {
                                         if (pendingWindow && !pendingWindow.closed) pendingWindow.close();
