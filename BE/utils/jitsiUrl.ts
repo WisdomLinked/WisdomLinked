@@ -2,6 +2,7 @@ const MOBILE_WEB_OVERRIDES = [
     "config.disableDeepLinking=true",
     "config.deeplinking.disabled=true",
     "interfaceConfig.MOBILE_APP_PROMO=true",
+    "config.whiteboard.enabled=true",
 ];
 
 export const appendJitsiMobileWebOverrides = (url: string, returnUrl?: string): string => {
