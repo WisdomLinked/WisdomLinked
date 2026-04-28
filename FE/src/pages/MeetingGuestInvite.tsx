@@ -10,6 +10,23 @@ export default function MeetingGuestInvite() {
   const [jitsiUrl, setJitsiUrl] = useState("");
   const [expiresAt, setExpiresAt] = useState("");
 
+  const handleLoginForFullExperience = () => {
+    try {
+      const raw = window.localStorage.getItem("currentUser");
+      const user = raw && raw !== "undefined" ? JSON.parse(raw) : null;
+      if (user?.email && user?.role) {
+        const dashboardPath = user.role === "customer"
+          ? "/user/studentdashboard"
+          : `/user/${String(user.role)}dashboard`;
+        navigate(dashboardPath);
+        return;
+      }
+    } catch {
+      // fall through to login route if local data is invalid
+    }
+    navigate("/login");
+  };
+
   useEffect(() => {
     let cancelled = false;
     const run = async () => {
@@ -63,7 +80,7 @@ export default function MeetingGuestInvite() {
               <button
                 type="button"
                 className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
-                onClick={() => navigate("/login")}
+                onClick={handleLoginForFullExperience}
               >
                 Login for full experience
               </button>
