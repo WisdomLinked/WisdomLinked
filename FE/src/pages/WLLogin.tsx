@@ -14,6 +14,7 @@ const FOCUS_RING = 'focus:ring-2 focus:ring-[#234C6A]/60 focus:border-[#234C6A]'
 export default function WLLogin() {
     const navigate = useNavigate();
     const [searchParams] = useSearchParams();
+    const redirectPath = String(searchParams.get("redirect") || "").trim();
     const dispatch = useDispatch();
     const [oauthError, setOauthError] = useState<string | null>(null);
     const [form, setForm] = useState({ email: '', password: '' });
@@ -140,7 +141,6 @@ export default function WLLogin() {
                 localStorage.setItem('currentUser', JSON.stringify(response.userDetails));
                 dispatch({ type: actionTypes.authenticate, payload: response.userDetails });
                 dispatch(showAlert(`Hi, ${response.userDetails.username} 👋. Welcome back.`));
-                const redirectPath = String(searchParams.get("redirect") || "").trim();
                 if (redirectPath.startsWith("/")) {
                     navigate(redirectPath);
                     return;
@@ -283,7 +283,7 @@ export default function WLLogin() {
                                     style={submitting ? { background: '#9AA6B2' } : BTN_PRIMARY_STYLE}>
                                     {submitting ? (<><svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" /></svg>Signing in...</>) : 'Sign in'}
                                 </button>
-                                <SocialAuthBlock />
+                                <SocialAuthBlock redirect={redirectPath.startsWith("/") ? redirectPath : undefined} />
                                 <p className="text-center text-slate-500 text-sm mt-4">
                                     Don't have an account? <button type="button" onClick={() => setShowSignupModal(true)} className="font-semibold hover:underline" style={{ color: '#234C6A' }}>Sign up</button>
                                 </p>

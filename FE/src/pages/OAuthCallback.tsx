@@ -11,6 +11,7 @@ export default function OAuthCallback() {
     useEffect(() => {
         const token = searchParams.get('token');
         const role = searchParams.get('role') || 'customer';
+        const redirect = String(searchParams.get('redirect') || '').trim();
         
         if (!token) {
             navigate('/login?error=auth_failed', { replace: true });
@@ -33,6 +34,8 @@ export default function OAuthCallback() {
 
             if (needsProfile) {
                 navigate('/auth-complete-profile', { replace: true });
+            } else if (redirect.startsWith('/')) {
+                navigate(redirect, { replace: true });
             } else {
                 const dashboardPath = role === 'customer' ? '/user/studentdashboard' : `/user/${role}dashboard`;
                 navigate(dashboardPath, { replace: true });

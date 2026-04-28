@@ -1,11 +1,15 @@
 import React from 'react';
 
 const BASE_URL = (process.env.REACT_APP_API_BASE_URL || '').replace(/\/$/, '');
-function getAuthRedirectUrl(provider: string, role?: string) {
+function getAuthRedirectUrl(provider: string, role?: string, redirect?: string) {
   const envUrl = process.env[`REACT_APP_${provider.toUpperCase()}_AUTH_URL`];
   const base = envUrl || (BASE_URL ? `${BASE_URL}/auth/${provider}` : '#');
   if (base === '#') return base;
-  return role ? `${base}?role=${role}` : base;
+  const params = new URLSearchParams();
+  if (role) params.set('role', role);
+  if (redirect) params.set('redirect', redirect);
+  const q = params.toString();
+  return q ? `${base}?${q}` : base;
 }
 
 /* Minimal brand SVG icons (24x24) */
@@ -18,10 +22,13 @@ const GoogleIcon = () => (
   </svg>
 );
 
-export default function SocialAuthBlock({ role }: { role?: string } = {}) {
+export default function SocialAuthBlock({ role, redirect }: { role?: string; redirect?: string } = {}) {
+  const navigateTo = (url: string) => {
+    window.location.assign(url);
+  };
   const handleSocialClick = (provider: string) => {
-    const url = getAuthRedirectUrl(provider, role);
-    if (url && url !== '#') window.location.href = url;
+    const url = getAuthRedirectUrl(provider, role, redirect);
+    if (url && url !== '#') navigateTo(url);
   };
 
   return (

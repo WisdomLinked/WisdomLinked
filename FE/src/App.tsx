@@ -209,6 +209,13 @@ function App() {
       ) {
         return;
       }
+      if (path.includes('/login')) {
+        const redirectPath = new URLSearchParams(search).get('redirect') || '';
+        if (redirectPath.startsWith('/')) {
+          navigate(redirectPath);
+          return;
+        }
+      }
 
       let locationUrl = ''
       const location = localStorage.getItem("location")
