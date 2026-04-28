@@ -15,6 +15,8 @@ import { isMeetingModerator } from '../utils/meetingRoleRules';
 
 const JITSI_DOMAIN = process.env.JITSI_DOMAIN || 'meet.wisdomlinked.com';
 const FRONTEND_BASE_URL = process.env.FRONTEND_BASE_URL || process.env.REACT_APP_URL || '';
+const MEETING_RETURN_URL = process.env.MEETING_RETURN_URL
+    || (FRONTEND_BASE_URL ? `${String(FRONTEND_BASE_URL).replace(/\/$/, '')}/user` : '');
 const JITSI_JWT_SECRET = process.env.JITSI_JWT_SECRET || '';
 const JITSI_APP_ID = process.env.JITSI_APP_ID || 'wisdomlinked';
 const JITSI_AUD = process.env.JITSI_AUD || 'jitsi';
@@ -28,7 +30,7 @@ const buildSignedJitsiUrl = (
     opts?: { moderator?: boolean; guest?: boolean; expiresInSeconds?: number },
 ): string => {
     const base = `https://${JITSI_DOMAIN}/${roomName}`;
-    if (!JITSI_JWT_SECRET) return appendJitsiMobileWebOverrides(base);
+    if (!JITSI_JWT_SECRET) return appendJitsiMobileWebOverrides(base, MEETING_RETURN_URL);
     const nowSec = Math.floor(Date.now() / 1000);
     const exp = nowSec + Number(opts?.expiresInSeconds || 2 * 60 * 60);
     const userId = normalizeId(userLike?._id || userLike?.id || userLike?.userId);
@@ -67,7 +69,7 @@ const buildSignedJitsiUrl = (
         JITSI_JWT_SECRET,
         { algorithm: 'HS256', header: { kid: JITSI_APP_ID } },
     );
-    return appendJitsiMobileWebOverrides(`${base}?jwt=${encodeURIComponent(token)}`);
+    return appendJitsiMobileWebOverrides(`${base}?jwt=${encodeURIComponent(token)}`, MEETING_RETURN_URL);
 };
 
 const canUserJoinMeeting = async (meeting: any, userId: string): Promise<{ allowed: boolean; moderator: boolean }> => {
