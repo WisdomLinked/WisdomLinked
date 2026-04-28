@@ -64,6 +64,7 @@ const buildSignedJitsiUrl = (
                     recording: moderator,
                     transcription: moderator,
                     outbound_call: false,
+                    whiteboard: true,
                 },
             },
         },
