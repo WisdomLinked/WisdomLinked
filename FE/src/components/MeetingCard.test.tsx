@@ -122,4 +122,33 @@ describe("MeetingCard", () => {
       expect(consoleErrorSpy).toHaveBeenCalled();
     });
   });
+
+  it("copies normalized app invite URL for guest invite", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", {
+      value: { writeText },
+      configurable: true,
+    });
+    vi.spyOn(window, "alert").mockImplementation(() => {});
+    vi.mocked(chatApi.createMeetingGuestInvite).mockResolvedValue({
+      success: true,
+      inviteUrl: "https://meet.wisdomlinked.com/meeting/invite/invite-token-123",
+    });
+
+    render(
+      <MeetingCard
+        meetingThreadId="t4"
+        jitsiRoomName="wl-room-ghi"
+        starterName="Dana"
+        isEnded={false}
+        theme="light"
+      />,
+    );
+
+    fireEvent.click(screen.getByText("Copy guest invite"));
+
+    await waitFor(() => {
+      expect(writeText).toHaveBeenCalledWith(`${window.location.origin}/meeting/invite/invite-token-123`);
+    });
+  });
 });

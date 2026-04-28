@@ -38,7 +38,7 @@ describe("MeetingGuestInvite", () => {
     expect(mockNavigate).toHaveBeenCalledWith("/login");
   });
 
-  it("routes signed-in customers to student dashboard", async () => {
+  it("routes signed-in users to login from full-experience CTA", async () => {
     window.localStorage.setItem("currentUser", JSON.stringify({ email: "c@x.com", role: "customer" }));
     render(<MeetingGuestInvite />);
 
@@ -47,19 +47,7 @@ describe("MeetingGuestInvite", () => {
     });
 
     fireEvent.click(screen.getByText("Login for full experience"));
-    expect(mockNavigate).toHaveBeenCalledWith("/user/studentdashboard");
-  });
-
-  it("routes signed-in experts to expert dashboard", async () => {
-    window.localStorage.setItem("currentUser", JSON.stringify({ email: "e@x.com", role: "expert" }));
-    render(<MeetingGuestInvite />);
-
-    await waitFor(() => {
-      expect(screen.getByText("Continue as guest")).toBeInTheDocument();
-    });
-
-    fireEvent.click(screen.getByText("Login for full experience"));
-    expect(mockNavigate).toHaveBeenCalledWith("/user/expertdashboard");
+    expect(mockNavigate).toHaveBeenCalledWith("/login");
   });
 });
 

@@ -115,12 +115,23 @@ const MeetingCard: React.FC<MeetingCardProps> = ({
         const res = await createMeetingGuestInvite(meetingThreadId, 2);
         setInviteBusy(false);
         if (res?.success && res.inviteUrl) {
+            const normalizedInviteUrl = (() => {
+                const raw = String(res.inviteUrl || '').trim();
+                const tokenMatch = raw.match(/\/meeting\/invite\/([^/?#]+)/);
+                if (tokenMatch?.[1]) {
+                    return `${window.location.origin}/meeting/invite/${tokenMatch[1]}`;
+                }
+                if (raw.startsWith('/')) {
+                    return `${window.location.origin}${raw}`;
+                }
+                return raw;
+            })();
             try {
-                await navigator.clipboard.writeText(res.inviteUrl);
+                await navigator.clipboard.writeText(normalizedInviteUrl);
                 // keep lightweight here; alert is sufficient for now
                 window.alert('Guest invite link copied (valid up to 2 hours).');
             } catch {
-                window.alert(res.inviteUrl);
+                window.alert(normalizedInviteUrl);
             }
         } else {
             window.alert(res?.error || 'Could not create guest invite link');
