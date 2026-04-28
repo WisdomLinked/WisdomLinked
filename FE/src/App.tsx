@@ -205,6 +205,7 @@ function App() {
         path.includes('/oauth-callback') || 
         path.includes('/verification/') || 
         path.includes('/auth-complete-profile') ||
+        path.includes('/meeting/invite/') ||
         (path.includes('/login') && search.includes('error='))
       ) {
         return;
