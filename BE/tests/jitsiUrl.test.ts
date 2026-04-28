@@ -33,7 +33,7 @@ test("adds application return URL overrides when provided", () => {
     );
     assert.equal(
         url,
-        "https://meet.wisdomlinked.com/room-123?jwt=abc#config.disableDeepLinking=true&config.deeplinking.disabled=true&interfaceConfig.MOBILE_APP_PROMO=true&config.whiteboard.enabled=true&config.enableClosePage=false&config.welcomePage.customUrl=https%3A%2F%2Fwisdomlinked.com%2Fuser",
+        "https://meet.wisdomlinked.com/room-123?jwt=abc#config.disableDeepLinking=true&config.deeplinking.disabled=true&interfaceConfig.MOBILE_APP_PROMO=true&config.whiteboard.enabled=true&config.welcomePage.customUrl=https%3A%2F%2Fwisdomlinked.com%2Fuser",
     );
 });
 

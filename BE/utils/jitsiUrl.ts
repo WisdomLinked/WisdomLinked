@@ -11,8 +11,7 @@ export const appendJitsiMobileWebOverrides = (url: string, returnUrl?: string): 
     const overrides = [...MOBILE_WEB_OVERRIDES];
     const normalizedReturnUrl = String(returnUrl || "").trim();
     if (normalizedReturnUrl) {
-        // Prefer app fallback instead of landing on Jitsi home after hangup.
-        overrides.push("config.enableClosePage=false");
+        // Let server-side close-page config handle post-hangup redirect.
         overrides.push(`config.welcomePage.customUrl=${encodeURIComponent(normalizedReturnUrl)}`);
     }
     const hash = overrides.join("&");
