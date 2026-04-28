@@ -10,6 +10,8 @@ const User = require('../models/User');
 const MeetingGuestInvite = require('../models/MeetingGuestInvite');
 import { resolveMeetingRatingTargetUserId } from '../utils/meetingRatingRules';
 import { buildMeetingRoomName, canStartGroupMeeting } from '../utils/meetingModerationRules';
+import { appendJitsiMobileWebOverrides } from '../utils/jitsiUrl';
+import { isMeetingModerator } from '../utils/meetingRoleRules';
 
 const JITSI_DOMAIN = process.env.JITSI_DOMAIN || 'meet.wisdomlinked.com';
 const FRONTEND_BASE_URL = process.env.FRONTEND_BASE_URL || process.env.REACT_APP_URL || '';
@@ -26,7 +28,7 @@ const buildSignedJitsiUrl = (
     opts?: { moderator?: boolean; guest?: boolean; expiresInSeconds?: number },
 ): string => {
     const base = `https://${JITSI_DOMAIN}/${roomName}`;
-    if (!JITSI_JWT_SECRET) return base;
+    if (!JITSI_JWT_SECRET) return appendJitsiMobileWebOverrides(base);
     const nowSec = Math.floor(Date.now() / 1000);
     const exp = nowSec + Number(opts?.expiresInSeconds || 2 * 60 * 60);
     const userId = normalizeId(userLike?._id || userLike?.id || userLike?.userId);
@@ -65,7 +67,7 @@ const buildSignedJitsiUrl = (
         JITSI_JWT_SECRET,
         { algorithm: 'HS256', header: { kid: JITSI_APP_ID } },
     );
-    return `${base}?jwt=${encodeURIComponent(token)}`;
+    return appendJitsiMobileWebOverrides(`${base}?jwt=${encodeURIComponent(token)}`);
 };
 
 const canUserJoinMeeting = async (meeting: any, userId: string): Promise<{ allowed: boolean; moderator: boolean }> => {
@@ -75,7 +77,14 @@ const canUserJoinMeeting = async (meeting: any, userId: string): Promise<{ allow
         const conversation = await Conversation.findById(meeting.conversationId).select('participants').lean();
         const isParticipant = Array.isArray(conversation?.participants)
             && conversation.participants.some((p: any) => normalizeId(p) === uid);
-        return { allowed: isParticipant, moderator: false };
+        return {
+            allowed: isParticipant,
+            moderator: isMeetingModerator({
+                conversationId: meeting.conversationId,
+                userId: uid,
+                startedBy: meeting.startedBy,
+            }),
+        };
     }
     if (meeting.groupChatId) {
         const groupChat = await GroupChat.findById(meeting.groupChatId)
@@ -90,7 +99,10 @@ const canUserJoinMeeting = async (meeting: any, userId: string): Promise<{ allow
             ? groupChat.coModerators.map((p: any) => normalizeId(p))
             : [];
         const allowed = participantIds.includes(uid) || adminId === uid || coModeratorIds.includes(uid);
-        const moderator = adminId === uid || coModeratorIds.includes(uid);
+        const moderator = isMeetingModerator({
+            userId: uid,
+            groupAdminId: adminId,
+        });
         return { allowed, moderator };
     }
     return { allowed: false, moderator: false };
@@ -131,6 +143,7 @@ export const startMeeting = async (req: any, res: Response) => {
         if (!me) return res.status(404).json({ error: 'User not found' });
 
         let roomScope = String(conversationId || groupChatId || "");
+        let groupAdminId = "";
         if (conversationId) {
             const conversation = await Conversation.findById(conversationId);
             if (!conversation) return res.status(404).json({ error: 'Conversation not found' });
@@ -145,6 +158,7 @@ export const startMeeting = async (req: any, res: Response) => {
             if (!canStartGroupMeeting(groupChat, me)) {
                 return res.status(403).json({ error: 'Only the expert moderator can start this group call' });
             }
+            groupAdminId = normalizeId(groupChat?.admin);
             roomScope = String(groupChatId);
         }
         const jitsiRoomName = buildMeetingRoomName(roomScope);
@@ -201,7 +215,12 @@ export const startMeeting = async (req: any, res: Response) => {
         };
 
         const signedUrl = buildSignedJitsiUrl(jitsiRoomName, me, {
-            moderator: true,
+            moderator: isMeetingModerator({
+                conversationId,
+                userId,
+                startedBy: userId,
+                groupAdminId,
+            }),
             guest: false,
         });
         return res.status(200).json({
@@ -552,7 +571,7 @@ export const getMeetingJoinInfo = async (req: any, res: Response) => {
         const { userId } = req.user;
         const { meetingThreadId } = req.params;
         if (!meetingThreadId) return res.status(400).json({ error: 'meetingThreadId is required' });
-        const meeting = await MeetingThread.findById(meetingThreadId).select('jitsiRoomName status conversationId groupChatId removedParticipants joinEvents participants');
+        const meeting = await MeetingThread.findById(meetingThreadId).select('jitsiRoomName status conversationId groupChatId removedParticipants joinEvents participants startedBy');
         if (!meeting) return res.status(404).json({ error: 'Meeting not found' });
         if (meeting.status !== 'active') return res.status(400).json({ error: 'Meeting is no longer active' });
         if (isRemovedFromMeeting(meeting, String(userId))) {

@@ -46,15 +46,23 @@ const MeetingCard: React.FC<MeetingCardProps> = ({
     const [joinBusy, setJoinBusy] = useState(false);
     const jitsiDomain = process.env.REACT_APP_JITSI_DOMAIN || 'meet.wisdomlinked.com';
     const fallbackJitsiUrl = `https://${jitsiDomain}/${jitsiRoomName}`;
+    const openMeetingUrl = (jitsiUrl: string, pendingWindow: Window | null = null) => {
+        if (pendingWindow && !pendingWindow.closed) {
+            pendingWindow.location.href = jitsiUrl;
+            return;
+        }
+        window.location.assign(jitsiUrl);
+    };
     const handleJoin = async () => {
+        const pendingWindow = window.open("", "_blank");
         setJoinBusy(true);
         const info = await getMeetingJoinInfo(meetingThreadId);
         setJoinBusy(false);
+        const targetUrl = info?.success && info?.jitsiUrl ? info.jitsiUrl : fallbackJitsiUrl;
         if (info?.success && info?.jitsiUrl) {
             onJoin?.(info.jitsiUrl);
-            return;
         }
-        onJoin?.(fallbackJitsiUrl);
+        openMeetingUrl(targetUrl, pendingWindow);
     };
 
 

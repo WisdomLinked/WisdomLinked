@@ -85,6 +85,19 @@ const MessagesHeader = ({ scrollPosition, events, openCalendarModal, openSeminar
     const [callHistoryLoading, setCallHistoryLoading] = useState(false);
     const [callHistoryRows, setCallHistoryRows] = useState<Array<any>>([]);
 
+    const openMeetingUrl = (jitsiUrl?: string, pendingWindow: Window | null = null) => {
+        if (!jitsiUrl) {
+            if (pendingWindow && !pendingWindow.closed) pendingWindow.close();
+            return;
+        }
+        if (pendingWindow && !pendingWindow.closed) {
+            pendingWindow.location.href = jitsiUrl;
+            return;
+        }
+        // Mobile Safari/Chrome may block async popups; same-tab navigation remains reliable.
+        window.location.assign(jitsiUrl);
+    };
+
     const checkEnabledEvent = () => {
         let event = events.find((event: any) => event?._id === currentEvent?._id)
         set_enabledEvent(event)
@@ -201,13 +214,15 @@ const MessagesHeader = ({ scrollPosition, events, openCalendarModal, openSeminar
     const createNewRoomOrJoinRoom = async () => {
         const gid = chosenGroupChatDetails?.groupId;
         if (!gid) return;
+        const pendingWindow = window.open("", "_blank");
         if (userDetails.role === 'expert' && enabledEvent) {
             SetTotalTimeSpent(Date.now());
         }
         const res = await startMeeting({ groupChatId: gid });
         if (res?.jitsiUrl) {
-            window.open(res.jitsiUrl, '_blank', 'noopener,noreferrer');
+            openMeetingUrl(res.jitsiUrl, pendingWindow);
         } else {
+            if (pendingWindow && !pendingWindow.closed) pendingWindow.close();
             dispatch(showAlert(res?.error || 'Could not start the meeting room'));
         }
     }
@@ -417,17 +432,20 @@ const MessagesHeader = ({ scrollPosition, events, openCalendarModal, openSeminar
                                 !conversationId
                             }
                             onClick={async () => {
+                                const pendingWindow = window.open("", "_blank");
                                 if (enabledEvent) {
                                     SetTotalTimeSpent(Date.now());
                                 }
                                 if (!conversationId) {
+                                    if (pendingWindow && !pendingWindow.closed) pendingWindow.close();
                                     dispatch(showAlert('Chat is still loading — try again in a moment'));
                                     return;
                                 }
                                 const res = await startMeeting({ conversationId });
                                 if (res?.jitsiUrl) {
-                                    window.open(res.jitsiUrl, '_blank', 'noopener,noreferrer');
+                                    openMeetingUrl(res.jitsiUrl, pendingWindow);
                                 } else {
+                                    if (pendingWindow && !pendingWindow.closed) pendingWindow.close();
                                     dispatch(showAlert(res?.error || 'Could not start the call'));
                                 }
                             }}
@@ -442,17 +460,20 @@ const MessagesHeader = ({ scrollPosition, events, openCalendarModal, openSeminar
                                 !conversationId
                             }
                             onClick={async () => {
+                                const pendingWindow = window.open("", "_blank");
                                 if (enabledEvent) {
                                     SetTotalTimeSpent(Date.now());
                                 }
                                 if (!conversationId) {
+                                    if (pendingWindow && !pendingWindow.closed) pendingWindow.close();
                                     dispatch(showAlert('Chat is still loading — try again in a moment'));
                                     return;
                                 }
                                 const res = await startMeeting({ conversationId });
                                 if (res?.jitsiUrl) {
-                                    window.open(res.jitsiUrl, '_blank', 'noopener,noreferrer');
+                                    openMeetingUrl(res.jitsiUrl, pendingWindow);
                                 } else {
+                                    if (pendingWindow && !pendingWindow.closed) pendingWindow.close();
                                     dispatch(showAlert(res?.error || 'Could not start the call'));
                                 }
                             }}
@@ -506,12 +527,17 @@ const MessagesHeader = ({ scrollPosition, events, openCalendarModal, openSeminar
                                 style={{ color: theme === "light" ? "#0f172a" : "white" }}
                                 title="Start a group video call (WisdomLinked Meet)"
                                 onClick={async () => {
+                                    const pendingWindow = window.open("", "_blank");
                                     const gid = chosenGroupChatDetails?.groupId;
-                                    if (!gid) return;
+                                    if (!gid) {
+                                        if (pendingWindow && !pendingWindow.closed) pendingWindow.close();
+                                        return;
+                                    }
                                     const res = await startMeeting({ groupChatId: gid });
                                     if (res?.jitsiUrl) {
-                                        window.open(res.jitsiUrl, '_blank', 'noopener,noreferrer');
+                                        openMeetingUrl(res.jitsiUrl, pendingWindow);
                                     } else {
+                                        if (pendingWindow && !pendingWindow.closed) pendingWindow.close();
                                         dispatch(showAlert(res?.error || 'Could not start the meeting room'));
                                     }
                                 }}

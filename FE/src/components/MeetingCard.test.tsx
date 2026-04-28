@@ -7,6 +7,15 @@ import * as chatApi from "../api/chatApi";
 vi.mock("../api/chatApi");
 
 describe("MeetingCard", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.spyOn(window, "open").mockReturnValue({
+      closed: false,
+      location: { href: "" },
+      close: vi.fn(),
+    } as unknown as Window);
+  });
+
   it("renders call join CTA and room link for active meetings", () => {
     render(
       <MeetingCard
@@ -57,5 +66,60 @@ describe("MeetingCard", () => {
     });
     
     expect(mockOnJoin).toHaveBeenCalledWith("https://mock.jitsi.url");
+  });
+
+  it("navigates pre-opened tab to join url when popup opens", async () => {
+    const popup = {
+      closed: false,
+      location: { href: "" },
+      close: vi.fn(),
+    } as unknown as Window;
+    const openSpy = vi.spyOn(window, "open").mockReturnValue(popup);
+    vi.mocked(chatApi.getMeetingJoinInfo).mockResolvedValue({
+      success: true,
+      jitsiUrl: "https://mock.jitsi.url/mobile",
+    });
+
+    render(
+      <MeetingCard
+        meetingThreadId="t2"
+        jitsiRoomName="wl-room-abc"
+        starterName="Bob"
+        isEnded={false}
+        theme="light"
+      />,
+    );
+
+    fireEvent.click(screen.getByText("Join Call"));
+
+    await waitFor(() => {
+      expect(openSpy).toHaveBeenCalledWith("", "_blank");
+      expect(popup.location.href).toBe("https://mock.jitsi.url/mobile");
+    });
+  });
+
+  it("falls back to same-tab navigation when popup is blocked", async () => {
+    vi.spyOn(window, "open").mockReturnValue(null);
+    const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.mocked(chatApi.getMeetingJoinInfo).mockResolvedValue({
+      success: true,
+      jitsiUrl: "https://mock.jitsi.url/fallback",
+    });
+
+    render(
+      <MeetingCard
+        meetingThreadId="t3"
+        jitsiRoomName="wl-room-def"
+        starterName="Cara"
+        isEnded={false}
+        theme="light"
+      />,
+    );
+
+    fireEvent.click(screen.getByText("Join Call"));
+
+    await waitFor(() => {
+      expect(consoleErrorSpy).toHaveBeenCalled();
+    });
   });
 });

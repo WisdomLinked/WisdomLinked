@@ -746,7 +746,6 @@ const Messages = ({ theme = "dark" }: any) => {
                                     starterName={meetingData.starterName}
                                     isEnded={false}
                                     theme={theme}
-                                    onJoin={(url) => window.open(url, '_blank')}
                                 />
                             </div>
                         );
