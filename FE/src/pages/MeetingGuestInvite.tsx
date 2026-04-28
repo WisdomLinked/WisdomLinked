@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { resolveMeetingGuestInvite } from "../api/chatApi";
+import { joinMeetingFromGuestInvite, resolveMeetingGuestInvite } from "../api/chatApi";
 
 export default function MeetingGuestInvite() {
   const { token } = useParams();
@@ -18,6 +18,29 @@ export default function MeetingGuestInvite() {
         setLoading(false);
         return;
       }
+
+      // If the user is already logged in, skip the invite landing page and enter the meeting directly.
+      const stored = localStorage.getItem("currentUser");
+      const currentUser = (() => {
+        try {
+          return stored && stored !== "undefined" ? JSON.parse(stored) : null;
+        } catch {
+          return null;
+        }
+      })();
+      const isSignedIn = Boolean(currentUser?.email);
+
+      if (isSignedIn) {
+        const joinRes = await joinMeetingFromGuestInvite(token);
+        if (cancelled) return;
+        if (joinRes?.success && joinRes?.jitsiUrl) {
+          // Replace current tab: user shouldn't see the invite screen at all.
+          window.location.replace(joinRes.jitsiUrl);
+          return;
+        }
+        // If user doesn't actually have access, fall back to guest flow UI.
+      }
+
       const res = await resolveMeetingGuestInvite(token);
       if (cancelled) return;
       if (!res?.success || !res?.jitsiUrl) {

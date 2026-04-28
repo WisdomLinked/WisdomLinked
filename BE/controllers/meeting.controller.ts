@@ -570,6 +570,76 @@ export const resolveMeetingGuestInvite = async (req: Request, res: Response) => 
 };
 
 /**
+ * GET /api/meeting/guest-invite/:token/join
+ * Authenticated endpoint: join a meeting using a guest invite token, but with the user's real identity.
+ *
+ * This is used to ensure "Login for full experience" lands in the meeting (not dashboard),
+ * and to auto-enter the meeting when a logged-in user opens an invite link.
+ */
+export const joinMeetingFromGuestInvite = async (req: any, res: Response) => {
+    try {
+        const { userId } = req.user || {};
+        const rawToken = String((req.params as any).token || '').trim();
+        if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+        if (!rawToken) return res.status(400).json({ error: 'token is required' });
+
+        const tokenHash = hashInviteToken(rawToken);
+        const invite = await MeetingGuestInvite.findOne({ tokenHash }).lean();
+        if (!invite) return res.status(404).json({ error: 'Invite not found' });
+        if (invite.revokedAt) return res.status(410).json({ error: 'Invite is no longer valid' });
+        if (new Date(invite.expiresAt).getTime() <= Date.now()) {
+            return res.status(410).json({ error: 'Invite has expired' });
+        }
+
+        const meeting = await MeetingThread.findById(invite.meetingThreadId).select(
+            'jitsiRoomName status conversationId groupChatId removedParticipants joinEvents participants startedBy',
+        );
+        if (!meeting || meeting.status !== 'active') {
+            return res.status(410).json({ error: 'Meeting is no longer active' });
+        }
+        if (isRemovedFromMeeting(meeting, String(userId))) {
+            return res.status(403).json({ error: 'You were removed from this active call by a moderator' });
+        }
+
+        const me = await User.findById(userId).select('_id username email image');
+        if (!me) return res.status(404).json({ error: 'User not found' });
+
+        const auth = await canUserJoinMeeting(meeting, String(userId));
+        if (!auth.allowed) return res.status(403).json({ error: 'You do not have access to this meeting' });
+
+        const jitsiUrl = buildSignedJitsiUrl(String(meeting.jitsiRoomName), me, {
+            moderator: auth.moderator,
+            guest: false,
+        });
+
+        meeting.joinEvents = Array.isArray(meeting.joinEvents) ? meeting.joinEvents : [];
+        meeting.joinEvents.push({
+            userId: me._id,
+            joinedAt: new Date(),
+            source: 'guest-invite',
+        });
+        if (!Array.isArray(meeting.participants)) {
+            meeting.participants = [];
+        }
+        if (!meeting.participants.some((p: any) => normalizeId(p) === normalizeId(me._id))) {
+            meeting.participants.push(me._id);
+        }
+        await meeting.save();
+
+        return res.status(200).json({
+            success: true,
+            meetingThreadId: String(invite.meetingThreadId),
+            jitsiRoomName: String(meeting.jitsiRoomName),
+            role: auth.moderator ? 'moderator' : 'participant',
+            jitsiUrl,
+        });
+    } catch (err: any) {
+        console.error('[meeting.joinFromGuestInvite]', err.message);
+        return res.status(500).json({ error: err.message });
+    }
+};
+
+/**
  * GET /api/meeting/:meetingThreadId/join
  * Return signed Jitsi URL for authenticated participants.
  */

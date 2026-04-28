@@ -382,3 +382,21 @@ export const resolveMeetingGuestInvite = async (token: string): Promise<{
         return { success: false, error: err?.response?.data?.error || err.message };
     }
 };
+
+/** Join meeting using a guest invite token, but as an authenticated user. */
+export const joinMeetingFromGuestInvite = async (token: string): Promise<{
+    success?: boolean;
+    meetingThreadId?: string;
+    jitsiRoomName?: string;
+    role?: string;
+    jitsiUrl?: string;
+    error?: string;
+}> => {
+    try {
+        const res = await api.get(`meeting/guest-invite/${encodeURIComponent(token)}/join`);
+        return res.data;
+    } catch (err: any) {
+        console.error('[chatApi.joinMeetingFromGuestInvite]', err.message);
+        return { success: false, error: err?.response?.data?.error || err.message };
+    }
+};

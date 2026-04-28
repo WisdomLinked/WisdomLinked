@@ -11,6 +11,7 @@ import {
     submitMeetingRating,
     createMeetingGuestInvite,
     resolveMeetingGuestInvite,
+    joinMeetingFromGuestInvite,
     getMeetingJoinInfo,
     revokeMeetingParticipant,
 } from '../controllers/meeting.controller';
@@ -22,6 +23,7 @@ router.post('/rate', requireAuth(false), submitMeetingRating);
 router.post('/guest-invite', requireAuth(false), createMeetingGuestInvite);
 router.post('/revoke-participant', requireAuth(false), revokeMeetingParticipant);
 router.get('/guest-invite/:token', resolveMeetingGuestInvite);
+router.get('/guest-invite/:token/join', requireAuth(false), joinMeetingFromGuestInvite);
 router.get('/:meetingThreadId/join', requireAuth(false), getMeetingJoinInfo);
 router.get('/:meetingThreadId/rating-state', requireAuth(false), getMeetingRatingState);
 router.get('/:meetingThreadId', requireAuth(false), getMeetingThread);

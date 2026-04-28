@@ -20,6 +20,11 @@ describe("MeetingGuestInvite", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     window.localStorage.clear();
+    vi.unstubAllGlobals();
+    vi.mocked(chatApi.joinMeetingFromGuestInvite as any).mockResolvedValue({
+      success: false,
+      error: "No access",
+    });
     vi.mocked(chatApi.resolveMeetingGuestInvite).mockResolvedValue({
       success: true,
       jitsiUrl: "https://meet.wisdomlinked.com/room-abc",
@@ -38,16 +43,34 @@ describe("MeetingGuestInvite", () => {
     expect(mockNavigate).toHaveBeenCalledWith("/login?redirect=%2Fmeeting%2Finvite%2Finvite-token-123");
   });
 
-  it("routes signed-in users to login from full-experience CTA", async () => {
+  it("auto-enters the meeting for signed-in users (skips invite page)", async () => {
+    const replaceSpy = vi.fn();
+    vi.stubGlobal("location", { ...window.location, replace: replaceSpy });
+    vi.mocked(chatApi.joinMeetingFromGuestInvite as any).mockResolvedValue({
+      success: true,
+      jitsiUrl: "https://meet.wisdomlinked.com/authed-room",
+    });
     window.localStorage.setItem("currentUser", JSON.stringify({ email: "c@x.com", role: "customer" }));
+
+    render(<MeetingGuestInvite />);
+
+    await waitFor(() => {
+      expect(replaceSpy).toHaveBeenCalledWith("https://meet.wisdomlinked.com/authed-room");
+    });
+  });
+
+  it("falls back to guest invite UI when signed-in user cannot join as participant", async () => {
+    window.localStorage.setItem("currentUser", JSON.stringify({ email: "c@x.com", role: "customer" }));
+    vi.mocked(chatApi.joinMeetingFromGuestInvite as any).mockResolvedValue({
+      success: false,
+      error: "You do not have access to this meeting",
+    });
+
     render(<MeetingGuestInvite />);
 
     await waitFor(() => {
       expect(screen.getByText("Continue as guest")).toBeInTheDocument();
     });
-
-    fireEvent.click(screen.getByText("Login for full experience"));
-    expect(mockNavigate).toHaveBeenCalledWith("/login?redirect=%2Fmeeting%2Finvite%2Finvite-token-123");
   });
 });
 
