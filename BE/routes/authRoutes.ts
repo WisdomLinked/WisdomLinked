@@ -103,8 +103,28 @@ const oauthCallback = async (req: any, res: any) => {
         const user = result.user || result;
         const isNew = result.isNew || false;
 
-        // Read role from OAuth state parameter (Google/Facebook) or session (Twitter)
-        const role = req.query.state || (req.session && req.session.oauthRole) || null;
+        // Read role + redirect from OAuth state parameter (Google/Facebook) or session (Twitter)
+        const rawState = String(req.query.state || '').trim();
+        let role: string | null = (req.session && req.session.oauthRole) || null;
+        let redirectPath = '';
+        if (rawState) {
+            try {
+                const parsed = JSON.parse(decodeURIComponent(rawState));
+                if (parsed && typeof parsed === 'object') {
+                    if (typeof parsed.role === 'string' && parsed.role.trim()) {
+                        role = parsed.role.trim();
+                    }
+                    if (typeof parsed.redirect === 'string' && parsed.redirect.trim()) {
+                        redirectPath = parsed.redirect.trim();
+                    }
+                } else {
+                    role = rawState;
+                }
+            } catch {
+                // Backward compatibility: old state format used role directly.
+                role = rawState;
+            }
+        }
 
         // If new user came from login page (no role), block signup and redirect to register
         if (isNew && (!role || (role !== 'expert' && role !== 'customer'))) {
@@ -166,9 +186,10 @@ const oauthCallback = async (req: any, res: any) => {
         const needsProfile = isNew || isProfileIncomplete;
 
         // Redirect to FE with token so it can bootstrap the session
+        const encodedRedirect = redirectPath.startsWith('/') ? `&redirect=${encodeURIComponent(redirectPath)}` : '';
         const redirectUrl = needsProfile 
-            ? `${process.env.FE_URL}/oauth-callback?token=${token}&role=${user.role}&needsProfile=true`
-            : `${process.env.FE_URL}/oauth-callback?token=${token}&role=${user.role}`;
+            ? `${process.env.FE_URL}/oauth-callback?token=${token}&role=${user.role}&needsProfile=true${encodedRedirect}`
+            : `${process.env.FE_URL}/oauth-callback?token=${token}&role=${user.role}${encodedRedirect}`;
         
         res.redirect(redirectUrl);
     } catch (err) {
@@ -180,7 +201,12 @@ const oauthCallback = async (req: any, res: any) => {
 // Google
 router.get('/google', (req: any, res: any, next: any) => {
     const role = req.query.role || 'login';
-    passport.authenticate('google', { scope: ['profile', 'email'], state: role, session: false })(req, res, next);
+    const redirectPath = String(req.query.redirect || '').trim();
+    const state = encodeURIComponent(JSON.stringify({
+        role,
+        redirect: redirectPath.startsWith('/') ? redirectPath : '',
+    }));
+    passport.authenticate('google', { scope: ['profile', 'email'], state, session: false })(req, res, next);
 });
 router.get('/google/callback', passport.authenticate('google', { failureRedirect: '/login?error=google_failed', session: false }), oauthCallback);
 
