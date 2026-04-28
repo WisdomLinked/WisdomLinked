@@ -63,7 +63,7 @@ export default function MeetingGuestInvite() {
               <button
                 type="button"
                 className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
-                onClick={() => navigate("/login")}
+                onClick={() => navigate(`/login?redirect=${encodeURIComponent(`/meeting/invite/${String(token || "")}`)}`)}
               >
                 Login for full experience
               </button>

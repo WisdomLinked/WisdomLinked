@@ -35,7 +35,7 @@ describe("MeetingGuestInvite", () => {
     });
 
     fireEvent.click(screen.getByText("Login for full experience"));
-    expect(mockNavigate).toHaveBeenCalledWith("/login");
+    expect(mockNavigate).toHaveBeenCalledWith("/login?redirect=%2Fmeeting%2Finvite%2Finvite-token-123");
   });
 
   it("routes signed-in users to login from full-experience CTA", async () => {
@@ -47,7 +47,7 @@ describe("MeetingGuestInvite", () => {
     });
 
     fireEvent.click(screen.getByText("Login for full experience"));
-    expect(mockNavigate).toHaveBeenCalledWith("/login");
+    expect(mockNavigate).toHaveBeenCalledWith("/login?redirect=%2Fmeeting%2Finvite%2Finvite-token-123");
   });
 });
 

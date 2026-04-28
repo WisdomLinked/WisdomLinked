@@ -140,6 +140,11 @@ export default function WLLogin() {
                 localStorage.setItem('currentUser', JSON.stringify(response.userDetails));
                 dispatch({ type: actionTypes.authenticate, payload: response.userDetails });
                 dispatch(showAlert(`Hi, ${response.userDetails.username} 👋. Welcome back.`));
+                const redirectPath = String(searchParams.get("redirect") || "").trim();
+                if (redirectPath.startsWith("/")) {
+                    navigate(redirectPath);
+                    return;
+                }
                 // Navigate to the correct dashboard based on role
                 const role = response.userDetails.role;
                 if (role === 'customer') {
