@@ -12,9 +12,10 @@ import { resolveMeetingRatingTargetUserId } from '../utils/meetingRatingRules';
 import { buildMeetingRoomName, canStartGroupMeeting } from '../utils/meetingModerationRules';
 import { appendJitsiMobileWebOverrides } from '../utils/jitsiUrl';
 import { isMeetingModerator } from '../utils/meetingRoleRules';
+import { buildMeetingInviteUrl, resolvePublicAppBaseUrl } from '../utils/inviteUrl';
 
 const JITSI_DOMAIN = process.env.JITSI_DOMAIN || 'meet.wisdomlinked.com';
-const FRONTEND_BASE_URL = process.env.FRONTEND_BASE_URL || process.env.REACT_APP_URL || '';
+const FRONTEND_BASE_URL = process.env.FRONTEND_BASE_URL || process.env.FE_URL || process.env.REACT_APP_URL || '';
 const MEETING_RETURN_URL = process.env.MEETING_RETURN_URL
     || (FRONTEND_BASE_URL ? `${String(FRONTEND_BASE_URL).replace(/\/$/, '')}/user` : '');
 const JITSI_JWT_SECRET = process.env.JITSI_JWT_SECRET || '';
@@ -507,9 +508,13 @@ export const createMeetingGuestInvite = async (req: any, res: Response) => {
             expiresAt,
         });
 
-        const base = String(FRONTEND_BASE_URL || '').replace(/\/$/, '');
-        const invitePath = `/meeting/invite/${rawToken}`;
-        const inviteUrl = base ? `${base}${invitePath}` : invitePath;
+        const base = resolvePublicAppBaseUrl(String(FRONTEND_BASE_URL || ''), {
+            origin: String(req.get?.('origin') || ''),
+            host: String(req.get?.('host') || ''),
+            xForwardedHost: String(req.get?.('x-forwarded-host') || ''),
+            xForwardedProto: String(req.get?.('x-forwarded-proto') || ''),
+        });
+        const inviteUrl = buildMeetingInviteUrl(base, rawToken);
         return res.status(200).json({
             success: true,
             inviteUrl,
