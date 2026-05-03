@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { API } from '../config';
@@ -17,10 +17,12 @@ export default function Login() {
   const [adminPassword, setAdminPassword] = useState('');
   const [regStudentEmail, setRegStudentEmail] = useState('');
   const [regStudentPassword, setRegStudentPassword] = useState('');
+  const [regStudentPasswordConfirm, setRegStudentPasswordConfirm] = useState('');
   const [regStudentMajor, setRegStudentMajor] = useState('');
   const [regStudentMajorOther, setRegStudentMajorOther] = useState('');
   const [regExpertEmail, setRegExpertEmail] = useState('');
   const [regExpertPassword, setRegExpertPassword] = useState('');
+  const [regExpertPasswordConfirm, setRegExpertPasswordConfirm] = useState('');
   const [regExpertUsername, setRegExpertUsername] = useState('');
   const [regExpertMajors, setRegExpertMajors] = useState('');
   const [regExpertTitle, setRegExpertTitle] = useState('');
@@ -39,10 +41,16 @@ export default function Login() {
   const [regStudentCity, setRegStudentCity] = useState('');
   const [regStudentCountryCode, setRegStudentCountryCode] = useState('+1');
   const [regStudentPhone, setRegStudentPhone] = useState('');
+  const [regStudentTargetYear, setRegStudentTargetYear] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const { setAuth } = useAuth();
   const navigate = useNavigate();
+
+  const regAdmissionYears = useMemo(() => {
+    const y = new Date().getFullYear();
+    return Array.from({ length: 14 }, (_, i) => y - 3 + i);
+  }, []);
 
   function goToMain() {
     setView('main');
@@ -169,6 +177,10 @@ export default function Login() {
       setError('Full name is required');
       return;
     }
+    if (regStudentPassword !== regStudentPasswordConfirm) {
+      setError('Passwords do not match. Please enter the same password twice.');
+      return;
+    }
     if (!regStudentCountry) {
       setError('Country is required');
       return;
@@ -190,6 +202,7 @@ export default function Login() {
           major, timezone: regStudentTimezone, username: regStudentUsername.trim(),
           country: regStudentCountry, state: regStudentState.trim() || undefined, city: regStudentCity.trim() || undefined, phone,
           ...(regStudentBio.trim() && { bio: regStudentBio.trim() }),
+          ...(regStudentTargetYear !== '' && { target_year: Number(regStudentTargetYear) }),
         }),
       });
       const data = await res.json().catch(() => ({}));
@@ -210,6 +223,10 @@ export default function Login() {
     e.preventDefault();
     if (!regExpertUsername.trim()) {
       setError('Full name is required');
+      return;
+    }
+    if (regExpertPassword !== regExpertPasswordConfirm) {
+      setError('Passwords do not match. Please enter the same password twice.');
       return;
     }
     if (!regExpertTitle.trim()) {
@@ -477,6 +494,15 @@ export default function Login() {
                 required
                 autoComplete="new-password"
               />
+              <input
+                type="password"
+                placeholder="Confirm password"
+                value={regStudentPasswordConfirm}
+                onChange={e => setRegStudentPasswordConfirm(e.target.value)}
+                className={styles.input}
+                required
+                autoComplete="new-password"
+              />
               <label className={styles.label}>Major</label>
               <select
                 value={regStudentMajor}
@@ -499,6 +525,18 @@ export default function Login() {
                   className={styles.input}
                 />
               )}
+              <label className={styles.label}>Target year</label>
+              <select
+                value={regStudentTargetYear}
+                onChange={e => setRegStudentTargetYear(e.target.value)}
+                className={styles.input}
+                aria-label="Admission or enrollment target year"
+              >
+                <option value="">Not set</option>
+                {regAdmissionYears.map((y) => (
+                  <option key={y} value={String(y)}>{y}</option>
+                ))}
+              </select>
               <label className={styles.label}>Country</label>
               <select
                 value={regStudentCountry}
@@ -676,6 +714,15 @@ export default function Login() {
                 placeholder="Password"
                 value={regExpertPassword}
                 onChange={e => setRegExpertPassword(e.target.value)}
+                className={styles.input}
+                required
+                autoComplete="new-password"
+              />
+              <input
+                type="password"
+                placeholder="Confirm password"
+                value={regExpertPasswordConfirm}
+                onChange={e => setRegExpertPasswordConfirm(e.target.value)}
                 className={styles.input}
                 required
                 autoComplete="new-password"

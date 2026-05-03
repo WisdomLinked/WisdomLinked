@@ -61,8 +61,19 @@ router.post('/register', (req, res) => {
   const st = state != null ? String(state).trim().slice(0, 100) : null;
   const cty = city != null ? String(city).trim().slice(0, 100) : null;
   const ph = phone != null ? String(phone).trim().slice(0, 30) : null;
+  let targetYearVal = null;
+  if (userRole === 'student') {
+    const rawY = req.body?.target_year;
+    if (rawY !== undefined && rawY !== null && String(rawY).trim() !== '') {
+      const y = parseInt(String(rawY), 10);
+      if (Number.isNaN(y) || y < 2000 || y > 2100) {
+        return res.status(400).json({ error: 'Target year must be between 2000 and 2100' });
+      }
+      targetYearVal = y;
+    }
+  }
   try {
-    db.prepare('INSERT INTO users (email, password_hash, role, major, majors, timezone, username, bio, title, country, state, city, phone) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run(email, password, userRole, maj, majs, tz, un || null, b || null, tt || null, ctry || null, st || null, cty || null, ph || null);
+    db.prepare('INSERT INTO users (email, password_hash, role, major, majors, timezone, username, bio, title, country, state, city, phone, target_year) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run(email, password, userRole, maj, majs, tz, un || null, b || null, tt || null, ctry || null, st || null, cty || null, ph || null, targetYearVal);
     const user = db.prepare('SELECT id, email, role, major, majors, timezone, username, bio, title, image, phone, country, state, city, target_year FROM users WHERE email = ?').get(email);
     res.status(201).json({
       user: { id: user.id, email: user.email, role: user.role || userRole, major: user.major, majors: parseMajors(user.majors), timezone: user.timezone || 'America/Chicago', username: user.username, bio: user.bio, title: user.title, image: user.image, phone: user.phone, country: user.country, state: user.state, city: user.city, target_year: user.target_year != null ? Number(user.target_year) : null },
@@ -70,7 +81,17 @@ router.post('/register', (req, res) => {
     });
   } catch (e) {
     if (e.code === 'SQLITE_CONSTRAINT_UNIQUE') {
-      return res.status(409).json({ error: 'Email already registered' });
+      const existing = db.prepare('SELECT role FROM users WHERE email = ?').get(email);
+      const r = existing?.role;
+      const as =
+        r === 'admin'
+          ? 'an administrator'
+          : r === 'expert'
+            ? 'an expert'
+            : r === 'student'
+              ? 'a student'
+              : 'another account';
+      return res.status(409).json({ error: `This email is already in use as ${as}.` });
     }
     throw e;
   }

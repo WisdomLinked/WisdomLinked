@@ -423,6 +423,20 @@
   color: var(--text);
 }
 
+.sectionHeading {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: #fff;
+  background: #722f37;
+  margin: -1.25rem -1.25rem 0.65rem -1.25rem;
+  padding: 0.5rem 1rem;
+  border-radius: 9px 9px 0 0;
+}
+
+.section .sectionHeading ~ * {
+  padding-left: 0.75rem;
+}
+
 .row {
   display: flex;
   align-items: center;
@@ -790,25 +804,33 @@
   align-items: baseline;
   justify-content: space-between;
   gap: 0.5rem 1rem;
-  margin-bottom: 0.75rem;
+  margin: -1rem -1.25rem 0.75rem -1.25rem;
+  padding: 0.55rem 1.25rem;
+  background: #722f37;
+  border-radius: 11px 11px 0 0;
 }
 
 .docChecklistTitle {
-  font-size: 0.95rem;
-  font-weight: 600;
-  color: var(--text);
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: #fff;
 }
 
 .docChecklistCount {
-  font-size: 0.88rem;
+  font-size: 0.9rem;
   font-weight: 600;
-  color: var(--primary);
+  color: rgba(255, 255, 255, 0.92);
 }
 
 .docChecklistList {
   margin: 0;
-  padding: 0;
+  padding: 0 0 0 0.5rem;
   list-style: none;
+}
+
+.docChecklistAdditionalMeta {
+  font-weight: 500;
+  color: var(--text-muted);
 }
 
 .docChecklistItemDone,

@@ -428,6 +428,9 @@ export default function Upload() {
   /** New student: committee has not enabled upload and no files yet — simple prompt, no empty upload UI */
   const awaitingAdminFirstUpload = !isApproved && studentOwnedDocs.length === 0;
   const checklist = countRequiredDocsUploaded(documents);
+  const additionalFileCount = documents.filter(
+    (d) => d.type === 'additional' && !d.uploaded_by
+  ).length;
 
   function uploadLockedCopy(reason) {
     if (reason === 'committee_disabled') {
@@ -465,7 +468,7 @@ export default function Upload() {
           {error && <div className={styles.error}>{error}</div>}
           {clarifications.length > 0 && (
             <section className={styles.section}>
-              <label className={styles.label}>Clarifications from committee</label>
+              <label className={`${styles.label} ${styles.sectionHeading}`}>Clarifications from committee</label>
               <ul className={styles.list}>
                 {clarifications.map(c => (
                   <li key={c.id} className={styles.docItem}>
@@ -479,7 +482,7 @@ export default function Upload() {
             </section>
           )}
           <section className={styles.section}>
-            <label className={styles.label}>Message to admission committee</label>
+            <label className={`${styles.label} ${styles.sectionHeading}`}>Message to admission committee</label>
             <form onSubmit={handleSaveMessage}>
               <textarea
                 value={message}
@@ -538,6 +541,15 @@ export default function Upload() {
               </li>
             );
           })}
+          <li
+            className={additionalFileCount > 0 ? styles.docChecklistItemDone : styles.docChecklistItemMissing}
+          >
+            <span className={styles.docChecklistMark} aria-hidden>{additionalFileCount > 0 ? '✓' : '○'}</span>
+            <span>
+              Additional Files
+              <span className={styles.docChecklistAdditionalMeta}> · Total number: {additionalFileCount}</span>
+            </span>
+          </li>
         </ul>
       </div>
 
@@ -671,7 +683,7 @@ export default function Upload() {
           const isAdditional = id === 'additional';
           return (
             <section key={id} className={styles.section}>
-              <label className={styles.label}>{label}</label>
+              <label className={`${styles.label} ${styles.sectionHeading}`}>{label}</label>
               {isAdditional ? (
                 !uploadsLocked && (
                   <div className={styles.additionalUpload}>
@@ -789,7 +801,7 @@ export default function Upload() {
           if (!showCommitteeSection) return null;
           return (
             <section className={styles.section}>
-              <label className={styles.label}>Committee feedback</label>
+              <label className={`${styles.label} ${styles.sectionHeading}`}>Committee feedback</label>
               <p className={styles.feedbackHint}>Comments, edits, or critiques from the admission committee.</p>
               {(!isApproved || uploadDisabledReason === 'committee_disabled') && (
                 <p className={styles.committeeClosedMsg} role="status">
@@ -832,7 +844,7 @@ export default function Upload() {
 
         {!activeCase && hasRequiredDocs && isApproved && canUploadDocuments && !myCases.some((c) => c.status === 'approved') && (
           <section className={styles.section}>
-            <label className={styles.label}>Submit application</label>
+            <label className={`${styles.label} ${styles.sectionHeading}`}>Submit application</label>
             <p className={styles.submitHint}>You have uploaded Statement of Purpose(SOP), Letter of recommendation(LOR), Resume, and Transcript. Click to create your application case.</p>
             <button
               type="button"
@@ -847,7 +859,7 @@ export default function Upload() {
 
         {clarifications.length > 0 && (
           <section className={styles.section}>
-            <label className={styles.label}>Clarifications from committee</label>
+            <label className={`${styles.label} ${styles.sectionHeading}`}>Clarifications from committee</label>
             <ul className={styles.list}>
               {clarifications.map(c => (
                 <li key={c.id} className={styles.docItem}>
@@ -862,7 +874,7 @@ export default function Upload() {
         )}
 
         <section className={styles.section}>
-          <label className={styles.label}>Message to admission committee</label>
+          <label className={`${styles.label} ${styles.sectionHeading}`}>Message to admission committee</label>
           {uploadsLocked && uploadDisabledReason !== 'committee_disabled' && (
             <p className={styles.messageHint} role="status">
               You can always send messages here, even while uploads are closed.
