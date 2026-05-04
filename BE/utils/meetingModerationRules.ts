@@ -13,24 +13,13 @@ export const buildMeetingRoomName = (
 export const canStartGroupMeeting = (groupChatLike: any, meLike: any): boolean => {
     if (!groupChatLike || !meLike) return false;
     const meId = normalizeId(meLike);
-    const meRole = String(meLike?.role || "").toLowerCase();
     const adminId = normalizeId(groupChatLike?.admin);
-    const coModeratorIds = Array.isArray(groupChatLike?.coModerators)
-        ? groupChatLike.coModerators.map((p: any) => normalizeId(p)).filter(Boolean)
-        : [];
     const participants = Array.isArray(groupChatLike?.participants)
         ? groupChatLike.participants.map((p: any) => normalizeId(p)).filter(Boolean)
         : [];
     const isParticipant = participants.includes(meId) || adminId === meId;
     if (!isParticipant) return false;
-
-    const type = String(groupChatLike?.type || "").toLowerCase();
-    // Community + seminar moderation must be moderator-led (admin or co-moderator).
-    if (type === "community" || type === "seminar") {
-        const isModerator = adminId === meId || coModeratorIds.includes(meId);
-        return isModerator && (meRole === "expert" || coModeratorIds.includes(meId));
-    }
-    // 1:1 group-like calls keep existing behavior (either participant).
-    return true;
+    // Group/community policy: only group admin can initiate the call.
+    return adminId === meId;
 };
 

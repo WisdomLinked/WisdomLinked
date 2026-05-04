@@ -45,6 +45,7 @@ import {
     isRCConnected,
     normalizeRcStreamRoomMessage,
 } from "../../../../services/rcRealtime";
+import { updateMe } from "../../../../actions/authActions";
 import { toRocketChatUsername } from "../../../../utils/rocketchatUsername";
 import {
     preservedScrollTopAfterPrepend,
@@ -371,6 +372,10 @@ const Messages = ({ theme = "dark" }: any) => {
                 extraUsers,
                 serverResolved,
             );
+            if (chosenGroupChatDetails?.type === 'community' && canonicalMembershipSide(rcMsg?.t ?? rcMsg?.type) != null) {
+                // Keep community list/memberships in sync across participants without manual refresh.
+                dispatch(updateMe() as any);
+            }
             const wlRcSubtype = wlRcSubtypeFromRocketType(rcMsg?.t ?? rcMsg?.type);
             const newMsg = {
                 _id: rcMsg._id || `rc-${Date.now()}`,
@@ -744,6 +749,7 @@ const Messages = ({ theme = "dark" }: any) => {
                                     meetingThreadId={meetingData.meetingThreadId}
                                     jitsiRoomName={meetingData.jitsiRoomName}
                                     starterName={meetingData.starterName}
+                                    startedAt={message.createdAt}
                                     isEnded={false}
                                     theme={theme}
                                 />

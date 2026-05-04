@@ -14,6 +14,8 @@ import {
     joinMeetingFromGuestInvite,
     getMeetingJoinInfo,
     revokeMeetingParticipant,
+    delegateMeetingModerator,
+    revokeDelegatedMeetingModerator,
 } from '../controllers/meeting.controller';
 
 router.post('/start', requireAuth(false), startMeeting);
@@ -22,6 +24,8 @@ router.post('/transcript', requireAuth(false), addTranscriptMessage);
 router.post('/rate', requireAuth(false), submitMeetingRating);
 router.post('/guest-invite', requireAuth(false), createMeetingGuestInvite);
 router.post('/revoke-participant', requireAuth(false), revokeMeetingParticipant);
+router.post('/delegate-moderator', requireAuth(false), delegateMeetingModerator);
+router.post('/revoke-delegate-moderator', requireAuth(false), revokeDelegatedMeetingModerator);
 router.get('/guest-invite/:token', resolveMeetingGuestInvite);
 router.get('/guest-invite/:token/join', requireAuth(false), joinMeetingFromGuestInvite);
 router.get('/:meetingThreadId/join', requireAuth(false), getMeetingJoinInfo);

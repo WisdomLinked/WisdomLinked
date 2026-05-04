@@ -307,9 +307,21 @@ JIGASI_XMPP_PASSWORD=<generated>
 JIBRI_RECORDER_PASSWORD=<generated>
 JIBRI_XMPP_PASSWORD=<generated>
 
-# Enable authentication (optional but recommended)
-# ENABLE_AUTH=1
-# AUTH_TYPE=jwt
+# JWT auth — required for signed meet links (must match WisdomLinked backend JITSI_* env)
+ENABLE_AUTH=1
+AUTH_TYPE=jwt
+JWT_APP_ID=wisdomlinked
+JWT_APP_SECRET=<same secret as BE JITSI_JWT_SECRET>
+JWT_ACCEPTED_ISSUERS=wisdomlinked
+JWT_ACCEPTED_AUDIENCES=jitsi
+
+# Moderator from JWT only (not “every JWT user is moderator”, not “first joiner wins”)
+WAIT_FOR_HOST_DISABLE_AUTO_OWNERS=1
+JICOFO_ENABLE_AUTH=0
+ENABLE_MODERATOR_CHECKS=1
+ENABLE_AUTO_OWNER=0
+# Map `context.user.moderator` in the token to MUC owner (Prosody ships this under prosody-plugins-contrib)
+XMPP_MUC_MODULES=token_affiliation
 
 # Performance
 JVB_PORT=10000

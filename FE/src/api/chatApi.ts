@@ -331,6 +331,33 @@ export const revokeMeetingParticipant = async (
     }
 };
 
+/** Promote a participant to moderator (persists for signed /join URLs — they may need to re-open the call). */
+export const delegateMeetingModerator = async (
+    meetingThreadId: string,
+    targetUserId: string,
+): Promise<{ success?: boolean; delegatedModeratorIds?: string[]; error?: string }> => {
+    try {
+        const res = await api.post('meeting/delegate-moderator', { meetingThreadId, targetUserId });
+        return res.data;
+    } catch (err: any) {
+        console.error('[chatApi.delegateMeetingModerator]', err.message);
+        return { success: false, error: err?.response?.data?.error || err.message };
+    }
+};
+
+export const revokeDelegatedMeetingModerator = async (
+    meetingThreadId: string,
+    targetUserId: string,
+): Promise<{ success?: boolean; delegatedModeratorIds?: string[]; error?: string }> => {
+    try {
+        const res = await api.post('meeting/revoke-delegate-moderator', { meetingThreadId, targetUserId });
+        return res.data;
+    } catch (err: any) {
+        console.error('[chatApi.revokeDelegatedMeetingModerator]', err.message);
+        return { success: false, error: err?.response?.data?.error || err.message };
+    }
+};
+
 /** Submit end-of-call rating. */
 export const submitMeetingRating = async (
     meetingThreadId: string,

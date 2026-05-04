@@ -6,6 +6,7 @@ interface MeetingCardProps {
     meetingThreadId: string;
     jitsiRoomName: string;
     starterName: string;
+    startedAt?: string | number | Date;
     isEnded?: boolean;
     duration?: number;
     participantCount?: number;
@@ -22,10 +23,48 @@ const formatDuration = (seconds: number): string => {
     return `${secs}s`;
 };
 
+const formatStartedAtLocalTime = (value?: string | number | Date): string => {
+    if (!value) return "";
+    const date = value instanceof Date ? value : new Date(value);
+    if (Number.isNaN(date.getTime())) return "";
+    const nav =
+        typeof navigator !== "undefined"
+            ? navigator
+            : ({ language: "en-US", languages: ["en-US"] } as Navigator);
+    const locales = Array.from(
+        new Set(
+            [nav.language, ...(nav.languages || [])]
+                .map((l) => String(l || "").trim())
+                .filter(Boolean),
+        ),
+    );
+    const offsetNameRe = /^(GMT|UTC)([+-]\d{1,2}(:\d{2})?)?$/i;
+    const pickTzName = (timeZoneName: "short" | "shortGeneric"): string => {
+        for (const locale of locales) {
+            const part = new Intl.DateTimeFormat(locale, { timeZoneName })
+                .formatToParts(date)
+                .find((p) => p.type === "timeZoneName")?.value;
+            if (part && !offsetNameRe.test(part)) return part;
+        }
+        return "";
+    };
+    let tzLabel = pickTzName("short") || pickTzName("shortGeneric");
+    if (!tzLabel) {
+        const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+        const fallbackMap: Record<string, string> = {
+            "Asia/Kolkata": "IST",
+        };
+        tzLabel = fallbackMap[tz] || tz.split("/").pop()?.replace(/_/g, " ") || "Local";
+    }
+    const timeOnly = date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+    return `${timeOnly} ${tzLabel}`;
+};
+
 const MeetingCard: React.FC<MeetingCardProps> = ({
     meetingThreadId,
     jitsiRoomName,
     starterName,
+    startedAt,
     isEnded = false,
     duration = 0,
     participantCount = 0,
@@ -58,11 +97,15 @@ const MeetingCard: React.FC<MeetingCardProps> = ({
         setJoinBusy(true);
         const info = await getMeetingJoinInfo(meetingThreadId);
         setJoinBusy(false);
-        const targetUrl = info?.success && info?.jitsiUrl ? info.jitsiUrl : fallbackJitsiUrl;
-        if (info?.success && info?.jitsiUrl) {
-            onJoin?.(info.jitsiUrl);
+        if (!info?.success || !info?.jitsiUrl) {
+            if (pendingWindow && !pendingWindow.closed) {
+                pendingWindow.close();
+            }
+            window.alert(info?.error || "Could not join call. Please retry from chat.");
+            return;
         }
-        openMeetingUrl(targetUrl, pendingWindow);
+        onJoin?.(info.jitsiUrl);
+        openMeetingUrl(info.jitsiUrl, pendingWindow);
     };
 
 
@@ -81,6 +124,7 @@ const MeetingCard: React.FC<MeetingCardProps> = ({
     };
 
     const isDark = theme === 'dark';
+    const startedAtLocalTime = formatStartedAtLocalTime(startedAt);
 
     useEffect(() => {
         let cancelled = false;
@@ -161,6 +205,7 @@ const MeetingCard: React.FC<MeetingCardProps> = ({
                     </div>
                     <div className={`text-xs ${isDark ? 'text-gray-400' : 'text-slate-500'}`}>
                         Started by {starterName}
+                        {!!startedAtLocalTime && ` · ${startedAtLocalTime}`}
                         {isEnded && duration > 0 && ` · ${formatDuration(duration)}`}
                         {isEnded && participantCount > 0 && ` · ${participantCount} participants`}
                     </div>
