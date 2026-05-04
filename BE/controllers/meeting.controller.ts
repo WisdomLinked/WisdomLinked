@@ -25,6 +25,8 @@ const JITSI_ISS = process.env.JITSI_ISS || JITSI_APP_ID;
 
 const normalizeId = (v: any): string => String(v?._id ?? v?.id ?? v ?? '').trim();
 
+// Meet must set WAIT_FOR_HOST_DISABLE_AUTO_OWNERS=1 (Prosody) or every JWT joiner becomes MUC owner
+// despite `moderator: false` here; see BE/env.rocket.template.
 const buildSignedJitsiUrl = (
     roomName: string,
     userLike: any,
