@@ -12,6 +12,7 @@ export default function MeetingGuestInvite() {
   const [expiresAt, setExpiresAt] = useState("");
   const [isSignedIn, setIsSignedIn] = useState(false);
   const [switchingAccount, setSwitchingAccount] = useState(false);
+  const [signedInJoinDenied, setSignedInJoinDenied] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -42,7 +43,8 @@ export default function MeetingGuestInvite() {
           window.location.replace(joinRes.jitsiUrl);
           return;
         }
-        // If user doesn't actually have access, fall back to guest flow UI.
+        // If this signed-in account does not have direct join access, avoid login-loop CTA.
+        setSignedInJoinDenied(true);
       }
 
       const res = await resolveMeetingGuestInvite(token);
@@ -104,6 +106,11 @@ export default function MeetingGuestInvite() {
               >
                 Continue as guest
               </button>
+              {signedInJoinDenied ? (
+                <p className="text-xs text-slate-500">
+                  This signed-in account cannot join this private meeting directly. Use guest entry or switch to an invited account.
+                </p>
+              ) : null}
               <button
                 type="button"
                 className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"

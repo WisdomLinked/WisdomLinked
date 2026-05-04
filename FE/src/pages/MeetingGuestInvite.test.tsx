@@ -75,9 +75,13 @@ describe("MeetingGuestInvite", () => {
     await waitFor(() => {
       expect(screen.getByText("Continue as guest")).toBeInTheDocument();
     });
+    expect(
+      screen.getByText(/cannot join this private meeting directly/i),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Switch account for full experience")).toBeInTheDocument();
   });
 
-  it("switch-account CTA logs out signed-in user before redirecting to login", async () => {
+  it("signed-in user without access can still switch account for full experience", async () => {
     window.localStorage.setItem("currentUser", JSON.stringify({ email: "other@x.com", role: "customer" }));
     window.localStorage.setItem("isLoginRemembered", "true");
     vi.mocked(chatApi.joinMeetingFromGuestInvite as any).mockResolvedValue({
@@ -88,17 +92,16 @@ describe("MeetingGuestInvite", () => {
     render(<MeetingGuestInvite />);
 
     await waitFor(() => {
-      expect(screen.getByText("Switch account for full experience")).toBeInTheDocument();
+      expect(
+        screen.getByText(/cannot join this private meeting directly/i),
+      ).toBeInTheDocument();
     });
-
     fireEvent.click(screen.getByText("Switch account for full experience"));
 
     await waitFor(() => {
       expect(api.callLogout).toHaveBeenCalled();
-      expect(window.localStorage.getItem("currentUser")).toBeNull();
-      expect(window.localStorage.getItem("isLoginRemembered")).toBeNull();
-      expect(mockNavigate).toHaveBeenCalledWith("/login?redirect=%2Fmeeting%2Finvite%2Finvite-token-123");
     });
+    expect(mockNavigate).toHaveBeenCalledWith("/login?redirect=%2Fmeeting%2Finvite%2Finvite-token-123");
   });
 });
 

@@ -1,6 +1,5 @@
 import React, { useRef, useEffect, useMemo, useState } from "react";
 import IconButton from "@mui/material/IconButton";
-import AddIcCallIcon from "@mui/icons-material/AddIcCall";
 import { useAppSelector } from "../../../../store";
 import CalendarMonthIcon from '@mui/icons-material/CalendarMonth';
 import Avatar from "../../../../components/Avatar";
@@ -425,35 +424,6 @@ const MessagesHeader = ({ scrollPosition, events, openCalendarModal, openSeminar
             <div className="w-[120px] flex items-center justify-end">
                 {chosenChatDetails && (
                     <div className="flex items-center justify-center">
-                        <IconButton
-                            style={{ color: theme === "light" ? "#0f172a" : "white" }}
-                            className="disabled:opacity-50"
-                            disabled={
-                                !conversationId
-                            }
-                            onClick={async () => {
-                                const pendingWindow = window.open("", "_blank");
-                                if (enabledEvent) {
-                                    SetTotalTimeSpent(Date.now());
-                                }
-                                if (!conversationId) {
-                                    if (pendingWindow && !pendingWindow.closed) pendingWindow.close();
-                                    dispatch(showAlert('Chat is still loading — try again in a moment'));
-                                    return;
-                                }
-                                const res = await startMeeting({ conversationId });
-                                if (res?.jitsiUrl) {
-                                    appendMeetingStartMessage(res, dispatch);
-                                    openMeetingUrl(res.jitsiUrl, pendingWindow);
-                                } else {
-                                    if (pendingWindow && !pendingWindow.closed) pendingWindow.close();
-                                    dispatch(showAlert(res?.error || 'Could not start the call'));
-                                }
-                            }}
-                        >
-                            <AddIcCallIcon />
-                        </IconButton>
-
                         <IconButton
                             style={{ color: theme === "light" ? "#0f172a" : "white" }}
                             className="disabled:opacity-50"

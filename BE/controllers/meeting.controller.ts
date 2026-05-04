@@ -616,11 +616,10 @@ export const joinMeetingFromGuestInvite = async (req: any, res: Response) => {
         const me = await User.findById(userId).select('_id username email image');
         if (!me) return res.status(404).json({ error: 'User not found' });
 
-        const auth = await canUserJoinMeeting(meeting, String(userId));
-        if (!auth.allowed) return res.status(403).json({ error: 'You do not have access to this meeting' });
-
         const jitsiUrl = buildSignedJitsiUrl(String(meeting.jitsiRoomName), me, {
-            moderator: auth.moderator,
+            // Guest-invite token is the authorization gate for this path.
+            // Any authenticated account with a valid invite joins as participant.
+            moderator: false,
             guest: false,
         });
 
@@ -642,7 +641,7 @@ export const joinMeetingFromGuestInvite = async (req: any, res: Response) => {
             success: true,
             meetingThreadId: String(invite.meetingThreadId),
             jitsiRoomName: String(meeting.jitsiRoomName),
-            role: auth.moderator ? 'moderator' : 'participant',
+            role: 'participant',
             jitsiUrl,
         });
     } catch (err: any) {
