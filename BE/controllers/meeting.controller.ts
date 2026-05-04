@@ -11,7 +11,7 @@ const MeetingGuestInvite = require('../models/MeetingGuestInvite');
 import { resolveMeetingRatingTargetUserId } from '../utils/meetingRatingRules';
 import { buildMeetingRoomName, canStartGroupMeeting } from '../utils/meetingModerationRules';
 import { appendJitsiMobileWebOverrides } from '../utils/jitsiUrl';
-import { isMeetingModerator } from '../utils/meetingRoleRules';
+import { isMeetingModerator, isMeetingModeratorWithDelegates } from '../utils/meetingRoleRules';
 import { buildMeetingInviteUrl, resolvePublicAppBaseUrl } from '../utils/inviteUrl';
 
 const JITSI_DOMAIN = process.env.JITSI_DOMAIN || 'meet.wisdomlinked.com';
@@ -33,7 +33,9 @@ const buildSignedJitsiUrl = (
     opts?: { moderator?: boolean; guest?: boolean; expiresInSeconds?: number },
 ): string => {
     const base = `https://${JITSI_DOMAIN}/${roomName}`;
-    if (!JITSI_JWT_SECRET) return appendJitsiMobileWebOverrides(base, MEETING_RETURN_URL);
+    if (!JITSI_JWT_SECRET) {
+        return appendJitsiMobileWebOverrides(base, MEETING_RETURN_URL, moderator);
+    }
     const nowSec = Math.floor(Date.now() / 1000);
     const exp = nowSec + Number(opts?.expiresInSeconds || 2 * 60 * 60);
     const userId = normalizeId(userLike?._id || userLike?.id || userLike?.userId);
@@ -66,28 +68,38 @@ const buildSignedJitsiUrl = (
                     recording: moderator,
                     transcription: moderator,
                     outbound_call: false,
+                    whiteboard: moderator,
                 },
             },
         },
         JITSI_JWT_SECRET,
         { algorithm: 'HS256', header: { kid: JITSI_APP_ID } },
     );
-    return appendJitsiMobileWebOverrides(`${base}?jwt=${encodeURIComponent(token)}`, MEETING_RETURN_URL);
+    return appendJitsiMobileWebOverrides(
+        `${base}?jwt=${encodeURIComponent(token)}`,
+        MEETING_RETURN_URL,
+        moderator,
+    );
 };
+
+const delegatedIdsFromMeeting = (meeting: any): string[] =>
+    (Array.isArray(meeting?.delegatedModerators) ? meeting.delegatedModerators : []).map((id: any) => normalizeId(id));
 
 const canUserJoinMeeting = async (meeting: any, userId: string): Promise<{ allowed: boolean; moderator: boolean }> => {
     const uid = String(userId || '').trim();
     if (!meeting || !uid) return { allowed: false, moderator: false };
+    const delegated = delegatedIdsFromMeeting(meeting);
     if (meeting.conversationId) {
         const conversation = await Conversation.findById(meeting.conversationId).select('participants').lean();
         const isParticipant = Array.isArray(conversation?.participants)
             && conversation.participants.some((p: any) => normalizeId(p) === uid);
         return {
             allowed: isParticipant,
-            moderator: isMeetingModerator({
+            moderator: isMeetingModeratorWithDelegates({
                 conversationId: meeting.conversationId,
                 userId: uid,
                 startedBy: meeting.startedBy,
+                delegatedModeratorIds: delegated,
             }),
         };
     }
@@ -104,9 +116,10 @@ const canUserJoinMeeting = async (meeting: any, userId: string): Promise<{ allow
             ? groupChat.coModerators.map((p: any) => normalizeId(p))
             : [];
         const allowed = participantIds.includes(uid) || adminId === uid || coModeratorIds.includes(uid);
-        const moderator = isMeetingModerator({
+        const moderator = isMeetingModeratorWithDelegates({
             userId: uid,
             groupAdminId: adminId,
+            delegatedModeratorIds: delegated,
         });
         return { allowed, moderator };
     }
@@ -357,6 +370,7 @@ export const getMeetingThread = async (req: any, res: Response) => {
         const meeting = await MeetingThread.findById(meetingThreadId)
             .populate('startedBy', 'username _id image role')
             .populate('participants', 'username _id image role')
+            .populate('delegatedModerators', 'username _id image role')
             .populate('transcript.author', 'username _id image role');
 
         if (!meeting) return res.status(404).json({ error: 'Meeting not found' });
@@ -594,7 +608,7 @@ export const joinMeetingFromGuestInvite = async (req: any, res: Response) => {
         }
 
         const meeting = await MeetingThread.findById(invite.meetingThreadId).select(
-            'jitsiRoomName status conversationId groupChatId removedParticipants joinEvents participants startedBy',
+            'jitsiRoomName status conversationId groupChatId removedParticipants joinEvents participants startedBy delegatedModerators',
         );
         if (!meeting || meeting.status !== 'active') {
             return res.status(410).json({ error: 'Meeting is no longer active' });
@@ -650,7 +664,9 @@ export const getMeetingJoinInfo = async (req: any, res: Response) => {
         const { userId } = req.user;
         const { meetingThreadId } = req.params;
         if (!meetingThreadId) return res.status(400).json({ error: 'meetingThreadId is required' });
-        const meeting = await MeetingThread.findById(meetingThreadId).select('jitsiRoomName status conversationId groupChatId removedParticipants joinEvents participants startedBy');
+        const meeting = await MeetingThread.findById(meetingThreadId).select(
+            'jitsiRoomName status conversationId groupChatId removedParticipants joinEvents participants startedBy delegatedModerators',
+        );
         if (!meeting) return res.status(404).json({ error: 'Meeting not found' });
         if (meeting.status !== 'active') return res.status(400).json({ error: 'Meeting is no longer active' });
         if (isRemovedFromMeeting(meeting, String(userId))) {
@@ -704,7 +720,7 @@ export const revokeMeetingParticipant = async (req: any, res: Response) => {
             return res.status(400).json({ error: 'meetingThreadId and targetUserId are required' });
         }
         const meeting = await MeetingThread.findById(meetingThreadId).select(
-            'status groupChatId conversationId removedParticipants participants startedBy',
+            'status groupChatId conversationId removedParticipants participants startedBy delegatedModerators',
         );
         if (!meeting) return res.status(404).json({ error: 'Meeting not found' });
         if (meeting.status !== 'active') return res.status(400).json({ error: 'Meeting is not active' });
@@ -728,12 +744,134 @@ export const revokeMeetingParticipant = async (req: any, res: Response) => {
                 removedAt: new Date(),
                 reason: String(reason || '').trim(),
             });
+            if (Array.isArray(meeting.delegatedModerators) && meeting.delegatedModerators.length > 0) {
+                meeting.delegatedModerators = meeting.delegatedModerators.filter(
+                    (id: any) => normalizeId(id) !== normalizeId(targetUserId),
+                );
+            }
             await meeting.save();
         }
 
         return res.status(200).json({ success: true });
     } catch (err: any) {
         console.error('[meeting.revokeParticipant]', err.message);
+        return res.status(500).json({ error: err.message });
+    }
+};
+
+/** Whether user is moderator by policy (starter / group admin only), excluding delegatedModerators array. */
+const isCanonicalMeetingModerator = async (meeting: any, userId: string): Promise<boolean> => {
+    const uid = normalizeId(userId);
+    if (!meeting || !uid) return false;
+    if (meeting.conversationId) {
+        return isMeetingModerator({
+            conversationId: meeting.conversationId,
+            userId: uid,
+            startedBy: meeting.startedBy,
+        });
+    }
+    if (meeting.groupChatId) {
+        const groupChat = await GroupChat.findById(meeting.groupChatId).select('admin').lean();
+        return isMeetingModerator({
+            userId: uid,
+            groupAdminId: normalizeId(groupChat?.admin),
+        });
+    }
+    return false;
+};
+
+/**
+ * POST /api/meeting/delegate-moderator
+ * Body: { meetingThreadId, targetUserId }
+ *
+ * Gives target moderator privileges for our signed join URLs (JWT), on re-join after promotion.
+ * Any current moderator (starter / admin / delegated) may delegate.
+ */
+export const delegateMeetingModerator = async (req: any, res: Response) => {
+    try {
+        const { userId } = req.user || {};
+        const { meetingThreadId, targetUserId } = req.body || {};
+        if (!meetingThreadId || !targetUserId) {
+            return res.status(400).json({ error: 'meetingThreadId and targetUserId are required' });
+        }
+        const meeting = await MeetingThread.findById(meetingThreadId).select(
+            'status conversationId groupChatId removedParticipants delegatedModerators startedBy',
+        );
+        if (!meeting || meeting.status !== 'active') {
+            return res.status(400).json({ error: 'Meeting is not active' });
+        }
+        if (isRemovedFromMeeting(meeting, String(userId))) {
+            return res.status(403).json({ error: 'You cannot modify roles while removed from this call' });
+        }
+        const callerAuth = await canUserJoinMeeting(meeting, String(userId));
+        if (!callerAuth.moderator) {
+            return res.status(403).json({ error: 'Only moderators can grant moderator access' });
+        }
+        const targetUid = normalizeId(targetUserId);
+        if (!targetUid || targetUid === normalizeId(userId)) {
+            return res.status(400).json({ error: 'Invalid target user' });
+        }
+        const targetAuth = await canUserJoinMeeting(meeting, targetUid);
+        if (!targetAuth.allowed) {
+            return res.status(400).json({ error: 'Target user is not eligible for this meeting' });
+        }
+        if (await isCanonicalMeetingModerator(meeting, targetUid)) {
+            return res.status(400).json({ error: 'Meeting host is already the moderator for this meeting' });
+        }
+
+        meeting.delegatedModerators = Array.isArray(meeting.delegatedModerators) ? meeting.delegatedModerators : [];
+        const already = meeting.delegatedModerators.some((id: any) => normalizeId(id) === targetUid);
+        if (!already) meeting.delegatedModerators.push(targetUserId);
+        await meeting.save();
+
+        return res.status(200).json({ success: true, delegatedModeratorIds: delegatedIdsFromMeeting(meeting) });
+    } catch (err: any) {
+        console.error('[meeting.delegateModerator]', err.message);
+        return res.status(500).json({ error: err.message });
+    }
+};
+
+/**
+ * POST /api/meeting/revoke-delegate-moderator
+ * Body: { meetingThreadId, targetUserId }
+ */
+export const revokeDelegatedMeetingModerator = async (req: any, res: Response) => {
+    try {
+        const { userId } = req.user || {};
+        const { meetingThreadId, targetUserId } = req.body || {};
+        if (!meetingThreadId || !targetUserId) {
+            return res.status(400).json({ error: 'meetingThreadId and targetUserId are required' });
+        }
+        const meeting = await MeetingThread.findById(meetingThreadId).select(
+            'status conversationId groupChatId removedParticipants delegatedModerators startedBy',
+        );
+        if (!meeting || meeting.status !== 'active') {
+            return res.status(400).json({ error: 'Meeting is not active' });
+        }
+        if (isRemovedFromMeeting(meeting, String(userId))) {
+            return res.status(403).json({ error: 'You cannot modify roles while removed from this call' });
+        }
+        const callerAuth = await canUserJoinMeeting(meeting, String(userId));
+        if (!callerAuth.moderator) {
+            return res.status(403).json({ error: 'Only moderators can revoke delegated moderator access' });
+        }
+
+        const targetUid = normalizeId(targetUserId);
+        if (await isCanonicalMeetingModerator(meeting, targetUid)) {
+            return res.status(400).json({ error: 'Cannot revoke moderator role from the meeting host' });
+        }
+        const delegated = delegatedIdsFromMeeting(meeting);
+        if (!delegated.includes(targetUid)) {
+            return res.status(400).json({ error: 'User is not a delegated moderator' });
+        }
+
+        meeting.delegatedModerators = (Array.isArray(meeting.delegatedModerators) ? meeting.delegatedModerators : [])
+            .filter((id: any) => normalizeId(id) !== targetUid);
+        await meeting.save();
+
+        return res.status(200).json({ success: true, delegatedModeratorIds: delegatedIdsFromMeeting(meeting) });
+    } catch (err: any) {
+        console.error('[meeting.revokeDelegatedModerator]', err.message);
         return res.status(500).json({ error: err.message });
     }
 };

@@ -123,6 +123,38 @@ describe("MeetingCard", () => {
     });
   });
 
+  it("does not open raw room URL when signed join fails", async () => {
+    const popup = {
+      closed: false,
+      location: { href: "" },
+      close: vi.fn(),
+    } as unknown as Window;
+    vi.spyOn(window, "open").mockReturnValue(popup);
+    const alertSpy = vi.spyOn(window, "alert").mockImplementation(() => {});
+    vi.mocked(chatApi.getMeetingJoinInfo).mockResolvedValue({
+      success: false,
+      error: "Join token failed",
+    });
+
+    render(
+      <MeetingCard
+        meetingThreadId="t5"
+        jitsiRoomName="wl-room-no-fallback"
+        starterName="Eve"
+        isEnded={false}
+        theme="light"
+      />,
+    );
+
+    fireEvent.click(screen.getByText("Join Call"));
+
+    await waitFor(() => {
+      expect(alertSpy).toHaveBeenCalledWith("Join token failed");
+      expect((popup.close as any)).toHaveBeenCalled();
+      expect(popup.location.href).toBe("");
+    });
+  });
+
   it("copies normalized app invite URL for guest invite", async () => {
     const writeText = vi.fn().mockResolvedValue(undefined);
     Object.defineProperty(navigator, "clipboard", {

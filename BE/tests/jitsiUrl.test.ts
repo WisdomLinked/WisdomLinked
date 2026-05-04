@@ -37,3 +37,15 @@ test("adds application return URL overrides when provided", () => {
     );
 });
 
+test("disables whiteboard when explicitly requested", () => {
+    const url = appendJitsiMobileWebOverrides(
+        "https://meet.wisdomlinked.com/room-123?jwt=abc",
+        undefined,
+        false,
+    );
+    assert.equal(
+        url,
+        "https://meet.wisdomlinked.com/room-123?jwt=abc#config.disableDeepLinking=true&config.deeplinking.disabled=true&interfaceConfig.MOBILE_APP_PROMO=true&config.whiteboard.enabled=false",
+    );
+});
+

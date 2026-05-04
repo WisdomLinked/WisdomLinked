@@ -58,11 +58,15 @@ const MeetingCard: React.FC<MeetingCardProps> = ({
         setJoinBusy(true);
         const info = await getMeetingJoinInfo(meetingThreadId);
         setJoinBusy(false);
-        const targetUrl = info?.success && info?.jitsiUrl ? info.jitsiUrl : fallbackJitsiUrl;
-        if (info?.success && info?.jitsiUrl) {
-            onJoin?.(info.jitsiUrl);
+        if (!info?.success || !info?.jitsiUrl) {
+            if (pendingWindow && !pendingWindow.closed) {
+                pendingWindow.close();
+            }
+            window.alert(info?.error || "Could not join call. Please retry from chat.");
+            return;
         }
-        openMeetingUrl(targetUrl, pendingWindow);
+        onJoin?.(info.jitsiUrl);
+        openMeetingUrl(info.jitsiUrl, pendingWindow);
     };
 
 

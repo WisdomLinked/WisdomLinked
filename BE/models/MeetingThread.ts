@@ -30,6 +30,12 @@ const meetingThreadSchema = new mongoose.Schema(
                 ref: "User",
             },
         ],
+        delegatedModerators: [
+            {
+                type: mongoose.Schema.Types.ObjectId,
+                ref: "User",
+            },
+        ],
         joinEvents: [
             {
                 userId: {
