@@ -32,6 +32,24 @@ describe("MeetingCard", () => {
     expect(link).toBeInTheDocument();
   });
 
+  it("shows meeting start local time when provided", () => {
+    const startedAt = "2026-05-04T08:30:00.000Z";
+    render(
+      <MeetingCard
+        meetingThreadId="t-time"
+        jitsiRoomName="wl-room-time"
+        starterName="Alice"
+        startedAt={startedAt}
+        isEnded={false}
+        theme="light"
+      />,
+    );
+
+    const startedByRow = screen.getByText(/Started by/i);
+    expect(startedByRow).toHaveTextContent(/Started by Alice ·/);
+    expect(startedByRow.textContent || "").not.toMatch(/GMT[+-]/i);
+  });
+
   it("shows Joining... state and handles join flow correctly", async () => {
     const mockOnJoin = vi.fn();
     let resolveApi: any;

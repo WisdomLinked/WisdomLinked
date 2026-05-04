@@ -74,8 +74,34 @@ const CommunityChatList = () => {
     const [loadingChats, setLoadingChats] = useState(false);
     const [joiningChatId, setJoiningChatId] = useState<string | null>(null);
 
+    const mapChatsWithMissed = (chats: any[]) =>
+        chats.map((chat: any) => ({
+            ...chat,
+            missedChats: userDetails?.missedChats?.[chat._id] || 0,
+            type: 'community',
+        }));
+
     const isExpert = userDetails?.role === 'expert';
     const isCustomer = userDetails?.role === 'customer';
+
+    const fetchAllCommunityChats = async () => {
+        if (!userDetails?.userId) return;
+        setLoadingChats(true);
+        try {
+            const response = await getAllCommunityChats();
+            if (response === false) return;
+            if (response && response.status === 'SUCCESS' && response.chats) {
+                setCommunityChats(mapChatsWithMissed(response.chats));
+            } else {
+                const errorMsg = response?.error || response?.message || "Failed to fetch community chats";
+                dispatch(showAlert(errorMsg));
+            }
+        } catch (error: any) {
+            dispatch(showAlert(error?.message || "Failed to fetch community chats"));
+        } finally {
+            setLoadingChats(false);
+        }
+    };
 
     // Fetch available users for participant selection (experts only)
     useEffect(() => {
@@ -120,44 +146,15 @@ const CommunityChatList = () => {
 
     // Fetch all community chats
     useEffect(() => {
-        const fetchAllCommunityChats = async () => {
-            if (!userDetails?.userId) return;
-            
-            setLoadingChats(true);
-            try {
-                const response = await getAllCommunityChats();
-                // Handle case where checkForAuthorization returns false
-                if (response === false) {
-                    console.error('Authorization failed or error occurred');
-                    return;
-                }
-                if (response && response.status === 'SUCCESS' && response.chats) {
-                    // Add missedChats from userDetails for chats user has joined
-                    const chatsWithMissed = response.chats.map((chat: any) => {
-                        const missedChats = userDetails?.missedChats?.[chat._id] || 0;
-                        return {
-                            ...chat,
-                            missedChats,
-                            type: 'community'
-                        };
-                    });
-                    
-                    setCommunityChats(chatsWithMissed);
-                } else {
-                    const errorMsg = response?.error || response?.message || "Failed to fetch community chats";
-                    console.error('Failed to fetch community chats:', response);
-                    dispatch(showAlert(errorMsg));
-                }
-            } catch (error: any) {
-                console.error('Error fetching community chats:', error);
-                dispatch(showAlert(error?.message || "Failed to fetch community chats"));
-            } finally {
-                setLoadingChats(false);
-            }
-        };
+        void fetchAllCommunityChats();
+    }, [userDetails?.userId, userDetails?.missedChats]);
 
-        fetchAllCommunityChats();
-    }, [userDetails?.userId, userDetails?.missedChats, dispatch]);
+    useEffect(() => {
+        const timer = setInterval(() => {
+            void fetchAllCommunityChats();
+        }, 10000);
+        return () => clearInterval(timer);
+    }, [userDetails?.userId, userDetails?.missedChats]);
 
     // Search filter
     const filteredChats = communityChats.filter((chat: any) =>
@@ -185,28 +182,20 @@ const CommunityChatList = () => {
                 // Update user details to refresh the list
                 dispatch(updateMe());
                 // Refresh the community chats list
-                const refreshResponse = await getAllCommunityChats();
-                if (refreshResponse.status === 'SUCCESS' && refreshResponse.chats) {
-                    const chatsWithMissed = refreshResponse.chats.map((c: any) => {
-                        const missedChats = userDetails?.missedChats?.[c._id] || 0;
-                        return {
-                            ...c,
-                            missedChats,
-                            type: 'community'
-                        };
-                    });
-                    setCommunityChats(chatsWithMissed);
-                }
+                await fetchAllCommunityChats();
                 setNewChatName("");
                 setNewChatDescription("");
                 setIsOpenToAll(false);
                 setSelectedParticipants([]);
                 setOpenDialog(false);
             } else {
-                dispatch(showAlert(response.error || "Failed to create community chat"));
+                const backendError = String(response?.error || response?.message || "");
+                dispatch(showAlert(backendError || "Failed to create community chat"));
             }
         } catch (error: any) {
-            dispatch(showAlert(error?.message || "Failed to create community chat"));
+            const details = error?.response?.data;
+            const backendError = typeof details === "string" ? details : details?.error || details?.message;
+            dispatch(showAlert(backendError || error?.message || "Failed to create community chat"));
         } finally {
             setIsCreating(false);
         }
@@ -230,18 +219,7 @@ const CommunityChatList = () => {
                 dispatch(showAlert("Participants added successfully!"));
                 dispatch(updateMe());
                 // Refresh the community chats list
-                const refreshResponse = await getAllCommunityChats();
-                if (refreshResponse.status === 'SUCCESS' && refreshResponse.chats) {
-                    const chatsWithMissed = refreshResponse.chats.map((c: any) => {
-                        const missedChats = userDetails?.missedChats?.[c._id] || 0;
-                        return {
-                            ...c,
-                            missedChats,
-                            type: 'community'
-                        };
-                    });
-                    setCommunityChats(chatsWithMissed);
-                }
+                await fetchAllCommunityChats();
                 setSelectedParticipantsForAdd([]);
                 setSelectedChatForAddParticipants(null);
                 setOpenAddParticipantsDialog(false);
@@ -265,18 +243,7 @@ const CommunityChatList = () => {
                 // Update user details to refresh the list
                 dispatch(updateMe());
                 // Refresh the community chats list
-                const refreshResponse = await getAllCommunityChats();
-                if (refreshResponse.status === 'SUCCESS' && refreshResponse.chats) {
-                    const chatsWithMissed = refreshResponse.chats.map((c: any) => {
-                        const missedChats = userDetails?.missedChats?.[c._id] || 0;
-                        return {
-                            ...c,
-                            missedChats,
-                            type: 'community'
-                        };
-                    });
-                    setCommunityChats(chatsWithMissed);
-                }
+                await fetchAllCommunityChats();
             } else {
                 dispatch(showAlert(response.error || "Failed to join community chat"));
             }

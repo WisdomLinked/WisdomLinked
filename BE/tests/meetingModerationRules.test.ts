@@ -7,21 +7,16 @@ test("buildMeetingRoomName includes scope timestamp and random suffix", () => {
     assert.equal(room, "wl-group1-1234567890-abc123");
 });
 
-test("community/seminar start requires expert admin", () => {
+test("community start requires admin", () => {
     const group = { type: "community", admin: "u1", participants: ["u1", "u2"] };
     assert.equal(canStartGroupMeeting(group, { _id: "u1", role: "expert" }), true);
+    assert.equal(canStartGroupMeeting(group, { _id: "u1", role: "customer" }), true);
     assert.equal(canStartGroupMeeting(group, { _id: "u2", role: "expert" }), false);
-    assert.equal(canStartGroupMeeting(group, { _id: "u1", role: "customer" }), false);
 });
 
-test("community co-moderator can start meeting", () => {
-    const group = { type: "community", admin: "u1", coModerators: ["u2"], participants: ["u1", "u2"] };
-    assert.equal(canStartGroupMeeting(group, { _id: "u2", role: "customer" }), true);
-});
-
-test("individual type allows participant starter", () => {
+test("group type still requires admin starter", () => {
     const group = { type: "individual", admin: "u1", participants: ["u1", "u2"] };
-    assert.equal(canStartGroupMeeting(group, { _id: "u2", role: "customer" }), true);
+    assert.equal(canStartGroupMeeting(group, { _id: "u2", role: "customer" }), false);
 });
 
 test("non participant cannot start", () => {

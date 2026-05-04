@@ -283,7 +283,15 @@ export const createCommunityChat = async (data: { name: string; description?: st
         const res = await api.post("group-chat/create-community-chat", data);
         return res.data;
     } catch (err: any) {
-        return checkForAuthorization(err);
+        const status = err?.response?.status;
+        if (status === 401 || status === 403) {
+            return checkForAuthorization(err);
+        }
+        const payload = err?.response?.data;
+        return {
+            status: 'FAILED',
+            error: typeof payload === 'string' ? payload : payload?.error || payload?.message || err?.message || 'Failed to create community chat',
+        };
     }
 };
 

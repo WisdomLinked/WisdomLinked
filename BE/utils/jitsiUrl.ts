@@ -1,6 +1,12 @@
 const MOBILE_WEB_OVERRIDES = [
     "config.disableDeepLinking=true",
     "config.deeplinking.disabled=true",
+    // We use app-managed guest invites; hide Jitsi's native invite actions.
+    "config.disableInviteFunctions=true",
+    // Hide meeting password/security entry points; WL does not use room passwords.
+    "config.securityUi.enabled=false",
+    // Older interface flag to hide "invite more" affordance in some builds.
+    "interfaceConfig.HIDE_INVITE_MORE_HEADER=true",
     "interfaceConfig.MOBILE_APP_PROMO=true",
 ];
 

@@ -33,8 +33,12 @@ const buildSignedJitsiUrl = (
     opts?: { moderator?: boolean; guest?: boolean; expiresInSeconds?: number },
 ): string => {
     const base = `https://${JITSI_DOMAIN}/${roomName}`;
+    const moderator = Boolean(opts?.moderator);
+    const guest = Boolean(opts?.guest);
+    // Keep whiteboard visible for all participants; moderator role controls moderation actions.
+    const whiteboardEnabled = true;
     if (!JITSI_JWT_SECRET) {
-        return appendJitsiMobileWebOverrides(base, MEETING_RETURN_URL, moderator);
+        return appendJitsiMobileWebOverrides(base, MEETING_RETURN_URL, whiteboardEnabled);
     }
     const nowSec = Math.floor(Date.now() / 1000);
     const exp = nowSec + Number(opts?.expiresInSeconds || 2 * 60 * 60);
@@ -42,8 +46,6 @@ const buildSignedJitsiUrl = (
     const displayName = String(userLike?.username || userLike?.name || 'Guest');
     const email = String(userLike?.email || '').trim().toLowerCase();
     const avatar = String(userLike?.image || '').trim();
-    const moderator = Boolean(opts?.moderator);
-    const guest = Boolean(opts?.guest);
 
     const token = jwt.sign(
         {
@@ -60,15 +62,18 @@ const buildSignedJitsiUrl = (
                     name: displayName,
                     email: email || undefined,
                     avatar: avatar || undefined,
+                    // Lets owner-capable users skip lobby when token_lobby_bypass is enabled in Prosody.
+                    lobby_bypass: moderator,
                     moderator,
                     role: moderator ? 'moderator' : guest ? 'guest' : 'participant',
                 },
                 features: {
                     livestreaming: false,
-                    recording: moderator,
-                    transcription: moderator,
+                    // Do not hard-disable these by token; let Jitsi runtime role checks decide.
+                    recording: true,
+                    transcription: true,
                     outbound_call: false,
-                    whiteboard: moderator,
+                    whiteboard: whiteboardEnabled,
                 },
             },
         },
@@ -78,7 +83,7 @@ const buildSignedJitsiUrl = (
     return appendJitsiMobileWebOverrides(
         `${base}?jwt=${encodeURIComponent(token)}`,
         MEETING_RETURN_URL,
-        moderator,
+        whiteboardEnabled,
     );
 };
 
@@ -134,15 +139,6 @@ const isRemovedFromMeeting = (meeting: any, userId: string): boolean => {
     );
 };
 
-const hasJoinedMeeting = (meeting: any, userId: string): boolean => {
-    const uid = String(userId || '');
-    if (!uid) return false;
-    if (Array.isArray(meeting?.joinEvents) && meeting.joinEvents.some((j: any) => normalizeId(j?.userId) === uid)) {
-        return true;
-    }
-    return Array.isArray(meeting?.participants) && meeting.participants.some((p: any) => normalizeId(p) === uid);
-};
-
 /**
  * POST /api/meeting/start
  * Start a Jitsi meeting and create a meeting thread linked to a conversation or group.
@@ -174,7 +170,7 @@ export const startMeeting = async (req: any, res: Response) => {
                 .populate('admin', 'email role');
             if (!groupChat) return res.status(404).json({ error: 'Group chat not found' });
             if (!canStartGroupMeeting(groupChat, me)) {
-                return res.status(403).json({ error: 'Only the expert moderator can start this group call' });
+                return res.status(403).json({ error: 'Only the group admin can start this group call' });
             }
             groupAdminId = normalizeId(groupChat?.admin);
             roomScope = String(groupChatId);
