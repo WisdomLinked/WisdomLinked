@@ -1,14 +1,26 @@
 const MOBILE_WEB_OVERRIDES = [
     "config.disableDeepLinking=true",
     "config.deeplinking.disabled=true",
+    // We use app-managed guest invites; hide Jitsi's native invite actions.
+    "config.disableInviteFunctions=true",
+    // Hide meeting password/security entry points; WL does not use room passwords.
+    "config.securityUi.enabled=false",
+    // Older interface flag to hide "invite more" affordance in some builds.
+    "interfaceConfig.HIDE_INVITE_MORE_HEADER=true",
     "interfaceConfig.MOBILE_APP_PROMO=true",
-    "config.whiteboard.enabled=true",
 ];
 
-export const appendJitsiMobileWebOverrides = (url: string, returnUrl?: string): string => {
+export const appendJitsiMobileWebOverrides = (
+    url: string,
+    returnUrl?: string,
+    whiteboardEnabled: boolean = true,
+): string => {
     const base = String(url || "").trim();
     if (!base) return base;
-    const overrides = [...MOBILE_WEB_OVERRIDES];
+    const overrides = [
+        ...MOBILE_WEB_OVERRIDES,
+        `config.whiteboard.enabled=${whiteboardEnabled ? "true" : "false"}`,
+    ];
     const normalizedReturnUrl = String(returnUrl || "").trim();
     if (normalizedReturnUrl) {
         // Let server-side close-page config handle post-hangup redirect.

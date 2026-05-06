@@ -3,10 +3,14 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import MeetingGuestInvite from "./MeetingGuestInvite";
 import * as chatApi from "../api/chatApi";
+import * as api from "../api/api";
 
 const mockNavigate = vi.fn();
 
 vi.mock("../api/chatApi");
+vi.mock("../api/api", () => ({
+  callLogout: vi.fn().mockResolvedValue(undefined),
+}));
 vi.mock("react-router-dom", async () => {
   const actual = await vi.importActual<typeof import("react-router-dom")>("react-router-dom");
   return {
@@ -71,6 +75,33 @@ describe("MeetingGuestInvite", () => {
     await waitFor(() => {
       expect(screen.getByText("Continue as guest")).toBeInTheDocument();
     });
+    expect(
+      screen.getByText(/cannot join this private meeting directly/i),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Switch account for full experience")).toBeInTheDocument();
+  });
+
+  it("signed-in user without access can still switch account for full experience", async () => {
+    window.localStorage.setItem("currentUser", JSON.stringify({ email: "other@x.com", role: "customer" }));
+    window.localStorage.setItem("isLoginRemembered", "true");
+    vi.mocked(chatApi.joinMeetingFromGuestInvite as any).mockResolvedValue({
+      success: false,
+      error: "You do not have access to this meeting",
+    });
+
+    render(<MeetingGuestInvite />);
+
+    await waitFor(() => {
+      expect(
+        screen.getByText(/cannot join this private meeting directly/i),
+      ).toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByText("Switch account for full experience"));
+
+    await waitFor(() => {
+      expect(api.callLogout).toHaveBeenCalled();
+    });
+    expect(mockNavigate).toHaveBeenCalledWith("/login?redirect=%2Fmeeting%2Finvite%2Finvite-token-123");
   });
 });
 

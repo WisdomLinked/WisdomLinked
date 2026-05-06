@@ -1,6 +1,5 @@
 import React, { useRef, useEffect, useMemo, useState } from "react";
 import IconButton from "@mui/material/IconButton";
-import AddIcCallIcon from "@mui/icons-material/AddIcCall";
 import { useAppSelector } from "../../../../store";
 import CalendarMonthIcon from '@mui/icons-material/CalendarMonth';
 import Avatar from "../../../../components/Avatar";
@@ -415,14 +414,7 @@ const MessagesHeader = ({ scrollPosition, events, openCalendarModal, openSeminar
                                 <>
                                     <GroupsIcon />
                                     <div className={`w-[calc(100%-48px)] mr-2 truncate font-semibold ${theme === "light" ? "text-[18px]" : "text-[20px]"}`}>
-                                        {
-                                            chosenGroupChatDetails?.duration ?
-                                                chosenGroupChatDetails?.groupName :
-                                                userDetails.userId === chosenGroupChatDetails.admin?._id ?
-                                                    chosenGroupChatDetails?.description :
-                                                    chosenGroupChatDetails?.groupName
-
-                                        }
+                                        {chosenGroupChatDetails?.groupName}
                                     </div>
                                 </>
                             )}
@@ -432,35 +424,6 @@ const MessagesHeader = ({ scrollPosition, events, openCalendarModal, openSeminar
             <div className="w-[120px] flex items-center justify-end">
                 {chosenChatDetails && (
                     <div className="flex items-center justify-center">
-                        <IconButton
-                            style={{ color: theme === "light" ? "#0f172a" : "white" }}
-                            className="disabled:opacity-50"
-                            disabled={
-                                !conversationId
-                            }
-                            onClick={async () => {
-                                const pendingWindow = window.open("", "_blank");
-                                if (enabledEvent) {
-                                    SetTotalTimeSpent(Date.now());
-                                }
-                                if (!conversationId) {
-                                    if (pendingWindow && !pendingWindow.closed) pendingWindow.close();
-                                    dispatch(showAlert('Chat is still loading — try again in a moment'));
-                                    return;
-                                }
-                                const res = await startMeeting({ conversationId });
-                                if (res?.jitsiUrl) {
-                                    appendMeetingStartMessage(res, dispatch);
-                                    openMeetingUrl(res.jitsiUrl, pendingWindow);
-                                } else {
-                                    if (pendingWindow && !pendingWindow.closed) pendingWindow.close();
-                                    dispatch(showAlert(res?.error || 'Could not start the call'));
-                                }
-                            }}
-                        >
-                            <AddIcCallIcon />
-                        </IconButton>
-
                         <IconButton
                             style={{ color: theme === "light" ? "#0f172a" : "white" }}
                             className="disabled:opacity-50"
@@ -532,28 +495,30 @@ const MessagesHeader = ({ scrollPosition, events, openCalendarModal, openSeminar
                 {
                     chosenGroupChatDetails && !chosenGroupChatDetails?.duration ? (
                         <div className="flex items-center justify-end">
-                            <IconButton
-                                style={{ color: theme === "light" ? "#0f172a" : "white" }}
-                                title="Start a group video call (WisdomLinked Meet)"
-                                onClick={async () => {
-                                    const pendingWindow = window.open("", "_blank");
-                                    const gid = chosenGroupChatDetails?.groupId;
-                                    if (!gid) {
-                                        if (pendingWindow && !pendingWindow.closed) pendingWindow.close();
-                                        return;
-                                    }
-                                    const res = await startMeeting({ groupChatId: gid });
-                                    if (res?.jitsiUrl) {
-                                        appendMeetingStartMessage(res, dispatch);
-                                        openMeetingUrl(res.jitsiUrl, pendingWindow);
-                                    } else {
-                                        if (pendingWindow && !pendingWindow.closed) pendingWindow.close();
-                                        dispatch(showAlert(res?.error || 'Could not start the meeting room'));
-                                    }
-                                }}
-                            >
-                                <Video className="h-5 w-5" strokeWidth={2} />
-                            </IconButton>
+                            {isGroupAdmin ? (
+                                <IconButton
+                                    style={{ color: theme === "light" ? "#0f172a" : "white" }}
+                                    title="Start a group video call (WisdomLinked Meet)"
+                                    onClick={async () => {
+                                        const pendingWindow = window.open("", "_blank");
+                                        const gid = chosenGroupChatDetails?.groupId;
+                                        if (!gid) {
+                                            if (pendingWindow && !pendingWindow.closed) pendingWindow.close();
+                                            return;
+                                        }
+                                        const res = await startMeeting({ groupChatId: gid });
+                                        if (res?.jitsiUrl) {
+                                            appendMeetingStartMessage(res, dispatch);
+                                            openMeetingUrl(res.jitsiUrl, pendingWindow);
+                                        } else {
+                                            if (pendingWindow && !pendingWindow.closed) pendingWindow.close();
+                                            dispatch(showAlert(res?.error || 'Could not start the meeting room'));
+                                        }
+                                    }}
+                                >
+                                    <Video className="h-5 w-5" strokeWidth={2} />
+                                </IconButton>
+                            ) : null}
                             <button
                                 className={theme === "light" ? "text-slate-900 hover:bg-slate-100 rounded-lg p-1" : "text-white"}
                                 onClick={() => set_buttonsModalShow(true)}

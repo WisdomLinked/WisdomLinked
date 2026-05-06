@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { joinMeetingFromGuestInvite, resolveMeetingGuestInvite } from "../api/chatApi";
+import { callLogout } from "../api/api";
 
 export default function MeetingGuestInvite() {
   const { token } = useParams();
@@ -9,6 +10,9 @@ export default function MeetingGuestInvite() {
   const [error, setError] = useState("");
   const [jitsiUrl, setJitsiUrl] = useState("");
   const [expiresAt, setExpiresAt] = useState("");
+  const [isSignedIn, setIsSignedIn] = useState(false);
+  const [switchingAccount, setSwitchingAccount] = useState(false);
+  const [signedInJoinDenied, setSignedInJoinDenied] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -29,6 +33,7 @@ export default function MeetingGuestInvite() {
         }
       })();
       const isSignedIn = Boolean(currentUser?.email);
+      setIsSignedIn(isSignedIn);
 
       if (isSignedIn) {
         const joinRes = await joinMeetingFromGuestInvite(token);
@@ -38,7 +43,8 @@ export default function MeetingGuestInvite() {
           window.location.replace(joinRes.jitsiUrl);
           return;
         }
-        // If user doesn't actually have access, fall back to guest flow UI.
+        // If this signed-in account does not have direct join access, avoid login-loop CTA.
+        setSignedInJoinDenied(true);
       }
 
       const res = await resolveMeetingGuestInvite(token);
@@ -56,6 +62,23 @@ export default function MeetingGuestInvite() {
       cancelled = true;
     };
   }, [token]);
+
+  const redirectToLoginForFullExperience = async () => {
+    const redirect = `/meeting/invite/${String(token || "")}`;
+    if (isSignedIn) {
+      setSwitchingAccount(true);
+      try {
+        await callLogout();
+      } catch {
+        // Best-effort logout; still clear local auth cache and continue.
+      }
+      localStorage.removeItem("currentUser");
+      localStorage.removeItem("isLoginRemembered");
+      localStorage.removeItem("location");
+      setSwitchingAccount(false);
+    }
+    navigate(`/login?redirect=${encodeURIComponent(redirect)}`);
+  };
 
   return (
     <div className="min-h-screen bg-[#F5F3EF] flex items-center justify-center p-4">
@@ -83,12 +106,22 @@ export default function MeetingGuestInvite() {
               >
                 Continue as guest
               </button>
+              {signedInJoinDenied ? (
+                <p className="text-xs text-slate-500">
+                  This signed-in account cannot join this private meeting directly. Use guest entry or switch to an invited account.
+                </p>
+              ) : null}
               <button
                 type="button"
                 className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
-                onClick={() => navigate(`/login?redirect=${encodeURIComponent(`/meeting/invite/${String(token || "")}`)}`)}
+                onClick={() => void redirectToLoginForFullExperience()}
+                disabled={switchingAccount}
               >
-                Login for full experience
+                {switchingAccount
+                  ? "Switching account…"
+                  : isSignedIn
+                    ? "Switch account for full experience"
+                    : "Login for full experience"}
               </button>
             </div>
           </>
