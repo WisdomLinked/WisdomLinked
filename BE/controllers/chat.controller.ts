@@ -987,15 +987,32 @@ export const getChatUserProfile = async (req: any, res: Response) => {
         if (targetId === String(userId)) {
             return res.status(400).json({ error: 'Cannot open own profile from DM target lookup' });
         }
-        const user = await User.findOne({
+
+        const me = await User.findById(userId).select('role').lean();
+        const viewerMaySeeExpertResume =
+            String(me?.role || '').toLowerCase() === 'customer';
+
+        const doc = await User.findOne({
             _id: targetId,
             role: { $in: ['expert', 'customer'] },
             status: { $ne: 'blocked' },
         })
-            .select('_id username email image role status title country keywords services specialNote')
+            .select(
+                '_id username email image role status title country keywords services specialNote description resume',
+            )
+            .populate({ path: 'keywords', select: 'value label' })
+            .populate({ path: 'services', select: 'value label' })
             .lean();
-        if (!user) return res.status(404).json({ error: 'User not found' });
-        return res.status(200).json({ success: true, result: user });
+
+        if (!doc) return res.status(404).json({ error: 'User not found' });
+
+        const result: Record<string, unknown> = { ...doc };
+        const isTargetExpert = String(doc.role || '').toLowerCase() === 'expert';
+        if (!isTargetExpert || !viewerMaySeeExpertResume) {
+            delete result.resume;
+        }
+
+        return res.status(200).json({ success: true, result });
     } catch (err: any) {
         console.error('[chat.getChatUserProfile]', err.message);
         return res.status(500).json({ error: err.message });

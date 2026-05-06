@@ -1,7 +1,20 @@
-import React, { useMemo, useState } from 'react';
-import { Calendar, Clock, MapPin, Star, ArrowLeft, Users } from 'lucide-react';
+import React, { useEffect, useMemo, useState } from 'react';
+import {
+  ArrowLeft,
+  BookOpen,
+  Calendar,
+  ChevronDown,
+  Clock,
+  FileText,
+  MapPin,
+  MessageSquare,
+  Star,
+  Target,
+  Users,
+} from 'lucide-react';
 import type { MentorCardProps } from '../MentorCard';
 import { useAppSelector } from '../../store';
+import FilePreviewModal from '../../pages/Dashboard/FilePreviewModal';
 
 const aiHeadshotUrl = (seed: string) =>
   `https://api.dicebear.com/9.x/bottts-neutral/svg?seed=${encodeURIComponent(seed)}`;
@@ -10,6 +23,15 @@ function extractExperienceYears(experience: string) {
   // Examples: "8+ yrs", "15+ yrs"
   const m = experience.match(/(\d+)/);
   return m ? Number(m[1]) : 0;
+}
+
+function resolveResumePublicUrl(resume: unknown): string {
+  const s = typeof resume === 'string' ? resume.trim() : '';
+  if (!s) return '';
+  if (/^https?:\/\//i.test(s)) return s;
+  const base = typeof process !== 'undefined' ? String(process.env.REACT_APP_SERVER_URL || '').replace(/\/$/, '') : '';
+  if (!base) return s;
+  return `${base}/${s.replace(/^\//, '')}`;
 }
 
 export default function ExpertProfile({
@@ -70,6 +92,9 @@ export default function ExpertProfile({
 
   const [seminarBookingSuccessId, setSeminarBookingSuccessId] = useState<string | null>(null);
   const [seminarBookingError, setSeminarBookingError] = useState<string | null>(null);
+  const [resumePreviewOpen, setResumePreviewOpen] = useState(false);
+
+  const [openFaqIndex, setOpenFaqIndex] = useState<number | null>(null);
 
   const peakRate = 50;
   const oneToOneOffPeakRate = Math.min(oneToOneRate, 45);
@@ -227,7 +252,15 @@ export default function ExpertProfile({
   const displayFollowers =
     followerCountLive ?? mentor.followerCount ?? 0;
 
+  const resumeUrl = resolveResumePublicUrl(mentor.resume ?? null);
+  const hasResume = !!resumeUrl;
+
+  useEffect(() => {
+    setResumePreviewOpen(false);
+  }, [mentor.id]);
+
   return (
+    <>
     <div className="min-h-[calc(100vh-56px)] overflow-y-auto bg-[#F5F3EF] px-6 py-8 text-[#1A3A4A]">
       <div className="mb-6 flex items-center gap-3">
         <button
@@ -306,6 +339,30 @@ export default function ExpertProfile({
           <div className="mt-6 border-t border-[#E5E2DB] pt-6">
             <h2 className="font-serif text-[1.15rem] font-medium text-[#1A3A4A]">About</h2>
             <p className="mt-3 text-sm font-sans text-[#7A7A72] leading-relaxed">{bio}</p>
+          </div>
+
+          <div className="mt-6 rounded-xl border border-[#E5E2DB] bg-white px-4 py-4">
+            <div className="flex items-start gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#E8EEF4] text-[#1A3A4A]">
+                <FileText className="h-5 w-5" strokeWidth={2} aria-hidden />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[#7A7A72]">
+                  Resume
+                </p>
+                {hasResume ? (
+                  <button
+                    type="button"
+                    onClick={() => setResumePreviewOpen(true)}
+                    className="mt-2 text-left text-sm font-semibold text-[#1A3A4A] underline underline-offset-2 hover:text-[#122635]"
+                  >
+                    View resume
+                  </button>
+                ) : (
+                  <p className="mt-2 text-sm font-medium text-[#7A7A72]">None</p>
+                )}
+              </div>
+            </div>
           </div>
 
           <div className="mt-6 grid gap-4 lg:grid-cols-2">
@@ -393,6 +450,105 @@ export default function ExpertProfile({
                   {seminarBookingError}
                 </div>
               )}
+            </section>
+          </div>
+
+          <div className="mt-10 space-y-10">
+            <section className="rounded-xl bg-[#F5F3EF] p-6">
+              <h2 className="font-serif text-[1.15rem] font-medium text-[#1A3A4A]">
+                What to Expect
+              </h2>
+              <div className="mt-5 grid grid-cols-2 gap-4 lg:grid-cols-3">
+                <div className="rounded-lg border border-gray-200 bg-white p-5">
+                  <MessageSquare
+                    className="h-5 w-5 text-[#1A3A4A]"
+                    strokeWidth={2}
+                    aria-hidden
+                  />
+                  <p className="mt-3 text-sm font-semibold text-[#1A3A4A]">Personalized Guidance</p>
+                  <p className="mt-2 text-sm leading-relaxed text-[#7A7A72]">
+                    Sessions are tailored to your goals, questions, and pace—so you leave with clarity
+                    on your next steps.
+                  </p>
+                </div>
+                <div className="rounded-lg border border-gray-200 bg-white p-5">
+                  <BookOpen className="h-5 w-5 text-[#1A3A4A]" strokeWidth={2} aria-hidden />
+                  <p className="mt-3 text-sm font-semibold text-[#1A3A4A]">Structured Sessions</p>
+                  <p className="mt-2 text-sm leading-relaxed text-[#7A7A72]">
+                    Each booking follows a simple agenda—objectives upfront, focused discussion, and a
+                    concise recap you can act on.
+                  </p>
+                </div>
+                <div className="rounded-lg border border-gray-200 bg-white p-5">
+                  <Target className="h-5 w-5 text-[#1A3A4A]" strokeWidth={2} aria-hidden />
+                  <p className="mt-3 text-sm font-semibold text-[#1A3A4A]">Actionable Outcomes</p>
+                  <p className="mt-2 text-sm leading-relaxed text-[#7A7A72]">
+                    Expect concrete feedback, resources, and milestones—whether you are preparing for
+                    interviews, applications, or coursework.
+                  </p>
+                </div>
+              </div>
+            </section>
+
+            <section className="rounded-xl bg-[#F5F3EF] p-6">
+              <h2 className="font-serif text-[1.15rem] font-medium text-[#1A3A4A]">
+                Frequently Asked Questions
+              </h2>
+              <ul className="mt-5 divide-y divide-gray-200 border-t border-gray-200">
+                {(
+                  [
+                    {
+                      q: 'How do I book a 1:1 session?',
+                      a: 'Choose 1:1 in the booking panel, pick an available slot, then confirm your request. You will complete payment in a later step when billing is enabled.',
+                    },
+                    {
+                      q: 'What happens after I book?',
+                      a: 'Your request is saved and the expert is notified. You will receive details on how to join (time, link, or prep materials) before the session begins.',
+                    },
+                    {
+                      q: 'Can I reschedule or cancel a session?',
+                      a: 'Yes—use the link in your confirmation or contact support. Policies may vary by expert; rescheduling is easiest with advance notice.',
+                    },
+                    {
+                      q: "What's the difference between peak and off-peak rates?",
+                      a: 'Peak typically applies to evenings and weekends when demand is higher. Off-peak slots use the lower rate shown in the booking panel for the same service.',
+                    },
+                    {
+                      q: 'Are group seminars included in my plan?',
+                      a: 'Seminars are booked separately from 1:1 sessions unless your school or program states otherwise. Check each seminar card for its price and terms.',
+                    },
+                  ] as const
+                ).map((item, idx) => {
+                  const open = openFaqIndex === idx;
+                  return (
+                    <li key={item.q}>
+                      <button
+                        type="button"
+                        onClick={() => setOpenFaqIndex(open ? null : idx)}
+                        className="flex w-full items-center justify-between gap-3 py-4 text-left transition-all duration-200"
+                        aria-expanded={open}
+                      >
+                        <span className="font-medium text-gray-900">{item.q}</span>
+                        <ChevronDown
+                          className={`h-5 w-5 shrink-0 text-gray-600 transition-transform duration-200 ${
+                            open ? 'rotate-180' : ''
+                          }`}
+                          aria-hidden
+                        />
+                      </button>
+                      <div
+                        className={`grid transition-all duration-200 ease-out ${
+                          open ? 'grid-rows-[1fr] opacity-100 pb-4' : 'grid-rows-[0fr] opacity-0'
+                        }`}
+                      >
+                        <div className="min-h-0 overflow-hidden">
+                          <p className="text-sm leading-relaxed text-gray-600">{item.a}</p>
+                        </div>
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
             </section>
           </div>
         </section>
@@ -675,6 +831,14 @@ export default function ExpertProfile({
         </aside>
       </div>
     </div>
+    {resumePreviewOpen && hasResume ? (
+      <FilePreviewModal
+        fileUrl={resumeUrl}
+        fileName="Resume"
+        onClose={() => setResumePreviewOpen(false)}
+      />
+    ) : null}
+    </>
   );
 }
 

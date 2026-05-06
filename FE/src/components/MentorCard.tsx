@@ -14,6 +14,8 @@ export interface MentorCardProps {
   compact?: boolean;
   /** Shown on the card; updates when the user follows or unfollows from this page. */
   followerCount?: number;
+  /** Expert resume file path or URL (students may open from profile). */
+  resume?: string | null;
   onViewProfile?: (mentor: MentorCardProps) => void;
   isFollowing?: boolean;
   onToggleFollow?: (mentorId: string | number) => void;
@@ -37,6 +39,7 @@ const MentorCard: React.FC<MentorCardProps> = ({
   isNew,
   compact = false,
   followerCount = 0,
+  resume = null,
   onViewProfile,
   id,
   isFollowing = false,
@@ -62,6 +65,7 @@ const MentorCard: React.FC<MentorCardProps> = ({
           isNew,
           compact,
           followerCount,
+          resume,
         })
       }
       role={onViewProfile ? 'button' : undefined}
@@ -82,6 +86,7 @@ const MentorCard: React.FC<MentorCardProps> = ({
             isNew,
             compact,
             followerCount,
+            resume,
           });
         }
       }}
@@ -184,6 +189,7 @@ const MentorCard: React.FC<MentorCardProps> = ({
               isNew,
               compact,
               followerCount,
+              resume,
             });
           }}
         >

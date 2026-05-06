@@ -17,5 +17,16 @@ describe("chatProfileModal utils", () => {
     const merged = mergeChatProfile(fallback, { username: "New", role: "expert", email: "n@x.com" });
     expect(merged).toMatchObject({ username: "New", role: "expert", email: "n@x.com" });
   });
+
+  it("preserves populated keywords and services arrays from API", () => {
+    const fallback = buildFallbackChatProfile({ userId: "u4", username: "X" }, "expert");
+    const merged = mergeChatProfile(fallback, {
+      keywords: [{ label: "Computer Science", value: "cs" }],
+      services: [{ label: "Mentoring", value: "mentoring" }],
+    });
+    expect(merged.keywords).toHaveLength(1);
+    expect(merged.services).toHaveLength(1);
+    expect((merged.keywords as any)[0].label).toBe("Computer Science");
+  });
 });
 

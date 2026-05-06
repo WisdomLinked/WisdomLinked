@@ -17,6 +17,7 @@
  * wire extra DDP subs (e.g. user notifications) if you want double-tick parity with RC mobile.
  */
 import axios from 'axios';
+import { rcUsernamesWithActiveChatConnection } from '../utils/rocketChatPresence';
 
 const User = require('../models/User');
 
@@ -725,27 +726,34 @@ export const getDmUnreadByRoomAsUser = async (
     return unreadByRid;
 };
 
-/** Snapshot of online Rocket.Chat usernames (best-effort, admin-scoped). */
+/** Snapshot of Rocket.Chat usernames with an active chat connection (admin-scoped). */
 export const getRocketOnlineUsernames = async (): Promise<string[]> => {
-    const out: string[] = [];
     try {
         const headers = await getAdminAuthHeaders();
         const res = await axios.get(`${RC_URL}/api/v1/users.list`, {
-            params: { status: 'online', count: 500, offset: 0 },
+            params: {
+                status: 'online',
+                count: 500,
+                offset: 0,
+                fields: JSON.stringify({
+                    username: 1,
+                    status: 1,
+                    statusConnection: 1,
+                    lastLogin: 1,
+                    _updatedAt: 1,
+                }),
+            },
             headers,
         });
         const users = Array.isArray(res.data?.users) ? res.data.users : [];
-        users.forEach((u: any) => {
-            const uname = String(u?.username || '').trim();
-            if (uname) out.push(uname);
-        });
+        return rcUsernamesWithActiveChatConnection(users);
     } catch (e: any) {
         const st = e?.response?.status;
         if (st !== 404 && st !== 403) {
             console.warn('[getRocketOnlineUsernames]', st, e?.response?.data || e?.message);
         }
     }
-    return [...new Set(out)];
+    return [];
 };
 
 /**

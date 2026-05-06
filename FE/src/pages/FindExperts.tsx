@@ -29,6 +29,7 @@ function mapExpertToMentor(expert: any): MentorCardProps {
     services: svc.length ? svc : ['1:1 session'],
     image: expert.image || null,
     isNew,
+    resume: expert.resume ? String(expert.resume) : null,
   };
 }
 

@@ -20,6 +20,8 @@ export const mergeChatProfile = (fallbackProfile: any, apiProfile: any) => {
     ...apiProfile,
     username: String(apiProfile?.username || fallbackProfile?.username || "Member"),
     role: String(apiProfile?.role || fallbackProfile?.role || "member"),
+    keywords: Array.isArray(apiProfile?.keywords) ? apiProfile.keywords : fallbackProfile?.keywords ?? [],
+    services: Array.isArray(apiProfile?.services) ? apiProfile.services : fallbackProfile?.services ?? [],
   };
 };
 

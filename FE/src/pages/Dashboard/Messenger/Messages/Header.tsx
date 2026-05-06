@@ -571,6 +571,7 @@ const MessagesHeader = ({ scrollPosition, events, openCalendarModal, openSeminar
                     userDetails={chosenProfileData}
                     theme={theme}
                     previewImage={chosenChatDetails.image}
+                    viewerRole={userDetails?.role}
                 />
             ) : null}
             {chosenGroupChatDetails?.type === "community" ? (

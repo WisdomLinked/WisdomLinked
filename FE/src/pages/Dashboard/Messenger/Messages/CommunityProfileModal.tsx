@@ -13,7 +13,7 @@ interface CommunityProfileModalProps {
 const ACCENT = "#234C6A";
 const ACCENT_SOFT = "#E8EEF4";
 
-function collectInterestLabels(group: Record<string, any> | null | undefined): string[] {
+function collectMajorLabels(group: Record<string, any> | null | undefined): string[] {
     if (!group) return [];
     const out: string[] = [];
     const push = (s: unknown) => {
@@ -21,10 +21,20 @@ function collectInterestLabels(group: Record<string, any> | null | undefined): s
         if (v && !out.includes(v)) out.push(v);
     };
     (group.keywords ?? []).forEach((k: any) => {
-        if (k && typeof k === "object") push(k.value ?? k.label);
+        if (k && typeof k === "object") push(k.label ?? k.value);
     });
+    return out;
+}
+
+function collectServiceLabels(group: Record<string, any> | null | undefined): string[] {
+    if (!group) return [];
+    const out: string[] = [];
+    const push = (s: unknown) => {
+        const v = typeof s === "string" ? s.trim() : "";
+        if (v && !out.includes(v)) out.push(v);
+    };
     (group.services ?? []).forEach((s: any) => {
-        if (s && typeof s === "object") push(s.value ?? s.label);
+        if (s && typeof s === "object") push(s.label ?? s.value);
     });
     return out;
 }
@@ -60,7 +70,8 @@ const CommunityProfileModal: React.FC<CommunityProfileModalProps> = ({
         ? communityDetails.participants.length
         : 0;
     const visibility = communityDetails?.isOpenToAll ? "Open to all" : "Invite only";
-    const interests = collectInterestLabels(communityDetails);
+    const majors = collectMajorLabels(communityDetails);
+    const services = collectServiceLabels(communityDetails);
 
     return createPortal(
         <div
@@ -137,31 +148,59 @@ const CommunityProfileModal: React.FC<CommunityProfileModalProps> = ({
                         />
                     </div>
 
-                    <div className="mt-4 w-full">
-                        <div className={`mb-2 text-[10px] font-semibold uppercase tracking-[0.14em] ${isLight ? "text-slate-500" : "text-slate-400"}`}>
-                            Interests
+                    <div className="mt-4 w-full space-y-4">
+                        <div>
+                            <div className={`mb-2 text-[10px] font-semibold uppercase tracking-[0.14em] ${isLight ? "text-slate-500" : "text-slate-400"}`}>
+                                Majors
+                            </div>
+                            {majors.length ? (
+                                <div className="flex flex-wrap gap-1.5">
+                                    {majors.map(label => (
+                                        <span
+                                            key={label}
+                                            className={`inline-flex max-w-full truncate rounded-full px-2.5 py-1 text-[11px] font-semibold ${
+                                                isLight
+                                                    ? "border border-[#BCD6EA] bg-[#E8EEF4] text-[#234C6A]"
+                                                    : "border border-slate-600 bg-slate-800/90 text-slate-100"
+                                            }`}
+                                            title={label}
+                                        >
+                                            {label}
+                                        </span>
+                                    ))}
+                                </div>
+                            ) : (
+                                <div className={`text-[12px] ${isLight ? "text-slate-500" : "text-slate-400"}`}>
+                                    No majors selected yet.
+                                </div>
+                            )}
                         </div>
-                        {interests.length ? (
-                            <div className="flex flex-wrap gap-1.5">
-                                {interests.map(label => (
-                                    <span
-                                        key={label}
-                                        className={`inline-flex max-w-full truncate rounded-full px-2.5 py-1 text-[11px] font-medium ${
-                                            isLight
-                                                ? "border border-slate-200 bg-[#E8EEF4] text-[#234C6A]"
-                                                : "border border-slate-600 bg-slate-800/90 text-slate-100"
-                                        }`}
-                                        title={label}
-                                    >
-                                        {label}
-                                    </span>
-                                ))}
+                        <div>
+                            <div className={`mb-2 text-[10px] font-semibold uppercase tracking-[0.14em] ${isLight ? "text-slate-500" : "text-slate-400"}`}>
+                                Services
                             </div>
-                        ) : (
-                            <div className={`text-[12px] ${isLight ? "text-slate-500" : "text-slate-400"}`}>
-                                No majors or services listed yet.
-                            </div>
-                        )}
+                            {services.length ? (
+                                <div className="flex flex-wrap gap-1.5">
+                                    {services.map(label => (
+                                        <span
+                                            key={label}
+                                            className={`inline-flex max-w-full truncate rounded-full px-2.5 py-1 text-[11px] font-medium ${
+                                                isLight
+                                                    ? "border border-slate-200 bg-white text-[#234C6A]"
+                                                    : "border border-slate-600 bg-slate-800/60 text-slate-100"
+                                            }`}
+                                            title={label}
+                                        >
+                                            {label}
+                                        </span>
+                                    ))}
+                                </div>
+                            ) : (
+                                <div className={`text-[12px] ${isLight ? "text-slate-500" : "text-slate-400"}`}>
+                                    No services listed yet.
+                                </div>
+                            )}
+                        </div>
                     </div>
 
                     <button

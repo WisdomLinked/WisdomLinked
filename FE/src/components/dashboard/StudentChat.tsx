@@ -1207,12 +1207,6 @@ const StudentChat: React.FC = () => {
                   row.kind === 'privateDm' && unreadCount > 0
                     ? `${unreadCount > 99 ? '99+' : unreadCount}+ new message${unreadCount > 1 ? 's' : ''}`
                     : row.lastLine;
-                const initials = title
-                  .split(' ')
-                  .map(w => w[0])
-                  .join('')
-                  .slice(0, 2)
-                  .toUpperCase();
                 const rowKey =
                   row.kind === 'friend'
                     ? `f-${row.id}`
@@ -1242,20 +1236,27 @@ const StudentChat: React.FC = () => {
                 const inner = (
                   <>
                     <div className="mt-0.5">
-                      <span className="relative inline-flex h-7 w-7 items-center justify-center overflow-hidden rounded-full border border-[#BCD6EA] bg-[#E8EEF4] text-[10px] font-semibold text-[#234C6A]">
+                      <div className="relative flex-shrink-0 w-11 h-11">
+                        {row.image ? (
+                          <img
+                            src={row.image}
+                            alt={title}
+                            className="w-11 h-11 rounded-full object-cover"
+                          />
+                        ) : (
+                          <div className="w-11 h-11 rounded-full bg-gray-200 flex items-center justify-center text-sm font-semibold text-gray-600">
+                            {(title || '').slice(0, 2).toUpperCase()}
+                          </div>
+                        )}
+
                         {online ? (
                           <span
-                            className="absolute left-0 top-0 h-2 w-2 rounded-full bg-emerald-500 ring-2 ring-white"
-                            aria-label="Online"
+                            className="pointer-events-none absolute bottom-0 right-0 z-10 h-3 w-3 shrink-0 rounded-full bg-[#22c55e] shadow-[0_0_0_2px_#ffffff]"
+                            aria-hidden
                             title="Online"
                           />
                         ) : null}
-                        {row.image ? (
-                          <img src={row.image} alt={title} className="h-full w-full object-cover" />
-                        ) : (
-                          initials
-                        )}
-                      </span>
+                      </div>
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between gap-2">

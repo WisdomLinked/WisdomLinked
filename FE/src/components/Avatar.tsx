@@ -26,7 +26,10 @@ const Avatar = ({ username, isOnline, image, size = 'small', borderClass = '' }:
             }
             {
                 isOnline ?
-                    <div className='absolute -bottom-[1px] -right-[1px] w-3 h-3 rounded-full bg-green' /> :
+                    <span
+                        className="pointer-events-none absolute bottom-0 right-0 z-10 h-3 w-3 shrink-0 rounded-full bg-[#22c55e] shadow-[0_0_0_2px_#ffffff]"
+                        aria-hidden
+                    /> :
                     null
             }
         </div>

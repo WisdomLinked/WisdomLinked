@@ -1,9 +1,10 @@
 import React, { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { X, Mail, MapPin, User } from "lucide-react";
+import { FileText, Mail, MapPin, X } from "lucide-react";
 import { profileImageFetch } from "../../../../api/api";
 import { getAvatarTitle } from "../../../../actions/common";
 import { resolveProfileImageSrc } from "../../../../utils/profileImage";
+import FilePreviewModal from "../../FilePreviewModal";
 
 interface ProfileModalProps {
     isOpen: boolean;
@@ -12,6 +13,8 @@ interface ProfileModalProps {
     theme?: "light" | "dark";
     /** Shown while profile loads or if API image fetch fails (e.g. RC/chat avatar id). */
     previewImage?: string | null;
+    /** Current user role — used to show expert resume to students only. */
+    viewerRole?: string;
 }
 
 const ACCENT = "#234C6A";
@@ -25,8 +28,8 @@ function roleLabelFromUser(role: unknown): string {
     return r.charAt(0).toUpperCase() + r.slice(1);
 }
 
-/** Majors / keywords + services (e.g. resume, research) from populated User doc. */
-function collectInterestLabels(user: Record<string, any> | null | undefined): string[] {
+/** Majors (keywords) from populated User doc. */
+function collectMajorLabels(user: Record<string, any> | null | undefined): string[] {
     if (!user) return [];
     const out: string[] = [];
     const push = (s: unknown) => {
@@ -34,32 +37,52 @@ function collectInterestLabels(user: Record<string, any> | null | undefined): st
         if (v && !out.includes(v)) out.push(v);
     };
     (user.keywords ?? []).forEach((k: any) => {
-        if (k && typeof k === "object") push(k.value ?? k.label);
-    });
-    (user.services ?? []).forEach((s: any) => {
-        if (s && typeof s === "object") push(s.value ?? s.label);
+        if (k && typeof k === "object") push(k.label ?? k.value);
     });
     return out;
 }
 
+/** Services from populated User doc. */
+function collectServiceLabels(user: Record<string, any> | null | undefined): string[] {
+    if (!user) return [];
+    const out: string[] = [];
+    const push = (s: unknown) => {
+        const v = typeof s === "string" ? s.trim() : "";
+        if (v && !out.includes(v)) out.push(v);
+    };
+    (user.services ?? []).forEach((svc: any) => {
+        if (svc && typeof svc === "object") push(svc.label ?? svc.value);
+    });
+    return out;
+}
+
+function resolveResumePublicUrl(resume: unknown): string {
+    const s = typeof resume === "string" ? resume.trim() : "";
+    if (!s) return "";
+    if (/^https?:\/\//i.test(s)) return s;
+    const base = typeof process !== "undefined" ? String(process.env.REACT_APP_SERVER_URL || "").replace(/\/$/, "") : "";
+    if (!base) return s;
+    return `${base}/${s.replace(/^\//, "")}`;
+}
+
 function maskEmailForPrivacy(email: unknown): string {
     const raw = typeof email === "string" ? email.trim() : "";
-    if (!raw || !raw.includes("@")) return "—";
+    if (!raw || !raw.includes("@")) return "Not shared";
     const [localPart, domain = ""] = raw.split("@");
-    if (!localPart || !domain) return "—";
+    if (!localPart || !domain) return "Not shared";
 
     const visibleLocal =
         localPart.length <= 2
-            ? `${localPart.charAt(0)}*`
-            : `${localPart.slice(0, 2)}${"*".repeat(Math.max(2, localPart.length - 2))}`;
+            ? `${localPart.charAt(0)}••`
+            : `${localPart.slice(0, 3)}${"•".repeat(Math.min(6, Math.max(2, localPart.length - 3)))}`;
 
     const domainParts = domain.split(".");
     const firstDomain = domainParts[0] ?? "";
     const tld = domainParts.slice(1).join(".");
     const visibleDomain =
         firstDomain.length <= 1
-            ? "*"
-            : `${firstDomain.charAt(0)}${"*".repeat(Math.max(2, firstDomain.length - 1))}`;
+            ? "•••"
+            : `${firstDomain.slice(0, 2)}${"•".repeat(Math.min(5, Math.max(2, firstDomain.length - 2)))}`;
 
     return `${visibleLocal}@${visibleDomain}${tld ? `.${tld}` : ""}`;
 }
@@ -70,8 +93,10 @@ const ProfileModal: React.FC<ProfileModalProps> = ({
     userDetails,
     theme = "light",
     previewImage,
+    viewerRole,
 }) => {
     const [avatarSrc, setAvatarSrc] = useState<string | null>(null);
+    const [resumePreviewOpen, setResumePreviewOpen] = useState(false);
     const modalRef = useRef<HTMLDivElement>(null);
     const isLight = theme === "light";
 
@@ -105,6 +130,10 @@ const ProfileModal: React.FC<ProfileModalProps> = ({
         return () => document.removeEventListener("mousedown", handler);
     }, [isOpen, onClose]);
 
+    useEffect(() => {
+        if (!isOpen) setResumePreviewOpen(false);
+    }, [isOpen]);
+
     if (!isOpen) return null;
 
     const name = userDetails?.username ?? "—";
@@ -115,7 +144,13 @@ const ProfileModal: React.FC<ProfileModalProps> = ({
         String(userDetails?.role ?? "").toLowerCase() === "expert" && userDetails?.title
             ? String(userDetails.title).trim()
             : "";
-    const interests = collectInterestLabels(userDetails);
+    const majors = collectMajorLabels(userDetails);
+    const services = collectServiceLabels(userDetails);
+    const isExpertProfile = String(userDetails?.role ?? "").toLowerCase() === "expert";
+    const viewerIsStudent = String(viewerRole ?? "").toLowerCase() === "customer";
+    const resumeUrl = resolveResumePublicUrl(userDetails?.resume);
+    const showExpertResumeSection = isExpertProfile && viewerIsStudent;
+    const hasUploadedResume = !!resumeUrl;
 
     const overlay = (
         <div
@@ -186,47 +221,108 @@ const ProfileModal: React.FC<ProfileModalProps> = ({
                                 {expertTitle}
                             </p>
                         ) : null}
-                        <div className="mt-3 w-full max-w-[340px]">
-                            {interests.length > 0 ? (
-                                <div className="flex flex-wrap justify-center gap-1.5">
-                                    {interests.map(label => (
-                                        <span
-                                            key={label}
-                                            className={`inline-flex max-w-full truncate rounded-full px-2.5 py-1 text-[11px] font-medium ${
-                                                isLight
-                                                    ? "border border-slate-200 bg-[#E8EEF4] text-[#234C6A]"
-                                                    : "border border-slate-600 bg-slate-800/90 text-slate-100"
-                                            }`}
-                                            title={label}
-                                        >
-                                            {label}
-                                        </span>
-                                    ))}
-                                </div>
-                            ) : (
+                        <div className="mt-4 w-full max-w-[340px] space-y-4 text-left">
+                            <div>
                                 <p
-                                    className={`text-center text-[11px] ${isLight ? "text-slate-400" : "text-slate-500"}`}
+                                    className={`mb-2 text-center text-[10px] font-semibold uppercase tracking-[0.14em] ${isLight ? "text-slate-500" : "text-slate-400"}`}
                                 >
-                                    No majors or services listed yet.
+                                    Majors
                                 </p>
-                            )}
+                                {majors.length > 0 ? (
+                                    <div className="flex flex-wrap justify-center gap-1.5">
+                                        {majors.map(label => (
+                                            <span
+                                                key={label}
+                                                className={`inline-flex max-w-full truncate rounded-full px-2.5 py-1 text-[11px] font-semibold ${
+                                                    isLight
+                                                        ? "border border-[#BCD6EA] bg-[#E8EEF4] text-[#234C6A]"
+                                                        : "border border-slate-600 bg-slate-800/90 text-slate-100"
+                                                }`}
+                                                title={label}
+                                            >
+                                                {label}
+                                            </span>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <p className={`text-center text-[11px] ${isLight ? "text-slate-400" : "text-slate-500"}`}>
+                                        No majors selected yet.
+                                    </p>
+                                )}
+                            </div>
+                            <div>
+                                <p
+                                    className={`mb-2 text-center text-[10px] font-semibold uppercase tracking-[0.14em] ${isLight ? "text-slate-500" : "text-slate-400"}`}
+                                >
+                                    Services
+                                </p>
+                                {services.length > 0 ? (
+                                    <div className="flex flex-wrap justify-center gap-1.5">
+                                        {services.map(label => (
+                                            <span
+                                                key={label}
+                                                className={`inline-flex max-w-full truncate rounded-full px-2.5 py-1 text-[11px] font-medium ${
+                                                    isLight
+                                                        ? "border border-slate-200 bg-white text-[#234C6A]"
+                                                        : "border border-slate-600 bg-slate-800/60 text-slate-100"
+                                                }`}
+                                                title={label}
+                                            >
+                                                {label}
+                                            </span>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <p className={`text-center text-[11px] ${isLight ? "text-slate-400" : "text-slate-500"}`}>
+                                        No services listed yet.
+                                    </p>
+                                )}
+                            </div>
                         </div>
                     </div>
 
                     <div className="flex flex-col gap-2.5">
-                        <InfoRow
-                            theme={theme}
-                            icon={Mail}
-                            label="Email"
-                            value={email}
-                            mono
-                        />
+                        <EmailPrivacyRow theme={theme} maskedEmail={email} />
                         <InfoRow
                             theme={theme}
                             icon={MapPin}
                             label="Country"
                             value={countryName}
                         />
+                        {showExpertResumeSection ? (
+                            <div
+                                className={`rounded-xl border-2 px-3 py-3 ${
+                                    isLight ? "border-[#234C6A]/25 bg-[#F5F3EF]" : "border-slate-600 bg-slate-800/80"
+                                }`}
+                            >
+                                <div className="flex items-center gap-3">
+                                    <div
+                                        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl"
+                                        style={{ backgroundColor: isLight ? ACCENT_SOFT : "rgba(35, 76, 106, 0.35)" }}
+                                    >
+                                        <FileText className="h-[18px] w-[18px]" style={{ color: isLight ? ACCENT : "#D9EAFD" }} strokeWidth={2} />
+                                    </div>
+                                    <div className="min-w-0 flex-1">
+                                        <div className={`text-[10px] font-semibold uppercase tracking-[0.14em] ${isLight ? "text-slate-600" : "text-slate-400"}`}>
+                                            Resume
+                                        </div>
+                                        {hasUploadedResume ? (
+                                            <button
+                                                type="button"
+                                                onClick={() => setResumePreviewOpen(true)}
+                                                className={`mt-1 text-left text-sm font-semibold underline underline-offset-2 ${isLight ? "text-[#234C6A]" : "text-sky-200"}`}
+                                            >
+                                                View resume
+                                            </button>
+                                        ) : (
+                                            <p className={`mt-1 text-sm font-medium ${isLight ? "text-slate-500" : "text-slate-400"}`}>
+                                                None
+                                            </p>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+                        ) : null}
                     </div>
 
                     <button
@@ -242,8 +338,57 @@ const ProfileModal: React.FC<ProfileModalProps> = ({
         </div>
     );
 
-    return createPortal(overlay, document.body);
+    return (
+        <>
+            {createPortal(overlay, document.body)}
+            {resumePreviewOpen && hasUploadedResume ? (
+                <FilePreviewModal
+                    fileUrl={resumeUrl}
+                    fileName="Resume"
+                    onClose={() => setResumePreviewOpen(false)}
+                />
+            ) : null}
+        </>
+    );
 };
+
+function EmailPrivacyRow({
+    theme,
+    maskedEmail,
+}: {
+    theme?: "light" | "dark";
+    maskedEmail: string;
+}) {
+    const isLight = theme === "light";
+    return (
+        <div
+            className={`rounded-xl border-2 px-3 py-3 ${
+                isLight ? "border-slate-300 bg-white shadow-sm" : "border-slate-600 bg-slate-800/90"
+            }`}
+        >
+            <div className="flex gap-3">
+                <div
+                    className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl"
+                    style={{ backgroundColor: isLight ? ACCENT_SOFT : "rgba(35, 76, 106, 0.35)" }}
+                >
+                    <Mail className="h-[18px] w-[18px]" style={{ color: isLight ? ACCENT : "#D9EAFD" }} strokeWidth={2} />
+                </div>
+                <div className="min-w-0 flex-1 text-left">
+                    <div className={`text-[10px] font-semibold uppercase tracking-[0.14em] ${isLight ? "text-slate-600" : "text-slate-400"}`}>
+                        Email
+                    </div>
+                    <div
+                        className={`mt-1.5 break-all font-mono text-[15px] font-semibold leading-snug tracking-wide ${
+                            isLight ? "text-slate-900" : "text-slate-50"
+                        }`}
+                    >
+                        {maskedEmail}
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+}
 
 function InfoRow({
     theme,
