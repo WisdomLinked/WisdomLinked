@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { FileText, Mail, MapPin, X } from "lucide-react";
+import { AlignLeft, FileText, MapPin, StickyNote, X } from "lucide-react";
 import { profileImageFetch } from "../../../../api/api";
 import { getAvatarTitle } from "../../../../actions/common";
 import { resolveProfileImageSrc } from "../../../../utils/profileImage";
@@ -65,28 +65,6 @@ function resolveResumePublicUrl(resume: unknown): string {
     return `${base}/${s.replace(/^\//, "")}`;
 }
 
-function maskEmailForPrivacy(email: unknown): string {
-    const raw = typeof email === "string" ? email.trim() : "";
-    if (!raw || !raw.includes("@")) return "Not shared";
-    const [localPart, domain = ""] = raw.split("@");
-    if (!localPart || !domain) return "Not shared";
-
-    const visibleLocal =
-        localPart.length <= 2
-            ? `${localPart.charAt(0)}••`
-            : `${localPart.slice(0, 3)}${"•".repeat(Math.min(6, Math.max(2, localPart.length - 3)))}`;
-
-    const domainParts = domain.split(".");
-    const firstDomain = domainParts[0] ?? "";
-    const tld = domainParts.slice(1).join(".");
-    const visibleDomain =
-        firstDomain.length <= 1
-            ? "•••"
-            : `${firstDomain.slice(0, 2)}${"•".repeat(Math.min(5, Math.max(2, firstDomain.length - 2)))}`;
-
-    return `${visibleLocal}@${visibleDomain}${tld ? `.${tld}` : ""}`;
-}
-
 const ProfileModal: React.FC<ProfileModalProps> = ({
     isOpen,
     onClose,
@@ -137,7 +115,6 @@ const ProfileModal: React.FC<ProfileModalProps> = ({
     if (!isOpen) return null;
 
     const name = userDetails?.username ?? "—";
-    const email = maskEmailForPrivacy(userDetails?.email);
     const countryName = userDetails?.country?.name ?? "—";
     const roleLine = roleLabelFromUser(userDetails?.role);
     const expertTitle =
@@ -151,6 +128,12 @@ const ProfileModal: React.FC<ProfileModalProps> = ({
     const resumeUrl = resolveResumePublicUrl(userDetails?.resume);
     const showExpertResumeSection = isExpertProfile && viewerIsStudent;
     const hasUploadedResume = !!resumeUrl;
+    const selfDescription = String(userDetails?.description ?? "").trim();
+    const notesText = String(userDetails?.specialNote ?? "").trim();
+    const servicesSectionTitle = isExpertProfile ? "Services offered" : "Services requested";
+    const servicesEmptyMessage = isExpertProfile
+        ? "No services offered yet."
+        : "No services requested yet.";
 
     const overlay = (
         <div
@@ -254,7 +237,7 @@ const ProfileModal: React.FC<ProfileModalProps> = ({
                                 <p
                                     className={`mb-2 text-center text-[10px] font-semibold uppercase tracking-[0.14em] ${isLight ? "text-slate-500" : "text-slate-400"}`}
                                 >
-                                    Services
+                                    {servicesSectionTitle}
                                 </p>
                                 {services.length > 0 ? (
                                     <div className="flex flex-wrap justify-center gap-1.5">
@@ -274,7 +257,7 @@ const ProfileModal: React.FC<ProfileModalProps> = ({
                                     </div>
                                 ) : (
                                     <p className={`text-center text-[11px] ${isLight ? "text-slate-400" : "text-slate-500"}`}>
-                                        No services listed yet.
+                                        {servicesEmptyMessage}
                                     </p>
                                 )}
                             </div>
@@ -282,12 +265,23 @@ const ProfileModal: React.FC<ProfileModalProps> = ({
                     </div>
 
                     <div className="flex flex-col gap-2.5">
-                        <EmailPrivacyRow theme={theme} maskedEmail={email} />
                         <InfoRow
                             theme={theme}
                             icon={MapPin}
                             label="Country"
                             value={countryName}
+                        />
+                        <InfoRow
+                            theme={theme}
+                            icon={AlignLeft}
+                            label="Self description"
+                            value={selfDescription || "Not provided"}
+                        />
+                        <InfoRow
+                            theme={theme}
+                            icon={StickyNote}
+                            label="Notes"
+                            value={notesText || "Not provided"}
                         />
                         {showExpertResumeSection ? (
                             <div
@@ -351,44 +345,6 @@ const ProfileModal: React.FC<ProfileModalProps> = ({
         </>
     );
 };
-
-function EmailPrivacyRow({
-    theme,
-    maskedEmail,
-}: {
-    theme?: "light" | "dark";
-    maskedEmail: string;
-}) {
-    const isLight = theme === "light";
-    return (
-        <div
-            className={`rounded-xl border-2 px-3 py-3 ${
-                isLight ? "border-slate-300 bg-white shadow-sm" : "border-slate-600 bg-slate-800/90"
-            }`}
-        >
-            <div className="flex gap-3">
-                <div
-                    className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl"
-                    style={{ backgroundColor: isLight ? ACCENT_SOFT : "rgba(35, 76, 106, 0.35)" }}
-                >
-                    <Mail className="h-[18px] w-[18px]" style={{ color: isLight ? ACCENT : "#D9EAFD" }} strokeWidth={2} />
-                </div>
-                <div className="min-w-0 flex-1 text-left">
-                    <div className={`text-[10px] font-semibold uppercase tracking-[0.14em] ${isLight ? "text-slate-600" : "text-slate-400"}`}>
-                        Email
-                    </div>
-                    <div
-                        className={`mt-1.5 break-all font-mono text-[15px] font-semibold leading-snug tracking-wide ${
-                            isLight ? "text-slate-900" : "text-slate-50"
-                        }`}
-                    >
-                        {maskedEmail}
-                    </div>
-                </div>
-            </div>
-        </div>
-    );
-}
 
 function InfoRow({
     theme,
