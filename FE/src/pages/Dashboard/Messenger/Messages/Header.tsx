@@ -330,6 +330,10 @@ const MessagesHeader = ({ scrollPosition, events, openCalendarModal, openSeminar
     const isCommunityModerator = chosenGroupChatDetails?.type === "community"
         && (isGroupAdmin || groupCoModeratorIds.has(String(userDetails?._id || "")));
 
+    const peerRoleLower = String(chosenChatDetails?.peerRole || "").toLowerCase();
+    /** Students never start Meet calls to experts; text chat stays enabled in the thread below. */
+    const studentCannotStartDmVideoToExpert =
+        String(userDetails?.role || "").toLowerCase() === "customer" && peerRoleLower === "expert";
 
     return (
         <div
@@ -427,8 +431,13 @@ const MessagesHeader = ({ scrollPosition, events, openCalendarModal, openSeminar
                         <IconButton
                             style={{ color: theme === "light" ? "#0f172a" : "white" }}
                             className="disabled:opacity-50"
+                            title={
+                                studentCannotStartDmVideoToExpert
+                                    ? "Only your expert can start a video or audio call. You can keep messaging in this chat."
+                                    : undefined
+                            }
                             disabled={
-                                !conversationId
+                                !conversationId || studentCannotStartDmVideoToExpert
                             }
                             onClick={async () => {
                                 const pendingWindow = window.open("", "_blank");

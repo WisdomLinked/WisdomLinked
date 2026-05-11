@@ -1,10 +1,11 @@
 import React, { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { AlignLeft, FileText, MapPin, StickyNote, X } from "lucide-react";
+import { AlignLeft, FileText, Mail, MapPin, StickyNote, X } from "lucide-react";
 import { profileImageFetch } from "../../../../api/api";
 import { getAvatarTitle } from "../../../../actions/common";
 import { resolveProfileImageSrc } from "../../../../utils/profileImage";
 import FilePreviewModal from "../../FilePreviewModal";
+import { hasResumeForPreview, resolveResumePublicUrl } from "../../../../utils/resumeUrl";
 
 interface ProfileModalProps {
     isOpen: boolean;
@@ -56,13 +57,26 @@ function collectServiceLabels(user: Record<string, any> | null | undefined): str
     return out;
 }
 
-function resolveResumePublicUrl(resume: unknown): string {
-    const s = typeof resume === "string" ? resume.trim() : "";
-    if (!s) return "";
-    if (/^https?:\/\//i.test(s)) return s;
-    const base = typeof process !== "undefined" ? String(process.env.REACT_APP_SERVER_URL || "").replace(/\/$/, "") : "";
-    if (!base) return s;
-    return `${base}/${s.replace(/^\//, "")}`;
+function maskEmailForPrivacy(email: unknown): string {
+    const raw = typeof email === "string" ? email.trim() : "";
+    if (!raw || !raw.includes("@")) return "Not shared";
+    const [localPart, domain = ""] = raw.split("@");
+    if (!localPart || !domain) return "Not shared";
+
+    const visibleLocal =
+        localPart.length <= 2
+            ? `${localPart.charAt(0)}••`
+            : `${localPart.slice(0, 3)}${"•".repeat(Math.min(6, Math.max(2, localPart.length - 3)))}`;
+
+    const domainParts = domain.split(".");
+    const firstDomain = domainParts[0] ?? "";
+    const tld = domainParts.slice(1).join(".");
+    const visibleDomain =
+        firstDomain.length <= 1
+            ? "•••"
+            : `${firstDomain.slice(0, 2)}${"•".repeat(Math.min(5, Math.max(2, firstDomain.length - 2)))}`;
+
+    return `${visibleLocal}@${visibleDomain}${tld ? `.${tld}` : ""}`;
 }
 
 const ProfileModal: React.FC<ProfileModalProps> = ({
@@ -112,9 +126,16 @@ const ProfileModal: React.FC<ProfileModalProps> = ({
         if (!isOpen) setResumePreviewOpen(false);
     }, [isOpen]);
 
+    useEffect(() => {
+        if (!hasResumeForPreview(userDetails?.resume) && resumePreviewOpen) {
+            setResumePreviewOpen(false);
+        }
+    }, [userDetails?.resume, resumePreviewOpen]);
+
     if (!isOpen) return null;
 
     const name = userDetails?.username ?? "—";
+    const maskedEmail = maskEmailForPrivacy(userDetails?.email);
     const countryName = userDetails?.country?.name ?? "—";
     const roleLine = roleLabelFromUser(userDetails?.role);
     const expertTitle =
@@ -127,7 +148,7 @@ const ProfileModal: React.FC<ProfileModalProps> = ({
     const viewerIsStudent = String(viewerRole ?? "").toLowerCase() === "customer";
     const resumeUrl = resolveResumePublicUrl(userDetails?.resume);
     const showExpertResumeSection = isExpertProfile && viewerIsStudent;
-    const hasUploadedResume = !!resumeUrl;
+    const hasUploadedResume = hasResumeForPreview(userDetails?.resume);
     const selfDescription = String(userDetails?.description ?? "").trim();
     const notesText = String(userDetails?.specialNote ?? "").trim();
     const servicesSectionTitle = isExpertProfile ? "Services offered" : "Services requested";
@@ -273,6 +294,13 @@ const ProfileModal: React.FC<ProfileModalProps> = ({
                         />
                         <InfoRow
                             theme={theme}
+                            icon={Mail}
+                            label="Email"
+                            value={maskedEmail}
+                            mono
+                        />
+                        <InfoRow
+                            theme={theme}
                             icon={AlignLeft}
                             label="Self description"
                             value={selfDescription || "Not provided"}
@@ -300,19 +328,21 @@ const ProfileModal: React.FC<ProfileModalProps> = ({
                                         <div className={`text-[10px] font-semibold uppercase tracking-[0.14em] ${isLight ? "text-slate-600" : "text-slate-400"}`}>
                                             Resume
                                         </div>
-                                        {hasUploadedResume ? (
-                                            <button
-                                                type="button"
-                                                onClick={() => setResumePreviewOpen(true)}
-                                                className={`mt-1 text-left text-sm font-semibold underline underline-offset-2 ${isLight ? "text-[#234C6A]" : "text-sky-200"}`}
-                                            >
-                                                View resume
-                                            </button>
-                                        ) : (
-                                            <p className={`mt-1 text-sm font-medium ${isLight ? "text-slate-500" : "text-slate-400"}`}>
-                                                None
-                                            </p>
-                                        )}
+                                        <button
+                                            type="button"
+                                            disabled={!hasUploadedResume}
+                                            onClick={() => hasUploadedResume && setResumePreviewOpen(true)}
+                                            title={hasUploadedResume ? "Open resume" : "No resume uploaded"}
+                                            className={`mt-1 w-full text-left text-sm font-semibold transition-colors disabled:cursor-not-allowed disabled:no-underline ${
+                                                hasUploadedResume
+                                                    ? `underline underline-offset-2 ${isLight ? "text-[#234C6A] hover:text-[#1b3d56]" : "text-sky-200 hover:text-sky-100"}`
+                                                    : isLight
+                                                      ? "text-slate-400"
+                                                      : "text-slate-500"
+                                            }`}
+                                        >
+                                            View resume
+                                        </button>
                                     </div>
                                 </div>
                             </div>
@@ -340,6 +370,9 @@ const ProfileModal: React.FC<ProfileModalProps> = ({
                     fileUrl={resumeUrl}
                     fileName="Resume"
                     onClose={() => setResumePreviewOpen(false)}
+                    resumeStudentViewContext={
+                        userDetails?._id ? { expertId: String(userDetails._id) } : undefined
+                    }
                 />
             ) : null}
         </>

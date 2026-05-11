@@ -24,6 +24,7 @@ const Conversation = require('../models/Conversation');
 const GroupChat = require('../models/GroupChat');
 const User = require('../models/User');
 const MeetingThread = require('../models/MeetingThread');
+const { sendExpertResumeFormatReminderEmail } = require('../services/notifications');
 
 /** RC REST may return `ts` as ISO string or `{ $date: n }` — normalize for the React app. */
 const normalizeRcMessageTs = (ts: any): string => {
@@ -1015,6 +1016,42 @@ export const getChatUserProfile = async (req: any, res: Response) => {
         return res.status(200).json({ success: true, result });
     } catch (err: any) {
         console.error('[chat.getChatUserProfile]', err.message);
+        return res.status(500).json({ error: err.message });
+    }
+};
+
+/** Student triggered unsupported resume format while viewing an expert profile — email the expert once per attempt (client may dedupe). */
+export const notifyExpertResumeFormat = async (req: any, res: Response) => {
+    try {
+        const { userId } = req.user;
+        const expertId = String(req.body?.expertId || '').trim();
+        if (!expertId) return res.status(400).json({ error: 'expertId is required' });
+
+        const viewer = await User.findById(userId).select('role username').lean();
+        if (!viewer || String(viewer.role || '').toLowerCase() !== 'customer') {
+            return res.status(403).json({ error: 'Only students can send this reminder' });
+        }
+
+        const expert = await User.findOne({
+            _id: expertId,
+            role: { $regex: /^expert$/i },
+            status: { $ne: 'blocked' },
+        })
+            .select('email username')
+            .lean();
+        if (!expert?.email) {
+            return res.status(404).json({ error: 'Expert not found' });
+        }
+
+        await sendExpertResumeFormatReminderEmail(
+            expert.email,
+            expert.username || 'Expert',
+            viewer.username || 'A student',
+        );
+
+        return res.status(200).json({ success: true });
+    } catch (err: any) {
+        console.error('[chat.notifyExpertResumeFormat]', err.message);
         return res.status(500).json({ error: err.message });
     }
 };

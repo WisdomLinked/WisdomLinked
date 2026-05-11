@@ -20,6 +20,16 @@ import type { TopBarNotificationItem } from '../components/layout/TopBar';
 import StatCard from '../components/ui/StatCard';
 import AdminMetricsPanel from '../components/dashboard/AdminMetricsPanel';
 import { doGetAdminDashboardStats, type AdminDashboardStatsData } from '../api/api';
+import {
+  loadAdminTopBarDismiss,
+  pruneDismissForResolvedStats,
+  saveAdminTopBarDismiss,
+  shouldShowApproval,
+  shouldShowChatbot,
+  shouldShowContact,
+  shouldShowPayment,
+  type AdminTopBarDismissState,
+} from '../utils/adminTopBarDismiss';
 import StudentSettings from '../components/dashboard/StudentSettings';
 import { profileImageFetch } from '../api/api';
 import { useAppSelector } from '../store';
@@ -271,6 +281,10 @@ export default function AdminDashboard() {
 
   const [extraView, setExtraView] = useState<'profile' | 'settings' | null>(null);
   const [avatarUrl, setAvatarUrl] = useState<string | undefined>(undefined);
+  const [adminStats, setAdminStats] = useState<AdminDashboardStatsData>(emptyStats);
+  const [notifDismiss, setNotifDismiss] = useState<AdminTopBarDismissState>(() =>
+    loadAdminTopBarDismiss(),
+  );
 
   const section = useMemo(() => pathToSection(location.pathname), [location.pathname]);
 
@@ -282,29 +296,154 @@ export default function AdminDashboard() {
     (userDetails?.name as string | undefined) ||
     'Admin';
 
-  const adminNotifications: TopBarNotificationItem[] = useMemo(
-    () => [
-      {
-        id: 'a1',
-        title: 'User pending approval',
-        meta: 'Review pending sign-ups in User management.',
-        icon: <Users className="h-3.5 w-3.5 text-wl-brand" aria-hidden />,
-      },
-      {
-        id: 'a2',
-        title: 'New contact request',
-        meta: 'Someone submitted the contact form.',
-        icon: <Inbox className="h-3.5 w-3.5 text-wl-brand" aria-hidden />,
-      },
-      {
-        id: 'a3',
-        title: 'Payment activity',
-        meta: 'Check refunds and payment links in Payments.',
-        icon: <CreditCard className="h-3.5 w-3.5 text-wl-brand" aria-hidden />,
-      },
-    ],
-    []
+  const refreshAdminStats = React.useCallback(async () => {
+    const res = await doGetAdminDashboardStats();
+    if (res?.status === 'SUCCESS' && res.data) {
+      setAdminStats(res.data);
+      setNotifDismiss(prev => {
+        const pruned = pruneDismissForResolvedStats(prev, res.data!);
+        if (JSON.stringify(pruned) !== JSON.stringify(prev)) {
+          saveAdminTopBarDismiss(pruned);
+        }
+        return pruned;
+      });
+    }
+  }, []);
+
+  useEffect(() => {
+    void refreshAdminStats();
+  }, [refreshAdminStats, location.pathname]);
+
+  useEffect(() => {
+    const t = window.setInterval(() => void refreshAdminStats(), 90_000);
+    return () => window.clearInterval(t);
+  }, [refreshAdminStats]);
+
+  const dismissAndPersist = React.useCallback(
+    (patch: Partial<AdminTopBarDismissState>) => {
+      setNotifDismiss(prev => {
+        const next = { ...prev, ...patch };
+        saveAdminTopBarDismiss(next);
+        return next;
+      });
+    },
+    [],
   );
+
+  const goToSection = React.useCallback(
+    (id: string, search = '') => {
+      if (id === 'dashboard') {
+        navigate(`${AUTH_BASE}admindashboard`);
+        return;
+      }
+      navigate(`${AUTH_BASE}admindashboard/${id}${search}`);
+    },
+    [navigate],
+  );
+
+  const adminNotifications: TopBarNotificationItem[] = useMemo(() => {
+    const s = adminStats;
+    const d = notifDismiss;
+    const items: TopBarNotificationItem[] = [];
+
+    if (shouldShowApproval(d, s.pendingApprovals)) {
+      items.push({
+        id: 'admin-pending-approval',
+        title: 'User pending approval',
+        meta:
+          s.pendingApprovals === 1
+            ? '1 account awaiting review in User management.'
+            : `${s.pendingApprovals} accounts awaiting review in User management.`,
+        unreadCount: s.pendingApprovals,
+        icon: <Users className="h-3.5 w-3.5 text-wl-brand" aria-hidden />,
+        onClick: () => {
+          dismissAndPersist({ approval: s.pendingApprovals });
+          goToSection('usermgmt');
+        },
+      });
+    }
+
+    if (shouldShowContact(d, s.newContactMessages)) {
+      items.push({
+        id: 'admin-contact',
+        title: 'New contact request',
+        meta:
+          s.newContactMessages === 1
+            ? '1 new message from the contact form.'
+            : `${s.newContactMessages} new messages from the contact form.`,
+        unreadCount: s.newContactMessages,
+        icon: <Inbox className="h-3.5 w-3.5 text-wl-brand" aria-hidden />,
+        onClick: () => {
+          dismissAndPersist({ contact: s.newContactMessages });
+          goToSection('contactedus');
+        },
+      });
+    }
+
+    if (shouldShowPayment(d, s.refundCount)) {
+      items.push({
+        id: 'admin-payment-refunds',
+        title: 'Payment / refunds',
+        meta:
+          s.refundCount === 1
+            ? '1 refund record — review in Payments.'
+            : `${s.refundCount} refund records — review in Payments.`,
+        unreadCount: s.refundCount,
+        icon: <CreditCard className="h-3.5 w-3.5 text-wl-brand" aria-hidden />,
+        onClick: () => {
+          dismissAndPersist({ payment: s.refundCount });
+          goToSection('payment');
+        },
+      });
+    }
+
+    if (shouldShowChatbot(d, s.unansweredChatbotQuestions)) {
+      items.push({
+        id: 'admin-chatbot-qa',
+        title: 'Chatbot Q&A',
+        meta:
+          s.unansweredChatbotQuestions === 1
+            ? '1 question still needs an answer.'
+            : `${s.unansweredChatbotQuestions} questions still need answers.`,
+        unreadCount: s.unansweredChatbotQuestions,
+        icon: <Bot className="h-3.5 w-3.5 text-wl-brand" aria-hidden />,
+        onClick: () => {
+          dismissAndPersist({ chatbot: s.unansweredChatbotQuestions });
+          goToSection('chatBotQA');
+        },
+      });
+    }
+
+    return items;
+  }, [adminStats, notifDismiss, dismissAndPersist, goToSection]);
+
+  /** Clear bell items when the admin opens the matching section (sidebar), not only when tapping the notification. */
+  useEffect(() => {
+    if (section === 'usermgmt' && shouldShowApproval(notifDismiss, adminStats.pendingApprovals)) {
+      dismissAndPersist({ approval: adminStats.pendingApprovals });
+    }
+  }, [section, adminStats.pendingApprovals, notifDismiss, dismissAndPersist]);
+
+  useEffect(() => {
+    if (section === 'contactedus' && shouldShowContact(notifDismiss, adminStats.newContactMessages)) {
+      dismissAndPersist({ contact: adminStats.newContactMessages });
+    }
+  }, [section, adminStats.newContactMessages, notifDismiss, dismissAndPersist]);
+
+  useEffect(() => {
+    if (section === 'payment' && shouldShowPayment(notifDismiss, adminStats.refundCount)) {
+      dismissAndPersist({ payment: adminStats.refundCount });
+    }
+  }, [section, adminStats.refundCount, notifDismiss, dismissAndPersist]);
+
+  useEffect(() => {
+    if (
+      section === 'chatBotQA' &&
+      shouldShowChatbot(notifDismiss, adminStats.unansweredChatbotQuestions)
+    ) {
+      dismissAndPersist({ chatbot: adminStats.unansweredChatbotQuestions });
+    }
+  }, [section, adminStats.unansweredChatbotQuestions, notifDismiss, dismissAndPersist]);
 
   useEffect(() => {
     const isLoggedIn = !!userDetails?.email;
@@ -331,14 +470,6 @@ export default function AdminDashboard() {
       })
       .catch(() => setAvatarUrl(undefined));
   }, [userDetails?.image]);
-
-  const goToSection = (id: string, search = '') => {
-    if (id === 'dashboard') {
-      navigate(`${AUTH_BASE}admindashboard`);
-      return;
-    }
-    navigate(`${AUTH_BASE}admindashboard/${id}${search}`);
-  };
 
   const title =
     extraView === 'profile'

@@ -51,6 +51,10 @@ export async function openExpertChatWithUser(params: {
         userId: otherId,
         username: existing.other.username ?? otherUser.username,
         image: existing.other.image ?? otherUser.image,
+        peerRole:
+          String(existing.other?.role || '')
+            .toLowerCase()
+            .trim() || undefined,
       })
     );
     return;
@@ -69,6 +73,10 @@ export async function openExpertChatWithUser(params: {
         userId: otherId,
         username: other?.username ?? otherUser.username,
         image: other?.image ?? otherUser.image,
+        peerRole:
+          String(other?.role || '')
+            .toLowerCase()
+            .trim() || undefined,
       })
     );
   } catch {
@@ -78,6 +86,10 @@ export async function openExpertChatWithUser(params: {
         userId: otherUser._id,
         username: otherUser.username,
         image: otherUser.image,
+        peerRole:
+          String((otherUser as any)?.role || '')
+            .toLowerCase()
+            .trim() || undefined,
       })
     );
   }

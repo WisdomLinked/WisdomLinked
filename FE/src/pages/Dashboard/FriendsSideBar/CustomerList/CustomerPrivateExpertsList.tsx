@@ -47,6 +47,7 @@ const CustomerPrivateExpertsList: React.FC = () => {
       otherName: string;
       subtitle: string;
       image?: string | null;
+      peerRole?: string;
     }> = [];
 
     const dcs = userDetails.directConversations ?? [];
@@ -64,6 +65,7 @@ const CustomerPrivateExpertsList: React.FC = () => {
         otherName: other.username ?? other.email ?? otherId,
         subtitle: "Direct message",
         image: other.image ?? null,
+        peerRole: String(other.role || '').toLowerCase() || undefined,
       });
     }
 
@@ -73,12 +75,13 @@ const CustomerPrivateExpertsList: React.FC = () => {
   // Now it's safe to early return for UI when no userDetails.
   if (!userDetails) return null;
 
-  const openChat = (row: { otherId: string; otherName: string; image?: string | null }) => {
+  const openChat = (row: { otherId: string; otherName: string; image?: string | null; peerRole?: string }) => {
     dispatch(
       setChosenChatDetails({
         userId: row.otherId,
         username: row.otherName,
         image: row.image,
+        peerRole: row.peerRole,
       }),
     );
     navigate(`${process.env.REACT_APP_AUTH_URL}customerdashboard/chat`);

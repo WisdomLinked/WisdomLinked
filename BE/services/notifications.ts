@@ -130,6 +130,20 @@ sendEmailMeetingRequestToCustomer = (targetEmail, name, customerName,start,durat
     sendNotificationEmail(targetEmail, subject, html);
 }
 
+sendExpertResumeFormatReminderEmail = async (expertEmail, expertName, studentName) => {
+    subject = "Action needed: upload your resume as Word or PDF";
+    html = `
+        <p>Dear ${expertName},</p>
+        <p>Students are interested in viewing your resume on WisdomLinked. A student (${studentName}) recently tried to open your resume, but the file is not in a supported format for in-browser viewing.</p>
+        <p>Please update your profile and replace your resume with a <strong>Microsoft Word (.doc or .docx) or PDF</strong> file. After you upload a supported file, students will be able to view it.</p>
+        <p>
+            <a href="${website_url}">Log in to update your profile</a>
+        </p>
+        <p>Thank you,<br/>WisdomLinked</p>
+    `;
+    await sendNotificationEmail(expertEmail, subject, html);
+}
+
 shareMeetingId = (targetEmail, name, meetingId, title) =>{
     subject = "WisdomLinked Meet invitation";
     html = `
@@ -180,5 +194,6 @@ module.exports = {
     sendEmailMeetingAcceptance,
     sendEmailNewUserAccountApproval,
     sendEmailUserAccountApproved,
+    sendExpertResumeFormatReminderEmail,
     shareMeetingId
 };

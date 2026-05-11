@@ -465,7 +465,7 @@ const joinPrivateChat = async (req, res) => {
         if (String(userId) === String(personId)) return res.status(400).send("Cannot open chat with yourself");
 
         // Ensure the clicked person exists
-        const otherUser = await User.findById(personId).select("username email image").exec();
+        const otherUser = await User.findById(personId).select("username email image role").exec();
         if (!otherUser) return res.status(404).send("User not found");
 
         // 1:1 DM = Mongo Conversation + Rocket.Chat IM — not a GroupChat / wl-group-* channel.
@@ -516,6 +516,7 @@ const joinPrivateChat = async (req, res) => {
                 username: otherUser.username,
                 email: otherUser.email,
                 image: otherUser.image,
+                role: otherUser.role,
             },
         });
     } catch (err) {

@@ -104,6 +104,9 @@ const CustomerList: React.FC = () => {
           userId: otherUserId,
           username: otherUser?.username,
           image: otherUser?.image,
+          peerRole: String(otherUser?.role || '')
+            .toLowerCase()
+            .trim() || undefined,
         }),
       );
 

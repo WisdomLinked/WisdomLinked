@@ -23,7 +23,8 @@ import {
 export const setChosenChatDetails = (chatDetails: {
     userId: string;
     username: string;
-    image: any;
+    image?: any;
+    peerRole?: string;
 }): SetChosenChatDetails => {
     return {
         type: actionTypes.setChosenChatDetails,

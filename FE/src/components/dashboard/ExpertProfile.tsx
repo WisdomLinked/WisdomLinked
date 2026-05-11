@@ -15,6 +15,7 @@ import {
 import type { MentorCardProps } from '../MentorCard';
 import { useAppSelector } from '../../store';
 import FilePreviewModal from '../../pages/Dashboard/FilePreviewModal';
+import { hasResumeForPreview, resolveResumePublicUrl } from '../../utils/resumeUrl';
 
 const aiHeadshotUrl = (seed: string) =>
   `https://api.dicebear.com/9.x/bottts-neutral/svg?seed=${encodeURIComponent(seed)}`;
@@ -23,15 +24,6 @@ function extractExperienceYears(experience: string) {
   // Examples: "8+ yrs", "15+ yrs"
   const m = experience.match(/(\d+)/);
   return m ? Number(m[1]) : 0;
-}
-
-function resolveResumePublicUrl(resume: unknown): string {
-  const s = typeof resume === 'string' ? resume.trim() : '';
-  if (!s) return '';
-  if (/^https?:\/\//i.test(s)) return s;
-  const base = typeof process !== 'undefined' ? String(process.env.REACT_APP_SERVER_URL || '').replace(/\/$/, '') : '';
-  if (!base) return s;
-  return `${base}/${s.replace(/^\//, '')}`;
 }
 
 export default function ExpertProfile({
@@ -253,11 +245,17 @@ export default function ExpertProfile({
     followerCountLive ?? mentor.followerCount ?? 0;
 
   const resumeUrl = resolveResumePublicUrl(mentor.resume ?? null);
-  const hasResume = !!resumeUrl;
+  const hasResume = hasResumeForPreview(mentor.resume ?? null);
 
   useEffect(() => {
     setResumePreviewOpen(false);
   }, [mentor.id]);
+
+  useEffect(() => {
+    if (!hasResumeForPreview(mentor.resume ?? null) && resumePreviewOpen) {
+      setResumePreviewOpen(false);
+    }
+  }, [mentor.resume, resumePreviewOpen]);
 
   return (
     <>
@@ -350,17 +348,19 @@ export default function ExpertProfile({
                 <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[#7A7A72]">
                   Resume
                 </p>
-                {hasResume ? (
-                  <button
-                    type="button"
-                    onClick={() => setResumePreviewOpen(true)}
-                    className="mt-2 text-left text-sm font-semibold text-[#1A3A4A] underline underline-offset-2 hover:text-[#122635]"
-                  >
-                    View resume
-                  </button>
-                ) : (
-                  <p className="mt-2 text-sm font-medium text-[#7A7A72]">None</p>
-                )}
+                <button
+                  type="button"
+                  disabled={!hasResume}
+                  onClick={() => hasResume && setResumePreviewOpen(true)}
+                  title={hasResume ? 'Open resume' : 'No resume uploaded'}
+                  className={`mt-2 w-full text-left text-sm font-semibold transition-colors disabled:cursor-not-allowed disabled:no-underline ${
+                    hasResume
+                      ? 'text-[#1A3A4A] underline underline-offset-2 hover:text-[#122635]'
+                      : 'text-[#94a3b8]'
+                  }`}
+                >
+                  View resume
+                </button>
               </div>
             </div>
           </div>
@@ -836,6 +836,11 @@ export default function ExpertProfile({
         fileUrl={resumeUrl}
         fileName="Resume"
         onClose={() => setResumePreviewOpen(false)}
+        resumeStudentViewContext={
+          String(userDetails?.role || '').toLowerCase() === 'customer' && mentor?.id != null
+            ? { expertId: String(mentor.id) }
+            : undefined
+        }
       />
     ) : null}
     </>

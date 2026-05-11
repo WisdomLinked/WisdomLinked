@@ -156,6 +156,10 @@ export default function ModernChat({ videoChaton }: { videoChaton: boolean }) {
         userId: String(otherUserId),
         username: other?.username ?? customer?.username,
         image: other?.image ?? customer?.image,
+        peerRole:
+          String(other?.role || customer?.role || '')
+            .toLowerCase()
+            .trim() || undefined,
       }),
     );
   };

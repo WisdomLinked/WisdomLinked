@@ -168,6 +168,19 @@ export const fetchChatUserProfile = async (userId: string) => {
     }
 };
 
+/** Student viewed an expert resume in an unsupported format — emails the expert (server enforces student role). */
+export const notifyExpertResumeFormat = async (expertId: string) => {
+    try {
+        const res = await api.post('chat/notify-expert-resume-format', {
+            expertId: String(expertId || '').trim(),
+        });
+        return res.data as { success?: boolean; error?: string };
+    } catch (err: any) {
+        console.error('[chatApi.notifyExpertResumeFormat]', err.message);
+        return { success: false, error: err?.response?.data?.error || err.message };
+    }
+};
+
 /** Delete a message: mode='me' hides for current user; mode='both' deletes in RC for all (permission-dependent). */
 export const deleteChatMessage = async (
     data: {

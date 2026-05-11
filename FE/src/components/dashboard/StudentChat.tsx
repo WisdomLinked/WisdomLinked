@@ -50,7 +50,15 @@ type CommunityRow = {
 };
 
 type PrivateRow =
-  | { kind: 'friend'; id: string; title: string; lastLine: string; missedChats?: number; image?: string | null }
+  | {
+      kind: 'friend';
+      id: string;
+      title: string;
+      lastLine: string;
+      missedChats?: number;
+      image?: string | null;
+      peerRole?: string;
+    }
   /** Student: 1:1 DM (Rocket.Chat IM), not a group channel. */
   | {
       kind: 'privateDm';
@@ -58,6 +66,7 @@ type PrivateRow =
       title: string;
       lastLine: string;
       image?: string | null;
+      peerRole?: string;
       /** When persisted on Conversation — used for unread badge. */
       rcChannelId?: string;
       /** Mongo Conversation id — needed for DM clear/delete actions. */
@@ -128,6 +137,7 @@ const StudentChat: React.FC = () => {
       title: string;
       lastLine: string;
       image?: string | null;
+      peerRole?: string;
       rcChannelId?: string;
       conversationId?: string;
     }> = [];
@@ -141,11 +151,13 @@ const StudentChat: React.FC = () => {
       if (!otherUserId || seen.has(otherUserId)) continue;
       seen.add(otherUserId);
       const convId = conv?._id != null ? String(conv._id) : undefined;
+      const peerRole = String(other.role || '').toLowerCase() || undefined;
       results.push({
         otherUserId,
         title: other.username ?? other.email ?? otherUserId,
         lastLine: 'Direct message',
         image: other.image ?? null,
+        peerRole,
         rcChannelId: conv.rcChannelId ? String(conv.rcChannelId) : undefined,
         conversationId: convId,
       });
@@ -306,6 +318,7 @@ const StudentChat: React.FC = () => {
             title: p.title,
             lastLine: p.lastLine,
             image: await resolveProfileImage(p.image),
+            peerRole: p.peerRole,
             rcChannelId: p.rcChannelId,
             conversationId: p.conversationId,
           })),
@@ -323,6 +336,7 @@ const StudentChat: React.FC = () => {
               lastLine: friend.email || '',
               missedChats: friend.missedChats,
               image: await resolveProfileImage(friend.image),
+              peerRole: String(friend.role || '').toLowerCase() || undefined,
             };
           }),
         );
@@ -334,6 +348,7 @@ const StudentChat: React.FC = () => {
             title: p.title,
             lastLine: p.lastLine,
             image: await resolveProfileImage(p.image),
+            peerRole: p.peerRole,
             rcChannelId: p.rcChannelId,
             conversationId: p.conversationId,
           })),
@@ -349,6 +364,7 @@ const StudentChat: React.FC = () => {
             title: p.title,
             lastLine: p.lastLine,
             image: await resolveProfileImage(p.image),
+            peerRole: p.peerRole,
             rcChannelId: p.rcChannelId,
             conversationId: p.conversationId,
           })),
@@ -365,6 +381,7 @@ const StudentChat: React.FC = () => {
             lastLine: friend.email || '',
             missedChats: friend.missedChats,
             image: await resolveProfileImage(friend.image),
+            peerRole: String(friend.role || '').toLowerCase() || undefined,
           };
         }),
       );
@@ -744,6 +761,7 @@ const StudentChat: React.FC = () => {
           userId: row.otherUserId,
           username: row.title,
           image: row.image,
+          peerRole: row.peerRole,
         }),
       );
     },
@@ -927,7 +945,14 @@ const StudentChat: React.FC = () => {
   };
 
   const openFriend = (row: Extract<PrivateRow, { kind: 'friend' }>) => {
-    dispatch(setChosenChatDetails({ userId: row.id, username: row.title, image: row.image }));
+    dispatch(
+      setChosenChatDetails({
+        userId: row.id,
+        username: row.title,
+        image: row.image,
+        peerRole: row.peerRole,
+      }),
+    );
     dispatch({
       type: actionTypes.updateMissedChats,
       payload: { receiverId: row.id, count: 0 },
@@ -945,11 +970,16 @@ const StudentChat: React.FC = () => {
       if (user) {
         dispatch({ type: 'updateUserDetails', payload: user });
       }
+      const peerRole =
+        String(other?.role || row.raw?.role || '')
+          .toLowerCase()
+          .trim() || undefined;
       dispatch(
         setChosenChatDetails({
           userId: String(otherUserId),
           username: other?.username ?? row.raw?.username ?? row.title,
           image: other?.image ?? row.raw?.image,
+          peerRole,
         }),
       );
     } catch (e: any) {

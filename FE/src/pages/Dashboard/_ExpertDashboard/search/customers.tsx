@@ -133,6 +133,9 @@ const Customers = ({
                 userId: customerId,
                 username: otherUser?.username,
                 image: otherUser?.image,
+                peerRole: String(otherUser?.role || '')
+                  .toLowerCase()
+                  .trim() || undefined,
               })
             );
       

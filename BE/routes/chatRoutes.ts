@@ -19,6 +19,7 @@ import {
     getDirectCallHistory,
     getOnlineUsers,
     getChatUserProfile,
+    notifyExpertResumeFormat,
 } from '../controllers/chat.controller';
 
 // DM routes
@@ -37,6 +38,7 @@ router.post('/mark-read', requireAuth(false), markChatRead);
 router.get('/dm-unread-snapshot', requireAuth(false), getDmUnreadSnapshot);
 router.get('/search-users', requireAuth(false), searchPrivateChatUsers);
 router.get('/user-profile/:userId', requireAuth(false), getChatUserProfile);
+router.post('/notify-expert-resume-format', requireAuth(false), notifyExpertResumeFormat);
 router.post('/rc-read-receipts', requireAuth(false), getReadReceiptsBatch);
 router.post('/delete-message', requireAuth(false), deleteChatMessage);
 router.post('/dm/hide', requireAuth(false), hideDmFromList);

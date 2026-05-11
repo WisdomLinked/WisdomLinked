@@ -163,6 +163,19 @@ export const startMeeting = async (req: any, res: Response) => {
             if (!conversation) return res.status(404).json({ error: 'Conversation not found' });
             const isParticipant = (conversation.participants || []).some((p: any) => String(p) === String(userId));
             if (!isParticipant) return res.status(403).json({ error: 'Only participants can start this call' });
+
+            const otherUserId = (conversation.participants || []).find((p: any) => String(p) !== String(userId));
+            const otherParticipant = otherUserId
+                ? await User.findById(otherUserId).select('role').lean()
+                : null;
+            const myRole = String(me?.role || '').toLowerCase();
+            const otherRole = String(otherParticipant?.role || '').toLowerCase();
+            if (myRole === 'customer' && otherRole === 'expert') {
+                return res.status(403).json({
+                    error:
+                        'Only your expert can start a video or audio call. You can continue the conversation in text chat.',
+                });
+            }
         }
         if (groupChatId) {
             const groupChat = await GroupChat.findById(groupChatId)
@@ -194,7 +207,7 @@ export const startMeeting = async (req: any, res: Response) => {
         if (conversationId) {
             const conversation = await Conversation.findById(conversationId);
             if (conversation) {
-                const otherUserId = conversation.participants.find((p: any) => p.toString() !== userId);
+                const otherUserId = conversation.participants.find((p: any) => String(p) !== String(userId));
                 const other = await User.findById(otherUserId);
                 if (me && other && me.email && other.email) {
                     const rcChannelId = await getOrCreateDMChannel(

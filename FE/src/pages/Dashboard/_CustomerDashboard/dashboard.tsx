@@ -108,7 +108,16 @@ const Dashboard = () => {
         console.log("navigate events", item); // Use item here instead of event
         navigate(`${process.env.REACT_APP_AUTH_URL}customerdashboard/chat`);
         // Assuming item contains customer details, you can use item directly
-        dispatch(setChosenChatDetails({ userId: item._id, username: item.username, image: item.image }));
+        dispatch(
+            setChosenChatDetails({
+                userId: item._id,
+                username: item.username,
+                image: item.image,
+                peerRole: String(item.role || '')
+                    .toLowerCase()
+                    .trim() || undefined,
+            }),
+        );
     };
 
     const navigateSeminar = (item: any) => {

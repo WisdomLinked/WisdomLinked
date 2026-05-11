@@ -143,6 +143,9 @@ export interface SetChosenChatDetails {
     payload: {
         userId: string;
         username: string;
+        image?: any;
+        /** Lowercase role of the DM peer when known (e.g. from Conversation participants). */
+        peerRole?: string;
     };
 }
 

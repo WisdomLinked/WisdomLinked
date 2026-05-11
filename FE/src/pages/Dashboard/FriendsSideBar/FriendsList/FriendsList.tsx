@@ -99,6 +99,7 @@ const FriendsList = () => {
                   image={f.image}
                   lastChatDate={f.lastChatDate}
                   missedChats={f.missedChats}
+                  peerRole={f.role}
               />
           ))}
       </MainContainer>

@@ -29,7 +29,8 @@ const FriendsListItem = ({
     image,
     clickHandler,
     isActive,
-    status
+    status,
+    peerRole,
 }: any) => {
     const dispatch = useDispatch();
 
@@ -54,7 +55,16 @@ const FriendsListItem = ({
                     if (clickHandler) {
                         clickHandler()
                     } else {
-                        dispatch(setChosenChatDetails({ userId: id, username, image: image }));
+                        dispatch(
+                            setChosenChatDetails({
+                                userId: id,
+                                username,
+                                image: image,
+                                peerRole: String(peerRole || '')
+                                    .toLowerCase()
+                                    .trim() || undefined,
+                            }),
+                        );
                         dispatch({ type: actionTypes.updateMissedChats, payload: { receiverId: id, count: 0 } })
                     }
                 }}
