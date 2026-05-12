@@ -1,10 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import MessagesHeader from "./Header";
-import Message from "./Message";
+import ChatThreadView from "./ChatThreadView";
 import { useAppSelector } from "../../../../store";
-import { Message as MessageType } from "../../../../actions/types";
-import DateSeparator from "./DateSeparator";
-import ChatSystemNotice from "./ChatSystemNotice";
 import {
     WL_COMMUNITY_SYS_PREFIX,
     parseCommunityGroupRealtimeMessage,
@@ -13,14 +10,11 @@ import {
 import { canonicalMembershipSide, wlRcSubtypeFromRocketType } from "../../../../utils/rcMembershipTypes";
 import {doGetEventsBetweenCustomerAndExpert, profileImageFetch} from "../../../../api/api";
 import { useDispatch } from "react-redux";
-import { formatDateHH_MM_AMPM, isTheEventGoingOn } from "../../../../actions/common";
 import MessageCalendar from "./calendar";
 import CloseIcon from '@mui/icons-material/Close';
 import SeminarDetails from "../../seminarDetails";
 import { deleteGroupAction } from "../../../../actions/groupChatActions";
 import ExpertSeminar from "../../_ExpertDashboard/seminar";
-import MeetingCard from "../../../../components/MeetingCard";
-
 // Chat API + realtime
 import { getOrCreateDM, fetchDirectHistory, fetchGroupHistory, fetchGroupMemberByRcSlug, markChatRead, getRCToken, deleteChatMessage, fetchReadReceiptsBatch, fetchDmUnreadSnapshot } from "../../../../api/chatApi";
 import { notifyChatMessage, stripChatHtml } from "../../../../utils/chatBrowserNotifications";
@@ -52,8 +46,6 @@ import {
     shouldRequestOlderMessages,
 } from "./historyPagination";
 import { resolveProfileImageSrc } from "../../../../utils/profileImage";
-import { parseMeetingMessageContent } from "../../../../utils/meetingMessage";
-
 /** RC `u.username` is email-derived; WL `userDetails.username` is display name — never equal. */
 function isRcStreamFromMe(rcMsg: any, me: any): boolean {
     if (!rcMsg?.u?.username || !me?.email) return false;
@@ -496,13 +488,6 @@ const Messages = ({ theme = "dark" }: any) => {
         };
     }, [messages]);
 
-    const sameAuthor = (message: MessageType, index: number) => {
-        if (index === 0) {
-            return false;
-        }
-        return String(message.author._id ?? '') === String(displayMessages[index - 1].author._id ?? '');
-    };
-
     const groupSenderLabel = (message: any) => {
         const aid = String(message?.author?._id ?? message?.author?.id ?? '');
         const parts = chosenGroupChatDetails?.participants ?? [];
@@ -738,144 +723,36 @@ const Messages = ({ theme = "dark" }: any) => {
                     </div>
                     : null
             }
-            {displayMessages.map((message: any, index) => {
-                // Check if this is a meeting message
-                const meetingData = parseMeetingMessageContent(String(message.content || ""));
-                if (meetingData) {
-                    if (meetingData.type === 'started') {
-                        return (
-                            <div key={message._id + index} className="w-full px-2 sm:px-3">
-                                <MeetingCard
-                                    meetingThreadId={meetingData.meetingThreadId}
-                                    jitsiRoomName={meetingData.jitsiRoomName}
-                                    starterName={meetingData.starterName}
-                                    startedAt={message.createdAt}
-                                    isEnded={false}
-                                    theme={theme}
-                                />
-                            </div>
-                        );
-                    }
-                    if (meetingData.type === 'ended') {
-                        return (
-                            <div key={message._id + index} className="w-full px-2 sm:px-3">
-                                <MeetingCard
-                                    meetingThreadId={meetingData.meetingThreadId}
-                                    jitsiRoomName=""
-                                    starterName=""
-                                    isEnded={true}
-                                    duration={meetingData.duration}
-                                    participantCount={meetingData.participantCount}
-                                    theme={theme}
-                                />
-                            </div>
-                        );
-                    }
+            <ChatThreadView
+                displayMessages={displayMessages}
+                theme={theme}
+                isOutgoingMessage={(m) =>
+                    isOutgoingAuthor(m, userDetails, myRcUserId, dmOtherWlUserId, groupAuthorOpts)
                 }
-
-                const thisMessageDate = new Date(
-                    message.createdAt
-                ).toDateString();
-                const prevMessageDate =
-                    index > 0 &&
-                    new Date(displayMessages[index - 1]?.createdAt).toDateString();
-
-                const isSameDay =
-                    index > 0 ? thisMessageDate === prevMessageDate : true;
-
-                const thisMessageTime = formatDateHH_MM_AMPM(new Date(message.createdAt));
-                const prevMessageTime = index > 0 && formatDateHH_MM_AMPM(new Date(displayMessages[index - 1]?.createdAt));
-                const isSameTime = index > 0 ? thisMessageTime === prevMessageTime : false;
-
-                if (message.type === 'wl-community-sys') {
-                    return (
-                        <div key={message._id + index} className="w-full px-2 sm:px-3">
-                            {(!isSameDay || index === 0) && (
-                                <DateSeparator date={message.createdAt} theme={theme} />
-                            )}
-                            <ChatSystemNotice text={message.content} theme={theme} />
-                        </div>
-                    );
+                deliveryForMessage={(m) =>
+                    deliveryStatusForMessage(
+                        m,
+                        userDetails,
+                        myRcUserId,
+                        dmOtherWlUserId,
+                        peerReadByMessageId[String(m._id)] === true ||
+                            (peerLastSeenMs != null &&
+                                !Number.isNaN(new Date(m.createdAt).getTime()) &&
+                                new Date(m.createdAt).getTime() <= peerLastSeenMs),
+                        groupAuthorOpts,
+                    )
                 }
-
-                const incomingMessage = !isOutgoingAuthor(message, userDetails, myRcUserId, dmOtherWlUserId, groupAuthorOpts);
-
-                // Handle direct chat and group chat scenarios
-                let participantImage = null;
-
-                if (chosenChatDetails) {
-                    // Direct chat
-                    participantImage = chosenChatDetails.image;
-                } else if (chosenGroupChatDetails) {
-                    // Group chat: Find the participant in the group
-                    const participant = chosenGroupChatDetails?.participants?.find(
-                        (participant: any) =>
-                            String(participant?._id ?? participant?.id) === String(message.author?._id ?? ''),
-                    );
-                    participantImage = participant?.image;
-                }
-
-                const isFriend = friends.find((x: any) => (x._id === message.author._id))
-                const disableBookButton = message.author?.role === 'admin' || userDetails?.role === 'admin' || userDetails?.status === 'review' || message.author?.status === 'review'
-                const showGroupSender =
-                    Boolean(chosenGroupChatDetails) &&
-                    incomingMessage &&
-                    !sameAuthor(message, index);
-
-                return (
-                    <div key={message._id + index} className="w-full px-2 sm:px-3">
-                        {(!isSameDay || index === 0) && (
-                            <DateSeparator date={message.createdAt} theme={theme} />
-                        )}
-
-                        {showGroupSender ? (
-                            <div
-                                className={`mb-0.5 pl-1 text-[11px] font-semibold ${
-                                    theme === 'light' ? 'text-slate-600' : 'text-slate-300'
-                                }`}
-                            >
-                                {groupSenderLabel(message)}
-                            </div>
-                        ) : null}
-
-                        <Message
-                            content={message.content}
-                            userId={message.author._id}
-                            username={message.author.username}
-                            image={profileImages.get(message.author._id)}
-                            role={message.author.role}
-                            status={message.author.status}
-                            sameAuthor={sameAuthor(message, index)}
-                            date={message.createdAt}
-                            incomingMessage={incomingMessage}
-                            isFriend={isFriend}
-                            disableBookButton={disableBookButton}
-                            myRole={userDetails?.role}
-                            hideDate={isSameDay && isSameTime}
-                            theme={theme}
-                            deliveryStatus={deliveryStatusForMessage(
-                                message,
-                                userDetails,
-                                myRcUserId,
-                                dmOtherWlUserId,
-                                peerReadByMessageId[String(message._id)] === true ||
-                                  (peerLastSeenMs != null &&
-                                    !Number.isNaN(new Date(message.createdAt).getTime()) &&
-                                    new Date(message.createdAt).getTime() <= peerLastSeenMs),
-                                groupAuthorOpts,
-                            )}
-                            messageId={message._id}
-                            roomId={rcChannelId}
-                            canDelete={!incomingMessage && !String(message._id).startsWith('temp-')}
-                            deleteForMeAvailable={Boolean(
-                                (chosenChatDetails && conversationId) ||
-                                    (chosenGroupChatDetails && (chosenGroupChatDetails.groupId || chosenGroupChatDetails._id)),
-                            )}
-                            onDeleteMessage={handleDeleteMessage}
-                        />
-                    </div>
-                );
-            })}
+                groupSenderLabel={groupSenderLabel}
+                chosenGroupChatDetails={chosenGroupChatDetails}
+                chosenChatDetails={chosenChatDetails}
+                profileImages={profileImages}
+                userDetails={userDetails}
+                friends={friends ?? []}
+                handleDeleteMessage={handleDeleteMessage}
+                rcChannelId={rcChannelId}
+                conversationId={conversationId}
+                myRcUserId={myRcUserId}
+            />
             <div ref={messagesEndRef} className="h-px w-full shrink-0" aria-hidden />
             </div>
             {

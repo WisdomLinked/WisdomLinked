@@ -18,7 +18,7 @@ const ChatDetails = ({
             <div
                 className={
                     theme === "light"
-                        ? "w-full h-full min-h-0 flex flex-col rounded-2xl border border-slate-200 bg-[#F6FAFF] shadow-sm overflow-hidden"
+                        ? "w-full h-full min-h-0 flex flex-col rounded-2xl border-x border-b border-slate-200 bg-[#F6FAFF] shadow-sm overflow-hidden"
                         : "w-full h-full min-h-0 flex flex-col overflow-hidden"
                 }
             >

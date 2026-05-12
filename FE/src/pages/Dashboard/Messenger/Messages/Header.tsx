@@ -2,13 +2,12 @@ import React, { useRef, useEffect, useMemo, useState } from "react";
 import IconButton from "@mui/material/IconButton";
 import { useAppSelector } from "../../../../store";
 import CalendarMonthIcon from '@mui/icons-material/CalendarMonth';
-import Avatar from "../../../../components/Avatar";
 import OverlayPortal from "../../../../components/OverayPortal";
 import MoreVertIcon from "@mui/icons-material/MoreVert";
 import PersonRemoveIcon from '@mui/icons-material/PersonRemove';
 import { useDispatch } from "react-redux";
 import { removeFriendAction } from "../../../../actions/friendActions";
-import { formatDateYYYY_MM_DD_h_m, isFutureEvent, isTheEventGoingOn } from "../../../../actions/common";
+import { formatDateYYYY_MM_DD_h_m, getAvatarTitle, isFutureEvent, isTheEventGoingOn } from "../../../../actions/common";
 import GroupParticipantsDialog from "./GroupParticipantsDialog";
 import ManageCommunityMembersDialog from "./ManageCommunityMembersDialog";
 import AddCommunityMembersDialog from "./AddCommunityMembersDialog";
@@ -35,6 +34,7 @@ import { showAlert } from "../../../../actions/alertActions";
 import { addNewMessage, resetChatAction, setChosenGroupChatDetails } from "../../../../actions/chatActions";
 import ProfileModal from "./ProfileModal";
 import CommunityProfileModal from "./CommunityProfileModal";
+import ChatHeader from "./ChatHeader";
 import { History, ShareIcon, Video } from "lucide-react";
 import { buildFallbackChatProfile, mergeChatProfile } from "../../../../utils/chatProfileModal";
 import { buildOnlineUserIdSet, hasOnlineUserId } from "../../../../utils/onlinePresence";
@@ -335,11 +335,33 @@ const MessagesHeader = ({ scrollPosition, events, openCalendarModal, openSeminar
     const studentCannotStartDmVideoToExpert =
         String(userDetails?.role || "").toLowerCase() === "customer" && peerRoleLower === "expert";
 
+    const handleDmStartVideoOrVoice = async () => {
+        const pendingWindow = window.open("", "_blank");
+        if (enabledEvent) {
+            SetTotalTimeSpent(Date.now());
+        }
+        if (!conversationId) {
+            if (pendingWindow && !pendingWindow.closed) pendingWindow.close();
+            dispatch(showAlert("Chat is still loading — try again in a moment"));
+            return;
+        }
+        const res = await startMeeting({ conversationId });
+        if (res?.jitsiUrl) {
+            appendMeetingStartMessage(res, dispatch);
+            openMeetingUrl(res.jitsiUrl, pendingWindow);
+        } else {
+            if (pendingWindow && !pendingWindow.closed) pendingWindow.close();
+            dispatch(showAlert(res?.error || "Could not start the call"));
+        }
+    };
+
     return (
         <div
             className={`w-full flex items-center justify-between sticky top-0 right-0 px-5 py-3 z-20 transition-all ${
                 theme === "light"
-                    ? "border-b border-slate-200"
+                    ? chosenChatDetails && !enabledEvent
+                        ? ""
+                        : "border-b border-slate-200"
                     : "rounded-b-[30px]"
             }`}
             style={navActiveStyle}
@@ -373,19 +395,45 @@ const MessagesHeader = ({ scrollPosition, events, openCalendarModal, openSeminar
                                     </div>
                                 </div>
                             </div> :
-                            <div className="w-[calc(100%-120px)] flex items-center justify-start space-x-3 cursor-pointer" title={chosenChatDetails?.username}
-                                 onClick={()=>{
-                                     handleProfileModalOpen(chosenChatDetails)
-                                 }}>
-                                <Avatar
-                                    username={chosenChatDetails.username!}
-                                    image={chosenChatDetails.image}
-                                    isOnline={isOnline(chosenChatDetails.userId)}
-                                />
-                                <div className={`w-[calc(100%-48px)] mr-2 truncate font-semibold text-[18px] ${theme === "light" ? "text-slate-900" : "text-white"} flex items-center gap-1.5`}>
-                                    {chosenChatDetails?.username}
-                                </div>
-                            </div>
+                            (() => {
+                                const peerOnline = isOnline(chosenChatDetails.userId);
+                                const rawLast =
+                                    (chosenChatDetails as { peerLastSeenAt?: string; lastSeen?: string })
+                                        .peerLastSeenAt ??
+                                    (chosenChatDetails as { lastSeen?: string }).lastSeen;
+                                const parsedLast = rawLast ? new Date(rawLast) : undefined;
+                                const lastSeenForLabel =
+                                    !peerOnline &&
+                                    parsedLast &&
+                                    !Number.isNaN(parsedLast.getTime())
+                                        ? parsedLast
+                                        : undefined;
+                                const initialsRaw = String(chosenChatDetails.username || "Member").trim();
+                                const initials = initialsRaw ? getAvatarTitle(initialsRaw) : "?";
+
+                                return (
+                                    <ChatHeader
+                                        name={String(chosenChatDetails.username || "Chat")}
+                                        status={peerOnline ? "online" : "offline"}
+                                        lastSeen={lastSeenForLabel}
+                                        avatarInitials={initials}
+                                        theme={theme === "light" ? "light" : "dark"}
+                                        onNameAreaClick={() => {
+                                            void handleProfileModalOpen(chosenChatDetails);
+                                        }}
+                                        onVideoClick={() => void handleDmStartVideoOrVoice()}
+                                        videoDisabled={!conversationId || studentCannotStartDmVideoToExpert}
+                                        videoTitle={
+                                            studentCannotStartDmVideoToExpert
+                                                ? "Only your expert can start a video or audio call. You can keep messaging in this chat."
+                                                : undefined
+                                        }
+                                        onPhoneClick={() => void handleDmStartVideoOrVoice()}
+                                        phoneDisabled={!conversationId || studentCannotStartDmVideoToExpert}
+                                        onMoreClick={() => set_buttonsModalShow(true)}
+                                    />
+                                );
+                            })()
                     ) :
                     chosenGroupChatDetails ?
                         <div
@@ -425,8 +473,9 @@ const MessagesHeader = ({ scrollPosition, events, openCalendarModal, openSeminar
                         </div> :
                         null
             }
-            <div className="w-[120px] flex items-center justify-end">
-                {chosenChatDetails && (
+            {!(chosenChatDetails && !enabledEvent) ? (
+                <div className="w-[120px] flex items-center justify-end">
+                {chosenChatDetails && enabledEvent && (
                     <div className="flex items-center justify-center">
                         <IconButton
                             style={{ color: theme === "light" ? "#0f172a" : "white" }}
@@ -538,6 +587,7 @@ const MessagesHeader = ({ scrollPosition, events, openCalendarModal, openSeminar
                     ) : null
                 }
             </div>
+            ) : null}
             {chosenChatDetails ? (
                 <ProfileModal
                     isOpen={profileModalShow}

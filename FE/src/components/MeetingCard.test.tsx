@@ -27,7 +27,7 @@ describe("MeetingCard", () => {
       />,
     );
 
-    expect(screen.getByText("Join Call")).toBeInTheDocument();
+    expect(screen.getByText("Join call")).toBeInTheDocument();
     const link = screen.getByRole("link", { name: /wisdomlinked meet/i });
     expect(link).toBeInTheDocument();
   });
@@ -68,7 +68,7 @@ describe("MeetingCard", () => {
       />,
     );
 
-    const joinButton = screen.getByText("Join Call");
+    const joinButton = screen.getByText("Join call");
     fireEvent.click(joinButton);
 
     // Should immediately show Joining... and be disabled
@@ -80,7 +80,7 @@ describe("MeetingCard", () => {
 
     // Should return to "Join Call" and call onJoin with the correct URL
     await waitFor(() => {
-        expect(screen.getByText("Join Call")).toBeInTheDocument();
+        expect(screen.getByText("Join call")).toBeInTheDocument();
     });
     
     expect(mockOnJoin).toHaveBeenCalledWith("https://mock.jitsi.url");
@@ -108,7 +108,7 @@ describe("MeetingCard", () => {
       />,
     );
 
-    fireEvent.click(screen.getByText("Join Call"));
+    fireEvent.click(screen.getByText("Join call"));
 
     await waitFor(() => {
       expect(openSpy).toHaveBeenCalledWith("", "_blank");
@@ -134,7 +134,7 @@ describe("MeetingCard", () => {
       />,
     );
 
-    fireEvent.click(screen.getByText("Join Call"));
+    fireEvent.click(screen.getByText("Join call"));
 
     await waitFor(() => {
       expect(consoleErrorSpy).toHaveBeenCalled();
@@ -164,7 +164,7 @@ describe("MeetingCard", () => {
       />,
     );
 
-    fireEvent.click(screen.getByText("Join Call"));
+    fireEvent.click(screen.getByText("Join call"));
 
     await waitFor(() => {
       expect(alertSpy).toHaveBeenCalledWith("Join token failed");
@@ -195,7 +195,7 @@ describe("MeetingCard", () => {
       />,
     );
 
-    fireEvent.click(screen.getByText("Copy guest invite"));
+    fireEvent.click(screen.getByText("Copy invite"));
 
     await waitFor(() => {
       expect(writeText).toHaveBeenCalledWith(`${window.location.origin}/meeting/invite/invite-token-123`);

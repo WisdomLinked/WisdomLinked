@@ -6,7 +6,7 @@ import DialogTitle from '@mui/material/DialogTitle';
 import DialogContent from '@mui/material/DialogContent';
 import DialogActions from '@mui/material/DialogActions';
 import Button from '@mui/material/Button';
-import { MessageCircle, Users, Plus, X, CheckCircle2, MoreVertical, UserPlus, ArrowLeft } from 'lucide-react';
+import { MessageCircle, Plus, X, CheckCircle2, MoreVertical, UserPlus, ArrowLeft } from 'lucide-react';
 import Messenger from '../../pages/Dashboard/Messenger/Messenger';
 import { useAppSelector } from '../../store';
 import { onSubscriptionChanged, subscribeToRoom } from '../../services/rcRealtime';
@@ -39,6 +39,8 @@ import { isTheEventGoingOn } from '../../actions/common';
 import { resolveProfileImageSrc } from '../../utils/profileImage';
 import { shouldShowMobileMessenger } from '../../utils/mobileChatLayout';
 import { buildOnlineUserIdSet, hasOnlineUserId } from '../../utils/onlinePresence';
+import { getAvatarPalette, getInitials, getPrivateDmStatusDotClass } from '../../utils/avatarColor';
+import { CommunityRoomAvatar } from './ChatSidebar';
 import { canAdminInitiateDmWithRole } from '../../utils/adminChatRules';
 
 type CommunityRow = {
@@ -1095,10 +1097,8 @@ const StudentChat: React.FC = () => {
                 const menuOpen = communityMenuOpenId === menuId;
                 const inner = (
                   <>
-                    <div className="mt-0.5">
-                      <span className="inline-flex h-6 w-6 items-center justify-center rounded-lg bg-slate-100 text-[#234C6A] text-[10px]">
-                        <Users className="h-3.5 w-3.5" aria-hidden="true" />
-                      </span>
+                    <div className="mt-0.5 shrink-0">
+                      <CommunityRoomAvatar />
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between gap-2">
@@ -1229,6 +1229,16 @@ const StudentChat: React.FC = () => {
                       ? row.id
                       : '';
                 const online = presenceUserId ? isUserOnline(presenceUserId) : false;
+                const displayName = title || '';
+                const initials = getInitials(displayName);
+                const palette = getAvatarPalette(initials);
+                const dmStatusDotClass = getPrivateDmStatusDotClass(online ? 'online' : 'offline');
+                const rowPortrait =
+                  row.kind === 'friend' && row.image
+                    ? row.image
+                    : row.kind === 'privateDm' && row.image
+                      ? row.image
+                      : null;
                 const unreadCount =
                   row.kind === 'privateDm' && row.rcChannelId
                     ? Math.max(Number(dmUnreadByRid?.[row.rcChannelId] || 0), Number(rcUnreadByRid?.[row.rcChannelId] || 0))
@@ -1265,23 +1275,31 @@ const StudentChat: React.FC = () => {
 
                 const inner = (
                   <>
-                    <div className="mt-0.5">
-                      <div className="relative flex-shrink-0 w-11 h-11">
-                        {row.image ? (
+                    <div className="mt-0.5 shrink-0">
+                      <div className="relative h-9 w-9 flex-shrink-0">
+                        {rowPortrait ? (
                           <img
-                            src={row.image}
-                            alt={title}
-                            className="w-11 h-11 rounded-full object-cover"
+                            src={rowPortrait}
+                            alt={displayName}
+                            className="h-9 w-9 rounded-full object-cover"
                           />
                         ) : (
-                          <div className="w-11 h-11 rounded-full bg-gray-200 flex items-center justify-center text-sm font-semibold text-gray-600">
-                            {(title || '').slice(0, 2).toUpperCase()}
+                          <div
+                            className="flex h-9 w-9 items-center justify-center rounded-full text-xs font-semibold"
+                            style={{ background: palette.bg, color: palette.text }}
+                          >
+                            {initials}
                           </div>
                         )}
 
-                        {online ? (
+                        {row.kind === 'privateDm' ? (
                           <span
-                            className="pointer-events-none absolute bottom-0 right-0 z-10 h-3 w-3 shrink-0 rounded-full bg-[#22c55e] shadow-[0_0_0_2px_#ffffff]"
+                            className={`absolute bottom-0 right-0 z-10 h-2.5 w-2.5 rounded-full border-2 border-white ${dmStatusDotClass}`}
+                            aria-hidden
+                          />
+                        ) : online ? (
+                          <span
+                            className="pointer-events-none absolute bottom-0 right-0 z-10 h-2.5 w-2.5 rounded-full border-2 border-white bg-[#1D9E75]"
                             aria-hidden
                             title="Online"
                           />

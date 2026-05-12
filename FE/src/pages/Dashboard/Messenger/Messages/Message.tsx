@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import parse from 'html-react-parser';
 import { Check, Trash2 } from "lucide-react";
-import { formatDate } from "../../../../actions/common";
+import { formatMessageTime } from '../../../../utils/formatMessageTime';
 import { Card, CardContent, Typography } from "@mui/material";
 import FilePreviewModal from "../../FilePreviewModal";
 
@@ -39,9 +39,7 @@ function DeliveryTicks({ status, theme }: { status?: string; theme?: string }) {
     );
 }
 
-const parseHtml = (html: any) => {
-    return parse(html ? html : '')
-}
+const parseHtml = (html: string | undefined | null) => parse(html || '');
 
 const Message = ({
     content,
@@ -55,7 +53,32 @@ const Message = ({
     canDelete,
     deleteForMeAvailable,
     onDeleteMessage,
-}: any) => {
+    threadBubbleShellClassName,
+    showDeleteAffix,
+}: {
+    content: string;
+    hideDate?: boolean;
+    date?: string;
+    incomingMessage?: boolean;
+    theme?: string;
+    deliveryStatus?: string;
+    messageId?: string;
+    roomId?: string | null;
+    canDelete?: boolean;
+    deleteForMeAvailable?: boolean;
+    onDeleteMessage?: (messageId: string, mode: 'me' | 'both') => Promise<void>;
+    threadBubbleShellClassName?: string;
+    showDeleteAffix?: boolean;
+    sameAuthor?: boolean;
+    userId?: string;
+    username?: string;
+    image?: string;
+    role?: string;
+    status?: string;
+    isFriend?: boolean;
+    disableBookButton?: boolean;
+    myRole?: string;
+}) => {
 
     const [showPreview, setShowPreview] = useState(false);
     const [deleting, setDeleting] = useState(false);
@@ -94,13 +117,25 @@ const Message = ({
         const endDate = new Date(endTimeUTC);
 
         // Log the local time strings
-        const startTimeOnly = startDate.toLocaleTimeString();
-        const endTimeOnly = endDate.toLocaleTimeString();
+        const startTimeOnly = formatMessageTime(startDate);
+        const endTimeOnly = formatMessageTime(endDate);
         content = content.split("#####")[0];
         //ADD the start and end time to content
         content = content + ` <br/> Start Time: ${startTimeOnly} <br/> End Time: ${endTimeOnly}`;
     }
 
+    const useThreadBubble =
+        Boolean(threadBubbleShellClassName) && !isFile && !isCallDurationMessage;
+
+    if (incomingMessage && useThreadBubble) {
+        return (
+            <div
+                className={`min-w-0 max-w-full px-2 py-1.5 text-sm leading-5 shadow-sm break-words whitespace-pre-wrap ${threadBubbleShellClassName}`}
+            >
+                {parseHtml(content)}
+            </div>
+        );
+    }
 
     if (!incomingMessage) {
         const renderDeleteActions = () => {
@@ -158,7 +193,7 @@ const Message = ({
                 <div className="flex max-w-[min(100%,36rem)] flex-col items-end px-1 py-1">
                     {!hideDate && (
                         <div className="text-grey text-[12px]">
-                            {formatDate(new Date(date))}
+                            {formatMessageTime(new Date(date))}
                         </div>
                     )}
                     <div className="flex items-end gap-1">
@@ -204,7 +239,7 @@ const Message = ({
                 <div className="flex max-w-[min(100%,36rem)] flex-col items-end mt-1">
                     {!hideDate && (
                         <div className="text-grey text-[12px]">
-                            {formatDate(new Date(date))}
+                            {formatMessageTime(new Date(date))}
                         </div>
                     )}
                     {/*
@@ -237,13 +272,26 @@ const Message = ({
             );
         }
 
+        if (useThreadBubble) {
+            return (
+                <div className="flex min-w-0 max-w-full items-end justify-end gap-1">
+                    {showDeleteAffix ? renderDeleteActions() : null}
+                    <div
+                        className={`min-w-0 max-w-full px-2 py-1.5 text-sm leading-5 shadow-sm break-words whitespace-pre-wrap ${threadBubbleShellClassName}`}
+                    >
+                        {parseHtml(content)}
+                    </div>
+                </div>
+            );
+        }
+
         // Else, render the normal outgoing message (right-aligned)
         return (
             <div className="chat_value_container flex w-full justify-end pr-2 sm:pr-4">
                 <div className="flex max-w-[min(100%,36rem)] flex-col items-end mt-1">
                     {!hideDate ? (
                         <div className={`text-[12px] ${theme === "light" ? "text-slate-500" : "text-grey"}`}>
-                            {formatDate(new Date(date))}
+                            {formatMessageTime(new Date(date))}
                         </div>
                     ) : null}
                     <div className="flex min-w-0 items-end gap-1">
@@ -269,7 +317,7 @@ const Message = ({
             <div className="min-w-0 max-w-[min(100%,36rem)]">
                 {!hideDate && (
                     <div className={`text-[12px] ${theme === "light" ? "text-slate-500" : "text-grey"}`}>
-                        {formatDate(new Date(date))}
+                        {formatMessageTime(new Date(date))}
                     </div>
                 )}
 
