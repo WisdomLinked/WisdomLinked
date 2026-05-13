@@ -93,15 +93,29 @@
     }) || null;
   }
 
-  function stylePaneButton(button) {
-    button.style.border = "0";
-    button.style.borderRadius = "6px";
-    button.style.background = "#fff";
-    button.style.color = "#111";
-    button.style.padding = "8px 12px";
-    button.style.font = "600 12px/1.2 system-ui,-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif";
+  function stylePaneButton(button, referenceButton) {
+    button.className = referenceButton.className || "";
+    var referenceStyle = window.getComputedStyle(referenceButton);
+    [
+      "background",
+      "backgroundColor",
+      "border",
+      "borderRadius",
+      "boxShadow",
+      "color",
+      "font",
+      "fontFamily",
+      "fontSize",
+      "fontWeight",
+      "height",
+      "lineHeight",
+      "minHeight",
+      "padding",
+    ].forEach(function (name) {
+      button.style[name] = referenceStyle[name];
+    });
     button.style.cursor = "pointer";
-    button.style.marginRight = "8px";
+    button.style.marginRight = referenceStyle.marginRight || "8px";
     button.style.whiteSpace = "nowrap";
   }
 
@@ -137,7 +151,7 @@
     button.type = "button";
     button.textContent = "Copy Meeting ID";
     button.title = "Copy WisdomLinked meeting ID";
-    stylePaneButton(button);
+    stylePaneButton(button, muteAllButton);
     button.addEventListener("click", function () { copyMeetingId(meetingId, button); });
     muteAllButton.parentElement.insertBefore(button, muteAllButton);
   }
