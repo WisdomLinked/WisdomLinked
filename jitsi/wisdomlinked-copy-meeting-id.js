@@ -57,7 +57,7 @@
     if (document.getElementById(STYLE_ID)) return;
     var style = document.createElement("style");
     style.id = STYLE_ID;
-    style.textContent = "#" + BUTTON_ID + "{position:fixed;right:16px;top:76px;z-index:2147483647;border:0;border-radius:10px;background:#234C6A;color:#fff;padding:10px 14px;font:600 13px/1.2 system-ui,-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;box-shadow:0 8px 24px rgba(0,0,0,.25);cursor:pointer}#" + BUTTON_ID + ":hover{filter:brightness(1.08)}#" + BUTTON_ID + ":active{transform:translateY(1px)}";
+    style.textContent = "#" + BUTTON_ID + "{position:fixed;left:16px;top:76px;z-index:2147483647;border:0;border-radius:10px;background:#234C6A;color:#fff;padding:10px 14px;font:600 13px/1.2 system-ui,-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;box-shadow:0 8px 24px rgba(0,0,0,.25);cursor:pointer}#" + BUTTON_ID + ":hover{filter:brightness(1.08)}#" + BUTTON_ID + ":active{transform:translateY(1px)}";
     document.head.appendChild(style);
   }
 
