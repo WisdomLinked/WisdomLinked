@@ -17,9 +17,15 @@ export const canStartGroupMeeting = (groupChatLike: any, meLike: any): boolean =
     const participants = Array.isArray(groupChatLike?.participants)
         ? groupChatLike.participants.map((p: any) => normalizeId(p)).filter(Boolean)
         : [];
+    const coModerators = Array.isArray(groupChatLike?.coModerators)
+        ? groupChatLike.coModerators.map((p: any) => normalizeId(p)).filter(Boolean)
+        : [];
     const isParticipant = participants.includes(meId) || adminId === meId;
     if (!isParticipant) return false;
-    // Group/community policy: only group admin can initiate the call.
+    if (String(groupChatLike?.type || "").toLowerCase() === "community") {
+        return adminId === meId || coModerators.includes(meId);
+    }
+    // Seminar/individual policy: only group admin can initiate the call.
     return adminId === meId;
 };
 

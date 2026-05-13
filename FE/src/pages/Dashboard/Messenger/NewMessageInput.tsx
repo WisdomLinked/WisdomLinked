@@ -5,6 +5,7 @@ import ReactQuill from 'react-quill'
 import 'react-quill/dist/quill.snow.css'
 import data from '@emoji-mart/data';
 import Picker from '@emoji-mart/react';
+import { Smile, X } from "lucide-react";
 import { callApi } from "../../../api/api";
 import { showAlert } from "../../../actions/alertActions";
 import { useDispatch } from "react-redux";
@@ -12,6 +13,8 @@ import { addNewMessage, setChatChannelInfo } from "../../../actions/chatActions"
 import { getOrCreateDM, sendDirectMessage as apiSendDM, sendGroupMessage as apiSendGroup } from "../../../api/chatApi";
 import { sendRoomTyping, connectToRC } from "../../../services/rcRealtime";
 import { toRocketChatUsername } from "../../../utils/rocketchatUsername";
+import { sanitizeMessageHtml } from "../../../utils/safeMessageHtml";
+import type { ReplyDraft } from "./ChatDetails";
 
 function plainTextToMessageHtml(text: string): string {
     const trimmed = text.trim();
@@ -44,6 +47,18 @@ const CHAT_FILE_REQUIREMENTS_MESSAGE =
     "Allowed formats: PDF, DOC, DOCX, TXT, CSV, JPG, JPEG, PNG, WEBP, GIF, XLS, XLSX, PPT, PPTX. Max size: 1 MB per file.";
 const CHAT_FILE_SIZE_EXCEEDED_MESSAGE = "File is too large. Max size: 1 MB per file.";
 
+const escapeReplyText = (value: string): string =>
+    String(value || "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;");
+
+const cleanReplyExcerpt = (value: string): string =>
+    String(value || "")
+        .replace(/\bReplying to\s+(You|[\w\s.@-]+)\b/gi, " ")
+        .replace(/\s+/g, " ")
+        .trim();
+
 function getFileExtension(name: string): string {
     const value = (name || "").trim();
     if (!value.includes(".")) return "";
@@ -65,7 +80,15 @@ function resolveUploadErrorMessage(response: any): string {
     return raw;
 }
 
-const NewMessageInput: React.FC<any> = ({ theme = "dark" }: any) => {
+const NewMessageInput: React.FC<any> = ({
+    theme = "dark",
+    replyTo,
+    onCancelReply,
+}: {
+    theme?: string;
+    replyTo?: ReplyDraft | null;
+    onCancelReply?: () => void;
+}) => {
     const [_message, set_message] = useState("");
     const dispatch = useDispatch();
     const [showEmojiPicker, setShowEmojiPicker] = useState(false);
@@ -73,7 +96,28 @@ const NewMessageInput: React.FC<any> = ({ theme = "dark" }: any) => {
     const [uploadingFile, setUploadingFile] = useState(false);
 
     const fileInputRef = useRef<HTMLInputElement | null>(null);
+    const textareaRef = useRef<HTMLTextAreaElement | null>(null);
     const quillRef = useRef<ReactQuill | null>(null);
+
+    const resizeTextarea = (textarea: HTMLTextAreaElement | null = textareaRef.current) => {
+        if (!textarea) return;
+        textarea.style.height = "auto";
+        textarea.style.height = `${Math.min(Math.max(textarea.scrollHeight, 36), 160)}px`;
+    };
+
+    const resizeQuillEditor = () => {
+        const editor = quillRef.current?.getEditor?.().root;
+        const container = editor?.parentElement;
+        if (!editor || !container) return;
+        editor.style.minHeight = "44px";
+        editor.style.maxHeight = "180px";
+        editor.style.overflowY = "auto";
+        editor.style.height = "auto";
+        editor.style.height = `${Math.min(Math.max(editor.scrollHeight, 44), 180)}px`;
+        container.style.height = "auto";
+        container.style.maxHeight = "220px";
+        container.style.overflowY = "visible";
+    };
     
     const handleButtonClick = () => {
         fileInputRef.current?.click();
@@ -133,6 +177,14 @@ const NewMessageInput: React.FC<any> = ({ theme = "dark" }: any) => {
     }
 
     const dispatchOutgoingHtml = async (message: string) => {
+        const replyHtml = replyTo
+            ? `<blockquote><strong>Replying to ${escapeReplyText(replyTo.authorName)}</strong><br>${escapeReplyText(cleanReplyExcerpt(replyTo.excerpt))}</blockquote>`
+            : "";
+        const safeMessage = sanitizeMessageHtml(`${replyHtml}${message}`);
+        if (!safeMessage.trim()) {
+            set_message("");
+            return;
+        }
         if (chosenChatDetails) {
             let convId = conversationId;
             if (!convId) {
@@ -148,7 +200,7 @@ const NewMessageInput: React.FC<any> = ({ theme = "dark" }: any) => {
                 }
             }
             if (convId) {
-                const result = await apiSendDM(convId, message);
+                const result = await apiSendDM(convId, safeMessage);
                 if (result?.message) {
                     dispatch(addNewMessage(result.message));
                 }
@@ -156,12 +208,13 @@ const NewMessageInput: React.FC<any> = ({ theme = "dark" }: any) => {
         }
         if (chosenGroupChatDetails) {
             // Send group message via REST API
-            const result = await apiSendGroup(chosenGroupChatDetails.groupId, message);
+            const result = await apiSendGroup(chosenGroupChatDetails.groupId, safeMessage);
             if (result?.message) {
                 dispatch(addNewMessage(result.message));
             }
         }
         set_message("");
+        onCancelReply?.();
     };
 
     const sendPlainMessage = () => {
@@ -242,6 +295,9 @@ const NewMessageInput: React.FC<any> = ({ theme = "dark" }: any) => {
 
     // Ensure RC connection for typing whenever room/identity changes.
     useEffect(() => {
+        resizeTextarea();
+        resizeQuillEditor();
+
         if (!rcChannelId || !rcTypingName) return;
         void connectToRC();
     }, [rcChannelId, rcTypingName]);
@@ -363,7 +419,7 @@ const NewMessageInput: React.FC<any> = ({ theme = "dark" }: any) => {
             [{ 'color': [] }, { 'background': [] }],
             [{ 'list': 'ordered'}, { 'list': 'bullet' }],
             [{ 'align': [] }],
-            ['link', 'image'],
+            ['link'],
             ['clean']
         ]
     };
@@ -412,8 +468,24 @@ const NewMessageInput: React.FC<any> = ({ theme = "dark" }: any) => {
 
     if (theme === "light") {
         return (
-            <div className="w-full border-t border-slate-200 bg-white px-2 py-1.5 sm:px-3">
-                <div className="flex items-center gap-1.5 rounded-full border border-slate-200/80 bg-slate-50 px-2 py-0.5">
+            <div className="relative w-full border-t border-slate-200 bg-white px-2 py-1.5 sm:px-3">
+                {replyTo ? (
+                    <div className="mb-1 flex items-start justify-between gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+                        <div className="min-w-0">
+                            <div className="font-semibold text-[#234C6A]">Replying to {replyTo.authorName}</div>
+                            <div className="truncate">{replyTo.excerpt || "Message"}</div>
+                        </div>
+                        <button
+                            type="button"
+                            onClick={onCancelReply}
+                            className="shrink-0 rounded-md p-1 text-slate-500 hover:bg-white hover:text-slate-800"
+                            aria-label="Cancel reply"
+                        >
+                            <X className="h-3.5 w-3.5" />
+                        </button>
+                    </div>
+                ) : null}
+                <div className="flex items-end gap-1.5 rounded-2xl border border-slate-200/80 bg-slate-50 px-2 py-1.5">
                     <button
                         type="button"
                         onClick={handleButtonClick}
@@ -422,10 +494,20 @@ const NewMessageInput: React.FC<any> = ({ theme = "dark" }: any) => {
                     >
                         <Paperclip className="h-3.5 w-3.5" />
                     </button>
+                    <button
+                        type="button"
+                        onClick={toggleEmojiPicker}
+                        className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-wl-muted transition hover:bg-white hover:text-wl-brand"
+                        aria-label="Add emoji"
+                    >
+                        <Smile className="h-3.5 w-3.5" />
+                    </button>
                     <textarea
+                        ref={textareaRef}
                         value={_message}
                         onChange={(e) => {
                             set_message(e.target.value);
+                            resizeTextarea(e.currentTarget);
                         }}
                         onKeyDown={(e) => {
                             if (e.key === "Enter" && !e.shiftKey) {
@@ -436,7 +518,7 @@ const NewMessageInput: React.FC<any> = ({ theme = "dark" }: any) => {
                         onBlur={onBlur}
                         placeholder="Type a message…"
                         rows={1}
-                        className="max-h-24 min-h-[2rem] w-0 flex-1 resize-none bg-transparent py-1 text-[13px] leading-5 text-wl-ink placeholder:text-slate-400 outline-none sm:text-sm"
+                        className="max-h-40 min-h-9 w-0 flex-1 resize-none overflow-y-auto bg-transparent py-1.5 text-[13px] leading-5 text-wl-ink placeholder:text-slate-400 outline-none sm:text-sm"
                     />
                     <input
                         type="file"
@@ -455,6 +537,11 @@ const NewMessageInput: React.FC<any> = ({ theme = "dark" }: any) => {
                         <Send className="h-3.5 w-3.5" strokeWidth={2.5} />
                     </button>
                 </div>
+                {showEmojiPicker && (
+                    <div className="absolute bottom-12 left-3 z-[1000]">
+                        <Picker data={data} onEmojiSelect={handleEmojiSelect} />
+                    </div>
+                )}
             </div>
         );
     }
@@ -462,12 +549,31 @@ const NewMessageInput: React.FC<any> = ({ theme = "dark" }: any) => {
     return (
         <div className="w-full flex items-center border-t border-transparent p-4 pb-12 pt-0 sm:pb-4">
             <div className="relative w-full">
+                {replyTo ? (
+                    <div className="mb-2 flex items-start justify-between gap-2 rounded-lg border border-white/10 bg-black/70 px-3 py-2 text-xs text-slate-200">
+                        <div className="min-w-0">
+                            <div className="font-semibold text-[#31B099]">Replying to {replyTo.authorName}</div>
+                            <div className="truncate">{replyTo.excerpt || "Message"}</div>
+                        </div>
+                        <button
+                            type="button"
+                            onClick={onCancelReply}
+                            className="shrink-0 rounded-md p-1 text-slate-400 hover:bg-white/10 hover:text-white"
+                            aria-label="Cancel reply"
+                        >
+                            <X className="h-3.5 w-3.5" />
+                        </button>
+                    </div>
+                ) : null}
                 <ReactQuill
                     ref={quillRef}
                     theme="snow"
-                    className="flex w-full flex-col-reverse rounded-md bg-black"
+                    className="chat-composer-quill flex w-full flex-col-reverse rounded-md bg-black"
                     value={_message}
-                    onChange={set_message}
+                    onChange={(value) => {
+                        set_message(value);
+                        requestAnimationFrame(resizeQuillEditor);
+                    }}
                     onKeyDown={handleSendMessage}
                     onBlur={onBlur}
                     modules={modules}

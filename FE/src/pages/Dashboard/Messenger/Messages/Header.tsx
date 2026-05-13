@@ -116,6 +116,8 @@ const MessagesHeader = ({ scrollPosition, events, openCalendarModal, openSeminar
     const handleRemoveFriend = () => {
         set_buttonsModalShow(false)
         if (chosenChatDetails) {
+            const label = userDetails?.role === 'customer' ? 'expert' : 'customer';
+            if (!window.confirm(`Remove this ${label} from your chat list?`)) return;
             dispatch(removeFriendAction({
                 friendId: chosenChatDetails.userId,
                 friendName: chosenChatDetails.username
@@ -171,6 +173,7 @@ const MessagesHeader = ({ scrollPosition, events, openCalendarModal, openSeminar
             setHeaderLeaveCommunityOpen(true);
             return;
         }
+        if (!window.confirm("Leave this seminar/group? You may lose access to this chat.")) return;
         SetLoadingStatus(true);
         const response = await doLeftSeminar(chosenGroupChatDetails.groupId);
         if (response) {
@@ -187,8 +190,12 @@ const MessagesHeader = ({ scrollPosition, events, openCalendarModal, openSeminar
         dispatch(leaveGroupAction({ groupChatId: chosenGroupChatDetails.groupId }));
     };
 
-    const handleDeleteGroup = () => {
+    const handleDeleteGroup = (skipConfirm = false) => {
         if (chosenGroupChatDetails) {
+            set_buttonsModalShow(false);
+            const isCommunity = chosenGroupChatDetails?.type === "community";
+            const label = isCommunity ? "community" : "seminar";
+            if (!skipConfirm && !window.confirm(`Delete this ${label} for everyone? This cannot be undone.`)) return;
             dispatch(
                 deleteGroupAction({
                     groupChatId: chosenGroupChatDetails?.groupId,
@@ -205,7 +212,7 @@ const MessagesHeader = ({ scrollPosition, events, openCalendarModal, openSeminar
 
     const confirmDeleteCommunityFromHeader = () => {
         setDeleteCommunityConfirmOpen(false);
-        handleDeleteGroup();
+        handleDeleteGroup(true);
     };
 
     const onlineIdSet = useMemo(() => {
@@ -661,7 +668,7 @@ const MessagesHeader = ({ scrollPosition, events, openCalendarModal, openSeminar
                                             }`}
                                             onClick={handleParticipantsOpenDialog}
                                         >
-                                            <span>View Participants ({chosenGroupChatDetails?.participants.length})</span>
+                                            <span>View Participants ({chosenGroupChatDetails?.participants?.length ?? 0})</span>
                                             <PeopleAltIcon fontSize="small" className="shrink-0 opacity-70" />
                                         </button>
                                         <button
@@ -702,7 +709,7 @@ const MessagesHeader = ({ scrollPosition, events, openCalendarModal, openSeminar
                                                                     className={`mt-0.5 flex w-full items-center justify-between gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-medium ${
                                                                         theme === "light" ? "text-slate-800 hover:bg-slate-50" : "hover:bg-white/10"
                                                                     } disabled:opacity-50`}
-                                                                    disabled={chosenGroupChatDetails?.participants.length > 1}
+                                                                    disabled={(chosenGroupChatDetails?.participants?.length ?? 0) > 1}
                                                                     onClick={() => {
                                                                         set_buttonsModalShow(false)
                                                                         openEditSeminarModal()
@@ -782,7 +789,7 @@ const MessagesHeader = ({ scrollPosition, events, openCalendarModal, openSeminar
                                                                             ? "text-rose-700 hover:bg-rose-50"
                                                                             : "text-rose-300 hover:bg-white/10"
                                                                     } disabled:opacity-50`}
-                                                                    disabled={chosenGroupChatDetails?.participants.length > 1}
+                                                                    disabled={(chosenGroupChatDetails?.participants?.length ?? 0) > 1}
                                                                     onClick={handleDeleteGroup}
                                                                 >
                                                                     <span>Delete Seminar</span>

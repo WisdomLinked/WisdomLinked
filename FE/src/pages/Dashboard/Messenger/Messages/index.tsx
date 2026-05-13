@@ -46,6 +46,7 @@ import {
     shouldRequestOlderMessages,
 } from "./historyPagination";
 import { resolveProfileImageSrc } from "../../../../utils/profileImage";
+import type { ReplyDraft } from "../ChatDetails";
 /** RC `u.username` is email-derived; WL `userDetails.username` is display name — never equal. */
 function isRcStreamFromMe(rcMsg: any, me: any): boolean {
     if (!rcMsg?.u?.username || !me?.email) return false;
@@ -101,11 +102,10 @@ function deliveryStatusForMessage(
     return "delivered";
 }
 
-const Messages = ({ theme = "dark" }: any) => {
+const Messages = ({ theme = "dark", onReplyMessage }: { theme?: string; onReplyMessage?: (reply: ReplyDraft) => void }) => {
     const dispatch = useDispatch()
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const scrollContainerRef = useRef<HTMLDivElement>(null);
-    const audioRef = useRef<HTMLAudioElement>(null);
     const prevMessagesLength = useRef(0);
     const markReadTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const loadingOlderRef = useRef(false);
@@ -174,7 +174,12 @@ const Messages = ({ theme = "dark" }: any) => {
                 dispatch(
                     replaceChatMessages(Array.isArray(historyData?.messages) ? historyData.messages : []),
                 );
-            } else {
+            } else if (cid) {
+                const historyData = await fetchDirectHistory(cid, 0);
+                dispatch(
+                    replaceChatMessages(Array.isArray(historyData?.messages) ? historyData.messages : []),
+                );
+            } else if (mode === 'both') {
                 dispatch(removeChatMessage(messageId));
             }
         },
@@ -198,6 +203,7 @@ const Messages = ({ theme = "dark" }: any) => {
     const lastMarkReadAtRef = useRef<number>(0);
     const receiptFetchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const lastReceiptFetchAtRef = useRef<number>(0);
+    const profileImageCacheRef = useRef(new Map<string, string>());
 
     useEffect(() => {
         let alive = true;
@@ -364,7 +370,7 @@ const Messages = ({ theme = "dark" }: any) => {
                 extraUsers,
                 serverResolved,
             );
-            if (chosenGroupChatDetails?.type === 'community' && canonicalMembershipSide(rcMsg?.t ?? rcMsg?.type) != null) {
+            if (gDetails?.type === 'community' && canonicalMembershipSide(rcMsg?.t ?? rcMsg?.type) != null) {
                 // Keep community list/memberships in sync across participants without manual refresh.
                 dispatch(updateMe() as any);
             }
@@ -397,8 +403,13 @@ const Messages = ({ theme = "dark" }: any) => {
         if (Date.now() - lastMarkReadAtRef.current < 8000) return;
         if (markReadTimerRef.current) clearTimeout(markReadTimerRef.current);
         markReadTimerRef.current = setTimeout(() => {
-            markChatRead(rcChannelId);
-            lastMarkReadAtRef.current = Date.now();
+            void (async () => {
+                const res = await markChatRead(rcChannelId);
+                if (res?.success) {
+                    dispatch(clearDmUnreadRid(String(rcChannelId)));
+                    lastMarkReadAtRef.current = Date.now();
+                }
+            })();
         }, 1200);
         return () => {
             if (markReadTimerRef.current) clearTimeout(markReadTimerRef.current);
@@ -465,21 +476,23 @@ const Messages = ({ theme = "dark" }: any) => {
     useEffect(() => {
         let cancelled = false;
         const processMessages = async () => {
-            const tempImages = new Map<string, string>();
-
+            const needed = new Map<string, string>();
             for (const message of messages) {
-                const userId = message.author._id;
-                if (message.author.image && !tempImages.has(userId)) {
-                    const resolved = await resolveProfileImageSrc(
-                        message.author.image,
-                        'small',
-                        profileImageFetch as any,
-                    );
-                    if (resolved) tempImages.set(userId, resolved);
+                const userId = String(message?.author?._id ?? "");
+                const image = String(message?.author?.image ?? "");
+                if (userId && image && !profileImageCacheRef.current.has(userId)) {
+                    needed.set(userId, image);
                 }
             }
 
-            if (!cancelled) setProfileImages(tempImages);
+            await Promise.all(
+                Array.from(needed.entries()).map(async ([userId, image]) => {
+                    const resolved = await resolveProfileImageSrc(image, 'small', profileImageFetch as any);
+                    if (resolved) profileImageCacheRef.current.set(userId, resolved);
+                }),
+            );
+
+            if (!cancelled) setProfileImages(new Map(profileImageCacheRef.current));
         };
 
         void processMessages();
@@ -491,9 +504,10 @@ const Messages = ({ theme = "dark" }: any) => {
     const groupSenderLabel = (message: any) => {
         const aid = String(message?.author?._id ?? message?.author?.id ?? '');
         const parts = chosenGroupChatDetails?.participants ?? [];
+        const coModerators = chosenGroupChatDetails?.coModerators ?? [];
         const admin = chosenGroupChatDetails?.admin;
         const adminObj = admin && typeof admin === 'object' ? admin : null;
-        const all: any[] = [...parts];
+        const all: any[] = [...parts, ...coModerators];
         if (
             adminObj?._id &&
             !all.some((x: any) => String(x?._id ?? x?.id) === String(adminObj._id))
@@ -580,7 +594,7 @@ const Messages = ({ theme = "dark" }: any) => {
         const expertId = userDetails?.role === 'expert' ? userDetails?._id : chosenChatDetails?.userId
         const customerId = userDetails?.role !== 'expert' ? userDetails?._id : chosenChatDetails?.userId
         if (chosenChatDetails) {
-            let temp = userDetails.events.filter((x: any) => {
+            let temp = (userDetails?.events || []).filter((x: any) => {
                 if (userDetails?.role === 'expert') {
                     return x.customer._id === customerId || x.customer === customerId
                 } else {
@@ -589,7 +603,7 @@ const Messages = ({ theme = "dark" }: any) => {
             })
             set_events([...temp])
         } else if (chosenGroupChatDetails) {
-            let temp = userDetails.groupChats.filter((x: any) => x._id === chosenGroupChatDetails.groupId)
+            let temp = (userDetails?.groupChats || []).filter((x: any) => x._id === chosenGroupChatDetails.groupId)
             set_events([...temp])
         }
     }
@@ -674,13 +688,6 @@ const Messages = ({ theme = "dark" }: any) => {
 
     useEffect(() => {
         if (messages.length > prevMessagesLength.current) {
-            if (!isFirstLoad && audioRef.current) {
-                audioRef.current.volume = 0.005;
-                audioRef.current
-                    .play()
-                    .then(() => console.log("Audio played successfully"))
-                    .catch((err) => console.error("Error playing audio:", err));
-            }
             scrollToBottom();
         }
         prevMessagesLength.current = messages.length;
@@ -690,13 +697,6 @@ const Messages = ({ theme = "dark" }: any) => {
         <div
             className={`relative flex min-h-0 w-full flex-1 flex-col ${theme === "light" ? "bg-[#F6FAFF]" : ""}`}
         >
-            <audio ref={audioRef} preload="auto">
-                <source
-                    src="https://www.soundjay.com/buttons/sounds/button-16a.mp3"
-                    type="audio/mp3"
-                />
-                Your browser does not support the audio element.
-            </audio>
             <div className="shrink-0">
                 <MessagesHeader
                     events={events}
@@ -749,6 +749,7 @@ const Messages = ({ theme = "dark" }: any) => {
                 userDetails={userDetails}
                 friends={friends ?? []}
                 handleDeleteMessage={handleDeleteMessage}
+                onReplyMessage={onReplyMessage}
                 rcChannelId={rcChannelId}
                 conversationId={conversationId}
                 myRcUserId={myRcUserId}

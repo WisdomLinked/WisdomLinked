@@ -7,11 +7,12 @@ test("buildMeetingRoomName includes scope timestamp and random suffix", () => {
     assert.equal(room, "wl-group1-1234567890-abc123");
 });
 
-test("community start requires admin", () => {
-    const group = { type: "community", admin: "u1", participants: ["u1", "u2"] };
+test("community start allows admin and co-moderators", () => {
+    const group = { type: "community", admin: "u1", participants: ["u1", "u2"], coModerators: ["u2"] };
     assert.equal(canStartGroupMeeting(group, { _id: "u1", role: "expert" }), true);
     assert.equal(canStartGroupMeeting(group, { _id: "u1", role: "customer" }), true);
-    assert.equal(canStartGroupMeeting(group, { _id: "u2", role: "expert" }), false);
+    assert.equal(canStartGroupMeeting(group, { _id: "u2", role: "expert" }), true);
+    assert.equal(canStartGroupMeeting(group, { _id: "u3", role: "expert" }), false);
 });
 
 test("group type still requires admin starter", () => {

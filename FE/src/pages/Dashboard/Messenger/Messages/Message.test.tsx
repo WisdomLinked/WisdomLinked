@@ -1,5 +1,7 @@
 import React from 'react';
 import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { vi } from 'vitest';
 import Message from './Message';
 
 describe('Message outgoing rendering', () => {
@@ -27,6 +29,20 @@ describe('Message outgoing rendering', () => {
         render(<Message {...baseProps} content={callText} />);
         expect(screen.getByLabelText('Delete message')).toBeInTheDocument();
         expect(screen.getByText(/Call Lasted for:/i)).toBeInTheDocument();
+    });
+
+    it('confirms before deleting a message for everyone', async () => {
+        const user = userEvent.setup();
+        const onDeleteMessage = vi.fn(async () => undefined);
+        const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValueOnce(false);
+        render(<Message {...baseProps} content="hello" onDeleteMessage={onDeleteMessage} />);
+
+        await user.click(screen.getByLabelText('Delete message'));
+        await user.click(screen.getByText('Delete for everyone'));
+
+        expect(confirmSpy).toHaveBeenCalledWith('Delete this message for everyone? This cannot be undone.');
+        expect(onDeleteMessage).not.toHaveBeenCalled();
+        confirmSpy.mockRestore();
     });
 });
 

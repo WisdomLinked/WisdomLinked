@@ -1,0 +1,35 @@
+import React from "react";
+import { render, screen } from "@testing-library/react";
+import { describe, expect, it } from "vitest";
+import { renderSafeMessageHtml, sanitizeMessageHtml } from "./safeMessageHtml";
+
+describe("renderSafeMessageHtml", () => {
+  it("removes scripts and event handlers while preserving simple formatting", () => {
+    render(
+      <div>
+        {renderSafeMessageHtml('<strong>Hello</strong><img src=x onerror="alert(1)"><script>alert(1)</script>')}
+      </div>,
+    );
+
+    expect(screen.getByText("Hello").tagName.toLowerCase()).toBe("strong");
+    expect(document.querySelector("img")).toBeNull();
+    expect(document.querySelector("script")).toBeNull();
+  });
+
+  it("keeps safe links and drops unsafe hrefs", () => {
+    render(
+      <div>
+        {renderSafeMessageHtml('<a href="https://example.com">safe</a><a href="javascript:alert(1)">bad</a>')}
+      </div>,
+    );
+
+    expect(screen.getByText("safe")).toHaveAttribute("href", "https://example.com");
+    expect(screen.getByText("bad")).not.toHaveAttribute("href");
+  });
+
+  it("sanitizes outgoing rich editor HTML before send", () => {
+    expect(
+      sanitizeMessageHtml('<p>Hello <img src=x onerror=alert(1)><a href="javascript:alert(1)">bad</a></p>'),
+    ).toBe("<p>Hello <a>bad</a></p>");
+  });
+});

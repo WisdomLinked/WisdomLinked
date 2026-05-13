@@ -51,6 +51,7 @@ const wlAuthorFromUser = (u: any) => ({
 });
 
 const toDateMillis = (ts: any): number => new Date(normalizeRcMessageTs(ts)).getTime();
+const normalizeId = (v: any): string => String(v?._id ?? v?.id ?? v ?? '').trim();
 
 const WL_COMMUNITY_SYS_PREFIX = '__WL_COMMUNITY_SYS__::';
 const CHAT_HISTORY_PAGE_SIZE = 50;
@@ -792,6 +793,48 @@ export const getReadReceiptsBatch = async (req: any, res: Response) => {
     }
 };
 
+const groupUserIds = (groupChat: any): string[] => [
+    normalizeId(groupChat?.admin),
+    ...(Array.isArray(groupChat?.participants) ? groupChat.participants.map((p: any) => normalizeId(p)) : []),
+    ...(Array.isArray(groupChat?.coModerators) ? groupChat.coModerators.map((p: any) => normalizeId(p)) : []),
+].filter(Boolean);
+
+const userCanAccessRocketRoom = async (
+    userId: string,
+    roomId: string,
+    context: { conversationId?: string; groupChatId?: string } = {},
+): Promise<boolean> => {
+    const uid = String(userId || '').trim();
+    const rid = String(roomId || '').trim();
+    if (!uid || !rid) return false;
+
+    if (context.conversationId) {
+        const conv = await Conversation.findById(context.conversationId).select('participants rcChannelId').lean();
+        return Boolean(
+            conv
+            && String(conv.rcChannelId || '') === rid
+            && Array.isArray(conv.participants)
+            && conv.participants.some((p: any) => normalizeId(p) === uid),
+        );
+    }
+
+    if (context.groupChatId) {
+        const groupChat = await GroupChat.findById(context.groupChatId).select('admin participants coModerators rcChannelId').lean();
+        return Boolean(
+            groupChat
+            && String(groupChat.rcChannelId || '') === rid
+            && groupUserIds(groupChat).includes(uid),
+        );
+    }
+
+    const [conv, groupChat] = await Promise.all([
+        Conversation.findOne({ rcChannelId: rid, participants: uid }).select('_id').lean(),
+        GroupChat.findOne({ rcChannelId: rid }).select('admin participants coModerators').lean(),
+    ]);
+    if (conv) return true;
+    return Boolean(groupChat && groupUserIds(groupChat).includes(uid));
+};
+
 /**
  * POST body:
  * - mode='both': { roomId, messageId } -> delete message in RC for everyone (subject to RC permissions).
@@ -826,7 +869,7 @@ export const deleteChatMessage = async (req: any, res: Response) => {
             if (groupChatId) {
                 const gc = await GroupChat.findById(groupChatId);
                 if (!gc) return res.status(404).json({ error: 'Group chat not found' });
-                if (!gc.participants.some((p: any) => String(p) === String(userId))) {
+                if (!groupUserIds(gc).includes(String(userId))) {
                     return res.status(403).json({ error: 'Not a participant' });
                 }
                 await GroupChat.updateOne(
@@ -847,6 +890,11 @@ export const deleteChatMessage = async (req: any, res: Response) => {
         if (!roomId) {
             return res.status(400).json({ error: 'roomId is required for mode=both' });
         }
+        const canAccessRoom = await userCanAccessRocketRoom(String(userId), String(roomId), {
+            conversationId,
+            groupChatId,
+        });
+        if (!canAccessRoom) return res.status(403).json({ error: 'You do not have access to this chat room' });
         const me = await User.findById(userId);
         if (!me?.email) return res.status(400).json({ error: 'User not found' });
         const ok = await deleteMessageAsUser(
@@ -920,6 +968,8 @@ export const markChatRead = async (req: any, res: Response) => {
         const { userId } = req.user;
         const { roomId } = req.body;
         if (!roomId) return res.status(400).json({ error: 'roomId is required' });
+        const canAccessRoom = await userCanAccessRocketRoom(String(userId), String(roomId));
+        if (!canAccessRoom) return res.status(403).json({ error: 'You do not have access to this chat room' });
         const me = await User.findById(userId);
         if (!me?.email) return res.status(400).json({ error: 'User not found' });
         const ok = await markRoomReadAsUser(String(roomId), {

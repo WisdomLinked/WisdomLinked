@@ -7,6 +7,7 @@ import ChatSystemNotice from './ChatSystemNotice';
 import { parseMeetingMessageContent } from '../../../../utils/meetingMessage';
 import { groupMessages } from './groupMessages';
 import type { ChatMessage, MessageGroup } from './chatThreadTypes';
+import type { ReplyDraft } from '../ChatDetails';
 
 type DisplayMessage = MessageModel & { type?: string };
 
@@ -22,6 +23,7 @@ export type ChatThreadViewProps = {
     userDetails: { _id?: string; id?: string; userId?: string; role?: string; status?: string };
     friends: Array<{ _id?: string }>;
     handleDeleteMessage: (messageId: string, mode: 'me' | 'both') => Promise<void>;
+    onReplyMessage?: (reply: ReplyDraft) => void;
     rcChannelId: string | null;
     conversationId: string | null;
     myRcUserId: string | null;
@@ -72,6 +74,32 @@ function initialsFromLabel(name: string): string {
     return (parts[0]?.charAt(0) || '?').toUpperCase();
 }
 
+function stripMessageText(raw: string): string {
+    if (typeof document === 'undefined') {
+        return raw
+            .replace(/<blockquote\b[^>]*>[\s\S]*?<\/blockquote>/gi, ' ')
+            .replace(/<[^>]+>/g, ' ')
+            .replace(/\s+/g, ' ')
+            .trim();
+    }
+    const node = document.createElement('div');
+    node.innerHTML = raw;
+    node.querySelectorAll('blockquote').forEach((quote) => quote.remove());
+    return (node.textContent || node.innerText || '')
+        .replace(/\bReplying to\s+(You|[\w\s.@-]+)\b/gi, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
+function replyDraftFromMessage(message: DisplayMessage, authorName: string): ReplyDraft {
+    const text = stripMessageText(String(message.content || ''));
+    return {
+        messageId: String(message._id),
+        authorName: authorName || 'Message',
+        excerpt: text.length > 140 ? `${text.slice(0, 140)}...` : text,
+    };
+}
+
 function toChatMessage(
     src: DisplayMessage,
     delivery: 'sending' | 'sent' | 'delivered' | 'seen' | undefined,
@@ -93,16 +121,10 @@ function toChatMessage(
 function bubbleShellClass(isSelf: boolean, index: number, n: number): string {
     if (isSelf) {
         const base = 'bg-[#1A3A4A] text-white ';
-        if (n === 1) return `${base}rounded-2xl rounded-br-sm`;
-        if (index === n - 1) return `${base}rounded-tl-2xl rounded-bl-sm rounded-tr-sm rounded-br-sm`;
-        if (index === 0) return `${base}rounded-tl-2xl rounded-bl-2xl rounded-tr-sm rounded-br-sm`;
-        return `${base}rounded-tl-2xl rounded-bl-2xl rounded-tr-sm rounded-br-sm`;
+        return `${base}rounded-2xl`;
     }
     const base = 'bg-white border border-gray-200 text-gray-900 ';
-    if (n === 1) return `${base}rounded-2xl rounded-bl-sm`;
-    if (index === n - 1) return `${base}rounded-tr-2xl rounded-br-sm rounded-tl-sm rounded-bl-sm`;
-    if (index === 0) return `${base}rounded-tr-2xl rounded-br-2xl rounded-tl-sm rounded-bl-sm`;
-    return `${base}rounded-tr-2xl rounded-br-2xl rounded-tl-sm rounded-bl-sm`;
+    return `${base}rounded-2xl`;
 }
 
 function marginAfterBubble(cur: BubbleTimelineItem, next: TimelineItem | undefined): string {
@@ -193,6 +215,7 @@ const ChatThreadView: React.FC<ChatThreadViewProps> = ({
     userDetails,
     friends,
     handleDeleteMessage,
+    onReplyMessage,
     rcChannelId,
     conversationId,
     myRcUserId,
@@ -312,6 +335,7 @@ const ChatThreadView: React.FC<ChatThreadViewProps> = ({
                                             )),
                                 )}
                                 onDeleteMessage={handleDeleteMessage}
+                                onReplyMessage={() => onReplyMessage?.(replyDraftFromMessage(m, m.author?.username || 'Message'))}
                             />
                             <p
                                 className={`text-xs text-gray-400 mt-1 ${
@@ -372,6 +396,7 @@ const ChatThreadView: React.FC<ChatThreadViewProps> = ({
                                                         )),
                                             )}
                                             onDeleteMessage={handleDeleteMessage}
+                                            onReplyMessage={() => onReplyMessage?.(replyDraftFromMessage(src, 'You'))}
                                         />
                                     );
                                 })}
@@ -429,6 +454,7 @@ const ChatThreadView: React.FC<ChatThreadViewProps> = ({
                                         roomId={rcChannelId}
                                         canDelete={false}
                                         onDeleteMessage={handleDeleteMessage}
+                                        onReplyMessage={() => onReplyMessage?.(replyDraftFromMessage(src, groupSenderLabel(src)))}
                                     />
                                 );
                             })}

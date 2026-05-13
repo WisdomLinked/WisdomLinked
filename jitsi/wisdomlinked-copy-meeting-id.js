@@ -1,4 +1,23 @@
 (function () {
+  /*
+   * WisdomLinked Jitsi customisation.
+   *
+   * This file is injected by the Jitsi web container through the mounted custom
+   * web directory on the WisdomComms server:
+   *   /root/.jitsi-meet-cfg/web/custom/index.html
+   *
+   * It reads `config.wisdomlinkedMeetingId` from the signed Jitsi URL hash and
+   * shows a moderator-only "Copy Meeting ID" control beside Jitsi's own
+   * participants-pane "Mute all" button. Jitsi rewrites the hash after join, so
+   * the meeting id is cached in sessionStorage for the lifetime of the tab.
+   *
+   * Rollback:
+   * 1. Remove the script tag with id/source for `wisdomlinked-copy-meeting-id.js`
+   *    from the mounted custom `index.html`.
+   * 2. Restore the backed-up `config.js` if toolbar button changes also need to
+   *    be reverted.
+   * 3. Reload the Jitsi web container or hard-refresh the browser cache.
+   */
   var BUTTON_ID = "wl-copy-meeting-id-button";
   var STORAGE_KEY = "wlCopyMeetingId";
 

@@ -32,6 +32,20 @@ const isCommunityModerator = (groupChat: any, userId: string): boolean => {
     return coMods.some((id: any) => String(id?._id ?? id) === me);
 };
 
+const normalizeId = (v: any): string => String(v?._id ?? v?.id ?? v ?? "").trim();
+
+const groupMemberIds = (groupChat: any): string[] => [
+    normalizeId(groupChat?.admin),
+    ...(Array.isArray(groupChat?.participants) ? groupChat.participants.map((p: any) => normalizeId(p)) : []),
+    ...(Array.isArray(groupChat?.coModerators) ? groupChat.coModerators.map((p: any) => normalizeId(p)) : []),
+].filter(Boolean);
+
+const userCanAccessGroupChat = (groupChat: any, userId: string, opts: { allowOpenCommunity?: boolean } = {}): boolean => {
+    if (!groupChat || !userId) return false;
+    if (groupMemberIds(groupChat).includes(String(userId))) return true;
+    return Boolean(opts.allowOpenCommunity && groupChat.type === "community" && groupChat.isOpenToAll === true);
+};
+
 async function syncCommunityRocketChannel(groupChatId: string) {
     try {
         const reloaded = await GroupChat.findById(groupChatId)
@@ -310,9 +324,15 @@ const joinCommunityChat = async (req, res) => {
                 error: 'Community chat not found'
             });
         }
+        if (!communityChat.isOpenToAll && !userCanAccessGroupChat(communityChat, String(userId))) {
+            return res.status(403).json({
+                status: 'FAIL',
+                error: 'This community is invite-only'
+            });
+        }
 
         // Add user to participants if not already present
-        if (!communityChat.participants.includes(userId)) {
+        if (!communityChat.participants.some((p: any) => normalizeId(p) === String(userId))) {
             communityChat.participants.push(userId);
             await communityChat.save();
         }
@@ -665,6 +685,7 @@ const createGroupChat = async (req, res) => {
 
 const getGroupChat = async (req, res) => {
     try {
+        const { userId } = req.user;
         const { groupChatId } = req.params;
 
         //check if groupchatID is i in porper format 
@@ -677,6 +698,9 @@ const getGroupChat = async (req, res) => {
 
         if (!groupChat) {
             return res.status(404).send("Sorry, Invalid meeting ID");
+        }
+        if (!userCanAccessGroupChat(groupChat, String(userId), { allowOpenCommunity: true })) {
+            return res.status(403).send("Forbidden");
         }
 
         return res.status(200).json(groupChat);
@@ -706,21 +730,18 @@ const resolveGroupMemberByRcSlug = async (req: any, res: any) => {
 
         const groupChat = await GroupChat.findById(groupChatId)
             .populate("participants", "email username rocketChatUsername image role status")
-            .populate("admin", "email username rocketChatUsername image role status");
+            .populate("admin", "email username rocketChatUsername image role status")
+            .populate("coModerators", "email username rocketChatUsername image role status");
         if (!groupChat) {
             return res.status(404).json({ error: "Group chat not found" });
         }
 
-        const uid = String(userId);
-        const isParticipant = (groupChat.participants as any[]).some(
-            (p: any) => String(p?._id ?? p) === uid
-        );
-        if (!isParticipant) {
+        if (!userCanAccessGroupChat(groupChat, String(userId))) {
             return res.status(403).json({ error: "Not a participant" });
         }
 
         const lower = slug.toLowerCase();
-        const pool: any[] = [...((groupChat.participants as any[]) || [])];
+        const pool: any[] = [...((groupChat.participants as any[]) || []), ...((groupChat.coModerators as any[]) || [])];
         const adm = groupChat.admin as any;
         if (adm && adm._id && !pool.some((p: any) => String(p?._id) === String(adm._id))) {
             pool.push(adm);
@@ -732,14 +753,6 @@ const resolveGroupMemberByRcSlug = async (req: any, res: any) => {
                     p?.email &&
                     toRocketChatUsername(String(p.email)).toLowerCase() === lower
             ) || null;
-
-        if (!match) {
-            match = await User.findOne({
-                $or: [{ rocketChatUsername: slug }, { rocketChatUsername: lower }],
-            })
-                .select("email username rocketChatUsername image role status")
-                .lean();
-        }
 
         if (!match) {
             return res.status(200).json({ user: null });
@@ -765,9 +778,11 @@ const joinGroupChat = async (req, res) => {
     try {
         const { userId } = req.user;
         const { groupChatId, payment_intent } = req.body;
+        if (!groupChatId || groupChatId.length !== 24) {
+            return res.status(400).send("Sorry, Invalid meeting ID");
+        }
 
-        // check if groupChat exists    
-        console.log('[joinGroupChat]', groupChatId, userId)
+        // check if groupChat exists
         const groupChat = await GroupChat.findOne({ _id: groupChatId });
         if (!groupChat) {
             return res.status(404).send("Sorry, Invalid meeting ID");
@@ -783,11 +798,14 @@ const joinGroupChat = async (req, res) => {
             return res.status(400).send("Sorry, the meeting is not active");
         }
 
-        if (groupChat.participants.includes(userId)) {
+        if (groupMemberIds(groupChat).includes(String(userId))) {
             return res.status(400).send("You are already a participant of this meeting");
         }
 
-        if (userId.role === 'customer') {
+        const currentUser = await User.findById(userId);
+        if (!currentUser) return res.status(404).send("User not found");
+
+        if (currentUser.role === 'customer') {
             const paymentIntentSucceeded_test = await checkPaymentIntentSucceeded(payment_intent, 'test')
             const paymentIntentSucceeded_live = await checkPaymentIntentSucceeded(payment_intent, 'live')
             if (groupChat.price && !paymentIntentSucceeded_test && !paymentIntentSucceeded_live) {
@@ -808,7 +826,6 @@ const joinGroupChat = async (req, res) => {
 
         }
 
-        const currentUser = await User.findById(userId);
         currentUser.groupChats.push(groupChatId);
         await currentUser.save();
         currentUser.populate(['events', 'keywords', 'services', 'groupChats'])
@@ -849,12 +866,16 @@ const updateGroupChat = async (req, res) => {
             throw new Error("Group ID is required");
         }
 
-        console.log(groupId, name, description, services, keywords, start, end, duration, price, type);
-
         const groupChat = await GroupChat.findById(groupId);
 
         if (!groupChat) {
             throw new Error("Group chat not found");
+        }
+        const canUpdate = groupChat.type === 'community'
+            ? isCommunityModerator(groupChat, String(userId))
+            : normalizeId(groupChat.admin) === String(userId);
+        if (!canUpdate) {
+            return res.status(403).send("Forbidden");
         }
 
         // Construct dynamic update object
@@ -867,15 +888,12 @@ const updateGroupChat = async (req, res) => {
         if (end !== undefined) updateFields.end = end;
         if (duration !== undefined) updateFields.duration = duration;
         if (price !== undefined) updateFields.price = price;
-        if (type !== undefined) updateFields.type = type;
+        if (type !== undefined && normalizeId(groupChat.admin) === String(userId)) updateFields.type = type;
         if (totalTimeSpent !== undefined) {
             //updateFields.totalTimeSpend = totalTimeSpent;
             const existingTotalTimeSpent = groupChat.totalTimeSpent || 0;
             updateFields.totalTimeSpent = existingTotalTimeSpent + totalTimeSpent;
         }
-
-        // Ensure admin is always updated
-        updateFields.admin = userId;
 
         // Update group chat with only provided fields
         await GroupChat.findByIdAndUpdate(groupId, updateFields, { new: true });
@@ -1123,6 +1141,9 @@ const leaveGroup = async (req, res) => {
 
         if (!currentUser) {
             return res.status(404).send("User not found");
+        }
+        if (!userCanAccessGroupChat(groupChat, String(userId))) {
+            return res.status(403).send("You are not a member of this group");
         }
 
         const isCommunity = groupChat.type === 'community';

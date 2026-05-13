@@ -6,7 +6,7 @@ import {
     getMeetingRatingState,
     submitMeetingRating,
 } from '../api/chatApi';
-import { ExternalLink, Video } from 'lucide-react';
+import { Video } from 'lucide-react';
 import { formatMessageTime } from '../utils/formatMessageTime';
 
 interface MeetingCardProps {
@@ -45,7 +45,6 @@ const formatStartedAtLocalTime = (value?: string | number | Date): string => {
 
 const MeetingCard: React.FC<MeetingCardProps> = ({
     meetingThreadId,
-    jitsiRoomName,
     starterName,
     startedAt,
     isEnded = false,
@@ -66,8 +65,6 @@ const MeetingCard: React.FC<MeetingCardProps> = ({
     const [submittingRating, setSubmittingRating] = useState(false);
     const [inviteBusy, setInviteBusy] = useState(false);
     const [joinBusy, setJoinBusy] = useState(false);
-    const jitsiDomain = process.env.REACT_APP_JITSI_DOMAIN || 'meet.wisdomlinked.com';
-    const fallbackJitsiUrl = `https://${jitsiDomain}/${jitsiRoomName}`;
     const openMeetingUrl = (jitsiUrl: string, pendingWindow: Window | null = null) => {
         if (pendingWindow && !pendingWindow.closed) {
             pendingWindow.location.href = jitsiUrl;
@@ -199,23 +196,6 @@ const MeetingCard: React.FC<MeetingCardProps> = ({
                         </button>
                     </div>
                 </div>
-                {jitsiRoomName ? (
-                    <div
-                        className={`px-4 pb-2 text-xs flex items-center gap-1.5 ${
-                            isDark ? 'text-blue-300' : 'text-blue-700'
-                        }`}
-                    >
-                        <ExternalLink className="h-3.5 w-3.5 flex-shrink-0" />
-                        <a
-                            href={fallbackJitsiUrl}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="underline underline-offset-2 hover:opacity-80"
-                        >
-                            WisdomLinked Meet
-                        </a>
-                    </div>
-                ) : null}
             </div>
         );
     }

@@ -1,9 +1,10 @@
 import React, { useState } from "react";
-import parse from 'html-react-parser';
-import { Check, Trash2 } from "lucide-react";
+import { Check, Reply, Trash2 } from "lucide-react";
 import { formatMessageTime } from '../../../../utils/formatMessageTime';
 import { Card, CardContent, Typography } from "@mui/material";
 import FilePreviewModal from "../../FilePreviewModal";
+import { renderSafeMessageHtml } from "../../../../utils/safeMessageHtml";
+import { resolveSafeChatFileUrl } from "../../../../utils/safeFileUrl";
 
 function DeliveryTicks({ status, theme }: { status?: string; theme?: string }) {
     if (!status) return null;
@@ -39,7 +40,7 @@ function DeliveryTicks({ status, theme }: { status?: string; theme?: string }) {
     );
 }
 
-const parseHtml = (html: string | undefined | null) => parse(html || '');
+const parseHtml = (html: string | undefined | null) => renderSafeMessageHtml(html);
 
 const Message = ({
     content,
@@ -53,6 +54,7 @@ const Message = ({
     canDelete,
     deleteForMeAvailable,
     onDeleteMessage,
+    onReplyMessage,
     threadBubbleShellClassName,
     showDeleteAffix,
 }: {
@@ -67,6 +69,7 @@ const Message = ({
     canDelete?: boolean;
     deleteForMeAvailable?: boolean;
     onDeleteMessage?: (messageId: string, mode: 'me' | 'both') => Promise<void>;
+    onReplyMessage?: () => void;
     threadBubbleShellClassName?: string;
     showDeleteAffix?: boolean;
     sameAuthor?: boolean;
@@ -86,6 +89,10 @@ const Message = ({
 
     const tryDelete = async (mode: 'me' | 'both') => {
         if (!onDeleteMessage || !messageId) return;
+        if (mode === 'both' && typeof window !== "undefined") {
+            const confirmed = window.confirm("Delete this message for everyone? This cannot be undone.");
+            if (!confirmed) return;
+        }
         setDeleting(true);
         try {
             await onDeleteMessage(String(messageId), mode);
@@ -96,8 +103,8 @@ const Message = ({
     };
 
     const handleDownload = () => {
-        // Open file in new tab for download
-        window.open(fileUrl, '_blank');
+        if (!safeFileUrl) return;
+        window.open(safeFileUrl, '_blank', 'noopener,noreferrer');
     };  
 
     const isCallDurationMessage =
@@ -106,6 +113,7 @@ const Message = ({
     const isFile = content.startsWith("Chatfile: ");
     const fileUrl = isFile ? content.replace("Chatfile: ", "").split("#####")[0] : "";
     const fileName = isFile ? content.split("#####")[1] : "";
+    const safeFileUrl = resolveSafeChatFileUrl(fileUrl);
 
     if( isCallDurationMessage && content.includes("#####") )
     {
@@ -127,12 +135,30 @@ const Message = ({
     const useThreadBubble =
         Boolean(threadBubbleShellClassName) && !isFile && !isCallDurationMessage;
 
+    const renderReplyAction = () => {
+        if (!onReplyMessage || !messageId || String(messageId).startsWith('temp-')) return null;
+        return (
+            <button
+                type="button"
+                onClick={onReplyMessage}
+                className={`shrink-0 rounded p-1 ${theme === "light" ? "text-slate-500 hover:bg-slate-100" : "text-slate-400 hover:bg-white/10"}`}
+                title="Reply to message"
+                aria-label="Reply to message"
+            >
+                <Reply className="h-3.5 w-3.5" />
+            </button>
+        );
+    };
+
     if (incomingMessage && useThreadBubble) {
         return (
-            <div
-                className={`min-w-0 max-w-full px-2 py-1.5 text-sm leading-5 shadow-sm break-words whitespace-pre-wrap ${threadBubbleShellClassName}`}
-            >
-                {parseHtml(content)}
+            <div className="flex min-w-0 max-w-full items-end gap-1">
+                <div
+                    className={`chat-message-rich min-w-0 max-w-full px-2 py-1.5 text-sm leading-5 shadow-sm break-words whitespace-pre-wrap ${threadBubbleShellClassName}`}
+                >
+                    {parseHtml(content)}
+                </div>
+                {renderReplyAction()}
             </div>
         );
     }
@@ -201,7 +227,8 @@ const Message = ({
                         <div className="flex">
                             {/* Preview section */}
                             <button
-                            onClick={() => setShowPreview(true)}
+                            onClick={() => safeFileUrl && setShowPreview(true)}
+                            disabled={!safeFileUrl}
                             style={{ backgroundColor: '#227768' }}
                             className="flex items-center gap-2 text-white font-semibold px-4 py-1.5 rounded-l-lg shadow-md hover:brightness-90 transition text-sm"
                             >
@@ -211,6 +238,7 @@ const Message = ({
                             {/* Download section */}
                             <button
                             onClick={handleDownload}
+                            disabled={!safeFileUrl}
                             style={{ backgroundColor: '#227768' }}
                             className="flex items-center px-3 py-1.5 text-white font-semibold rounded-r-lg shadow-md hover:brightness-90 transition text-sm"
                             title="Download file"
@@ -220,7 +248,7 @@ const Message = ({
 
                             {showPreview && (
                             <FilePreviewModal
-                                fileUrl={fileUrl}
+                                fileUrl={safeFileUrl || ""}
                                 fileName={fileName}
                                 onClose={() => setShowPreview(false)}
                             />
@@ -275,9 +303,10 @@ const Message = ({
         if (useThreadBubble) {
             return (
                 <div className="flex min-w-0 max-w-full items-end justify-end gap-1">
+                    {renderReplyAction()}
                     {showDeleteAffix ? renderDeleteActions() : null}
                     <div
-                        className={`min-w-0 max-w-full px-2 py-1.5 text-sm leading-5 shadow-sm break-words whitespace-pre-wrap ${threadBubbleShellClassName}`}
+                        className={`chat-message-rich min-w-0 max-w-full px-2 py-1.5 text-sm leading-5 shadow-sm break-words whitespace-pre-wrap ${threadBubbleShellClassName}`}
                     >
                         {parseHtml(content)}
                     </div>
@@ -295,13 +324,14 @@ const Message = ({
                         </div>
                     ) : null}
                     <div className="flex min-w-0 items-end gap-1">
+                        {renderReplyAction()}
                         {renderDeleteActions()}
                         <div
                             className={`min-w-0 max-w-full rounded-[13px] px-2 py-1.5 text-[14px] leading-[20px] shadow-sm ${
                                 theme === "light" ? "text-white bg-[#234C6A]" : "text-white bg-[#234C6A]"
                             }`}
                         >
-                            <div className="break-words whitespace-pre-wrap">
+                            <div className="chat-message-rich break-words whitespace-pre-wrap">
                                 {parseHtml(content)}
                             </div>
                         </div>
@@ -323,6 +353,7 @@ const Message = ({
 
                 {/* If it's a call-duration message, show the special template */}
                 {isCallDurationMessage ? (
+                    <div className="flex items-end gap-1">
                     <Card
                         sx={{
                             backgroundColor: "#222222",
@@ -340,12 +371,15 @@ const Message = ({
                             </Typography>
                         </CardContent>
                     </Card>
+                    {renderReplyAction()}
+                    </div>
                     ) : isFile ? (
                         <div className="chat_value_container flex flex-col items-start px-1 py-1">
-                            <div className="flex">
+                            <div className="flex items-end gap-1">
                                 {/* Preview section */}
                                 <button
-                                onClick={() => setShowPreview(true)}
+                                onClick={() => safeFileUrl && setShowPreview(true)}
+                                disabled={!safeFileUrl}
                                 style={{ backgroundColor: '#227768' }}
                                 className="flex items-center gap-2 text-white font-semibold px-4 py-1.5 rounded-l-lg shadow-md hover:brightness-90 transition text-sm"
                                 >
@@ -355,6 +389,7 @@ const Message = ({
                                 {/* Download section */}
                                 <button
                                 onClick={handleDownload}
+                                disabled={!safeFileUrl}
                                 style={{ backgroundColor: '#227768' }}
                                 className="flex items-center px-3 py-1.5 text-white font-semibold rounded-r-lg shadow-md hover:brightness-90 transition text-sm"
                                 title="Download file"
@@ -364,25 +399,29 @@ const Message = ({
 
                                 {showPreview && (
                                 <FilePreviewModal
-                                    fileUrl={fileUrl}
+                                    fileUrl={safeFileUrl || ""}
                                     fileName={fileName}
                                     onClose={() => setShowPreview(false)}
                                 />
                                 )}
+                                {renderReplyAction()}
                             </div>
                         </div>
                 ) : (
                     // Otherwise, show the regular incoming message bubble
-                    <div
-                        className={`min-w-0 max-w-full rounded-[13px] px-2 py-1.5 text-[14px] leading-[20px] shadow-sm ${
-                            theme === "light"
-                                ? "text-[#234C6A] bg-[#D9EAFD] border border-[#BCD6EA]"
-                                : "text-white bg-[#456882]"
-                        }`}
-                    >
-                        <div className="break-words whitespace-pre-wrap">
-                            {parseHtml(content)}
+                    <div className="flex min-w-0 items-end gap-1">
+                        <div
+                            className={`min-w-0 max-w-full rounded-[13px] px-2 py-1.5 text-[14px] leading-[20px] shadow-sm ${
+                                theme === "light"
+                                    ? "text-[#234C6A] bg-[#D9EAFD] border border-[#BCD6EA]"
+                                    : "text-white bg-[#456882]"
+                            }`}
+                        >
+                            <div className="chat-message-rich break-words whitespace-pre-wrap">
+                                {parseHtml(content)}
+                            </div>
                         </div>
+                        {renderReplyAction()}
                     </div>
                 )}
             </div>

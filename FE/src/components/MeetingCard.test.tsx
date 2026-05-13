@@ -16,7 +16,7 @@ describe("MeetingCard", () => {
     } as unknown as Window);
   });
 
-  it("renders call join CTA and room link for active meetings", () => {
+  it("renders call join CTA without exposing a raw room link", () => {
     render(
       <MeetingCard
         meetingThreadId="t1"
@@ -28,8 +28,7 @@ describe("MeetingCard", () => {
     );
 
     expect(screen.getByText("Join call")).toBeInTheDocument();
-    const link = screen.getByRole("link", { name: /wisdomlinked meet/i });
-    expect(link).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /wisdomlinked meet/i })).not.toBeInTheDocument();
   });
 
   it("shows meeting start local time when provided", () => {
