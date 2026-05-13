@@ -1,6 +1,7 @@
 import React, { useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { X, Users, Sparkles, Globe, Lock, Info } from "lucide-react";
+import { collectProfileOptionLabels } from "../../../../utils/chatProfileModal";
 
 interface CommunityProfileModalProps {
     isOpen: boolean;
@@ -14,29 +15,11 @@ const ACCENT = "#234C6A";
 const ACCENT_SOFT = "#E8EEF4";
 
 function collectMajorLabels(group: Record<string, any> | null | undefined): string[] {
-    if (!group) return [];
-    const out: string[] = [];
-    const push = (s: unknown) => {
-        const v = typeof s === "string" ? s.trim() : "";
-        if (v && !out.includes(v)) out.push(v);
-    };
-    (group.keywords ?? []).forEach((k: any) => {
-        if (k && typeof k === "object") push(k.label ?? k.value);
-    });
-    return out;
+    return collectProfileOptionLabels(group?.keywords);
 }
 
 function collectServiceLabels(group: Record<string, any> | null | undefined): string[] {
-    if (!group) return [];
-    const out: string[] = [];
-    const push = (s: unknown) => {
-        const v = typeof s === "string" ? s.trim() : "";
-        if (v && !out.includes(v)) out.push(v);
-    };
-    (group.services ?? []).forEach((s: any) => {
-        if (s && typeof s === "object") push(s.label ?? s.value);
-    });
-    return out;
+    return collectProfileOptionLabels(group?.services);
 }
 
 const CommunityProfileModal: React.FC<CommunityProfileModalProps> = ({

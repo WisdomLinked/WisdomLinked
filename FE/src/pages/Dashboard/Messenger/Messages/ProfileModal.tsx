@@ -6,6 +6,7 @@ import { getAvatarTitle } from "../../../../actions/common";
 import { resolveProfileImageSrc } from "../../../../utils/profileImage";
 import FilePreviewModal from "../../FilePreviewModal";
 import { hasResumeForPreview, resolveResumePublicUrl } from "../../../../utils/resumeUrl";
+import { collectProfileOptionLabels } from "../../../../utils/chatProfileModal";
 
 interface ProfileModalProps {
     isOpen: boolean;
@@ -31,30 +32,12 @@ function roleLabelFromUser(role: unknown): string {
 
 /** Majors (keywords) from populated User doc. */
 function collectMajorLabels(user: Record<string, any> | null | undefined): string[] {
-    if (!user) return [];
-    const out: string[] = [];
-    const push = (s: unknown) => {
-        const v = typeof s === "string" ? s.trim() : "";
-        if (v && !out.includes(v)) out.push(v);
-    };
-    (user.keywords ?? []).forEach((k: any) => {
-        if (k && typeof k === "object") push(k.label ?? k.value);
-    });
-    return out;
+    return collectProfileOptionLabels(user?.keywords);
 }
 
 /** Services from populated User doc. */
 function collectServiceLabels(user: Record<string, any> | null | undefined): string[] {
-    if (!user) return [];
-    const out: string[] = [];
-    const push = (s: unknown) => {
-        const v = typeof s === "string" ? s.trim() : "";
-        if (v && !out.includes(v)) out.push(v);
-    };
-    (user.services ?? []).forEach((svc: any) => {
-        if (svc && typeof svc === "object") push(svc.label ?? svc.value);
-    });
-    return out;
+    return collectProfileOptionLabels(user?.services);
 }
 
 function maskEmailForPrivacy(email: unknown): string {

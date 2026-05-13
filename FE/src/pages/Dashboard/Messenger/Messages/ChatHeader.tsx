@@ -32,12 +32,12 @@ export function getStatusLabel(status: 'online' | 'offline' | 'away', lastSeen?:
     if (lastSeen != null && !Number.isNaN(lastSeen.getTime())) {
         const clock = format(lastSeen, 'h:mm a');
         if (isToday(lastSeen)) {
-            return `Last seen today at ${clock}`;
+            return `Offline - last seen today at ${clock}`;
         }
         if (isYesterday(lastSeen)) {
-            return `Last seen yesterday at ${clock}`;
+            return `Offline - last seen yesterday at ${clock}`;
         }
-        return `Last seen ${format(lastSeen, 'MMMM d')} at ${clock}`;
+        return `Offline - last seen ${format(lastSeen, 'MMMM d')} at ${clock}`;
     }
     return 'Offline';
 }
