@@ -1,6 +1,5 @@
 (function () {
   var BUTTON_ID = "wl-copy-meeting-id-button";
-  var STYLE_ID = "wl-copy-meeting-id-style";
   var STORAGE_KEY = "wlCopyMeetingId";
 
   function hashValue(name) {
@@ -53,14 +52,6 @@
   }
   var cachedModerator = isModerator();
 
-  function ensureStyle() {
-    if (document.getElementById(STYLE_ID)) return;
-    var style = document.createElement("style");
-    style.id = STYLE_ID;
-    style.textContent = "#" + BUTTON_ID + "{position:fixed;left:16px;top:76px;z-index:2147483647;border:0;border-radius:10px;background:#234C6A;color:#fff;padding:10px 14px;font:600 13px/1.2 system-ui,-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;box-shadow:0 8px 24px rgba(0,0,0,.25);cursor:pointer}#" + BUTTON_ID + ":hover{filter:brightness(1.08)}#" + BUTTON_ID + ":active{transform:translateY(1px)}";
-    document.head.appendChild(style);
-  }
-
   function fallbackCopy(text) {
     var el = document.createElement("textarea");
     el.value = text;
@@ -93,6 +84,27 @@
     done();
   }
 
+  function findMuteAllButton() {
+    var buttons = Array.prototype.slice.call(document.querySelectorAll("button"));
+    return buttons.find(function (button) {
+      var text = (button.textContent || "").replace(/\s+/g, " ").trim().toLowerCase();
+      var label = (button.getAttribute("aria-label") || "").replace(/\s+/g, " ").trim().toLowerCase();
+      return text === "mute all" || label === "mute all";
+    }) || null;
+  }
+
+  function stylePaneButton(button) {
+    button.style.border = "0";
+    button.style.borderRadius = "6px";
+    button.style.background = "#234C6A";
+    button.style.color = "#fff";
+    button.style.padding = "8px 12px";
+    button.style.font = "600 12px/1.2 system-ui,-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif";
+    button.style.cursor = "pointer";
+    button.style.marginRight = "8px";
+    button.style.whiteSpace = "nowrap";
+  }
+
   function syncButton() {
     var meetingId = hashValue("config.wisdomlinkedMeetingId") || cachedMeetingId;
     if (meetingId && meetingId !== cachedMeetingId) {
@@ -108,15 +120,26 @@
       if (existing) existing.remove();
       return;
     }
-    ensureStyle();
-    if (existing) return;
+    var muteAllButton = findMuteAllButton();
+    if (!muteAllButton || !muteAllButton.parentElement) {
+      if (existing) existing.remove();
+      return;
+    }
+    if (existing) {
+      if (existing.parentElement !== muteAllButton.parentElement) {
+        existing.remove();
+      } else {
+        return;
+      }
+    }
     var button = document.createElement("button");
     button.id = BUTTON_ID;
     button.type = "button";
     button.textContent = "Copy Meeting ID";
     button.title = "Copy WisdomLinked meeting ID";
+    stylePaneButton(button);
     button.addEventListener("click", function () { copyMeetingId(meetingId, button); });
-    document.body.appendChild(button);
+    muteAllButton.parentElement.insertBefore(button, muteAllButton);
   }
 
   window.addEventListener("hashchange", syncButton);
