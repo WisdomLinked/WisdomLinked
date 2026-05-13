@@ -1,6 +1,7 @@
 (function () {
   var BUTTON_ID = "wl-copy-meeting-id-button";
   var STYLE_ID = "wl-copy-meeting-id-style";
+  var STORAGE_KEY = "wlCopyMeetingId";
 
   function hashValue(name) {
     var raw = window.location.hash ? window.location.hash.slice(1) : "";
@@ -42,11 +43,21 @@
     return Boolean(payload && (payload.moderator === true || (user && (user.moderator === true || user.role === "moderator"))));
   }
 
+  var cachedMeetingId = hashValue("config.wisdomlinkedMeetingId") || window.sessionStorage.getItem(STORAGE_KEY) || "";
+  if (cachedMeetingId) {
+    try {
+      window.sessionStorage.setItem(STORAGE_KEY, cachedMeetingId);
+    } catch (e) {
+      // Ignore private-mode/session-storage failures; the in-memory value still works.
+    }
+  }
+  var cachedModerator = isModerator();
+
   function ensureStyle() {
     if (document.getElementById(STYLE_ID)) return;
     var style = document.createElement("style");
     style.id = STYLE_ID;
-    style.textContent = "#" + BUTTON_ID + "{position:fixed;right:16px;bottom:92px;z-index:2147483647;border:0;border-radius:10px;background:#234C6A;color:#fff;padding:10px 14px;font:600 13px/1.2 system-ui,-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;box-shadow:0 8px 24px rgba(0,0,0,.25);cursor:pointer}#" + BUTTON_ID + ":hover{filter:brightness(1.08)}#" + BUTTON_ID + ":active{transform:translateY(1px)}";
+    style.textContent = "#" + BUTTON_ID + "{position:fixed;right:16px;top:76px;z-index:2147483647;border:0;border-radius:10px;background:#234C6A;color:#fff;padding:10px 14px;font:600 13px/1.2 system-ui,-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;box-shadow:0 8px 24px rgba(0,0,0,.25);cursor:pointer}#" + BUTTON_ID + ":hover{filter:brightness(1.08)}#" + BUTTON_ID + ":active{transform:translateY(1px)}";
     document.head.appendChild(style);
   }
 
@@ -83,9 +94,17 @@
   }
 
   function syncButton() {
-    var meetingId = hashValue("config.wisdomlinkedMeetingId");
+    var meetingId = hashValue("config.wisdomlinkedMeetingId") || cachedMeetingId;
+    if (meetingId && meetingId !== cachedMeetingId) {
+      cachedMeetingId = meetingId;
+      try {
+        window.sessionStorage.setItem(STORAGE_KEY, meetingId);
+      } catch (e) {
+        // Ignore private-mode/session-storage failures; the in-memory value still works.
+      }
+    }
     var existing = document.getElementById(BUTTON_ID);
-    if (!meetingId || !isModerator()) {
+    if (!meetingId || !cachedModerator) {
       if (existing) existing.remove();
       return;
     }
