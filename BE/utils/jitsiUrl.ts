@@ -14,6 +14,7 @@ export const appendJitsiMobileWebOverrides = (
     url: string,
     returnUrl?: string,
     whiteboardEnabled: boolean = true,
+    wisdomlinkedMeetingId?: string,
 ): string => {
     const base = String(url || "").trim();
     if (!base) return base;
@@ -21,6 +22,10 @@ export const appendJitsiMobileWebOverrides = (
         ...MOBILE_WEB_OVERRIDES,
         `config.whiteboard.enabled=${whiteboardEnabled ? "true" : "false"}`,
     ];
+    const meetingId = String(wisdomlinkedMeetingId || "").trim();
+    if (meetingId) {
+        overrides.push(`config.wisdomlinkedMeetingId=${encodeURIComponent(meetingId)}`);
+    }
     const normalizedReturnUrl = String(returnUrl || "").trim();
     if (normalizedReturnUrl) {
         // Let server-side close-page config handle post-hangup redirect.

@@ -331,7 +331,7 @@ const MessagesHeader = ({ scrollPosition, events, openCalendarModal, openSeminar
         && (isGroupAdmin || groupCoModeratorIds.has(String(userDetails?._id || "")));
 
     const peerRoleLower = String(chosenChatDetails?.peerRole || "").toLowerCase();
-    /** Students never start Meet calls to experts; text chat stays enabled in the thread below. */
+    /** Students never start Meet calls to experts; all other DM role combinations can ask the backend to start. */
     const studentCannotStartDmVideoToExpert =
         String(userDetails?.role || "").toLowerCase() === "customer" && peerRoleLower === "expert";
 
@@ -426,10 +426,10 @@ const MessagesHeader = ({ scrollPosition, events, openCalendarModal, openSeminar
                                         videoTitle={
                                             studentCannotStartDmVideoToExpert
                                                 ? "Only your expert can start a video or audio call. You can keep messaging in this chat."
-                                                : undefined
+                                                : !conversationId
+                                                  ? "Chat is still loading — try again in a moment"
+                                                  : "Start call"
                                         }
-                                        onPhoneClick={() => void handleDmStartVideoOrVoice()}
-                                        phoneDisabled={!conversationId || studentCannotStartDmVideoToExpert}
                                         onMoreClick={() => set_buttonsModalShow(true)}
                                     />
                                 );
@@ -483,11 +483,11 @@ const MessagesHeader = ({ scrollPosition, events, openCalendarModal, openSeminar
                             title={
                                 studentCannotStartDmVideoToExpert
                                     ? "Only your expert can start a video or audio call. You can keep messaging in this chat."
-                                    : undefined
+                                    : !conversationId
+                                      ? "Chat is still loading — try again in a moment"
+                                      : "Start call"
                             }
-                            disabled={
-                                !conversationId || studentCannotStartDmVideoToExpert
-                            }
+                            disabled={!conversationId || studentCannotStartDmVideoToExpert}
                             onClick={async () => {
                                 const pendingWindow = window.open("", "_blank");
                                 if (enabledEvent) {
@@ -553,7 +553,7 @@ const MessagesHeader = ({ scrollPosition, events, openCalendarModal, openSeminar
                 {
                     chosenGroupChatDetails && !chosenGroupChatDetails?.duration ? (
                         <div className="flex items-center justify-end">
-                            {isGroupAdmin ? (
+                            {isGroupAdmin || isCommunityModerator ? (
                                 <IconButton
                                     style={{ color: theme === "light" ? "#0f172a" : "white" }}
                                     title="Start a group video call (WisdomLinked Meet)"

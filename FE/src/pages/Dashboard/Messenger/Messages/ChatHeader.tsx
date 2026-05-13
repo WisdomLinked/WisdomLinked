@@ -1,6 +1,6 @@
 import React from 'react';
 import { format, isToday, isYesterday } from 'date-fns';
-import { Video, Phone, MoreHorizontal } from 'lucide-react';
+import { Video, MoreHorizontal } from 'lucide-react';
 
 export interface ChatHeaderProps {
     name: string;
@@ -17,8 +17,6 @@ type ChatHeaderInnerProps = ChatHeaderProps & {
     onVideoClick?: () => void;
     videoDisabled?: boolean;
     videoTitle?: string;
-    onPhoneClick?: () => void;
-    phoneDisabled?: boolean;
     onMoreClick?: () => void;
 };
 
@@ -54,8 +52,6 @@ const ChatHeader: React.FC<ChatHeaderInnerProps> = ({
     onVideoClick,
     videoDisabled,
     videoTitle,
-    onPhoneClick,
-    phoneDisabled,
     onMoreClick,
 }) => {
     const statusText = getStatusLabel(status, lastSeen);
@@ -101,16 +97,6 @@ const ChatHeader: React.FC<ChatHeaderInnerProps> = ({
                     className={`${actionIconBtnClass} disabled:pointer-events-none disabled:opacity-50`}
                 >
                     <Video size={18} />
-                </button>
-                <button
-                    type="button"
-                    aria-label="Start voice call"
-                    title={videoTitle}
-                    disabled={phoneDisabled}
-                    onClick={onPhoneClick}
-                    className={`${actionIconBtnClass} disabled:pointer-events-none disabled:opacity-50`}
-                >
-                    <Phone size={18} />
                 </button>
                 <button
                     type="button"

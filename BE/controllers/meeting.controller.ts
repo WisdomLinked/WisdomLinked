@@ -30,7 +30,7 @@ const normalizeId = (v: any): string => String(v?._id ?? v?.id ?? v ?? '').trim(
 const buildSignedJitsiUrl = (
     roomName: string,
     userLike: any,
-    opts?: { moderator?: boolean; guest?: boolean; expiresInSeconds?: number },
+    opts?: { moderator?: boolean; guest?: boolean; expiresInSeconds?: number; meetingThreadId?: string },
 ): string => {
     const base = `https://${JITSI_DOMAIN}/${roomName}`;
     const moderator = Boolean(opts?.moderator);
@@ -38,7 +38,7 @@ const buildSignedJitsiUrl = (
     // Keep whiteboard visible for all participants; moderator role controls moderation actions.
     const whiteboardEnabled = true;
     if (!JITSI_JWT_SECRET) {
-        return appendJitsiMobileWebOverrides(base, MEETING_RETURN_URL, whiteboardEnabled);
+        return appendJitsiMobileWebOverrides(base, MEETING_RETURN_URL, whiteboardEnabled, opts?.meetingThreadId);
     }
     const nowSec = Math.floor(Date.now() / 1000);
     const exp = nowSec + Number(opts?.expiresInSeconds || 2 * 60 * 60);
@@ -84,6 +84,7 @@ const buildSignedJitsiUrl = (
         `${base}?jwt=${encodeURIComponent(token)}`,
         MEETING_RETURN_URL,
         whiteboardEnabled,
+        opts?.meetingThreadId,
     );
 };
 
@@ -249,6 +250,7 @@ export const startMeeting = async (req: any, res: Response) => {
                 groupAdminId,
             }),
             guest: false,
+            meetingThreadId: String(meetingThread._id),
         });
         return res.status(200).json({
             meetingThreadId: meetingThread._id,
@@ -581,6 +583,7 @@ export const resolveMeetingGuestInvite = async (req: Request, res: Response) => 
             guest: true,
             moderator: false,
             expiresInSeconds: Math.max(5 * 60, Math.floor((new Date(invite.expiresAt).getTime() - Date.now()) / 1000)),
+            meetingThreadId: String(invite.meetingThreadId),
         });
         return res.status(200).json({
             success: true,
@@ -634,6 +637,7 @@ export const joinMeetingFromGuestInvite = async (req: any, res: Response) => {
             // Any authenticated account with a valid invite joins as participant.
             moderator: false,
             guest: false,
+            meetingThreadId: String(invite.meetingThreadId),
         });
 
         meeting.joinEvents = Array.isArray(meeting.joinEvents) ? meeting.joinEvents : [];
@@ -689,6 +693,7 @@ export const getMeetingJoinInfo = async (req: any, res: Response) => {
         const jitsiUrl = buildSignedJitsiUrl(String(meeting.jitsiRoomName), me, {
             moderator: auth.moderator,
             guest: false,
+            meetingThreadId: String(meetingThreadId),
         });
         meeting.joinEvents = Array.isArray(meeting.joinEvents) ? meeting.joinEvents : [];
         meeting.joinEvents.push({

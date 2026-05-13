@@ -37,6 +37,19 @@ test("adds application return URL overrides when provided", () => {
     );
 });
 
+test("adds WisdomLinked meeting id for Jitsi UI customization", () => {
+    const url = appendJitsiMobileWebOverrides(
+        "https://meet.wisdomlinked.com/room-123?jwt=abc",
+        undefined,
+        true,
+        "meeting-thread-123",
+    );
+    assert.equal(
+        url,
+        "https://meet.wisdomlinked.com/room-123?jwt=abc#config.disableDeepLinking=true&config.deeplinking.disabled=true&config.disableInviteFunctions=true&config.securityUi.enabled=false&interfaceConfig.HIDE_INVITE_MORE_HEADER=true&interfaceConfig.MOBILE_APP_PROMO=true&config.whiteboard.enabled=true&config.wisdomlinkedMeetingId=meeting-thread-123",
+    );
+});
+
 test("disables whiteboard when explicitly requested", () => {
     const url = appendJitsiMobileWebOverrides(
         "https://meet.wisdomlinked.com/room-123?jwt=abc",
