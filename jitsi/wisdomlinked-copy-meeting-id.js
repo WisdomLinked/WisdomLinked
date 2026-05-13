@@ -96,8 +96,8 @@
   function stylePaneButton(button) {
     button.style.border = "0";
     button.style.borderRadius = "6px";
-    button.style.background = "#234C6A";
-    button.style.color = "#fff";
+    button.style.background = "#fff";
+    button.style.color = "#111";
     button.style.padding = "8px 12px";
     button.style.font = "600 12px/1.2 system-ui,-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif";
     button.style.cursor = "pointer";
