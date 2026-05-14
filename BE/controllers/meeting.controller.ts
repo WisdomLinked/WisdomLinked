@@ -1,5 +1,11 @@
 import { Request, Response } from 'express';
-import { getOrCreateDMChannel, sendMessageToRC, toRocketChatUsername, syncRocketGroupChannelMembers } from '../services/rocketchat.service';
+import {
+    getOrCreateDMChannel,
+    sendMessageToRC,
+    toRocketChatUsername,
+    syncRocketGroupChannelMembers,
+    wlHtmlToPlainTextForRocketChat,
+} from '../services/rocketchat.service';
 import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
 
@@ -13,6 +19,8 @@ import { buildMeetingRoomName, canStartGroupMeeting } from '../utils/meetingMode
 import { appendJitsiMobileWebOverrides } from '../utils/jitsiUrl';
 import { isMeetingModerator, isMeetingModeratorWithDelegates } from '../utils/meetingRoleRules';
 import { buildMeetingInviteUrl, resolvePublicAppBaseUrl } from '../utils/inviteUrl';
+import { wlDisplayName } from '../utils/wlDisplayName';
+import { encodeMeetingChatLine } from '../utils/meetingChatPayload';
 
 const JITSI_DOMAIN = process.env.JITSI_DOMAIN || 'meet.wisdomlinked.com';
 const FRONTEND_BASE_URL = process.env.FRONTEND_BASE_URL || process.env.FE_URL || process.env.REACT_APP_URL || '';
@@ -443,6 +451,115 @@ export const addTranscriptMessage = async (req: any, res: Response) => {
         return res.status(200).json({ success: true });
     } catch (err: any) {
         console.error('[meeting.transcript]', err.message);
+        return res.status(500).json({ error: err.message });
+    }
+};
+
+const MAX_MEETING_CHAT_BODY = 3000;
+const MAX_MEETING_CHAT_AUTHOR = 80;
+
+function sanitizeMeetingChatBody(raw: unknown): string {
+    const t = wlHtmlToPlainTextForRocketChat(String(raw ?? ''));
+    const trimmed = t.trim();
+    if (!trimmed) return '';
+    return trimmed.length > MAX_MEETING_CHAT_BODY ? trimmed.slice(0, MAX_MEETING_CHAT_BODY) : trimmed;
+}
+
+/**
+ * POST /api/meeting/chat-sync
+ * Mirror an in-call line into Rocket.Chat (parent DM or group) and append Mongo transcript.
+ * Authenticated joined participants only.
+ * Body: { meetingThreadId, content }
+ */
+export const syncMeetingChatMessage = async (req: any, res: Response) => {
+    try {
+        const { userId } = req.user;
+        const { meetingThreadId, content } = req.body;
+
+        if (!meetingThreadId || content == null || String(content).trim() === '') {
+            return res.status(400).json({ error: 'meetingThreadId and content are required' });
+        }
+
+        const meeting = await MeetingThread.findById(meetingThreadId);
+        if (!meeting) return res.status(404).json({ error: 'Meeting not found' });
+        if (await expireStaleMeetingIfNeeded(meeting)) {
+            return res.status(400).json({ error: 'Meeting is no longer active' });
+        }
+        if (meeting.status !== 'active') {
+            return res.status(400).json({ error: 'Meeting is no longer active' });
+        }
+
+        const access = await requireMeetingAccess(meeting, String(userId));
+        if (!access.allowed) return res.status(403).json({ error: access.error || 'You do not have access to this meeting' });
+        if (isRemovedFromMeeting(meeting, String(userId))) {
+            return res.status(403).json({ error: 'You were removed from this meeting' });
+        }
+        if (!hasJoinedMeeting(meeting, String(userId))) {
+            return res.status(403).json({ error: 'Only joined meeting participants can sync meeting chat' });
+        }
+
+        const msg = sanitizeMeetingChatBody(content);
+        if (!msg) return res.status(400).json({ error: 'content is empty after sanitization' });
+
+        const me = await User.findById(userId);
+        if (!me?.email) return res.status(400).json({ error: 'User profile incomplete' });
+        const author =
+            wlDisplayName(me).trim().slice(0, MAX_MEETING_CHAT_AUTHOR) ||
+            String(me.username || '').trim().slice(0, MAX_MEETING_CHAT_AUTHOR) ||
+            'Member';
+        const rcLine = encodeMeetingChatLine(String(meeting._id), { v: 1, author, guest: false, msg });
+
+        let rcMessageId: string | null = null;
+
+        if (meeting.conversationId) {
+            const conversation = await Conversation.findById(meeting.conversationId);
+            if (!conversation) return res.status(404).json({ error: 'Conversation not found' });
+            const otherUserId = conversation.participants.find((p: any) => String(p) !== String(userId));
+            const other = otherUserId ? await User.findById(otherUserId) : null;
+            if (!other?.email) return res.status(500).json({ error: 'Could not resolve conversation peer' });
+            const rcChannelId = await getOrCreateDMChannel(
+                toRocketChatUsername(me.email),
+                toRocketChatUsername(other.email),
+            );
+            if (rcChannelId) {
+                rcMessageId = await sendMessageToRC(rcChannelId, rcLine, me.username, me.email);
+            }
+        } else if (meeting.groupChatId) {
+            const groupChat = await GroupChat.findById(meeting.groupChatId)
+                .populate('participants', 'email')
+                .populate('admin', 'email');
+            if (!groupChat) return res.status(404).json({ error: 'Group chat not found' });
+            const emails: string[] = [];
+            for (const p of groupChat.participants || []) {
+                if ((p as any)?.email) emails.push(String((p as any).email).toLowerCase());
+            }
+            const adm = groupChat.admin as any;
+            if (adm?.email) emails.push(String(adm.email).toLowerCase());
+            const rcChannelId = await syncRocketGroupChannelMembers(String(meeting.groupChatId), emails);
+            if (rcChannelId) {
+                rcMessageId = await sendMessageToRC(rcChannelId, rcLine, me.username, me.email);
+            }
+        }
+
+        if (!rcMessageId) {
+            return res.status(502).json({ error: 'Could not post meeting chat to messenger' });
+        }
+
+        if (!meeting.participants.some((p: any) => p.toString() === userId)) {
+            meeting.participants.push(userId);
+        }
+
+        meeting.transcript.push({
+            author: userId,
+            authorName: author,
+            content: msg,
+            createdAt: new Date(),
+        });
+        await meeting.save();
+
+        return res.status(200).json({ success: true, messageId: rcMessageId });
+    } catch (err: any) {
+        console.error('[meeting.chat-sync]', err.message);
         return res.status(500).json({ error: err.message });
     }
 };

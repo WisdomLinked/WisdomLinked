@@ -270,13 +270,24 @@ export const endMeeting = async (meetingThreadId: string) => {
     }
 };
 
-/** Send a chat transcript message from a Jitsi call. */
+/** Send a chat transcript message from a Jitsi call (Mongo transcript only). */
 export const addMeetingTranscript = async (meetingThreadId: string, content: string, authorName: string) => {
     try {
         const res = await api.post('meeting/transcript', { meetingThreadId, content, authorName });
         return res.data;
     } catch (err: any) {
         console.error('[chatApi.addMeetingTranscript]', err.message);
+        return null;
+    }
+};
+
+/** Mirror in-meeting text into the parent DM/group Rocket.Chat thread (authenticated). */
+export const syncMeetingChatMessage = async (meetingThreadId: string, content: string) => {
+    try {
+        const res = await api.post('meeting/chat-sync', { meetingThreadId, content });
+        return res.data as { success?: boolean; messageId?: string; error?: string };
+    } catch (err: any) {
+        console.error('[chatApi.syncMeetingChatMessage]', err.message);
         return null;
     }
 };

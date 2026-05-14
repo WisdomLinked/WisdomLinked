@@ -1,4 +1,5 @@
 import React, { useMemo } from 'react';
+import { Video } from 'lucide-react';
 import type { Message as MessageModel } from '../../../../actions/types';
 import { formatDividerDate, formatMessageTime } from '../../../../utils/formatMessageTime';
 import Message from './Message';
@@ -47,6 +48,11 @@ type TimelineItem =
           kind: 'meeting-ended';
           message: DisplayMessage;
           meeting: Extract<ReturnType<typeof parseMeetingMessageContent>, { type: 'ended' }>;
+      }
+    | {
+          kind: 'meeting-chat-line';
+          message: DisplayMessage;
+          chat: Extract<ReturnType<typeof parseMeetingMessageContent>, { type: 'chat-line' }>;
       }
     | { kind: 'legacy'; message: DisplayMessage }
     | BubbleTimelineItem;
@@ -192,6 +198,11 @@ function buildTimeline(
             timeline.push({ kind: 'meeting-ended', message, meeting: meetingData });
             continue;
         }
+        if (meetingData?.type === 'chat-line') {
+            flushBuffer();
+            timeline.push({ kind: 'meeting-chat-line', message, chat: meetingData });
+            continue;
+        }
 
         if (isLegacyStandaloneContent(String(message.content || ''))) {
             flushBuffer();
@@ -296,6 +307,29 @@ const ChatThreadView: React.FC<ChatThreadViewProps> = ({
                                 participantCount={entry.meeting.participantCount}
                                 theme={theme === 'light' ? 'light' : 'dark'}
                             />
+                        </div>
+                    );
+                }
+
+                if (entry.kind === 'meeting-chat-line') {
+                    const shell =
+                        theme === 'light'
+                            ? 'border border-stone-200 bg-stone-50/90 text-wl-ink'
+                            : 'border border-gray-600 bg-darkgrey-2 text-gray-100';
+                    return (
+                        <div key={key} className={`w-full px-2 sm:px-3 ${marginAfterNonBubble(next)}`}>
+                            <div className={`flex max-w-[min(100%,36rem)] gap-2 rounded-xl px-3 py-2 text-left shadow-sm ${shell}`}>
+                                <Video className="mt-0.5 h-4 w-4 shrink-0 text-[#1A3A4A]" aria-hidden />
+                                <div className="min-w-0 flex-1">
+                                    <p className="text-[11px] font-semibold uppercase tracking-wide text-[#1A3A4A]">
+                                        Meet{entry.chat.guest ? ' · Guest' : ''} · {entry.chat.author}
+                                    </p>
+                                    <p className="mt-0.5 whitespace-pre-wrap break-words text-sm leading-snug">{entry.chat.msg}</p>
+                                    <p className={`mt-1 text-xs ${theme === 'light' ? 'text-stone-400' : 'text-gray-400'}`}>
+                                        {formatMessageTime(new Date(entry.message.createdAt))}
+                                    </p>
+                                </div>
+                            </div>
                         </div>
                     );
                 }

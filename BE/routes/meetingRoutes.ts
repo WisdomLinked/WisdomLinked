@@ -6,6 +6,7 @@ import {
     startMeeting,
     endMeeting,
     addTranscriptMessage,
+    syncMeetingChatMessage,
     getMeetingThread,
     getMeetingRatingState,
     submitMeetingRating,
@@ -21,6 +22,7 @@ import {
 router.post('/start', requireAuth(false), startMeeting);
 router.post('/end', requireAuth(false), endMeeting);
 router.post('/transcript', requireAuth(false), addTranscriptMessage);
+router.post('/chat-sync', requireAuth(false), syncMeetingChatMessage);
 router.post('/rate', requireAuth(false), submitMeetingRating);
 router.post('/guest-invite', requireAuth(false), createMeetingGuestInvite);
 router.post('/revoke-participant', requireAuth(false), revokeMeetingParticipant);

@@ -35,5 +35,21 @@ describe("parseMeetingMessageContent", () => {
   it("returns null for non-meeting message", () => {
     expect(parseMeetingMessageContent("hello world")).toBeNull();
   });
+
+  it("parses meeting chat line (v1 payload)", () => {
+    const b64 = "eyJ2IjoxLCJhdXRob3IiOiJBbGljZSIsImd1ZXN0IjpmYWxzZSwibXNnIjoiSGkifQ";
+    const raw = `__MEETING_CHAT__::thread-99::${b64}`;
+    expect(parseMeetingMessageContent(raw)).toEqual({
+      type: "chat-line",
+      meetingThreadId: "thread-99",
+      author: "Alice",
+      guest: false,
+      msg: "Hi",
+    });
+  });
+
+  it("returns null for invalid meeting chat payload", () => {
+    expect(parseMeetingMessageContent("__MEETING_CHAT__::tid::!!!")).toBeNull();
+  });
 });
 
