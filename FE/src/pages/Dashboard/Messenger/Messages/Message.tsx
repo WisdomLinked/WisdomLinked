@@ -5,6 +5,7 @@ import { Card, CardContent, Typography } from "@mui/material";
 import FilePreviewModal from "../../FilePreviewModal";
 import { renderSafeMessageHtml } from "../../../../utils/safeMessageHtml";
 import { resolveSafeChatFileUrl } from "../../../../utils/safeFileUrl";
+import { peelWisdomLinkedReplyQuotes } from "../../../../utils/chatReplyLayout";
 
 function DeliveryTicks({ status, theme }: { status?: string; theme?: string }) {
     if (!status) return null;
@@ -41,6 +42,57 @@ function DeliveryTicks({ status, theme }: { status?: string; theme?: string }) {
 }
 
 const parseHtml = (html: string | undefined | null) => renderSafeMessageHtml(html);
+
+function renderChatRichContent(
+    html: string,
+    theme: string,
+    bubble: "incoming" | "outgoing",
+): React.ReactNode {
+    const { quotes, bodyHtml } = peelWisdomLinkedReplyQuotes(html);
+    const quoteShell =
+        bubble === "outgoing"
+            ? "border-l-[3px] border-white/45 bg-black/20 pl-2.5 pr-2 py-1.5 mb-2 rounded-r-md"
+            : theme === "light"
+              ? "border-l-[3px] border-[#234C6A]/50 bg-white/80 pl-2.5 pr-2 py-1.5 mb-2 rounded-r-md"
+              : "border-l-[3px] border-white/35 bg-black/30 pl-2.5 pr-2 py-1.5 mb-2 rounded-r-md";
+    const labelCls =
+        bubble === "outgoing"
+            ? "text-[11px] font-semibold uppercase tracking-wide text-[#7fdcc8]"
+            : theme === "light"
+              ? "text-[11px] font-semibold uppercase tracking-wide text-[#1A3A4A]/90"
+              : "text-[11px] font-semibold uppercase tracking-wide text-[#7fdcc8]";
+    const excerptCls =
+        bubble === "outgoing"
+            ? "mt-0.5 text-[12px] leading-snug break-words text-white/95"
+            : theme === "light"
+              ? "mt-0.5 text-[12px] leading-snug break-words text-[#234C6A]"
+              : "mt-0.5 text-[12px] leading-snug break-words text-white/95";
+    const divider =
+        bubble === "outgoing"
+            ? "my-2 h-px w-full bg-white/25"
+            : theme === "light"
+              ? "my-2 h-px w-full bg-slate-300/80"
+              : "my-2 h-px w-full bg-white/20";
+
+    if (quotes.length === 0) {
+        return <>{parseHtml(html)}</>;
+    }
+
+    return (
+        <>
+            {quotes.map((q, idx) => (
+                <div key={`wl-rq-${idx}`} className={quoteShell}>
+                    <div className={labelCls}>
+                        Replying to <span className="normal-case font-semibold">{q.to}</span>
+                    </div>
+                    <div className={excerptCls}>{q.excerpt}</div>
+                </div>
+            ))}
+            <div className={divider} role="separator" />
+            {parseHtml(bodyHtml || "")}
+        </>
+    );
+}
 
 const Message = ({
     content,
@@ -156,7 +208,7 @@ const Message = ({
                 <div
                     className={`chat-message-rich min-w-0 max-w-full px-2 py-1.5 text-sm leading-5 shadow-sm break-words whitespace-pre-wrap ${threadBubbleShellClassName}`}
                 >
-                    {parseHtml(content)}
+                    {renderChatRichContent(content, theme, "incoming")}
                 </div>
                 {renderReplyAction()}
             </div>
@@ -308,7 +360,7 @@ const Message = ({
                     <div
                         className={`chat-message-rich min-w-0 max-w-full px-2 py-1.5 text-sm leading-5 shadow-sm break-words whitespace-pre-wrap ${threadBubbleShellClassName}`}
                     >
-                        {parseHtml(content)}
+                        {renderChatRichContent(content, theme, "outgoing")}
                     </div>
                 </div>
             );
@@ -332,7 +384,7 @@ const Message = ({
                             }`}
                         >
                             <div className="chat-message-rich break-words whitespace-pre-wrap">
-                                {parseHtml(content)}
+                                {renderChatRichContent(content, theme, "outgoing")}
                             </div>
                         </div>
                         <DeliveryTicks status={deliveryStatus} theme={theme} />
@@ -418,12 +470,8 @@ const Message = ({
                             }`}
                         >
                             <div className="chat-message-rich break-words whitespace-pre-wrap">
-                                {parseHtml(content)}
+                                {renderChatRichContent(content, theme, "incoming")}
                             </div>
-                        </div>
-                        {renderReplyAction()}
-                    </div>
-                )}
             </div>
         </div>
     );

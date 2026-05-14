@@ -6,6 +6,7 @@ import Message from './Message';
 import MeetingCard from '../../../../components/MeetingCard';
 import ChatSystemNotice from './ChatSystemNotice';
 import { parseMeetingMessageContent } from '../../../../utils/meetingMessage';
+import { peelWisdomLinkedReplyQuotes } from '../../../../utils/chatReplyLayout';
 import { groupMessages } from './groupMessages';
 import type { ChatMessage, MessageGroup } from './chatThreadTypes';
 import type { ReplyDraft } from '../ChatDetails';
@@ -97,8 +98,13 @@ function stripMessageText(raw: string): string {
         .trim();
 }
 
+function replyPreviewPlainText(raw: string): string {
+    const { bodyHtml } = peelWisdomLinkedReplyQuotes(String(raw || ""));
+    return stripMessageText(bodyHtml);
+}
+
 function replyDraftFromMessage(message: DisplayMessage, authorName: string): ReplyDraft {
-    const text = stripMessageText(String(message.content || ''));
+    const text = replyPreviewPlainText(String(message.content || ""));
     return {
         messageId: String(message._id),
         authorName: authorName || 'Message',

@@ -15,6 +15,7 @@ import { sendRoomTyping, connectToRC } from "../../../services/rcRealtime";
 import { toRocketChatUsername } from "../../../utils/rocketchatUsername";
 import { sanitizeMessageHtml } from "../../../utils/safeMessageHtml";
 import type { ReplyDraft } from "./ChatDetails";
+import { flattenReplyTextForNextQuote } from "../../../utils/chatReplyLayout";
 
 function plainTextToMessageHtml(text: string): string {
     const trimmed = text.trim();
@@ -54,10 +55,7 @@ const escapeReplyText = (value: string): string =>
         .replace(/>/g, "&gt;");
 
 const cleanReplyExcerpt = (value: string): string =>
-    String(value || "")
-        .replace(/\bReplying to\s+(You|[\w\s.@-]+)\b/gi, " ")
-        .replace(/\s+/g, " ")
-        .trim();
+    flattenReplyTextForNextQuote(String(value || "").replace(/\s+/g, " ").trim());
 
 function getFileExtension(name: string): string {
     const value = (name || "").trim();
