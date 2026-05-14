@@ -49,7 +49,16 @@ Host a WisdomLinked page that embeds Jitsi and uses `new JitsiMeetExternalAPI(..
 
 ## Deploy on the Jitsi web container
 
-Mount both scripts from `custom/` and add two tags in `custom/index.html` (order: copy-meeting-id first, then meeting-chat-sync), for example:
+From a clone of this repo on the Jitsi host (or copy the two `.js` files into `web/custom/`):
+
+```bash
+export JITSI_WEB_CUSTOM="$HOME/.jitsi-meet-cfg/web/custom"   # adjust to your docker-jitsi-meet config path
+./jitsi/install-custom-web.sh
+```
+
+Then restart the `web` container and hard-refresh browsers.
+
+Manual option: mount both scripts from `custom/` and add two tags in `custom/index.html` (order: copy-meeting-id first, then meeting-chat-sync), for example:
 
 ```html
 <script src="custom/wisdomlinked-copy-meeting-id.js" defer></script>

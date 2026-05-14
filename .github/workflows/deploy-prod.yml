@@ -194,6 +194,7 @@ jobs:
             docker network create chat_custom_network || true
             
             # Run the Backend Production Container
+            # Optional GitHub secrets: MEETING_CHAT_SYNC_PUBLIC_API_BASE (else BE uses FE_URL), MEETING_CHAT_SYNC_SECRET (else JWT_SECRET).
             docker run -d \
               --name wisdomlinked_backend_prod \
               --restart unless-stopped \
@@ -227,6 +228,8 @@ jobs:
               -e JITSI_APP_ID="${{ secrets.JITSI_APP_ID }}" \
               -e JITSI_AUD="${{ secrets.JITSI_AUD }}" \
               -e JITSI_ISS="${{ secrets.JITSI_ISS }}" \
+              -e MEETING_CHAT_SYNC_PUBLIC_API_BASE="${{ secrets.MEETING_CHAT_SYNC_PUBLIC_API_BASE }}" \
+              -e MEETING_CHAT_SYNC_SECRET="${{ secrets.MEETING_CHAT_SYNC_SECRET }}" \
               ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE }}:latest
 
             # Run the Frontend Production Container

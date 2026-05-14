@@ -45,6 +45,8 @@ const publicApiBaseForMeetingChatSync = (): string =>
         process.env.MEETING_CHAT_SYNC_PUBLIC_API_BASE
             || process.env.API_PUBLIC_BASE_URL
             || process.env.PUBLIC_API_BASE
+            || process.env.FRONTEND_BASE_URL
+            || process.env.FE_URL
             || '',
     )
         .trim()
