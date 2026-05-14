@@ -4,6 +4,7 @@ import Avatar from "../../components/Avatar";
 import GroupParticipantsDialog from "./Messenger/Messages/GroupParticipantsDialog";
 import { useAppSelector } from "../../store";
 import { Calendar, Clock3, DollarSign, Users, Sparkles, UserRound } from "lucide-react";
+import { SERVICE_OPTIONS, matchesServiceOption } from "../../constants/serviceOptions";
 
 interface SeminarDetailsProps {
     title: string;
@@ -38,6 +39,14 @@ const SeminarDetails = ({
     onDeleteCommunityChat,
     theme = "dark",
 }: SeminarDetailsProps) => {
+
+    const serviceChipLabel = (service: any): string => {
+        const doc = { value: service?.value, name: service?.name, label: service?.label };
+        for (const opt of SERVICE_OPTIONS) {
+            if (matchesServiceOption(doc, opt)) return opt.label;
+        }
+        return String(service?.value ?? service?.label ?? "");
+    };
 
     const [showParticipants, set_showParticipants] = useState(false);
     const { auth: { userDetails } } = useAppSelector((state) => state);
@@ -128,7 +137,7 @@ const SeminarDetails = ({
                                             : "border border-slate-700 bg-slate-800 text-slate-200"
                                     }`}
                                 >
-                                    {service.value}
+                                    {serviceChipLabel(service)}
                                 </span>
                             ))}
                         </div>

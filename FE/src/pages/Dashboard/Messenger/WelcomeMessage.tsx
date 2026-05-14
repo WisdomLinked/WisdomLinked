@@ -5,7 +5,7 @@ const WelcomeMessage = ({ theme = "dark" }: any) => {
         <div
             className={
                 theme === "light"
-                    ? "w-full h-full flex flex-col items-center justify-center p-6 text-center bg-white rounded-2xl border border-slate-200 shadow-sm"
+                    ? "w-full h-full flex flex-col items-center justify-center p-6 text-center bg-wl-page rounded-2xl border border-stone-200 shadow-sm"
                     : "w-full h-full flex flex-col items-center justify-center p-6 text-center"
             }
         >

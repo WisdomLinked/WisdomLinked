@@ -18,7 +18,7 @@ import { useDispatch } from "react-redux";
 import { validateImageSize } from "../../../utils/validators";
 import { showAlert } from "../../../actions/alertActions";
 import ImagePicker from "../../../components/imagePicker";
-import { MAX_IMAGE_SIZE_IN_MB } from "../../../utils/constants";
+import { filterApiServicesToCanonical } from "../../../constants/serviceOptions";
 
 const CustomerProfile = ({
     userDetails,
@@ -140,7 +140,7 @@ const CustomerProfile = ({
         const response: any = await doGetKeywordsAndServices();
         if (response) {
             set_keywords(response.keywords || [])
-            set_services(response.services || [])
+            set_services(filterApiServicesToCanonical(response.services || []))
         }
     }
 

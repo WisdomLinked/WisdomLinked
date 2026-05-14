@@ -1011,7 +1011,7 @@ const StudentChat: React.FC = () => {
   const showMobileMessenger = shouldShowMobileMessenger(chosenChatDetails, chosenGroupChatDetails);
 
   return (
-    <div className="flex h-full bg-wl-chatGold text-slate-900">
+    <div className="flex h-full bg-wl-page text-slate-900">
       <aside className={`${showMobileMessenger ? 'hidden md:flex' : 'flex'} w-full md:w-80 lg:w-96 flex-col border-r border-slate-200 bg-white`}>
         <div className="px-4 pt-4 pb-3 border-b border-slate-200">
           <div className="flex items-center justify-between gap-2">
@@ -1398,7 +1398,7 @@ const StudentChat: React.FC = () => {
         </div>
       </aside>
 
-      <section className={`${showMobileMessenger ? 'flex' : 'hidden md:flex'} flex-1 flex-col min-h-0 min-w-0 bg-wl-chatGold`}>
+      <section className={`${showMobileMessenger ? 'flex' : 'hidden md:flex'} flex-1 flex-col min-h-0 min-w-0 bg-wl-page`}>
         <div className="md:hidden border-b border-slate-200 bg-white px-3 py-2">
           <button
             type="button"

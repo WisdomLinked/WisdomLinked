@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { Search, GraduationCap, Briefcase, MapPin, Filter, ChevronDown } from 'lucide-react';
+import { SERVICE_LABELS } from '../../constants/serviceOptions';
 
 type Mentor = {
   id: string;
@@ -21,7 +22,7 @@ const MENTORS: Mentor[] = [
     institution: 'Stanford University',
     yearsExperience: 8,
     major: 'Computer Science',
-    services: ['1-on-1 session', 'Research guidance', 'Grad school mentoring'],
+    services: [SERVICE_LABELS[0], SERVICE_LABELS[2]],
     isNew: true,
     photoUrl:
       'https://images.pexels.com/photos/1704488/pexels-photo-1704488.jpeg?auto=compress&cs=tinysrgb&w=400',
@@ -33,7 +34,7 @@ const MENTORS: Mentor[] = [
     institution: 'MIT',
     yearsExperience: 15,
     major: 'Civil Engineering',
-    services: ['1-on-1 session', 'Career planning'],
+    services: [SERVICE_LABELS[1]],
     isNew: true,
     photoUrl:
       'https://images.pexels.com/photos/2381069/pexels-photo-2381069.jpeg?auto=compress&cs=tinysrgb&w=400',
@@ -45,7 +46,7 @@ const MENTORS: Mentor[] = [
     institution: 'Tokyo Institute of Technology',
     yearsExperience: 10,
     major: 'Biomedical Engineering',
-    services: ['Research guidance', 'Seminar'],
+    services: [SERVICE_LABELS[2]],
     isNew: false,
     photoUrl:
       'https://images.pexels.com/photos/1181519/pexels-photo-1181519.jpeg?auto=compress&cs=tinysrgb&w=400',
@@ -57,7 +58,7 @@ const MENTORS: Mentor[] = [
     institution: 'Google',
     yearsExperience: 7,
     major: 'Computer Science',
-    services: ['1-on-1 session', 'Career planning', 'Interview prep'],
+    services: [SERVICE_LABELS[0], SERVICE_LABELS[1]],
     isNew: false,
     photoUrl:
       'https://images.pexels.com/photos/1181686/pexels-photo-1181686.jpeg?auto=compress&cs=tinysrgb&w=400',
@@ -69,7 +70,7 @@ const MENTORS: Mentor[] = [
     institution: 'Arup',
     yearsExperience: 9,
     major: 'Civil Engineering',
-    services: ['1-on-1 session', 'Work abroad guidance'],
+    services: [SERVICE_LABELS[1]],
     isNew: false,
     photoUrl:
       'https://images.pexels.com/photos/1181715/pexels-photo-1181715.jpeg?auto=compress&cs=tinysrgb&w=400',

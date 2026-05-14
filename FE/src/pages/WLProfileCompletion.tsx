@@ -6,6 +6,7 @@ import { callApi } from '../api/api';
 import { showAlert } from '../actions/alertActions';
 import { useAppSelector } from '../store';
 import { autoLogin } from '../actions/authActions';
+import { SERVICE_LABELS } from '../constants/serviceOptions';
 
 // Same majors / services as WLCustomerRegister & WLExpertRegister (regular sign-up)
 const ENGINEERING_MAJORS = [
@@ -15,8 +16,6 @@ const ENGINEERING_MAJORS = [
     'Materials Science & Engineering', 'Nuclear Engineering', 'Petroleum Engineering',
     'Software Engineering', 'Systems Engineering', 'Other',
 ];
-
-const SIGNUP_SERVICES = ['Study abroad', 'Work abroad', 'Research guidance'];
 
 const FOCUS_RING = "focus:ring-2 focus:ring-[#234C6A]/20 focus:border-[#234C6A]";
 
@@ -338,7 +337,7 @@ export default function WLProfileCompletion() {
                                     {errors.servicesOffered && <p className="mt-1.5 text-xs text-red-500 font-medium">{errors.servicesOffered}</p>}
                                     {showServiceDrop && (
                                         <div className="absolute top-full left-0 right-0 mt-2 bg-white border border-slate-200 rounded-xl shadow-xl overflow-hidden z-50 p-1.5">
-                                            {SIGNUP_SERVICES.map(s => (
+                                            {SERVICE_LABELS.map(s => (
                                                 <button
                                                     key={s}
                                                     type="button"
@@ -380,7 +379,7 @@ export default function WLProfileCompletion() {
                                     {errors.services && <p className="mt-1.5 text-xs text-red-500 font-medium">{errors.services}</p>}
                                     {showServiceDrop && (
                                         <div className="absolute top-full left-0 right-0 mt-2 bg-white border border-slate-200 rounded-xl shadow-xl overflow-hidden z-50 p-1.5">
-                                            {SIGNUP_SERVICES.map(s => (
+                                            {SERVICE_LABELS.map(s => (
                                                 <button
                                                     key={s}
                                                     type="button"

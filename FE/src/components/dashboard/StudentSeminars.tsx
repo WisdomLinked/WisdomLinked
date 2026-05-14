@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { Search, Filter, ChevronDown, CalendarDays, Clock, MapPin, ArrowLeft, User } from 'lucide-react';
+import { SERVICE_LABELS } from '../../constants/serviceOptions';
 
 type Seminar = {
   id: string;
@@ -24,7 +25,7 @@ const SEMINARS: Seminar[] = [
     date: '2024-03-22',
     time: '18:00',
     major: 'Computer Science',
-    tags: ['Research', 'Grad school'],
+    tags: [SERVICE_LABELS[2], SERVICE_LABELS[0]],
     level: 'Intermediate',
     expertName: 'Prof. Emily Chen',
     location: 'Online · WisdomLinked Hall A',
@@ -39,7 +40,7 @@ const SEMINARS: Seminar[] = [
     date: '2024-03-28',
     time: '16:30',
     major: 'Civil Engineering',
-    tags: ['Industry', 'Work abroad'],
+    tags: [SERVICE_LABELS[1]],
     level: 'Intermediate',
     expertName: 'Prof. Daniel Ortiz',
     location: 'Online · WisdomLinked Hall B',
@@ -54,7 +55,7 @@ const SEMINARS: Seminar[] = [
     date: '2024-04-02',
     time: '19:00',
     major: 'Other',
-    tags: ['Grad school'],
+    tags: [SERVICE_LABELS[0]],
     level: 'Beginner',
     expertName: 'Dr. Sarah Williams',
     location: 'Online · WisdomLinked Hall C',
@@ -69,7 +70,7 @@ const SEMINARS: Seminar[] = [
     date: '2024-04-10',
     time: '17:30',
     major: 'Computer Science',
-    tags: ['Grad school', 'Research'],
+    tags: [SERVICE_LABELS[0], SERVICE_LABELS[2]],
     level: 'Beginner',
     expertName: 'Dr. Liam Carter',
     location: 'Online · WisdomLinked Hall D',
@@ -84,7 +85,7 @@ const SEMINARS: Seminar[] = [
     date: '2024-04-15',
     time: '15:00',
     major: 'Other Engineering',
-    tags: ['Career', 'Work abroad'],
+    tags: [SERVICE_LABELS[1], SERVICE_LABELS[2]],
     level: 'Intermediate',
     expertName: 'Prof. Aisha Rahman',
     location: 'Online · WisdomLinked Hall E',

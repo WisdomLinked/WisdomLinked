@@ -17,8 +17,8 @@ module.exports = {
           brand: "#234C6A",
           brandSoft: "#E8EEF4",
           page: "#F5F3EF",
-          /** Warm light gold — chat routes (student / expert / admin) */
-          chatGold: "#F7F1E6",
+          /** Chat route canvas — same warm off-white as dashboard page */
+          chatGold: "#F5F3EF",
           pageAlt: "#f8f7f4",
           card: "#ffffff",
           line: "#e8e6e1",

@@ -2,6 +2,7 @@ import React, { useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { X, Users, Sparkles, Globe, Lock, Info } from "lucide-react";
 import { collectProfileOptionLabels } from "../../../../utils/chatProfileModal";
+import { canonicalLabelsFromMixedServiceEntries } from "../../../../constants/serviceOptions";
 
 interface CommunityProfileModalProps {
     isOpen: boolean;
@@ -19,7 +20,7 @@ function collectMajorLabels(group: Record<string, any> | null | undefined): stri
 }
 
 function collectServiceLabels(group: Record<string, any> | null | undefined): string[] {
-    return collectProfileOptionLabels(group?.services);
+    return canonicalLabelsFromMixedServiceEntries(group?.services);
 }
 
 const CommunityProfileModal: React.FC<CommunityProfileModalProps> = ({

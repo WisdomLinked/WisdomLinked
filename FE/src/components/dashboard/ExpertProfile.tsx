@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import type { MentorCardProps } from '../MentorCard';
 import { useAppSelector } from '../../store';
+import { SERVICE_LABELS } from '../../constants/serviceOptions';
 import FilePreviewModal from '../../pages/Dashboard/FilePreviewModal';
 import { hasResumeForPreview, resolveResumePublicUrl } from '../../utils/resumeUrl';
 
@@ -56,7 +57,9 @@ export default function ExpertProfile({
   );
 
   const supportsOneToOne = useMemo(
-    () => mentor.services.some(s => /1\s*[-–]?\s*on\s*[-–]?\s*1/i.test(s) || /1:1/i.test(s)),
+    () =>
+      mentor.services.some(s => /1\s*[-–]?\s*on\s*[-–]?\s*1/i.test(s) || /1:1/i.test(s)) ||
+      mentor.services.some(s => SERVICE_LABELS.includes(s)),
     [mentor.services],
   );
   const supportsSeminar = useMemo(

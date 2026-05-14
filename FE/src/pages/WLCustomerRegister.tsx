@@ -7,6 +7,7 @@ import { showAlert } from '../actions/alertActions';
 import SocialAuthBlock from '../components/SocialAuthBlock';
 import ConfirmEmail from '../components/ConfirmEmail';
 import logo from '../assets/images/logo.png';
+import { SERVICE_LABELS } from '../constants/serviceOptions';
 
 const BTN_PRIMARY_STYLE = { background: 'linear-gradient(135deg, #234C6A 0%, #456882 100%)' };
 const FOCUS_RING = 'focus:ring-2 focus:ring-[#234C6A]/60 focus:border-[#234C6A]';
@@ -30,8 +31,6 @@ const ENGINEERING_MAJORS = [
     'Materials Science & Engineering', 'Nuclear Engineering', 'Petroleum Engineering',
     'Software Engineering', 'Systems Engineering', 'Other',
 ];
-
-const STUDENT_SERVICES = ['Study abroad', 'Work abroad', 'Research guidance'];
 
 const COUNTRIES = [
     'United States', 'United Kingdom', 'Canada', 'Australia', 'Germany', 'France',
@@ -340,7 +339,7 @@ export default function WLCustomerRegister() {
                                 </button>
                                 {showServiceDrop && (
                                     <div className="absolute z-50 mt-1 w-full max-w-xl rounded-2xl border border-slate-200 bg-white shadow-xl overflow-hidden flex flex-col max-h-56 overflow-y-auto">
-                                        {STUDENT_SERVICES.map(s => (
+                                        {SERVICE_LABELS.map(s => (
                                             <button key={s} type="button" onClick={() => {
                                                 const newServices = form.services.includes(s) ? form.services.filter(x => x !== s) : [...form.services, s];
                                                 handleChange('services', newServices);

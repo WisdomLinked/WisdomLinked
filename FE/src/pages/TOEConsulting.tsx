@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { doContactUs } from '../api/api';
 import SignupModal from '../components/SignupModal';
+import { SERVICE_LABELS } from '../constants/serviceOptions';
 import {
   Star, Users, Briefcase, GraduationCap, TrendingUp, MessageCircle, CheckCircle,
   ArrowRight, Sparkles, Menu, X, BookOpen, Globe, ChevronDown, ChevronUp, Phone, Mail, User,
@@ -38,8 +39,6 @@ const ENGINEERING_MAJORS = [
   'Materials Science & Engineering', 'Nuclear Engineering', 'Petroleum Engineering',
   'Software Engineering', 'Systems Engineering', 'Other',
 ];
-
-const STUDENT_SERVICES = ['Study abroad', 'Work abroad', 'Research guidance'];
 
 const COUNTRIES = [
   'United States', 'United Kingdom', 'Canada', 'Australia', 'Germany', 'France',
@@ -369,7 +368,7 @@ function StudentSignupForm({ onBack, onClose, onGoLogin, inputNormal, inputError
                 </button>
                 {showServiceDrop && (
                   <div className="absolute z-50 mt-1 w-full max-w-xl rounded-2xl border border-slate-200 bg-white shadow-xl overflow-hidden">
-                    {STUDENT_SERVICES.map(s => (
+                    {SERVICE_LABELS.map(s => (
                       <button key={s} type="button" onClick={() => { setForm(f => ({ ...f, services: s })); setShowServiceDrop(false); setErrors(er => ({ ...er, services: '' })); }}
                         className={`w-full flex items-center gap-2 px-4 py-2.5 text-sm text-left ${ACCENT_BG} transition-colors text-slate-700`}>
                         {s}
@@ -610,7 +609,7 @@ function ExpertSignupForm({ onBack, onClose, onGoLogin, inputNormal, inputError 
                 </button>
                 {showServicesDrop && (
                   <div className="absolute z-50 mt-1 w-full max-w-xl rounded-2xl border border-slate-200 bg-white shadow-xl overflow-hidden">
-                    {STUDENT_SERVICES.map(s => (
+                    {SERVICE_LABELS.map(s => (
                       <button key={s} type="button" onClick={() => toggleService(s)}
                         className={`w-full flex items-center gap-2 px-4 py-2.5 text-sm text-left transition-colors ${form.servicesOffered.includes(s) ? `${ACCENT_SELECTED} font-semibold` : `text-slate-700 ${ACCENT_BG}`}`}>
                         {form.servicesOffered.includes(s) && <CheckCircle size={14} style={{ color: '#234C6A' }} />}{s}
@@ -1465,17 +1464,16 @@ export default function TOEConsulting() {
   const openContact = () => { setMobileMenuOpen(false); setShowContactModal(true); };
 
   const services = [
-    { icon: <GraduationCap className="w-8 h-8" />, title: "Graduate Studies Guidance", description: "Get personalized advice from top university professors on applications, program selection, and application materials assessment.", topics: ["University selection", "Application strategy", "Materials review"], color: "from-[#F8FAFC] to-white", accent: "text-[#234C6A]", border: "border-slate-200 hover:border-[#456882]", iconBg: "bg-[#E8EEF4] text-[#234C6A]" },
-    { icon: <Briefcase className="w-8 h-8" />, title: "Research Assessment", description: "Have leading scientists evaluate your research, identify key focus areas, and provide strategic direction for improvements.", topics: ["Research direction", "Methodology advice", "Publication strategy"], color: "from-[#F8FAFC] to-white", accent: "text-[#234C6A]", border: "border-slate-200 hover:border-[#456882]", iconBg: "bg-[#E8EEF4] text-[#234C6A]" },
-    { icon: <TrendingUp className="w-8 h-8" />, title: "Career Planning", description: "Learn from senior engineers and managers about job hunting strategies, career advancement, and future planning.", topics: ["Job search tactics", "Career roadmap", "Industry insights"], color: "from-[#F8FAFC] to-white", accent: "text-[#234C6A]", border: "border-slate-200 hover:border-[#456882]", iconBg: "bg-[#E8EEF4] text-[#234C6A]" },
-    { icon: <GraduationCap className="w-8 h-8" />, title: "Seminars & Workshops", description: "Attend live sessions on various academic and professional topics.", topics: ["Graduate school application workshops", "Research skill seminars", "Career development webinars"], color: "from-[#F8FAFC] to-white", accent: "text-[#234C6A]", border: "border-slate-200 hover:border-[#456882]", iconBg: "bg-[#E8EEF4] text-[#234C6A]" },
+    { icon: <GraduationCap className="w-8 h-8" />, title: "Study Abroad", description: "Navigate applications, program fit, and admissions strategy with faculty who know top programs abroad.", topics: ["Program selection", "Application materials", "Scholarship planning"], color: "from-[#F8FAFC] to-white", accent: "text-[#234C6A]", border: "border-slate-200 hover:border-[#456882]", iconBg: "bg-[#E8EEF4] text-[#234C6A]" },
+    { icon: <Briefcase className="w-8 h-8" />, title: "Work Abroad", description: "Understand job markets, employer expectations, and relocation steps with professionals who have done it.", topics: ["Job search abroad", "CV & interviews", "Relocation basics"], color: "from-[#F8FAFC] to-white", accent: "text-[#234C6A]", border: "border-slate-200 hover:border-[#456882]", iconBg: "bg-[#E8EEF4] text-[#234C6A]" },
+    { icon: <BookOpen className="w-8 h-8" />, title: "Research Guidance", description: "Sharpen your research direction, methods, and publications with experienced researchers in your field.", topics: ["Research design", "Writing & review", "Lab and funding paths"], color: "from-[#F8FAFC] to-white", accent: "text-[#234C6A]", border: "border-slate-200 hover:border-[#456882]", iconBg: "bg-[#E8EEF4] text-[#234C6A]" },
   ];
 
   const testimonials = [
     { name: "Sarah Chen", role: "PhD Student, Stanford", content: "The guidance I received helped me get into my dream program. My advisor reviewed my research proposal and gave invaluable feedback.", rating: 5, image: "SC", color: "bg-[#E8EEF4] text-[#234C6A]" },
     { name: "Michael Rodriguez", role: "Senior Engineer, Google", content: "Talking with an expert in my field gave me the clarity I needed for my career transition. Worth every minute.", rating: 5, image: "MR", color: "bg-[#E8EEF4] text-[#234C6A]" },
     { name: "Dr. Yuki Tanaka", role: "Research Scientist", content: "As an expert on the platform, I've connected with brilliant minds globally and found exceptional graduate students for my lab.", rating: 5, image: "YT", color: "bg-[#E8EEF4] text-[#234C6A]" },
-    { name: "Ahmed Hassan", role: "MBA Graduate", content: "The career planning session transformed my approach to job hunting. I landed three offers within two months.", rating: 5, image: "AH", color: "bg-[#E8EEF4] text-[#234C6A]" },
+    { name: "Ahmed Hassan", role: "MBA Graduate", content: "The work abroad guidance clarified markets and interviews for me. I landed three offers within two months.", rating: 5, image: "AH", color: "bg-[#E8EEF4] text-[#234C6A]" },
   ];
 
   const expertBenefits = [
@@ -1818,7 +1816,7 @@ export default function TOEConsulting() {
               <h2 className="font-display text-4xl md:text-5xl font-bold text-slate-900 mb-4">Expert's advice</h2>
               <p className="text-slate-600 text-lg max-w-2xl mx-auto">Get personalized, one-on-one guidance from the elites of the elite or join a speacialized seminar</p>
             </div>
-            <div className="grid md:grid-cols-4 gap-8 items-stretch">
+            <div className="grid md:grid-cols-3 gap-8 items-stretch">
               {services.map((service, index) => (
                 <div key={index} className={`card-hover p-6 sm:p-8 rounded-2xl sm:rounded-3xl border ${service.border} group cursor-pointer flex flex-col min-h-0`} style={{ background: 'linear-gradient(135deg, rgba(69,104,130,0.05) 0%, rgba(69,104,130,0.10) 100%), #F0F4F8' }}>
                   <div className="flex-1 flex flex-col min-h-0">

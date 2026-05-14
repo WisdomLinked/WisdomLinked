@@ -2,6 +2,10 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Search, Filter, ChevronDown, Check } from 'lucide-react';
 import MentorCard, { MentorCardProps } from '../components/MentorCard';
 import { doFilterExperts, doGetKeywordsAndServices } from '../api/api';
+import {
+  canonicalLabelsFromMixedServiceEntries,
+  serviceDropdownRowsFromApi,
+} from '../constants/serviceOptions';
 import { SetLoadingStatus } from '../actions/appActions';
 
 /** Placeholder follower UI until a backend endpoint exists. */
@@ -9,7 +13,7 @@ export const INITIAL_FOLLOWER_COUNTS: Record<string, number> = {};
 
 function mapExpertToMentor(expert: any): MentorCardProps {
   const kw = (expert.keywords || []).map((k: any) => k?.value).filter(Boolean);
-  const svc = (expert.services || []).map((s: any) => s?.value ?? s?.name).filter(Boolean);
+  const svc = canonicalLabelsFromMixedServiceEntries(expert.services);
   const field = kw[0] || 'General';
   const created = expert.createdAt ? new Date(expert.createdAt).getTime() : 0;
   const isNew = created > 0 && Date.now() - created < 30 * 24 * 60 * 60 * 1000;
@@ -26,7 +30,7 @@ function mapExpertToMentor(expert: any): MentorCardProps {
       typeof expert.rating === 'number' && expert.rating > 0
         ? `${expert.rating.toFixed(1)}★`
         : '—',
-    services: svc.length ? svc : ['1:1 session'],
+    services: svc,
     image: expert.image || null,
     isNew,
     resume: expert.resume ? String(expert.resume) : null,
@@ -245,9 +249,7 @@ export default function FindExpertsPage({
       );
     }
     if (res?.services) {
-      setServiceOptions(
-        res.services.map((s: any) => ({ _id: String(s._id), value: s.value || s.name || '' })),
-      );
+      setServiceOptions(serviceDropdownRowsFromApi(res.services));
     }
   }, []);
 
@@ -301,7 +303,7 @@ export default function FindExpertsPage({
           Find Experts
         </h1>
         <p className="mt-2 max-w-xl text-sm font-sans text-[#7A7A72]">
-          Browse mentors for 1-on-1 sessions, seminars, and research guidance.
+          Browse mentors for Study Abroad, Work Abroad, and Research Guidance.
         </p>
       </header>
 

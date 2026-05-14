@@ -118,12 +118,15 @@ function toChatMessage(
     };
 }
 
-function bubbleShellClass(isSelf: boolean, index: number, n: number): string {
+function bubbleShellClass(isSelf: boolean, index: number, n: number, theme: string): string {
     if (isSelf) {
         const base = 'bg-[#1A3A4A] text-white ';
         return `${base}rounded-2xl`;
     }
-    const base = 'bg-white border border-gray-200 text-gray-900 ';
+    const isLight = theme === 'light';
+    const base = isLight
+        ? 'bg-white border border-stone-200 text-wl-ink shadow-sm '
+        : 'bg-white border border-gray-200 text-gray-900 ';
     return `${base}rounded-2xl`;
 }
 
@@ -245,13 +248,15 @@ const ChatThreadView: React.FC<ChatThreadViewProps> = ({
                         : `${entry.kind}-${entry.kind === 'bubble' ? entry.sources[0]?._id : (entry as { message: DisplayMessage }).message._id}-${idx}`;
 
                 if (entry.kind === 'date') {
+                    const lineCls = theme === 'light' ? 'bg-stone-200' : 'bg-gray-200';
+                    const labelCls = theme === 'light' ? 'text-stone-400' : 'text-gray-400';
                     return (
                         <div key={key} className="flex items-center gap-3 my-5">
-                            <div className="flex-1 h-px bg-gray-200" />
-                            <span className="text-xs text-gray-400 font-medium whitespace-nowrap">
+                            <div className={`flex-1 h-px ${lineCls}`} />
+                            <span className={`text-xs font-medium whitespace-nowrap ${labelCls}`}>
                                 {formatDividerDate(entry.date)}
                             </span>
-                            <div className="flex-1 h-px bg-gray-200" />
+                            <div className={`flex-1 h-px ${lineCls}`} />
                         </div>
                     );
                 }
@@ -365,7 +370,7 @@ const ChatThreadView: React.FC<ChatThreadViewProps> = ({
                             <div className="flex max-w-[min(100%,36rem)] flex-col items-end gap-0.5">
                                 {group.messages.map((cm, i) => {
                                     const src = sources[i];
-                                    const shell = bubbleShellClass(true, i, group.messages.length);
+                                    const shell = bubbleShellClass(true, i, group.messages.length, theme);
                                     const isLast = i === group.messages.length - 1;
                                     return (
                                         <Message
@@ -416,7 +421,11 @@ const ChatThreadView: React.FC<ChatThreadViewProps> = ({
                 return (
                     <div key={key} className={`relative w-full pl-10 pr-2 sm:pr-3 ${mb}`}>
                         <div
-                            className="absolute left-0 bottom-5 flex h-[30px] w-[30px] flex-shrink-0 items-center justify-center rounded-full bg-gray-100 text-[11px] font-semibold text-gray-700"
+                            className={`absolute left-0 bottom-5 flex h-[30px] w-[30px] flex-shrink-0 items-center justify-center rounded-full text-[11px] font-semibold ${
+                                theme === 'light'
+                                    ? 'bg-stone-200 text-stone-800'
+                                    : 'bg-gray-100 text-gray-700'
+                            }`}
                             aria-hidden
                         >
                             {avatarLetter}
@@ -433,7 +442,7 @@ const ChatThreadView: React.FC<ChatThreadViewProps> = ({
                             ) : null}
                             {group.messages.map((cm, i) => {
                                 const src = sources[i];
-                                const shell = bubbleShellClass(false, i, group.messages.length);
+                                const shell = bubbleShellClass(false, i, group.messages.length, theme);
                                 return (
                                     <Message
                                         key={cm.id}

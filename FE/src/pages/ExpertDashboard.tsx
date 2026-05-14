@@ -536,7 +536,7 @@ export default function ExpertDashboard() {
 
   const content =
     activeItem === 'chat' ? (
-      <div className="h-[calc(100vh-56px)] bg-wl-chatGold">
+      <div className="h-[calc(100vh-56px)] bg-wl-page">
         <StudentChat />
       </div>
     ) : activeItem === 'clients' ? (

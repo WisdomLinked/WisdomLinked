@@ -19,6 +19,7 @@ import FileBrowser from "../../../components/fileBrowser";
 import { useDispatch } from "react-redux";
 import { showAlert } from "../../../actions/alertActions";
 import { updateMe } from "../../../actions/authActions";
+import { filterApiServicesToCanonical } from "../../../constants/serviceOptions";
 import ReactImagePickerEditor from 'react-image-picker-editor';
 import 'react-image-picker-editor/dist/index.css'
 import FilePreviewModal from "../FilePreviewModal";
@@ -189,7 +190,7 @@ const ExpertProfile = ({
         const response: any = await doGetKeywordsAndServices();
         if (response) {
             set_keywords(response.keywords || []);
-            set_services(response.services || []);
+            set_services(filterApiServicesToCanonical(response.services || []));
         }
     };
 

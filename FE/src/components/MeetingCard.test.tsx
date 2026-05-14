@@ -9,6 +9,7 @@ vi.mock("../api/chatApi");
 describe("MeetingCard", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.useRealTimers();
     vi.spyOn(window, "open").mockReturnValue({
       closed: false,
       location: { href: "" },
@@ -29,6 +30,25 @@ describe("MeetingCard", () => {
 
     expect(screen.getByText("Join call")).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /wisdomlinked meet/i })).not.toBeInTheDocument();
+  });
+
+  it("greys out and disables invite/join when started more than 2 hours ago", () => {
+    vi.useFakeTimers({ now: new Date("2026-05-04T15:00:00.000Z"), toFake: ["Date"] });
+    render(
+      <MeetingCard
+        meetingThreadId="t-exp"
+        jitsiRoomName="wl-room-exp"
+        starterName="John Honai"
+        startedAt="2026-05-04T12:30:00.000Z"
+        isEnded={false}
+        theme="light"
+      />,
+    );
+
+    expect(screen.getByText("Invite expired")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /copy invite/i })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /join call/i })).toBeDisabled();
+    vi.useRealTimers();
   });
 
   it("shows meeting start local time when provided", () => {

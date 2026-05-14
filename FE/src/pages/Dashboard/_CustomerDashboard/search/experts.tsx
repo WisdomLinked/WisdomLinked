@@ -1,5 +1,11 @@
 import React, { useEffect, useState } from "react";
-import {doFilterExperts, doGetKeywordsAndServices, joinGeneralChat, profileImageFetch} from "../../../../api/api";
+import {
+    doFilterExperts,
+    doGetKeywordsAndServices,
+    joinGeneralChat,
+    profileImageFetch,
+} from "../../../../api/api";
+import { filterApiServicesToCanonical } from "../../../../constants/serviceOptions";
 import { getAvatarTitle } from "../../../../actions/common";
 import { Rating } from "@mui/material";
 import FilterListIcon from '@mui/icons-material/FilterList';
@@ -57,7 +63,7 @@ const Experts = ({
         const response: any = await doGetKeywordsAndServices();
         if (response) {
             set_keywords(response.keywords || [])
-            set_services(response.services || [])
+            set_services(filterApiServicesToCanonical(response.services || []))
         }
     }
 

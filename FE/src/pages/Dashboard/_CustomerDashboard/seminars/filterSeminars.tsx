@@ -7,6 +7,7 @@ import { useAppSelector } from "../../../../store";
 import OverlayPortal from "../../../../components/OverayPortal";
 import SeminarDetails from "../../seminarDetails";
 import { SetLoadingStatus } from "../../../../actions/appActions";
+import { filterApiServicesToCanonical } from "../../../../constants/serviceOptions";
 
 const FilterSeminars = ({
     selectedSeminar,
@@ -48,7 +49,7 @@ const FilterSeminars = ({
         const response: any = await doGetKeywordsAndServices();
         if (response) {
             set_keywords(response.keywords || [])
-            set_services(response.services || [])
+            set_services(filterApiServicesToCanonical(response.services || []))
         }
     }
 

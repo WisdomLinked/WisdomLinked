@@ -9,10 +9,14 @@ import {
 import { Video } from 'lucide-react';
 import { formatMessageTime } from '../utils/formatMessageTime';
 
+const MEET_EXPIRY_MS = 2 * 60 * 60 * 1000; // 2 hours
+
 interface MeetingCardProps {
     meetingThreadId: string;
     jitsiRoomName: string;
     starterName: string;
+    /** Prefer meet/call start time for invite expiry; falls back to `startedAt`. */
+    createdAt?: string | number | Date;
     startedAt?: string | number | Date;
     isEnded?: boolean;
     duration?: number;
@@ -46,6 +50,7 @@ const formatStartedAtLocalTime = (value?: string | number | Date): string => {
 const MeetingCard: React.FC<MeetingCardProps> = ({
     meetingThreadId,
     starterName,
+    createdAt,
     startedAt,
     isEnded = false,
     duration = 0,
@@ -104,6 +109,14 @@ const MeetingCard: React.FC<MeetingCardProps> = ({
 
     const isDark = theme === 'dark';
     const startedAtLocalTime = formatStartedAtLocalTime(startedAt);
+
+    const expiryAnchor = createdAt ?? startedAt;
+    const expiryMs =
+        expiryAnchor !== undefined && expiryAnchor !== null && expiryAnchor !== ''
+            ? new Date(expiryAnchor as string | number | Date).getTime()
+            : NaN;
+    const isExpired =
+        Number.isFinite(expiryMs) && Date.now() - expiryMs > MEET_EXPIRY_MS;
 
     useEffect(() => {
         let cancelled = false;
@@ -169,28 +182,43 @@ const MeetingCard: React.FC<MeetingCardProps> = ({
 
         return (
             <div className="flex flex-col">
-                <div className="flex items-center justify-between gap-3 bg-white border-l-4 border-l-[#1A3A4A] border border-gray-200 rounded-xl px-4 py-3 my-3">
+                <div
+                    className={`flex items-center justify-between gap-3 rounded-xl border border-l-4 border-l-[#1A3A4A] px-4 py-3 my-3 shadow-sm ${
+                        theme === 'light' ? 'bg-white border-stone-200' : 'bg-white border-gray-200'
+                    } ${isExpired ? 'opacity-50 pointer-events-none' : ''}`}
+                >
                     <div className="flex items-center gap-3 min-w-0">
                         <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse flex-shrink-0" />
                         <div className="min-w-0">
                             <p className="text-sm font-semibold text-[#1A3A4A]">WisdomLinked Meet in progress</p>
                             <p className="text-xs text-gray-400 mt-0.5">{startedLine}</p>
+                            {isExpired ? (
+                                <span className="text-xs text-stone-400 mt-0.5 block">Invite expired</span>
+                            ) : null}
                         </div>
                     </div>
                     <div className="flex items-center gap-2 flex-shrink-0">
                         <button
                             type="button"
                             onClick={() => void handleCopyGuestInvite()}
-                            disabled={inviteBusy}
-                            className="text-xs font-medium px-3 py-1.5 rounded-lg border border-gray-300 text-gray-600 bg-white hover:bg-gray-50 transition-colors whitespace-nowrap disabled:opacity-70"
+                            disabled={inviteBusy || isExpired}
+                            className={`text-xs font-medium px-3 py-1.5 rounded-lg border whitespace-nowrap transition-colors disabled:opacity-70 ${
+                                isExpired ? 'opacity-50 cursor-not-allowed' : ''
+                            } ${
+                                theme === 'light'
+                                    ? 'border-stone-300 text-stone-700 bg-white hover:bg-wl-page'
+                                    : 'border-gray-300 text-gray-600 bg-white hover:bg-gray-50'
+                            }`}
                         >
                             {inviteBusy ? 'Creating…' : 'Copy invite'}
                         </button>
                         <button
                             type="button"
                             onClick={() => void handleJoin()}
-                            disabled={joinBusy}
-                            className="text-xs font-medium px-3 py-1.5 rounded-lg bg-[#1A3A4A] text-white hover:bg-[#15303d] transition-colors whitespace-nowrap disabled:cursor-wait disabled:opacity-80"
+                            disabled={joinBusy || isExpired}
+                            className={`text-xs font-medium px-3 py-1.5 rounded-lg bg-[#1A3A4A] text-white hover:bg-[#15303d] transition-colors whitespace-nowrap disabled:cursor-wait disabled:opacity-80 ${
+                                isExpired ? 'opacity-50 cursor-not-allowed' : ''
+                            }`}
                         >
                             {joinBusy ? 'Joining…' : 'Join call'}
                         </button>
@@ -205,12 +233,12 @@ const MeetingCard: React.FC<MeetingCardProps> = ({
             className={`my-2 mx-auto max-w-[480px] rounded-xl border overflow-hidden ${
                 isDark
                     ? 'bg-gradient-to-br from-[#1a1a2e] to-[#16213e] border-[#2a2a4a]'
-                    : 'bg-gradient-to-br from-blue-50 to-indigo-50 border-blue-200'
+                    : 'bg-white border-stone-200 shadow-sm'
             }`}
         >
             <div
                 className={`px-4 py-3 flex items-center gap-3 ${
-                    isDark ? 'border-b border-[#2a2a4a]' : 'border-b border-blue-200'
+                    isDark ? 'border-b border-[#2a2a4a]' : 'border-b border-stone-200'
                 }`}
             >
                 <div
@@ -236,14 +264,14 @@ const MeetingCard: React.FC<MeetingCardProps> = ({
             </div>
 
             {isEnded && (
-                <div className={`w-full px-4 py-2 border-t ${isDark ? 'border-[#2a2a4a]' : 'border-blue-200'}`}>
+                <div className={`w-full px-4 py-2 border-t ${isDark ? 'border-[#2a2a4a]' : 'border-stone-200'}`}>
                     <button
                         type="button"
                         onClick={() => void loadTranscript()}
                         className={`w-full py-2 text-xs text-left font-medium rounded-md transition-colors ${
                             isDark
                                 ? 'text-blue-400 hover:bg-[#1e2a44]'
-                                : 'text-blue-600 hover:bg-blue-100'
+                                : 'text-[#234C6A] hover:bg-stone-100'
                         }`}
                     >
                         {loading ? 'Loading...' : expanded ? '▼ Hide transcript' : '▶ Show meeting transcript'}
@@ -265,7 +293,7 @@ const MeetingCard: React.FC<MeetingCardProps> = ({
                                         className={`w-full rounded-md border px-2 py-1 text-xs ${
                                             isDark
                                                 ? 'bg-slate-800 border-slate-600 text-slate-100'
-                                                : 'bg-white border-slate-300 text-slate-900'
+                                                : 'bg-wl-page border-stone-300 text-wl-ink'
                                         }`}
                                     >
                                         {[5, 4, 3, 2, 1].map((n) => (
@@ -282,7 +310,7 @@ const MeetingCard: React.FC<MeetingCardProps> = ({
                                         className={`w-full rounded-md border px-2 py-1 text-xs ${
                                             isDark
                                                 ? 'bg-slate-800 border-slate-600 text-slate-100'
-                                                : 'bg-white border-slate-300 text-slate-900'
+                                                : 'bg-wl-page border-stone-300 text-wl-ink'
                                         }`}
                                     />
                                     <button
@@ -307,12 +335,12 @@ const MeetingCard: React.FC<MeetingCardProps> = ({
             {expanded && transcript.length > 0 && (
                 <div
                     className={`px-4 pb-3 space-y-1.5 max-h-60 overflow-y-auto ${
-                        isDark ? 'border-t border-[#2a2a4a]' : 'border-t border-blue-200'
+                        isDark ? 'border-t border-[#2a2a4a]' : 'border-t border-stone-200'
                     }`}
                 >
                     {transcript.map((msg, i) => (
                         <div key={i} className="pt-1.5">
-                            <span className={`text-xs font-semibold ${isDark ? 'text-blue-300' : 'text-blue-700'}`}>
+                            <span className={`text-xs font-semibold ${isDark ? 'text-blue-300' : 'text-[#234C6A]'}`}>
                                 {msg.authorName || msg.author?.username || 'Unknown'}
                             </span>
                             <span className={`text-xs ml-2 ${isDark ? 'text-gray-300' : 'text-slate-700'}`}>

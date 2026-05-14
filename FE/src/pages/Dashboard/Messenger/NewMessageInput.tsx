@@ -468,9 +468,9 @@ const NewMessageInput: React.FC<any> = ({
 
     if (theme === "light") {
         return (
-            <div className="relative w-full border-t border-slate-200 bg-white px-2 py-1.5 sm:px-3">
+            <div className="relative w-full border-t border-stone-200 bg-wl-page px-2 py-1.5 sm:px-3">
                 {replyTo ? (
-                    <div className="mb-1 flex items-start justify-between gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+                    <div className="mb-1 flex items-start justify-between gap-2 rounded-xl border border-stone-200 bg-[#EDEAE4] px-3 py-2 text-xs text-stone-700">
                         <div className="min-w-0">
                             <div className="font-semibold text-[#234C6A]">Replying to {replyTo.authorName}</div>
                             <div className="truncate">{replyTo.excerpt || "Message"}</div>
@@ -478,18 +478,18 @@ const NewMessageInput: React.FC<any> = ({
                         <button
                             type="button"
                             onClick={onCancelReply}
-                            className="shrink-0 rounded-md p-1 text-slate-500 hover:bg-white hover:text-slate-800"
+                            className="shrink-0 rounded-md p-1 text-stone-500 hover:bg-white/70 hover:text-stone-800"
                             aria-label="Cancel reply"
                         >
                             <X className="h-3.5 w-3.5" />
                         </button>
                     </div>
                 ) : null}
-                <div className="flex items-end gap-1.5 rounded-2xl border border-slate-200/80 bg-slate-50 px-2 py-1.5">
+                <div className="flex items-end gap-1.5 rounded-2xl border border-stone-200 bg-white px-2 py-1.5 shadow-sm">
                     <button
                         type="button"
                         onClick={handleButtonClick}
-                        className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-wl-muted transition hover:bg-white hover:text-wl-brand"
+                        className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-wl-muted transition hover:bg-wl-page hover:text-wl-brand"
                         aria-label="Attach file"
                     >
                         <Paperclip className="h-3.5 w-3.5" />
@@ -497,7 +497,7 @@ const NewMessageInput: React.FC<any> = ({
                     <button
                         type="button"
                         onClick={toggleEmojiPicker}
-                        className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-wl-muted transition hover:bg-white hover:text-wl-brand"
+                        className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-wl-muted transition hover:bg-wl-page hover:text-wl-brand"
                         aria-label="Add emoji"
                     >
                         <Smile className="h-3.5 w-3.5" />

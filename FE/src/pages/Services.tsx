@@ -15,10 +15,9 @@ const Services = () => {
           <div className='w-full lg:w-[50%]'>
             <b className='text-2xl'>We provide advice regarding the following consulting-for-a-fee services through registered experts:</b>
             <ul className="list-disc my-3 pl-6">
-              <li className='mt-2'>Study abroad (mainly in the western world) </li>
-              <li className='mt-2'>Scientific research advice</li>
-              <li className='mt-2'>Work in the west (including how to look for a job)</li>
-              <li className='mt-2'>Others</li>
+              <li className='mt-2'>Study Abroad</li>
+              <li className='mt-2'>Work Abroad</li>
+              <li className='mt-2'>Research Guidance</li>
             </ul>
           </div>
           <div className='w-full lg:w-[50%] pl-0 lg:pl-4'>

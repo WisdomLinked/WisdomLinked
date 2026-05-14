@@ -13,6 +13,7 @@ import { useDispatch } from 'react-redux';
 import { useAppSelector } from '../../../store';
 import { updateMe } from '../../../actions/authActions';
 import { formatDateYYYY_MM_DD_h_m } from '../../../actions/common';
+import { canonicalLabelsFromMixedServiceEntries } from '../../../constants/serviceOptions';
 import Avatar from '../../../components/Avatar';
 import GroupParticipantsDialog from '../Messenger/Messages/GroupParticipantsDialog';
 import ExpertSeminar from './seminar';
@@ -45,7 +46,7 @@ function mapGroupChatToExpertSeminar(g: any) {
     groupName: g.name || '',
     description: g.description || '',
     keywords: labelsFromMixed(g.keywords),
-    services: labelsFromMixed(g.services),
+    services: canonicalLabelsFromMixedServiceEntries(g.services),
     start: g.start,
     end: g.end,
     duration: g.duration,
@@ -162,7 +163,7 @@ function SeminarDetailPane({
   const now = Date.now();
   const isPast = end ? end.getTime() < now : start ? start.getTime() < now : false;
   const keywords = labelsFromMixed(seminar?.keywords);
-  const services = labelsFromMixed(seminar?.services);
+  const services = canonicalLabelsFromMixedServiceEntries(seminar?.services);
 
   return (
     <div className="min-h-full text-[#1A3A4A] px-4 py-6 md:px-8 pb-12">

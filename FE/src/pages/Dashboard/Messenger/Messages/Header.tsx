@@ -45,10 +45,9 @@ export const appendMeetingStartMessage = (res: any, dispatch: any) => {
     }
 };
 
-const MessagesHeader = ({ scrollPosition, events, openCalendarModal, openSeminarModal, openEditSeminarModal, theme = "dark" }: any) => {
+const MessagesHeader = ({ events, openCalendarModal, openSeminarModal, openEditSeminarModal, theme = "dark" }: any) => {
 
     const navRef = useRef<HTMLDivElement>(null);
-    let navPosition = navRef.current?.getBoundingClientRect().top;
     const {
         auth: { userDetails },
         chat: {
@@ -59,11 +58,6 @@ const MessagesHeader = ({ scrollPosition, events, openCalendarModal, openSeminar
         },
         friends: { onlineUsers },
     } = useAppSelector((state) => state);
-
-    const navActiveStyle =
-        scrollPosition >= navPosition!
-            ? (theme === "light" ? { backgroundColor: "#ffffff" } : { backgroundColor: "#141414" })
-            : { backgroundColor: "transparent" };
 
     const dispatch = useDispatch()
     const [participantsDialogOpen, setParticipantsDialogOpen] = useState(false);
@@ -365,13 +359,8 @@ const MessagesHeader = ({ scrollPosition, events, openCalendarModal, openSeminar
     return (
         <div
             className={`w-full flex items-center justify-between sticky top-0 right-0 px-5 py-3 z-20 transition-all ${
-                theme === "light"
-                    ? chosenChatDetails && !enabledEvent
-                        ? ""
-                        : "border-b border-slate-200"
-                    : "rounded-b-[30px]"
+                theme === "light" ? "bg-wl-page" : "bg-darkgrey-1 rounded-b-[30px]"
             }`}
-            style={navActiveStyle}
             ref={navRef}
         >
             {
@@ -381,11 +370,11 @@ const MessagesHeader = ({ scrollPosition, events, openCalendarModal, openSeminar
                             <div
                                 className={`w-[calc(100%-120px)] flex items-center gap-3 rounded-xl border px-3 py-2 ${
                                     theme === "light"
-                                        ? "border-slate-200 bg-gradient-to-r from-[#E8EEF4] to-white text-slate-700"
+                                        ? "border-stone-200 bg-gradient-to-r from-wl-page to-[#E8E4DC] text-slate-700"
                                         : "border-slate-700 bg-slate-900/80 text-lightgrey"
                                 }`}
                             >
-                                <div className={`inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${theme === "light" ? "bg-white text-[#234C6A]" : "bg-slate-800 text-slate-200"}`}>
+                                <div className={`inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${theme === "light" ? "bg-wl-page text-[#234C6A] border border-stone-200" : "bg-slate-800 text-slate-200"}`}>
                                     <CalendarMonthIcon fontSize="small" />
                                 </div>
                                 <div className="min-w-0 flex-1" title={enabledEvent.title}>
@@ -424,6 +413,7 @@ const MessagesHeader = ({ scrollPosition, events, openCalendarModal, openSeminar
                                         status={peerOnline ? "online" : "offline"}
                                         lastSeen={lastSeenForLabel}
                                         avatarInitials={initials}
+                                        image={chosenChatDetails?.image}
                                         theme={theme === "light" ? "light" : "dark"}
                                         onNameAreaClick={() => {
                                             void handleProfileModalOpen(chosenChatDetails);
@@ -452,7 +442,7 @@ const MessagesHeader = ({ scrollPosition, events, openCalendarModal, openSeminar
                         >
                             {enabledEvent ? (
                                 <>
-                                    <div className={`inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${theme === "light" ? "bg-white text-[#234C6A] border border-slate-200" : "bg-slate-800 text-slate-200"}`}>
+                                    <div className={`inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${theme === "light" ? "bg-wl-page text-[#234C6A] border border-stone-200" : "bg-slate-800 text-slate-200"}`}>
                                         <CastForEducationIcon fontSize="small" />
                                     </div>
                                     <div className="min-w-0 flex-1">

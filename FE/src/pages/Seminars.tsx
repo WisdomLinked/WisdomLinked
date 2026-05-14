@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { Search, Filter, ChevronDown, CalendarX } from 'lucide-react';
 import SeminarCard, { SeminarCardProps } from '../components/SeminarCard';
+import { SERVICE_LABELS } from '../constants/serviceOptions';
 
 type Seminar = SeminarCardProps;
 
@@ -15,7 +16,7 @@ const seminars: Seminar[] = [
     location: 'Online · WisdomLinked',
     field: 'Computer Science',
     level: 'Intermediate',
-    topics: ['Research', 'Grad school'],
+    topics: [SERVICE_LABELS[2], SERVICE_LABELS[0]],
     image: null,
     isRecommended: true,
   },
@@ -29,7 +30,7 @@ const seminars: Seminar[] = [
     location: 'Online · WisdomLinked',
     field: 'Civil Engineering',
     level: 'Intermediate',
-    topics: ['Industry', 'Work abroad'],
+    topics: [SERVICE_LABELS[1]],
     image: null,
     isRecommended: true,
   },
@@ -43,7 +44,7 @@ const seminars: Seminar[] = [
     location: 'Online · WisdomLinked',
     field: 'Computer Science',
     level: 'Beginner',
-    topics: ['Grad school', 'Research'],
+    topics: [SERVICE_LABELS[0], SERVICE_LABELS[2]],
     image: null,
     isRecommended: true,
   },
@@ -57,7 +58,7 @@ const seminars: Seminar[] = [
     location: 'Online · WisdomLinked',
     field: 'Computer Science',
     level: 'Intermediate',
-    topics: ['Interview prep', 'Industry'],
+    topics: [SERVICE_LABELS[1], SERVICE_LABELS[0]],
     image: null,
     isRecommended: false,
   },
@@ -71,7 +72,7 @@ const seminars: Seminar[] = [
     location: 'Online · WisdomLinked',
     field: 'Biomedical Engineering',
     level: 'Beginner',
-    topics: ['Career planning', 'Industry'],
+    topics: [SERVICE_LABELS[1], SERVICE_LABELS[2]],
     image: null,
     isRecommended: false,
   },
@@ -85,7 +86,7 @@ const seminars: Seminar[] = [
     location: 'Online · WisdomLinked',
     field: 'Civil Engineering',
     level: 'Advanced',
-    topics: ['Work abroad', 'Career planning'],
+    topics: [SERVICE_LABELS[1], SERVICE_LABELS[0]],
     image: null,
     isRecommended: false,
   },

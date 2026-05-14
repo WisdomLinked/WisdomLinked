@@ -7,6 +7,7 @@ import { resolveProfileImageSrc } from "../../../../utils/profileImage";
 import FilePreviewModal from "../../FilePreviewModal";
 import { hasResumeForPreview, resolveResumePublicUrl } from "../../../../utils/resumeUrl";
 import { collectProfileOptionLabels } from "../../../../utils/chatProfileModal";
+import { canonicalLabelsFromMixedServiceEntries } from "../../../../constants/serviceOptions";
 
 interface ProfileModalProps {
     isOpen: boolean;
@@ -35,9 +36,9 @@ function collectMajorLabels(user: Record<string, any> | null | undefined): strin
     return collectProfileOptionLabels(user?.keywords);
 }
 
-/** Services from populated User doc. */
+/** Services from populated User doc — canonical three labels only. */
 function collectServiceLabels(user: Record<string, any> | null | undefined): string[] {
-    return collectProfileOptionLabels(user?.services);
+    return canonicalLabelsFromMixedServiceEntries(user?.services);
 }
 
 function maskEmailForPrivacy(email: unknown): string {

@@ -90,7 +90,7 @@ const Messenger = ({
 
   return (
       <div className="w-full h-full flex min-h-0">
-        <div className={`w-full min-h-0 flex flex-1 flex-col ${theme === "light" ? "bg-wl-chatGold text-slate-900" : "bg-darkgrey-1"}`}>
+        <div className={`w-full min-h-0 flex flex-1 flex-col ${theme === "light" ? "bg-wl-page text-slate-900" : "bg-darkgrey-1"}`}>
           {chosenChatDetails?.userId || chosenGroupChatDetails?.groupId ? (
               <ChatDetails videoChaton = {videoChaton} theme={theme}/>
           ) : (

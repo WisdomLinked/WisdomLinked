@@ -14,12 +14,9 @@ import {
 } from 'lucide-react';
 import { useAppSelector } from '../../store';
 import { doUpdateProfile, profileImageFetch, profileImageUpload } from '../../api/api';
+import { SERVICE_OPTIONS } from '../../constants/serviceOptions';
 
-const PREFERENCE_OPTIONS = [
-  { id: 'study_abroad', label: 'Study abroad' },
-  { id: 'work_abroad', label: 'Work abroad' },
-  { id: 'research', label: 'Research guidance' },
-];
+const PREFERENCE_OPTIONS = SERVICE_OPTIONS.map((o) => ({ id: o.value, label: o.label }));
 
 const INTEREST_OPTIONS = [
   'Civil Engineering',
@@ -56,7 +53,7 @@ const MOCK_PAYMENTS: PaymentRecord[] = [
     date: '2024-03-05',
     amount: '75.00',
     currency: 'USD',
-    purpose: '1-on-1 session',
+    purpose: 'Study Abroad',
     status: 'completed',
     sessionType: 'Individual',
     expertName: 'Dr. Emily Chen',
@@ -78,7 +75,7 @@ const MOCK_PAYMENTS: PaymentRecord[] = [
     date: '2024-02-15',
     amount: '50.00',
     currency: 'USD',
-    purpose: '1-on-1 session',
+    purpose: 'Study Abroad',
     status: 'completed',
     sessionType: 'Individual',
     expertName: 'Prof. Daniel Ortiz',
@@ -105,7 +102,7 @@ export default function StudentProfile() {
   const [preferences, setPreferences] = useState<Record<string, boolean>>({
     study_abroad: true,
     work_abroad: false,
-    research: true,
+    research_guidance: true,
   });
   const [interests, setInterests] = useState<string[]>(['Computer Science', 'Other Engineering']);
   const [showInterestDropdown, setShowInterestDropdown] = useState(false);
@@ -446,7 +443,7 @@ export default function StudentProfile() {
           )}
         </div>
         <p className="text-xs text-slate-600 mb-3">
-          What are you looking for? (Study abroad, Work abroad, Research, etc.)
+          What are you looking for? (Study Abroad, Work Abroad, Research Guidance, etc.)
         </p>
         <div className="flex flex-wrap gap-3">
           {PREFERENCE_OPTIONS.map(opt => (

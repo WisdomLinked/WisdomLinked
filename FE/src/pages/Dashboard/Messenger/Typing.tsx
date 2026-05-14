@@ -93,7 +93,11 @@ const Typing = ({ theme = "dark" }: any) => {
     if (typingUsers.length === 0) return null;
 
     return (
-        <div className={`flex items-center font-semibold px-4 py-2 ${theme === "light" ? "text-slate-600" : "text-lightgrey"}`}>
+        <div
+            className={`flex items-center font-semibold px-4 py-2 ${
+                theme === "light" ? "bg-wl-page text-stone-600" : "text-lightgrey"
+            }`}
+        >
             <>
                 {typingUsers.map((username, index) => (
                     <span key={username} className="mr-1">

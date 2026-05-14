@@ -14,6 +14,7 @@ import CloseIcon from "@mui/icons-material/Close";
 import SelectionWithCheckBox from "../../../../components/SelectionWithCheckBox";
 import OverlayPortal from "../../../../components/OverayPortal";
 import { SetLoadingStatus } from "../../../../actions/appActions";
+import { filterApiServicesToCanonical } from "../../../../constants/serviceOptions";
 import { useDispatch } from "react-redux";
 import { setChosenChatDetails, setChosenGroupChatDetails } from "../../../../actions/chatActions";
 import { useNavigate } from "react-router-dom";
@@ -51,7 +52,7 @@ const Customers = ({
         const response: any = await doGetKeywordsAndServices();
         if (response) {
             set_keywords(response.keywords || [])
-            set_services(response.services || [])
+            set_services(filterApiServicesToCanonical(response.services || []))
         }
     }
 

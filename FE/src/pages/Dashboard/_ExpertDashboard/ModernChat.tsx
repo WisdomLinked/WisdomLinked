@@ -165,7 +165,7 @@ export default function ModernChat({ videoChaton }: { videoChaton: boolean }) {
   };
 
   return (
-    <div className="h-[calc(100vh-56px)] min-h-0 bg-wl-chatGold">
+    <div className="h-[calc(100vh-56px)] min-h-0 bg-wl-page">
       <div className="flex h-full min-h-0">
         {/* Left panel */}
         <aside className="hidden min-h-0 md:flex md:w-80 lg:w-96 flex-col border-r border-slate-200 bg-white">
@@ -281,7 +281,7 @@ export default function ModernChat({ videoChaton }: { videoChaton: boolean }) {
         </aside>
 
         {/* Right panel: existing real chat */}
-        <main className="flex min-h-0 min-w-0 flex-1 flex-col bg-wl-chatGold">
+        <main className="flex min-h-0 min-w-0 flex-1 flex-col bg-wl-page">
           <Messenger videoChaton={videoChaton} theme="light" />
         </main>
       </div>

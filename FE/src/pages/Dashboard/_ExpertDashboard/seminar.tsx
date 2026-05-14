@@ -12,6 +12,7 @@ import React, {
   import { SetLoadingStatus } from '../../../actions/appActions';
   import { showAlert } from '../../../actions/alertActions';
   import { updateMe } from '../../../actions/authActions';
+  import { SERVICE_LABELS } from '../../../constants/serviceOptions';
   
   type StepId = 1 | 2 | 3;
   
@@ -106,17 +107,6 @@ import React, {
     'Finance',
     'Design',
     'Healthcare',
-  ];
-  
-  const SERVICES_OPTIONS: string[] = [
-    'Career Coaching',
-    'Resume Review',
-    'Interview Prep',
-    'Mentorship',
-    'Technical Training',
-    'Soft Skills',
-    'Leadership',
-    'Networking',
   ];
   
   const TIMEZONE_OPTIONS: string[] = [
@@ -615,7 +605,7 @@ import React, {
                 </button>
                 {openDropdown === 'services' && (
                   <div className="absolute z-20 mt-1 max-h-48 w-full overflow-auto rounded-lg border border-gray-200 bg-white py-1 text-sm shadow-lg">
-                    {SERVICES_OPTIONS.map((option) => {
+                    {SERVICE_LABELS.map((option) => {
                       const checked = formData.services.includes(option);
                       return (
                         <label

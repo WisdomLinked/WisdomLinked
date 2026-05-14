@@ -14,6 +14,7 @@ import FileBrowser from "./fileBrowser";
 import PhoneInput from "react-phone-input-2";
 
 import {doGetKeywordsAndServices, registerUserByAdmin, sendWelcomeEmail} from "../api/api";
+import { filterApiServicesToCanonical } from "../constants/serviceOptions";
 import { SetLoadingStatus } from "../actions/appActions";
 import { showAlert } from "../actions/alertActions";
 import { useAppSelector } from "../store";
@@ -114,7 +115,7 @@ function AdminRegisterExpert() {
         const response: any = await doGetKeywordsAndServices();
         if (response) {
             set_keywords(response.keywords || []);
-            set_services(response.services || []);
+            set_services(filterApiServicesToCanonical(response.services || []));
         }
     };
 

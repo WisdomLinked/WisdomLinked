@@ -431,7 +431,7 @@ const ChatPage: React.FC = () => {
 
     return (
       <div className="flex h-full flex-col">
-        <div className="flex items-center justify-between border-b border-gray-200 bg-white px-4 py-3">
+        <div className="flex items-center justify-between border-b border-stone-200 bg-wl-page px-4 py-3">
           <div className="flex items-center gap-3 min-w-0">
             <button
               type="button"
@@ -441,7 +441,13 @@ const ChatPage: React.FC = () => {
               ←
             </button>
 
-            <div className="hidden md:flex h-10 w-10 items-center justify-center rounded-full bg-[#e8f0f8] text-xs font-semibold text-[#234C6A]">
+            <div
+              className={
+                selectedChat.type === 'community'
+                  ? 'hidden md:flex h-10 w-10 items-center justify-center rounded-full bg-[#e8f0f8] text-[#234C6A]'
+                  : 'hidden md:flex h-10 w-10 items-center justify-center rounded-full bg-teal-700 text-sm font-semibold text-white'
+              }
+            >
               {selectedChat.type === 'community' ? (
                 <Users className="h-5 w-5" />
               ) : (
@@ -545,7 +551,7 @@ const ChatPage: React.FC = () => {
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto bg-white px-4 py-3 md:px-6 md:py-4">
+        <div className="flex-1 overflow-y-auto bg-wl-page px-4 py-3 md:px-6 md:py-4">
           <div className="mb-4 flex items-center gap-3 text-[11px] text-gray-400">
             <div className="h-px flex-1 bg-gray-200" />
             <span className="uppercase tracking-wide">Today</span>
@@ -650,7 +656,7 @@ const ChatPage: React.FC = () => {
   };
 
   const renderEmptyState = () => (
-    <div className="flex h-full flex-col items-center justify-center bg-white px-4 py-8 text-center">
+    <div className="flex h-full flex-col items-center justify-center bg-wl-page px-4 py-8 text-center">
       <div className="mb-4 rounded-full bg-[#e8f0f8] p-4">
         <MessageSquare className="h-8 w-8 text-[#234C6A]" />
       </div>
@@ -746,7 +752,7 @@ const ChatPage: React.FC = () => {
 
       <div
         className={[
-          'flex h-full flex-1 flex-col bg-white',
+          'flex h-full flex-1 flex-col bg-wl-page',
           showListOnlyOnMobile ? 'hidden md:flex' : 'flex',
         ].join(' ')}
       >

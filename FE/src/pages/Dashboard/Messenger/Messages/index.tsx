@@ -186,7 +186,6 @@ const Messages = ({ theme = "dark", onReplyMessage }: { theme?: string; onReplyM
         [dispatch],
     );
 
-    const [scrollPosition, setScrollPosition] = useState(0);
     const [isScrollToTop, set_isScrollToTop] = useState(false)
     const [isFirstLoad, set_isFirstLoad] = useState(true)
 
@@ -542,7 +541,6 @@ const Messages = ({ theme = "dark", onReplyMessage }: { theme?: string; onReplyM
     };
 
     const handleScroll = (e: React.UIEvent<HTMLDivElement, UIEvent>) => {
-        setScrollPosition(e.currentTarget.scrollTop);
         if (
             !loadingOlderRef.current &&
             shouldRequestOlderMessages(
@@ -695,12 +693,11 @@ const Messages = ({ theme = "dark", onReplyMessage }: { theme?: string; onReplyM
 
     return (
         <div
-            className={`relative flex min-h-0 w-full flex-1 flex-col ${theme === "light" ? "bg-[#F6FAFF]" : ""}`}
+            className={`relative flex min-h-0 w-full flex-1 flex-col ${theme === "light" ? "bg-wl-page" : "bg-darkgrey-1"}`}
         >
             <div className="shrink-0">
                 <MessagesHeader
                     events={events}
-                    scrollPosition={scrollPosition}
                     openCalendarModal={() => set_eventsModalShow(true)}
                     openSeminarModal={() => set_seminarDetailsModalShow(true)}
                     openEditSeminarModal={() => set_editSeminarModalShow(true)}
@@ -709,12 +706,12 @@ const Messages = ({ theme = "dark", onReplyMessage }: { theme?: string; onReplyM
             </div>
             <div
                 ref={scrollContainerRef}
-                className={`flex min-h-0 w-full flex-1 flex-col items-stretch overflow-y-auto overscroll-y-contain ${theme === "light" ? "bg-[#F6FAFF]" : ""}`}
+                className={`flex min-h-0 w-full flex-1 flex-col items-stretch overflow-y-auto overscroll-y-contain ${theme === "light" ? "bg-wl-page" : "bg-darkgrey-1"}`}
                 onScroll={handleScroll}
             >
             {
                 gotAllChats ?
-                    <div className={`mt-[15px] text-[13px] text-center px-6 ${theme === "light" ? "text-slate-500" : "text-grey"}`}>
+                    <div className={`mt-[15px] text-[13px] text-center px-6 ${theme === "light" ? "text-stone-400" : "text-grey"}`}>
                         {chat.chosenChatDetails?.userId
                             ? `This is the beginning of your conversation with ${chat.chosenChatDetails?.username}`
                             : chat.chosenGroupChatDetails?.type === 'community'
