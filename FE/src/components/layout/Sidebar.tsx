@@ -151,7 +151,7 @@ export default function Sidebar({
           aria-label={`Open profile for ${studentName}`}
         >
           {avatarUrl ? (
-            <img
+            <img 
               src={avatarUrl}
               alt=""
               className="h-9 w-9 shrink-0 rounded-full object-cover border border-slate-200"
