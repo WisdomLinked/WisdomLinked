@@ -46,6 +46,7 @@ import {
     shouldRequestOlderMessages,
 } from "./historyPagination";
 import { resolveProfileImageSrc } from "../../../../utils/profileImage";
+import { parseMeetingMessageContent } from "../../../../utils/meetingMessage";
 import type { ReplyDraft } from "../ChatDetails";
 /** RC `u.username` is email-derived; WL `userDetails.username` is display name — never equal. */
 function isRcStreamFromMe(rcMsg: any, me: any): boolean {
@@ -257,8 +258,12 @@ const Messages = ({ theme = "dark", onReplyMessage }: { theme?: string; onReplyM
         const unsubMsg = onNewMessage((rawRc: any) => {
             void (async () => {
             const rcMsg = normalizeRcStreamRoomMessage(rawRc);
-            // Skip echoes of our own sends (REST already appended with Mongo author._id)
-            if (isRcStreamFromMe(rcMsg, userDetails)) return;
+            // Skip echoes of our own sends (REST already appended with Mongo author._id).
+            // In-call meet lines are posted to RC from the Jitsi tab (no prior local append), so keep them.
+            if (isRcStreamFromMe(rcMsg, userDetails)) {
+                const meetingLine = parseMeetingMessageContent(String(rcMsg.msg || ''));
+                if (meetingLine?.type !== 'chat-line') return;
+            }
             if (rcMsg?._hidden) return;
             const t = rcMsg?.t;
             if (t === 'rm' || t === 'message_removed') return;
