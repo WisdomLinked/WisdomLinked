@@ -15,6 +15,8 @@ export const appendJitsiMobileWebOverrides = (
     returnUrl?: string,
     whiteboardEnabled: boolean = true,
     wisdomlinkedMeetingId?: string,
+    wisdomlinkedChatSyncToken?: string,
+    wisdomlinkedChatSyncApiBase?: string,
 ): string => {
     const base = String(url || "").trim();
     if (!base) return base;
@@ -25,6 +27,14 @@ export const appendJitsiMobileWebOverrides = (
     const meetingId = String(wisdomlinkedMeetingId || "").trim();
     if (meetingId) {
         overrides.push(`config.wisdomlinkedMeetingId=${encodeURIComponent(meetingId)}`);
+    }
+    const chatTok = String(wisdomlinkedChatSyncToken || "").trim();
+    if (chatTok) {
+        overrides.push(`config.wisdomlinkedChatSyncToken=${encodeURIComponent(chatTok)}`);
+    }
+    const apiBase = String(wisdomlinkedChatSyncApiBase || "").trim();
+    if (apiBase) {
+        overrides.push(`config.wisdomlinkedChatSyncApiBase=${encodeURIComponent(apiBase)}`);
     }
     const normalizedReturnUrl = String(returnUrl || "").trim();
     if (normalizedReturnUrl) {

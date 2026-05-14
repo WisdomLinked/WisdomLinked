@@ -37,8 +37,10 @@ if (!MONGO_URI) {
 const app = express();
 const maxRequestBodySize = process.env.MAX_REQUEST_BODY_SIZE || '1mb';
 
+const jitHost = String(process.env.JITSI_DOMAIN || '').replace(/^https?:\/\//, '').replace(/\/$/, '');
+const jitOrigin = jitHost ? `https://${jitHost}` : null;
 const corsOptions = {
-    origin: [process.env.FE_URL, "https://www.wisdomlinked.com", "http://localhost:3000"],
+    origin: [process.env.FE_URL, "https://www.wisdomlinked.com", "http://localhost:3000", jitOrigin].filter(Boolean),
     methods: ['GET', 'POST', 'PUT', 'DELETE'],
     credentials: true,
     allowedHeaders: ['Content-Type', 'Authorization']

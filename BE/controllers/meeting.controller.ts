@@ -21,6 +21,8 @@ import { isMeetingModerator, isMeetingModeratorWithDelegates } from '../utils/me
 import { buildMeetingInviteUrl, resolvePublicAppBaseUrl } from '../utils/inviteUrl';
 import { wlDisplayName } from '../utils/wlDisplayName';
 import { encodeMeetingChatLine } from '../utils/meetingChatPayload';
+import { signWlMeetingChatToken, signGuestMeetingChatToken, type MeetingChatTokenClaims } from '../utils/meetingChatSyncToken';
+import { allowMeetingChatRate } from '../utils/meetingChatRateLimit';
 
 const JITSI_DOMAIN = process.env.JITSI_DOMAIN || 'meet.wisdomlinked.com';
 const FRONTEND_BASE_URL = process.env.FRONTEND_BASE_URL || process.env.FE_URL || process.env.REACT_APP_URL || '';
@@ -35,6 +37,44 @@ const MEETING_MAX_ACTIVE_MS = Math.max(
     Number(process.env.MEETING_MAX_ACTIVE_HOURS || 12) * 60 * 60 * 1000,
 );
 
+const MEETING_CHAT_SYNC_RL_MAX = Math.max(10, Math.min(120, Number(process.env.MEETING_CHAT_SYNC_RL_PER_MIN || 50)));
+const MEETING_CHAT_SYNC_RL_WINDOW_MS = 60_000;
+
+const publicApiBaseForMeetingChatSync = (): string =>
+    String(
+        process.env.MEETING_CHAT_SYNC_PUBLIC_API_BASE
+            || process.env.API_PUBLIC_BASE_URL
+            || process.env.PUBLIC_API_BASE
+            || '',
+    )
+        .trim()
+        .replace(/\/$/, '');
+
+const meetingChatSyncUrlParams = (
+    userId: string | undefined,
+    meetingThreadId: string,
+    guest?: { inviteId: string; displayName: string; expiresInSeconds: number },
+): { chatSyncToken?: string; chatSyncApiBase?: string } => {
+    const apiBase = publicApiBaseForMeetingChatSync();
+    if (!apiBase) return {};
+    try {
+        if (guest) {
+            const exp = Math.max(120, Math.min(guest.expiresInSeconds, 48 * 60 * 60));
+            return {
+                chatSyncToken: signGuestMeetingChatToken(guest.inviteId, meetingThreadId, guest.displayName, exp),
+                chatSyncApiBase: apiBase,
+            };
+        }
+        if (!userId) return {};
+        return {
+            chatSyncToken: signWlMeetingChatToken(userId, meetingThreadId, 8 * 60 * 60),
+            chatSyncApiBase: apiBase,
+        };
+    } catch {
+        return {};
+    }
+};
+
 const normalizeId = (v: any): string => String(v?._id ?? v?.id ?? v ?? '').trim();
 
 // Meet must set WAIT_FOR_HOST_DISABLE_AUTO_OWNERS=1 (Prosody) or every JWT joiner becomes MUC owner
@@ -42,7 +82,14 @@ const normalizeId = (v: any): string => String(v?._id ?? v?.id ?? v ?? '').trim(
 const buildSignedJitsiUrl = (
     roomName: string,
     userLike: any,
-    opts?: { moderator?: boolean; guest?: boolean; expiresInSeconds?: number; meetingThreadId?: string },
+    opts?: {
+        moderator?: boolean;
+        guest?: boolean;
+        expiresInSeconds?: number;
+        meetingThreadId?: string;
+        chatSyncToken?: string;
+        chatSyncApiBase?: string;
+    },
 ): string => {
     const base = `https://${JITSI_DOMAIN}/${roomName}`;
     const moderator = Boolean(opts?.moderator);
@@ -50,7 +97,14 @@ const buildSignedJitsiUrl = (
     // Keep whiteboard visible for all participants; moderator role controls moderation actions.
     const whiteboardEnabled = true;
     if (!JITSI_JWT_SECRET) {
-        return appendJitsiMobileWebOverrides(base, MEETING_RETURN_URL, whiteboardEnabled, opts?.meetingThreadId);
+        return appendJitsiMobileWebOverrides(
+            base,
+            MEETING_RETURN_URL,
+            whiteboardEnabled,
+            opts?.meetingThreadId,
+            opts?.chatSyncToken,
+            opts?.chatSyncApiBase,
+        );
     }
     const nowSec = Math.floor(Date.now() / 1000);
     const exp = nowSec + Number(opts?.expiresInSeconds || 2 * 60 * 60);
@@ -97,6 +151,8 @@ const buildSignedJitsiUrl = (
         MEETING_RETURN_URL,
         whiteboardEnabled,
         opts?.meetingThreadId,
+        opts?.chatSyncToken,
+        opts?.chatSyncApiBase,
     );
 };
 
@@ -318,6 +374,7 @@ export const startMeeting = async (req: any, res: Response) => {
             type: 'meeting',
         };
 
+        const chatSync = meetingChatSyncUrlParams(String(userId), String(meetingThread._id));
         const signedUrl = buildSignedJitsiUrl(jitsiRoomName, me, {
             moderator: isMeetingModerator({
                 conversationId,
@@ -327,6 +384,8 @@ export const startMeeting = async (req: any, res: Response) => {
             }),
             guest: false,
             meetingThreadId: String(meetingThread._id),
+            chatSyncToken: chatSync.chatSyncToken,
+            chatSyncApiBase: chatSync.chatSyncApiBase,
         });
         return res.status(200).json({
             meetingThreadId: meetingThread._id,
@@ -468,16 +527,20 @@ function sanitizeMeetingChatBody(raw: unknown): string {
 /**
  * POST /api/meeting/chat-sync
  * Mirror an in-call line into Rocket.Chat (parent DM or group) and append Mongo transcript.
- * Authenticated joined participants only.
+ * Auth: WisdomLinked session cookie, or `Authorization: Bearer <meeting chat JWT>` from the Jitsi tab.
  * Body: { meetingThreadId, content }
  */
 export const syncMeetingChatMessage = async (req: any, res: Response) => {
     try {
-        const { userId } = req.user;
-        const { meetingThreadId, content } = req.body;
+        const claims = req.meetingChatClaims as MeetingChatTokenClaims | undefined;
+        const meetingThreadId = String(req.body?.meetingThreadId || '').trim();
+        const rawContent = req.body?.content;
 
-        if (!meetingThreadId || content == null || String(content).trim() === '') {
+        if (!meetingThreadId || rawContent == null || String(rawContent).trim() === '') {
             return res.status(400).json({ error: 'meetingThreadId and content are required' });
+        }
+        if (claims && String(claims.mid) !== meetingThreadId) {
+            return res.status(400).json({ error: 'meetingThreadId does not match token' });
         }
 
         const meeting = await MeetingThread.findById(meetingThreadId);
@@ -489,40 +552,75 @@ export const syncMeetingChatMessage = async (req: any, res: Response) => {
             return res.status(400).json({ error: 'Meeting is no longer active' });
         }
 
-        const access = await requireMeetingAccess(meeting, String(userId));
-        if (!access.allowed) return res.status(403).json({ error: access.error || 'You do not have access to this meeting' });
-        if (isRemovedFromMeeting(meeting, String(userId))) {
-            return res.status(403).json({ error: 'You were removed from this meeting' });
-        }
-        if (!hasJoinedMeeting(meeting, String(userId))) {
-            return res.status(403).json({ error: 'Only joined meeting participants can sync meeting chat' });
+        const isGuest = claims?.typ === 'guest-meeting-chat';
+        let wlUserId: string | null = null;
+        let author = '';
+        let rateKey = '';
+        let posterForRc: { username: string; email: string } | null = null;
+
+        if (isGuest && claims.typ === 'guest-meeting-chat') {
+            rateKey = `g:${claims.inv}:${meetingThreadId}`;
+            const inv = await MeetingGuestInvite.findById(claims.inv).lean();
+            if (!inv || String(inv.meetingThreadId) !== String(meeting._id)) {
+                return res.status(403).json({ error: 'Invite is not valid for this meeting' });
+            }
+            if (inv.revokedAt || new Date(inv.expiresAt).getTime() <= Date.now()) {
+                return res.status(403).json({ error: 'Invite is no longer valid' });
+            }
+            author = String(claims.nm || 'Guest').trim().slice(0, MAX_MEETING_CHAT_AUTHOR) || 'Guest';
+        } else {
+            wlUserId = claims?.typ === 'wl-meeting-chat' ? String(claims.sub) : String(req.user?.userId || '');
+            if (!wlUserId) return res.status(401).json({ error: 'Unauthorized' });
+            rateKey = `u:${wlUserId}:${meetingThreadId}`;
+            const access = await requireMeetingAccess(meeting, wlUserId);
+            if (!access.allowed) return res.status(403).json({ error: access.error || 'You do not have access to this meeting' });
+            if (isRemovedFromMeeting(meeting, wlUserId)) {
+                return res.status(403).json({ error: 'You were removed from this meeting' });
+            }
+            if (!hasJoinedMeeting(meeting, wlUserId)) {
+                return res.status(403).json({ error: 'Only joined meeting participants can sync meeting chat' });
+            }
+            const me = await User.findById(wlUserId).select('email username').lean();
+            if (!me?.email) return res.status(400).json({ error: 'User profile incomplete' });
+            author =
+                wlDisplayName(me as any).trim().slice(0, MAX_MEETING_CHAT_AUTHOR) ||
+                String(me.username || '').trim().slice(0, MAX_MEETING_CHAT_AUTHOR) ||
+                'Member';
+            posterForRc = { username: String(me.username), email: String(me.email) };
         }
 
-        const msg = sanitizeMeetingChatBody(content);
+        if (!allowMeetingChatRate(rateKey, MEETING_CHAT_SYNC_RL_MAX, MEETING_CHAT_SYNC_RL_WINDOW_MS)) {
+            return res.status(429).json({ error: 'Too many meeting chat sync requests; try again shortly' });
+        }
+
+        const msg = sanitizeMeetingChatBody(rawContent);
         if (!msg) return res.status(400).json({ error: 'content is empty after sanitization' });
 
-        const me = await User.findById(userId);
-        if (!me?.email) return res.status(400).json({ error: 'User profile incomplete' });
-        const author =
-            wlDisplayName(me).trim().slice(0, MAX_MEETING_CHAT_AUTHOR) ||
-            String(me.username || '').trim().slice(0, MAX_MEETING_CHAT_AUTHOR) ||
-            'Member';
-        const rcLine = encodeMeetingChatLine(String(meeting._id), { v: 1, author, guest: false, msg });
-
+        const rcLine = encodeMeetingChatLine(String(meeting._id), { v: 1, author, guest: isGuest, msg });
         let rcMessageId: string | null = null;
 
         if (meeting.conversationId) {
             const conversation = await Conversation.findById(meeting.conversationId);
             if (!conversation) return res.status(404).json({ error: 'Conversation not found' });
-            const otherUserId = conversation.participants.find((p: any) => String(p) !== String(userId));
-            const other = otherUserId ? await User.findById(otherUserId) : null;
-            if (!other?.email) return res.status(500).json({ error: 'Could not resolve conversation peer' });
+            const partIds = (conversation.participants || []).map((p: any) => String(p));
+            const ua = partIds[0] ? await User.findById(partIds[0]).select('email username').lean() : null;
+            const ub = partIds[1] ? await User.findById(partIds[1]).select('email username').lean() : null;
+            if (!ua?.email || !ub?.email) return res.status(500).json({ error: 'Could not resolve conversation participants' });
             const rcChannelId = await getOrCreateDMChannel(
-                toRocketChatUsername(me.email),
-                toRocketChatUsername(other.email),
+                toRocketChatUsername(ua.email),
+                toRocketChatUsername(ub.email),
             );
             if (rcChannelId) {
-                rcMessageId = await sendMessageToRC(rcChannelId, rcLine, me.username, me.email);
+                if (isGuest) {
+                    rcMessageId = await sendMessageToRC(rcChannelId, rcLine, `Meet · ${author}`, undefined);
+                } else if (posterForRc?.email) {
+                    rcMessageId = await sendMessageToRC(
+                        rcChannelId,
+                        rcLine,
+                        posterForRc.username,
+                        posterForRc.email,
+                    );
+                }
             }
         } else if (meeting.groupChatId) {
             const groupChat = await GroupChat.findById(meeting.groupChatId)
@@ -537,7 +635,16 @@ export const syncMeetingChatMessage = async (req: any, res: Response) => {
             if (adm?.email) emails.push(String(adm.email).toLowerCase());
             const rcChannelId = await syncRocketGroupChannelMembers(String(meeting.groupChatId), emails);
             if (rcChannelId) {
-                rcMessageId = await sendMessageToRC(rcChannelId, rcLine, me.username, me.email);
+                if (isGuest) {
+                    rcMessageId = await sendMessageToRC(rcChannelId, rcLine, `Meet · ${author}`, undefined);
+                } else if (posterForRc?.email) {
+                    rcMessageId = await sendMessageToRC(
+                        rcChannelId,
+                        rcLine,
+                        posterForRc.username,
+                        posterForRc.email,
+                    );
+                }
             }
         }
 
@@ -545,16 +652,17 @@ export const syncMeetingChatMessage = async (req: any, res: Response) => {
             return res.status(502).json({ error: 'Could not post meeting chat to messenger' });
         }
 
-        if (!meeting.participants.some((p: any) => p.toString() === userId)) {
-            meeting.participants.push(userId);
+        if (!isGuest && wlUserId && !meeting.participants.some((p: any) => p.toString() === wlUserId)) {
+            meeting.participants.push(wlUserId);
         }
 
-        meeting.transcript.push({
-            author: userId,
+        const transcriptEntry: { author?: any; authorName: string; content: string; createdAt: Date } = {
             authorName: author,
             content: msg,
             createdAt: new Date(),
-        });
+        };
+        if (!isGuest && wlUserId) transcriptEntry.author = wlUserId;
+        meeting.transcript.push(transcriptEntry);
         await meeting.save();
 
         return res.status(200).json({ success: true, messageId: rcMessageId });
@@ -784,11 +892,19 @@ export const resolveMeetingGuestInvite = async (req: Request, res: Response) => 
             image: '',
             _id: `guest-${String(invite._id)}`,
         };
+        const inviteExpSec = Math.max(120, Math.floor((new Date(invite.expiresAt).getTime() - Date.now()) / 1000));
+        const chatSync = meetingChatSyncUrlParams(undefined, String(invite.meetingThreadId), {
+            inviteId: String(invite._id),
+            displayName: guestIdentity.username,
+            expiresInSeconds: inviteExpSec,
+        });
         const jitsiUrl = buildSignedJitsiUrl(String(meeting.jitsiRoomName), guestIdentity, {
             guest: true,
             moderator: false,
-            expiresInSeconds: Math.max(5 * 60, Math.floor((new Date(invite.expiresAt).getTime() - Date.now()) / 1000)),
+            expiresInSeconds: Math.max(5 * 60, inviteExpSec),
             meetingThreadId: String(invite.meetingThreadId),
+            chatSyncToken: chatSync.chatSyncToken,
+            chatSyncApiBase: chatSync.chatSyncApiBase,
         });
         return res.status(200).json({
             success: true,
@@ -840,12 +956,15 @@ export const joinMeetingFromGuestInvite = async (req: any, res: Response) => {
         const me = await User.findById(userId).select('_id username email image');
         if (!me) return res.status(404).json({ error: 'User not found' });
 
+        const chatSync = meetingChatSyncUrlParams(String(userId), String(invite.meetingThreadId));
         const jitsiUrl = buildSignedJitsiUrl(String(meeting.jitsiRoomName), me, {
             // Guest-invite token is the authorization gate for this path.
             // Any authenticated account with a valid invite joins as participant.
             moderator: false,
             guest: false,
             meetingThreadId: String(invite.meetingThreadId),
+            chatSyncToken: chatSync.chatSyncToken,
+            chatSyncApiBase: chatSync.chatSyncApiBase,
         });
 
         meeting.joinEvents = Array.isArray(meeting.joinEvents) ? meeting.joinEvents : [];
@@ -901,10 +1020,13 @@ export const getMeetingJoinInfo = async (req: any, res: Response) => {
 
         const auth = await canUserJoinMeeting(meeting, String(userId));
         if (!auth.allowed) return res.status(403).json({ error: 'You do not have access to this meeting' });
+        const chatSync = meetingChatSyncUrlParams(String(userId), meetingThreadId);
         const jitsiUrl = buildSignedJitsiUrl(String(meeting.jitsiRoomName), me, {
             moderator: auth.moderator,
             guest: false,
             meetingThreadId: String(meetingThreadId),
+            chatSyncToken: chatSync.chatSyncToken,
+            chatSyncApiBase: chatSync.chatSyncApiBase,
         });
         meeting.joinEvents = Array.isArray(meeting.joinEvents) ? meeting.joinEvents : [];
         meeting.joinEvents.push({

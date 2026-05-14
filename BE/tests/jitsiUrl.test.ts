@@ -50,6 +50,19 @@ test("adds WisdomLinked meeting id for Jitsi UI customization", () => {
     );
 });
 
+test("adds meeting chat sync token and API base when provided", () => {
+    const url = appendJitsiMobileWebOverrides(
+        "https://meet.wisdomlinked.com/room-1?jwt=abc",
+        undefined,
+        true,
+        "mid-1",
+        "tok-abc",
+        "https://api.example.com",
+    );
+    assert.ok(url.includes("config.wisdomlinkedChatSyncToken=tok-abc"));
+    assert.ok(url.includes("config.wisdomlinkedChatSyncApiBase=https%3A%2F%2Fapi.example.com"));
+});
+
 test("disables whiteboard when explicitly requested", () => {
     const url = appendJitsiMobileWebOverrides(
         "https://meet.wisdomlinked.com/room-123?jwt=abc",

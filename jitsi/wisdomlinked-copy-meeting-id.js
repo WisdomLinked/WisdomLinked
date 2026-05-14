@@ -11,6 +11,9 @@
    * participants-pane "Mute all" button. Jitsi rewrites the hash after join, so
    * the meeting id is cached in sessionStorage for the lifetime of the tab.
    *
+   * Companion script for mirroring in-meeting text chat to Messenger:
+   *   `wisdomlinked-meeting-chat-sync.js` (see `jitsi/MEETING_CHAT_HOOKS.md`).
+   *
    * Rollback:
    * 1. Remove the script tag with id/source for `wisdomlinked-copy-meeting-id.js`
    *    from the mounted custom `index.html`.

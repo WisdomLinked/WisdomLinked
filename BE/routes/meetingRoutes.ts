@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { requireAuth } = require('../middlewares/requireAuth');
 
+import { meetingChatSyncGate } from '../middlewares/meetingChatSyncGate';
 import {
     startMeeting,
     endMeeting,
@@ -22,7 +23,7 @@ import {
 router.post('/start', requireAuth(false), startMeeting);
 router.post('/end', requireAuth(false), endMeeting);
 router.post('/transcript', requireAuth(false), addTranscriptMessage);
-router.post('/chat-sync', requireAuth(false), syncMeetingChatMessage);
+router.post('/chat-sync', meetingChatSyncGate, syncMeetingChatMessage);
 router.post('/rate', requireAuth(false), submitMeetingRating);
 router.post('/guest-invite', requireAuth(false), createMeetingGuestInvite);
 router.post('/revoke-participant', requireAuth(false), revokeMeetingParticipant);
