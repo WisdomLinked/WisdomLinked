@@ -472,6 +472,10 @@ const Message = ({
                             <div className="chat-message-rich break-words whitespace-pre-wrap">
                                 {renderChatRichContent(content, theme, "incoming")}
                             </div>
+                        </div>
+                        {renderReplyAction()}
+                    </div>
+                )}
             </div>
         </div>
     );
