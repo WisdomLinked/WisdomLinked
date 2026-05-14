@@ -109,7 +109,11 @@
 
   function isLikelyOwnMessage(m) {
     if (!m || typeof m !== "object") return false;
+    if (m.messageType === "error") return false;
+    if (m.lobbyChat === true || m.privateMessage === true) return false;
     if (m.own === true || m.isOwn === true) return true;
+    /* jitsi-meet Redux IMessage uses messageType "local" | "remote" | "error" (not isOwn). */
+    if (m.messageType === "local") return true;
     try {
       var app = typeof APP !== "undefined" ? APP : null;
       var getId =
@@ -162,6 +166,7 @@
     for (i = 0; i < msgs.length; i++) {
       var m = msgs[i];
       if (!isLikelyOwnMessage(m)) continue;
+      if (m.isReaction === true) continue;
       var txt = textFromMessage(m);
       if (!txt) continue;
       var k = messageDedupeKey(m, i);

@@ -15,7 +15,7 @@ Jitsi polls are usually **not** emitted as normal MUC text messages. A text-only
 
 ### 1) Redux store (`APP.store`) — used in `wisdomlinked-meeting-chat-sync.js`
 
-Many `jitsi-meet` builds expose `window.APP.store`. The chat subsystem often lives under `state['features/chat']` (shape varies: `messages`, `messageMap`, `recent`, etc.). The bundled script subscribes to the store, diffs message keys, and dedupes by id.
+Many `jitsi-meet` builds expose `window.APP.store`. The chat subsystem often lives under `state['features/chat']` (shape varies: `messages`, `messageMap`, `recent`, etc.). The bundled script subscribes to the store, diffs message keys, and dedupes by id. Recent web builds store `messageType: "local" | "remote" | "error"` on each `IMessage` (not `isOwn`); the sync script treats `"local"` as the sender’s own main-room line.
 
 **Pros:** No iframe; works with current “open meet in new tab” flow.  
 **Cons:** State shape changes between Jitsi versions; subscribe handler must stay defensive.
