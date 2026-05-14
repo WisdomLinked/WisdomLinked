@@ -58,11 +58,20 @@ export JITSI_WEB_CUSTOM="$HOME/.jitsi-meet-cfg/web/custom"   # adjust to your do
 
 Then restart the `web` container and hard-refresh browsers.
 
-Manual option: mount both scripts from `custom/` and add two tags in `custom/index.html` (order: copy-meeting-id first, then meeting-chat-sync), for example:
+**docker-jitsi-meet:** bind-mount each script into `/usr/share/jitsi-meet/` (same pattern as a custom `index.html`). The `web/custom` directory is mounted at `/config/custom` in the container, so paths like `/custom/*.js` are **not** real static files; the SPA serves `index.html` instead and the scripts never load.
 
-```html
-<script src="custom/wisdomlinked-copy-meeting-id.js" defer></script>
-<script src="custom/wisdomlinked-meeting-chat-sync.js" defer></script>
+Add read-only volume lines next to your existing `index.html` bind (paths are examples):
+
+```yaml
+- ${HOME}/.jitsi-meet-cfg/web/custom/wisdomlinked-copy-meeting-id.js:/usr/share/jitsi-meet/wisdomlinked-copy-meeting-id.js:ro
+- ${HOME}/.jitsi-meet-cfg/web/custom/wisdomlinked-meeting-chat-sync.js:/usr/share/jitsi-meet/wisdomlinked-meeting-chat-sync.js:ro
 ```
 
-Rebuild/restart the `web` container and hard-refresh clients after changes.
+In `custom/index.html`, reference them from the app root (not under `custom/`):
+
+```html
+<script src="wisdomlinked-copy-meeting-id.js" defer></script>
+<script src="wisdomlinked-meeting-chat-sync.js" defer></script>
+```
+
+Recreate the `web` container (`docker compose up -d web`) and hard-refresh clients after changes.
