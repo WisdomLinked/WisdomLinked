@@ -51,5 +51,30 @@ describe("parseMeetingMessageContent", () => {
   it("returns null for invalid meeting chat payload", () => {
     expect(parseMeetingMessageContent("__MEETING_CHAT__::tid::!!!")).toBeNull();
   });
+
+  it("parses meeting chat line with guest true", () => {
+    const b64 = "eyJ2IjoxLCJhdXRob3IiOiJHdWVzdCIsImd1ZXN0Ijp0cnVlLCJtc2ciOiJIZWxsbyJ9";
+    const raw = `__MEETING_CHAT__::t-guest::${b64}`;
+    expect(parseMeetingMessageContent(raw)).toEqual({
+      type: "chat-line",
+      meetingThreadId: "t-guest",
+      author: "Guest",
+      guest: true,
+      msg: "Hello",
+    });
+  });
+
+  it("parses meeting chat unicode message", () => {
+    const json = JSON.stringify({ v: 1, author: "José", guest: false, msg: "café 🎉" });
+    const b64 = Buffer.from(json, "utf8").toString("base64url");
+    const raw = `__MEETING_CHAT__::t-uni::${b64}`;
+    expect(parseMeetingMessageContent(raw)).toEqual({
+      type: "chat-line",
+      meetingThreadId: "t-uni",
+      author: "José",
+      guest: false,
+      msg: "café 🎉",
+    });
+  });
 });
 
