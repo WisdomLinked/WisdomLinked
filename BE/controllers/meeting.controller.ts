@@ -181,8 +181,10 @@ export const endMeetingFromCall = async (req: any, res: Response) => {
     return endMeeting(req, res);
 };
 
-const isLastParticipantEndReason = (reason: unknown): boolean =>
-    String(reason || '').trim() === 'last_participant';
+const isLastParticipantEndReason = (reason: unknown): boolean => {
+    const r = String(reason || '').trim();
+    return r === 'last_participant' || r === 'last_participant_return';
+};
 
 const delegatedIdsFromMeeting = (meeting: any): string[] =>
     (Array.isArray(meeting?.delegatedModerators) ? meeting.delegatedModerators : []).map((id: any) => normalizeId(id));

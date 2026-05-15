@@ -140,6 +140,31 @@ test("DM participant may end via end-call when last_participant", async () => {
   }
 });
 
+test("DM participant may end via POST /end with last_participant_return", async () => {
+  const originalFindByIdMeeting = MeetingThread.findById;
+  const originalFindByIdConversation = Conversation.findById;
+  const originalFindByIdUser = User.findById;
+
+  try {
+    const meeting = stubDmMeetingEnd();
+
+    const req: any = {
+      user: { userId: "other-participant" },
+      body: { meetingThreadId: "meeting-dm", endReason: "last_participant_return" },
+    };
+    const res = createRes();
+
+    await endMeeting(req, res);
+
+    assert.equal(res.statusCode, 200);
+    assert.equal(meeting.status, "ended");
+  } finally {
+    MeetingThread.findById = originalFindByIdMeeting;
+    Conversation.findById = originalFindByIdConversation;
+    User.findById = originalFindByIdUser;
+  }
+});
+
 test("non-participant cannot end a meeting", async () => {
   const originalFindByIdMeeting = MeetingThread.findById;
   const originalFindByIdConversation = Conversation.findById;

@@ -6,6 +6,7 @@
   var STORAGE_MEETING = "wlMeetingChatMeetingId";
   var STORAGE_TOKEN = "wlMeetingChatSyncToken";
   var STORAGE_API = "wlMeetingChatSyncApiBase";
+  var STORAGE_ALONE = "wlAloneInRoom";
   var endedMeetings = Object.create(null);
   var trackedRemoteCount = -1;
   var trackedTotalCount = -1;
@@ -35,6 +36,17 @@
   function wlDebug() {
     if (!debugEnabled() || typeof console === "undefined" || !console.debug) return;
     console.debug.apply(console, ["[wl-meeting-end]"].concat([].slice.call(arguments)));
+  }
+
+  function setAloneInRoom(alone) {
+    aloneInRoom = alone;
+    try {
+      if (alone) {
+        window.sessionStorage.setItem(STORAGE_ALONE, "1");
+      } else {
+        window.sessionStorage.removeItem(STORAGE_ALONE);
+      }
+    } catch (e) {}
   }
 
   function readConfig() {
@@ -115,7 +127,7 @@
     if (live >= 0) {
       trackedTotalCount = live;
       trackedRemoteCount = Math.max(0, live - 1);
-      if (trackedRemoteCount === 0) aloneInRoom = true;
+      if (trackedRemoteCount === 0 || live <= 1) setAloneInRoom(true);
     }
     wlDebug("counts", {
       live: live,
@@ -134,7 +146,27 @@
     return false;
   }
 
+  function postEndCall(cfg) {
+    var url = String(cfg.apiBase).replace(/\/$/, "") + "/api/meeting/end-call";
+    var body = JSON.stringify({
+      meetingThreadId: cfg.meetingThreadId,
+      endReason: "last_participant",
+    });
+    return fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: "Bearer " + cfg.token,
+      },
+      body: body,
+      credentials: "omit",
+      keepalive: true,
+    });
+  }
+
   function endCallOnce() {
+    var live = liveParticipantCount();
+    if (live >= 0 && live <= 1) setAloneInRoom(true);
     refreshTrackedCounts();
     if (!isLastParticipantLeaving()) {
       wlDebug("skip end — not last participant", {
@@ -152,23 +184,13 @@
     }
     if (endedMeetings[cfg.meetingThreadId]) return;
     endedMeetings[cfg.meetingThreadId] = 1;
+    try {
+      window.sessionStorage.removeItem(STORAGE_ALONE);
+    } catch (e) {}
     wlDebug("ending meeting", cfg.meetingThreadId);
-    var url = String(cfg.apiBase).replace(/\/$/, "") + "/api/meeting/end-call";
-    fetch(url, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: "Bearer " + cfg.token,
-      },
-      body: JSON.stringify({
-        meetingThreadId: cfg.meetingThreadId,
-        endReason: "last_participant",
-      }),
-      credentials: "omit",
-      keepalive: true,
-    })
+    postEndCall(cfg)
       .then(function (res) {
-        if (!res.ok) wlDebug("end-call failed", res.status, cfg.meetingThreadId);
+        if (res && !res.ok) wlDebug("end-call failed", res.status, cfg.meetingThreadId);
       })
       .catch(function (err) {
         wlDebug("end-call error", err);
@@ -176,13 +198,15 @@
   }
 
   function onParticipantLeft() {
-    if (trackedRemoteCount > 0) trackedRemoteCount -= 1;
     refreshTrackedCounts();
-    if (trackedRemoteCount === 0) aloneInRoom = true;
+    var live = liveParticipantCount();
+    if (trackedRemoteCount === 0 || (live >= 0 && live <= 1)) {
+      setAloneInRoom(true);
+    }
   }
 
   function onParticipantJoined() {
-    aloneInRoom = false;
+    setAloneInRoom(false);
     refreshTrackedCounts();
   }
 
@@ -194,9 +218,9 @@
       app.conference._wlEndHooked = true;
 
       app.conference.addListener("conferenceJoined", function () {
-        aloneInRoom = false;
+        setAloneInRoom(false);
         refreshTrackedCounts();
-        if (trackedRemoteCount === 0 || trackedTotalCount <= 1) aloneInRoom = true;
+        if (trackedRemoteCount === 0 || trackedTotalCount <= 1) setAloneInRoom(true);
       });
       app.conference.addListener("participantJoined", onParticipantJoined);
       app.conference.addListener("participantLeft", onParticipantLeft);

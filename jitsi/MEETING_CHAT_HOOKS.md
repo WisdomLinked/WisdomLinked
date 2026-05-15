@@ -29,10 +29,13 @@ Hard-refresh meet clients after deploy. **Also deploy staging/production BE** so
 ## Meeting end (last leaver)
 
 - Tracks `aloneInRoom` via `conferenceJoined`, `participantJoined`, `participantLeft`, and live/Redux participant counts.
-- Ends only when `aloneInRoom` is true, live count `<= 1`, or tracked remote count is `0`. **Unknown count never ends the meeting.**
-- `pagehide` / `beforeunload` call end **only if** `aloneInRoom` is already true (safe tab-close for last person).
+- On `participantLeft`, sets `aloneInRoom` when remote count is `0` or live count `<= 1` (does not end until the remaining user hangs up).
+- Persists `sessionStorage.wlAloneInRoom = "1"` when alone so Messenger can end on return if hangup `fetch` missed.
+- Ends on `videoConferenceLeft` / `readyToClose` when `aloneInRoom` or live count `<= 1`. **Unknown count never ends the meeting.**
+- `pagehide` / `beforeunload` call end **only if** `aloneInRoom` is already true.
 - Body: `{ meetingThreadId, endReason: "last_participant" }`.
 - Debug: `config.wisdomlinkedMeetingEndDebug=true`.
+- **Messenger return:** if `wlAloneInRoom` is set, FE calls `POST /api/meeting/end` with `endReason: "last_participant_return"` (session cookie).
 
 ## Hash keys (backend join URL)
 

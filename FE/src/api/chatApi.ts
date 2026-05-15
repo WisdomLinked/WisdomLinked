@@ -260,9 +260,15 @@ export const startMeeting = async (data: { conversationId?: string; groupChatId?
 };
 
 /** End a Jitsi meeting. */
-export const endMeeting = async (meetingThreadId: string) => {
+export const endMeeting = async (
+    meetingThreadId: string,
+    endReason?: 'last_participant_return',
+) => {
     try {
-        const res = await api.post('meeting/end', { meetingThreadId });
+        const res = await api.post('meeting/end', {
+            meetingThreadId,
+            ...(endReason ? { endReason } : {}),
+        });
         return res.data;
     } catch (err: any) {
         console.error('[chatApi.endMeeting]', err.message);
