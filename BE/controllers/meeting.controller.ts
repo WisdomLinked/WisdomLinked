@@ -416,7 +416,12 @@ export const endMeeting = async (req: any, res: Response) => {
         if (!meeting) return res.status(404).json({ error: 'Meeting not found' });
         await expireStaleMeetingIfNeeded(meeting);
         if (meeting.status === 'ended') return res.status(400).json({ error: 'Meeting already ended' });
-        const access = await requireMeetingAccess(meeting, String(userId), { moderator: true });
+        // DM: either participant may end on hangup; group: moderators only.
+        const access = await requireMeetingAccess(
+            meeting,
+            String(userId),
+            meeting.groupChatId ? { moderator: true } : {},
+        );
         if (!access.allowed) return res.status(403).json({ error: access.error || 'You do not have access to this meeting' });
 
         await markMeetingEnded(meeting);

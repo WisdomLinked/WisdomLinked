@@ -5,6 +5,7 @@ import { endMeeting, getMeetingJoinInfo } from "../controllers/meeting.controlle
 
 const MeetingThread = require("../models/MeetingThread");
 const Conversation = require("../models/Conversation");
+const User = require("../models/User");
 
 const createRes = () => {
   const res: any = {
@@ -50,6 +51,62 @@ test("meeting join expires stale active meetings", async () => {
     assert.ok(staleMeeting.duration > 0);
   } finally {
     MeetingThread.findById = originalFindByIdMeeting;
+  }
+});
+
+test("DM participant who did not start may end the meeting", async () => {
+  const originalFindByIdMeeting = MeetingThread.findById;
+  const originalFindByIdConversation = Conversation.findById;
+  const originalFindByIdUser = User.findById;
+  const convDoc = { _id: "conv-1", participants: ["owner", "other-participant"] };
+  const meeting: any = {
+    _id: "meeting-dm",
+    status: "active",
+    startedAt: new Date(Date.now() - 5 * 60 * 1000),
+    conversationId: "conv-1",
+    groupChatId: undefined,
+    participants: ["owner", "other-participant"],
+    removedParticipants: [],
+    startedBy: { _id: "owner", email: "owner@test.com", username: "Owner" },
+    duration: 0,
+    save: async () => undefined,
+  };
+
+  try {
+    MeetingThread.findById = () => ({
+      populate: async () => meeting,
+    });
+    Conversation.findById = () => ({
+      select: () => ({
+        lean: async () => convDoc,
+      }),
+      then(resolve) {
+        resolve(convDoc);
+      },
+    });
+    User.findById = async (id) => {
+      if (String(id) === "owner") {
+        return { _id: "owner", email: "owner@test.com", username: "Owner" };
+      }
+      return null;
+    };
+
+    const req: any = {
+      user: { userId: "other-participant" },
+      body: { meetingThreadId: "meeting-dm" },
+    };
+    const res = createRes();
+
+    await endMeeting(req, res);
+
+    assert.equal(res.statusCode, 200);
+    assert.equal(meeting.status, "ended");
+    assert.ok(meeting.endedAt);
+    assert.ok(meeting.duration > 0);
+  } finally {
+    MeetingThread.findById = originalFindByIdMeeting;
+    Conversation.findById = originalFindByIdConversation;
+    User.findById = originalFindByIdUser;
   }
 });
 

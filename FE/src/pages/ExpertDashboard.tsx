@@ -27,6 +27,7 @@ import { logoutUser, updateMe } from '../actions/authActions';
 import { showAlert } from '../actions/alertActions';
 import { patchDmUnreadRid, setChosenGroupChatDetails, setDmUnreadByRidBulk } from '../actions/chatActions';
 import { connectToRC, onSubscriptionChanged, subscribeToRoom } from '../services/rcRealtime';
+import { useEndMeetingOnReturn } from '../hooks/useEndMeetingOnReturn';
 
 
 // Reuse existing expert dashboard feature pages (legacy MUI pages)
@@ -95,6 +96,7 @@ function mapPendingSeminarToModal(pg: any): UpcomingModalSession {
 }
 
 export default function ExpertDashboard() {
+  useEndMeetingOnReturn();
   const dispatch = useDispatch();
   const location = useLocation();
 

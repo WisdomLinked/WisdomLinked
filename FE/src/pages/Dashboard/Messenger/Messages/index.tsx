@@ -48,6 +48,7 @@ import {
 import { resolveProfileImageSrc } from "../../../../utils/profileImage";
 import { parseMeetingMessageContent } from "../../../../utils/meetingMessage";
 import type { ReplyDraft } from "../ChatDetails";
+import { useEndMeetingOnReturn } from "../../../../hooks/useEndMeetingOnReturn";
 /** RC `u.username` is email-derived; WL `userDetails.username` is display name — never equal. */
 function isRcStreamFromMe(rcMsg: any, me: any): boolean {
     if (!rcMsg?.u?.username || !me?.email) return false;
@@ -104,6 +105,7 @@ function deliveryStatusForMessage(
 }
 
 const Messages = ({ theme = "dark", onReplyMessage }: { theme?: string; onReplyMessage?: (reply: ReplyDraft) => void }) => {
+    useEndMeetingOnReturn();
     const dispatch = useDispatch()
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const scrollContainerRef = useRef<HTMLDivElement>(null);

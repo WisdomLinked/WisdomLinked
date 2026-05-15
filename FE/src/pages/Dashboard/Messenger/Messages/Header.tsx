@@ -38,6 +38,14 @@ import ChatHeader from "./ChatHeader";
 import { History, ShareIcon, Video } from "lucide-react";
 import { buildFallbackChatProfile, mergeChatProfile } from "../../../../utils/chatProfileModal";
 import { buildOnlineUserIdSet, hasOnlineUserId } from "../../../../utils/onlinePresence";
+import { trackMeetingJoin } from "../../../../utils/meetingSession";
+import {
+    formatCallDuration,
+    formatCallEnded,
+    formatCallStarted,
+    resolveCallHistoryActive,
+    resolveCallHistoryDurationSeconds,
+} from "../../../../utils/callHistoryDisplay";
 
 export const appendMeetingStartMessage = (res: any, dispatch: any) => {
     if (res?.message) {
@@ -118,23 +126,6 @@ const MessagesHeader = ({ events, openCalendarModal, openSeminarModal, openEditS
             }));
         }
     }
-
-    const formatCallDuration = (seconds: number) => {
-        const total = Math.max(0, Number(seconds) || 0);
-        const h = Math.floor(total / 3600);
-        const m = Math.floor((total % 3600) / 60);
-        const s = total % 60;
-        if (h > 0) return `${h}h ${m}m ${s}s`;
-        if (m > 0) return `${m}m ${s}s`;
-        return `${s}s`;
-    };
-
-    const formatCallDateTime = (iso: string | null | undefined) => {
-        if (!iso) return "—";
-        const d = new Date(iso);
-        if (Number.isNaN(d.getTime())) return "—";
-        return d.toLocaleString();
-    };
 
     const handleOpenCallHistory = async () => {
         if (!conversationId) {
@@ -226,6 +217,7 @@ const MessagesHeader = ({ events, openCalendarModal, openSeminarModal, openEditS
         }
         const res = await startMeeting({ groupChatId: gid });
         if (res?.jitsiUrl) {
+            trackMeetingJoin(res.meetingThreadId, res.jitsiUrl);
             appendMeetingStartMessage(res, dispatch);
             openMeetingUrl(res.jitsiUrl, pendingWindow);
         } else {
@@ -348,6 +340,7 @@ const MessagesHeader = ({ events, openCalendarModal, openSeminarModal, openEditS
         }
         const res = await startMeeting({ conversationId });
         if (res?.jitsiUrl) {
+            trackMeetingJoin(res.meetingThreadId, res.jitsiUrl);
             appendMeetingStartMessage(res, dispatch);
             openMeetingUrl(res.jitsiUrl, pendingWindow);
         } else {
@@ -497,6 +490,7 @@ const MessagesHeader = ({ events, openCalendarModal, openSeminarModal, openEditS
                                 }
                                 const res = await startMeeting({ conversationId });
                                 if (res?.jitsiUrl) {
+                                    trackMeetingJoin(res.meetingThreadId, res.jitsiUrl);
                                     appendMeetingStartMessage(res, dispatch);
                                     openMeetingUrl(res.jitsiUrl, pendingWindow);
                                 } else {
@@ -563,6 +557,7 @@ const MessagesHeader = ({ events, openCalendarModal, openSeminarModal, openEditS
                                         }
                                         const res = await startMeeting({ groupChatId: gid });
                                         if (res?.jitsiUrl) {
+                                            trackMeetingJoin(res.meetingThreadId, res.jitsiUrl);
                                             appendMeetingStartMessage(res, dispatch);
                                             openMeetingUrl(res.jitsiUrl, pendingWindow);
                                         } else {
@@ -904,22 +899,50 @@ const MessagesHeader = ({ events, openCalendarModal, openSeminarModal, openEditS
                         <p className="text-sm font-medium text-slate-500">No call history yet.</p>
                     ) : (
                         <div className="space-y-2.5">
-                            {callHistoryRows.map((row: any) => (
-                                <div key={row._id} className="rounded-xl border border-slate-200 bg-white px-3 py-3 shadow-sm">
-                                    <div className="text-[15px] font-semibold text-slate-900">
-                                        {row?.startedBy?.username ? `${row.startedBy.username} started the call` : 'Call'}
+                            {callHistoryRows.map((row: any) => {
+                                const isActive = resolveCallHistoryActive(row);
+                                const durationSec = resolveCallHistoryDurationSeconds(row);
+                                return (
+                                    <div
+                                        key={row._id}
+                                        className="rounded-xl border border-slate-200 bg-white px-3 py-3 shadow-sm"
+                                    >
+                                        <div className="flex flex-wrap items-center gap-2">
+                                            <span className="text-[15px] font-semibold text-slate-900">
+                                                Video call
+                                            </span>
+                                            <span
+                                                className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
+                                                    isActive
+                                                        ? "bg-emerald-100 text-emerald-800"
+                                                        : "bg-slate-100 text-slate-600"
+                                                }`}
+                                            >
+                                                {isActive ? "In progress" : "Ended"}
+                                            </span>
+                                        </div>
+                                        {row?.startedBy?.username ? (
+                                            <p className="mt-1 text-xs text-slate-500">
+                                                {row.startedBy.username} started the call
+                                            </p>
+                                        ) : null}
+                                        <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs">
+                                            <dt className="font-medium text-slate-500">Started</dt>
+                                            <dd className="font-medium text-slate-800">
+                                                {formatCallStarted(row.startedAt)}
+                                            </dd>
+                                            <dt className="font-medium text-slate-500">Ended</dt>
+                                            <dd className="font-medium text-slate-800">
+                                                {formatCallEnded(row.endedAt, isActive)}
+                                            </dd>
+                                            <dt className="font-medium text-slate-500">Duration</dt>
+                                            <dd className="font-semibold text-[#234C6A]">
+                                                {formatCallDuration(durationSec, isActive)}
+                                            </dd>
+                                        </dl>
                                     </div>
-                                    <div className="mt-1.5 text-xs font-medium text-slate-600">
-                                        Date: {formatCallDateTime(row.startedAt)}
-                                    </div>
-                                    <div className="mt-0.5 text-xs font-medium text-slate-600">
-                                        Ended: {formatCallDateTime(row.endedAt)}
-                                    </div>
-                                    <div className="mt-0.5 text-xs font-semibold text-[#234C6A]">
-                                        Duration: {formatCallDuration(row.duration)}
-                                    </div>
-                                </div>
-                            ))}
+                                );
+                            })}
                         </div>
                     )}
                 </DialogContent>

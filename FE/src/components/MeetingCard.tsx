@@ -8,6 +8,7 @@ import {
 } from '../api/chatApi';
 import { Video } from 'lucide-react';
 import { formatMessageTime } from '../utils/formatMessageTime';
+import { trackMeetingJoin } from '../utils/meetingSession';
 
 const MEET_EXPIRY_MS = 2 * 60 * 60 * 1000; // 2 hours
 
@@ -89,6 +90,7 @@ const MeetingCard: React.FC<MeetingCardProps> = ({
             window.alert(info?.error || 'Could not join call. Please retry from chat.');
             return;
         }
+        trackMeetingJoin(info.meetingThreadId ?? meetingThreadId, info.jitsiUrl);
         onJoin?.(info.jitsiUrl);
         openMeetingUrl(info.jitsiUrl, pendingWindow);
     };

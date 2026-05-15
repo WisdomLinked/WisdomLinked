@@ -483,22 +483,34 @@ export const getDirectCallHistory = async (req: any, res: Response) => {
             .limit(limit)
             .populate('startedBy', 'username image role status');
 
-        const history = rows.map((m: any) => ({
-            _id: m._id,
-            startedAt: m.startedAt,
-            endedAt: m.endedAt || null,
-            duration: Number(m.duration || 0),
-            status: m.status,
-            startedBy: m.startedBy
-                ? {
-                      _id: m.startedBy._id,
-                      username: m.startedBy.username,
-                      image: m.startedBy.image,
-                      role: m.startedBy.role,
-                      status: m.startedBy.status,
-                  }
-                : null,
-        }));
+        const history = rows.map((m: any) => {
+            const startedMs = m.startedAt ? new Date(m.startedAt).getTime() : NaN;
+            const endedMs = m.endedAt ? new Date(m.endedAt).getTime() : NaN;
+            const isActive = m.status === 'active';
+            const durationSeconds = isActive
+                ? null
+                : Number.isFinite(startedMs) && Number.isFinite(endedMs)
+                  ? Math.max(0, Math.round((endedMs - startedMs) / 1000))
+                  : Number(m.duration || 0);
+            return {
+                _id: m._id,
+                startedAt: m.startedAt,
+                endedAt: m.endedAt || null,
+                duration: Number(m.duration || 0),
+                durationSeconds,
+                isActive,
+                status: m.status,
+                startedBy: m.startedBy
+                    ? {
+                          _id: m.startedBy._id,
+                          username: m.startedBy.username,
+                          image: m.startedBy.image,
+                          role: m.startedBy.role,
+                          status: m.startedBy.status,
+                      }
+                    : null,
+            };
+        });
 
         return res.status(200).json({ history });
     } catch (err: any) {

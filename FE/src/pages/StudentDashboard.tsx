@@ -27,6 +27,7 @@ import {
   subscribeToRoom,
 } from '../services/rcRealtime';
 import { patchDmUnreadRid, setDmUnreadByRidBulk } from '../actions/chatActions';
+import { useEndMeetingOnReturn } from '../hooks/useEndMeetingOnReturn';
 function deriveSessionCounts(u: any) {
   if (!u) {
     return { bookedSem: 0, pendSem: 0, bookedInd: 0, pendInd: 0 };
@@ -48,6 +49,7 @@ function deriveSessionCounts(u: any) {
 }
 
 export default function StudentDashboard() {
+  useEndMeetingOnReturn();
   const dispatch = useDispatch();
   const [activeItem, setActiveItem] = useState('dashboard');
   const [dmUnreadByRid, setDmUnreadByRid] = useState<Record<string, number>>({});
