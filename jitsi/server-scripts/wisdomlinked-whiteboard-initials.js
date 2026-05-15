@@ -1,12 +1,12 @@
 (function () {
   /*
-   * WisdomLinked — whiteboard display initials + view-only for non-moderators.
-   * Requires hash keys from backend join URL:
+   * Whiteboard initials + view-only for non-moderators (hash from backend is authoritative).
    *   config.wisdomlinkedWhiteboardInitials
-   *   config.wisdomlinkedWhiteboardDebug (optional, "true" for console.debug)
+   *   config.wisdomlinkedIsMeetingModerator=true|false
+   *   config.wisdomlinkedWhiteboardDebug=true (optional)
    */
   var STORAGE_INITIALS = "wlWhiteboardInitials";
-  var STORAGE_MOD = "wlWhiteboardIsModerator";
+  var STORAGE_MOD = "wlIsMeetingModerator";
   var VIEW_ONLY_STYLE_ID = "wl-whiteboard-view-only";
   var hookedApis = new WeakSet();
 
@@ -36,87 +36,40 @@
     console.debug.apply(console, ["[wl-whiteboard]"].concat([].slice.call(arguments)));
   }
 
-  function base64UrlJson(part) {
-    try {
-      var normalized = part.replace(/-/g, "+").replace(/_/g, "/");
-      while (normalized.length % 4) normalized += "=";
-      return JSON.parse(window.atob(normalized));
-    } catch (e) {
-      return null;
-    }
-  }
-
-  function jwtPayload() {
-    var token = new URLSearchParams(window.location.search).get("jwt") || "";
-    var parts = token.split(".");
-    if (parts.length < 2) return null;
-    return base64UrlJson(parts[1]);
-  }
-
-  function conferenceIsModerator() {
-    try {
-      var app = typeof APP !== "undefined" ? APP : null;
-      if (app && app.conference && typeof app.conference.isModerator === "function") {
-        return app.conference.isModerator() === true;
-      }
-    } catch (e) {}
-    return null;
-  }
-
-  function jwtModeratorState() {
-    var payload = jwtPayload();
-    if (!payload) return null;
-    var user = payload.context && payload.context.user;
-    if (payload.moderator === true || (user && user.moderator === true)) return true;
-    if (user && user.role === "moderator") return true;
-    if (payload.moderator === false || (user && user.moderator === false)) return false;
-    if (user && user.role === "participant") return false;
-    if (user && user.role === "guest") return false;
-    return null;
-  }
-
-  function isModerator() {
-    var conf = conferenceIsModerator();
-    if (conf === true) return true;
-    var jwt = jwtModeratorState();
-    if (jwt === true) return true;
-    if (conf === false && jwt === false) return false;
-    if (conf === false) return false;
-    if (jwt === false) return false;
-    return false;
-  }
-
-  function shouldApplyViewOnly() {
-    if (isModerator()) return false;
-    var conf = conferenceIsModerator();
-    if (conf === false) return true;
-    var jwt = jwtModeratorState();
-    if (jwt === false) return true;
-    return false;
-  }
-
-  function persistFromHash() {
-    var initials = hashValue("config.wisdomlinkedWhiteboardInitials") || "";
-    if (initials) {
-      try {
-        window.sessionStorage.setItem(STORAGE_INITIALS, initials);
-      } catch (e) {}
-    }
-    var conf = conferenceIsModerator();
-    var jwt = jwtModeratorState();
-    if (conf === true || jwt === true) {
+  function persistModeratorFromHash() {
+    var modHash = hashValue("config.wisdomlinkedIsMeetingModerator");
+    if (modHash === "true") {
       try {
         window.sessionStorage.setItem(STORAGE_MOD, "1");
       } catch (e) {}
-    } else if (conf === false || jwt === false) {
+    } else if (modHash === "false") {
       try {
         window.sessionStorage.setItem(STORAGE_MOD, "0");
       } catch (e) {}
     }
   }
 
+  function canDrawOnWhiteboard() {
+    persistModeratorFromHash();
+    try {
+      var v = window.sessionStorage.getItem(STORAGE_MOD);
+      if (v === "0") return false;
+      if (v === "1") return true;
+    } catch (e) {}
+    return true;
+  }
+
+  function persistInitialsFromHash() {
+    var initials = hashValue("config.wisdomlinkedWhiteboardInitials") || "";
+    if (initials) {
+      try {
+        window.sessionStorage.setItem(STORAGE_INITIALS, initials);
+      } catch (e) {}
+    }
+  }
+
   function cachedInitials() {
-    persistFromHash();
+    persistInitialsFromHash();
     try {
       return window.sessionStorage.getItem(STORAGE_INITIALS) || "";
     } catch (e) {
@@ -151,15 +104,13 @@
   }
 
   function ensureViewOnlyStyles() {
-    if (!shouldApplyViewOnly() || typeof document === "undefined") return;
+    if (canDrawOnWhiteboard() || typeof document === "undefined") return;
     if (document.getElementById(VIEW_ONLY_STYLE_ID)) return;
     var style = document.createElement("style");
     style.id = VIEW_ONLY_STYLE_ID;
     style.textContent =
-      "#whiteboard-container .excalidraw .excalidraw-canvas, " +
-      "#whiteboard-container .excalidraw canvas, " +
-      '[data-testid="whiteboard"] .excalidraw .excalidraw-canvas, ' +
-      '[data-testid="whiteboard"] .excalidraw canvas {' +
+      "body .excalidraw .excalidraw-canvas, body .excalidraw canvas, " +
+      "body .excalidraw .layer-ui__wrapper .ToolIcon, body .excalidraw .App-menu {" +
       "pointer-events: none !important; user-select: none !important; }";
     document.head.appendChild(style);
   }
@@ -170,7 +121,7 @@
   }
 
   function applyViewOnly(excalidrawApi) {
-    if (!excalidrawApi || !shouldApplyViewOnly()) return;
+    if (!excalidrawApi || canDrawOnWhiteboard()) return;
     ensureViewOnlyStyles();
     try {
       if (typeof excalidrawApi.updateScene === "function") {
@@ -182,7 +133,7 @@
       if (!hookedApis.has(excalidrawApi) && typeof excalidrawApi.onChange === "function") {
         hookedApis.add(excalidrawApi);
         excalidrawApi.onChange(function () {
-          if (shouldApplyViewOnly()) applyViewOnly(excalidrawApi);
+          if (!canDrawOnWhiteboard()) applyViewOnly(excalidrawApi);
         });
       }
       wlDebug("view-only applied");
@@ -201,12 +152,15 @@
   }
 
   function pollExcalidrawViewOnly() {
-    if (isModerator() || !shouldApplyViewOnly()) {
+    if (canDrawOnWhiteboard()) {
       removeViewOnlyStyles();
       return;
     }
     var wb = getWhiteboardSlice();
-    if (!wb || !wb.isOpen) return;
+    if (!wb || !wb.isOpen) {
+      removeViewOnlyStyles();
+      return;
+    }
     ensureViewOnlyStyles();
     if (typeof wb.getExcalidrawAPI === "function") {
       var api = wb.getExcalidrawAPI();
@@ -225,43 +179,35 @@
         var wb = getWhiteboardSlice();
         var open = Boolean(wb && wb.isOpen);
         if (open && !prevOpen) {
-          wlDebug("whiteboard opened", {
-            mod: isModerator(),
-            viewOnly: shouldApplyViewOnly(),
-          });
+          wlDebug("whiteboard opened", { canDraw: canDrawOnWhiteboard() });
           pollExcalidrawViewOnly();
         }
+        if (!open && prevOpen) removeViewOnlyStyles();
         prevOpen = open;
       });
     } catch (e) {}
   }
 
-  function hookConferenceModerator() {
-    try {
-      var app = typeof APP !== "undefined" ? APP : null;
-      if (!app || !app.conference || app.conference._wlWbModHooked) return;
-      app.conference._wlWbModHooked = true;
-      app.conference.addListener("conferenceJoined", persistFromHash);
-    } catch (e) {}
-  }
-
   if (typeof window !== "undefined" && window.addEventListener) {
-    window.addEventListener("hashchange", persistFromHash);
+    window.addEventListener("hashchange", function () {
+      persistModeratorFromHash();
+      persistInitialsFromHash();
+    });
     window.addEventListener("load", function () {
-      persistFromHash();
+      persistModeratorFromHash();
+      persistInitialsFromHash();
       patchWhiteboardStateInUrl();
       hookWhiteboardOpen();
-      hookConferenceModerator();
     });
     window.setInterval(function () {
-      persistFromHash();
+      persistModeratorFromHash();
+      persistInitialsFromHash();
       patchWhiteboardStateInUrl();
       hookWhiteboardOpen();
-      hookConferenceModerator();
       pollExcalidrawViewOnly();
     }, 400);
-    persistFromHash();
+    persistModeratorFromHash();
+    persistInitialsFromHash();
     hookWhiteboardOpen();
-    hookConferenceModerator();
   }
 })();

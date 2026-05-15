@@ -108,6 +108,7 @@ const buildSignedJitsiUrl = (
             opts?.chatSyncToken,
             opts?.chatSyncApiBase,
             wbInitials,
+            moderator,
         );
     }
     const nowSec = Math.floor(Date.now() / 1000);
@@ -158,6 +159,7 @@ const buildSignedJitsiUrl = (
         opts?.chatSyncToken,
         opts?.chatSyncApiBase,
         wbInitials,
+        moderator,
     );
 };
 

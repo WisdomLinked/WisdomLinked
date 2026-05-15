@@ -18,6 +18,7 @@ export const appendJitsiMobileWebOverrides = (
     wisdomlinkedChatSyncToken?: string,
     wisdomlinkedChatSyncApiBase?: string,
     wisdomlinkedWhiteboardInitials?: string,
+    wisdomlinkedIsMeetingModerator?: boolean,
 ): string => {
     const base = String(url || "").trim();
     if (!base) return base;
@@ -40,6 +41,11 @@ export const appendJitsiMobileWebOverrides = (
     const wbInitials = String(wisdomlinkedWhiteboardInitials || "").trim();
     if (wbInitials) {
         overrides.push(`config.wisdomlinkedWhiteboardInitials=${encodeURIComponent(wbInitials)}`);
+    }
+    if (typeof wisdomlinkedIsMeetingModerator === "boolean") {
+        overrides.push(
+            `config.wisdomlinkedIsMeetingModerator=${wisdomlinkedIsMeetingModerator ? "true" : "false"}`,
+        );
     }
     const normalizedReturnUrl = String(returnUrl || "").trim();
     if (normalizedReturnUrl) {

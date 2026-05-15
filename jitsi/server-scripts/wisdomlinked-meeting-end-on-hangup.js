@@ -1,7 +1,6 @@
 (function () {
   /*
    * POST /api/meeting/end-call when the last participant leaves Jitsi.
-   * Uses same sessionStorage keys as wisdomlinked-meeting-chat-sync.js.
    * Optional hash: config.wisdomlinkedMeetingEndDebug=true
    */
   var STORAGE_MEETING = "wlMeetingChatMeetingId";
@@ -10,6 +9,7 @@
   var endedMeetings = Object.create(null);
   var trackedRemoteCount = -1;
   var trackedTotalCount = -1;
+  var aloneInRoom = false;
 
   function hashValue(name) {
     var raw = window.location.hash ? window.location.hash.slice(1) : "";
@@ -81,6 +81,19 @@
     };
   }
 
+  function reduxParticipantCount() {
+    try {
+      var app = typeof APP !== "undefined" ? APP : null;
+      if (!app || !app.store || typeof app.store.getState !== "function") return -1;
+      var participants = app.store.getState()["features/base/participants"];
+      if (!participants) return -1;
+      if (typeof participants.size === "number") return participants.size;
+      return Object.keys(participants).length;
+    } catch (e) {
+      return -1;
+    }
+  }
+
   function liveParticipantCount() {
     try {
       var app = typeof APP !== "undefined" ? APP : null;
@@ -93,7 +106,8 @@
         return members.length;
       }
     } catch (e) {}
-    return -1;
+    var redux = reduxParticipantCount();
+    return redux >= 0 ? redux : -1;
   }
 
   function refreshTrackedCounts() {
@@ -101,25 +115,22 @@
     if (live >= 0) {
       trackedTotalCount = live;
       trackedRemoteCount = Math.max(0, live - 1);
+      if (trackedRemoteCount === 0) aloneInRoom = true;
     }
     wlDebug("counts", {
       live: live,
       total: trackedTotalCount,
       remote: trackedRemoteCount,
+      aloneInRoom: aloneInRoom,
     });
   }
 
   function isLastParticipantLeaving() {
+    if (aloneInRoom) return true;
     var live = liveParticipantCount();
-    if (live >= 0) {
-      return live <= 1;
-    }
-    if (trackedRemoteCount >= 0) {
-      return trackedRemoteCount === 0;
-    }
-    if (trackedTotalCount >= 0) {
-      return trackedTotalCount <= 1;
-    }
+    if (live >= 0) return live <= 1;
+    if (trackedRemoteCount >= 0) return trackedRemoteCount === 0;
+    if (trackedTotalCount >= 0) return trackedTotalCount <= 1;
     return false;
   }
 
@@ -127,6 +138,7 @@
     refreshTrackedCounts();
     if (!isLastParticipantLeaving()) {
       wlDebug("skip end — not last participant", {
+        aloneInRoom: aloneInRoom,
         live: liveParticipantCount(),
         remote: trackedRemoteCount,
         total: trackedTotalCount,
@@ -134,7 +146,10 @@
       return;
     }
     var cfg = readConfig();
-    if (!cfg.meetingThreadId || !cfg.token || !cfg.apiBase) return;
+    if (!cfg.meetingThreadId || !cfg.token || !cfg.apiBase) {
+      wlDebug("skip end — missing config", cfg);
+      return;
+    }
     if (endedMeetings[cfg.meetingThreadId]) return;
     endedMeetings[cfg.meetingThreadId] = 1;
     wlDebug("ending meeting", cfg.meetingThreadId);
@@ -151,7 +166,24 @@
       }),
       credentials: "omit",
       keepalive: true,
-    }).catch(function () {});
+    })
+      .then(function (res) {
+        if (!res.ok) wlDebug("end-call failed", res.status, cfg.meetingThreadId);
+      })
+      .catch(function (err) {
+        wlDebug("end-call error", err);
+      });
+  }
+
+  function onParticipantLeft() {
+    if (trackedRemoteCount > 0) trackedRemoteCount -= 1;
+    refreshTrackedCounts();
+    if (trackedRemoteCount === 0) aloneInRoom = true;
+  }
+
+  function onParticipantJoined() {
+    aloneInRoom = false;
+    refreshTrackedCounts();
   }
 
   function hookConferenceLeave() {
@@ -162,14 +194,12 @@
       app.conference._wlEndHooked = true;
 
       app.conference.addListener("conferenceJoined", function () {
+        aloneInRoom = false;
         refreshTrackedCounts();
+        if (trackedRemoteCount === 0 || trackedTotalCount <= 1) aloneInRoom = true;
       });
-      app.conference.addListener("participantJoined", function () {
-        refreshTrackedCounts();
-      });
-      app.conference.addListener("participantLeft", function () {
-        refreshTrackedCounts();
-      });
+      app.conference.addListener("participantJoined", onParticipantJoined);
+      app.conference.addListener("participantLeft", onParticipantLeft);
 
       app.conference.addListener("readyToClose", endCallOnce);
       app.conference.addListener("videoConferenceLeft", endCallOnce);
@@ -178,7 +208,14 @@
     } catch (e) {}
   }
 
+  function onPageHideIfAlone() {
+    if (!aloneInRoom) return;
+    endCallOnce();
+  }
+
   if (typeof window !== "undefined" && window.addEventListener) {
+    window.addEventListener("pagehide", onPageHideIfAlone);
+    window.addEventListener("beforeunload", onPageHideIfAlone);
     window.setInterval(function () {
       readConfig();
       hookConferenceLeave();

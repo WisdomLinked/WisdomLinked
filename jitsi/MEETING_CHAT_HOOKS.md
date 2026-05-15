@@ -15,7 +15,7 @@ scp jitsi/server-scripts/wisdomlinked-meeting-end-on-hangup.js \
 ssh wisdomlinked-comms 'cd /root/wisdomlinked-comms/jitsi/docker-jitsi-meet && docker compose up -d --force-recreate web'
 ```
 
-Hard-refresh meet clients after deploy.
+Hard-refresh meet clients after deploy. **Also deploy staging/production BE** so join URLs include `config.wisdomlinkedIsMeetingModerator`.
 
 ## Scripts on the server
 
@@ -23,47 +23,41 @@ Hard-refresh meet clients after deploy.
 |------|---------|
 | `wisdomlinked-copy-meeting-id.js` | Moderator “Copy Meeting ID” control |
 | `wisdomlinked-meeting-chat-sync.js` | In-call text chat → `POST /api/meeting/chat-sync` |
-| `wisdomlinked-whiteboard-initials.js` | Whiteboard cursor initials; view-only for non-moderators |
-| `wisdomlinked-meeting-end-on-hangup.js` | `POST /api/meeting/end-call` when **last** participant leaves |
-
-`custom/index.html` must load them from the app root (not `/custom/`):
-
-```html
-<script src="wisdomlinked-copy-meeting-id.js" defer></script>
-<script src="wisdomlinked-meeting-chat-sync.js" defer></script>
-<script src="wisdomlinked-whiteboard-initials.js" defer></script>
-<script src="wisdomlinked-meeting-end-on-hangup.js" defer></script>
-```
+| `wisdomlinked-whiteboard-initials.js` | Whiteboard initials; view-only when hash says non-moderator |
+| `wisdomlinked-meeting-end-on-hangup.js` | `POST /api/meeting/end-call` when last participant leaves |
 
 ## Meeting end (last leaver)
 
-- Hangup script ends the meeting **only** when participant count is known and indicates this user is the last one leaving.
-- Uses live `APP.conference.getParticipantCount()` when available; tracks `participantJoined` / `participantLeft` / `conferenceJoined` as fallback.
-- **Unknown count never ends the meeting** (no default to 1). `pagehide` / `beforeunload` are **not** used (conference is often torn down → false positives).
-- End runs on `videoConferenceLeft` and `readyToClose` only.
-- Body includes `endReason: "last_participant"`. Backend ends the `MeetingThread` and posts `__MEETING_ENDED__` to Rocket.Chat.
-- Leaving while others are still in the call does **not** end the meeting for the chat.
-- Optional debug: hash `config.wisdomlinkedMeetingEndDebug=true` → `[wl-meeting-end]` in console.
-- Returning from Jitsi to Messenger only clears `sessionStorage` (`wl_active_meeting_thread_id`); it does not call `/api/meeting/end`.
+- Tracks `aloneInRoom` via `conferenceJoined`, `participantJoined`, `participantLeft`, and live/Redux participant counts.
+- Ends only when `aloneInRoom` is true, live count `<= 1`, or tracked remote count is `0`. **Unknown count never ends the meeting.**
+- `pagehide` / `beforeunload` call end **only if** `aloneInRoom` is already true (safe tab-close for last person).
+- Body: `{ meetingThreadId, endReason: "last_participant" }`.
+- Debug: `config.wisdomlinkedMeetingEndDebug=true`.
 
-## Hash keys (set by backend join URL)
+## Hash keys (backend join URL)
 
 | Hash key | Purpose |
 |----------|---------|
 | `config.wisdomlinkedMeetingId` | Mongo `MeetingThread` id |
-| `config.wisdomlinkedChatSyncToken` | Bearer JWT for meeting chat sync / end-call |
+| `config.wisdomlinkedChatSyncToken` | Bearer JWT for chat sync / end-call |
 | `config.wisdomlinkedChatSyncApiBase` | API origin for cross-origin `fetch` from meet |
-| `config.wisdomlinkedWhiteboardInitials` | Initials on Excalidraw cursors only |
-| `config.wisdomlinkedWhiteboardDebug` | Optional `"true"` → `console.debug` for whiteboard script |
-| `config.wisdomlinkedMeetingEndDebug` | Optional `"true"` → `console.debug` for hangup script |
+| `config.wisdomlinkedWhiteboardInitials` | Initials on Excalidraw cursors |
+| `config.wisdomlinkedIsMeetingModerator` | **`true`** = starter/admin may draw; **`false`** = view-only whiteboard |
+| `config.wisdomlinkedWhiteboardDebug` | Optional whiteboard `console.debug` |
+| `config.wisdomlinkedMeetingEndDebug` | Optional hangup `console.debug` |
 
 ## Whiteboard view-only
 
-- **Moderator detection:** `APP.conference.isModerator()` first, then JWT `moderator` / `context.user.role`.
-- View-only applies only when the user is **definitely** a non-moderator (JWT or conference says so). **Unknown role = no lockout** (moderators can always draw).
-- Non-moderators get Excalidraw `viewModeEnabled` plus scoped CSS `pointer-events: none` on `#whiteboard-container` / `[data-testid="whiteboard"]` canvas only (not global `.excalidraw`).
-- Moderators: no view-only styles; full draw access.
+- **Authoritative:** `config.wisdomlinkedIsMeetingModerator` from backend (not `APP.conference.isModerator()`, which Prosody may set true for everyone).
+- Persisted as `sessionStorage.wlIsMeetingModerator` (`"1"` / `"0"`).
+- `"0"` → Excalidraw view mode + `pointer-events: none` on `body .excalidraw` while board is open.
+- `"1"` → full draw access.
+- If hash not yet present (old join URL), draw is allowed until a new join URL is issued.
+
+## Staging API for end-call
+
+Set on staging BE: `MEETING_CHAT_SYNC_PUBLIC_API_BASE=https://staging.wisdomlinked.com` (no trailing path beyond site origin; scripts append `/api/meeting/end-call`).
 
 ## Prosody / JWT
 
-See [`wisdomlinked-moderator.env.snippet`](./wisdomlinked-moderator.env.snippet) and [`BE/env.rocket.template`](../BE/env.rocket.template).
+See [`wisdomlinked-moderator.env.snippet`](./wisdomlinked-moderator.env.snippet) and [`BE/env.rocket.template`](../BE/env.rocket.template). Required: `WAIT_FOR_HOST_DISABLE_AUTO_OWNERS=1`, `token_affiliation` in `XMPP_MUC_MODULES`.

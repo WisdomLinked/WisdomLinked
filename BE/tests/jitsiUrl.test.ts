@@ -76,6 +76,32 @@ test("adds meeting chat sync token and API base when provided", () => {
     assert.ok(url.includes("config.wisdomlinkedChatSyncApiBase=https%3A%2F%2Fapi.example.com"));
 });
 
+test("adds meeting moderator hash when provided", () => {
+    const modUrl = appendJitsiMobileWebOverrides(
+        "https://meet.wisdomlinked.com/room-1?jwt=abc",
+        undefined,
+        true,
+        "mid-1",
+        undefined,
+        undefined,
+        undefined,
+        true,
+    );
+    assert.ok(modUrl.includes("config.wisdomlinkedIsMeetingModerator=true"));
+
+    const partUrl = appendJitsiMobileWebOverrides(
+        "https://meet.wisdomlinked.com/room-1?jwt=abc",
+        undefined,
+        true,
+        "mid-1",
+        undefined,
+        undefined,
+        undefined,
+        false,
+    );
+    assert.ok(partUrl.includes("config.wisdomlinkedIsMeetingModerator=false"));
+});
+
 test("disables whiteboard when explicitly requested", () => {
     const url = appendJitsiMobileWebOverrides(
         "https://meet.wisdomlinked.com/room-123?jwt=abc",
