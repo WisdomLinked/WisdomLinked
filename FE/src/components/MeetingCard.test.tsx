@@ -69,6 +69,27 @@ describe("MeetingCard", () => {
     expect(startedByRow.textContent || "").not.toMatch(/GMT[+-]/i);
   });
 
+  it("renders grey ended banner without join actions", () => {
+    render(
+      <MeetingCard
+        meetingThreadId="t-ended"
+        jitsiRoomName="wl-room-ended"
+        starterName="Khussal Pradhan"
+        startedAt="2026-05-15T14:44:00.000Z"
+        isEnded
+        duration={930}
+        participantCount={2}
+        theme="light"
+      />,
+    );
+
+    expect(screen.getByText("WisdomLinked Meet ended")).toBeInTheDocument();
+    expect(screen.queryByText("WisdomLinked Meet in progress")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /join call/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /copy invite/i })).not.toBeInTheDocument();
+    expect(screen.getByText(/Started by Khussal Pradhan/)).toBeInTheDocument();
+  });
+
   it("shows Joining... state and handles join flow correctly", async () => {
     const mockOnJoin = vi.fn();
     let resolveApi: any;

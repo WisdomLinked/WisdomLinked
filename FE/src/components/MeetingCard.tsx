@@ -6,7 +6,6 @@ import {
     getMeetingRatingState,
     submitMeetingRating,
 } from '../api/chatApi';
-import { Video } from 'lucide-react';
 import { formatMessageTime } from '../utils/formatMessageTime';
 import { trackMeetingJoin } from '../utils/meetingSession';
 
@@ -175,98 +174,88 @@ const MeetingCard: React.FC<MeetingCardProps> = ({
         }
     };
 
-    if (!isEnded) {
-        const starter = starterName || 'Someone';
-        const startedLine =
-            startedAtLocalTime.length > 0
-                ? `Started by ${starter} · ${startedAtLocalTime}`
-                : `Started by ${starter}`;
+    const starter = starterName || 'Someone';
+    const startedLineParts: string[] = [`Started by ${starter}`];
+    if (startedAtLocalTime.length > 0) startedLineParts.push(startedAtLocalTime);
+    if (isEnded && duration > 0) startedLineParts.push(formatDuration(duration));
+    if (isEnded && participantCount > 0) startedLineParts.push(`${participantCount} participants`);
+    const startedLine = startedLineParts.join(' · ');
 
-        return (
-            <div className="flex flex-col">
-                <div
-                    className={`flex items-center justify-between gap-3 rounded-xl border border-l-4 border-l-[#1A3A4A] px-4 py-3 my-3 shadow-sm ${
-                        theme === 'light' ? 'bg-white border-stone-200' : 'bg-white border-gray-200'
-                    } ${isExpired ? 'opacity-50 pointer-events-none' : ''}`}
-                >
-                    <div className="flex items-center gap-3 min-w-0">
-                        <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse flex-shrink-0" />
-                        <div className="min-w-0">
-                            <p className="text-sm font-semibold text-[#1A3A4A]">WisdomLinked Meet in progress</p>
-                            <p className="text-xs text-gray-400 mt-0.5">{startedLine}</p>
-                            {isExpired ? (
-                                <span className="text-xs text-stone-400 mt-0.5 block">Invite expired</span>
-                            ) : null}
-                        </div>
-                    </div>
-                    <div className="flex items-center gap-2 flex-shrink-0">
-                        <button
-                            type="button"
-                            onClick={() => void handleCopyGuestInvite()}
-                            disabled={inviteBusy || isExpired}
-                            className={`text-xs font-medium px-3 py-1.5 rounded-lg border whitespace-nowrap transition-colors disabled:opacity-70 ${
-                                isExpired ? 'opacity-50 cursor-not-allowed' : ''
-                            } ${
-                                theme === 'light'
-                                    ? 'border-stone-300 text-stone-700 bg-white hover:bg-wl-page'
-                                    : 'border-gray-300 text-gray-600 bg-white hover:bg-gray-50'
-                            }`}
-                        >
-                            {inviteBusy ? 'Creating…' : 'Copy invite'}
-                        </button>
-                        <button
-                            type="button"
-                            onClick={() => void handleJoin()}
-                            disabled={joinBusy || isExpired}
-                            className={`text-xs font-medium px-3 py-1.5 rounded-lg bg-[#1A3A4A] text-white hover:bg-[#15303d] transition-colors whitespace-nowrap disabled:cursor-wait disabled:opacity-80 ${
-                                isExpired ? 'opacity-50 cursor-not-allowed' : ''
-                            }`}
-                        >
-                            {joinBusy ? 'Joining…' : 'Join call'}
-                        </button>
-                    </div>
+    const statusBanner = isEnded ? (
+        <div
+            className={`flex items-center gap-3 rounded-xl border border-l-4 px-4 py-3 my-3 shadow-sm opacity-60 pointer-events-none ${
+                theme === 'light'
+                    ? 'bg-stone-50 border-stone-200 border-l-stone-400'
+                    : 'bg-gray-100 border-gray-200 border-l-gray-400'
+            }`}
+        >
+            <div className="min-w-0">
+                <p className={`text-sm font-semibold ${theme === 'light' ? 'text-stone-500' : 'text-gray-500'}`}>
+                    WisdomLinked Meet ended
+                </p>
+                <p className="text-xs text-stone-400 mt-0.5">{startedLine}</p>
+            </div>
+        </div>
+    ) : (
+        <div
+            className={`flex items-center justify-between gap-3 rounded-xl border border-l-4 border-l-[#1A3A4A] px-4 py-3 my-3 shadow-sm ${
+                theme === 'light' ? 'bg-white border-stone-200' : 'bg-white border-gray-200'
+            } ${isExpired ? 'opacity-50 pointer-events-none' : ''}`}
+        >
+            <div className="flex items-center gap-3 min-w-0">
+                <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse flex-shrink-0" />
+                <div className="min-w-0">
+                    <p className="text-sm font-semibold text-[#1A3A4A]">WisdomLinked Meet in progress</p>
+                    <p className="text-xs text-gray-400 mt-0.5">{startedLine}</p>
+                    {isExpired ? (
+                        <span className="text-xs text-stone-400 mt-0.5 block">Invite expired</span>
+                    ) : null}
                 </div>
             </div>
-        );
+            <div className="flex items-center gap-2 flex-shrink-0">
+                <button
+                    type="button"
+                    onClick={() => void handleCopyGuestInvite()}
+                    disabled={inviteBusy || isExpired}
+                    className={`text-xs font-medium px-3 py-1.5 rounded-lg border whitespace-nowrap transition-colors disabled:opacity-70 ${
+                        isExpired ? 'opacity-50 cursor-not-allowed' : ''
+                    } ${
+                        theme === 'light'
+                            ? 'border-stone-300 text-stone-700 bg-white hover:bg-wl-page'
+                            : 'border-gray-300 text-gray-600 bg-white hover:bg-gray-50'
+                    }`}
+                >
+                    {inviteBusy ? 'Creating…' : 'Copy invite'}
+                </button>
+                <button
+                    type="button"
+                    onClick={() => void handleJoin()}
+                    disabled={joinBusy || isExpired}
+                    className={`text-xs font-medium px-3 py-1.5 rounded-lg bg-[#1A3A4A] text-white hover:bg-[#15303d] transition-colors whitespace-nowrap disabled:cursor-wait disabled:opacity-80 ${
+                        isExpired ? 'opacity-50 cursor-not-allowed' : ''
+                    }`}
+                >
+                    {joinBusy ? 'Joining…' : 'Join call'}
+                </button>
+            </div>
+        </div>
+    );
+
+    if (!isEnded) {
+        return <div className="flex flex-col">{statusBanner}</div>;
     }
 
     return (
-        <div
-            className={`my-2 mx-auto max-w-[480px] rounded-xl border overflow-hidden ${
-                isDark
-                    ? 'bg-gradient-to-br from-[#1a1a2e] to-[#16213e] border-[#2a2a4a]'
-                    : 'bg-white border-stone-200 shadow-sm'
-            }`}
-        >
+        <div className="flex flex-col">
+            {statusBanner}
             <div
-                className={`px-4 py-3 flex items-center gap-3 ${
-                    isDark ? 'border-b border-[#2a2a4a]' : 'border-b border-stone-200'
+                className={`my-2 mx-auto max-w-[480px] w-full rounded-xl border overflow-hidden ${
+                    isDark
+                        ? 'bg-gradient-to-br from-[#1a1a2e] to-[#16213e] border-[#2a2a4a]'
+                        : 'bg-white border-stone-200 shadow-sm'
                 }`}
             >
-                <div
-                    className={`w-9 h-9 rounded-full flex items-center justify-center text-lg ${
-                        isEnded ? (isDark ? 'bg-gray-700' : 'bg-gray-200') : 'bg-gradient-to-r from-green-500 to-emerald-500'
-                    }`}
-                >
-                    <span className={isEnded ? (isDark ? 'text-gray-300' : 'text-gray-700') : 'text-white'} aria-hidden>
-                        <Video className="h-4 w-4" />
-                    </span>
-                </div>
-                <div className="flex-1 min-w-0">
-                    <div className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>
-                        WisdomLinked Meet ended
-                    </div>
-                    <div className={`text-xs ${isDark ? 'text-gray-400' : 'text-slate-500'}`}>
-                        {starterName ? `Started by ${starterName}` : 'Meeting ended'}
-                        {!!startedAtLocalTime && ` · ${startedAtLocalTime}`}
-                        {duration > 0 && ` · ${formatDuration(duration)}`}
-                        {participantCount > 0 && ` · ${participantCount} participants`}
-                    </div>
-                </div>
-            </div>
-
-            {isEnded && (
-                <div className={`w-full px-4 py-2 border-t ${isDark ? 'border-[#2a2a4a]' : 'border-stone-200'}`}>
+                <div className={`w-full px-4 py-2 ${isDark ? 'border-[#2a2a4a]' : 'border-stone-200'}`}>
                     <button
                         type="button"
                         onClick={() => void loadTranscript()}
@@ -332,32 +321,32 @@ const MeetingCard: React.FC<MeetingCardProps> = ({
                         </div>
                     )}
                 </div>
-            )}
 
-            {expanded && transcript.length > 0 && (
-                <div
-                    className={`px-4 pb-3 space-y-1.5 max-h-60 overflow-y-auto ${
-                        isDark ? 'border-t border-[#2a2a4a]' : 'border-t border-stone-200'
-                    }`}
-                >
-                    {transcript.map((msg, i) => (
-                        <div key={i} className="pt-1.5">
-                            <span className={`text-xs font-semibold ${isDark ? 'text-blue-300' : 'text-[#234C6A]'}`}>
-                                {msg.authorName || msg.author?.username || 'Unknown'}
-                            </span>
-                            <span className={`text-xs ml-2 ${isDark ? 'text-gray-300' : 'text-slate-700'}`}>
-                                {msg.content}
-                            </span>
-                        </div>
-                    ))}
-                </div>
-            )}
+                {expanded && transcript.length > 0 && (
+                    <div
+                        className={`px-4 pb-3 space-y-1.5 max-h-60 overflow-y-auto ${
+                            isDark ? 'border-t border-[#2a2a4a]' : 'border-t border-stone-200'
+                        }`}
+                    >
+                        {transcript.map((msg, i) => (
+                            <div key={i} className="pt-1.5">
+                                <span className={`text-xs font-semibold ${isDark ? 'text-blue-300' : 'text-[#234C6A]'}`}>
+                                    {msg.authorName || msg.author?.username || 'Unknown'}
+                                </span>
+                                <span className={`text-xs ml-2 ${isDark ? 'text-gray-300' : 'text-slate-700'}`}>
+                                    {msg.content}
+                                </span>
+                            </div>
+                        ))}
+                    </div>
+                )}
 
-            {expanded && transcript.length === 0 && !loading && (
-                <div className={`px-4 py-2 text-xs ${isDark ? 'text-gray-500' : 'text-slate-400'}`}>
-                    No messages were sent during this meeting.
-                </div>
-            )}
+                {expanded && transcript.length === 0 && !loading && (
+                    <div className={`px-4 py-2 text-xs ${isDark ? 'text-gray-500' : 'text-slate-400'}`}>
+                        No messages were sent during this meeting.
+                    </div>
+                )}
+            </div>
         </div>
     );
 };

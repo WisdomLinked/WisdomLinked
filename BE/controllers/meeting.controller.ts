@@ -20,6 +20,7 @@ import { appendJitsiMobileWebOverrides } from '../utils/jitsiUrl';
 import { isMeetingModerator, isMeetingModeratorWithDelegates } from '../utils/meetingRoleRules';
 import { buildMeetingInviteUrl, resolvePublicAppBaseUrl } from '../utils/inviteUrl';
 import { wlDisplayName } from '../utils/wlDisplayName';
+import { jitsiDisplayInitials } from '../utils/jitsiDisplayName';
 import { encodeMeetingChatLine } from '../utils/meetingChatPayload';
 import { signWlMeetingChatToken, signGuestMeetingChatToken, type MeetingChatTokenClaims } from '../utils/meetingChatSyncToken';
 import { allowMeetingChatRate } from '../utils/meetingChatRateLimit';
@@ -96,8 +97,7 @@ const buildSignedJitsiUrl = (
     const base = `https://${JITSI_DOMAIN}/${roomName}`;
     const moderator = Boolean(opts?.moderator);
     const guest = Boolean(opts?.guest);
-    // Keep whiteboard visible for all participants; moderator role controls moderation actions.
-    const whiteboardEnabled = true;
+    const whiteboardEnabled = moderator;
     if (!JITSI_JWT_SECRET) {
         return appendJitsiMobileWebOverrides(
             base,
@@ -111,7 +111,7 @@ const buildSignedJitsiUrl = (
     const nowSec = Math.floor(Date.now() / 1000);
     const exp = nowSec + Number(opts?.expiresInSeconds || 2 * 60 * 60);
     const userId = normalizeId(userLike?._id || userLike?.id || userLike?.userId);
-    const displayName = String(userLike?.username || userLike?.name || 'Guest');
+    const displayName = jitsiDisplayInitials(userLike);
     const email = String(userLike?.email || '').trim().toLowerCase();
     const avatar = String(userLike?.image || '').trim();
 

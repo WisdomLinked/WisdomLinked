@@ -6,6 +6,7 @@ import Message from './Message';
 import MeetingCard from '../../../../components/MeetingCard';
 import ChatSystemNotice from './ChatSystemNotice';
 import { parseMeetingMessageContent } from '../../../../utils/meetingMessage';
+import { buildMeetingThreadMaps } from '../../../../utils/meetingThreadMaps';
 import { peelWisdomLinkedReplyQuotes } from '../../../../utils/chatReplyLayout';
 import { wlDisplayName } from '../../../../utils/displayName';
 import { groupMessages } from './groupMessages';
@@ -257,6 +258,11 @@ const ChatThreadView: React.FC<ChatThreadViewProps> = ({
         [displayMessages, selfSenderIds, isOutgoingMessage, deliveryForMessage],
     );
 
+    const { endedMeetings, startedMeetings } = useMemo(
+        () => buildMeetingThreadMaps(displayMessages),
+        [displayMessages],
+    );
+
     const showGroupNames = Boolean(chosenGroupChatDetails) && !chosenChatDetails;
     const dmPeer = chosenChatDetails as { username?: string } | null | undefined;
     const replyPeerDisplayName = dmPeer?.username ? String(dmPeer.username) : undefined;
@@ -311,14 +317,18 @@ const ChatThreadView: React.FC<ChatThreadViewProps> = ({
                 }
 
                 if (entry.kind === 'meeting-started') {
+                    const threadId = entry.meeting.meetingThreadId;
+                    const endInfo = endedMeetings.get(threadId);
                     return (
                         <div key={key} className={`w-full px-2 sm:px-3 ${marginAfterNonBubble(next)}`}>
                             <MeetingCard
-                                meetingThreadId={entry.meeting.meetingThreadId}
+                                meetingThreadId={threadId}
                                 jitsiRoomName={entry.meeting.jitsiRoomName}
                                 starterName={entry.meeting.starterName}
                                 startedAt={entry.message.createdAt}
-                                isEnded={false}
+                                isEnded={Boolean(endInfo)}
+                                duration={endInfo?.duration}
+                                participantCount={endInfo?.participantCount}
                                 theme={theme === 'light' ? 'light' : 'dark'}
                             />
                         </div>
@@ -326,12 +336,17 @@ const ChatThreadView: React.FC<ChatThreadViewProps> = ({
                 }
 
                 if (entry.kind === 'meeting-ended') {
+                    const threadId = entry.meeting.meetingThreadId;
+                    if (startedMeetings.has(threadId)) {
+                        return null;
+                    }
+                    const started = startedMeetings.get(threadId);
                     return (
                         <div key={key} className={`w-full px-2 sm:px-3 ${marginAfterNonBubble(next)}`}>
                             <MeetingCard
-                                meetingThreadId={entry.meeting.meetingThreadId}
-                                jitsiRoomName=""
-                                starterName=""
+                                meetingThreadId={threadId}
+                                jitsiRoomName={started?.jitsiRoomName ?? ''}
+                                starterName={started?.starterName ?? ''}
                                 isEnded
                                 duration={entry.meeting.duration}
                                 participantCount={entry.meeting.participantCount}
