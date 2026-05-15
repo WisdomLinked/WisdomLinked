@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { endMeeting, getMeetingJoinInfo } from "../controllers/meeting.controller";
+import { endMeeting, endMeetingFromCall, getMeetingJoinInfo } from "../controllers/meeting.controller";
 
 const MeetingThread = require("../models/MeetingThread");
 const Conversation = require("../models/Conversation");
@@ -54,10 +54,7 @@ test("meeting join expires stale active meetings", async () => {
   }
 });
 
-test("DM participant who did not start may end the meeting", async () => {
-  const originalFindByIdMeeting = MeetingThread.findById;
-  const originalFindByIdConversation = Conversation.findById;
-  const originalFindByIdUser = User.findById;
+const stubDmMeetingEnd = () => {
   const convDoc = { _id: "conv-1", participants: ["owner", "other-participant"] };
   const meeting: any = {
     _id: "meeting-dm",
@@ -71,25 +68,32 @@ test("DM participant who did not start may end the meeting", async () => {
     duration: 0,
     save: async () => undefined,
   };
+  MeetingThread.findById = () => ({
+    populate: async () => meeting,
+  });
+  Conversation.findById = () => ({
+    select: () => ({
+      lean: async () => convDoc,
+    }),
+    then(resolve) {
+      resolve(convDoc);
+    },
+  });
+  User.findById = async (id) => {
+    if (String(id) === "owner") {
+      return { _id: "owner", email: "owner@test.com", username: "Owner" };
+    }
+    return null;
+  };
+  return meeting;
+};
 
+test("DM participant who did not start cannot end via POST /end without last_participant", async () => {
+  const originalFindByIdMeeting = MeetingThread.findById;
+  const originalFindByIdConversation = Conversation.findById;
+  const originalFindByIdUser = User.findById;
   try {
-    MeetingThread.findById = () => ({
-      populate: async () => meeting,
-    });
-    Conversation.findById = () => ({
-      select: () => ({
-        lean: async () => convDoc,
-      }),
-      then(resolve) {
-        resolve(convDoc);
-      },
-    });
-    User.findById = async (id) => {
-      if (String(id) === "owner") {
-        return { _id: "owner", email: "owner@test.com", username: "Owner" };
-      }
-      return null;
-    };
+    stubDmMeetingEnd();
 
     const req: any = {
       user: { userId: "other-participant" },
@@ -98,6 +102,32 @@ test("DM participant who did not start may end the meeting", async () => {
     const res = createRes();
 
     await endMeeting(req, res);
+
+    assert.equal(res.statusCode, 403);
+    assert.match(String(res.body?.error || ""), /moderators can end/i);
+  } finally {
+    MeetingThread.findById = originalFindByIdMeeting;
+    Conversation.findById = originalFindByIdConversation;
+    User.findById = originalFindByIdUser;
+  }
+});
+
+test("DM participant may end via end-call when last_participant", async () => {
+  const originalFindByIdMeeting = MeetingThread.findById;
+  const originalFindByIdConversation = Conversation.findById;
+  const originalFindByIdUser = User.findById;
+
+  try {
+    const meeting = stubDmMeetingEnd();
+
+    const req: any = {
+      user: { userId: "other-participant" },
+      body: { meetingThreadId: "meeting-dm", endReason: "last_participant" },
+      meetingChatClaims: { typ: "wl-meeting-chat", mid: "meeting-dm", sub: "other-participant" },
+    };
+    const res = createRes();
+
+    await endMeetingFromCall(req, res);
 
     assert.equal(res.statusCode, 200);
     assert.equal(meeting.status, "ended");

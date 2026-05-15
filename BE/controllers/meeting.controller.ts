@@ -164,7 +164,7 @@ const buildSignedJitsiUrl = (
 /**
  * POST /api/meeting/end-call
  * End meeting from Jitsi tab using meeting-chat Bearer JWT (hangup hook).
- * Body: { meetingThreadId }
+ * Body: { meetingThreadId, endReason?: 'last_participant' }
  */
 export const endMeetingFromCall = async (req: any, res: Response) => {
     const claims = req.meetingChatClaims as MeetingChatTokenClaims | undefined;
@@ -178,6 +178,9 @@ export const endMeetingFromCall = async (req: any, res: Response) => {
     }
     return endMeeting(req, res);
 };
+
+const isLastParticipantEndReason = (reason: unknown): boolean =>
+    String(reason || '').trim() === 'last_participant';
 
 const delegatedIdsFromMeeting = (meeting: any): string[] =>
     (Array.isArray(meeting?.delegatedModerators) ? meeting.delegatedModerators : []).map((id: any) => normalizeId(id));
@@ -437,13 +440,14 @@ export const endMeeting = async (req: any, res: Response) => {
         if (!meeting) return res.status(404).json({ error: 'Meeting not found' });
         await expireStaleMeetingIfNeeded(meeting);
         if (meeting.status === 'ended') return res.status(400).json({ error: 'Meeting already ended' });
-        // DM: either participant may end on hangup; group: moderators only.
-        const access = await requireMeetingAccess(
-            meeting,
-            String(userId),
-            meeting.groupChatId ? { moderator: true } : {},
-        );
+        const lastParticipantLeaving = isLastParticipantEndReason(req.body?.endReason);
+        const access = await requireMeetingAccess(meeting, String(userId));
         if (!access.allowed) return res.status(403).json({ error: access.error || 'You do not have access to this meeting' });
+        if (!lastParticipantLeaving && !access.moderator) {
+            return res.status(403).json({
+                error: 'Only meeting moderators can end the meeting while others may still be in the call',
+            });
+        }
 
         await markMeetingEnded(meeting);
 
