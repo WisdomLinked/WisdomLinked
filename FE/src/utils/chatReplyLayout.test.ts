@@ -2,8 +2,11 @@ import { describe, expect, it } from "vitest";
 import {
   buildReplyQuoteHtml,
   immediateReplyQuote,
+  peelLegacyPlainReplyQuotes,
   peelWisdomLinkedReplyQuotes,
   peelWisdomLinkedReplyQuotesRegex,
+  peelWireFormatReply,
+  WL_REPLY_WIRE_PREFIX,
   flattenReplyTextForNextQuote,
 } from "./chatReplyLayout";
 
@@ -48,5 +51,26 @@ describe("chatReplyLayout", () => {
   it("flattenReplyTextForNextQuote strips blockquotes and tags", () => {
     const messy = '<blockquote><strong>Replying to X</strong><br>a</blockquote><p>tail</p>';
     expect(flattenReplyTextForNextQuote(messy)).toBe("tail");
+  });
+
+  it("peels wire format from RC storage", () => {
+    const wire = `${WL_REPLY_WIRE_PREFIX}|msg1|${encodeURIComponent("Khussal")}|${encodeURIComponent("supp bro")}|\nhows life?`;
+    const { quotes, bodyHtml } = peelWisdomLinkedReplyQuotes(wire);
+    expect(quotes).toHaveLength(1);
+    expect(quotes[0]?.to).toBe("Khussal");
+    expect(quotes[0]?.excerpt).toBe("supp bro");
+    expect(quotes[0]?.messageId).toBe("msg1");
+    expect(bodyHtml).toContain("hows life?");
+    expect(bodyHtml).not.toMatch(/Replying to/i);
+  });
+
+  it("peels legacy plain Replying-to blocks and uses immediate parent only", () => {
+    const plain =
+      "Replying to Alice\nfirst\nReplying to Bob\nsecond line\nfinal body";
+    const { quotes } = peelLegacyPlainReplyQuotes(plain);
+    const stacked = peelWisdomLinkedReplyQuotes(plain);
+    expect(immediateReplyQuote(quotes)?.to).toBe("Bob");
+    expect(immediateReplyQuote(stacked.quotes)?.to).toBe("Bob");
+    expect(stacked.bodyHtml).toContain("final body");
   });
 });

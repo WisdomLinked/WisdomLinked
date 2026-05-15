@@ -6,6 +6,7 @@ import FilePreviewModal from "../../FilePreviewModal";
 import { renderSafeMessageHtml } from "../../../../utils/safeMessageHtml";
 import { resolveSafeChatFileUrl } from "../../../../utils/safeFileUrl";
 import ReplyQuoteCard from "../../../../components/messenger/ReplyQuoteCard";
+import { resolveReplyAuthorLabel } from "../../../../utils/displayName";
 import { immediateReplyQuote, peelWisdomLinkedReplyQuotes } from "../../../../utils/chatReplyLayout";
 
 function DeliveryTicks({ status, theme }: { status?: string; theme?: string }) {
@@ -49,6 +50,7 @@ function renderChatRichContent(
     theme: string,
     bubble: "incoming" | "outgoing",
     onJumpToParent?: (messageId: string) => void,
+    replyLabelOpts?: { peerDisplayName?: string; peerSlug?: string },
 ): React.ReactNode {
     const { quotes, bodyHtml } = peelWisdomLinkedReplyQuotes(html);
     const quote = immediateReplyQuote(quotes);
@@ -64,10 +66,12 @@ function renderChatRichContent(
               ? "my-2 h-px w-full bg-slate-300/80"
               : "my-2 h-px w-full bg-white/20";
 
+    const authorLabel = resolveReplyAuthorLabel(quote.to, replyLabelOpts);
+
     return (
         <>
             <ReplyQuoteCard
-                authorName={quote.to}
+                authorName={authorLabel}
                 excerpt={quote.excerpt}
                 variant={bubble}
                 theme={theme}
@@ -94,6 +98,8 @@ const Message = ({
     onDeleteMessage,
     onReplyMessage,
     onJumpToParent,
+    replyPeerDisplayName,
+    replyPeerSlug,
     threadBubbleShellClassName,
     showDeleteAffix,
 }: {
@@ -110,6 +116,8 @@ const Message = ({
     onDeleteMessage?: (messageId: string, mode: 'me' | 'both') => Promise<void>;
     onReplyMessage?: () => void;
     onJumpToParent?: (messageId: string) => void;
+    replyPeerDisplayName?: string;
+    replyPeerSlug?: string;
     threadBubbleShellClassName?: string;
     showDeleteAffix?: boolean;
     sameAuthor?: boolean;
@@ -122,6 +130,10 @@ const Message = ({
     disableBookButton?: boolean;
     myRole?: string;
 }) => {
+    const replyLabelOpts = {
+        peerDisplayName: replyPeerDisplayName,
+        peerSlug: replyPeerSlug,
+    };
 
     const [showPreview, setShowPreview] = useState(false);
     const [deleting, setDeleting] = useState(false);
@@ -196,7 +208,7 @@ const Message = ({
                 <div
                     className={`chat-message-rich min-w-0 max-w-full px-2 py-1.5 text-sm leading-5 shadow-sm break-words whitespace-pre-wrap ${threadBubbleShellClassName}`}
                 >
-                    {renderChatRichContent(content, theme, "incoming", onJumpToParent)}
+                    {renderChatRichContent(content, theme, "incoming", onJumpToParent, replyLabelOpts)}
                 </div>
                 {renderReplyAction()}
             </div>
@@ -348,7 +360,7 @@ const Message = ({
                     <div
                         className={`chat-message-rich min-w-0 max-w-full px-2 py-1.5 text-sm leading-5 shadow-sm break-words whitespace-pre-wrap ${threadBubbleShellClassName}`}
                     >
-                        {renderChatRichContent(content, theme, "outgoing", onJumpToParent)}
+                        {renderChatRichContent(content, theme, "outgoing", onJumpToParent, replyLabelOpts)}
                     </div>
                 </div>
             );
@@ -372,7 +384,7 @@ const Message = ({
                             }`}
                         >
                             <div className="chat-message-rich break-words whitespace-pre-wrap">
-                                {renderChatRichContent(content, theme, "outgoing", onJumpToParent)}
+                                {renderChatRichContent(content, theme, "outgoing", onJumpToParent, replyLabelOpts)}
                             </div>
                         </div>
                         <DeliveryTicks status={deliveryStatus} theme={theme} />
@@ -458,7 +470,7 @@ const Message = ({
                             }`}
                         >
                             <div className="chat-message-rich break-words whitespace-pre-wrap">
-                                {renderChatRichContent(content, theme, "incoming", onJumpToParent)}
+                                {renderChatRichContent(content, theme, "incoming", onJumpToParent, replyLabelOpts)}
                             </div>
                         </div>
                         {renderReplyAction()}

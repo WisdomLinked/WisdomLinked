@@ -19,6 +19,7 @@ import {
     getRocketOnlineUsernames,
 } from '../services/rocketchat.service';
 import { wlDisplayName } from '../utils/wlDisplayName';
+import { prepareMessageForRocketChat } from '../utils/chatReplyPlainText';
 
 const Conversation = require('../models/Conversation');
 const GroupChat = require('../models/GroupChat');
@@ -377,10 +378,11 @@ export const sendMessage = async (req: any, res: Response) => {
             }
         }
 
+        const storedContent = prepareMessageForRocketChat(content);
         // Build a fake message object just to satisfy the frontend's optimistic update
         const populatedMessage = {
             _id: sentId,
-            content,
+            content: storedContent,
             author: { _id: me._id, username: me.username, image: me.image, role: me.role, status: me.status },
             createdAt: new Date().toISOString(),
             type: 'direct',
@@ -638,7 +640,7 @@ export const sendGroupMessage = async (req: any, res: Response) => {
 
         const populatedMessage = {
             _id: sentId,
-            content,
+            content: prepareMessageForRocketChat(content),
             author: {
                 _id: me!._id,
                 username: wlDisplayName(me!),

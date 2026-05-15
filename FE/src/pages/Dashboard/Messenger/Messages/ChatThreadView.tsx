@@ -7,6 +7,7 @@ import MeetingCard from '../../../../components/MeetingCard';
 import ChatSystemNotice from './ChatSystemNotice';
 import { parseMeetingMessageContent } from '../../../../utils/meetingMessage';
 import { peelWisdomLinkedReplyQuotes } from '../../../../utils/chatReplyLayout';
+import { wlDisplayName } from '../../../../utils/displayName';
 import { groupMessages } from './groupMessages';
 import type { ChatMessage, MessageGroup } from './chatThreadTypes';
 import type { ReplyDraft } from '../ChatDetails';
@@ -103,11 +104,14 @@ function replyPreviewPlainText(raw: string): string {
     return stripMessageText(bodyHtml);
 }
 
-function replyDraftFromMessage(message: DisplayMessage, authorName: string): ReplyDraft {
+function replyDraftFromMessage(message: DisplayMessage, fallbackName: string): ReplyDraft {
     const text = replyPreviewPlainText(String(message.content || ""));
+    const author = message.author as { username?: string; email?: string } | undefined;
+    const authorName =
+        wlDisplayName(author) || wlDisplayName({ username: fallbackName }) || fallbackName || "Message";
     return {
         messageId: String(message._id),
-        authorName: authorName || 'Message',
+        authorName,
         excerpt: text.length > 140 ? `${text.slice(0, 140)}...` : text,
     };
 }
@@ -254,6 +258,8 @@ const ChatThreadView: React.FC<ChatThreadViewProps> = ({
     );
 
     const showGroupNames = Boolean(chosenGroupChatDetails) && !chosenChatDetails;
+    const dmPeer = chosenChatDetails as { username?: string } | null | undefined;
+    const replyPeerDisplayName = dmPeer?.username ? String(dmPeer.username) : undefined;
     const [highlightMessageId, setHighlightMessageId] = useState<string | null>(null);
 
     const scrollToMessage = useCallback((messageId: string) => {
@@ -405,6 +411,7 @@ const ChatThreadView: React.FC<ChatThreadViewProps> = ({
                                 onDeleteMessage={handleDeleteMessage}
                                 onReplyMessage={() => onReplyMessage?.(replyDraftFromMessage(m, m.author?.username || 'Message'))}
                                 onJumpToParent={scrollToMessage}
+                                replyPeerDisplayName={replyPeerDisplayName}
                             />
                             <p
                                 className={`text-xs text-gray-400 mt-1 ${
@@ -472,6 +479,7 @@ const ChatThreadView: React.FC<ChatThreadViewProps> = ({
                                             onDeleteMessage={handleDeleteMessage}
                                             onReplyMessage={() => onReplyMessage?.(replyDraftFromMessage(src, 'You'))}
                                             onJumpToParent={scrollToMessage}
+                                            replyPeerDisplayName={replyPeerDisplayName}
                                         />
                                         </div>
                                     );
@@ -541,6 +549,7 @@ const ChatThreadView: React.FC<ChatThreadViewProps> = ({
                                             onDeleteMessage={handleDeleteMessage}
                                             onReplyMessage={() => onReplyMessage?.(replyDraftFromMessage(src, groupSenderLabel(src)))}
                                             onJumpToParent={scrollToMessage}
+                                            replyPeerDisplayName={replyPeerDisplayName}
                                         />
                                     </div>
                                 );

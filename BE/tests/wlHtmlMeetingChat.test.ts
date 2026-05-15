@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { wlHtmlToPlainTextForRocketChat } from '../services/rocketchat.service';
+import { wlHtmlToPlainTextForRocketChat } from '../utils/wlHtmlPlainText';
 
 test('wlHtmlToPlainTextForRocketChat preserves __MEETING_CHAT__ line', () => {
     const line = '__MEETING_CHAT__::507f1f77bcf86cd799439011::eyJ2IjoxfQ';

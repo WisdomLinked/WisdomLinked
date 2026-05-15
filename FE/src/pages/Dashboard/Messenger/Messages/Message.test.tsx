@@ -3,6 +3,7 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { vi } from 'vitest';
 import Message from './Message';
+import { WL_REPLY_WIRE_PREFIX } from '../../../../utils/chatReplyLayout';
 
 describe('Message outgoing rendering', () => {
     const baseProps = {
@@ -63,6 +64,22 @@ describe('Message outgoing rendering', () => {
         expect(screen.queryByText('Alice')).not.toBeInTheDocument();
         expect(screen.queryByText(/replying to/i)).not.toBeInTheDocument();
         expect(screen.getByRole('button', { name: /jump to message from bob/i })).toBeInTheDocument();
+    });
+
+    it('renders wire-format RC reply without Replying to label', () => {
+        const wire = `${WL_REPLY_WIRE_PREFIX}|p1|${encodeURIComponent('Khussal Pradhan')}|${encodeURIComponent('supp bro')}|\n?going good la`;
+        render(
+            <Message
+                {...baseProps}
+                content={wire}
+                onJumpToParent={vi.fn()}
+                replyPeerDisplayName="Khussal Pradhan"
+            />,
+        );
+        expect(screen.getByText('Khussal Pradhan')).toBeInTheDocument();
+        expect(screen.getByText('supp bro')).toBeInTheDocument();
+        expect(screen.getByText('?going good la')).toBeInTheDocument();
+        expect(screen.queryByText(/replying to/i)).not.toBeInTheDocument();
     });
 });
 
