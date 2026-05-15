@@ -44,5 +44,25 @@ describe('Message outgoing rendering', () => {
         expect(onDeleteMessage).not.toHaveBeenCalled();
         confirmSpy.mockRestore();
     });
+
+    it('renders a single immediate parent quote for stacked reply HTML', () => {
+        const html =
+            '<blockquote><strong>Replying to Alice</strong><br>first</blockquote>' +
+            '<blockquote class="wl-reply-quote" data-wl-reply-id="parent-2"><strong>Replying to Bob</strong><br>second</blockquote>' +
+            '<p>my answer</p>';
+        render(
+            <Message
+                {...baseProps}
+                content={html}
+                onJumpToParent={vi.fn()}
+            />,
+        );
+        expect(screen.getByText('Bob')).toBeInTheDocument();
+        expect(screen.getByText('second')).toBeInTheDocument();
+        expect(screen.getByText('my answer')).toBeInTheDocument();
+        expect(screen.queryByText('Alice')).not.toBeInTheDocument();
+        expect(screen.queryByText(/replying to/i)).not.toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /jump to message from bob/i })).toBeInTheDocument();
+    });
 });
 

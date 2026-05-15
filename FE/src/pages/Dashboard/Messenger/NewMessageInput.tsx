@@ -5,7 +5,7 @@ import ReactQuill from 'react-quill'
 import 'react-quill/dist/quill.snow.css'
 import data from '@emoji-mart/data';
 import Picker from '@emoji-mart/react';
-import { Smile, X } from "lucide-react";
+import { Smile } from "lucide-react";
 import { callApi } from "../../../api/api";
 import { showAlert } from "../../../actions/alertActions";
 import { useDispatch } from "react-redux";
@@ -15,7 +15,8 @@ import { sendRoomTyping, connectToRC } from "../../../services/rcRealtime";
 import { toRocketChatUsername } from "../../../utils/rocketchatUsername";
 import { sanitizeMessageHtml } from "../../../utils/safeMessageHtml";
 import type { ReplyDraft } from "./ChatDetails";
-import { flattenReplyTextForNextQuote } from "../../../utils/chatReplyLayout";
+import ReplyQuoteCard from "../../../components/messenger/ReplyQuoteCard";
+import { buildReplyQuoteHtml, flattenReplyTextForNextQuote } from "../../../utils/chatReplyLayout";
 
 function plainTextToMessageHtml(text: string): string {
     const trimmed = text.trim();
@@ -176,7 +177,11 @@ const NewMessageInput: React.FC<any> = ({
 
     const dispatchOutgoingHtml = async (message: string) => {
         const replyHtml = replyTo
-            ? `<blockquote><strong>Replying to ${escapeReplyText(replyTo.authorName)}</strong><br>${escapeReplyText(cleanReplyExcerpt(replyTo.excerpt))}</blockquote>`
+            ? buildReplyQuoteHtml({
+                  messageId: replyTo.messageId,
+                  authorNameEscaped: escapeReplyText(replyTo.authorName),
+                  excerptEscaped: escapeReplyText(cleanReplyExcerpt(replyTo.excerpt)),
+              })
             : "";
         const safeMessage = sanitizeMessageHtml(`${replyHtml}${message}`);
         if (!safeMessage.trim()) {
@@ -468,20 +473,14 @@ const NewMessageInput: React.FC<any> = ({
         return (
             <div className="relative w-full border-t border-stone-200 bg-wl-page px-2 py-1.5 sm:px-3">
                 {replyTo ? (
-                    <div className="mb-1 flex items-start justify-between gap-2 rounded-xl border border-stone-200 bg-[#EDEAE4] px-3 py-2 text-xs text-stone-700">
-                        <div className="min-w-0">
-                            <div className="font-semibold text-[#234C6A]">Replying to {replyTo.authorName}</div>
-                            <div className="truncate">{replyTo.excerpt || "Message"}</div>
-                        </div>
-                        <button
-                            type="button"
-                            onClick={onCancelReply}
-                            className="shrink-0 rounded-md p-1 text-stone-500 hover:bg-white/70 hover:text-stone-800"
-                            aria-label="Cancel reply"
-                        >
-                            <X className="h-3.5 w-3.5" />
-                        </button>
-                    </div>
+                    <ReplyQuoteCard
+                        className="mb-1"
+                        authorName={replyTo.authorName}
+                        excerpt={replyTo.excerpt}
+                        variant="composer"
+                        theme={theme}
+                        onCancel={onCancelReply}
+                    />
                 ) : null}
                 <div className="flex items-end gap-1.5 rounded-2xl border border-stone-200 bg-white px-2 py-1.5 shadow-sm">
                     <button
@@ -548,20 +547,14 @@ const NewMessageInput: React.FC<any> = ({
         <div className="w-full flex items-center border-t border-transparent p-4 pb-12 pt-0 sm:pb-4">
             <div className="relative w-full">
                 {replyTo ? (
-                    <div className="mb-2 flex items-start justify-between gap-2 rounded-lg border border-white/10 bg-black/70 px-3 py-2 text-xs text-slate-200">
-                        <div className="min-w-0">
-                            <div className="font-semibold text-[#31B099]">Replying to {replyTo.authorName}</div>
-                            <div className="truncate">{replyTo.excerpt || "Message"}</div>
-                        </div>
-                        <button
-                            type="button"
-                            onClick={onCancelReply}
-                            className="shrink-0 rounded-md p-1 text-slate-400 hover:bg-white/10 hover:text-white"
-                            aria-label="Cancel reply"
-                        >
-                            <X className="h-3.5 w-3.5" />
-                        </button>
-                    </div>
+                    <ReplyQuoteCard
+                        className="mb-2"
+                        authorName={replyTo.authorName}
+                        excerpt={replyTo.excerpt}
+                        variant="composer"
+                        theme={theme}
+                        onCancel={onCancelReply}
+                    />
                 ) : null}
                 <ReactQuill
                     ref={quillRef}

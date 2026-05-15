@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildReplyQuoteHtml,
+  immediateReplyQuote,
   peelWisdomLinkedReplyQuotes,
   peelWisdomLinkedReplyQuotesRegex,
   flattenReplyTextForNextQuote,
@@ -20,17 +22,27 @@ describe("chatReplyLayout", () => {
     expect(bodyHtml.trim()).toBe("<p>my reply</p>");
   });
 
-  it("peels stacked reply quotes in order", () => {
+  it("peels data-wl-reply-id from blockquote", () => {
+    const html = buildReplyQuoteHtml({
+      messageId: "abc123",
+      authorNameEscaped: "Bob",
+      excerptEscaped: "hi",
+    });
+    const { quotes } = peelWisdomLinkedReplyQuotesRegex(`${html}<p>reply</p>`);
+    expect(quotes[0]?.messageId).toBe("abc123");
+    expect(quotes[0]?.to).toBe("Bob");
+  });
+
+  it("immediateReplyQuote returns last peeled quote", () => {
     const html =
       '<blockquote><strong>Replying to Bob</strong><br>first</blockquote>' +
-      '<blockquote><strong>Replying to You</strong><br>second line</blockquote>' +
+      '<blockquote data-wl-reply-id="id2"><strong>Replying to You</strong><br>second line</blockquote>' +
       "<p>final</p>";
-    const { quotes, bodyHtml } = peelWisdomLinkedReplyQuotesRegex(html);
-    expect(quotes).toHaveLength(2);
-    expect(quotes[0].to).toBe("Bob");
-    expect(quotes[1].to).toBe("You");
-    expect(quotes[1].excerpt).toBe("second line");
-    expect(bodyHtml.trim()).toBe("<p>final</p>");
+    const { quotes } = peelWisdomLinkedReplyQuotesRegex(html);
+    const immediate = immediateReplyQuote(quotes);
+    expect(immediate?.to).toBe("You");
+    expect(immediate?.excerpt).toBe("second line");
+    expect(immediate?.messageId).toBe("id2");
   });
 
   it("flattenReplyTextForNextQuote strips blockquotes and tags", () => {

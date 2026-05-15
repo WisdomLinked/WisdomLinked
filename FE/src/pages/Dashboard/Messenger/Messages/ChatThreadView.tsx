@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import { Video } from 'lucide-react';
 import type { Message as MessageModel } from '../../../../actions/types';
 import { formatDividerDate, formatMessageTime } from '../../../../utils/formatMessageTime';
@@ -254,6 +254,24 @@ const ChatThreadView: React.FC<ChatThreadViewProps> = ({
     );
 
     const showGroupNames = Boolean(chosenGroupChatDetails) && !chosenChatDetails;
+    const [highlightMessageId, setHighlightMessageId] = useState<string | null>(null);
+
+    const scrollToMessage = useCallback((messageId: string) => {
+        const id = String(messageId || '').trim();
+        if (!id || typeof document === 'undefined') return;
+        const el = document.querySelector(`[data-message-id="${CSS.escape(id)}"]`);
+        if (!el) return;
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        setHighlightMessageId(id);
+        window.setTimeout(() => setHighlightMessageId((current) => (current === id ? null : current)), 1600);
+    }, []);
+
+    const messageRowAttrs = (messageId: string | undefined) => ({
+        'data-message-id': messageId ? String(messageId) : undefined,
+        className: highlightMessageId && messageId && highlightMessageId === String(messageId)
+            ? 'rounded-lg ring-2 ring-[#6264A7]/50 ring-offset-2 ring-offset-transparent transition'
+            : undefined,
+    });
 
     return (
         <>
@@ -350,8 +368,13 @@ const ChatThreadView: React.FC<ChatThreadViewProps> = ({
                         userDetails?.status === 'review' ||
                         m.author?.status === 'review';
 
+                    const legacyRow = messageRowAttrs(m._id);
                     return (
-                        <div key={key} className={`w-full px-2 sm:px-3 ${marginAfterNonBubble(next)}`}>
+                        <div
+                            key={key}
+                            data-message-id={legacyRow['data-message-id']}
+                            className={`w-full px-2 sm:px-3 ${marginAfterNonBubble(next)}${legacyRow.className ? ` ${legacyRow.className}` : ''}`}
+                        >
                             <Message
                                 content={m.content}
                                 userId={m.author._id}
@@ -381,6 +404,7 @@ const ChatThreadView: React.FC<ChatThreadViewProps> = ({
                                 )}
                                 onDeleteMessage={handleDeleteMessage}
                                 onReplyMessage={() => onReplyMessage?.(replyDraftFromMessage(m, m.author?.username || 'Message'))}
+                                onJumpToParent={scrollToMessage}
                             />
                             <p
                                 className={`text-xs text-gray-400 mt-1 ${
@@ -412,9 +436,14 @@ const ChatThreadView: React.FC<ChatThreadViewProps> = ({
                                     const src = sources[i];
                                     const shell = bubbleShellClass(true, i, group.messages.length, theme);
                                     const isLast = i === group.messages.length - 1;
+                                    const selfRow = messageRowAttrs(src._id);
                                     return (
-                                        <Message
+                                        <div
                                             key={cm.id}
+                                            data-message-id={selfRow['data-message-id']}
+                                            className={selfRow.className}
+                                        >
+                                        <Message
                                             content={src.content}
                                             userId={src.author._id}
                                             username={src.author.username}
@@ -442,7 +471,9 @@ const ChatThreadView: React.FC<ChatThreadViewProps> = ({
                                             )}
                                             onDeleteMessage={handleDeleteMessage}
                                             onReplyMessage={() => onReplyMessage?.(replyDraftFromMessage(src, 'You'))}
+                                            onJumpToParent={scrollToMessage}
                                         />
+                                        </div>
                                     );
                                 })}
                                 <p className="text-xs text-gray-400 mt-1 self-end flex items-center gap-1">
@@ -483,28 +514,35 @@ const ChatThreadView: React.FC<ChatThreadViewProps> = ({
                             {group.messages.map((cm, i) => {
                                 const src = sources[i];
                                 const shell = bubbleShellClass(false, i, group.messages.length, theme);
+                                const incomingRow = messageRowAttrs(src._id);
                                 return (
-                                    <Message
+                                    <div
                                         key={cm.id}
-                                        content={src.content}
-                                        userId={src.author._id}
-                                        username={src.author.username}
-                                        image={profileImages.get(src.author._id)}
-                                        role={src.author.role}
-                                        status={src.author.status}
-                                        sameAuthor={false}
-                                        date={src.createdAt}
-                                        incomingMessage
-                                        hideDate
-                                        theme={theme}
-                                        threadBubbleShellClassName={shell}
-                                        deliveryStatus={undefined}
-                                        messageId={src._id}
-                                        roomId={rcChannelId}
-                                        canDelete={false}
-                                        onDeleteMessage={handleDeleteMessage}
-                                        onReplyMessage={() => onReplyMessage?.(replyDraftFromMessage(src, groupSenderLabel(src)))}
-                                    />
+                                        data-message-id={incomingRow['data-message-id']}
+                                        className={incomingRow.className}
+                                    >
+                                        <Message
+                                            content={src.content}
+                                            userId={src.author._id}
+                                            username={src.author.username}
+                                            image={profileImages.get(src.author._id)}
+                                            role={src.author.role}
+                                            status={src.author.status}
+                                            sameAuthor={false}
+                                            date={src.createdAt}
+                                            incomingMessage
+                                            hideDate
+                                            theme={theme}
+                                            threadBubbleShellClassName={shell}
+                                            deliveryStatus={undefined}
+                                            messageId={src._id}
+                                            roomId={rcChannelId}
+                                            canDelete={false}
+                                            onDeleteMessage={handleDeleteMessage}
+                                            onReplyMessage={() => onReplyMessage?.(replyDraftFromMessage(src, groupSenderLabel(src)))}
+                                            onJumpToParent={scrollToMessage}
+                                        />
+                                    </div>
                                 );
                             })}
                             <p className="text-xs text-gray-400 mt-1 self-start">{timeLabel}</p>

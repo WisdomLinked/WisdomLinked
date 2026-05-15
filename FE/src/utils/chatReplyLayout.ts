@@ -1,11 +1,50 @@
 /**
  * WisdomLinked thread replies are sent as
- * `<blockquote><strong>Replying to Name</strong><br>excerpt</blockquote>` + body.
- * When people reply in a chain, multiple blockquotes stack and read as one blob.
+ * `<blockquote data-wl-reply-id="…"><strong>Replying to Name</strong><br>excerpt</blockquote>` + body.
  * This module peels those into structured data for layout, and flattens text for the next excerpt.
  */
 
-export type PeeledReplyQuote = { to: string; excerpt: string };
+export type PeeledReplyQuote = {
+  to: string;
+  excerpt: string;
+  messageId?: string;
+};
+
+export type ReplyQuotePayload = {
+  messageId: string;
+  authorName: string;
+  excerpt: string;
+};
+
+/** Direct parent in a reply chain (last blockquote before body). */
+export function immediateReplyQuote(quotes: PeeledReplyQuote[]): PeeledReplyQuote | null {
+  if (!quotes.length) return null;
+  return quotes[quotes.length - 1];
+}
+
+function escapeHtmlAttr(value: string): string {
+  return String(value || "")
+    .replace(/&/g, "&amp;")
+    .replace(/"/g, "&quot;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+/** Outbound HTML for a reply (values in excerpt/author must already be HTML-escaped if needed). */
+export function buildReplyQuoteHtml(params: {
+  messageId: string;
+  authorNameEscaped: string;
+  excerptEscaped: string;
+}): string {
+  const mid = escapeHtmlAttr(params.messageId);
+  return `<blockquote class="wl-reply-quote" data-wl-reply-id="${mid}"><strong>Replying to ${params.authorNameEscaped}</strong><br>${params.excerptEscaped}</blockquote>`;
+}
+
+function readReplyIdFromBlockquote(el: Element): string | undefined {
+  const raw = el.getAttribute("data-wl-reply-id");
+  const id = String(raw || "").trim();
+  return id || undefined;
+}
 
 function skipLeadingEmptyNodes(container: HTMLElement): Element | null {
   let guard = 0;
@@ -23,7 +62,7 @@ function skipLeadingEmptyNodes(container: HTMLElement): Element | null {
   return null;
 }
 
-/** Match `<blockquote><strong>Replying to X</strong>...` produced by NewMessageInput. */
+/** Match WisdomLinked reply blockquotes (with optional data-wl-reply-id). */
 export function peelWisdomLinkedReplyQuotes(html: string): {
   quotes: PeeledReplyQuote[];
   bodyHtml: string;
@@ -37,12 +76,12 @@ export function peelWisdomLinkedReplyQuotes(html: string): {
   }
 
   const doc = document.implementation.createHTMLDocument("");
-  const wrap = doc.createElement("div");
+  const wrapEl = doc.createElement("div");
   const maxPeels = 12;
 
   for (let i = 0; i < maxPeels; i++) {
-    wrap.innerHTML = remaining;
-    const first = skipLeadingEmptyNodes(wrap);
+    wrapEl.innerHTML = remaining;
+    const first = skipLeadingEmptyNodes(wrapEl);
     if (!first || first.tagName.toLowerCase() !== "blockquote") break;
 
     const strongEls = first.querySelectorAll("strong");
@@ -62,10 +101,11 @@ export function peelWisdomLinkedReplyQuotes(html: string): {
       if (/^Replying to\s+/i.test((s.textContent || "").trim())) s.remove();
     });
     const excerpt = (excerptRoot.textContent || "").replace(/\s+/g, " ").trim();
+    const messageId = readReplyIdFromBlockquote(first);
 
-    quotes.push({ to, excerpt });
+    quotes.push({ to, excerpt, messageId });
     first.remove();
-    remaining = wrap.innerHTML.trim();
+    remaining = wrapEl.innerHTML.trim();
     if (!remaining) break;
   }
 
@@ -80,18 +120,21 @@ export function peelWisdomLinkedReplyQuotesRegex(html: string): {
   const quotes: PeeledReplyQuote[] = [];
   let remaining = String(html ?? "").trim();
   const re =
-    /^<blockquote[^>]*>\s*<strong>\s*Replying to\s+([^<]+)<\/strong>\s*<br\s*\/?>\s*([\s\S]*?)<\/blockquote>/i;
+    /^<blockquote([^>]*)>\s*<strong>\s*Replying to\s+([^<]+)<\/strong>\s*<br\s*\/?>\s*([\s\S]*?)<\/blockquote>/i;
 
   for (let i = 0; i < 12; i++) {
     const m = remaining.match(re);
     if (!m) break;
-    const to = m[1].trim().replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">");
-    const excerpt = m[2]
+    const attrs = m[1] || "";
+    const idMatch = /data-wl-reply-id\s*=\s*["']([^"']+)["']/i.exec(attrs);
+    const messageId = idMatch ? idMatch[1].trim() : undefined;
+    const to = m[2].trim().replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">");
+    const excerpt = m[3]
       .replace(/<[^>]+>/g, " ")
       .replace(/&nbsp;/gi, " ")
       .replace(/\s+/g, " ")
       .trim();
-    quotes.push({ to, excerpt });
+    quotes.push({ to, excerpt, messageId });
     remaining = remaining.slice(m[0].length).trim();
   }
   return { quotes, bodyHtml: remaining };
@@ -99,7 +142,6 @@ export function peelWisdomLinkedReplyQuotesRegex(html: string): {
 
 /**
  * Strip reply blockquotes and tags before embedding an excerpt in the next send.
- * (Full-thread excerpts should come from `peelWisdomLinkedReplyQuotes` + body in the draft builder.)
  */
 export function flattenReplyTextForNextQuote(raw: string): string {
   let s = String(raw ?? "");
