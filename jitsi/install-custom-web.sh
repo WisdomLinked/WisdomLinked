@@ -26,13 +26,15 @@ fi
 mkdir -p "$DEST"
 cp -f "$ROOT/wisdomlinked-copy-meeting-id.js" "$DEST/"
 cp -f "$ROOT/wisdomlinked-meeting-chat-sync.js" "$DEST/"
+cp -f "$ROOT/wisdomlinked-whiteboard-initials.js" "$DEST/"
+cp -f "$ROOT/wisdomlinked-meeting-end-on-hangup.js" "$DEST/"
 
 INDEX="$DEST/index.html"
 MARKER="wisdomlinked-meeting-chat-sync.js"
 if [[ -f "$INDEX" ]] && ! grep -q "$MARKER" "$INDEX"; then
   if grep -q '</body>' "$INDEX"; then
     # macOS/BSD and GNU sed compatible: use perl
-    perl -0pi -e 's#</body>#<script src="wisdomlinked-copy-meeting-id.js" defer></script>\n<script src="wisdomlinked-meeting-chat-sync.js" defer></script>\n</body>#' "$INDEX"
+    perl -0pi -e 's#</body>#<script src="wisdomlinked-copy-meeting-id.js" defer></script>\n<script src="wisdomlinked-meeting-chat-sync.js" defer></script>\n<script src="wisdomlinked-whiteboard-initials.js" defer></script>\n<script src="wisdomlinked-meeting-end-on-hangup.js" defer></script>\n</body>#' "$INDEX"
   else
     echo "Warning: $INDEX has no </body>; add script tags manually (see jitsi/MEETING_CHAT_HOOKS.md)." >&2
   fi

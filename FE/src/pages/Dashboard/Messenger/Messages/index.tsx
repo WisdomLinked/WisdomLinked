@@ -47,6 +47,7 @@ import {
 } from "./historyPagination";
 import { resolveProfileImageSrc } from "../../../../utils/profileImage";
 import { parseMeetingMessageContent } from "../../../../utils/meetingMessage";
+import { shouldAppendRcStreamToActiveThread } from "../../../../utils/rcMessageRoomGuard";
 import type { ReplyDraft } from "../ChatDetails";
 import { useEndMeetingOnReturn } from "../../../../hooks/useEndMeetingOnReturn";
 /** RC `u.username` is email-derived; WL `userDetails.username` is display name — never equal. */
@@ -272,7 +273,8 @@ const Messages = ({ theme = "dark", onReplyMessage }: { theme?: string; onReplyM
 
             const activeRid = store.getState().chat.rcChannelId;
             const msgRid = rcMsg.rid ? String(rcMsg.rid) : '';
-            if (msgRid && String(activeRid || '') !== msgRid) {
+            const otherRoom = Boolean(msgRid && String(activeRid || '') !== msgRid);
+            if (otherRoom) {
                 dispatch(incrementDmUnreadRid(msgRid));
             }
 
@@ -283,7 +285,6 @@ const Messages = ({ theme = "dark", onReplyMessage }: { theme?: string; onReplyM
                 'New message';
             const bodyText = stripChatHtml(String(rcMsg.msg || ''));
             const tabHidden = typeof document !== 'undefined' && document.visibilityState === 'hidden';
-            const otherRoom = Boolean(msgRid && String(activeRid || '') !== msgRid);
             const skipNotifyForRcSystem = canonicalMembershipSide(String(t || '')) != null;
             const windowBlurred =
                 typeof document !== 'undefined' && typeof document.hasFocus === 'function' && !document.hasFocus();
@@ -295,6 +296,10 @@ const Messages = ({ theme = "dark", onReplyMessage }: { theme?: string; onReplyM
                 notifyChatMessage(peerName, bodyText, msgRid || 'wl-chat', {
                     allowWhenVisible: otherRoom || windowBlurred,
                 });
+            }
+
+            if (!shouldAppendRcStreamToActiveThread(msgRid, activeRid)) {
+                return;
             }
 
             // Convert RC message format to our format (group: map RC slug → WL user from participants)

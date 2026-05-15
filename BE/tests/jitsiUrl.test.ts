@@ -50,6 +50,19 @@ test("adds WisdomLinked meeting id for Jitsi UI customization", () => {
     );
 });
 
+test("adds whiteboard initials hash when provided", () => {
+    const url = appendJitsiMobileWebOverrides(
+        "https://meet.wisdomlinked.com/room-1?jwt=abc",
+        undefined,
+        true,
+        "meeting-thread-123",
+        undefined,
+        undefined,
+        "KP",
+    );
+    assert.ok(url.includes("config.wisdomlinkedWhiteboardInitials=KP"));
+});
+
 test("adds meeting chat sync token and API base when provided", () => {
     const url = appendJitsiMobileWebOverrides(
         "https://meet.wisdomlinked.com/room-1?jwt=abc",

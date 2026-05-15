@@ -97,7 +97,8 @@ const buildSignedJitsiUrl = (
     const base = `https://${JITSI_DOMAIN}/${roomName}`;
     const moderator = Boolean(opts?.moderator);
     const guest = Boolean(opts?.guest);
-    const whiteboardEnabled = moderator;
+    const whiteboardEnabled = true;
+    const wbInitials = jitsiDisplayInitials(userLike);
     if (!JITSI_JWT_SECRET) {
         return appendJitsiMobileWebOverrides(
             base,
@@ -106,12 +107,13 @@ const buildSignedJitsiUrl = (
             opts?.meetingThreadId,
             opts?.chatSyncToken,
             opts?.chatSyncApiBase,
+            wbInitials,
         );
     }
     const nowSec = Math.floor(Date.now() / 1000);
     const exp = nowSec + Number(opts?.expiresInSeconds || 2 * 60 * 60);
     const userId = normalizeId(userLike?._id || userLike?.id || userLike?.userId);
-    const displayName = jitsiDisplayInitials(userLike);
+    const displayName = wlDisplayName(userLike) || String(userLike?.name || 'Guest');
     const email = String(userLike?.email || '').trim().toLowerCase();
     const avatar = String(userLike?.image || '').trim();
 
@@ -155,7 +157,26 @@ const buildSignedJitsiUrl = (
         opts?.meetingThreadId,
         opts?.chatSyncToken,
         opts?.chatSyncApiBase,
+        wbInitials,
     );
+};
+
+/**
+ * POST /api/meeting/end-call
+ * End meeting from Jitsi tab using meeting-chat Bearer JWT (hangup hook).
+ * Body: { meetingThreadId }
+ */
+export const endMeetingFromCall = async (req: any, res: Response) => {
+    const claims = req.meetingChatClaims as MeetingChatTokenClaims | undefined;
+    const meetingThreadId = String(req.body?.meetingThreadId || '').trim();
+    if (!meetingThreadId) return res.status(400).json({ error: 'meetingThreadId is required' });
+    if (claims?.typ === 'wl-meeting-chat') {
+        if (String(claims.mid) !== meetingThreadId) {
+            return res.status(400).json({ error: 'meetingThreadId does not match token' });
+        }
+        req.user = { ...(req.user || {}), userId: String(claims.sub) };
+    }
+    return endMeeting(req, res);
 };
 
 const delegatedIdsFromMeeting = (meeting: any): string[] =>

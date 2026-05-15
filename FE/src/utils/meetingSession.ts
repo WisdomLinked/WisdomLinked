@@ -1,4 +1,5 @@
 import { endMeeting } from "../api/chatApi";
+import type { Message } from "../actions/types";
 
 export const ACTIVE_MEETING_KEY = "wl_active_meeting_thread_id";
 
@@ -39,13 +40,18 @@ export function clearActiveMeetingThreadId(): void {
 }
 
 /** End the meeting the user left open in Jitsi (best-effort). */
-export async function tryEndActiveMeeting(): Promise<void> {
+export async function tryEndActiveMeeting(
+    onEnded?: (endMessage: Message | null) => void,
+): Promise<void> {
     const id = getActiveMeetingThreadId();
     if (!id) return;
     clearActiveMeetingThreadId();
     try {
-        await endMeeting(id);
+        const res = await endMeeting(id);
+        const endMessage = (res?.endMessage ?? null) as Message | null;
+        onEnded?.(endMessage);
     } catch (err) {
         console.warn("[meetingSession] could not end active meeting", err);
+        onEnded?.(null);
     }
 }

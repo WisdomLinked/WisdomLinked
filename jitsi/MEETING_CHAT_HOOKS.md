@@ -41,11 +41,14 @@ Host a WisdomLinked page that embeds Jitsi and uses `new JitsiMeetExternalAPI(..
 | `config.wisdomlinkedMeetingId` | Mongo `MeetingThread` id |
 | `config.wisdomlinkedChatSyncToken` | Short-lived JWT for `POST /api/meeting/chat-sync` |
 | `config.wisdomlinkedChatSyncApiBase` | Origin for API (e.g. `https://app.example.com`) so `fetch` works from the meet origin |
+| `config.wisdomlinkedWhiteboardInitials` | Initials shown on Excalidraw cursors (meeting UI keeps full JWT display name) |
 
 ## References in-repo
 
 - [`wisdomlinked-copy-meeting-id.js`](./wisdomlinked-copy-meeting-id.js) — hash + `sessionStorage` caching pattern.
-- [`wisdomlinked-meeting-chat-sync.js`](./wisdomlinked-meeting-chat-sync.js) — implementation.
+- [`wisdomlinked-meeting-chat-sync.js`](./wisdomlinked-meeting-chat-sync.js) — in-call text → Messenger.
+- [`wisdomlinked-whiteboard-initials.js`](./wisdomlinked-whiteboard-initials.js) — whiteboard initials + view-only for non-moderators.
+- [`wisdomlinked-meeting-end-on-hangup.js`](./wisdomlinked-meeting-end-on-hangup.js) — `POST /api/meeting/end-call` on hangup (Bearer JWT).
 
 ## Deploy on the Jitsi web container
 

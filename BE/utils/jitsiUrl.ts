@@ -17,6 +17,7 @@ export const appendJitsiMobileWebOverrides = (
     wisdomlinkedMeetingId?: string,
     wisdomlinkedChatSyncToken?: string,
     wisdomlinkedChatSyncApiBase?: string,
+    wisdomlinkedWhiteboardInitials?: string,
 ): string => {
     const base = String(url || "").trim();
     if (!base) return base;
@@ -35,6 +36,10 @@ export const appendJitsiMobileWebOverrides = (
     const apiBase = String(wisdomlinkedChatSyncApiBase || "").trim();
     if (apiBase) {
         overrides.push(`config.wisdomlinkedChatSyncApiBase=${encodeURIComponent(apiBase)}`);
+    }
+    const wbInitials = String(wisdomlinkedWhiteboardInitials || "").trim();
+    if (wbInitials) {
+        overrides.push(`config.wisdomlinkedWhiteboardInitials=${encodeURIComponent(wbInitials)}`);
     }
     const normalizedReturnUrl = String(returnUrl || "").trim();
     if (normalizedReturnUrl) {
