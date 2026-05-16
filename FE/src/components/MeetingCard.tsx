@@ -89,7 +89,7 @@ const MeetingCard: React.FC<MeetingCardProps> = ({
             window.alert(info?.error || 'Could not join call. Please retry from chat.');
             return;
         }
-        trackMeetingJoin(info.meetingThreadId ?? meetingThreadId, info.jitsiUrl);
+        trackMeetingJoin(info.meetingThreadId ?? meetingThreadId, info.jitsiUrl, pendingWindow);
         onJoin?.(info.jitsiUrl);
         openMeetingUrl(info.jitsiUrl, pendingWindow);
     };

@@ -35,7 +35,8 @@ Hard-refresh meet clients after deploy. **Also deploy staging/production BE** so
 - `pagehide` / `beforeunload` call end **only if** `aloneInRoom` is already true.
 - Body: `{ meetingThreadId, endReason: "last_participant" }`.
 - Debug: `config.wisdomlinkedMeetingEndDebug=true`.
-- **Messenger return:** if `wlAloneInRoom` is set, FE calls `POST /api/meeting/end` with `endReason: "last_participant_return"` (session cookie).
+- **Messenger bridge (cross-origin):** when alone, meet posts `postMessage` (`wl-meeting-alone` / `wl-meeting-ended`) to the opener; Messenger stores `wlPendingEndMeeting` and calls `POST /api/meeting/end` with `endReason: "last_participant_return"` when the meet popup closes or on ended signal.
+- **UI reconcile:** Messenger polls `GET /api/meeting/:id` for in-progress cards; if Mongo `status === ended` but RC lacks `__MEETING_ENDED__`, still shows “Meet ended”.
 
 ## Hash keys (backend join URL)
 

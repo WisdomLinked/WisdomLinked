@@ -7,6 +7,7 @@ import MeetingCard from '../../../../components/MeetingCard';
 import ChatSystemNotice from './ChatSystemNotice';
 import { parseMeetingMessageContent } from '../../../../utils/meetingMessage';
 import { buildMeetingThreadMaps } from '../../../../utils/meetingThreadMaps';
+import { useMeetingStatusReconcile } from '../../../../hooks/useMeetingStatusReconcile';
 import { peelWisdomLinkedReplyQuotes } from '../../../../utils/chatReplyLayout';
 import { wlDisplayName } from '../../../../utils/displayName';
 import { groupMessages } from './groupMessages';
@@ -262,6 +263,7 @@ const ChatThreadView: React.FC<ChatThreadViewProps> = ({
         () => buildMeetingThreadMaps(displayMessages),
         [displayMessages],
     );
+    const dbEndedMeetings = useMeetingStatusReconcile(displayMessages);
 
     const showGroupNames = Boolean(chosenGroupChatDetails) && !chosenChatDetails;
     const dmPeer = chosenChatDetails as { username?: string } | null | undefined;
@@ -318,7 +320,7 @@ const ChatThreadView: React.FC<ChatThreadViewProps> = ({
 
                 if (entry.kind === 'meeting-started') {
                     const threadId = entry.meeting.meetingThreadId;
-                    const endInfo = endedMeetings.get(threadId);
+                    const endInfo = endedMeetings.get(threadId) ?? dbEndedMeetings.get(threadId);
                     return (
                         <div key={key} className={`w-full px-2 sm:px-3 ${marginAfterNonBubble(next)}`}>
                             <MeetingCard

@@ -1,6 +1,7 @@
 (function () {
   /*
    * POST /api/meeting/end-call when the last participant leaves Jitsi.
+   * Notifies window.opener (Messenger) via postMessage when alone — cross-origin bridge.
    * Optional hash: config.wisdomlinkedMeetingEndDebug=true
    */
   var STORAGE_MEETING = "wlMeetingChatMeetingId";
@@ -38,6 +39,24 @@
     console.debug.apply(console, ["[wl-meeting-end]"].concat([].slice.call(arguments)));
   }
 
+  function messengerOriginFromApiBase(apiBase) {
+    try {
+      return new URL(String(apiBase || "")).origin;
+    } catch (e) {
+      return "";
+    }
+  }
+
+  function notifyOpener(payload) {
+    try {
+      if (!window.opener || window.opener.closed) return;
+      var cfg = readConfig();
+      var origin = messengerOriginFromApiBase(cfg.apiBase);
+      if (!origin) return;
+      window.opener.postMessage(payload, origin);
+    } catch (e) {}
+  }
+
   function setAloneInRoom(alone) {
     aloneInRoom = alone;
     try {
@@ -47,6 +66,12 @@
         window.sessionStorage.removeItem(STORAGE_ALONE);
       }
     } catch (e) {}
+    if (alone) {
+      var cfg = readConfig();
+      if (cfg.meetingThreadId) {
+        notifyOpener({ type: "wl-meeting-alone", meetingThreadId: cfg.meetingThreadId });
+      }
+    }
   }
 
   function readConfig() {
@@ -184,16 +209,31 @@
     }
     if (endedMeetings[cfg.meetingThreadId]) return;
     endedMeetings[cfg.meetingThreadId] = 1;
-    try {
-      window.sessionStorage.removeItem(STORAGE_ALONE);
-    } catch (e) {}
     wlDebug("ending meeting", cfg.meetingThreadId);
     postEndCall(cfg)
       .then(function (res) {
-        if (res && !res.ok) wlDebug("end-call failed", res.status, cfg.meetingThreadId);
+        if (res && res.ok) {
+          try {
+            window.sessionStorage.removeItem(STORAGE_ALONE);
+          } catch (e) {}
+          notifyOpener({
+            type: "wl-meeting-ended",
+            meetingThreadId: cfg.meetingThreadId,
+          });
+        } else {
+          wlDebug("end-call failed", res && res.status, cfg.meetingThreadId);
+          notifyOpener({
+            type: "wl-meeting-ended",
+            meetingThreadId: cfg.meetingThreadId,
+          });
+        }
       })
       .catch(function (err) {
         wlDebug("end-call error", err);
+        notifyOpener({
+          type: "wl-meeting-ended",
+          meetingThreadId: cfg.meetingThreadId,
+        });
       });
   }
 

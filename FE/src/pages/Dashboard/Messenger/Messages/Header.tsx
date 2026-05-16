@@ -217,7 +217,7 @@ const MessagesHeader = ({ events, openCalendarModal, openSeminarModal, openEditS
         }
         const res = await startMeeting({ groupChatId: gid });
         if (res?.jitsiUrl) {
-            trackMeetingJoin(res.meetingThreadId, res.jitsiUrl);
+            trackMeetingJoin(res.meetingThreadId, res.jitsiUrl, pendingWindow);
             appendMeetingStartMessage(res, dispatch);
             openMeetingUrl(res.jitsiUrl, pendingWindow);
         } else {
@@ -340,7 +340,7 @@ const MessagesHeader = ({ events, openCalendarModal, openSeminarModal, openEditS
         }
         const res = await startMeeting({ conversationId });
         if (res?.jitsiUrl) {
-            trackMeetingJoin(res.meetingThreadId, res.jitsiUrl);
+            trackMeetingJoin(res.meetingThreadId, res.jitsiUrl, pendingWindow);
             appendMeetingStartMessage(res, dispatch);
             openMeetingUrl(res.jitsiUrl, pendingWindow);
         } else {
@@ -490,7 +490,7 @@ const MessagesHeader = ({ events, openCalendarModal, openSeminarModal, openEditS
                                 }
                                 const res = await startMeeting({ conversationId });
                                 if (res?.jitsiUrl) {
-                                    trackMeetingJoin(res.meetingThreadId, res.jitsiUrl);
+                                    trackMeetingJoin(res.meetingThreadId, res.jitsiUrl, pendingWindow);
                                     appendMeetingStartMessage(res, dispatch);
                                     openMeetingUrl(res.jitsiUrl, pendingWindow);
                                 } else {
@@ -557,7 +557,7 @@ const MessagesHeader = ({ events, openCalendarModal, openSeminarModal, openEditS
                                         }
                                         const res = await startMeeting({ groupChatId: gid });
                                         if (res?.jitsiUrl) {
-                                            trackMeetingJoin(res.meetingThreadId, res.jitsiUrl);
+                                            trackMeetingJoin(res.meetingThreadId, res.jitsiUrl, pendingWindow);
                                             appendMeetingStartMessage(res, dispatch);
                                             openMeetingUrl(res.jitsiUrl, pendingWindow);
                                         } else {
