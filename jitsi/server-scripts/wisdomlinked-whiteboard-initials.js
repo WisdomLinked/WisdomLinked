@@ -1,14 +1,22 @@
 (function () {
   /*
-   * Whiteboard initials + view-only for non-moderators (hash from backend is authoritative).
-   *   config.wisdomlinkedWhiteboardInitials
-   *   config.wisdomlinkedIsMeetingModerator=true|false
-   *   config.wisdomlinkedWhiteboardDebug=true (optional)
+   * Whiteboard initials + view-only for non-moderators.
+   * Authoritative draw permission: GET /api/meeting/permissions (poll).
+   * Jitsi "Grant moderator" sync: granter listens PARTICIPANT_ROLE_CHANGED → delegate/revoke APIs.
    */
   var STORAGE_INITIALS = "wlWhiteboardInitials";
   var STORAGE_MOD = "wlIsMeetingModerator";
+  var STORAGE_MEETING = "wlMeetingChatMeetingId";
+  var STORAGE_TOKEN = "wlMeetingChatSyncToken";
+  var STORAGE_API = "wlMeetingChatSyncApiBase";
   var VIEW_ONLY_STYLE_ID = "wl-whiteboard-view-only";
+  var PERMISSIONS_POLL_MS = 5000;
+  var JOIN_GRACE_MS = 3000;
   var hookedApis = new WeakSet();
+  var conferenceJoinedAt = 0;
+  var localParticipantId = "";
+  var roleSyncDebounced = Object.create(null);
+  var lastCanDraw = null;
 
   function hashValue(name) {
     var raw = window.location.hash ? window.location.hash.slice(1) : "";
@@ -36,6 +44,50 @@
     console.debug.apply(console, ["[wl-whiteboard]"].concat([].slice.call(arguments)));
   }
 
+  function readConfig() {
+    var mid = hashValue("config.wisdomlinkedMeetingId") || "";
+    var tok = hashValue("config.wisdomlinkedChatSyncToken") || "";
+    var api = hashValue("config.wisdomlinkedChatSyncApiBase") || "";
+    if (mid) {
+      try {
+        window.sessionStorage.setItem(STORAGE_MEETING, mid);
+      } catch (e) {}
+    }
+    if (tok) {
+      try {
+        window.sessionStorage.setItem(STORAGE_TOKEN, tok);
+      } catch (e) {}
+    }
+    if (api) {
+      try {
+        window.sessionStorage.setItem(STORAGE_API, api);
+      } catch (e) {}
+    }
+    return {
+      meetingThreadId: (function () {
+        try {
+          return window.sessionStorage.getItem(STORAGE_MEETING) || "";
+        } catch (e) {
+          return "";
+        }
+      })(),
+      token: (function () {
+        try {
+          return window.sessionStorage.getItem(STORAGE_TOKEN) || "";
+        } catch (e) {
+          return "";
+        }
+      })(),
+      apiBase: (function () {
+        try {
+          return window.sessionStorage.getItem(STORAGE_API) || "";
+        } catch (e) {
+          return "";
+        }
+      })(),
+    };
+  }
+
   function persistModeratorFromHash() {
     var modHash = hashValue("config.wisdomlinkedIsMeetingModerator");
     if (modHash === "true") {
@@ -49,6 +101,16 @@
     }
   }
 
+  function setCanDrawFromApi(canDraw) {
+    try {
+      window.sessionStorage.setItem(STORAGE_MOD, canDraw ? "1" : "0");
+    } catch (e) {}
+    if (lastCanDraw !== canDraw) {
+      wlDebug("permissions updated", { canDraw: canDraw });
+      lastCanDraw = canDraw;
+    }
+  }
+
   function canDrawOnWhiteboard() {
     persistModeratorFromHash();
     try {
@@ -57,6 +119,142 @@
       if (v === "1") return true;
     } catch (e) {}
     return true;
+  }
+
+  function pollPermissions() {
+    var cfg = readConfig();
+    if (!cfg.meetingThreadId || !cfg.token || !cfg.apiBase) return;
+    var url =
+      String(cfg.apiBase).replace(/\/$/, "") +
+      "/api/meeting/permissions?meetingThreadId=" +
+      encodeURIComponent(cfg.meetingThreadId);
+    fetch(url, {
+      method: "GET",
+      headers: { Authorization: "Bearer " + cfg.token },
+      credentials: "omit",
+    })
+      .then(function (res) {
+        if (!res || !res.ok) return null;
+        return res.json();
+      })
+      .then(function (data) {
+        if (!data || typeof data.canDrawWhiteboard !== "boolean") return;
+        setCanDrawFromApi(data.canDrawWhiteboard);
+        pollExcalidrawViewOnly();
+      })
+      .catch(function () {});
+  }
+
+  function postDelegateApi(path, targetUserId) {
+    var cfg = readConfig();
+    if (!cfg.meetingThreadId || !cfg.token || !cfg.apiBase || !targetUserId) return;
+    var url = String(cfg.apiBase).replace(/\/$/, "") + "/api/meeting/" + path;
+    fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: "Bearer " + cfg.token,
+      },
+      body: JSON.stringify({
+        meetingThreadId: cfg.meetingThreadId,
+        targetUserId: targetUserId,
+      }),
+      credentials: "omit",
+    })
+      .then(function (res) {
+        wlDebug(path, res && res.status, targetUserId);
+      })
+      .catch(function (err) {
+        wlDebug(path, "error", err);
+      });
+  }
+
+  function wlUserIdFromParticipant(participant) {
+    if (!participant) return "";
+    try {
+      if (typeof participant.getIdentity === "function") {
+        var identity = String(participant.getIdentity() || "").trim();
+        if (/^[a-f0-9]{24}$/i.test(identity)) return identity;
+      }
+      if (participant._identity && /^[a-f0-9]{24}$/i.test(String(participant._identity))) {
+        return String(participant._identity);
+      }
+      if (typeof participant.getId === "function") {
+        var pid = String(participant.getId() || "");
+        var match = pid.match(/([a-f0-9]{24})/i);
+        if (match) return match[1];
+      }
+    } catch (e) {}
+    return "";
+  }
+
+  function isModeratorRole(role) {
+    var r = String(role || "").toLowerCase();
+    return r === "moderator" || r === "owner";
+  }
+
+  function onParticipantRoleChanged(participantId, role) {
+    if (!conferenceJoinedAt || Date.now() - conferenceJoinedAt < JOIN_GRACE_MS) return;
+    if (!participantId || String(participantId) === String(localParticipantId)) return;
+    if (!canDrawOnWhiteboard()) return;
+
+    var app = typeof APP !== "undefined" ? APP : null;
+    if (!app || !app.conference) return;
+    var participant = null;
+    try {
+      if (typeof app.conference.getParticipantById === "function") {
+        participant = app.conference.getParticipantById(participantId);
+      }
+    } catch (e) {}
+    var targetUserId = wlUserIdFromParticipant(participant);
+    if (!targetUserId) {
+      wlDebug("role change — no WL user id", participantId, role);
+      return;
+    }
+
+    var debounceKey = targetUserId + ":" + String(role);
+    if (roleSyncDebounced[debounceKey]) return;
+    roleSyncDebounced[debounceKey] = window.setTimeout(function () {
+      delete roleSyncDebounced[debounceKey];
+    }, 2000);
+
+    if (isModeratorRole(role)) {
+      postDelegateApi("delegate-moderator", targetUserId);
+    } else {
+      postDelegateApi("revoke-delegate-moderator", targetUserId);
+    }
+  }
+
+  function hookConferenceRoleSync() {
+    try {
+      var app = typeof APP !== "undefined" ? APP : null;
+      if (!app || !app.conference) return;
+      if (app.conference._wlWhiteboardRoleHooked) return;
+      app.conference._wlWhiteboardRoleHooked = true;
+
+      app.conference.addListener("conferenceJoined", function () {
+        conferenceJoinedAt = Date.now();
+        try {
+          if (typeof app.conference.myUserId === "function") {
+            localParticipantId = app.conference.myUserId();
+          } else if (app.conference.myUserId) {
+            localParticipantId = app.conference.myUserId;
+          }
+        } catch (e) {}
+        pollPermissions();
+      });
+
+      var roleEvents = [
+        "PARTICIPANT_ROLE_CHANGED",
+        "USER_ROLE_CHANGED",
+        "participant.role.changed",
+      ];
+      roleEvents.forEach(function (evt) {
+        try {
+          app.conference.addListener(evt, onParticipantRoleChanged);
+        } catch (e) {}
+      });
+    } catch (e) {}
   }
 
   function persistInitialsFromHash() {
@@ -140,6 +338,20 @@
     } catch (e) {}
   }
 
+  function enableDrawOnExcalidraw(excalidrawApi) {
+    if (!excalidrawApi || !canDrawOnWhiteboard()) return;
+    removeViewOnlyStyles();
+    try {
+      if (typeof excalidrawApi.updateScene === "function") {
+        excalidrawApi.updateScene({ appState: { viewModeEnabled: false } });
+      }
+      if (typeof excalidrawApi.setViewModeEnabled === "function") {
+        excalidrawApi.setViewModeEnabled(false);
+      }
+      wlDebug("draw enabled");
+    } catch (e) {}
+  }
+
   function getWhiteboardSlice() {
     try {
       var app = typeof APP !== "undefined" ? APP : null;
@@ -152,19 +364,26 @@
   }
 
   function pollExcalidrawViewOnly() {
-    if (canDrawOnWhiteboard()) {
-      removeViewOnlyStyles();
-      return;
-    }
     var wb = getWhiteboardSlice();
     if (!wb || !wb.isOpen) {
-      removeViewOnlyStyles();
+      if (!canDrawOnWhiteboard()) removeViewOnlyStyles();
       return;
     }
-    ensureViewOnlyStyles();
     if (typeof wb.getExcalidrawAPI === "function") {
       var api = wb.getExcalidrawAPI();
-      if (api) applyViewOnly(api);
+      if (api) {
+        if (canDrawOnWhiteboard()) {
+          enableDrawOnExcalidraw(api);
+        } else {
+          applyViewOnly(api);
+        }
+        return;
+      }
+    }
+    if (canDrawOnWhiteboard()) {
+      removeViewOnlyStyles();
+    } else {
+      ensureViewOnlyStyles();
     }
   }
 
@@ -180,6 +399,7 @@
         var open = Boolean(wb && wb.isOpen);
         if (open && !prevOpen) {
           wlDebug("whiteboard opened", { canDraw: canDrawOnWhiteboard() });
+          pollPermissions();
           pollExcalidrawViewOnly();
         }
         if (!open && prevOpen) removeViewOnlyStyles();
@@ -198,16 +418,22 @@
       persistInitialsFromHash();
       patchWhiteboardStateInUrl();
       hookWhiteboardOpen();
+      hookConferenceRoleSync();
+      pollPermissions();
     });
     window.setInterval(function () {
       persistModeratorFromHash();
       persistInitialsFromHash();
       patchWhiteboardStateInUrl();
       hookWhiteboardOpen();
+      hookConferenceRoleSync();
       pollExcalidrawViewOnly();
     }, 400);
+    window.setInterval(pollPermissions, PERMISSIONS_POLL_MS);
     persistModeratorFromHash();
     persistInitialsFromHash();
     hookWhiteboardOpen();
+    hookConferenceRoleSync();
+    pollPermissions();
   }
 })();

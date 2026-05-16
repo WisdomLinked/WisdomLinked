@@ -8,6 +8,7 @@ import {
     endMeeting,
     endMeetingFromCall,
     meetingHeartbeat,
+    getMeetingPermissions,
     addTranscriptMessage,
     syncMeetingChatMessage,
     getMeetingThread,
@@ -26,13 +27,14 @@ router.post('/start', requireAuth(false), startMeeting);
 router.post('/end', requireAuth(false), endMeeting);
 router.post('/end-call', meetingChatSyncGate, endMeetingFromCall);
 router.post('/heartbeat', meetingChatSyncGate, meetingHeartbeat);
+router.get('/permissions', meetingChatSyncGate, getMeetingPermissions);
 router.post('/transcript', requireAuth(false), addTranscriptMessage);
 router.post('/chat-sync', meetingChatSyncGate, syncMeetingChatMessage);
 router.post('/rate', requireAuth(false), submitMeetingRating);
 router.post('/guest-invite', requireAuth(false), createMeetingGuestInvite);
 router.post('/revoke-participant', requireAuth(false), revokeMeetingParticipant);
-router.post('/delegate-moderator', requireAuth(false), delegateMeetingModerator);
-router.post('/revoke-delegate-moderator', requireAuth(false), revokeDelegatedMeetingModerator);
+router.post('/delegate-moderator', meetingChatSyncGate, delegateMeetingModerator);
+router.post('/revoke-delegate-moderator', meetingChatSyncGate, revokeDelegatedMeetingModerator);
 router.get('/guest-invite/:token', resolveMeetingGuestInvite);
 router.get('/guest-invite/:token/join', requireAuth(false), joinMeetingFromGuestInvite);
 router.get('/:meetingThreadId/join', requireAuth(false), getMeetingJoinInfo);

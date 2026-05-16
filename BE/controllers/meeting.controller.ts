@@ -257,6 +257,20 @@ const isLastParticipantEndReason = (reason: unknown): boolean => {
 const delegatedIdsFromMeeting = (meeting: any): string[] =>
     (Array.isArray(meeting?.delegatedModerators) ? meeting.delegatedModerators : []).map((id: any) => normalizeId(id));
 
+const resolveMeetingActorUserId = (req: any): string => {
+    const claims = req.meetingChatClaims as MeetingChatTokenClaims | undefined;
+    if (claims?.typ === 'wl-meeting-chat' && claims.sub) return String(claims.sub);
+    return String(req.user?.userId || '');
+};
+
+const meetingThreadIdFromRequest = (req: any): string => {
+    const claims = req.meetingChatClaims as MeetingChatTokenClaims | undefined;
+    const fromQuery = String(req.query?.meetingThreadId || req.params?.meetingThreadId || req.body?.meetingThreadId || '').trim();
+    if (fromQuery) return fromQuery;
+    if (claims?.typ === 'wl-meeting-chat' && claims.mid) return String(claims.mid);
+    return '';
+};
+
 const canUserJoinMeeting = async (meeting: any, userId: string): Promise<{ allowed: boolean; moderator: boolean }> => {
     const uid = String(userId || '').trim();
     if (!meeting || !uid) return { allowed: false, moderator: false };
@@ -1258,16 +1272,63 @@ const isCanonicalMeetingModerator = async (meeting: any, userId: string): Promis
 };
 
 /**
+ * GET /api/meeting/permissions?meetingThreadId=
+ * Returns whiteboard draw permission from Mongo (includes delegatedModerators).
+ * Auth: meeting-chat Bearer JWT or session cookie.
+ */
+export const getMeetingPermissions = async (req: any, res: Response) => {
+    try {
+        const claims = req.meetingChatClaims as MeetingChatTokenClaims | undefined;
+        const userId = resolveMeetingActorUserId(req);
+        const meetingThreadId = meetingThreadIdFromRequest(req);
+        if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+        if (!meetingThreadId) return res.status(400).json({ error: 'meetingThreadId is required' });
+        if (claims?.typ === 'wl-meeting-chat' && String(claims.mid) !== meetingThreadId) {
+            return res.status(400).json({ error: 'meetingThreadId does not match token' });
+        }
+
+        const meeting = await MeetingThread.findById(meetingThreadId).select(
+            'status conversationId groupChatId removedParticipants delegatedModerators startedBy',
+        );
+        if (!meeting) return res.status(404).json({ error: 'Meeting not found' });
+        if (meeting.status !== 'active') {
+            return res.status(200).json({ success: true, canDrawWhiteboard: false, status: meeting.status });
+        }
+        if (isRemovedFromMeeting(meeting, userId)) {
+            return res.status(403).json({ error: 'You were removed from this active call by a moderator' });
+        }
+
+        const auth = await canUserJoinMeeting(meeting, userId);
+        if (!auth.allowed) {
+            return res.status(403).json({ error: 'You do not have access to this meeting' });
+        }
+
+        return res.status(200).json({
+            success: true,
+            canDrawWhiteboard: auth.moderator,
+        });
+    } catch (err: any) {
+        console.error('[meeting.permissions]', err.message);
+        return res.status(500).json({ error: err.message });
+    }
+};
+
+/**
  * POST /api/meeting/delegate-moderator
  * Body: { meetingThreadId, targetUserId }
  *
- * Gives target moderator privileges for our signed join URLs (JWT), on re-join after promotion.
+ * Gives target moderator privileges for whiteboard + signed join URLs.
  * Any current moderator (starter / admin / delegated) may delegate.
  */
 export const delegateMeetingModerator = async (req: any, res: Response) => {
     try {
-        const { userId } = req.user || {};
-        const { meetingThreadId, targetUserId } = req.body || {};
+        const userId = resolveMeetingActorUserId(req);
+        const claims = req.meetingChatClaims as MeetingChatTokenClaims | undefined;
+        const { targetUserId } = req.body || {};
+        const meetingThreadId = meetingThreadIdFromRequest(req);
+        if (claims?.typ === 'wl-meeting-chat' && meetingThreadId && String(claims.mid) !== meetingThreadId) {
+            return res.status(400).json({ error: 'meetingThreadId does not match token' });
+        }
         if (!meetingThreadId || !targetUserId) {
             return res.status(400).json({ error: 'meetingThreadId and targetUserId are required' });
         }
@@ -1314,8 +1375,13 @@ export const delegateMeetingModerator = async (req: any, res: Response) => {
  */
 export const revokeDelegatedMeetingModerator = async (req: any, res: Response) => {
     try {
-        const { userId } = req.user || {};
-        const { meetingThreadId, targetUserId } = req.body || {};
+        const userId = resolveMeetingActorUserId(req);
+        const claims = req.meetingChatClaims as MeetingChatTokenClaims | undefined;
+        const { targetUserId } = req.body || {};
+        const meetingThreadId = meetingThreadIdFromRequest(req);
+        if (claims?.typ === 'wl-meeting-chat' && meetingThreadId && String(claims.mid) !== meetingThreadId) {
+            return res.status(400).json({ error: 'meetingThreadId does not match token' });
+        }
         if (!meetingThreadId || !targetUserId) {
             return res.status(400).json({ error: 'meetingThreadId and targetUserId are required' });
         }

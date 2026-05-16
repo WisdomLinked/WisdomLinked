@@ -23,7 +23,7 @@ Hard-refresh meet clients after deploy. **Also deploy staging/production BE** so
 |------|---------|
 | `wisdomlinked-copy-meeting-id.js` | Moderator “Copy Meeting ID” control |
 | `wisdomlinked-meeting-chat-sync.js` | In-call text chat → `POST /api/meeting/chat-sync` |
-| `wisdomlinked-whiteboard-initials.js` | Whiteboard initials; view-only when hash says non-moderator |
+| `wisdomlinked-whiteboard-initials.js` | Whiteboard initials; live permissions poll; Jitsi grant → delegate sync |
 | `wisdomlinked-meeting-end-on-hangup.js` | `POST /api/meeting/end-call` when last participant hangs up |
 
 ## Meeting end (last leaver)
@@ -46,6 +46,22 @@ Hard-refresh meet clients after deploy. **Also deploy staging/production BE** so
 | B hangs up | Both see Meet ended within ~5s |
 | Solo join + hangup | Meet ended |
 | Debug hash on URL | Console shows `ending meeting` + `POST .../end-call` 200 |
+
+## Whiteboard draw permission
+
+- **Initial:** `config.wisdomlinkedIsMeetingModerator` on join URL → `sessionStorage.wlIsMeetingModerator` (`"0"` = view-only).
+- **Live (authoritative):** Poll `GET /api/meeting/permissions?meetingThreadId=` every 5s with meeting-chat Bearer token. Updates draw access when `delegatedModerators` changes — **no rejoin**.
+- **Jitsi “Grant moderator”:** On the **granter’s** tab, `PARTICIPANT_ROLE_CHANGED` (and aliases) calls `POST /api/meeting/delegate-moderator` / `revoke-delegate-moderator` with the target’s Mongo user id from JWT `context.user.id` (`participant.getIdentity()`).
+- Ignores `APP.conference.isModerator()` (Prosody may mark everyone moderator).
+- Debug: `config.wisdomlinkedWhiteboardDebug=true` → `[wl-whiteboard]` in console.
+
+### Whiteboard test checklist
+
+| Step | Expected |
+|------|----------|
+| Host + guest in call | Guest whiteboard view-only |
+| Host: Jitsi Grant moderator on guest | Within ~5–10s guest can draw |
+| Host revokes moderator | Guest returns to view-only |
 
 ## Hash keys (backend join URL)
 
