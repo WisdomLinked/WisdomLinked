@@ -15,7 +15,7 @@ scp jitsi/server-scripts/wisdomlinked-meeting-end-on-hangup.js \
 ssh wisdomlinked-comms 'cd /root/wisdomlinked-comms/jitsi/docker-jitsi-meet && docker compose up -d --force-recreate web'
 ```
 
-Hard-refresh meet clients after deploy. **Also deploy staging/production BE** so join URLs include `config.wisdomlinkedIsMeetingModerator`.
+Hard-refresh meet clients after deploy. **Also deploy staging/production BE** so join URLs include `config.wisdomlinkedMessengerOrigin` and chat-sync hashes.
 
 ## Scripts on the server
 
@@ -24,43 +24,45 @@ Hard-refresh meet clients after deploy. **Also deploy staging/production BE** so
 | `wisdomlinked-copy-meeting-id.js` | Moderator “Copy Meeting ID” control |
 | `wisdomlinked-meeting-chat-sync.js` | In-call text chat → `POST /api/meeting/chat-sync` |
 | `wisdomlinked-whiteboard-initials.js` | Whiteboard initials; view-only when hash says non-moderator |
-| `wisdomlinked-meeting-end-on-hangup.js` | `POST /api/meeting/end-call` when last participant leaves |
+| `wisdomlinked-meeting-end-on-hangup.js` | `POST /api/meeting/end-call` when last participant hangs up |
 
 ## Meeting end (last leaver)
 
-- Tracks `aloneInRoom` via `conferenceJoined`, `participantJoined`, `participantLeft`, and live/Redux participant counts.
-- On `participantLeft`, sets `aloneInRoom` when remote count is `0` or live count `<= 1` (does not end until the remaining user hangs up).
-- Persists `sessionStorage.wlAloneInRoom = "1"` when alone so Messenger can end on return if hangup `fetch` missed.
-- Ends on `videoConferenceLeft` / `readyToClose` when `aloneInRoom` or live count `<= 1`. **Unknown count never ends the meeting.**
-- `pagehide` / `beforeunload` call end **only if** `aloneInRoom` is already true.
-- Body: `{ meetingThreadId, endReason: "last_participant" }`.
-- Debug: `config.wisdomlinkedMeetingEndDebug=true`.
-- **Messenger bridge (cross-origin):** when alone, meet posts `postMessage` (`wl-meeting-alone` / `wl-meeting-ended`) to the opener; Messenger stores `wlPendingEndMeeting` and calls `POST /api/meeting/end` with `endReason: "last_participant_return"` when the meet popup closes or on ended signal.
-- **UI reconcile:** Messenger polls `GET /api/meeting/:id` for in-progress cards; if Mongo `status === ended` but RC lacks `__MEETING_ENDED__`, still shows “Meet ended”.
+- **`remoteJoinCount`** (event-based): `0` on `conferenceJoined`; `+1` on `participantJoined`; `-1` on `participantLeft`. Does **not** rely on Jitsi `getParticipantCount()` (often returns `-1`).
+- **`aloneInRoom`**: `true` when `remoteJoinCount === 0`. Set on `participantLeft` but **does not** call end until hangup — first leaver must not end for others.
+- Ends on `videoConferenceLeft` / `readyToClose` only when `remoteJoinCount === 0` and `aloneInRoom`.
+- `POST /api/meeting/heartbeat` every 30s with `{ meetingThreadId, remoteJoinCount, aloneInRoom }`. BE auto-ends if alone heartbeats stop for ~90s (tab closed without hangup).
+- Body for end-call: `{ meetingThreadId, endReason: "last_participant" }`.
+- Debug: `config.wisdomlinkedMeetingEndDebug=true` → `[wl-meeting-end]` in console.
+- **Messenger bridge:** `postMessage` to `config.wisdomlinkedMessengerOrigin` (SPA origin, not API host). Types: `wl-meeting-alone`, `wl-meeting-ended`.
+- **UI reconcile:** Messenger polls `GET /api/meeting/:id` every 45s for in-progress cards; shows “Meet ended” when Mongo `status === ended`.
+
+## Manual test checklist
+
+| Step | Expected |
+|------|----------|
+| A and B join | Both see Meet in progress |
+| A leaves | B still sees in progress |
+| B hangs up | Both see Meet ended within ~5s |
+| Solo join + hangup | Meet ended |
+| Debug hash on URL | Console shows `ending meeting` + `POST .../end-call` 200 |
 
 ## Hash keys (backend join URL)
 
 | Hash key | Purpose |
 |----------|---------|
 | `config.wisdomlinkedMeetingId` | Mongo `MeetingThread` id |
-| `config.wisdomlinkedChatSyncToken` | Bearer JWT for chat sync / end-call |
+| `config.wisdomlinkedChatSyncToken` | Bearer JWT for chat sync / end-call / heartbeat |
 | `config.wisdomlinkedChatSyncApiBase` | API origin for cross-origin `fetch` from meet |
+| `config.wisdomlinkedMessengerOrigin` | Messenger SPA origin for `postMessage` target |
 | `config.wisdomlinkedWhiteboardInitials` | Initials on Excalidraw cursors |
-| `config.wisdomlinkedIsMeetingModerator` | **`true`** = starter/admin may draw; **`false`** = view-only whiteboard |
-| `config.wisdomlinkedWhiteboardDebug` | Optional whiteboard `console.debug` |
+| `config.wisdomlinkedIsMeetingModerator` | **`true`** = draw; **`false`** = view-only whiteboard |
 | `config.wisdomlinkedMeetingEndDebug` | Optional hangup `console.debug` |
 
-## Whiteboard view-only
+## Staging env
 
-- **Authoritative:** `config.wisdomlinkedIsMeetingModerator` from backend (not `APP.conference.isModerator()`, which Prosody may set true for everyone).
-- Persisted as `sessionStorage.wlIsMeetingModerator` (`"1"` / `"0"`).
-- `"0"` → Excalidraw view mode + `pointer-events: none` on `body .excalidraw` while board is open.
-- `"1"` → full draw access.
-- If hash not yet present (old join URL), draw is allowed until a new join URL is issued.
-
-## Staging API for end-call
-
-Set on staging BE: `MEETING_CHAT_SYNC_PUBLIC_API_BASE=https://staging.wisdomlinked.com` (no trailing path beyond site origin; scripts append `/api/meeting/end-call`).
+- `MEETING_CHAT_SYNC_PUBLIC_API_BASE=https://staging.wisdomlinked.com` (site origin; scripts append `/api/meeting/...`)
+- `FE_URL` or `FRONTEND_BASE_URL=https://staging.wisdomlinked.com` (for `wisdomlinkedMessengerOrigin` hash)
 
 ## Prosody / JWT
 

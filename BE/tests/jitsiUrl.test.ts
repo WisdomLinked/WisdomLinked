@@ -76,6 +76,21 @@ test("adds meeting chat sync token and API base when provided", () => {
     assert.ok(url.includes("config.wisdomlinkedChatSyncApiBase=https%3A%2F%2Fapi.example.com"));
 });
 
+test("adds messenger origin hash when provided", () => {
+    const url = appendJitsiMobileWebOverrides(
+        "https://meet.wisdomlinked.com/room-1?jwt=abc",
+        undefined,
+        true,
+        "mid-1",
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        "https://staging.wisdomlinked.com",
+    );
+    assert.ok(url.includes("config.wisdomlinkedMessengerOrigin=https%3A%2F%2Fstaging.wisdomlinked.com"));
+});
+
 test("adds meeting moderator hash when provided", () => {
     const modUrl = appendJitsiMobileWebOverrides(
         "https://meet.wisdomlinked.com/room-1?jwt=abc",

@@ -106,6 +106,12 @@ const meetingThreadSchema = new mongoose.Schema(
             enum: ["active", "ended"],
             default: "active",
         },
+        lastHeartbeatAt: {
+            type: Date,
+        },
+        lastReportedRemoteCount: {
+            type: Number,
+        },
         ratings: [
             {
                 rater: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },

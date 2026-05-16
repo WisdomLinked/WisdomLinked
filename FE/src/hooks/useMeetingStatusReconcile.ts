@@ -1,6 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { getMeetingThread } from "../api/chatApi";
 import { buildMeetingThreadMaps, type EndedMeetingInfo } from "../utils/meetingThreadMaps";
+
+const RECONCILE_POLL_MS = 45_000;
 
 /**
  * For started meetings without __MEETING_ENDED__ in chat, sync status from Mongo
@@ -23,37 +25,50 @@ export function useMeetingStatusReconcile(
         return ids.join(",");
     }, [startedMeetings, endedMeetings, dbEnded]);
 
-    useEffect(() => {
+    const pollInProgress = useCallback(async () => {
         const ids = inProgressIds ? inProgressIds.split(",").filter(Boolean) : [];
         if (!ids.length) return;
-        let cancelled = false;
-        void (async () => {
-            const updates = new Map<string, EndedMeetingInfo>();
-            for (const id of ids) {
-                const res = await getMeetingThread(id);
-                const meeting = res?.meeting;
-                if (meeting?.status === "ended") {
-                    const participants = Array.isArray(meeting.participants)
-                        ? meeting.participants.length
-                        : 0;
-                    updates.set(id, {
-                        duration: Number(meeting.duration) || 0,
-                        participantCount: participants,
-                    });
-                }
-            }
-            if (!cancelled && updates.size > 0) {
-                setDbEnded((prev) => {
-                    const next = new Map(prev);
-                    updates.forEach((v, k) => next.set(k, v));
-                    return next;
+        const updates = new Map<string, EndedMeetingInfo>();
+        for (const id of ids) {
+            const res = await getMeetingThread(id);
+            const meeting = res?.meeting;
+            if (meeting?.status === "ended") {
+                const participants = Array.isArray(meeting.participants)
+                    ? meeting.participants.length
+                    : 0;
+                updates.set(id, {
+                    duration: Number(meeting.duration) || 0,
+                    participantCount: participants,
                 });
             }
+        }
+        if (updates.size > 0) {
+            setDbEnded((prev) => {
+                const next = new Map(prev);
+                updates.forEach((v, k) => next.set(k, v));
+                return next;
+            });
+        }
+    }, [inProgressIds]);
+
+    useEffect(() => {
+        let cancelled = false;
+        void (async () => {
+            if (cancelled) return;
+            await pollInProgress();
         })();
         return () => {
             cancelled = true;
         };
-    }, [inProgressIds]);
+    }, [pollInProgress]);
+
+    useEffect(() => {
+        if (!inProgressIds) return undefined;
+        const interval = window.setInterval(() => {
+            void pollInProgress();
+        }, RECONCILE_POLL_MS);
+        return () => window.clearInterval(interval);
+    }, [inProgressIds, pollInProgress]);
 
     return dbEnded;
 }

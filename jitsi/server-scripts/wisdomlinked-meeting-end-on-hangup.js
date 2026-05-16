@@ -1,17 +1,20 @@
 (function () {
   /*
-   * POST /api/meeting/end-call when the last participant leaves Jitsi.
-   * Notifies window.opener (Messenger) via postMessage when alone — cross-origin bridge.
-   * Optional hash: config.wisdomlinkedMeetingEndDebug=true
+   * POST /api/meeting/end-call when the last participant hangs up.
+   * Uses event-based remoteJoinCount (works when Jitsi live count APIs return -1).
+   * Notifies window.opener via postMessage using config.wisdomlinkedMessengerOrigin.
+   * Optional: config.wisdomlinkedMeetingEndDebug=true
    */
   var STORAGE_MEETING = "wlMeetingChatMeetingId";
   var STORAGE_TOKEN = "wlMeetingChatSyncToken";
   var STORAGE_API = "wlMeetingChatSyncApiBase";
+  var STORAGE_MESSENGER = "wlMeetingMessengerOrigin";
   var STORAGE_ALONE = "wlAloneInRoom";
   var endedMeetings = Object.create(null);
-  var trackedRemoteCount = -1;
-  var trackedTotalCount = -1;
+  var remoteJoinCount = 0;
+  var conferenceJoined = false;
   var aloneInRoom = false;
+  var heartbeatTimer = null;
 
   function hashValue(name) {
     var raw = window.location.hash ? window.location.hash.slice(1) : "";
@@ -39,9 +42,16 @@
     console.debug.apply(console, ["[wl-meeting-end]"].concat([].slice.call(arguments)));
   }
 
-  function messengerOriginFromApiBase(apiBase) {
+  function messengerOrigin() {
+    var fromHash = hashValue("config.wisdomlinkedMessengerOrigin") || "";
+    if (fromHash) {
+      try {
+        window.sessionStorage.setItem(STORAGE_MESSENGER, fromHash);
+      } catch (e) {}
+      return fromHash;
+    }
     try {
-      return new URL(String(apiBase || "")).origin;
+      return window.sessionStorage.getItem(STORAGE_MESSENGER) || "";
     } catch (e) {
       return "";
     }
@@ -50,8 +60,15 @@
   function notifyOpener(payload) {
     try {
       if (!window.opener || window.opener.closed) return;
-      var cfg = readConfig();
-      var origin = messengerOriginFromApiBase(cfg.apiBase);
+      var origin = messengerOrigin();
+      if (!origin) {
+        var cfg = readConfig();
+        try {
+          origin = new URL(String(cfg.apiBase || "")).origin;
+        } catch (e2) {
+          origin = "";
+        }
+      }
       if (!origin) return;
       window.opener.postMessage(payload, origin);
     } catch (e) {}
@@ -78,6 +95,7 @@
     var mid = hashValue("config.wisdomlinkedMeetingId") || "";
     var tok = hashValue("config.wisdomlinkedChatSyncToken") || "";
     var api = hashValue("config.wisdomlinkedChatSyncApiBase") || "";
+    var msgOrigin = hashValue("config.wisdomlinkedMessengerOrigin") || "";
     if (mid) {
       try {
         window.sessionStorage.setItem(STORAGE_MEETING, mid);
@@ -91,6 +109,11 @@
     if (api) {
       try {
         window.sessionStorage.setItem(STORAGE_API, api);
+      } catch (e) {}
+    }
+    if (msgOrigin) {
+      try {
+        window.sessionStorage.setItem(STORAGE_MESSENGER, msgOrigin);
       } catch (e) {}
     }
     return {
@@ -118,57 +141,10 @@
     };
   }
 
-  function reduxParticipantCount() {
-    try {
-      var app = typeof APP !== "undefined" ? APP : null;
-      if (!app || !app.store || typeof app.store.getState !== "function") return -1;
-      var participants = app.store.getState()["features/base/participants"];
-      if (!participants) return -1;
-      if (typeof participants.size === "number") return participants.size;
-      return Object.keys(participants).length;
-    } catch (e) {
-      return -1;
-    }
-  }
-
-  function liveParticipantCount() {
-    try {
-      var app = typeof APP !== "undefined" ? APP : null;
-      if (!app || !app.conference) return -1;
-      if (typeof app.conference.getParticipantCount === "function") {
-        return app.conference.getParticipantCount();
-      }
-      if (typeof app.conference.listMembers === "function") {
-        var members = app.conference.listMembers() || [];
-        return members.length;
-      }
-    } catch (e) {}
-    var redux = reduxParticipantCount();
-    return redux >= 0 ? redux : -1;
-  }
-
-  function refreshTrackedCounts() {
-    var live = liveParticipantCount();
-    if (live >= 0) {
-      trackedTotalCount = live;
-      trackedRemoteCount = Math.max(0, live - 1);
-      if (trackedRemoteCount === 0 || live <= 1) setAloneInRoom(true);
-    }
-    wlDebug("counts", {
-      live: live,
-      total: trackedTotalCount,
-      remote: trackedRemoteCount,
-      aloneInRoom: aloneInRoom,
-    });
-  }
-
   function isLastParticipantLeaving() {
-    if (aloneInRoom) return true;
-    var live = liveParticipantCount();
-    if (live >= 0) return live <= 1;
-    if (trackedRemoteCount >= 0) return trackedRemoteCount === 0;
-    if (trackedTotalCount >= 0) return trackedTotalCount <= 1;
-    return false;
+    if (!conferenceJoined) return false;
+    if (remoteJoinCount > 0) return false;
+    return aloneInRoom || remoteJoinCount === 0;
   }
 
   function postEndCall(cfg) {
@@ -189,16 +165,42 @@
     });
   }
 
+  function postHeartbeat(cfg) {
+    if (!cfg.meetingThreadId || !cfg.token || !cfg.apiBase) return;
+    var url = String(cfg.apiBase).replace(/\/$/, "") + "/api/meeting/heartbeat";
+    var body = JSON.stringify({
+      meetingThreadId: cfg.meetingThreadId,
+      remoteJoinCount: remoteJoinCount,
+      aloneInRoom: aloneInRoom,
+    });
+    fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: "Bearer " + cfg.token,
+      },
+      body: body,
+      credentials: "omit",
+      keepalive: true,
+    }).catch(function () {});
+  }
+
+  function startHeartbeat() {
+    if (heartbeatTimer) return;
+    heartbeatTimer = window.setInterval(function () {
+      var cfg = readConfig();
+      postHeartbeat(cfg);
+    }, 30000);
+    var cfg = readConfig();
+    postHeartbeat(cfg);
+  }
+
   function endCallOnce() {
-    var live = liveParticipantCount();
-    if (live >= 0 && live <= 1) setAloneInRoom(true);
-    refreshTrackedCounts();
     if (!isLastParticipantLeaving()) {
       wlDebug("skip end — not last participant", {
         aloneInRoom: aloneInRoom,
-        live: liveParticipantCount(),
-        remote: trackedRemoteCount,
-        total: trackedTotalCount,
+        remoteJoinCount: remoteJoinCount,
+        conferenceJoined: conferenceJoined,
       });
       return;
     }
@@ -216,17 +218,13 @@
           try {
             window.sessionStorage.removeItem(STORAGE_ALONE);
           } catch (e) {}
-          notifyOpener({
-            type: "wl-meeting-ended",
-            meetingThreadId: cfg.meetingThreadId,
-          });
         } else {
           wlDebug("end-call failed", res && res.status, cfg.meetingThreadId);
-          notifyOpener({
-            type: "wl-meeting-ended",
-            meetingThreadId: cfg.meetingThreadId,
-          });
         }
+        notifyOpener({
+          type: "wl-meeting-ended",
+          meetingThreadId: cfg.meetingThreadId,
+        });
       })
       .catch(function (err) {
         wlDebug("end-call error", err);
@@ -237,17 +235,26 @@
       });
   }
 
-  function onParticipantLeft() {
-    refreshTrackedCounts();
-    var live = liveParticipantCount();
-    if (trackedRemoteCount === 0 || (live >= 0 && live <= 1)) {
-      setAloneInRoom(true);
-    }
+  function onConferenceJoined() {
+    conferenceJoined = true;
+    remoteJoinCount = 0;
+    setAloneInRoom(true);
+    startHeartbeat();
+    wlDebug("conferenceJoined", { remoteJoinCount: remoteJoinCount });
   }
 
   function onParticipantJoined() {
+    remoteJoinCount = Math.max(0, remoteJoinCount) + 1;
     setAloneInRoom(false);
-    refreshTrackedCounts();
+    wlDebug("participantJoined", { remoteJoinCount: remoteJoinCount });
+  }
+
+  function onParticipantLeft() {
+    remoteJoinCount = Math.max(0, remoteJoinCount - 1);
+    if (remoteJoinCount === 0) {
+      setAloneInRoom(true);
+    }
+    wlDebug("participantLeft", { remoteJoinCount: remoteJoinCount, aloneInRoom: aloneInRoom });
   }
 
   function hookConferenceLeave() {
@@ -257,23 +264,20 @@
       if (app.conference._wlEndHooked) return;
       app.conference._wlEndHooked = true;
 
-      app.conference.addListener("conferenceJoined", function () {
-        setAloneInRoom(false);
-        refreshTrackedCounts();
-        if (trackedRemoteCount === 0 || trackedTotalCount <= 1) setAloneInRoom(true);
-      });
+      app.conference.addListener("conferenceJoined", onConferenceJoined);
       app.conference.addListener("participantJoined", onParticipantJoined);
       app.conference.addListener("participantLeft", onParticipantLeft);
-
       app.conference.addListener("readyToClose", endCallOnce);
       app.conference.addListener("videoConferenceLeft", endCallOnce);
 
-      refreshTrackedCounts();
+      if (app.conference.isJoined && app.conference.isJoined()) {
+        onConferenceJoined();
+      }
     } catch (e) {}
   }
 
   function onPageHideIfAlone() {
-    if (!aloneInRoom) return;
+    if (!aloneInRoom || remoteJoinCount > 0) return;
     endCallOnce();
   }
 

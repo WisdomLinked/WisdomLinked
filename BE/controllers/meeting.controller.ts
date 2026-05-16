@@ -53,12 +53,33 @@ const publicApiBaseForMeetingChatSync = (): string =>
         .trim()
         .replace(/\/$/, '');
 
+const messengerOriginForMeet = (): string => {
+    const raw = String(
+        process.env.FRONTEND_BASE_URL
+            || process.env.FE_URL
+            || process.env.REACT_APP_URL
+            || '',
+    ).trim();
+    if (!raw) return '';
+    try {
+        return new URL(raw).origin;
+    } catch {
+        return raw.replace(/\/$/, '');
+    }
+};
+
+const MEETING_HEARTBEAT_STALE_MS = Math.max(
+    60_000,
+    Number(process.env.MEETING_HEARTBEAT_STALE_MS || 90_000),
+);
+
 const meetingChatSyncUrlParams = (
     userId: string | undefined,
     meetingThreadId: string,
     guest?: { inviteId: string; displayName: string; expiresInSeconds: number },
-): { chatSyncToken?: string; chatSyncApiBase?: string } => {
+): { chatSyncToken?: string; chatSyncApiBase?: string; messengerOrigin?: string } => {
     const apiBase = publicApiBaseForMeetingChatSync();
+    const messengerOrigin = messengerOriginForMeet();
     if (!apiBase) return {};
     try {
         if (guest) {
@@ -66,12 +87,14 @@ const meetingChatSyncUrlParams = (
             return {
                 chatSyncToken: signGuestMeetingChatToken(guest.inviteId, meetingThreadId, guest.displayName, exp),
                 chatSyncApiBase: apiBase,
+                messengerOrigin,
             };
         }
         if (!userId) return {};
         return {
             chatSyncToken: signWlMeetingChatToken(userId, meetingThreadId, 8 * 60 * 60),
             chatSyncApiBase: apiBase,
+            messengerOrigin,
         };
     } catch {
         return {};
@@ -92,6 +115,7 @@ const buildSignedJitsiUrl = (
         meetingThreadId?: string;
         chatSyncToken?: string;
         chatSyncApiBase?: string;
+        messengerOrigin?: string;
     },
 ): string => {
     const base = `https://${JITSI_DOMAIN}/${roomName}`;
@@ -109,6 +133,7 @@ const buildSignedJitsiUrl = (
             opts?.chatSyncApiBase,
             wbInitials,
             moderator,
+            opts?.messengerOrigin,
         );
     }
     const nowSec = Math.floor(Date.now() / 1000);
@@ -160,6 +185,7 @@ const buildSignedJitsiUrl = (
         opts?.chatSyncApiBase,
         wbInitials,
         moderator,
+        opts?.messengerOrigin,
     );
 };
 
@@ -179,6 +205,48 @@ export const endMeetingFromCall = async (req: any, res: Response) => {
         req.user = { ...(req.user || {}), userId: String(claims.sub) };
     }
     return endMeeting(req, res);
+};
+
+/**
+ * POST /api/meeting/heartbeat
+ * Jitsi tab reports occupancy; stale alone heartbeats auto-end the meeting.
+ * Body: { meetingThreadId, remoteJoinCount?, aloneInRoom? }
+ */
+export const meetingHeartbeat = async (req: any, res: Response) => {
+    try {
+        const claims = req.meetingChatClaims as MeetingChatTokenClaims | undefined;
+        const meetingThreadId = String(req.body?.meetingThreadId || '').trim();
+        if (!meetingThreadId) return res.status(400).json({ error: 'meetingThreadId is required' });
+        if (claims?.typ === 'wl-meeting-chat' && String(claims.mid) !== meetingThreadId) {
+            return res.status(400).json({ error: 'meetingThreadId does not match token' });
+        }
+
+        const meeting = await MeetingThread.findById(meetingThreadId);
+        if (!meeting) return res.status(404).json({ error: 'Meeting not found' });
+        if (meeting.status === 'ended') {
+            return res.status(200).json({ success: true, status: 'ended' });
+        }
+
+        const remote = Number(req.body?.remoteJoinCount);
+        meeting.lastHeartbeatAt = new Date();
+        if (Number.isFinite(remote)) {
+            meeting.lastReportedRemoteCount = Math.max(0, Math.floor(remote));
+        }
+        await meeting.save();
+
+        const endedByStale = await reconcileStaleActiveMeetingFromHeartbeat(meeting);
+        if (endedByStale) {
+            return res.status(200).json({ success: true, status: 'ended', reason: 'heartbeat_stale' });
+        }
+
+        return res.status(200).json({
+            success: true,
+            status: meeting.status,
+        });
+    } catch (err: any) {
+        console.error('[meeting.heartbeat]', err.message);
+        return res.status(500).json({ error: err.message });
+    }
 };
 
 const isLastParticipantEndReason = (reason: unknown): boolean => {
@@ -258,6 +326,57 @@ const markMeetingEnded = async (meeting: any, endedAt = new Date()): Promise<boo
 const expireStaleMeetingIfNeeded = async (meeting: any): Promise<boolean> => {
     if (!isMeetingStale(meeting)) return false;
     await markMeetingEnded(meeting);
+    return true;
+};
+
+const sendMeetingEndedToRocketChat = async (meeting: any, endContent: string): Promise<void> => {
+    const me = meeting.startedBy;
+    if (!me) return;
+    if (meeting.conversationId) {
+        const conversation = await Conversation.findById(meeting.conversationId);
+        if (conversation) {
+            const otherUserId = conversation.participants.find((p: any) => p.toString() !== me._id.toString());
+            const other = await User.findById(otherUserId);
+            if (other && me.email && other.email) {
+                const rcChannelId = await getOrCreateDMChannel(
+                    toRocketChatUsername(me.email),
+                    toRocketChatUsername(other.email),
+                );
+                if (rcChannelId) await sendMessageToRC(rcChannelId, endContent, me.username, me.email);
+            }
+        }
+    } else if (meeting.groupChatId && me.email) {
+        const groupChat = await GroupChat.findById(meeting.groupChatId)
+            .populate('participants', 'email')
+            .populate('admin', 'email');
+        if (groupChat) {
+            const emails: string[] = [];
+            for (const p of groupChat.participants || []) {
+                if ((p as any)?.email) emails.push(String((p as any).email).toLowerCase());
+            }
+            const adm = groupChat.admin as any;
+            if (adm?.email) emails.push(String(adm.email).toLowerCase());
+            const rcChannelId = await syncRocketGroupChannelMembers(String(meeting.groupChatId), emails);
+            if (rcChannelId) await sendMessageToRC(rcChannelId, endContent, me.username, me.email);
+        }
+    }
+};
+
+/** End active meeting when Jitsi heartbeats stop while alone (tab closed without hangup). */
+const reconcileStaleActiveMeetingFromHeartbeat = async (meeting: any): Promise<boolean> => {
+    if (!meeting || meeting.status !== 'active') return false;
+    const lastAt = meeting.lastHeartbeatAt ? new Date(meeting.lastHeartbeatAt).getTime() : 0;
+    if (!lastAt || !Number.isFinite(lastAt)) return false;
+    const remote = Number(meeting.lastReportedRemoteCount);
+    if (!Number.isFinite(remote) || remote > 0) return false;
+    if (Date.now() - lastAt <= MEETING_HEARTBEAT_STALE_MS) return false;
+
+    const populated = await MeetingThread.findById(meeting._id).populate('startedBy');
+    if (!populated || populated.status !== 'active') return false;
+    await markMeetingEnded(populated);
+    const meetingThreadId = String(populated._id);
+    const endContent = `__MEETING_ENDED__::${meetingThreadId}::${populated.duration}::${populated.participants.length}`;
+    await sendMeetingEndedToRocketChat(populated, endContent);
     return true;
 };
 
@@ -416,6 +535,7 @@ export const startMeeting = async (req: any, res: Response) => {
             meetingThreadId: String(meetingThread._id),
             chatSyncToken: chatSync.chatSyncToken,
             chatSyncApiBase: chatSync.chatSyncApiBase,
+            messengerOrigin: chatSync.messengerOrigin,
         });
         return res.status(200).json({
             meetingThreadId: meetingThread._id,
@@ -457,36 +577,7 @@ export const endMeeting = async (req: any, res: Response) => {
 
         const endContent = `__MEETING_ENDED__::${meetingThreadId}::${meeting.duration}::${meeting.participants.length}`;
         const me = meeting.startedBy;
-
-        // Send exclusively to Rocket.Chat
-        if (meeting.conversationId) {
-            const conversation = await Conversation.findById(meeting.conversationId);
-            if (conversation) {
-                const otherUserId = conversation.participants.find((p: any) => p.toString() !== me._id.toString());
-                const other = await User.findById(otherUserId);
-                if (other && me.email && other.email) {
-                    const rcChannelId = await getOrCreateDMChannel(
-                        toRocketChatUsername(me.email),
-                        toRocketChatUsername(other.email)
-                    );
-                    if (rcChannelId) await sendMessageToRC(rcChannelId, endContent, me.username, me.email);
-                }
-            }
-        } else if (meeting.groupChatId && me.email) {
-            const groupChat = await GroupChat.findById(meeting.groupChatId)
-                .populate('participants', 'email')
-                .populate('admin', 'email');
-            if (groupChat) {
-                const emails: string[] = [];
-                for (const p of groupChat.participants || []) {
-                    if ((p as any)?.email) emails.push(String((p as any).email).toLowerCase());
-                }
-                const adm = groupChat.admin as any;
-                if (adm?.email) emails.push(String(adm.email).toLowerCase());
-                const rcChannelId = await syncRocketGroupChannelMembers(String(meeting.groupChatId), emails);
-                if (rcChannelId) await sendMessageToRC(rcChannelId, endContent, me.username, me.email);
-            }
-        }
+        await sendMeetingEndedToRocketChat(meeting, endContent);
 
         const endMessage = {
             _id: `temp-${Date.now()}`,
@@ -718,10 +809,11 @@ export const getMeetingThread = async (req: any, res: Response) => {
         const { meetingThreadId } = req.params;
 
         const rawMeeting = await MeetingThread.findById(meetingThreadId).select(
-            'jitsiRoomName status conversationId groupChatId removedParticipants participants startedBy delegatedModerators startedAt endedAt duration',
+            'jitsiRoomName status conversationId groupChatId removedParticipants participants startedBy delegatedModerators startedAt endedAt duration lastHeartbeatAt lastReportedRemoteCount',
         );
         if (!rawMeeting) return res.status(404).json({ error: 'Meeting not found' });
         await expireStaleMeetingIfNeeded(rawMeeting);
+        await reconcileStaleActiveMeetingFromHeartbeat(rawMeeting);
         const access = await requireMeetingAccess(rawMeeting, String(userId));
         if (!access.allowed) return res.status(403).json({ error: access.error || 'You do not have access to this meeting' });
 
@@ -941,6 +1033,7 @@ export const resolveMeetingGuestInvite = async (req: Request, res: Response) => 
             meetingThreadId: String(invite.meetingThreadId),
             chatSyncToken: chatSync.chatSyncToken,
             chatSyncApiBase: chatSync.chatSyncApiBase,
+            messengerOrigin: chatSync.messengerOrigin,
         });
         return res.status(200).json({
             success: true,
@@ -1001,6 +1094,7 @@ export const joinMeetingFromGuestInvite = async (req: any, res: Response) => {
             meetingThreadId: String(invite.meetingThreadId),
             chatSyncToken: chatSync.chatSyncToken,
             chatSyncApiBase: chatSync.chatSyncApiBase,
+            messengerOrigin: chatSync.messengerOrigin,
         });
 
         meeting.joinEvents = Array.isArray(meeting.joinEvents) ? meeting.joinEvents : [];
@@ -1063,6 +1157,7 @@ export const getMeetingJoinInfo = async (req: any, res: Response) => {
             meetingThreadId: String(meetingThreadId),
             chatSyncToken: chatSync.chatSyncToken,
             chatSyncApiBase: chatSync.chatSyncApiBase,
+            messengerOrigin: chatSync.messengerOrigin,
         });
         meeting.joinEvents = Array.isArray(meeting.joinEvents) ? meeting.joinEvents : [];
         meeting.joinEvents.push({
