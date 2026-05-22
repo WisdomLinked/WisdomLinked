@@ -325,6 +325,18 @@ const ChatThreadView: React.FC<ChatThreadViewProps> = ({
             : undefined,
     });
 
+    const deleteForMeAvailable = Boolean(
+        (chosenChatDetails && conversationId) ||
+            (chosenGroupChatDetails &&
+                Boolean(
+                    (chosenGroupChatDetails as { groupId?: string }).groupId ||
+                        (chosenGroupChatDetails as { _id?: string })._id,
+                )),
+    );
+
+    const canDeleteMessageId = (messageId: string | undefined) =>
+        !String(messageId ?? '').startsWith('temp-');
+
     return (
         <>
             {timeline.map((entry, idx) => {
@@ -433,15 +445,13 @@ const ChatThreadView: React.FC<ChatThreadViewProps> = ({
                                 deliveryStatus={deliveryForMessage(m)}
                                 messageId={m._id}
                                 roomId={rcChannelId}
-                                canDelete={!incomingMessage && !String(m._id).startsWith('temp-')}
-                                deleteForMeAvailable={Boolean(
-                                    (chosenChatDetails && conversationId) ||
-                                        (chosenGroupChatDetails &&
-                                            Boolean(
-                                                (chosenGroupChatDetails as { groupId?: string }).groupId ||
-                                                    (chosenGroupChatDetails as { _id?: string })._id,
-                                            )),
-                                )}
+                                canDelete={
+                                    incomingMessage
+                                        ? canDeleteMessageId(m._id) && deleteForMeAvailable
+                                        : canDeleteMessageId(m._id)
+                                }
+                                canDeleteForEveryone={!incomingMessage}
+                                deleteForMeAvailable={deleteForMeAvailable}
                                 onDeleteMessage={handleDeleteMessage}
                                 onReplyMessage={() => onReplyMessage?.(replyDraftFromMessage(m, m.author?.username || 'Message'))}
                                 onJumpToParent={scrollToMessage}
@@ -476,7 +486,6 @@ const ChatThreadView: React.FC<ChatThreadViewProps> = ({
                                 {group.messages.map((cm, i) => {
                                     const src = sources[i];
                                     const shell = bubbleShellClass(true, i, group.messages.length, theme);
-                                    const isLast = i === group.messages.length - 1;
                                     const selfRow = messageRowAttrs(src._id);
                                     return (
                                         <div
@@ -497,19 +506,13 @@ const ChatThreadView: React.FC<ChatThreadViewProps> = ({
                                             hideDate
                                             theme={theme}
                                             threadBubbleShellClassName={shell}
-                                            showDeleteAffix={isLast}
+                                            showDeleteAffix={canDeleteMessageId(src._id)}
                                             deliveryStatus={undefined}
                                             messageId={src._id}
                                             roomId={rcChannelId}
-                                            canDelete={isLast && !String(src._id).startsWith('temp-')}
-                                            deleteForMeAvailable={Boolean(
-                                                (chosenChatDetails && conversationId) ||
-                                                    (chosenGroupChatDetails &&
-                                                        Boolean(
-                                                            (chosenGroupChatDetails as { groupId?: string }).groupId ||
-                                                                (chosenGroupChatDetails as { _id?: string })._id,
-                                                        )),
-                                            )}
+                                            canDelete={canDeleteMessageId(src._id)}
+                                            canDeleteForEveryone
+                                            deleteForMeAvailable={deleteForMeAvailable}
                                             onDeleteMessage={handleDeleteMessage}
                                             onReplyMessage={() => onReplyMessage?.(replyDraftFromMessage(src, 'You'))}
                                             onJumpToParent={scrollToMessage}
@@ -575,7 +578,10 @@ const ChatThreadView: React.FC<ChatThreadViewProps> = ({
                                             deliveryStatus={undefined}
                                             messageId={src._id}
                                             roomId={rcChannelId}
-                                            canDelete={false}
+                                            canDelete={canDeleteMessageId(src._id) && deleteForMeAvailable}
+                                            canDeleteForEveryone={false}
+                                            deleteForMeAvailable={deleteForMeAvailable}
+                                            showDeleteAffix={canDeleteMessageId(src._id) && deleteForMeAvailable}
                                             onDeleteMessage={handleDeleteMessage}
                                             onReplyMessage={() => onReplyMessage?.(replyDraftFromMessage(src, groupSenderLabel(src)))}
                                             onJumpToParent={scrollToMessage}

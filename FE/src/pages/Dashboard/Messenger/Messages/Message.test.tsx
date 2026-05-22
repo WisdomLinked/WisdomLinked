@@ -32,6 +32,24 @@ describe('Message outgoing rendering', () => {
         expect(screen.getByText(/Call Lasted for:/i)).toBeInTheDocument();
     });
 
+    it('shows delete for me only on incoming thread bubbles when canDeleteForEveryone is false', async () => {
+        const user = userEvent.setup();
+        render(
+            <Message
+                {...baseProps}
+                incomingMessage
+                threadBubbleShellClassName="rounded-lg bg-slate-100"
+                canDelete
+                canDeleteForEveryone={false}
+                content="peer says hi"
+            />,
+        );
+
+        await user.click(screen.getByLabelText('Delete message'));
+        expect(screen.getByText('Delete for me')).toBeInTheDocument();
+        expect(screen.queryByText('Delete for everyone')).not.toBeInTheDocument();
+    });
+
     it('confirms before deleting a message for everyone', async () => {
         const user = userEvent.setup();
         const onDeleteMessage = vi.fn(async () => undefined);

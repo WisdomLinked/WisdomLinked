@@ -102,6 +102,7 @@ const Message = ({
     replyPeerSlug,
     threadBubbleShellClassName,
     showDeleteAffix,
+    canDeleteForEveryone,
 }: {
     content: string;
     hideDate?: boolean;
@@ -120,6 +121,8 @@ const Message = ({
     replyPeerSlug?: string;
     threadBubbleShellClassName?: string;
     showDeleteAffix?: boolean;
+    /** When false, only "Delete for me" is offered (peer messages). Default: !incomingMessage */
+    canDeleteForEveryone?: boolean;
     sameAuthor?: boolean;
     userId?: string;
     username?: string;
@@ -202,48 +205,37 @@ const Message = ({
         );
     };
 
-    if (incomingMessage && useThreadBubble) {
-        return (
-            <div className="flex min-w-0 max-w-full items-end gap-1">
-                <div
-                    className={`chat-message-rich min-w-0 max-w-full px-2 py-1.5 text-sm leading-5 shadow-sm break-words whitespace-pre-wrap ${threadBubbleShellClassName}`}
-                >
-                    {renderChatRichContent(content, theme, "incoming", onJumpToParent, replyLabelOpts)}
-                </div>
-                {renderReplyAction()}
-            </div>
-        );
-    }
+    const allowDeleteForEveryone = canDeleteForEveryone ?? !incomingMessage;
 
-    if (!incomingMessage) {
-        const renderDeleteActions = () => {
-            if (!canDelete || !onDeleteMessage) return null;
-            if (!showDeleteOptions) {
-                return (
+    const renderDeleteActions = () => {
+        if (!canDelete || !onDeleteMessage) return null;
+        if (!showDeleteOptions) {
+            return (
+                <button
+                    type="button"
+                    disabled={deleting}
+                    onClick={() => setShowDeleteOptions(true)}
+                    className={`shrink-0 rounded p-1 ${theme === "light" ? "text-slate-500 hover:bg-slate-100" : "text-slate-400 hover:bg-white/10"}`}
+                    title="Delete message"
+                    aria-label="Delete message"
+                >
+                    <Trash2 className="h-3.5 w-3.5" />
+                </button>
+            );
+        }
+        return (
+            <div className={`flex items-center gap-1 rounded-md px-1 py-1 ${theme === "light" ? "bg-white border border-slate-200" : "bg-black/70 border border-white/10"}`}>
+                {deleteForMeAvailable ? (
                     <button
                         type="button"
                         disabled={deleting}
-                        onClick={() => setShowDeleteOptions(true)}
-                        className={`shrink-0 rounded p-1 ${theme === "light" ? "text-slate-500 hover:bg-slate-100" : "text-slate-400 hover:bg-white/10"}`}
-                        title="Delete message"
-                        aria-label="Delete message"
+                        onClick={() => void tryDelete('me')}
+                        className={`rounded px-2 py-1 text-[11px] ${theme === "light" ? "text-slate-700 hover:bg-slate-100" : "text-white hover:bg-white/10"}`}
                     >
-                        <Trash2 className="h-3.5 w-3.5" />
+                        Delete for me
                     </button>
-                );
-            }
-            return (
-                <div className={`flex items-center gap-1 rounded-md px-1 py-1 ${theme === "light" ? "bg-white border border-slate-200" : "bg-black/70 border border-white/10"}`}>
-                    {deleteForMeAvailable ? (
-                        <button
-                            type="button"
-                            disabled={deleting}
-                            onClick={() => void tryDelete('me')}
-                            className={`rounded px-2 py-1 text-[11px] ${theme === "light" ? "text-slate-700 hover:bg-slate-100" : "text-white hover:bg-white/10"}`}
-                        >
-                            Delete for me
-                        </button>
-                    ) : null}
+                ) : null}
+                {allowDeleteForEveryone ? (
                     <button
                         type="button"
                         disabled={deleting}
@@ -252,17 +244,36 @@ const Message = ({
                     >
                         Delete for everyone
                     </button>
-                    <button
-                        type="button"
-                        disabled={deleting}
-                        onClick={() => setShowDeleteOptions(false)}
-                        className={`rounded px-2 py-1 text-[11px] ${theme === "light" ? "text-slate-500 hover:bg-slate-100" : "text-slate-300 hover:bg-white/10"}`}
-                    >
-                        Cancel
-                    </button>
+                ) : null}
+                <button
+                    type="button"
+                    disabled={deleting}
+                    onClick={() => setShowDeleteOptions(false)}
+                    className={`rounded px-2 py-1 text-[11px] ${theme === "light" ? "text-slate-500 hover:bg-slate-100" : "text-slate-300 hover:bg-white/10"}`}
+                >
+                    Cancel
+                </button>
+            </div>
+        );
+    };
+
+    const showThreadDelete = (showDeleteAffix ?? canDelete) && canDelete;
+
+    if (incomingMessage && useThreadBubble) {
+        return (
+            <div className="flex min-w-0 max-w-full items-end gap-1">
+                {showThreadDelete ? renderDeleteActions() : null}
+                {renderReplyAction()}
+                <div
+                    className={`chat-message-rich min-w-0 max-w-full px-2 py-1.5 text-sm leading-5 shadow-sm break-words whitespace-pre-wrap ${threadBubbleShellClassName}`}
+                >
+                    {renderChatRichContent(content, theme, "incoming", onJumpToParent, replyLabelOpts)}
                 </div>
-            );
-        };
+            </div>
+        );
+    }
+
+    if (!incomingMessage) {
 
         // If it's a file message, show the file link
         if (isFile) {
@@ -357,7 +368,7 @@ const Message = ({
             return (
                 <div className="flex min-w-0 max-w-full items-end justify-end gap-1">
                     {renderReplyAction()}
-                    {showDeleteAffix ? renderDeleteActions() : null}
+                    {showThreadDelete ? renderDeleteActions() : null}
                     <div
                         className={`chat-message-rich min-w-0 max-w-full px-2 py-1.5 text-sm leading-5 shadow-sm break-words whitespace-pre-wrap ${threadBubbleShellClassName}`}
                     >
@@ -407,6 +418,7 @@ const Message = ({
                 {/* If it's a call-duration message, show the special template */}
                 {isCallDurationMessage ? (
                     <div className="flex items-end gap-1">
+                    {renderDeleteActions()}
                     <Card
                         sx={{
                             backgroundColor: "#222222",
@@ -429,6 +441,7 @@ const Message = ({
                     ) : isFile ? (
                         <div className="chat_value_container flex flex-col items-start px-1 py-1">
                             <div className="flex items-end gap-1">
+                                {renderDeleteActions()}
                                 {/* Preview section */}
                                 <button
                                 onClick={() => safeFileUrl && setShowPreview(true)}
@@ -464,6 +477,7 @@ const Message = ({
                 ) : (
                     // Otherwise, show the regular incoming message bubble
                     <div className="flex min-w-0 items-end gap-1">
+                        {renderDeleteActions()}
                         <div
                             className={`min-w-0 max-w-full rounded-[13px] px-2 py-1.5 text-[14px] leading-[20px] shadow-sm ${
                                 theme === "light"
