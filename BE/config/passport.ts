@@ -1,6 +1,13 @@
 const passport = require('passport');
 const GoogleStrategy = require('passport-google-oauth20').Strategy;
 const User = require('../models/User');
+const { importOAuthProfilePhoto } = require('../services/oauthProfilePhoto');
+
+async function maybeImportGoogleProfilePhoto(user: any, profile: any, provider: string) {
+    if (provider !== 'google') return;
+    const photoUrl = profile?.photos?.[0]?.value;
+    await importOAuthProfilePhoto(user, photoUrl);
+}
 
 // Shared callback: find or create user from OAuth profile
 async function findOrCreateOAuthUser(profile: any, provider: string) {
@@ -16,6 +23,7 @@ async function findOrCreateOAuthUser(profile: any, provider: string) {
             user.oauthId = profile.id;
             await user.save();
         }
+        await maybeImportGoogleProfilePhoto(user, profile, provider);
         return { user, isNew: false };
     }
 
@@ -41,6 +49,8 @@ async function findOrCreateOAuthUser(profile: any, provider: string) {
         const { sendEmailNewUserAccountApproval } = require('../services/notifications');
         sendEmailNewUserAccountApproval(user.username);
     } catch (e) { console.error('[OAuth] sendEmail error:', e.message); }
+
+    await maybeImportGoogleProfilePhoto(user, profile, provider);
 
     return { user, isNew: true };
 }

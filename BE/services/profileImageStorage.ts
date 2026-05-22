@@ -28,11 +28,12 @@ function getS3Client(): S3Client {
 }
 
 function isProfileImageStorageConfigured(): boolean {
+  const endpoint = normalizeSpacesHost(process.env.DO_SPACES_ENDPOINT || "");
   return !!(
     process.env.DO_SPACES_BUCKET &&
     process.env.DO_SPACES_KEY &&
     process.env.DO_SPACES_SECRET &&
-    spacesEndpointHost
+    endpoint
   );
 }
 
