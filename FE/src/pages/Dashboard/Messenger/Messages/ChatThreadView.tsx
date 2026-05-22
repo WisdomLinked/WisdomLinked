@@ -2,10 +2,11 @@ import React, { useCallback, useMemo, useState } from 'react';
 import type { Message as MessageModel } from '../../../../actions/types';
 import { formatDividerDate, formatMessageTime } from '../../../../utils/formatMessageTime';
 import Message from './Message';
-import MeetingChatBubble from './MeetingChatBubble';
+import MeetingChatPanel from './MeetingChatPanel';
 import MeetingCard from '../../../../components/MeetingCard';
 import ChatSystemNotice from './ChatSystemNotice';
 import { parseMeetingMessageContent } from '../../../../utils/meetingMessage';
+import { isMeetingChatSelf } from '../../../../utils/meetingChatSelf';
 import { buildMeetingThreadMaps } from '../../../../utils/meetingThreadMaps';
 import { useMeetingStatusReconcile } from '../../../../hooks/useMeetingStatusReconcile';
 import { peelWisdomLinkedReplyQuotes } from '../../../../utils/chatReplyLayout';
@@ -25,7 +26,15 @@ export type ChatThreadViewProps = {
     chosenGroupChatDetails: unknown;
     chosenChatDetails: unknown;
     profileImages: Map<string, string>;
-    userDetails: { _id?: string; id?: string; userId?: string; role?: string; status?: string };
+    userDetails: {
+        _id?: string;
+        id?: string;
+        userId?: string;
+        username?: string;
+        email?: string;
+        role?: string;
+        status?: string;
+    };
     friends: Array<{ _id?: string }>;
     handleDeleteMessage: (messageId: string, mode: 'me' | 'both') => Promise<void>;
     onReplyMessage?: (reply: ReplyDraft) => void;
@@ -54,12 +63,17 @@ type TimelineItem =
           meeting: Extract<ReturnType<typeof parseMeetingMessageContent>, { type: 'ended' }>;
       }
     | {
-          kind: 'meeting-chat-line';
-          message: DisplayMessage;
-          chat: Extract<ReturnType<typeof parseMeetingMessageContent>, { type: 'chat-line' }>;
+          kind: 'meeting-chat-block';
+          meetingThreadId: string;
+          lines: Array<{
+              message: DisplayMessage;
+              chat: Extract<ReturnType<typeof parseMeetingMessageContent>, { type: 'chat-line' }>;
+          }>;
       }
     | { kind: 'legacy'; message: DisplayMessage }
     | BubbleTimelineItem;
+
+type MeetingChatLineParsed = Extract<ReturnType<typeof parseMeetingMessageContent>, { type: 'chat-line' }>;
 
 function calendarDayKey(d: Date): string {
     return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
@@ -161,19 +175,6 @@ function marginAfterNonBubble(next: TimelineItem | undefined): string {
     return 'mb-2';
 }
 
-function marginAfterMeetingChatLine(
-    isSelf: boolean,
-    next: TimelineItem | undefined,
-    isOutgoingMessage: (m: DisplayMessage) => boolean,
-): string {
-    if (!next) return '';
-    if (next.kind === 'meeting-chat-line') {
-        const nextSelf = isOutgoingMessage(next.message);
-        return isSelf === nextSelf ? 'mb-1' : 'mb-3';
-    }
-    return 'mb-2';
-}
-
 function buildTimeline(
     displayMessages: DisplayMessage[],
     selfSenderIds: ReadonlySet<string>,
@@ -197,7 +198,8 @@ function buildTimeline(
         buffer = [];
     };
 
-    for (const message of displayMessages) {
+    for (let i = 0; i < displayMessages.length; i++) {
+        const message = displayMessages[i];
         const created = new Date(message.createdAt);
         const dayKey = calendarDayKey(created);
         if (lastDayKey !== dayKey) {
@@ -225,7 +227,23 @@ function buildTimeline(
         }
         if (meetingData?.type === 'chat-line') {
             flushBuffer();
-            timeline.push({ kind: 'meeting-chat-line', message, chat: meetingData });
+            const lines: Array<{ message: DisplayMessage; chat: MeetingChatLineParsed }> = [
+                { message, chat: meetingData },
+            ];
+            const threadId = meetingData.meetingThreadId;
+            while (i + 1 < displayMessages.length) {
+                const nextMsg = displayMessages[i + 1];
+                const nextMeet = parseMeetingMessageContent(String(nextMsg.content || ''));
+                if (
+                    nextMeet?.type !== 'chat-line' ||
+                    nextMeet.meetingThreadId !== threadId
+                ) {
+                    break;
+                }
+                lines.push({ message: nextMsg, chat: nextMeet });
+                i += 1;
+            }
+            timeline.push({ kind: 'meeting-chat-block', meetingThreadId: threadId, lines });
             continue;
         }
 
@@ -307,7 +325,11 @@ const ChatThreadView: React.FC<ChatThreadViewProps> = ({
                 const key =
                     entry.kind === 'date'
                         ? `d-${entry.date.toISOString()}`
-                        : `${entry.kind}-${entry.kind === 'bubble' ? entry.sources[0]?._id : (entry as { message: DisplayMessage }).message._id}-${idx}`;
+                        : entry.kind === 'bubble'
+                          ? `bubble-${entry.sources[0]?._id}-${idx}`
+                          : entry.kind === 'meeting-chat-block'
+                            ? `meet-block-${entry.meetingThreadId}-${entry.lines[0]?.message._id}-${idx}`
+                            : `${entry.kind}-${(entry as { message: DisplayMessage }).message._id}-${idx}`;
 
                 if (entry.kind === 'date') {
                     const lineCls = theme === 'light' ? 'bg-stone-200' : 'bg-gray-200';
@@ -371,20 +393,30 @@ const ChatThreadView: React.FC<ChatThreadViewProps> = ({
                     );
                 }
 
-                if (entry.kind === 'meeting-chat-line') {
-                    const isSelf = isOutgoingMessage(entry.message);
-                    const mb = marginAfterMeetingChatLine(isSelf, next, isOutgoingMessage);
+                if (entry.kind === 'meeting-chat-block') {
+                    const panelLines = entry.lines.map((line) => {
+                        const isSelf = isMeetingChatSelf(
+                            line.message,
+                            {
+                                author: line.chat.author,
+                                guest: line.chat.guest,
+                                senderId: line.chat.senderId,
+                            },
+                            userDetails,
+                            isOutgoingMessage,
+                        );
+                        return {
+                            messageId: String(line.message._id),
+                            isSelf,
+                            authorLabel: line.chat.author,
+                            guest: line.chat.guest,
+                            msg: line.chat.msg,
+                            timeLabel: formatMessageTime(new Date(line.message.createdAt)),
+                        };
+                    });
                     return (
-                        <div key={key} className={mb}>
-                            <MeetingChatBubble
-                                isSelf={isSelf}
-                                authorLabel={entry.chat.author}
-                                guest={entry.chat.guest}
-                                msg={entry.chat.msg}
-                                timeLabel={formatMessageTime(new Date(entry.message.createdAt))}
-                                theme={theme}
-                                testId={isSelf ? 'meeting-chat-out' : 'meeting-chat-in'}
-                            />
+                        <div key={key} className={`w-full px-2 sm:px-3 ${marginAfterNonBubble(next)}`}>
+                            <MeetingChatPanel lines={panelLines} theme={theme} />
                         </div>
                     );
                 }

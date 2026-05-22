@@ -1,6 +1,13 @@
 import { Buffer } from 'node:buffer';
 
-export type MeetingChatPayloadV1 = { v: 1; author: string; guest?: boolean; msg: string };
+export type MeetingChatPayloadV1 = {
+    v: 1;
+    author: string;
+    guest?: boolean;
+    msg: string;
+    /** WL Mongo user id of the poster (non-guest). */
+    sub?: string;
+};
 
 export const MEETING_CHAT_MARKER = '__MEETING_CHAT__';
 

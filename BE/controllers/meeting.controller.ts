@@ -737,7 +737,13 @@ export const syncMeetingChatMessage = async (req: any, res: Response) => {
         const msg = sanitizeMeetingChatBody(rawContent);
         if (!msg) return res.status(400).json({ error: 'content is empty after sanitization' });
 
-        const rcLine = encodeMeetingChatLine(String(meeting._id), { v: 1, author, guest: isGuest, msg });
+        const rcLine = encodeMeetingChatLine(String(meeting._id), {
+            v: 1,
+            author,
+            guest: isGuest,
+            msg,
+            ...(!isGuest && wlUserId ? { sub: wlUserId } : {}),
+        });
         let rcMessageId: string | null = null;
 
         if (meeting.conversationId) {

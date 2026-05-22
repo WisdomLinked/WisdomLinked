@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { parseMeetingMessageContent } from "./meetingMessage";
 
+function b64Payload(obj: Record<string, unknown>) {
+  return Buffer.from(JSON.stringify(obj), "utf8").toString("base64url");
+}
+
 describe("parseMeetingMessageContent", () => {
   it("parses meeting started payload", () => {
     const raw = "__MEETING_STARTED__::thread-1::wl-room-1::Alice";
@@ -45,6 +49,19 @@ describe("parseMeetingMessageContent", () => {
       author: "Alice",
       guest: false,
       msg: "Hi",
+    });
+  });
+
+  it("parses meeting chat line with optional sub as senderId", () => {
+    const b64 = b64Payload({ v: 1, author: "Bob", guest: false, msg: "Hey", sub: "user-42" });
+    const raw = `__MEETING_CHAT__::thread-sub::${b64}`;
+    expect(parseMeetingMessageContent(raw)).toEqual({
+      type: "chat-line",
+      meetingThreadId: "thread-sub",
+      author: "Bob",
+      guest: false,
+      msg: "Hey",
+      senderId: "user-42",
     });
   });
 

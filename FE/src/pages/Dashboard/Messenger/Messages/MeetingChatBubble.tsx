@@ -50,9 +50,9 @@ const MeetingChatBubble: React.FC<MeetingChatBubbleProps> = ({
     return (
         <div
             data-testid={testId}
-            className={`flex w-full px-2 sm:px-3 ${isSelf ? 'justify-end' : 'justify-start'}`}
+            className={`flex w-full ${isSelf ? 'justify-end' : 'justify-start'}`}
         >
-            <div className="flex max-w-[70%] min-w-0 flex-col gap-0.5">
+            <div className="flex max-w-[85%] min-w-0 flex-col gap-0.5">
                 <div className={`flex min-w-0 gap-2 ${shellClass(isSelf, theme)}`}>
                     <Video className={`mt-0.5 h-4 w-4 shrink-0 ${iconCls}`} aria-hidden />
                     <div className="min-w-0 flex-1">

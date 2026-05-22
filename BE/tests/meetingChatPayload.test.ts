@@ -38,3 +38,16 @@ test('meetingChatPayload round-trip with guest true', () => {
     assert.equal(decoded!.payload.guest, true);
     assert.equal(decoded!.payload.msg, 'Hi from meet');
 });
+
+test('meetingChatPayload round-trip with optional sub', () => {
+    const line = encodeMeetingChatLine('507f1f77bcf86cd799439011', {
+        v: 1,
+        author: 'Alice',
+        guest: false,
+        msg: 'Hello',
+        sub: '507f1f77bcf86cd799439099',
+    });
+    const decoded = decodeMeetingChatLine(line);
+    assert.ok(decoded);
+    assert.equal(decoded!.payload.sub, '507f1f77bcf86cd799439099');
+});

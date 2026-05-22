@@ -17,6 +17,8 @@ export type ParsedMeetingMessage =
       author: string;
       guest: boolean;
       msg: string;
+      /** WL Mongo user id from meet sync payload (`sub`). */
+      senderId?: string;
     };
 
 const stripHtml = (value: string): string =>
@@ -69,19 +71,22 @@ export const parseMeetingMessageContent = (content: string): ParsedMeetingMessag
     if (!meetingThreadId || !b64) return null;
     const json = decodeBase64UrlToUtf8(b64);
     if (!json) return null;
-    let payload: { v?: number; author?: string; guest?: boolean; msg?: string };
+    let payload: { v?: number; author?: string; guest?: boolean; msg?: string; sub?: string };
     try {
       payload = JSON.parse(json) as typeof payload;
     } catch {
       return null;
     }
     if (payload.v !== 1 || typeof payload.author !== "string" || typeof payload.msg !== "string") return null;
+    const senderId =
+      typeof payload.sub === "string" && payload.sub.trim() ? payload.sub.trim() : undefined;
     return {
       type: "chat-line",
       meetingThreadId,
       author: payload.author,
       guest: Boolean(payload.guest),
       msg: payload.msg,
+      ...(senderId ? { senderId } : {}),
     };
   }
   return null;
