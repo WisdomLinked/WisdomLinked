@@ -39,6 +39,7 @@ export type ChatThreadViewProps = {
     rcChannelId: string | null;
     conversationId: string | null;
     myRcUserId: string | null;
+    onScrollToMessage?: (messageId: string) => void;
 };
 
 type BubbleTimelineItem = {
@@ -283,6 +284,7 @@ const ChatThreadView: React.FC<ChatThreadViewProps> = ({
     rcChannelId,
     conversationId,
     myRcUserId,
+    onScrollToMessage,
 }) => {
     const selfSenderIds = useMemo(() => {
         const s = new Set<string>();
@@ -308,15 +310,19 @@ const ChatThreadView: React.FC<ChatThreadViewProps> = ({
     const replyPeerDisplayName = dmPeer?.username ? String(dmPeer.username) : undefined;
     const [highlightMessageId, setHighlightMessageId] = useState<string | null>(null);
 
-    const scrollToMessage = useCallback((messageId: string) => {
-        const id = String(messageId || '').trim();
-        if (!id || typeof document === 'undefined') return;
-        const el = document.querySelector(`[data-message-id="${CSS.escape(id)}"]`);
-        if (!el) return;
-        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        setHighlightMessageId(id);
-        window.setTimeout(() => setHighlightMessageId((current) => (current === id ? null : current)), 1600);
-    }, []);
+    const scrollToMessage = useCallback(
+        (messageId: string) => {
+            const id = String(messageId || '').trim();
+            if (!id) return;
+            onScrollToMessage?.(id);
+            setHighlightMessageId(id);
+            window.setTimeout(
+                () => setHighlightMessageId((current) => (current === id ? null : current)),
+                1600,
+            );
+        },
+        [onScrollToMessage],
+    );
 
     const messageRowAttrs = (messageId: string | undefined) => ({
         'data-message-id': messageId ? String(messageId) : undefined,

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from "react";
+import React, { useState, useEffect, useLayoutEffect, useRef, useMemo, useCallback } from "react";
 import MessagesHeader from "./Header";
 import ChatThreadView from "./ChatThreadView";
 import { useAppSelector } from "../../../../store";
@@ -42,7 +42,11 @@ import {
 import { updateMe } from "../../../../actions/authActions";
 import { toRocketChatUsername } from "../../../../utils/rocketchatUsername";
 import {
+    isNearBottom,
     preservedScrollTopAfterPrepend,
+    scrollContainerToBottom,
+    scrollMessageIntoViewInContainer,
+    shouldAutoScrollOnAppend,
     shouldRequestOlderMessages,
 } from "./historyPagination";
 import { resolveProfileImageSrc } from "../../../../utils/profileImage";
@@ -110,7 +114,9 @@ const Messages = ({ theme = "dark", onReplyMessage }: { theme?: string; onReplyM
     const dispatch = useDispatch()
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const scrollContainerRef = useRef<HTMLDivElement>(null);
-    const prevMessagesLength = useRef(0);
+    const prevMessagesLengthRef = useRef(0);
+    const wasPrependingRef = useRef(false);
+    const pendingThreadBottomRef = useRef(false);
     const markReadTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const loadingOlderRef = useRef(false);
     const { chat, auth: { userDetails },  friends: { friends } } = useAppSelector((state) => state);
@@ -203,7 +209,6 @@ const Messages = ({ theme = "dark", onReplyMessage }: { theme?: string; onReplyM
     );
 
     const [isScrollToTop, set_isScrollToTop] = useState(false)
-    const [isFirstLoad, set_isFirstLoad] = useState(true)
 
     const [events, set_events] = useState<Array<any>>([])
     const [eventsModalShow, set_eventsModalShow] = useState(false)
@@ -590,16 +595,14 @@ const Messages = ({ theme = "dark", onReplyMessage }: { theme?: string; onReplyM
         return fromParticipant || fromAdmin || fromAuthor || 'Member';
     };
 
-    const scrollToBottom = (behavior: ScrollBehavior = "smooth") => {
-        const el = scrollContainerRef.current;
-        if (!el) return;
-        if (behavior === "smooth" && typeof el.scrollTo === "function") {
-            el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
-        } else {
-            el.scrollTop = el.scrollHeight;
-        }
-        if (isFirstLoad) set_isFirstLoad(false);
-    };
+    const scrollToMessageInThread = useCallback((messageId: string) => {
+        const id = String(messageId || "").trim();
+        const container = scrollContainerRef.current;
+        if (!id || !container) return;
+        const el = container.querySelector(`[data-message-id="${CSS.escape(id)}"]`);
+        if (!el || !(el instanceof HTMLElement)) return;
+        scrollMessageIntoViewInContainer(container, el, "smooth");
+    }, []);
 
     const handleScroll = (e: React.UIEvent<HTMLDivElement, UIEvent>) => {
         if (
@@ -626,11 +629,15 @@ const Messages = ({ theme = "dark", onReplyMessage }: { theme?: string; onReplyM
             if (st.chosenChatDetails && st.conversationId) {
                 const data = await fetchDirectHistory(st.conversationId, page);
                 if (data?.messages) {
+                    wasPrependingRef.current = true;
                     dispatch(setMessages(data.messages));
                 }
             } else if (st.chosenGroupChatDetails) {
-                const data = await fetchGroupHistory(st.chosenGroupChatDetails.groupId, page);
+                const gid =
+                    st.chosenGroupChatDetails.groupId ?? st.chosenGroupChatDetails._id;
+                const data = await fetchGroupHistory(gid, page);
                 if (data?.messages) {
+                    wasPrependingRef.current = true;
                     dispatch(setMessages(data.messages));
                 }
             }
@@ -710,6 +717,7 @@ const Messages = ({ theme = "dark", onReplyMessage }: { theme?: string; onReplyM
                 const historyData = await fetchDirectHistory(dmData.conversationId, 0);
                 if (cancelled) return;
                 if (String(store.getState().chat.chosenChatDetails?.userId ?? '') !== dmPeerId) return;
+                pendingThreadBottomRef.current = true;
                 dispatch(replaceChatMessages(Array.isArray(historyData?.messages) ? historyData.messages : []));
                 return;
             }
@@ -734,23 +742,59 @@ const Messages = ({ theme = "dark", onReplyMessage }: { theme?: string; onReplyM
                 if (rcRid) {
                     dispatch(clearDmUnreadRid(String(rcRid)));
                 }
+                pendingThreadBottomRef.current = true;
                 dispatch(replaceChatMessages(Array.isArray(historyData?.messages) ? historyData.messages : []));
             }
         };
 
-        set_isFirstLoad(true);
+        prevMessagesLengthRef.current = 0;
         initChat();
         return () => {
             cancelled = true;
         };
     }, [chosenChatDetails, chosenGroupChatDetails, dispatch]);
 
-    useEffect(() => {
-        if (messages.length > prevMessagesLength.current) {
-            scrollToBottom();
+    useLayoutEffect(() => {
+        if (pendingThreadBottomRef.current) {
+            pendingThreadBottomRef.current = false;
+            const snapBottom = () => scrollContainerToBottom(scrollContainerRef.current, "auto");
+            snapBottom();
+            requestAnimationFrame(snapBottom);
+            prevMessagesLengthRef.current = messages.length;
+            return;
         }
-        prevMessagesLength.current = messages.length;
-    }, [messages]);
+
+        if (wasPrependingRef.current) {
+            wasPrependingRef.current = false;
+            prevMessagesLengthRef.current = messages.length;
+            return;
+        }
+
+        const prevLen = prevMessagesLengthRef.current;
+        const nextLen = messages.length;
+        const el = scrollContainerRef.current;
+        const lastMsg = nextLen > 0 ? messages[nextLen - 1] : null;
+        const lastOutgoing = Boolean(
+            lastMsg &&
+                isOutgoingAuthor(lastMsg, userDetails, myRcUserId, dmOtherWlUserId, groupAuthorOpts),
+        );
+
+        if (
+            shouldAutoScrollOnAppend({
+                prevLength: prevLen,
+                nextLength: nextLen,
+                isPrepending: false,
+                nearBottom: el
+                    ? isNearBottom(el.scrollTop, el.scrollHeight, el.clientHeight)
+                    : true,
+                lastMessageOutgoing: lastOutgoing,
+            })
+        ) {
+            scrollContainerToBottom(el, "smooth");
+        }
+
+        prevMessagesLengthRef.current = nextLen;
+    }, [messages, userDetails, myRcUserId, dmOtherWlUserId, groupAuthorOpts]);
 
     return (
         <div
@@ -816,6 +860,7 @@ const Messages = ({ theme = "dark", onReplyMessage }: { theme?: string; onReplyM
                 rcChannelId={rcChannelId}
                 conversationId={conversationId}
                 myRcUserId={myRcUserId}
+                onScrollToMessage={scrollToMessageInThread}
             />
             <div ref={messagesEndRef} className="h-px w-full shrink-0" aria-hidden />
             </div>

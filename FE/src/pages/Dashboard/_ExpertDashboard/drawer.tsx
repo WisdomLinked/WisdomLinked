@@ -188,11 +188,18 @@ export default function ExpertDrawer() {
                     </div>
                 </div>
             </div>
-            <div className={`w-full ${location === 'expertchat' ? 'lg:w-[calc(100%-370px)]' : 'lg:w-[calc(100%-70px)]'} h-full`}>
+            <div className={`w-full ${location === 'expertchat' ? 'lg:w-[calc(100%-370px)]' : 'lg:w-[calc(100%-70px)]'} h-full min-h-0 flex flex-col`}>
                 <Routes>
                     <Route path="/timeslots" element={<Availability />} />
                     <Route path="/calendar" element={<Calendar />} />
-                    <Route path="/chat" element={<Messenger videoChaton={false}/>} />
+                    <Route
+                        path="/chat"
+                        element={
+                            <div className="flex h-full min-h-0 flex-1 flex-col">
+                                <Messenger videoChaton={false} />
+                            </div>
+                        }
+                    />
                     <Route path="/profile" element={<ExpertProfile userDetails={userDetails} />} />
                     <Route path="/seminar" element={<ExpertSeminar />} />
                     <Route path="/search" element={<Search />} />
