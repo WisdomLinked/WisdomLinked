@@ -25,3 +25,8 @@ test("isProfileImageStorageConfigured is false without env", () => {
   assert.equal(isProfileImageStorageConfigured(), false);
   Object.assign(process.env, prev);
 });
+
+test("buildStoredProfileFilename defaults extension when missing", () => {
+  const name = buildStoredProfileFilename("avatar");
+  assert.match(name, /^avatar_\d+\.jpg$/);
+});

@@ -32,4 +32,20 @@ describe('parseProfileImageFilenameFromUploadResponse', () => {
       'upload.png',
     );
   });
+
+  it('reads root-level details array', () => {
+    expect(
+      parseProfileImageFilenameFromUploadResponse(
+        {
+          details: [{ filename: 'root.jpg', status: 'uploaded' }],
+        },
+        'fallback.jpg',
+      ),
+    ).toBe('root.jpg');
+  });
+
+  it('returns null when response and fallback are empty', () => {
+    expect(parseProfileImageFilenameFromUploadResponse(null)).toBeNull();
+    expect(parseProfileImageFilenameFromUploadResponse({}, '')).toBeNull();
+  });
 });
