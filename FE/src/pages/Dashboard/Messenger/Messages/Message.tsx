@@ -302,6 +302,7 @@ const Message = ({
                             <FilePreviewModal
                                 fileUrl={safeFileUrl || ""}
                                 fileName={fileName}
+                                documentType="File Preview"
                                 onClose={() => setShowPreview(false)}
                             />
                             )}
@@ -453,6 +454,7 @@ const Message = ({
                                 <FilePreviewModal
                                     fileUrl={safeFileUrl || ""}
                                     fileName={fileName}
+                                    documentType="File Preview"
                                     onClose={() => setShowPreview(false)}
                                 />
                                 )}

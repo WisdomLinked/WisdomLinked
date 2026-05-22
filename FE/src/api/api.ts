@@ -705,6 +705,31 @@ export async function profileImageUpload(formData: FormData): Promise<any> {
     }
 }
 
+/** Upload profile photo and persist on the authenticated user (updates Redux userDetails). */
+export const saveProfilePhoto = async (file: File): Promise<{ result: any; filename?: string }> => {
+    const formData = new FormData();
+    formData.append('image', file);
+    try {
+        const res = await api.post('auth/profilePhoto', formData, {
+            headers: { 'Content-Type': 'multipart/form-data' },
+        });
+        if (res.data?.result) {
+            store.dispatch({
+                type: 'updateUserDetails',
+                payload: res.data.result,
+            });
+        }
+        return res.data;
+    } catch (err: any) {
+        const msg =
+            err?.response?.data?.error ||
+            err?.response?.data?.message ||
+            err?.message ||
+            'Failed to upload profile photo';
+        throw new Error(typeof msg === 'string' ? msg : 'Failed to upload profile photo');
+    }
+};
+
 
 export const profileImageFetch = async (url: string, size: string) => {
     try {

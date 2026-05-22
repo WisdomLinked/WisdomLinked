@@ -8,6 +8,7 @@ const {
     register,
     updateMissedChats,
     updateProfile,
+    uploadProfilePhoto,
     getKeywordsAndServices,
     handleSubmit,
     leaveFeedback,
@@ -36,7 +37,7 @@ const {
     getEventsBetweenCustomerAndExpert,
     getMyEvents
 } = require('../controllers/event.controller')
-const { uploadsGeneral, uploadsChatFile } = require("../middlewares/multerConfig");
+const { uploadsGeneral, uploadsChatFile, uploadsProfilePhoto } = require("../middlewares/multerConfig");
 const { mapChatUploadMulterError } = require("../middlewares/multerConfig");
 const {
     stripePay,
@@ -73,6 +74,7 @@ router.post("/confirmPasswordResetByCode", confirmPasswordResetByCode);
 router.get("/getKeywordsAndServices", getKeywordsAndServices);
 router.post("/updateMissedChats", requireAuth(false), updateMissedChats);
 router.post("/updateProfile", requireAuth(false), updateProfile);
+router.post("/profilePhoto", requireAuth(false), uploadsProfilePhoto, uploadProfilePhoto);
 router.put("/profile", requireAuth(false), uploadsGeneral, updateProfile); // Used by complete profile flow
 router.post("/getEventsBetweenCustomerAndExpert", requireAuth(false), getEventsBetweenCustomerAndExpert);
 router.get("/me", requireAuth(false), getMe);

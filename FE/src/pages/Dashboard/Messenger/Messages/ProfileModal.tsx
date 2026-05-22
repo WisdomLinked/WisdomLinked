@@ -353,6 +353,7 @@ const ProfileModal: React.FC<ProfileModalProps> = ({
                 <FilePreviewModal
                     fileUrl={resumeUrl}
                     fileName="Resume"
+                    documentType="Resume"
                     onClose={() => setResumePreviewOpen(false)}
                     resumeStudentViewContext={
                         userDetails?._id ? { expertId: String(userDetails._id) } : undefined

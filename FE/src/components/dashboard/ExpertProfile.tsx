@@ -838,6 +838,7 @@ export default function ExpertProfile({
       <FilePreviewModal
         fileUrl={resumeUrl}
         fileName="Resume"
+        documentType="Resume"
         onClose={() => setResumePreviewOpen(false)}
         resumeStudentViewContext={
           String(userDetails?.role || '').toLowerCase() === 'customer' && mentor?.id != null

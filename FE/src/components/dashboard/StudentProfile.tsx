@@ -2,7 +2,6 @@ import React, { useState, useRef, useEffect } from 'react';
 import {
   User,
   Mail,
-  Camera,
   Lock,
   CreditCard,
   ChevronDown,
@@ -13,7 +12,12 @@ import {
   Save,
 } from 'lucide-react';
 import { useAppSelector } from '../../store';
-import { doUpdateProfile, profileImageFetch, profileImageUpload } from '../../api/api';
+import { useDispatch } from 'react-redux';
+import { showAlert } from '../../actions/alertActions';
+import { updateMe } from '../../actions/authActions';
+import { doUpdateProfile, profileImageFetch } from '../../api/api';
+import { resolveProfileImageSrc } from '../../utils/profileImage';
+import { saveProfilePhotoFile } from '../../utils/profileImageUpload';
 import { SERVICE_OPTIONS } from '../../constants/serviceOptions';
 
 const PREFERENCE_OPTIONS = SERVICE_OPTIONS.map((o) => ({ id: o.value, label: o.label }));
@@ -83,6 +87,7 @@ const MOCK_PAYMENTS: PaymentRecord[] = [
 ];
 
 export default function StudentProfile() {
+  const dispatch = useDispatch();
   const userDetails = useAppSelector((state: any) => state?.auth?.userDetails ?? null);
 
   const [name, setName] = useState(() => userDetails?.username ?? '');
@@ -109,6 +114,8 @@ export default function StudentProfile() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [personalDirty, setPersonalDirty] = useState(false);
+  const [personalSaving, setPersonalSaving] = useState(false);
+  const [photoSaving, setPhotoSaving] = useState(false);
   const [preferencesDirty, setPreferencesDirty] = useState(false);
   const [interestsDirty, setInterestsDirty] = useState(false);
 
@@ -123,15 +130,19 @@ export default function StudentProfile() {
     if (personalDirty) return;
     if (userDetails?.username) setName(userDetails.username);
     if (userDetails?.email) setEmail(userDetails.email);
-    if (userDetails?.image) {
-      profileImageFetch(userDetails.image, 'small')
-        .then((img: any) => {
-          if (typeof img === 'string') setPhotoUrl(img);
-        })
-        .catch(() => {
-          // keep current preview if fetch fails
-        });
-    }
+    let cancelled = false;
+    const loadPhoto = async () => {
+      const src = await resolveProfileImageSrc(
+        userDetails?.image,
+        'small',
+        profileImageFetch as any,
+      );
+      if (!cancelled) setPhotoUrl(src);
+    };
+    void loadPhoto();
+    return () => {
+      cancelled = true;
+    };
   }, [personalDirty, userDetails?.username, userDetails?.email, userDetails?.image]);
 
   useEffect(() => {
@@ -186,38 +197,75 @@ export default function StudentProfile() {
       // (The backend update endpoint expects `image` in the request body.)
       // Precompute preview payload; we also re-read on save if needed.
       readFileAsDataUrl(file).then(dataUrl => setPhotoDataUrl(dataUrl));
+    }
+  };
 
-      setPersonalDirty(true);
+  const hasPhotoChanges = photoFile != null;
+  const hasPersonalTextChanges =
+    name.trim() !== (userDetails?.username ?? '').trim() ||
+    email.trim() !== (userDetails?.email ?? '').trim();
+
+  const profileHasUnsavedChanges =
+    hasPersonalTextChanges || preferencesDirty || interestsDirty;
+
+  const handleSavePhoto = async () => {
+    if (!photoFile) return;
+    setPhotoSaving(true);
+    try {
+      const filename = await saveProfilePhotoFile(photoFile);
+      setPhotoFile(null);
+      setPhotoDataUrl(null);
+      await dispatch(updateMe() as any);
+      const src = await resolveProfileImageSrc(
+        filename,
+        'small',
+        profileImageFetch as any,
+      );
+      setPhotoUrl(src);
+      dispatch(showAlert('Profile photo saved'));
+    } catch (err: any) {
+      dispatch(
+        showAlert(
+          err?.response?.data?.error || err?.message || 'Could not save profile photo',
+        ),
+      );
+    } finally {
+      setPhotoSaving(false);
     }
   };
 
   const handleSavePersonal = async () => {
     const trimmedName = name.trim();
-    if (!trimmedName) return;
-
-    let uploadedImageName: string | null = null;
-    if (photoFile) {
-      const formData = new FormData();
-      formData.append('image', photoFile);
-      const uploadRes = await profileImageUpload(formData);
-      uploadedImageName = uploadRes?.data?.details?.[0]?.filename || null;
-    } else if (photoDataUrl && typeof userDetails?.image === 'string') {
-      uploadedImageName = userDetails.image;
+    if (!trimmedName) {
+      dispatch(showAlert('Name is required'));
+      return;
     }
 
-    const ok = await doUpdateProfile({
-      username: trimmedName,
-      ...(uploadedImageName ? { image: uploadedImageName } : {}),
-      // Note: email isn't updated by the current backend `/auth/updateProfile` handler.
-    });
+    setPersonalSaving(true);
+    try {
+      const ok = await doUpdateProfile({
+        username: trimmedName,
+      });
 
-    if (ok) {
-      setPersonalDirty(false);
-      setPhotoDataUrl(null);
-      setPhotoFile(null);
-      // Keep the email field consistent with backend response.
-      if (userDetails?.email) setEmail(userDetails.email);
+      if (ok) {
+        setPersonalDirty(false);
+        if (userDetails?.email) setEmail(userDetails.email);
+        await dispatch(updateMe() as any);
+        dispatch(showAlert('Profile saved'));
+      } else {
+        dispatch(showAlert('Could not save profile'));
+      }
+    } catch (err: any) {
+      dispatch(showAlert(err?.message || 'Could not save profile'));
+    } finally {
+      setPersonalSaving(false);
     }
+  };
+
+  const handleSaveAllProfileChanges = async () => {
+    if (hasPersonalTextChanges) await handleSavePersonal();
+    if (preferencesDirty) handleSavePreferences();
+    if (interestsDirty) handleSaveInterests();
   };
 
   const handleSavePreferences = () => {
@@ -302,13 +350,14 @@ export default function StudentProfile() {
           <h2 className="text-sm font-semibold uppercase tracking-wider text-slate-900">
             Personal information
           </h2>
-          {personalDirty && (
+          {hasPersonalTextChanges && (
             <button
               type="button"
-              onClick={handleSavePersonal}
-              className="rounded-lg bg-[#234C6A] px-3 py-1.5 text-[11px] font-semibold text-white hover:brightness-110"
+              onClick={() => void handleSavePersonal()}
+              disabled={personalSaving}
+              className="rounded-lg bg-[#234C6A] px-3 py-1.5 text-[11px] font-semibold text-white hover:brightness-110 disabled:opacity-50"
             >
-              Save
+              {personalSaving ? 'Saving…' : 'Save'}
             </button>
           )}
         </div>
@@ -338,13 +387,22 @@ export default function StudentProfile() {
                 className="hidden"
                 onChange={handlePhotoChange}
               />
+            </div>
+            <div className="mt-2 flex flex-wrap items-center gap-2">
               <button
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
-                className="absolute bottom-0 right-0 flex h-8 w-8 items-center justify-center rounded-full bg-[#234C6A] text-white shadow-md hover:brightness-110"
-                aria-label="Change profile photo"
+                className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-[11px] font-semibold text-slate-700 hover:bg-slate-50 transition"
               >
-                <Camera className="h-4 w-4" />
+                Change photo
+              </button>
+              <button
+                type="button"
+                disabled={!hasPhotoChanges || photoSaving}
+                onClick={() => void handleSavePhoto()}
+                className="rounded-lg bg-[#234C6A] px-3 py-1.5 text-[11px] font-semibold text-white shadow-sm hover:bg-[#1b3c53] disabled:opacity-40 disabled:cursor-not-allowed transition"
+              >
+                {photoSaving ? 'Saving…' : 'Save photo'}
               </button>
             </div>
           </div>
@@ -768,6 +826,27 @@ export default function StudentProfile() {
           </div>
         </div>
       )}
+
+      {profileHasUnsavedChanges ? (
+        <div className="sticky bottom-4 z-10 mt-6">
+          <div className="rounded-2xl border border-slate-200 bg-white/90 backdrop-blur-md px-5 py-3.5 shadow-lg flex items-center justify-between gap-3">
+            <p className="text-xs text-slate-500">You have unsaved profile changes.</p>
+            <button
+              type="button"
+              onClick={() => void handleSaveAllProfileChanges()}
+              disabled={personalSaving}
+              className="inline-flex items-center gap-2 rounded-xl bg-[#234C6A] px-5 py-2 text-sm font-semibold text-white shadow-sm hover:bg-[#1b3c53] disabled:opacity-40 disabled:cursor-not-allowed transition"
+            >
+              {personalSaving ? (
+                <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+              ) : (
+                <Save className="h-4 w-4" aria-hidden />
+              )}
+              Save changes
+            </button>
+          </div>
+        </div>
+      ) : null}
 
       </div>
     </div>

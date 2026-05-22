@@ -22,7 +22,7 @@ export interface DocumentPreviewModalProps {
   onClose: () => void;
   fileUrl: string;
   fileName: string;
-  /** Shown as the modal title (e.g. "Resume", "Transcript"). */
+  /** Shown as the modal title (e.g. "Resume", "File Preview"). */
   documentType?: string;
   /**
    * When set (student viewing an expert's resume): `.pdf` → inline PDF; `.doc`/`.docx` → Word viewer;
@@ -437,7 +437,7 @@ const FilePreviewModal: React.FC<DocumentPreviewModalProps> = ({
   onClose,
   fileUrl,
   fileName,
-  documentType = "Resume",
+  documentType = "File Preview",
   resumeStudentViewContext,
 }) => {
   const [iframeKey, setIframeKey] = useState(0);

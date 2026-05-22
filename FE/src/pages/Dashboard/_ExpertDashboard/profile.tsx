@@ -1,17 +1,17 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import EditAvatar from "../EditAvatar";
 import {
     callApi,
     doGetKeywordsAndServices,
     doUpdateProfile,
     doUpdateProfileByAdmin,
-    profileImageFetch, profileImageUpload
+    profileImageFetch,
 } from "../../../api/api";
 import ShowFieldError from "../../../components/ShowFieldError";
 import MultiSelectionWithInputTag from "../../../components/MultiSelectionWithInputTag";
 import SelectionWithCheckBox from "../../../components/SelectionWithCheckBox";
 import PhoneInput from "react-phone-input-2";
-import { arraysEqual, checkTitleNameInvalid } from "../../../actions/common";
+import { checkTitleNameInvalid } from "../../../actions/common";
 import { useNavigate } from "react-router-dom";
 import { SetLoadingStatus } from "../../../actions/appActions";
 import CountrySelect from "../../../components/CountrySelection";
@@ -20,6 +20,14 @@ import { useDispatch } from "react-redux";
 import { showAlert } from "../../../actions/alertActions";
 import { updateMe } from "../../../actions/authActions";
 import { filterApiServicesToCanonical } from "../../../constants/serviceOptions";
+import {
+    dataUriToImageFile,
+    saveProfilePhotoFile,
+} from "../../../utils/profileImageUpload";
+import {
+    hasExpertProfilePhotoChanges,
+    hasExpertProfileUnsavedChanges,
+} from "../../../utils/profileFormChanges";
 import ReactImagePickerEditor from 'react-image-picker-editor';
 import 'react-image-picker-editor/dist/index.css'
 import FilePreviewModal from "../FilePreviewModal";
@@ -43,15 +51,28 @@ const FieldLabel = ({ children, required }: { children: React.ReactNode; require
 );
 
 const inputClass = "w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 outline-none transition focus:border-[#234C6A] focus:bg-white focus:ring-2 focus:ring-[#234C6A]/10";
+const photoBtnOutline =
+    "rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-[11px] font-semibold text-slate-700 hover:bg-slate-50 transition";
+const photoBtnSave =
+    "rounded-lg bg-[#234C6A] px-3 py-1.5 text-[11px] font-semibold text-white shadow-sm hover:bg-[#1b3c53] disabled:opacity-40 disabled:cursor-not-allowed transition";
 
 const ExpertProfile = ({
     userDetails,
     isFromAdminPanel = false,
-    updateOneUser
+    updateOneUser,
+    onBack,
 }: any) => {
 
     const dispatch = useDispatch();
     const navigate = useNavigate();
+
+    const handleBack = () => {
+        if (typeof onBack === 'function') {
+            onBack();
+            return;
+        }
+        navigate('/expertdashboard', { replace: false });
+    };
     const [imageSrc, set_imageSrc] = useState<any>(null);
     const [image, set_image] = useState<any>('');
     const [oldImageSrc, set_oldImageSrc] = useState<any>(null);
@@ -70,6 +91,8 @@ const ExpertProfile = ({
     const [phoneNumber, set_phoneNumber] = useState<any>('');
     const [showError, set_showError] = useState(false);
     const [enableToUpdate, set_enableToUpdate] = useState(false);
+    const [photoSaving, set_photoSaving] = useState(false);
+    const photoFileInputRef = useRef<HTMLInputElement>(null);
     const [resume, set_resume] = useState('');
     const [file, set_file] = useState('');
     const [fileError, set_fileError] = useState('');
@@ -99,8 +122,16 @@ const ExpertProfile = ({
     const loadData = async () => {
         if (!userDetails) return;
         if (userDetails.image) {
-            const img: any = imageSrc ? imageSrc : await profileImageFetch(userDetails.image, "small");
-            if (img) { set_imageSrc(img); set_oldImageSrc(img); set_image(userDetails.image); }
+            const img: any = await profileImageFetch(userDetails.image, "small");
+            if (img) {
+                set_imageSrc(img);
+                set_oldImageSrc(img);
+                set_image(userDetails.image);
+            }
+        } else {
+            set_imageSrc(null);
+            set_oldImageSrc(null);
+            set_image('');
         }
         set_name(userDetails.username || '');
         set_title(userDetails.title || '');
@@ -137,39 +168,111 @@ const ExpertProfile = ({
         set_savingSpecialNote(false);
     };
 
-    const uploadProfileImage = async (newDataUri: any) => {
+    const mapServiceIds = (items: Array<any>) =>
+        items
+            .map((x: any) => (typeof x === 'string' ? x : x?._id ?? x?.id))
+            .filter(Boolean);
+
+    const handlePhotoFilePick = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file || !file.type.startsWith('image/')) return;
+        const reader = new FileReader();
+        reader.onload = () => {
+            if (typeof reader.result === 'string') set_imageSrc(reader.result);
+        };
+        reader.readAsDataURL(file);
+        e.target.value = '';
+    };
+
+    const handleSavePhoto = async () => {
+        if (!imageSrc || imageSrc === oldImageSrc) return;
+        set_photoSaving(true);
         try {
-            const fileExtension = newDataUri.split(';')[0].split('/')[1];
-            const base64Response = await fetch(newDataUri);
-            const blob = await base64Response.blob();
-            const file = new File([blob], `${userDetails.userId}_${Date.now()}.${fileExtension}`, { type: blob.type });
-            const formData = new FormData();
-            formData.append('image', file);
-            const res = await profileImageUpload(formData);
-            set_currFileName(res.data.details[0].filename);
-            return res.data.details[0].filename;
-        } catch (error) {
-            console.error('Error uploading image:', error);
+            const file = await dataUriToImageFile(
+                imageSrc,
+                String(userDetails.userId || userDetails.email || 'expert'),
+            );
+            const filename = await saveProfilePhotoFile(file);
+            set_image(filename);
+            set_currFileName(filename);
+            await dispatch(updateMe() as any);
+            await loadData();
+            dispatch(showAlert('Profile photo saved'));
+        } catch (error: any) {
+            const msg =
+                error?.response?.data?.error ||
+                error?.message ||
+                'Could not save profile photo';
+            dispatch(showAlert(String(msg)));
+        } finally {
+            set_photoSaving(false);
         }
     };
 
+    const isProfileFormValid = () =>
+        name.length >= 3 &&
+        !checkTitleNameInvalid('Username', name) &&
+        title.length > 0 &&
+        !!country &&
+        (!stateAvailable || (stateAvailable && !!state)) &&
+        (!cityAvailable || (cityAvailable && !!city)) &&
+        !!phoneNumber;
+
     const updateProfile = async () => {
+        const hasFormChanges = hasExpertProfileUnsavedChanges({
+            imageSrc,
+            oldImageSrc,
+            name,
+            title,
+            description,
+            selectedKeywords,
+            selectedServices,
+            country,
+            state,
+            city,
+            phoneNumber,
+            userDetails,
+        });
+        if (!hasFormChanges) {
+            dispatch(showAlert('No profile changes to save.'));
+            return;
+        }
+        if (!isProfileFormValid()) {
+            set_showError(true);
+            dispatch(showAlert('Please complete all required fields before saving.'));
+            return;
+        }
         SetLoadingStatus(true);
-        if (oldImageSrc != imageSrc) await uploadProfileImage(imageSrc);
         const updates = {
             email: userDetails.email,
-            image: currFileName ? currFileName : image,
-            username: name, title, description,
+            username: name,
+            title,
+            description,
             keywords: selectedKeywords,
-            services: selectedServices.map((x: any) => x._id),
-            country, state, city, phoneNumber,
+            services: mapServiceIds(selectedServices),
+            country,
+            state,
+            city,
+            phoneNumber,
         };
         if (!isFromAdminPanel) {
-            await doUpdateProfile(updates);
-            await dispatch(updateMe() as any);
+            const ok = await doUpdateProfile(updates);
+            if (ok) {
+                await dispatch(updateMe() as any);
+                dispatch(showAlert('Profile saved'));
+                await loadData();
+            } else {
+                dispatch(showAlert('Could not save profile'));
+            }
         } else {
             const res = await doUpdateProfileByAdmin(updates);
-            if (res) updateOneUser(res.result);
+            if (res) {
+                updateOneUser(res.result);
+                dispatch(showAlert('Profile saved'));
+                await loadData();
+            } else {
+                dispatch(showAlert('Could not save profile'));
+            }
         }
         SetLoadingStatus(false);
     };
@@ -195,35 +298,30 @@ const ExpertProfile = ({
     };
 
     useEffect(() => {
-        const hasChanges =
-            !(imageSrc == oldImageSrc) ||
-            name !== userDetails.username ||
-            title !== userDetails.title ||
-            description !== userDetails.description ||
-            !arraysEqual(selectedKeywords || [], userDetails.keywords || []) ||
-            !arraysEqual(selectedServices || [], userDetails.services || []) ||
-            !userDetails.country?.name !== country?.name ||
-            !userDetails.state?.name !== state?.name ||
-            !userDetails.city?.name !== city?.name ||
-            phoneNumber !== userDetails.phoneNumber;
-
-        const hasValidCoreFields =
-            name.length >= 3 &&
-            !checkTitleNameInvalid('Username', name) &&
-            title.length > 0 &&
-            country &&
-            (!stateAvailable || (stateAvailable && state)) &&
-            (!cityAvailable || (cityAvailable && city)) &&
-            !!phoneNumber;
-
-        if (hasChanges && hasValidCoreFields) {
-            set_enableToUpdate(true);
-            set_showError(false);
-        } else {
+        if (!userDetails) {
             set_enableToUpdate(false);
-            set_showError(true);
+            set_showError(false);
+            return;
         }
+        const hasFormChanges = hasExpertProfileUnsavedChanges({
+            imageSrc,
+            oldImageSrc,
+            name,
+            title,
+            description,
+            selectedKeywords,
+            selectedServices,
+            country,
+            state,
+            city,
+            phoneNumber,
+            userDetails,
+        });
+        set_enableToUpdate(hasFormChanges);
+        set_showError(hasFormChanges && !isProfileFormValid());
     }, [imageSrc, oldImageSrc, name, title, description, selectedKeywords, selectedServices, country, state, stateAvailable, city, cityAvailable, phoneNumber, userDetails]);
+
+    const hasPhotoChanges = hasExpertProfilePhotoChanges(imageSrc, oldImageSrc);
 
     useEffect(() => {
         if (!fileError && file) updateResume();
@@ -250,8 +348,10 @@ const ExpertProfile = ({
                 {!isFromAdminPanel && (
                     <div className="mb-7 flex items-center gap-4">
                         <button
-                            onClick={() => navigate(-1)}
+                            type="button"
+                            onClick={handleBack}
                             className="flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 shadow-sm hover:bg-slate-50 hover:text-slate-800 transition"
+                            aria-label="Back to dashboard"
                         >
                             <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
                                 <path d="M9.57 5.93L3.5 12l6.07 6.07" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
@@ -298,9 +398,33 @@ const ExpertProfile = ({
                                         imageChanged={(newDataUri: any) => set_imageSrc(newDataUri)}
                                     />
                                 </div>
-                                <p className="text-[11px] text-slate-400 text-center max-w-[120px]">
+                                <p className="text-[11px] text-slate-400 text-center max-w-[140px]">
                                     Max 500 KB · Square works best
                                 </p>
+                                <input
+                                    ref={photoFileInputRef}
+                                    type="file"
+                                    accept="image/*"
+                                    className="hidden"
+                                    onChange={handlePhotoFilePick}
+                                />
+                                <div className="flex flex-wrap items-center justify-center gap-2">
+                                    <button
+                                        type="button"
+                                        onClick={() => photoFileInputRef.current?.click()}
+                                        className={photoBtnOutline}
+                                    >
+                                        Change photo
+                                    </button>
+                                    <button
+                                        type="button"
+                                        disabled={!hasPhotoChanges || photoSaving}
+                                        onClick={() => void handleSavePhoto()}
+                                        className={photoBtnSave}
+                                    >
+                                        {photoSaving ? 'Saving…' : 'Save photo'}
+                                    </button>
+                                </div>
                             </div>
 
                             {/* Name + Title */}
@@ -514,7 +638,7 @@ const ExpertProfile = ({
                         )}
 
                         {showPreview && (
-                            <FilePreviewModal fileUrl={resume} fileName="Resume" onClose={() => setShowPreview(false)} />
+                            <FilePreviewModal fileUrl={resume} fileName="Resume" documentType="Resume" onClose={() => setShowPreview(false)} />
                         )}
 
                         <div>
@@ -538,7 +662,11 @@ const ExpertProfile = ({
                     <div className="sticky bottom-4 z-10">
                         <div className="rounded-2xl border border-slate-200 bg-white/90 backdrop-blur-md px-5 py-3.5 shadow-lg flex items-center justify-between gap-3">
                             <p className="text-xs text-slate-400 hidden sm:block">
-                                {enableToUpdate ? "You have unsaved changes." : "All fields must be valid to save."}
+                                {enableToUpdate
+                                    ? showError
+                                        ? "You have unsaved changes. Complete required fields to save."
+                                        : "You have unsaved changes."
+                                    : "No changes to save."}
                             </p>
                             <div className="flex items-center gap-2 ml-auto">
                                 <button
@@ -551,7 +679,7 @@ const ExpertProfile = ({
                                 <button
                                     type="button"
                                     disabled={!enableToUpdate}
-                                    onClick={async () => { await updateProfile(); await loadData(); }}
+                                    onClick={() => void updateProfile()}
                                     className="rounded-xl bg-[#234C6A] px-5 py-2 text-sm font-semibold text-white shadow-sm hover:bg-[#1b3c53] disabled:opacity-40 disabled:cursor-not-allowed transition"
                                 >
                                     Save changes

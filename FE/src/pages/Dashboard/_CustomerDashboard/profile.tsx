@@ -1,15 +1,19 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
     doGetKeywordsAndServices,
     doUpdateProfile,
     doUpdateProfileByAdmin,
     profileImageFetch,
-    profileImageUpload
 } from "../../../api/api";
+import { updateMe } from "../../../actions/authActions";
+import {
+    dataUriToImageFile,
+    saveProfilePhotoFile,
+} from "../../../utils/profileImageUpload";
 import ShowFieldError from "../../../components/ShowFieldError";
 import MultiSelectionWithInputTag from "../../../components/MultiSelectionWithInputTag";
 import SelectionWithCheckBox from "../../../components/SelectionWithCheckBox";
-import { arraysEqual, checkTitleNameInvalid } from "../../../actions/common";
+import { checkTitleNameInvalid } from "../../../actions/common";
 import { useNavigate } from "react-router-dom";
 import { SetLoadingStatus } from "../../../actions/appActions";
 import CountrySelect from "../../../components/CountrySelection";
@@ -19,6 +23,10 @@ import { validateImageSize } from "../../../utils/validators";
 import { showAlert } from "../../../actions/alertActions";
 import ImagePicker from "../../../components/imagePicker";
 import { filterApiServicesToCanonical } from "../../../constants/serviceOptions";
+import {
+    hasCustomerProfilePhotoChanges,
+    hasCustomerProfileUnsavedChanges,
+} from "../../../utils/profileFormChanges";
 
 const CustomerProfile = ({
     userDetails,
@@ -53,6 +61,8 @@ const CustomerProfile = ({
     const [phoneNumber, set_phoneNumber] = useState<any>('')
     const [showError, set_showError] = useState(false)
     const [enableToUpdate, set_enableToUpdate] = useState(false)
+    const [photoSaving, set_photoSaving] = useState(false)
+    const photoFileInputRef = useRef<HTMLInputElement>(null)
 
     const reset = () => {
         if (userDetails.image) {
@@ -70,11 +80,16 @@ const CustomerProfile = ({
 
     const loadData = async () => {
         if (userDetails.image) {
-            const image: any = imageSrc ? imageSrc : await profileImageFetch(userDetails.image, "small");
+            const image: any = await profileImageFetch(userDetails.image, "small");
             if (image) {
+                set_imageSrc(image);
                 set_originalImageSrc(image);
-                set_image(userDetails.image)
+                set_image(userDetails.image);
             }
+        } else {
+            set_imageSrc(null);
+            set_originalImageSrc(null);
+            set_image(null);
         }
         set_name(userDetails.username)
         set_selectedKeywords(userDetails.keywords)
@@ -85,48 +100,78 @@ const CustomerProfile = ({
         set_phoneNumber(userDetails.phoneNumber)
     }
 
-    const uploadProfileImage = async (newDataUri: any) => {
+    const mapServiceIds = (items: Array<any>) =>
+        items
+            .map((x: any) => (typeof x === 'string' ? x : x?._id ?? x?.id))
+            .filter(Boolean);
+
+    const handleSavePhoto = async () => {
+        if (!imageSrc || imageSrc === originalImageSrc) return;
+        set_photoSaving(true);
         try {
-            const fileExtension = newDataUri.split(';')[0].split('/')[1];
-            const base64Response = await fetch(newDataUri);
-            const blob = await base64Response.blob();
-            const file = new File(
-                [blob],
-                `${userDetails.userId}_${Date.now()}.${fileExtension}`,
-                { type: blob.type }
+            const file = await dataUriToImageFile(
+                imageSrc,
+                String(userDetails.userId || userDetails.email || 'user'),
             );
-
-            const formData = new FormData();
-            formData.append('image', file);
-
-            const res = await profileImageUpload(formData);
-            curr_filename = res.data.details[0].filename
-
-            return res.data.details[0].filename;
+            const filename = await saveProfilePhotoFile(file);
+            curr_filename = filename;
+            set_image(filename);
+            await dispatch(updateMe() as any);
+            await loadData();
+            dispatch(showAlert('Profile photo saved'));
         } catch (error: any) {
-            dispatch(showAlert("Error uploading image: " + error.response.data.error))
+            const msg =
+                error?.response?.data?.error ||
+                error?.message ||
+                'Could not save profile photo';
+            dispatch(showAlert(String(msg)));
+        } finally {
+            set_photoSaving(false);
         }
     };
 
     const updateProfile = async () => {
-        SetLoadingStatus(true)
-        if (originalImageSrc != imageSrc) {
-            await uploadProfileImage(imageSrc)
-            console.log("after upload ", image)
+        const hasFormChanges = hasCustomerProfileUnsavedChanges({
+            imageSrc,
+            originalImageSrc,
+            name,
+            selectedKeywords,
+            selectedServices,
+            country,
+            state,
+            city,
+            phoneNumber,
+            userDetails,
+        });
+        if (!hasFormChanges) {
+            dispatch(showAlert('No profile changes to save.'));
+            return;
         }
+        if (!isProfileFormValid()) {
+            set_showError(true);
+            dispatch(showAlert('Please complete all required fields before saving.'));
+            return;
+        }
+        SetLoadingStatus(true)
         const updates = {
             email: userDetails.email,
-            image: curr_filename ? curr_filename : image,
             username: name,
             keywords: selectedKeywords,
-            services: selectedServices.map((x: any) => x._id),
+            services: mapServiceIds(selectedServices),
             country,
             state,
             city,
             phoneNumber: phoneNumber
         }
         if (!isFromAdminPanel) {
-            await doUpdateProfile(updates)
+            const ok = await doUpdateProfile(updates);
+            if (ok) {
+                await dispatch(updateMe() as any);
+                dispatch(showAlert('Profile saved'));
+                await loadData();
+            } else {
+                dispatch(showAlert('Could not save profile'));
+            }
         } else {
             const res = await doUpdateProfileByAdmin(updates)
             if (res) {
@@ -144,46 +189,56 @@ const CustomerProfile = ({
         }
     }
 
-    // Returns true if input is valid
-    const validateInput = () => {
-        if (
-            name.length >= 3 &&
-            !checkTitleNameInvalid('Username', name) &&
-            country &&
-            (!stateAvailable || (stateAvailable && state)) &&
-            (!cityAvailable || (cityAvailable && city)) &&
-            phoneNumber &&
-            (
-                !(imageSrc == originalImageSrc) ||
-                name !== userDetails.username ||
-                !arraysEqual(selectedKeywords, userDetails.keywords || []) ||
-                !arraysEqual(selectedServices, userDetails.services || []) ||
-                !userDetails.country?.name !== country?.name ||
-                !userDetails.state?.name !== state?.name ||
-                !userDetails.city?.name !== city?.name ||
-                phoneNumber !== userDetails.phoneNumber
-            )
-        ) {
-            return true;
-        } else {
-            return false;
-        }
-    }
+    const isProfileFormValid = () =>
+        name.length >= 3 &&
+        !checkTitleNameInvalid('Username', name) &&
+        !!country &&
+        (!stateAvailable || (stateAvailable && !!state)) &&
+        (!cityAvailable || (cityAvailable && !!city)) &&
+        !!phoneNumber;
 
-    // Validates input and controls if submit button is enabled
     const on_imageChange = (newImageSrc: any) => {
         if (validateImageSize(newImageSrc) === false) {
-            set_enableToUpdate(false);
-        } else {
-            set_imageSrc(newImageSrc);
-            set_enableToUpdate(true);
+            dispatch(showAlert(`Image size cannot be greater than the allowed limit.`));
+            return;
         }
+        set_imageSrc(newImageSrc);
+    }
+
+    const handlePhotoFilePick = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file || !file.type.startsWith('image/')) return;
+        const reader = new FileReader();
+        reader.onload = () => {
+            if (typeof reader.result === 'string') on_imageChange(reader.result);
+        };
+        reader.readAsDataURL(file);
+        e.target.value = '';
     }
 
     useEffect(() => {
-        set_enableToUpdate(validateInput())
-        set_showError(!validateInput())
-    }, [imageSrc, name, selectedKeywords, selectedServices, country, state, stateAvailable, city, cityAvailable, phoneNumber])
+        if (!userDetails) {
+            set_enableToUpdate(false);
+            set_showError(false);
+            return;
+        }
+        const hasChanges = hasCustomerProfileUnsavedChanges({
+            imageSrc,
+            originalImageSrc,
+            name,
+            selectedKeywords,
+            selectedServices,
+            country,
+            state,
+            city,
+            phoneNumber,
+            userDetails,
+        });
+        set_enableToUpdate(hasChanges);
+        set_showError(hasChanges && !isProfileFormValid());
+    }, [imageSrc, originalImageSrc, name, selectedKeywords, selectedServices, country, state, stateAvailable, city, cityAvailable, phoneNumber, userDetails])
+
+    const hasPhotoChanges = hasCustomerProfilePhotoChanges(imageSrc, originalImageSrc);
 
     useEffect(() => {
         loadData()
@@ -213,8 +268,32 @@ const CustomerProfile = ({
                 }
 
                 <div className="w-full flex flex-col justify-center items-stretch mt-2 rounded-2xl border border-slate-200 bg-white px-6 py-6 shadow-sm">
-                    <div className="mx-auto">
+                    <div className="mx-auto flex flex-col items-center gap-2">
                         <ImagePicker key={imagePickerKey} initialImage={originalImageSrc} on_imageChange={on_imageChange} validator={validateImageSize} />
+                        <input
+                            ref={photoFileInputRef}
+                            type="file"
+                            accept="image/*"
+                            className="hidden"
+                            onChange={handlePhotoFilePick}
+                        />
+                        <div className="flex flex-wrap items-center justify-center gap-2">
+                            <button
+                                type="button"
+                                onClick={() => photoFileInputRef.current?.click()}
+                                className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-[11px] font-semibold text-slate-700 hover:bg-slate-50 transition"
+                            >
+                                Change photo
+                            </button>
+                            <button
+                                type="button"
+                                disabled={!hasPhotoChanges || photoSaving}
+                                onClick={() => void handleSavePhoto()}
+                                className="rounded-lg bg-[#234C6A] px-3 py-1.5 text-[11px] font-semibold text-white shadow-sm hover:bg-[#1b3c53] disabled:opacity-40 disabled:cursor-not-allowed transition"
+                            >
+                                {photoSaving ? 'Saving…' : 'Save photo'}
+                            </button>
+                        </div>
                     </div>
                     <div className="w-full mt-6">
                         {

@@ -40,6 +40,19 @@ const isAllowedChatFileExtension = (originalName: unknown): boolean => {
   return !!ext && ALLOWED_CHAT_FILE_EXTENSIONS.has(ext);
 };
 
+const MAX_PROFILE_PHOTO_BYTES = 5 * 1024 * 1024;
+const uploadsProfilePhoto = multer({
+  storage,
+  limits: { fileSize: MAX_PROFILE_PHOTO_BYTES },
+  fileFilter: (_req: any, file: any, callback: any) => {
+    if (!file?.mimetype || !String(file.mimetype).startsWith("image/")) {
+      callback(new Error("Profile photo must be an image file."));
+      return;
+    }
+    callback(null, true);
+  },
+}).single("image");
+
 const uploadsChatFile = multer({
   storage,
   limits: { fileSize: MAX_CHAT_FILE_SIZE_BYTES },
@@ -67,6 +80,7 @@ const mapChatUploadMulterError = (err: any): string => {
 
 module.exports = {
     uploadsGeneral,
+    uploadsProfilePhoto,
     uploadsChatFile,
     MAX_GENERAL_FILE_SIZE_BYTES,
     MAX_CHAT_FILE_SIZE_BYTES,

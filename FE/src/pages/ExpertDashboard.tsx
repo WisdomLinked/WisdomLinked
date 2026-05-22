@@ -21,6 +21,7 @@ import TopBar from '../components/layout/TopBar';
 import type { TopBarNotificationItem } from '../components/layout/TopBar';
 import StudentSettings from '../components/dashboard/StudentSettings';
 import { getAllCommunityChats, profileImageFetch } from '../api/api';
+import { resolveProfileImageSrc } from '../utils/profileImage';
 import { fetchDmUnreadSnapshot } from '../api/chatApi';
 import { useAppSelector } from '../store';
 import { logoutUser, updateMe } from '../actions/authActions';
@@ -147,17 +148,19 @@ export default function ExpertDashboard() {
   ]);
 
   useEffect(() => {
-    const image = userDetails?.image as string | undefined;
-    if (!image) {
-      setAvatarUrl(undefined);
-      return;
-    }
-    profileImageFetch(image, 'small')
-      .then((img: unknown) => {
-        if (typeof img === 'string') setAvatarUrl(img);
-        else setAvatarUrl(undefined);
-      })
-      .catch(() => setAvatarUrl(undefined));
+    let cancelled = false;
+    const loadAvatar = async () => {
+      const src = await resolveProfileImageSrc(
+        userDetails?.image,
+        'small',
+        profileImageFetch as any,
+      );
+      if (!cancelled) setAvatarUrl(src ?? undefined);
+    };
+    void loadAvatar();
+    return () => {
+      cancelled = true;
+    };
   }, [userDetails?.image]);
 
   useEffect(() => {
@@ -569,7 +572,7 @@ export default function ExpertDashboard() {
       </div>
     ) : activeItem === 'profile' ? (
       <div className="h-[calc(100vh-56px)] overflow-y-auto bg-[#F5F3EF]">
-        <ExpertProfile userDetails={userDetails} />
+        <ExpertProfile userDetails={userDetails} onBack={() => setActiveItem('dashboard')} />
       </div>
     ) : activeItem === 'settings' ? (
       <StudentSettings />
@@ -778,6 +781,7 @@ export default function ExpertDashboard() {
           }}
           navItems={navItems}
           studentName={expertName}
+          avatarUrl={avatarUrl}
           roleLabel="Expert"
           notifications={{ chat: activeItem === 'chat' ? 0 : totalUnreadDm }}
         />

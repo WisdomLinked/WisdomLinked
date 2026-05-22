@@ -267,6 +267,7 @@ const Experts = ({
                 <FilePreviewModal
                     fileUrl={resumePreview.url}
                     fileName="Resume"
+                    documentType="Resume"
                     onClose={() => setResumePreview(null)}
                     resumeStudentViewContext={{ expertId: resumePreview.expertId }}
                 />

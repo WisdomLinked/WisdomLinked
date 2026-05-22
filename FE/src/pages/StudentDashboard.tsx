@@ -3,6 +3,7 @@ import { useDispatch } from 'react-redux';
 import { BookOpen, Clock, UserCheck, AlertCircle, MessageSquare } from 'lucide-react';
 import { useAppSelector } from '../store';
 import { doGetMyEvents, getAllCommunityChats, profileImageFetch } from '../api/api';
+import { resolveProfileImageSrc } from '../utils/profileImage';
 import { fetchDmUnreadSnapshot } from '../api/chatApi';
 import Sidebar from '../components/layout/Sidebar';
 import TopBar, { TopBarNotificationItem } from '../components/layout/TopBar';
@@ -137,17 +138,19 @@ export default function StudentDashboard() {
   const [avatarUrl, setAvatarUrl] = useState<string | undefined>(undefined);
 
   useEffect(() => {
-    const image = userDetails?.image as string | undefined;
-    if (!image) {
-      setAvatarUrl(undefined);
-      return;
-    }
-    profileImageFetch(image, 'small')
-      .then((img: any) => {
-        if (typeof img === 'string') setAvatarUrl(img);
-        else setAvatarUrl(undefined);
-      })
-      .catch(() => setAvatarUrl(undefined));
+    let cancelled = false;
+    const loadAvatar = async () => {
+      const src = await resolveProfileImageSrc(
+        userDetails?.image,
+        'small',
+        profileImageFetch as any,
+      );
+      if (!cancelled) setAvatarUrl(src ?? undefined);
+    };
+    void loadAvatar();
+    return () => {
+      cancelled = true;
+    };
   }, [userDetails?.image]);
 
   useEffect(() => {

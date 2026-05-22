@@ -22,6 +22,11 @@ const ContactedUs = require("../models/ContactedUs");
 const nodemailer = require("nodemailer");
 const sgMail = require("@sendgrid/mail");
 const { S3Client, PutObjectCommand, DeleteObjectCommand } = require('@aws-sdk/client-s3');
+const { uploadImageToStorage } = require("../services/imageUploadService");
+const {
+    pickUploadedProfileFilename,
+    normalizeProfileImageRef,
+} = require("../utils/profileImageFilename");
 
 
 sgMail.setApiKey(process.env.SENDGRID_API_KEY);
@@ -884,8 +889,9 @@ const updateProfile = async (req: any, res: Response) => {
         if (description !== undefined && description !== null) {
             updates.description = description
         }
-        if (image) {
-            updates.image = image
+        const normalizedImage = normalizeProfileImageRef(image);
+        if (normalizedImage) {
+            updates.image = normalizedImage;
         }
         if (services && Array.isArray(services)) {
             let _services = [];
@@ -1250,6 +1256,43 @@ const logout = async (req: Request, res: Response) => {
     }
 }
 
+/** Multipart profile photo: upload to storage and persist filename on the authenticated user. */
+const uploadProfilePhoto = async (req: any, res: Response) => {
+    try {
+        const { email } = req.user;
+        const file = req.file;
+        if (!file) {
+            return res.status(400).json({ error: "Image file is required." });
+        }
+
+        const uploadResult = await uploadImageToStorage(file);
+        const filename = pickUploadedProfileFilename(uploadResult, file.originalname);
+        if (!filename) {
+            return res.status(500).json({
+                error: "Profile photo upload failed.",
+                details: uploadResult,
+            });
+        }
+
+        await User.findOneAndUpdate({ email }, { image: filename }, { new: true });
+        const result = await getFullUserData(email);
+        if (!result) {
+            return res.status(404).json({ error: "User not found." });
+        }
+        result.password = null;
+        result.token = null;
+
+        return res.status(200).json({
+            result,
+            filename,
+            message: "Profile photo updated.",
+        });
+    } catch (err: any) {
+        console.log("[uploadProfilePhoto]", err?.message || err);
+        return res.status(500).json({ error: err?.message || "Failed to upload profile photo." });
+    }
+};
+
 module.exports = {
     login,
     logout,
@@ -1257,6 +1300,7 @@ module.exports = {
     getMe,
     updateMissedChats,
     updateProfile,
+    uploadProfilePhoto,
     getKeywordsAndServices,
     handleSubmit,
     leaveFeedback,
