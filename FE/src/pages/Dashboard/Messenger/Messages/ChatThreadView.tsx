@@ -1,8 +1,8 @@
 import React, { useCallback, useMemo, useState } from 'react';
-import { Video } from 'lucide-react';
 import type { Message as MessageModel } from '../../../../actions/types';
 import { formatDividerDate, formatMessageTime } from '../../../../utils/formatMessageTime';
 import Message from './Message';
+import MeetingChatBubble from './MeetingChatBubble';
 import MeetingCard from '../../../../components/MeetingCard';
 import ChatSystemNotice from './ChatSystemNotice';
 import { parseMeetingMessageContent } from '../../../../utils/meetingMessage';
@@ -158,6 +158,19 @@ function marginAfterBubble(cur: BubbleTimelineItem, next: TimelineItem | undefin
 
 function marginAfterNonBubble(next: TimelineItem | undefined): string {
     if (!next) return '';
+    return 'mb-2';
+}
+
+function marginAfterMeetingChatLine(
+    isSelf: boolean,
+    next: TimelineItem | undefined,
+    isOutgoingMessage: (m: DisplayMessage) => boolean,
+): string {
+    if (!next) return '';
+    if (next.kind === 'meeting-chat-line') {
+        const nextSelf = isOutgoingMessage(next.message);
+        return isSelf === nextSelf ? 'mb-1' : 'mb-3';
+    }
     return 'mb-2';
 }
 
@@ -359,24 +372,19 @@ const ChatThreadView: React.FC<ChatThreadViewProps> = ({
                 }
 
                 if (entry.kind === 'meeting-chat-line') {
-                    const shell =
-                        theme === 'light'
-                            ? 'border border-stone-200 bg-stone-50/90 text-wl-ink'
-                            : 'border border-gray-600 bg-darkgrey-2 text-gray-100';
+                    const isSelf = isOutgoingMessage(entry.message);
+                    const mb = marginAfterMeetingChatLine(isSelf, next, isOutgoingMessage);
                     return (
-                        <div key={key} className={`w-full px-2 sm:px-3 ${marginAfterNonBubble(next)}`}>
-                            <div className={`flex max-w-[min(100%,36rem)] gap-2 rounded-xl px-3 py-2 text-left shadow-sm ${shell}`}>
-                                <Video className="mt-0.5 h-4 w-4 shrink-0 text-[#1A3A4A]" aria-hidden />
-                                <div className="min-w-0 flex-1">
-                                    <p className="text-[11px] font-semibold uppercase tracking-wide text-[#1A3A4A]">
-                                        Meet{entry.chat.guest ? ' · Guest' : ''} · {entry.chat.author}
-                                    </p>
-                                    <p className="mt-0.5 whitespace-pre-wrap break-words text-sm leading-snug">{entry.chat.msg}</p>
-                                    <p className={`mt-1 text-xs ${theme === 'light' ? 'text-stone-400' : 'text-gray-400'}`}>
-                                        {formatMessageTime(new Date(entry.message.createdAt))}
-                                    </p>
-                                </div>
-                            </div>
+                        <div key={key} className={mb}>
+                            <MeetingChatBubble
+                                isSelf={isSelf}
+                                authorLabel={entry.chat.author}
+                                guest={entry.chat.guest}
+                                msg={entry.chat.msg}
+                                timeLabel={formatMessageTime(new Date(entry.message.createdAt))}
+                                theme={theme}
+                                testId={isSelf ? 'meeting-chat-out' : 'meeting-chat-in'}
+                            />
                         </div>
                     );
                 }
