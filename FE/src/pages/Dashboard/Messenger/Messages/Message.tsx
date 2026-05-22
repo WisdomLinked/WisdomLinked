@@ -262,13 +262,13 @@ const Message = ({
     if (incomingMessage && useThreadBubble) {
         return (
             <div className="flex min-w-0 max-w-full items-end gap-1">
-                {showThreadDelete ? renderDeleteActions() : null}
-                {renderReplyAction()}
                 <div
                     className={`chat-message-rich min-w-0 max-w-full px-2 py-1.5 text-sm leading-5 shadow-sm break-words whitespace-pre-wrap ${threadBubbleShellClassName}`}
                 >
                     {renderChatRichContent(content, theme, "incoming", onJumpToParent, replyLabelOpts)}
                 </div>
+                {showThreadDelete ? renderDeleteActions() : null}
+                {renderReplyAction()}
             </div>
         );
     }
@@ -418,7 +418,6 @@ const Message = ({
                 {/* If it's a call-duration message, show the special template */}
                 {isCallDurationMessage ? (
                     <div className="flex items-end gap-1">
-                    {renderDeleteActions()}
                     <Card
                         sx={{
                             backgroundColor: "#222222",
@@ -436,12 +435,12 @@ const Message = ({
                             </Typography>
                         </CardContent>
                     </Card>
+                    {renderDeleteActions()}
                     {renderReplyAction()}
                     </div>
                     ) : isFile ? (
                         <div className="chat_value_container flex flex-col items-start px-1 py-1">
                             <div className="flex items-end gap-1">
-                                {renderDeleteActions()}
                                 {/* Preview section */}
                                 <button
                                 onClick={() => safeFileUrl && setShowPreview(true)}
@@ -471,13 +470,13 @@ const Message = ({
                                     onClose={() => setShowPreview(false)}
                                 />
                                 )}
+                                {renderDeleteActions()}
                                 {renderReplyAction()}
                             </div>
                         </div>
                 ) : (
                     // Otherwise, show the regular incoming message bubble
                     <div className="flex min-w-0 items-end gap-1">
-                        {renderDeleteActions()}
                         <div
                             className={`min-w-0 max-w-full rounded-[13px] px-2 py-1.5 text-[14px] leading-[20px] shadow-sm ${
                                 theme === "light"
@@ -489,6 +488,7 @@ const Message = ({
                                 {renderChatRichContent(content, theme, "incoming", onJumpToParent, replyLabelOpts)}
                             </div>
                         </div>
+                        {renderDeleteActions()}
                         {renderReplyAction()}
                     </div>
                 )}

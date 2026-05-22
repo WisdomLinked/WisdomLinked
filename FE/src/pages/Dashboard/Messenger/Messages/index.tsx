@@ -152,8 +152,20 @@ const Messages = ({ theme = "dark", onReplyMessage }: { theme?: string; onReplyM
             const g = st.chosenGroupChatDetails;
             const gid = g?.groupId ?? g?._id;
             /** Only send DM conversation id when a 1:1 thread is active (never reuse group id stored here by mistake). */
-            const cid = st.chosenChatDetails ? st.conversationId : null;
+            let cid = st.chosenChatDetails ? st.conversationId : null;
             const groupIdStr = gid != null && gid !== '' ? String(gid) : '';
+            if (mode === 'me' && !cid && !groupIdStr && st.chosenChatDetails?.userId) {
+                const dmData = await getOrCreateDM(st.chosenChatDetails.userId);
+                if (dmData?.conversationId) {
+                    cid = String(dmData.conversationId);
+                    dispatch(
+                        setChatChannelInfo({
+                            conversationId: cid,
+                            rcChannelId: dmData.rcChannelId ?? st.rcChannelId,
+                        }),
+                    );
+                }
+            }
             if (mode === 'both' && !rid) {
                 dispatch(showAlert('Chat room not ready — try again.'));
                 return;

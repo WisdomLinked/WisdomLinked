@@ -326,7 +326,7 @@ const ChatThreadView: React.FC<ChatThreadViewProps> = ({
     });
 
     const deleteForMeAvailable = Boolean(
-        (chosenChatDetails && conversationId) ||
+        chosenChatDetails?.userId ||
             (chosenGroupChatDetails &&
                 Boolean(
                     (chosenGroupChatDetails as { groupId?: string }).groupId ||
