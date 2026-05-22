@@ -53,4 +53,29 @@ describe("ChatThreadView meet chat in thread", () => {
     expect(screen.queryByTestId("meeting-chat-in")).not.toBeInTheDocument();
     expect(screen.queryByTestId("meeting-chat-out")).not.toBeInTheDocument();
   });
+
+  it("shows incoming thread avatar photo when profileImages has the author", () => {
+    const peerId = "peer-1";
+    const photo = "data:image/png;base64,peerPhoto";
+    const profileImages = new Map([[peerId, photo]]);
+
+    render(
+      <ChatThreadView
+        {...baseProps}
+        profileImages={profileImages}
+        displayMessages={[
+          {
+            _id: "msg-1",
+            content: "Hello there",
+            author: { _id: peerId, username: "Peer User", role: "customer", status: "active" },
+            createdAt: new Date("2026-01-15T12:00:00.000Z").toISOString(),
+            type: "direct",
+          },
+        ] as any}
+      />,
+    );
+
+    const img = screen.getByTestId("thread-incoming-avatar-photo");
+    expect(img).toHaveAttribute("src", photo);
+  });
 });

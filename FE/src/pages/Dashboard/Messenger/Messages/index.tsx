@@ -488,19 +488,54 @@ const Messages = ({ theme = "dark", onReplyMessage }: { theme?: string; onReplyM
 
     useEffect(() => {
         let cancelled = false;
+
         const processMessages = async () => {
             const needed = new Map<string, string>();
+            const enqueue = (userId: unknown, image: unknown) => {
+                const id = String(userId ?? "").trim();
+                const img = String(image ?? "").trim();
+                if (id && img && !profileImageCacheRef.current.has(id)) {
+                    needed.set(id, img);
+                }
+            };
             for (const message of messages) {
-                const userId = String(message?.author?._id ?? "");
-                const image = String(message?.author?.image ?? "");
-                if (userId && image && !profileImageCacheRef.current.has(userId)) {
-                    needed.set(userId, image);
+                enqueue(message?.author?._id, message?.author?.image);
+            }
+
+            if (chosenChatDetails?.userId) {
+                let peerImage = chosenChatDetails.image;
+                if (!peerImage && Array.isArray(friends)) {
+                    const peerId = String(chosenChatDetails.userId);
+                    const friend = friends.find(
+                        (f: { _id?: string; id?: string; image?: string }) =>
+                            String(f._id ?? f.id ?? "") === peerId,
+                    );
+                    peerImage = friend?.image;
+                }
+                enqueue(chosenChatDetails.userId, peerImage);
+            }
+
+            const group = chosenGroupChatDetails as {
+                participants?: Array<{ _id?: string; id?: string; image?: string }>;
+                admin?: { _id?: string; id?: string; image?: string } | string;
+                coModerators?: Array<{ _id?: string; id?: string; image?: string }>;
+            } | null;
+            if (group) {
+                for (const p of group.participants ?? []) {
+                    enqueue(p._id ?? p.id, p.image);
+                }
+                const admin = group.admin;
+                if (admin && typeof admin === "object") {
+                    enqueue(admin._id ?? admin.id, admin.image);
+                }
+                for (const cm of group.coModerators ?? []) {
+                    enqueue(cm._id ?? cm.id, cm.image);
                 }
             }
 
             await Promise.all(
                 Array.from(needed.entries()).map(async ([userId, image]) => {
-                    const resolved = await resolveProfileImageSrc(image, 'small', profileImageFetch as any);
+                    const resolved = await resolveProfileImageSrc(image, "small", profileImageFetch as any);
                     if (resolved) profileImageCacheRef.current.set(userId, resolved);
                 }),
             );
@@ -512,7 +547,7 @@ const Messages = ({ theme = "dark", onReplyMessage }: { theme?: string; onReplyM
         return () => {
             cancelled = true;
         };
-    }, [messages]);
+    }, [messages, chosenChatDetails, chosenGroupChatDetails, friends]);
 
     const groupSenderLabel = (message: any) => {
         const aid = String(message?.author?._id ?? message?.author?.id ?? '');
@@ -716,6 +751,11 @@ const Messages = ({ theme = "dark", onReplyMessage }: { theme?: string; onReplyM
                     openSeminarModal={() => set_seminarDetailsModalShow(true)}
                     openEditSeminarModal={() => set_editSeminarModalShow(true)}
                     theme={theme}
+                    peerAvatarSrc={
+                        chosenChatDetails?.userId
+                            ? profileImages.get(String(chosenChatDetails.userId))
+                            : undefined
+                    }
                 />
             </div>
             <div

@@ -13,6 +13,20 @@ describe("ChatHeader status label", () => {
     expect(label).toMatch(/^Offline - last seen /);
   });
 
+  it("renders profile photo when image is a displayable data URL", () => {
+    render(
+      <ChatHeader
+        name="Alex"
+        status="online"
+        avatarInitials="A"
+        image="data:image/png;base64,iVBORw0KGgo="
+      />,
+    );
+
+    const img = screen.getByRole("img", { name: "Alex" });
+    expect(img).toHaveAttribute("src", "data:image/png;base64,iVBORw0KGgo=");
+  });
+
   it("shows one call action, not separate video and voice buttons", () => {
     render(
       <ChatHeader

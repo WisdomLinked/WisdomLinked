@@ -745,9 +745,12 @@ export const profileImageFetch = async (url: string, size: string) => {
             reader.readAsDataURL(blob);
         });
 
-        return base64Data;
+        return typeof base64Data === 'string' ? base64Data : null;
     } catch (err) {
-        return err;
+        if (process.env.NODE_ENV === 'development') {
+            console.warn('profileImageFetch failed', err);
+        }
+        return null;
     }
 };
 

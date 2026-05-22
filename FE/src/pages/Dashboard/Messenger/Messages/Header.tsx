@@ -53,7 +53,7 @@ export const appendMeetingStartMessage = (res: any, dispatch: any) => {
     }
 };
 
-const MessagesHeader = ({ events, openCalendarModal, openSeminarModal, openEditSeminarModal, theme = "dark" }: any) => {
+const MessagesHeader = ({ events, openCalendarModal, openSeminarModal, openEditSeminarModal, theme = "dark", peerAvatarSrc }: any) => {
 
     const navRef = useRef<HTMLDivElement>(null);
     const {
@@ -406,7 +406,7 @@ const MessagesHeader = ({ events, openCalendarModal, openSeminarModal, openEditS
                                         status={peerOnline ? "online" : "offline"}
                                         lastSeen={lastSeenForLabel}
                                         avatarInitials={initials}
-                                        image={chosenChatDetails?.image}
+                                        image={peerAvatarSrc}
                                         theme={theme === "light" ? "light" : "dark"}
                                         onNameAreaClick={() => {
                                             void handleProfileModalOpen(chosenChatDetails);

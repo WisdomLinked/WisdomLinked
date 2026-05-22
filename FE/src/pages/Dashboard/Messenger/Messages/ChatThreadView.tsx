@@ -86,6 +86,42 @@ function initialsFromLabel(name: string): string {
     return (parts[0]?.charAt(0) || '?').toUpperCase();
 }
 
+function ThreadIncomingAvatar({
+    photoSrc,
+    initials,
+    theme,
+}: {
+    photoSrc?: string;
+    initials: string;
+    theme: string;
+}) {
+    const [imgFailed, setImgFailed] = useState(false);
+    const showPhoto = Boolean(photoSrc) && !imgFailed;
+    const shellClass = `absolute left-0 bottom-5 flex h-[30px] w-[30px] flex-shrink-0 items-center justify-center overflow-hidden rounded-full text-[11px] font-semibold ${
+        theme === 'light' ? 'bg-stone-200 text-stone-800' : 'bg-gray-100 text-gray-700'
+    }`;
+
+    if (showPhoto) {
+        return (
+            <div className={shellClass} aria-hidden>
+                <img
+                    src={photoSrc}
+                    alt=""
+                    data-testid="thread-incoming-avatar-photo"
+                    className="h-full w-full object-cover"
+                    onError={() => setImgFailed(true)}
+                />
+            </div>
+        );
+    }
+
+    return (
+        <div className={shellClass} aria-hidden>
+            {initials}
+        </div>
+    );
+}
+
 function stripMessageText(raw: string): string {
     if (typeof document === 'undefined') {
         return raw
@@ -494,19 +530,15 @@ const ChatThreadView: React.FC<ChatThreadViewProps> = ({
                 const firstSrc = sources[0];
                 const displayName = groupSenderLabel(firstSrc);
                 const avatarLetter = initialsFromLabel(displayName);
+                const authorId = String(firstSrc.author?._id ?? '');
 
                 return (
                     <div key={key} className={`relative w-full pl-10 pr-2 sm:pr-3 ${mb}`}>
-                        <div
-                            className={`absolute left-0 bottom-5 flex h-[30px] w-[30px] flex-shrink-0 items-center justify-center rounded-full text-[11px] font-semibold ${
-                                theme === 'light'
-                                    ? 'bg-stone-200 text-stone-800'
-                                    : 'bg-gray-100 text-gray-700'
-                            }`}
-                            aria-hidden
-                        >
-                            {avatarLetter}
-                        </div>
+                        <ThreadIncomingAvatar
+                            photoSrc={profileImages.get(authorId)}
+                            initials={avatarLetter}
+                            theme={theme}
+                        />
                         <div className="flex min-w-0 max-w-[min(100%,36rem)] flex-col items-start gap-0.5">
                             {showGroupNames ? (
                                 <div
