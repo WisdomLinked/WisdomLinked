@@ -241,4 +241,54 @@ describe("MeetingCard", () => {
       expect(writeText).toHaveBeenCalledWith(`${window.location.origin}/meeting/invite/invite-token-123`);
     });
   });
+
+  it("shows View meet chat toggle and left/right bubbles for transcript", async () => {
+    vi.mocked(chatApi.getMeetingThread).mockResolvedValue({
+      meeting: {
+        transcript: [
+          {
+            authorName: "Expert Name",
+            author: { _id: "expert-id", username: "Expert" },
+            content: "from expert",
+            createdAt: "2026-05-22T20:00:00.000Z",
+          },
+          {
+            authorName: "Student User",
+            author: { _id: "student-id", username: "Student" },
+            content: "from student",
+            createdAt: "2026-05-22T20:01:00.000Z",
+          },
+        ],
+      },
+    });
+    vi.mocked(chatApi.getMeetingRatingState).mockResolvedValue({
+      canRate: false,
+      ratingBlockedReason: "n/a",
+      hasRated: false,
+    });
+
+    render(
+      <MeetingCard
+        meetingThreadId="t-chat"
+        jitsiRoomName="wl-room-chat"
+        starterName="Expert"
+        isEnded
+        theme="light"
+        viewerUserId="student-id"
+        viewerDisplayName="Student User"
+      />,
+    );
+
+    expect(screen.getByText(/View meet chat/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByText(/View meet chat/i));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("meeting-card-chat")).toBeInTheDocument();
+    });
+
+    expect(screen.getByText("from expert")).toBeInTheDocument();
+    expect(screen.getByText("from student")).toBeInTheDocument();
+    expect(screen.getByTestId("meeting-chat-in")).toBeInTheDocument();
+    expect(screen.getByTestId("meeting-chat-out")).toBeInTheDocument();
+  });
 });

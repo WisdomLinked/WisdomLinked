@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { isMeetingChatSelf } from "./meetingChatSelf";
+import { isMeetingChatSelf, isTranscriptLineSelf } from "./meetingChatSelf";
 
 describe("isMeetingChatSelf", () => {
   const student = {
@@ -61,6 +61,41 @@ describe("isMeetingChatSelf", () => {
         { author: "Expert Name", guest: false, senderId: "expert-id" },
         student,
         () => false,
+      ),
+    ).toBe(false);
+  });
+});
+
+describe("isTranscriptLineSelf", () => {
+  const student = {
+    _id: "student-id",
+    username: "Student User",
+    email: "student@tamu.edu",
+  };
+
+  it("matches transcript author Mongo id", () => {
+    expect(
+      isTranscriptLineSelf(
+        { authorName: "Student User", author: { _id: "student-id" }, content: "hi" },
+        student,
+      ),
+    ).toBe(true);
+  });
+
+  it("matches authorName when author id missing", () => {
+    expect(
+      isTranscriptLineSelf(
+        { authorName: "Student User", content: "hi" },
+        student,
+      ),
+    ).toBe(true);
+  });
+
+  it("returns false for other participant", () => {
+    expect(
+      isTranscriptLineSelf(
+        { authorName: "Expert Name", author: { _id: "expert-id" }, content: "hi" },
+        student,
       ),
     ).toBe(false);
   });

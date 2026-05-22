@@ -8,6 +8,8 @@ import {
 } from '../api/chatApi';
 import { formatMessageTime } from '../utils/formatMessageTime';
 import { trackMeetingJoin } from '../utils/meetingSession';
+import { isTranscriptLineSelf } from '../utils/meetingChatSelf';
+import MeetingChatBubble from '../pages/Dashboard/Messenger/Messages/MeetingChatBubble';
 
 const MEET_EXPIRY_MS = 2 * 60 * 60 * 1000; // 2 hours
 
@@ -23,12 +25,15 @@ interface MeetingCardProps {
     participantCount?: number;
     theme?: 'dark' | 'light';
     onJoin?: (jitsiUrl: string) => void;
+    viewerUserId?: string;
+    viewerDisplayName?: string;
 }
 
 interface TranscriptLine {
     authorName?: string;
-    author?: { username?: string };
+    author?: { _id?: string; id?: string; username?: string };
     content?: string;
+    createdAt?: string | number | Date;
 }
 
 const formatDuration = (seconds: number): string => {
@@ -57,6 +62,8 @@ const MeetingCard: React.FC<MeetingCardProps> = ({
     participantCount = 0,
     theme = 'dark',
     onJoin,
+    viewerUserId,
+    viewerDisplayName,
 }) => {
     const [expanded, setExpanded] = useState(false);
     const [transcript, setTranscript] = useState<TranscriptLine[]>([]);
@@ -109,7 +116,13 @@ const MeetingCard: React.FC<MeetingCardProps> = ({
     };
 
     const isDark = theme === 'dark';
+    const cardTheme = isDark ? 'dark' : 'light';
     const startedAtLocalTime = formatStartedAtLocalTime(startedAt);
+    const viewer = {
+        _id: viewerUserId,
+        userId: viewerUserId,
+        username: viewerDisplayName,
+    };
 
     const expiryAnchor = createdAt ?? startedAt;
     const expiryMs =
@@ -265,7 +278,11 @@ const MeetingCard: React.FC<MeetingCardProps> = ({
                                 : 'text-[#234C6A] hover:bg-stone-100'
                         }`}
                     >
-                        {loading ? 'Loading...' : expanded ? '▼ Hide transcript' : '▶ Show meeting transcript'}
+                        {loading
+                            ? 'Loading meet chat...'
+                            : expanded
+                              ? '▼ Hide meet chat'
+                              : '▶ View meet chat'}
                     </button>
                     {canRate ? (
                         <div className="mt-2">
@@ -324,26 +341,56 @@ const MeetingCard: React.FC<MeetingCardProps> = ({
 
                 {expanded && transcript.length > 0 && (
                     <div
-                        className={`px-4 pb-3 space-y-1.5 max-h-60 overflow-y-auto ${
+                        data-testid="meeting-card-chat"
+                        className={`px-3 pb-3 pt-2 max-h-60 overflow-y-auto ${
                             isDark ? 'border-t border-[#2a2a4a]' : 'border-t border-stone-200'
                         }`}
                     >
-                        {transcript.map((msg, i) => (
-                            <div key={i} className="pt-1.5">
-                                <span className={`text-xs font-semibold ${isDark ? 'text-blue-300' : 'text-[#234C6A]'}`}>
-                                    {msg.authorName || msg.author?.username || 'Unknown'}
-                                </span>
-                                <span className={`text-xs ml-2 ${isDark ? 'text-gray-300' : 'text-slate-700'}`}>
-                                    {msg.content}
-                                </span>
-                            </div>
-                        ))}
+                        {transcript.map((msg, i) => {
+                            const authorLabel =
+                                msg.authorName || msg.author?.username || 'Unknown';
+                            const isSelf = isTranscriptLineSelf(
+                                msg,
+                                viewer,
+                                viewerDisplayName,
+                            );
+                            const prev = transcript[i - 1];
+                            const prevSelf = prev
+                                ? isTranscriptLineSelf(prev, viewer, viewerDisplayName)
+                                : null;
+                            const tightTop = prevSelf === isSelf;
+                            const created = msg.createdAt
+                                ? new Date(msg.createdAt)
+                                : null;
+                            const timeLabel =
+                                created && !Number.isNaN(created.getTime())
+                                    ? formatMessageTime(created)
+                                    : '';
+                            return (
+                                <div
+                                    key={`${i}-${authorLabel}-${String(msg.content || '').slice(0, 24)}`}
+                                    className={tightTop ? 'mt-0.5' : 'mt-1.5'}
+                                >
+                                    <MeetingChatBubble
+                                        isSelf={isSelf}
+                                        authorLabel={authorLabel}
+                                        guest={false}
+                                        msg={String(msg.content || '')}
+                                        timeLabel={timeLabel}
+                                        theme={cardTheme}
+                                        testId={
+                                            isSelf ? 'meeting-chat-out' : 'meeting-chat-in'
+                                        }
+                                    />
+                                </div>
+                            );
+                        })}
                     </div>
                 )}
 
                 {expanded && transcript.length === 0 && !loading && (
                     <div className={`px-4 py-2 text-xs ${isDark ? 'text-gray-500' : 'text-slate-400'}`}>
-                        No messages were sent during this meeting.
+                        No messages were sent during this call.
                     </div>
                 )}
             </div>

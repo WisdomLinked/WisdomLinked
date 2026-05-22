@@ -2,11 +2,9 @@ import React, { useCallback, useMemo, useState } from 'react';
 import type { Message as MessageModel } from '../../../../actions/types';
 import { formatDividerDate, formatMessageTime } from '../../../../utils/formatMessageTime';
 import Message from './Message';
-import MeetingChatPanel from './MeetingChatPanel';
 import MeetingCard from '../../../../components/MeetingCard';
 import ChatSystemNotice from './ChatSystemNotice';
 import { parseMeetingMessageContent } from '../../../../utils/meetingMessage';
-import { isMeetingChatSelf } from '../../../../utils/meetingChatSelf';
 import { buildMeetingThreadMaps } from '../../../../utils/meetingThreadMaps';
 import { useMeetingStatusReconcile } from '../../../../hooks/useMeetingStatusReconcile';
 import { peelWisdomLinkedReplyQuotes } from '../../../../utils/chatReplyLayout';
@@ -62,18 +60,13 @@ type TimelineItem =
           message: DisplayMessage;
           meeting: Extract<ReturnType<typeof parseMeetingMessageContent>, { type: 'ended' }>;
       }
-    | {
-          kind: 'meeting-chat-block';
-          meetingThreadId: string;
-          lines: Array<{
-              message: DisplayMessage;
-              chat: Extract<ReturnType<typeof parseMeetingMessageContent>, { type: 'chat-line' }>;
-          }>;
-      }
     | { kind: 'legacy'; message: DisplayMessage }
     | BubbleTimelineItem;
 
-type MeetingChatLineParsed = Extract<ReturnType<typeof parseMeetingMessageContent>, { type: 'chat-line' }>;
+function viewerUserIdFromDetails(userDetails: ChatThreadViewProps['userDetails']): string | undefined {
+    const id = userDetails?._id ?? userDetails?.userId ?? userDetails?.id;
+    return id != null && id !== '' ? String(id) : undefined;
+}
 
 function calendarDayKey(d: Date): string {
     return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
@@ -227,23 +220,6 @@ function buildTimeline(
         }
         if (meetingData?.type === 'chat-line') {
             flushBuffer();
-            const lines: Array<{ message: DisplayMessage; chat: MeetingChatLineParsed }> = [
-                { message, chat: meetingData },
-            ];
-            const threadId = meetingData.meetingThreadId;
-            while (i + 1 < displayMessages.length) {
-                const nextMsg = displayMessages[i + 1];
-                const nextMeet = parseMeetingMessageContent(String(nextMsg.content || ''));
-                if (
-                    nextMeet?.type !== 'chat-line' ||
-                    nextMeet.meetingThreadId !== threadId
-                ) {
-                    break;
-                }
-                lines.push({ message: nextMsg, chat: nextMeet });
-                i += 1;
-            }
-            timeline.push({ kind: 'meeting-chat-block', meetingThreadId: threadId, lines });
             continue;
         }
 
@@ -299,6 +275,8 @@ const ChatThreadView: React.FC<ChatThreadViewProps> = ({
     const showGroupNames = Boolean(chosenGroupChatDetails) && !chosenChatDetails;
     const dmPeer = chosenChatDetails as { username?: string } | null | undefined;
     const replyPeerDisplayName = dmPeer?.username ? String(dmPeer.username) : undefined;
+    const viewerUserId = viewerUserIdFromDetails(userDetails);
+    const viewerDisplayName = wlDisplayName(userDetails);
     const [highlightMessageId, setHighlightMessageId] = useState<string | null>(null);
 
     const scrollToMessage = useCallback((messageId: string) => {
@@ -327,9 +305,7 @@ const ChatThreadView: React.FC<ChatThreadViewProps> = ({
                         ? `d-${entry.date.toISOString()}`
                         : entry.kind === 'bubble'
                           ? `bubble-${entry.sources[0]?._id}-${idx}`
-                          : entry.kind === 'meeting-chat-block'
-                            ? `meet-block-${entry.meetingThreadId}-${entry.lines[0]?.message._id}-${idx}`
-                            : `${entry.kind}-${(entry as { message: DisplayMessage }).message._id}-${idx}`;
+                          : `${entry.kind}-${(entry as { message: DisplayMessage }).message._id}-${idx}`;
 
                 if (entry.kind === 'date') {
                     const lineCls = theme === 'light' ? 'bg-stone-200' : 'bg-gray-200';
@@ -367,6 +343,8 @@ const ChatThreadView: React.FC<ChatThreadViewProps> = ({
                                 duration={endInfo?.duration}
                                 participantCount={endInfo?.participantCount}
                                 theme={theme === 'light' ? 'light' : 'dark'}
+                                viewerUserId={viewerUserId}
+                                viewerDisplayName={viewerDisplayName}
                             />
                         </div>
                     );
@@ -388,35 +366,9 @@ const ChatThreadView: React.FC<ChatThreadViewProps> = ({
                                 duration={entry.meeting.duration}
                                 participantCount={entry.meeting.participantCount}
                                 theme={theme === 'light' ? 'light' : 'dark'}
+                                viewerUserId={viewerUserId}
+                                viewerDisplayName={viewerDisplayName}
                             />
-                        </div>
-                    );
-                }
-
-                if (entry.kind === 'meeting-chat-block') {
-                    const panelLines = entry.lines.map((line) => {
-                        const isSelf = isMeetingChatSelf(
-                            line.message,
-                            {
-                                author: line.chat.author,
-                                guest: line.chat.guest,
-                                senderId: line.chat.senderId,
-                            },
-                            userDetails,
-                            isOutgoingMessage,
-                        );
-                        return {
-                            messageId: String(line.message._id),
-                            isSelf,
-                            authorLabel: line.chat.author,
-                            guest: line.chat.guest,
-                            msg: line.chat.msg,
-                            timeLabel: formatMessageTime(new Date(line.message.createdAt)),
-                        };
-                    });
-                    return (
-                        <div key={key} className={`w-full px-2 sm:px-3 ${marginAfterNonBubble(next)}`}>
-                            <MeetingChatPanel lines={panelLines} theme={theme} />
                         </div>
                     );
                 }

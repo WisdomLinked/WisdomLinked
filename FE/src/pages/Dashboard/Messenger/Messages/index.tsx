@@ -263,9 +263,9 @@ const Messages = ({ theme = "dark", onReplyMessage }: { theme?: string; onReplyM
             const rcMsg = normalizeRcStreamRoomMessage(rawRc);
             // Skip echoes of our own sends (REST already appended with Mongo author._id).
             // In-call meet lines are posted to RC from the Jitsi tab (no prior local append), so keep them.
+            const meetingLineEarly = parseMeetingMessageContent(String(rcMsg.msg || ''));
             if (isRcStreamFromMe(rcMsg, userDetails)) {
-                const meetingLine = parseMeetingMessageContent(String(rcMsg.msg || ''));
-                if (meetingLine?.type !== 'chat-line') return;
+                if (meetingLineEarly?.type !== 'chat-line') return;
             }
             if (rcMsg?._hidden) return;
             const t = rcMsg?.t;
@@ -284,12 +284,14 @@ const Messages = ({ theme = "dark", onReplyMessage }: { theme?: string; onReplyM
                 st.chat.chosenGroupChatDetails?.groupName ||
                 'New message';
             const bodyText = stripChatHtml(String(rcMsg.msg || ''));
+            const skipNotifyForMeetChat = meetingLineEarly?.type === 'chat-line';
             const tabHidden = typeof document !== 'undefined' && document.visibilityState === 'hidden';
             const skipNotifyForRcSystem = canonicalMembershipSide(String(t || '')) != null;
             const windowBlurred =
                 typeof document !== 'undefined' && typeof document.hasFocus === 'function' && !document.hasFocus();
             const shouldNotify =
                 bodyText &&
+                !skipNotifyForMeetChat &&
                 !skipNotifyForRcSystem &&
                 (tabHidden || otherRoom || windowBlurred);
             if (shouldNotify) {

@@ -59,3 +59,38 @@ export function isMeetingChatSelf(
 
   return false;
 }
+
+export type TranscriptLineForSelf = {
+  authorName?: string;
+  author?: { _id?: string; id?: string; username?: string };
+};
+
+/**
+ * Whether a Mongo transcript row was sent by the viewer (MeetingCard meet chat).
+ */
+export function isTranscriptLineSelf(
+  line: TranscriptLineForSelf,
+  viewer: MeetingChatSelfUser | null | undefined,
+  viewerDisplayName?: string,
+): boolean {
+  if (!viewer) return false;
+
+  const authorId = String(line.author?._id ?? line.author?.id ?? "").trim();
+  if (authorId) {
+    const mine = myWlUserIds(viewer);
+    if (mine.includes(authorId)) return true;
+  }
+
+  const authorLabel = normalizeLabel(
+    String(line.authorName || line.author?.username || ""),
+  );
+  const myLabel = normalizeLabel(
+    viewerDisplayName || wlDisplayName(viewer),
+  );
+  if (authorLabel && myLabel && authorLabel === myLabel) return true;
+
+  const rawUsername = normalizeLabel(String(viewer.username || ""));
+  if (authorLabel && rawUsername && authorLabel === rawUsername) return true;
+
+  return false;
+}
