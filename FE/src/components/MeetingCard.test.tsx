@@ -242,7 +242,7 @@ describe("MeetingCard", () => {
     });
   });
 
-  it("shows View meet chat toggle and left/right bubbles for transcript", async () => {
+  it("shows View meet chat toggle and simple transcript list", async () => {
     vi.mocked(chatApi.getMeetingThread).mockResolvedValue({
       meeting: {
         transcript: [
@@ -274,8 +274,6 @@ describe("MeetingCard", () => {
         starterName="Expert"
         isEnded
         theme="light"
-        viewerUserId="student-id"
-        viewerDisplayName="Student User"
       />,
     );
 
@@ -288,7 +286,7 @@ describe("MeetingCard", () => {
 
     expect(screen.getByText("from expert")).toBeInTheDocument();
     expect(screen.getByText("from student")).toBeInTheDocument();
-    expect(screen.getByTestId("meeting-chat-in")).toBeInTheDocument();
-    expect(screen.getByTestId("meeting-chat-out")).toBeInTheDocument();
+    expect(screen.queryByTestId("meeting-chat-in")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("meeting-chat-out")).not.toBeInTheDocument();
   });
 });

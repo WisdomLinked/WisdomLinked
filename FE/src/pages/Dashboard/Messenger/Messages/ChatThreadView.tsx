@@ -63,11 +63,6 @@ type TimelineItem =
     | { kind: 'legacy'; message: DisplayMessage }
     | BubbleTimelineItem;
 
-function viewerUserIdFromDetails(userDetails: ChatThreadViewProps['userDetails']): string | undefined {
-    const id = userDetails?._id ?? userDetails?.userId ?? userDetails?.id;
-    return id != null && id !== '' ? String(id) : undefined;
-}
-
 function calendarDayKey(d: Date): string {
     return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
 }
@@ -275,8 +270,6 @@ const ChatThreadView: React.FC<ChatThreadViewProps> = ({
     const showGroupNames = Boolean(chosenGroupChatDetails) && !chosenChatDetails;
     const dmPeer = chosenChatDetails as { username?: string } | null | undefined;
     const replyPeerDisplayName = dmPeer?.username ? String(dmPeer.username) : undefined;
-    const viewerUserId = viewerUserIdFromDetails(userDetails);
-    const viewerDisplayName = wlDisplayName(userDetails);
     const [highlightMessageId, setHighlightMessageId] = useState<string | null>(null);
 
     const scrollToMessage = useCallback((messageId: string) => {
@@ -343,8 +336,6 @@ const ChatThreadView: React.FC<ChatThreadViewProps> = ({
                                 duration={endInfo?.duration}
                                 participantCount={endInfo?.participantCount}
                                 theme={theme === 'light' ? 'light' : 'dark'}
-                                viewerUserId={viewerUserId}
-                                viewerDisplayName={viewerDisplayName}
                             />
                         </div>
                     );
@@ -366,8 +357,6 @@ const ChatThreadView: React.FC<ChatThreadViewProps> = ({
                                 duration={entry.meeting.duration}
                                 participantCount={entry.meeting.participantCount}
                                 theme={theme === 'light' ? 'light' : 'dark'}
-                                viewerUserId={viewerUserId}
-                                viewerDisplayName={viewerDisplayName}
                             />
                         </div>
                     );
