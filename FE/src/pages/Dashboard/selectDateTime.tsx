@@ -1,21 +1,19 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { Calendar } from "react-big-calendar";
 import CloseIcon from '@mui/icons-material/Close';
 import "react-big-calendar/lib/css/react-big-calendar.css";
-import { isSlotUnavailable, makeAnOffsetToAvailableTimeSlots, slotToTime } from "../../actions/common";
-// https://codesandbox.io/s/blazing-pond-47crhl?file=/src/ReactBigCalendar.js
+import { isSlotUnavailable, slotToTime } from "../../actions/common";
 import { localizer } from "../../actions/common"
-import { SetLoadingStatus } from "../../actions/appActions";
-import { getDailyTimeSlots } from "../../api/api";
 import { useAppSelector } from "../../store";
 import LegendCalendar from "../../components/LegendCalendar"
-
-function toYMDLocal(d: Date) {
-    const y = d.getFullYear();
-    const m = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
-    return `${y}-${m}-${day}`;
-}
+import BookingTimeZoneControl from "../../components/scheduling/BookingTimeZoneControl";
+import {
+    convertExpertSlotsToViewer,
+    detectUserTimeZone,
+    resolveViewerTimeZone,
+    toYMDInTimeZone,
+} from "../../utils/schedulingTimezone";
+import type { BookingDisplayTimeZoneMode } from "../../types/scheduling";
 
 const SelectDateTime = ({
     setStartEndTime,
@@ -29,20 +27,32 @@ const SelectDateTime = ({
     const { auth: { userDetails } } = useAppSelector((state) => state);
 
     const [events, set_events] = useState<Array<any>>([])
-    const [availableSlots, set_availableSlots] = useState([])
+    const [rawExpertSlots, set_rawExpertSlots] = useState<number[]>([])
 
     const [modalShow, set_modalShow] = useState(false)
+    const [tzMode, setTzMode] = useState<BookingDisplayTimeZoneMode>('mine');
+    const [customTz, setCustomTz] = useState(detectUserTimeZone());
 
-    // Date Selection -------
+    const expertTz = (selectedUser as any)?.timeZone || 'UTC';
+    const viewerTz = resolveViewerTimeZone(
+        tzMode,
+        userDetails?.timeZone || detectUserTimeZone(),
+        expertTz,
+        customTz,
+    );
+
+    const availableSlots = useMemo(
+        () => convertExpertSlotsToViewer(rawExpertSlots, expertTz, viewerTz),
+        [rawExpertSlots, expertTz, viewerTz],
+    );
+
     const [selectedDate, set_selectedDate] = useState<any>(null)
-    // Time Selection -------
     const durations = [30, 60, 90]
     const [duration, set_duration] = useState(30)
     const [timeSlots, set_timeSlots] = useState<Array<any>>([])
     const [selectedTimeSlot, set_selectedTimeSlot] = useState<any>()
     const [selectedIndex, set_selectedIndex] = useState(-1);
     const [showTimeSlotSelector, set_showTimeSlotSelector] = useState(false);
-
 
     const toggleTimeSlotSelector = () => {
         set_showTimeSlotSelector(!showTimeSlotSelector);
@@ -56,80 +66,23 @@ const SelectDateTime = ({
         set_duration(value);
     };
 
-    const eventStyleGetter = (event: any, start: any, end: any) => {
+    const eventStyleGetter = (event: any, _start: any, end: any) => {
         const now = new Date()
+        const isLegacy = event.type === 'event';
         const style = end < now ? {
-            backgroundColor: event.type === 'event' ? '#000000' : '#6C7278',
+            backgroundColor: isLegacy ? '#000000' : '#6C7278',
             borderRadius: '0px',
             opacity: 0.7,
-            color: event.type === 'event' ? (event.status === 'accepted' ? '#31B099' : event.status === 'pending' ? '#a87723' : 'red') : 'black',
+            color: isLegacy ? (event.status === 'accepted' ? '#31B099' : event.status === 'pending' ? '#a87723' : 'red') : 'black',
         } : {
-            backgroundColor: event.type === 'event' ? (event.status === 'accepted' ? '#31B099' : event.status === 'pending' ? '#a87723' : 'red') : 'white',
+            backgroundColor: isLegacy ? (event.status === 'accepted' ? '#31B099' : event.status === 'pending' ? '#a87723' : 'red') : 'white',
             borderRadius: '0px',
             opacity: 1,
-            color: event.type === 'event' ? 'white' : 'black',
+            color: isLegacy ? 'white' : 'black',
             border: '0px',
         };
-        return {
-            style: style,
-        };
+        return { style };
     };
-
-    const dayStyleGetter = useCallback(
-        (date: Date) => {
-            const today = new Date().setHours(0, 0, 0, 0); // Normalize today's date to midnight
-    
-            // Style for past dates
-            if (date.getTime() < today) {
-                return {
-                    style: {
-                        backgroundColor: '#141414',
-                        cursor: 'not-allowed',
-                    },
-                };
-            }
-    
-            // Check if the date has an event
-            const hasEvent = events.some(
-                (event) =>
-                    date.getTime() >= new Date(event.start).setHours(0, 0, 0, 0) &&
-                    date.getTime() <= new Date(event.end).setHours(23, 59, 59, 999)
-            );
-            
-            let availableTimeSlots = getAvailableTimeSlots(date, duration)
-            let backgroundColor
-            let cursorStyle = 'pointer'
-            if(selectedIndex === -1)
-            {
-                if(!availableTimeSlots.length){
-                    backgroundColor = '#f94144'
-                    cursorStyle = 'not-allowed';
-                }
-                else if(hasEvent){
-                    backgroundColor = '#f9a826'
-                } else {
-                    backgroundColor = '#30B199'
-                }
-            }
-            else{
-                if(availableTimeSlots.includes(selectedIndex)){
-                    backgroundColor = '#30B199'
-                }
-                else{
-                    backgroundColor = '#f94144'
-                    cursorStyle = 'not-allowed';
-                }
-            }
-    
-            return {
-                style: {
-                    backgroundColor, 
-                    cursorStyle
-                },
-            };
-        },
-        [events, selectedIndex, duration, availableSlots, selectedUser]
-    );
 
     const isToday = (selectedDate: any) => {
         const today = new Date();
@@ -138,25 +91,22 @@ const SelectDateTime = ({
             selectedDate.getFullYear() === today.getFullYear();
     }
 
-    const getAvailableTimeSlots = (selectedDate: any, duration: number) => {
+    const getAvailableTimeSlots = useCallback((selectedDate: any, duration: number) => {
         const dayStartTime = new Date(selectedDate).getTime()
         const dayEndTime = dayStartTime + (24 * 60 * 60 * 1000) - 1
         const start = new Date(dayStartTime)
         const end = new Date(dayEndTime)
-        // events of the selected date 
         const selectedEvents = events?.filter((item: any) =>
             item.start >= start && item.end <= end
         );
 
-        let _availableSlots: Array<any> = []
-        const timezoneOffset = - new Date().getTimezoneOffset() / 30
-        _availableSlots = makeAnOffsetToAvailableTimeSlots(availableSlots || [], timezoneOffset)
+        let _availableSlots: Array<any> = [...(availableSlots || [])]
 
         _availableSlots.splice(_availableSlots.length - (duration / 30 - 1), duration / 30 - 1)
 
         if (isToday(selectedDate)) {
             const startOfToday = new Date();
-            startOfToday.setHours(0, 0, 0, 0); // Set the time to 00:00:00.000
+            startOfToday.setHours(0, 0, 0, 0);
             const now = new Date();
             const timeDiffInMs = now.getTime() - startOfToday.getTime();
             const nextSlot = Math.floor(timeDiffInMs / (1000 * 60 * 30))
@@ -190,54 +140,112 @@ const SelectDateTime = ({
         });
 
         return updatedAvailableSlots;
-    }
+    }, [events, availableSlots, selectedUser]);
 
     const isDateAvailable = (date: number) => {
         const today = new Date().setHours(0, 0, 0, 0);
-        
-        // If date is in the past, it's not available
+
         if (date < today) {
             return false;
         }
 
         const dayDate = new Date(date);
         const blocked = (selectedUser as any)?.blockedBookingDates;
-        if (Array.isArray(blocked) && blocked.includes(toYMDLocal(dayDate))) {
+        const expertTz = (selectedUser as any)?.timeZone || 'UTC';
+        if (Array.isArray(blocked) && blocked.includes(toYMDInTimeZone(dayDate, expertTz))) {
             return false;
         }
-        
-        // Check if the date has available time slots
+
         const availableTimeSlots = getAvailableTimeSlots(date, duration);
         if (availableTimeSlots.length === 0) {
             return false;
         }
-        
-        // If we have a selected index, check if that time slot is available on this date
+
         if (selectedIndex >= 0) {
             return availableTimeSlots.includes(selectedIndex);
         }
-        
+
         return true;
     };
-    
-    // Modify the handleSelectDate function to check availability
+
+    const dayStyleGetter = useCallback(
+        (date: Date) => {
+            const today = new Date().setHours(0, 0, 0, 0);
+
+            if (date.getTime() < today) {
+                return {
+                    style: {
+                        backgroundColor: '#141414',
+                        cursor: 'not-allowed',
+                    },
+                };
+            }
+
+            const hasEvent = events.some(
+                (event) =>
+                    date.getTime() >= new Date(event.start).setHours(0, 0, 0, 0) &&
+                    date.getTime() <= new Date(event.end).setHours(23, 59, 59, 999)
+            );
+
+            let availableTimeSlots = getAvailableTimeSlots(date, duration)
+            let backgroundColor
+            let cursorStyle = 'pointer'
+            if (selectedIndex === -1) {
+                if (!availableTimeSlots.length) {
+                    backgroundColor = '#f94144'
+                    cursorStyle = 'not-allowed';
+                }
+                else if (hasEvent) {
+                    backgroundColor = '#f9a826'
+                } else {
+                    backgroundColor = '#30B199'
+                }
+            }
+            else {
+                if (availableTimeSlots.includes(selectedIndex)) {
+                    backgroundColor = '#30B199'
+                }
+                else {
+                    backgroundColor = '#f94144'
+                    cursorStyle = 'not-allowed';
+                }
+            }
+
+            return {
+                style: {
+                    backgroundColor,
+                    cursorStyle
+                },
+            };
+        },
+        [events, selectedIndex, duration, getAvailableTimeSlots]
+    );
+
+    const saveAndNext = (slotOverride?: number) => {
+        const slot = slotOverride !== undefined ? slotOverride : selectedTimeSlot;
+        if (!selectedDate || slot === undefined || slot === null) {
+            console.error("Invalid date or time slot");
+            return;
+        }
+        const dayStartTime = new Date(selectedDate).getTime()
+        const eventStartTime = dayStartTime + slot * 1800 * 1000
+        const eventEndTime = eventStartTime + duration * 60 * 1000
+        setStartEndTime(new Date(eventStartTime), new Date(eventEndTime), duration)
+    }
+
     const handleSelectDate = ({ start, end }: any) => {
         const dayStartTime = new Date(start).getTime();
         const dayEndTime = new Date(end).getTime();
-        
-        // Check if it's a full day selection and the date is not in the past
+
         if ((dayEndTime - dayStartTime) === 3600 * 24 * 1000 && dayEndTime >= new Date().getTime()) {
-            // Check if the date is available
             if (!isDateAvailable(start)) {
-                // Date is unavailable (red), so we don't proceed
                 return;
             }
-            
-            // Date is available, proceed as normal
+
             set_selectedDate(start);
             if (selectedIndex >= 0) {
                 set_selectedTimeSlot(selectedIndex);
-                saveAndNext();
+                saveAndNext(selectedIndex);
             } else {
                 set_modalShow(true);
             }
@@ -245,7 +253,7 @@ const SelectDateTime = ({
     };
 
     const updateTimeSlots = async () => {
-        const _availableSlots = await getAvailableTimeSlots(selectedDate, duration)
+        const _availableSlots = getAvailableTimeSlots(selectedDate, duration)
         set_timeSlots([..._availableSlots])
     }
 
@@ -253,117 +261,121 @@ const SelectDateTime = ({
         if (selectedDate && modalShow) {
             updateTimeSlots()
         }
-    }, [duration, selectedDate, modalShow, selectedUser])
-
-    const saveAndNext = () => {
-        if (!selectedDate || selectedTimeSlot === undefined) {
-            console.error("Invalid date or time slot");
-            return;
-        }
-        const dayStartTime = new Date(selectedDate).getTime()
-        const eventStartTime = dayStartTime + selectedTimeSlot * 1800 * 1000
-        const eventEndTime = eventStartTime + duration * 60 * 1000
-        setStartEndTime(new Date(eventStartTime), new Date(eventEndTime), duration)
-    }
+    }, [duration, selectedDate, modalShow, selectedUser, availableSlots, events])
 
     useEffect(() => {
         if (userDetails.role === 'customer') {
-            set_availableSlots(selectedUser?.timeSlots || [])
+            set_rawExpertSlots(selectedUser?.timeSlots || [])
         } else {
-            set_availableSlots(userDetails?.timeSlots || [])
+            set_rawExpertSlots(userDetails?.timeSlots || [])
         }
-        let temp = selectedUser?.events.map((event: any) => {
-            return {
+
+        const temp: any[] = []
+        selectedUser?.events?.forEach((event: any) => {
+            temp.push({
                 ...event,
                 id: event._id,
                 start: new Date(event.start),
                 end: new Date(event.end),
+                title: `(Legacy) ${event.title || 'Session'}`,
                 type: 'event'
-            }
-        })
-        selectedUser?.groupChats.map((seminar: any) => {
-            temp.push({
-                ...seminar,
-                id: seminar._id,
-                start: new Date(seminar.start),
-                end: new Date(seminar.end),
-                title: '(S)' + seminar.name,
-                type: 'seminar'
             })
         })
-        selectedUser?.pendingGroupChats.map((item: any) => {
+        selectedUser?.groupChats?.forEach((gc: any) => {
+            const prefix =
+                gc.type === 'individual'
+                    ? '(1:1)'
+                    : gc.type === 'seminar'
+                        ? '(S)'
+                        : '(G)';
+            temp.push({
+                ...gc,
+                id: gc._id,
+                start: new Date(gc.start),
+                end: new Date(gc.end),
+                title: `${prefix} ${gc.name}`,
+                type: gc.type === 'individual' ? 'individual' : 'seminar',
+            })
+        })
+        selectedUser?.pendingGroupChats?.forEach((item: any) => {
             temp.push({
                 ...item.groupChatId,
                 id: item.groupChatId?._id,
                 start: new Date(item.groupChatId?.start),
                 end: new Date(item.groupChatId?.end),
-                title: '(PS)' + item.groupChatId?.name,
+                title: '(PS) ' + item.groupChatId?.name,
                 type: 'pending seminar'
             })
         })
-        myEvents?.map((event: any) => {
+        myEvents?.forEach((event: any) => {
             temp.push(event)
         })
-        set_events([...temp])
-    }, [selectedUser, myEvents])
+        set_events(temp)
+    }, [selectedUser, myEvents, userDetails.role, userDetails?.timeSlots])
 
-    
     const generateTimeSlotIndices = () => {
         const slots = [];
-        let currentTime = new Date("2025-04-06T00:00:00"); // Start at 12:00 AM
-        const endTime = new Date("2025-04-06T23:30:00"); // End at 11:30 PM
+        let currentTime = new Date("2025-04-06T00:00:00");
+        const endTime = new Date("2025-04-06T23:30:00");
         let index = 0;
-      
+
         while (currentTime <= endTime) {
-          slots.push({ index, time: currentTime.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: true }) });
-          currentTime = new Date(currentTime.getTime() + 30 * 60 * 1000); // Increment by 30 minutes
-          index++;
+            slots.push({ index, time: currentTime.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: true }) });
+            currentTime = new Date(currentTime.getTime() + 30 * 60 * 1000);
+            index++;
         }
-      
+
         return slots;
-      };
-      
-      const timeSlotIndices = generateTimeSlotIndices();
-      
+    };
+
+    const timeSlotIndices = generateTimeSlotIndices();
 
     return (
         <>
-            <div style={{ 
-            display: "flex", 
-            justifyContent: "space-between", 
-            alignItems: "center",
-            gap: "20px", 
-            marginBottom: "10px"
-        }}>
-            
-            <div style={{ flex: "0 0 auto" }}>
-                <LegendCalendar 
-                    showTimeSlotSelector={showTimeSlotSelector}
-                    toggleTimeSlotSelector={toggleTimeSlotSelector}
-                    selectedIndex={selectedIndex}
-                    setSelectedIndex={handleSetSelectedIndex}
-                    duration={duration}
-                    setDuration={handleSetDuration}
-                    timeSlotIndices={timeSlotIndices}
-                    durations={durations}
-                    selectedUser={selectedUser}
-                    hidePriceInDurationSelection={hidePriceInDurationSelection}
-                />
-            </div>
-        </div>
+            <BookingTimeZoneControl
+                mode={tzMode}
+                customTimeZone={customTz}
+                expertTimeZone={expertTz}
+                studentTimeZone={userDetails?.timeZone}
+                onModeChange={setTzMode}
+                onCustomTimeZoneChange={setCustomTz}
+            />
+            <div style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                gap: "20px",
+                marginBottom: "10px"
+            }}>
 
-        <Calendar
-            className="customerSelectDateTimeCalendar !h min-h-[400px] pt-1 pb-6 text-white"
-            views={["month"]}
-            selectable
-            localizer={localizer}
-            defaultDate={new Date()}
-            defaultView="month"
-            events={hideEvents ? [] : events}
-            eventPropGetter={eventStyleGetter}
-            dayPropGetter={dayStyleGetter}
-            onSelectSlot={handleSelectDate}
-        />
+                <div style={{ flex: "0 0 auto" }}>
+                    <LegendCalendar
+                        showTimeSlotSelector={showTimeSlotSelector}
+                        toggleTimeSlotSelector={toggleTimeSlotSelector}
+                        selectedIndex={selectedIndex}
+                        setSelectedIndex={handleSetSelectedIndex}
+                        duration={duration}
+                        setDuration={handleSetDuration}
+                        timeSlotIndices={timeSlotIndices}
+                        durations={durations}
+                        selectedUser={selectedUser}
+                        hidePriceInDurationSelection={hidePriceInDurationSelection}
+                    />
+                </div>
+            </div>
+
+            <Calendar
+                className="customerSelectDateTimeCalendar !h min-h-[400px] pt-1 pb-6 text-white"
+                views={["month"]}
+                selectable
+                localizer={localizer}
+                defaultDate={new Date()}
+                defaultView="month"
+                events={hideEvents ? [] : events}
+                eventPropGetter={eventStyleGetter}
+                dayPropGetter={dayStyleGetter}
+                onSelectSlot={handleSelectDate}
+            />
             {
                 modalShow ?
                     <div className={`absolute top-0 left-0 w-full h-full bg-white bg-opacity-10 backdrop-blur-sm z-10 flex items-center justify-center p-8`}>
@@ -376,6 +388,7 @@ const SelectDateTime = ({
                                 <CloseIcon />
                             </button>
                             <div className="text-center text-2xl">Select time</div>
+                            <p className="mt-2 text-center text-xs text-lightgrey">Times shown in {viewerTz}</p>
                             <div className="mt-8 text-lightgrey text-[12px] leading-[19px]">Duration (price)</div>
                             <select
                                 className="w-full bg-black rounded-[15px] h-[62px] mt-0.5 border text-white text-[14px] leading-[21px] px-[24px] disabled:cursor-not-allowed"
@@ -412,8 +425,8 @@ const SelectDateTime = ({
                                 </button>
                                 <button
                                     className="w-[calc(50%-8px)] bg-green rounded-lg flex items-center justify-center disabled:opacity-50"
-                                    disabled={!selectedTimeSlot}
-                                    onClick={saveAndNext}
+                                    disabled={selectedTimeSlot === undefined || selectedTimeSlot === null}
+                                    onClick={() => saveAndNext()}
                                 >
                                     Save
                                 </button>

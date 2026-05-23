@@ -1,7 +1,11 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Bell, Globe2, Shield, Mail, Smartphone, Moon } from 'lucide-react';
+import { useAppSelector } from '../../store';
+import { doUpdateProfile } from '../../api/api';
+import { detectUserTimeZone } from '../../utils/schedulingTimezone';
 
 export default function StudentSettings() {
+  const { auth: { userDetails } } = useAppSelector((s: any) => s);
   const [emailNotifications, setEmailNotifications] = useState(true);
   const [pushNotifications, setPushNotifications] = useState(true);
   const [seminarReminders, setSeminarReminders] = useState(true);
@@ -9,9 +13,16 @@ export default function StudentSettings() {
   const [marketingEmails, setMarketingEmails] = useState(false);
   const [darkMode, setDarkMode] = useState(false);
   const [timeZone, setTimeZone] = useState(
-    Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
+    () => userDetails?.timeZone || detectUserTimeZone(),
   );
   const [saveMessage, setSaveMessage] = useState('');
+  const [saveError, setSaveError] = useState('');
+
+  useEffect(() => {
+    if (userDetails?.timeZone) {
+      setTimeZone(userDetails.timeZone);
+    }
+  }, [userDetails?.timeZone]);
 
   const cardClass =
     'rounded-2xl border border-[#E5E2DB] bg-white p-5 shadow-[0_10px_30px_rgba(0,0,0,0.04)]';
@@ -21,9 +32,15 @@ export default function StudentSettings() {
       enabled ? 'bg-[#234C6A]' : 'bg-slate-300'
     }`;
 
-  const handleSave = () => {
-    setSaveMessage('Settings saved successfully.');
-    window.setTimeout(() => setSaveMessage(''), 2200);
+  const handleSave = async () => {
+    setSaveError('');
+    const ok = await doUpdateProfile({ timeZone });
+    if (ok) {
+      setSaveMessage('Settings saved successfully.');
+      window.setTimeout(() => setSaveMessage(''), 2200);
+    } else {
+      setSaveError('Could not save settings. Please try again.');
+    }
   };
 
   return (
@@ -120,10 +137,12 @@ export default function StudentSettings() {
 
           <div className="space-y-4">
             <div className="rounded-xl border border-[#E5E2DB] bg-[#F5F3EF] px-3 py-3">
-              <label className="block text-xs font-semibold text-slate-700 mb-1">
+              <label htmlFor="student-timezone" className="block text-xs font-semibold text-slate-700 mb-1">
                 Time zone
               </label>
               <select
+                id="student-timezone"
+                aria-label="Time zone"
                 value={timeZone}
                 onChange={e => setTimeZone(e.target.value)}
                 className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 outline-none focus:ring-2 focus:ring-[#234C6A]/20"
@@ -203,6 +222,9 @@ export default function StudentSettings() {
         >
           Save settings
         </button>
+        {saveError ? (
+          <p className="text-sm font-semibold text-red-600">{saveError}</p>
+        ) : null}
         {saveMessage ? (
           <p className="text-sm font-semibold text-emerald-700">{saveMessage}</p>
         ) : null}

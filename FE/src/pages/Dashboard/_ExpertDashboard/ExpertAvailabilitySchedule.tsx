@@ -15,6 +15,7 @@ import {
 } from '../../../api/api';
 import { useAppSelector } from '../../../store';
 import { updateMe } from '../../../actions/authActions';
+import { toYMDInTimeZone } from '../../../utils/schedulingTimezone';
 
 /** Stable string id for hooks — raw `_id` may be a new object reference every Redux merge. */
 function normalizeUserId(details: any): string | undefined {
@@ -32,13 +33,6 @@ function normalizeUserId(details: any): string | undefined {
     }
   }
   return undefined;
-}
-
-function toYMD(d: Date): string {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${y}-${m}-${day}`;
 }
 
 function startOfWeekMonday(d: Date): Date {
@@ -66,6 +60,20 @@ const ExpertAvailabilitySchedule: React.FC = () => {
   const [dayModalOpen, setDayModalOpen] = useState(false);
   const [selectedDay, setSelectedDay] = useState<Date | null>(null);
   const [dayEvents, setDayEvents] = useState<any[]>([]);
+  const [scheduleBanner, setScheduleBanner] = useState<{
+    type: 'success' | 'error' | null;
+    message: string;
+  }>({ type: null, message: '' });
+
+  const expertTimeZone = useMemo(
+    () => userDetails?.timeZone || 'UTC',
+    [userDetails?.timeZone],
+  );
+
+  const ymdInExpertTz = useCallback(
+    (d: Date) => toYMDInTimeZone(d, expertTimeZone),
+    [expertTimeZone],
+  );
 
   const blockedDates: string[] = useMemo(
     () =>
@@ -133,11 +141,37 @@ const ExpertAvailabilitySchedule: React.FC = () => {
 
   const persistBlockedDates = async (next: string[]) => {
     setScheduleBusy(true);
+    setScheduleBanner({ type: null, message: '' });
     try {
       const res = await doSetExpertBlockedBookingDates(next);
-      if (res && res !== false) {
-        await (dispatch as any)(updateMe());
+      if (res && res !== false && Array.isArray(res.blockedBookingDates)) {
+        dispatch({
+          type: 'updateUserDetails',
+          payload: {
+            ...userDetails,
+            blockedBookingDates: res.blockedBookingDates,
+            ...(res.bookingNoticeHours != null
+              ? { bookingNoticeHours: res.bookingNoticeHours }
+              : {}),
+            ...(res.timeZone ? { timeZone: res.timeZone } : {}),
+          },
+        });
+        setScheduleBanner({
+          type: 'success',
+          message: 'Unavailable days updated for student bookings.',
+        });
+        void (dispatch as any)(updateMe());
+      } else {
+        setScheduleBanner({
+          type: 'error',
+          message: 'Could not save unavailable days. Please try again.',
+        });
       }
+    } catch {
+      setScheduleBanner({
+        type: 'error',
+        message: 'Could not save unavailable days. Please try again.',
+      });
     } finally {
       setScheduleBusy(false);
     }
@@ -182,7 +216,7 @@ const ExpertAvailabilitySchedule: React.FC = () => {
     if (d < today) {
       return { style: { backgroundColor: '#f8fafc' } };
     }
-    const ymd = toYMD(d);
+    const ymd = ymdInExpertTz(d);
     if (blockedDates.includes(ymd)) {
       return {
         style: {
@@ -255,7 +289,7 @@ const ExpertAvailabilitySchedule: React.FC = () => {
 
   const toggleBlockSelectedDay = async () => {
     if (!selectedDay) return;
-    const ymd = toYMD(selectedDay);
+    const ymd = ymdInExpertTz(selectedDay);
     const todayStart = new Date();
     todayStart.setHours(0, 0, 0, 0);
     const selStart = new Date(selectedDay);
@@ -271,10 +305,21 @@ const ExpertAvailabilitySchedule: React.FC = () => {
   };
 
   const blockedForSelectedDay =
-    selectedDay != null && blockedDates.includes(toYMD(selectedDay));
+    selectedDay != null && blockedDates.includes(ymdInExpertTz(selectedDay));
 
   return (
     <div id="expert-availability-schedule" className="mt-8 space-y-4 scroll-mt-24">
+      {scheduleBanner.type ? (
+        <div
+          className={`rounded-xl border px-4 py-3 text-sm ${
+            scheduleBanner.type === 'error'
+              ? 'border-red-200 bg-red-50 text-red-800'
+              : 'border-emerald-200 bg-emerald-50 text-emerald-800'
+          }`}
+        >
+          {scheduleBanner.message}
+        </div>
+      ) : null}
       <style>{`
         .rbc-off-range-bg { background-color: #f1f5f9 !important; }
         .rbc-off-range .rbc-button-link { color: #94a3b8 !important; }

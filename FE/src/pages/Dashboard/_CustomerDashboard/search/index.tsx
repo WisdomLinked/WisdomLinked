@@ -8,7 +8,7 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import EventDetail from "../eventDetail";
 import { useAppSelector } from "../../../../store";
 import { getAvatarTitle } from "../../../../actions/common";
-import {doAppendEvent, doUpdateEvent, getExpertById, profileImageFetch, createGroupChatByUser} from "../../../../api/api";
+import {doUpdateEvent, getExpertById, profileImageFetch, createGroupChatByUser} from "../../../../api/api";
 import { useDispatch } from "react-redux";
 import { Swiper, SwiperSlide } from "swiper/react";
 import { Pagination, Navigation } from "swiper";

@@ -6,6 +6,31 @@ const Keyword = require("../models/Keyword");
 const PaymentHistory = require("../models/PaymentHistory");
 const { shareMeetingId } = require("../services/notifications")
 
+function expertUserUpdateFilter(req: any) {
+    if (req.user?.userId) {
+        return { _id: req.user.userId };
+    }
+    const email = req.user?.email;
+    if (email) {
+        const escaped = String(email).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        return { email: { $regex: new RegExp(`^${escaped}$`, "i") } };
+    }
+    return null;
+}
+
+function normalizeBlockedDates(dates: unknown): string[] | null {
+    if (!Array.isArray(dates)) return null;
+    const unique = [
+        ...new Set(
+            dates
+                .map((d: unknown) => String(d || "").trim().slice(0, 10))
+                .filter((s: string) => /^\d{4}-\d{2}-\d{2}$/.test(s)),
+        ),
+    ];
+    unique.sort();
+    return unique;
+}
+
 const updateTimeSlots = async (req: any, res: Response) => {
     try {
         const { email } = req.user
@@ -196,7 +221,10 @@ const classifyPayment = (h: any) => {
 /** Set minimum advance booking notice (24 / 48 / 72 hours). */
 const setBookingNoticeHours = async (req: any, res: Response) => {
     try {
-        const { email } = req.user;
+        const filter = expertUserUpdateFilter(req);
+        if (!filter) {
+            return res.status(401).json({ error: "Unauthorized" });
+        }
         const raw = req.body?.bookingNoticeHours ?? req.body?.hours;
         const n = Number(raw);
         if (!ALLOWED_NOTICE_HOURS.includes(n)) {
@@ -204,48 +232,53 @@ const setBookingNoticeHours = async (req: any, res: Response) => {
                 error: "bookingNoticeHours must be 24, 48, or 72",
             });
         }
-        const user = await User.findOneAndUpdate(
-            { email },
+        const user = await User.findByIdAndUpdate(
+            filter,
             { bookingNoticeHours: n },
-            { new: true }
-        ).select("bookingNoticeHours email");
+            { new: true },
+        ).select("bookingNoticeHours timeZone email");
         if (!user) {
-            return res.status(404).send("User not found");
+            return res.status(404).json({ error: "User not found" });
         }
         return res.status(200).json({
             bookingNoticeHours: user.bookingNoticeHours,
+            timeZone: user.timeZone || "UTC",
         });
     } catch (err: any) {
         console.log(err);
-        return res.status(500).send(err.message);
+        return res.status(500).json({ error: err.message });
     }
 };
 
 /** Replace expert whole-day booking blocks (YYYY-MM-DD). */
 const setBlockedBookingDates = async (req: any, res: Response) => {
     try {
-        const { email } = req.user;
-        const { dates } = req.body;
-        if (!Array.isArray(dates)) {
-            return res.status(400).send("dates must be an array of YYYY-MM-DD strings");
+        const filter = expertUserUpdateFilter(req);
+        if (!filter) {
+            return res.status(401).json({ error: "Unauthorized" });
         }
-        const normalized = dates
-            .map((d: unknown) => String(d || "").trim().slice(0, 10))
-            .filter((s: string) => /^\d{4}-\d{2}-\d{2}$/.test(s));
-        const user = await User.findOneAndUpdate(
-            { email },
+        const normalized = normalizeBlockedDates(req.body?.dates);
+        if (normalized === null) {
+            return res.status(400).json({
+                error: "dates must be an array of YYYY-MM-DD strings",
+            });
+        }
+        const user = await User.findByIdAndUpdate(
+            filter,
             { blockedBookingDates: normalized },
-            { new: true }
-        ).select("blockedBookingDates email");
+            { new: true },
+        ).select("blockedBookingDates bookingNoticeHours timeZone email");
         if (!user) {
-            return res.status(404).send("User not found");
+            return res.status(404).json({ error: "User not found" });
         }
         return res.status(200).json({
             blockedBookingDates: user.blockedBookingDates || [],
+            bookingNoticeHours: user.bookingNoticeHours,
+            timeZone: user.timeZone || "UTC",
         });
     } catch (err: any) {
         console.log(err);
-        return res.status(500).send(err.message);
+        return res.status(500).json({ error: err.message });
     }
 };
 

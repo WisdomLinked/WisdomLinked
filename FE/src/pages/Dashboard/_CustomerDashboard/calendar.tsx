@@ -131,6 +131,7 @@ const CustomerCalendar = () => {
                 return {
                     ...event,
                     id: event._id,
+                    title: `(Legacy) ${event.title || 'Session'}`,
                     start: new Date(event.start),
                     end: new Date(event.end),
                     type: 'event',
