@@ -18,6 +18,18 @@ import { resolveMeetingRatingTargetUserId } from '../utils/meetingRatingRules';
 import { buildMeetingRoomName, canStartGroupMeeting } from '../utils/meetingModerationRules';
 import { appendJitsiMobileWebOverrides } from '../utils/jitsiUrl';
 import { isMeetingModerator, isMeetingModeratorWithDelegates } from '../utils/meetingRoleRules';
+import {
+    MEETING_CANNOT_REVOKE_HOST_ROLE,
+    MEETING_EXPERT_CANNOT_REVOKE_SELF,
+    MEETING_HOST_ALREADY_EXPERT,
+    MEETING_NOT_DELEGATED_EXPERT,
+    MEETING_ONLY_EXPERTS_ACTION,
+    MEETING_ONLY_EXPERTS_END_WHILE_OTHERS,
+    MEETING_ONLY_EXPERTS_GRANT_ACCESS,
+    MEETING_ONLY_EXPERTS_REVOKE_ACCESS,
+    MEETING_ONLY_EXPERTS_REVOKE_DELEGATED,
+    MEETING_REMOVED_BY_HOST,
+} from '../utils/meetingUserFacingCopy';
 import { buildMeetingInviteUrl, resolvePublicAppBaseUrl } from '../utils/inviteUrl';
 import { wlDisplayName } from '../utils/wlDisplayName';
 import { jitsiDisplayInitials } from '../utils/jitsiDisplayName';
@@ -424,12 +436,12 @@ const requireMeetingAccess = async (
 ): Promise<{ allowed: boolean; moderator: boolean; error?: string }> => {
     if (!meeting) return { allowed: false, moderator: false, error: 'Meeting not found' };
     if (isRemovedFromMeeting(meeting, userId)) {
-        return { allowed: false, moderator: false, error: 'You were removed from this active call by a moderator' };
+        return { allowed: false, moderator: false, error: MEETING_REMOVED_BY_HOST };
     }
     const auth = await canUserJoinMeeting(meeting, userId);
     if (!auth.allowed) return { ...auth, error: 'You do not have access to this meeting' };
     if (opts.moderator && !auth.moderator) {
-        return { ...auth, allowed: false, error: 'Only meeting moderators can perform this action' };
+        return { ...auth, allowed: false, error: MEETING_ONLY_EXPERTS_ACTION };
     }
     return auth;
 };
@@ -583,7 +595,7 @@ export const endMeeting = async (req: any, res: Response) => {
         if (!access.allowed) return res.status(403).json({ error: access.error || 'You do not have access to this meeting' });
         if (!lastParticipantLeaving && !access.moderator) {
             return res.status(403).json({
-                error: 'Only meeting moderators can end the meeting while others may still be in the call',
+                error: MEETING_ONLY_EXPERTS_END_WHILE_OTHERS,
             });
         }
 
@@ -1099,7 +1111,7 @@ export const joinMeetingFromGuestInvite = async (req: any, res: Response) => {
             return res.status(410).json({ error: 'Meeting is no longer active' });
         }
         if (isRemovedFromMeeting(meeting, String(userId))) {
-            return res.status(403).json({ error: 'You were removed from this active call by a moderator' });
+            return res.status(403).json({ error: MEETING_REMOVED_BY_HOST });
         }
 
         const me = await User.findById(userId).select('_id username email image');
@@ -1162,7 +1174,7 @@ export const getMeetingJoinInfo = async (req: any, res: Response) => {
         }
         if (meeting.status !== 'active') return res.status(400).json({ error: 'Meeting is no longer active' });
         if (isRemovedFromMeeting(meeting, String(userId))) {
-            return res.status(403).json({ error: 'You were removed from this active call by a moderator' });
+            return res.status(403).json({ error: MEETING_REMOVED_BY_HOST });
         }
 
         const me = await User.findById(userId).select('_id username email image');
@@ -1224,10 +1236,10 @@ export const revokeMeetingParticipant = async (req: any, res: Response) => {
 
         const auth = await canUserJoinMeeting(meeting, String(userId));
         if (!auth.moderator) {
-            return res.status(403).json({ error: 'Only moderators can revoke participant call access' });
+            return res.status(403).json({ error: MEETING_ONLY_EXPERTS_REVOKE_ACCESS });
         }
         if (String(targetUserId) === String(userId)) {
-            return res.status(400).json({ error: 'Moderator cannot revoke own access' });
+            return res.status(400).json({ error: MEETING_EXPERT_CANNOT_REVOKE_SELF });
         }
         const targetIsEligible = await canUserJoinMeeting(meeting, String(targetUserId));
         if (!targetIsEligible.allowed) {
@@ -1301,7 +1313,7 @@ export const getMeetingPermissions = async (req: any, res: Response) => {
             return res.status(200).json({ success: true, canDrawWhiteboard: false, status: meeting.status });
         }
         if (isRemovedFromMeeting(meeting, userId)) {
-            return res.status(403).json({ error: 'You were removed from this active call by a moderator' });
+            return res.status(403).json({ error: MEETING_REMOVED_BY_HOST });
         }
 
         const auth = await canUserJoinMeeting(meeting, userId);
@@ -1349,7 +1361,7 @@ export const delegateMeetingModerator = async (req: any, res: Response) => {
         }
         const callerAuth = await canUserJoinMeeting(meeting, String(userId));
         if (!callerAuth.moderator) {
-            return res.status(403).json({ error: 'Only moderators can grant moderator access' });
+            return res.status(403).json({ error: MEETING_ONLY_EXPERTS_GRANT_ACCESS });
         }
         const targetUid = normalizeId(targetUserId);
         if (!targetUid || targetUid === normalizeId(userId)) {
@@ -1360,7 +1372,7 @@ export const delegateMeetingModerator = async (req: any, res: Response) => {
             return res.status(400).json({ error: 'Target user is not eligible for this meeting' });
         }
         if (await isCanonicalMeetingModerator(meeting, targetUid)) {
-            return res.status(400).json({ error: 'Meeting host is already the moderator for this meeting' });
+            return res.status(400).json({ error: MEETING_HOST_ALREADY_EXPERT });
         }
 
         meeting.delegatedModerators = Array.isArray(meeting.delegatedModerators) ? meeting.delegatedModerators : [];
@@ -1402,16 +1414,16 @@ export const revokeDelegatedMeetingModerator = async (req: any, res: Response) =
         }
         const callerAuth = await canUserJoinMeeting(meeting, String(userId));
         if (!callerAuth.moderator) {
-            return res.status(403).json({ error: 'Only moderators can revoke delegated moderator access' });
+            return res.status(403).json({ error: MEETING_ONLY_EXPERTS_REVOKE_DELEGATED });
         }
 
         const targetUid = normalizeId(targetUserId);
         if (await isCanonicalMeetingModerator(meeting, targetUid)) {
-            return res.status(400).json({ error: 'Cannot revoke moderator role from the meeting host' });
+            return res.status(400).json({ error: MEETING_CANNOT_REVOKE_HOST_ROLE });
         }
         const delegated = delegatedIdsFromMeeting(meeting);
         if (!delegated.includes(targetUid)) {
-            return res.status(400).json({ error: 'User is not a delegated moderator' });
+            return res.status(400).json({ error: MEETING_NOT_DELEGATED_EXPERT });
         }
 
         meeting.delegatedModerators = (Array.isArray(meeting.delegatedModerators) ? meeting.delegatedModerators : [])

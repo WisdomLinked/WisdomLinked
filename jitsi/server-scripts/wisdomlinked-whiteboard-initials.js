@@ -2,7 +2,7 @@
   /*
    * Whiteboard initials + view-only for non-moderators.
    * Authoritative draw permission: GET /api/meeting/permissions (poll).
-   * Jitsi "Grant moderator" sync: granter listens PARTICIPANT_ROLE_CHANGED → delegate/revoke APIs.
+   * Jitsi "Grant expert rights" (grant-moderator) sync: granter listens PARTICIPANT_ROLE_CHANGED → delegate/revoke APIs.
    */
   var STORAGE_INITIALS = "wlWhiteboardInitials";
   var STORAGE_MOD = "wlIsMeetingModerator";
