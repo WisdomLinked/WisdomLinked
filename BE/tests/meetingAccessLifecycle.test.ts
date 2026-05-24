@@ -104,7 +104,7 @@ test("DM participant who did not start cannot end via POST /end without last_par
     await endMeeting(req, res);
 
     assert.equal(res.statusCode, 403);
-    assert.match(String(res.body?.error || ""), /moderators can end/i);
+    assert.match(String(res.body?.error || ""), /experts can end/i);
   } finally {
     MeetingThread.findById = originalFindByIdMeeting;
     Conversation.findById = originalFindByIdConversation;

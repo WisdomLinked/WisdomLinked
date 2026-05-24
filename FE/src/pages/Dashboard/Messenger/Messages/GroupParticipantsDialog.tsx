@@ -216,7 +216,7 @@ const GroupParticipantsDialog = ({
                         className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-200"
                     />
                     <p className="mt-2 text-xs text-slate-500">
-                        {`The moderator declined you from participating in the video call because ${removeReason.trim() || "[reason]"}. Later communication with you will ensue when needed.`}
+                        {`The expert declined you from participating in the video call because ${removeReason.trim() || "[reason]"}. Later communication with you will ensue when needed.`}
                     </p>
                 </DialogContent>
                 <DialogActions>

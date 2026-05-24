@@ -124,7 +124,7 @@ test("guest invite join still blocks users removed by moderator", async () => {
     await joinMeetingFromGuestInvite(req, res);
 
     assert.equal(res.statusCode, 403);
-    assert.equal(res.body?.error, "You were removed from this active call by a moderator");
+    assert.equal(res.body?.error, "You were removed from this active call by an expert");
   } finally {
     MeetingGuestInvite.findOne = originalFindOne;
     MeetingThread.findById = originalFindByIdMeeting;
