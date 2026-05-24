@@ -9,6 +9,7 @@ const { appendPaymentHistory } = require("./payment.controller");
 const { checkTitleNameInvalid } = require('../services/global')
 const { sendEmailMeetingRequestToExpert, sendEmailMeetingRequestToCustomer, scheduleEmailReminder, sendEmailMeetingAcceptance } = require('../services/notifications')
 const { assertBookingLeadTime } = require("../utils/bookingLeadTime");
+const { assertBookingSlotValid } = require("../utils/bookingValidation");
 
 const createEventByExpert = async (req, res) => {
     try {
@@ -139,6 +140,11 @@ const appendEvent = async (req, res) => {
                 return res.status(404).send("Sorry, the invitation you are trying to accept doesn't exist")
             }
         }
+
+        await assertBookingSlotValid(expertUser, start, end, {
+            excludeEventId: eventExists?._id?.toString(),
+        });
+
         console.log(eventId, eventExists)
         if (eventExists) {
             eventExists.paidBy = paymentIntentSucceeded_test ? 'test' : 'live'

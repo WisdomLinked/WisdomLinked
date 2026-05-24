@@ -221,35 +221,9 @@ code {
     transform: none;
   }
 }
-/* React Big Calendar */
+/* React Big Calendar — shared (non-theme) */
 .rbc-toolbar {
   gap: 8px;
-}
-
-.rbc-toolbar button {
-  color: white !important;
-  background-color: transparent !important;
-}
-
-.rbc-toolbar button:hover {
-  background-color: #6c7278 !important;
-}
-
-.rbc-off-range-bg {
-  background-color: #141414 !important;
-}
-
-.rbc-today {
-  background-color: #6c7278 !important;
-}
-
-.rbc-show-more {
-  color: #dce4e8 !important;
-  background-color: transparent !important;
-}
-
-.rbc-agenda-view table.rbc-agenda-table .rbc-agenda-time-cell {
-  border: 1px solid white;
 }
 
 .rbc-agenda-event-cell {
@@ -272,9 +246,138 @@ code {
   cursor: pointer;
 }
 
-/* customerSelectDateTimeCalendar */
+/* Legacy dark customer booking calendar */
+.customerSelectDateTimeCalendar .rbc-toolbar button {
+  color: white !important;
+  background-color: transparent !important;
+}
+
+.customerSelectDateTimeCalendar .rbc-toolbar button:hover {
+  background-color: #6c7278 !important;
+}
+
+.customerSelectDateTimeCalendar .rbc-off-range-bg {
+  background-color: #141414 !important;
+}
+
+.customerSelectDateTimeCalendar .rbc-today {
+  background-color: #6c7278 !important;
+}
+
+.customerSelectDateTimeCalendar .rbc-show-more {
+  color: #dce4e8 !important;
+  background-color: transparent !important;
+}
+
+.customerSelectDateTimeCalendar .rbc-agenda-view table.rbc-agenda-table .rbc-agenda-time-cell {
+  border: 1px solid white;
+}
+
 .customerSelectDateTimeCalendar .rbc-row-segment {
   pointer-events: none;
+}
+
+/* studentBookingCalendar — Find Experts / student dashboard */
+.studentBookingCalendar {
+  font-family: inherit;
+  color: #1a3a4a !important;
+}
+
+.studentBookingCalendar .rbc-toolbar {
+  margin-bottom: 0.75rem;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.studentBookingCalendar .rbc-toolbar button {
+  color: #1a3a4a !important;
+  border: 1px solid #e5e2db !important;
+  border-radius: 4px !important;
+  background: #fff !important;
+  font-size: 13px !important;
+  font-weight: 600 !important;
+  padding: 5px 12px !important;
+}
+
+.studentBookingCalendar .rbc-toolbar button:hover,
+.studentBookingCalendar .rbc-toolbar button.rbc-active {
+  background: #1a3a4a !important;
+  color: #fff !important;
+  border-color: #1a3a4a !important;
+}
+
+.studentBookingCalendar .rbc-toolbar-label {
+  color: #1a3a4a !important;
+  font-weight: 600 !important;
+  font-size: 15px !important;
+}
+
+.studentBookingCalendar .rbc-month-header .rbc-header {
+  padding: 0.5rem 0;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: none;
+  letter-spacing: 0.02em;
+  color: #7a7a72 !important;
+  border-bottom: 1px solid #e5e2db;
+  overflow: visible;
+  white-space: nowrap;
+}
+
+.studentBookingCalendar .rbc-month-view {
+  border: 1px solid #e5e2db;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #fff !important;
+}
+
+.studentBookingCalendar .rbc-day-bg + .rbc-day-bg {
+  border-left: 1px solid #e5e2db;
+}
+
+.studentBookingCalendar .rbc-month-row + .rbc-month-row {
+  border-top: 1px solid #e5e2db;
+}
+
+.studentBookingCalendar .rbc-off-range-bg {
+  background: #faf9f7 !important;
+}
+
+.studentBookingCalendar .rbc-off-range .rbc-button-link {
+  color: #7a7a72 !important;
+}
+
+.studentBookingCalendar .rbc-button-link {
+  color: #1a3a4a !important;
+}
+
+.studentBookingCalendar .rbc-today {
+  background: #f5f3ef !important;
+}
+
+.studentBookingCalendar .rbc-date-cell {
+  padding: 4px 6px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #1a3a4a !important;
+}
+
+.studentBookingCalendar .rbc-row-segment {
+  pointer-events: none;
+}
+
+.studentBookingCalendar .rbc-show-more {
+  color: #1a3a4a !important;
+  background-color: transparent !important;
+}
+
+/* Student month view: day colors are the affordance; hide busy event chips */
+.studentBookingCalendar .rbc-event {
+  display: none;
+}
+
+.student-booking-picker .rbc-event-label {
+  font-size: 10px;
 }
 
 /* expertTimeSlot */

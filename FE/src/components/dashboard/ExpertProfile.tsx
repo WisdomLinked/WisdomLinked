@@ -1,4 +1,5 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState, useCallback } from 'react';
+import { useDispatch } from 'react-redux';
 import {
   ArrowLeft,
   BookOpen,
@@ -17,6 +18,14 @@ import { useAppSelector } from '../../store';
 import { SERVICE_LABELS } from '../../constants/serviceOptions';
 import FilePreviewModal from '../../pages/Dashboard/FilePreviewModal';
 import { hasResumeForPreview, resolveResumePublicUrl } from '../../utils/resumeUrl';
+import StudentExpertBookingPicker from './StudentExpertBookingPicker';
+import StudentBookingCheckout from './StudentBookingCheckout';
+import { createGroupChatByUser, getExpertById, profileImageFetch } from '../../api/api';
+import { resolveProfileImageSrc } from '../../utils/profileImage';
+import { normalizeExpertPrice } from '../../utils/schedulingSlots';
+import { SetLoadingStatus } from '../../actions/appActions';
+
+type BookingStep = 'pick' | 'review' | 'pay' | 'success';
 
 const aiHeadshotUrl = (seed: string) =>
   `https://api.dicebear.com/9.x/bottts-neutral/svg?seed=${encodeURIComponent(seed)}`;
@@ -33,6 +42,9 @@ export default function ExpertProfile({
   followerCount: followerCountLive,
   isFollowing = false,
   onToggleFollow,
+  paymentReturnSuccess = false,
+  onPaymentReturnHandled,
+  onGoToCalendar,
 }: {
   mentor: MentorCardProps;
   onBack: () => void;
@@ -40,16 +52,52 @@ export default function ExpertProfile({
   followerCount?: number;
   isFollowing?: boolean;
   onToggleFollow?: (mentorId: string | number) => void;
+  /** Set when Stripe redirect completed on student dashboard. */
+  paymentReturnSuccess?: boolean;
+  onPaymentReturnHandled?: () => void;
+  onGoToCalendar?: () => void;
 }) {
+  const dispatch = useDispatch();
   const { auth: { userDetails } } = useAppSelector((state: any) => state);
   const experienceYears = useMemo(
     () => extractExperienceYears(mentor.experience),
     [mentor.experience],
   );
 
+  const [expertDetails, setExpertDetails] = useState<any>(null);
+  const [expertLoading, setExpertLoading] = useState(false);
+  const [pickedStart, setPickedStart] = useState<Date | null>(null);
+  const [pickedEnd, setPickedEnd] = useState<Date | null>(null);
+  const [pickedDuration, setPickedDuration] = useState(0);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setExpertLoading(true);
+      try {
+        const res: any = await getExpertById(mentor.id);
+        if (!cancelled && res?.result) {
+          setExpertDetails(res.result);
+        }
+      } catch {
+        if (!cancelled) setExpertDetails(null);
+      } finally {
+        if (!cancelled) setExpertLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [mentor.id]);
+
+  const expertHourlyRate = useMemo(
+    () => normalizeExpertPrice(expertDetails?.price),
+    [expertDetails?.price],
+  );
+
   const oneToOneRate = useMemo(
-    () => 60 + experienceYears * 18,
-    [experienceYears],
+    () => expertHourlyRate ?? 60 + experienceYears * 18,
+    [experienceYears, expertHourlyRate],
   );
   const seminarRate = useMemo(
     () => 35 + experienceYears * 10,
@@ -82,6 +130,7 @@ export default function ExpertProfile({
   /** 1:1 only — price scales from hourly peak/off-peak rate. */
   const [sessionDurationMinutes, setSessionDurationMinutes] = useState<30 | 60 | 90>(60);
 
+  const [bookingStep, setBookingStep] = useState<BookingStep>('pick');
   const [bookingSuccess, setBookingSuccess] = useState(false);
   const [bookingError, setBookingError] = useState<string | null>(null);
 
@@ -90,6 +139,7 @@ export default function ExpertProfile({
   const [resumePreviewOpen, setResumePreviewOpen] = useState(false);
 
   const [openFaqIndex, setOpenFaqIndex] = useState<number | null>(null);
+  const [displayImage, setDisplayImage] = useState(() => aiHeadshotUrl(mentor.name));
 
   const peakRate = 50;
   const oneToOneOffPeakRate = Math.min(oneToOneRate, 45);
@@ -125,8 +175,91 @@ export default function ExpertProfile({
   const upcomingSeminarPrice = (item: { date: string; time: string }) =>
     isPeakSeminarDateTime(item.date, item.time) ? peakRate : seminarOffPeakRate;
 
+  const handleSlotPicked = useCallback((start: Date, end: Date, duration: number) => {
+    setPickedStart(start);
+    setPickedEnd(end);
+    setPickedDuration(duration);
+    setBookingError(null);
+    if (bookingStep !== 'pick') {
+      setBookingStep('pick');
+    }
+  }, [bookingStep]);
+
+  const oneToOneSessionPrice = useMemo(() => {
+    if (!pickedDuration) return 0;
+    const hourly = normalizeExpertPrice(expertDetails?.price) ?? oneToOneRate;
+    return (pickedDuration * hourly) / 60;
+  }, [pickedDuration, expertDetails?.price, oneToOneRate]);
+
+  const bookingEventTitle = useMemo(() => {
+    const student = userDetails?.username || 'Student';
+    const expertName = mentor.name || expertDetails?.username || 'Expert';
+    return `${student}, ${expertName}`;
+  }, [userDetails?.username, mentor.name, expertDetails?.username]);
+
+  const studentBookingReturnUrl = useMemo(() => {
+    try {
+      const url = new URL(window.location.href);
+      url.search = '';
+      url.searchParams.set('student_booking', '1');
+      return url.toString();
+    } catch {
+      return '/user/studentdashboard?student_booking=1';
+    }
+  }, []);
+
+  const submitOneToOneBooking = useCallback(
+    async (paymentIntentId: string) => {
+      if (!pickedStart || !pickedEnd || !pickedDuration) {
+        setBookingError('Please select a date and time on the calendar.');
+        return;
+      }
+      SetLoadingStatus(true);
+      setBookingError(null);
+      try {
+        const response = await createGroupChatByUser({
+          name: bookingEventTitle,
+          start: pickedStart.toISOString(),
+          end: pickedEnd.toISOString(),
+          duration: pickedDuration,
+          price: oneToOneSessionPrice,
+          expert: expertDetails?._id ?? mentor.id,
+          payment_intent: paymentIntentId,
+        });
+        if (response?.result) {
+          dispatch({ type: 'updateUserDetails', payload: response.result });
+        }
+        setBookingSuccess(true);
+        setBookingStep('success');
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : 'Booking failed. Please try again.';
+        setBookingError(message);
+      } finally {
+        SetLoadingStatus(false);
+      }
+    },
+    [
+      pickedStart,
+      pickedEnd,
+      pickedDuration,
+      bookingEventTitle,
+      oneToOneSessionPrice,
+      expertDetails?._id,
+      mentor.id,
+      dispatch,
+    ],
+  );
+
+  useEffect(() => {
+    if (paymentReturnSuccess) {
+      setBookingSuccess(true);
+      setBookingStep('success');
+      onPaymentReturnHandled?.();
+    }
+  }, [paymentReturnSuccess, onPaymentReturnHandled]);
+
   const availability = useMemo(() => {
-    // Deterministic mock schedule based on mentor id.
+    // Mock schedule for seminar picker only.
     const dayNames = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
     return dayNames.map((day, idx) => {
       const available = (idx + mentor.id) % 7 !== 6; // mostly available days
@@ -242,13 +375,27 @@ export default function ExpertProfile({
     return { past, upcoming };
   }, [mentor.id, mentor.field]);
 
-  const resolvedImage = mentor.image ?? aiHeadshotUrl(mentor.name);
-
   const displayFollowers =
     followerCountLive ?? mentor.followerCount ?? 0;
 
   const resumeUrl = resolveResumePublicUrl(mentor.resume ?? null);
   const hasResume = hasResumeForPreview(mentor.resume ?? null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setDisplayImage(aiHeadshotUrl(mentor.name));
+    (async () => {
+      const src = await resolveProfileImageSrc(
+        mentor.image,
+        'medium',
+        profileImageFetch as any,
+      );
+      if (!cancelled && src) setDisplayImage(src);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [mentor.id, mentor.image, mentor.name]);
 
   useEffect(() => {
     setResumePreviewOpen(false);
@@ -279,7 +426,7 @@ export default function ExpertProfile({
           <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
             <div className="flex min-w-0 flex-1 flex-col gap-5 sm:flex-row sm:items-start">
               <div className="h-44 w-44 shrink-0 overflow-hidden rounded-2xl border border-[#E5E2DB] bg-[#F5F3EF]">
-                <img src={resolvedImage} alt={mentor.name} className="h-full w-full object-cover" />
+                <img src={displayImage} alt={mentor.name} className="h-full w-full object-cover" />
               </div>
 
               <div className="min-w-0 flex-1">
@@ -502,7 +649,7 @@ export default function ExpertProfile({
                   [
                     {
                       q: 'How do I book a 1:1 session?',
-                      a: 'Choose 1:1 in the booking panel, pick an available slot, then confirm your request. You will complete payment in a later step when billing is enabled.',
+                      a: 'Choose 1:1, pick an available slot on the calendar (times respect your timezone), then continue to the standard payment flow.',
                     },
                     {
                       q: 'What happens after I book?',
@@ -564,7 +711,7 @@ export default function ExpertProfile({
                   Book availability
                 </h2>
                 <p className="mt-1 text-[12px] text-[#7A7A72]">
-                  Choose a service, pick a time slot, and confirm your request. Payment comes later.
+                  Choose a service, pick a time on the expert&apos;s calendar, then continue to payment.
                 </p>
               </div>
               <span className="inline-flex items-center gap-1 rounded-[4px] bg-[#F5F3EF] px-2 py-1 text-[11px] font-semibold text-[#1A3A4A]">
@@ -652,6 +799,90 @@ export default function ExpertProfile({
                 <p className="text-[12px] font-semibold uppercase tracking-[0.16em] text-[#7A7A72] mb-2">
                   Availability
                 </p>
+                {serviceChoice === 'oneToOne' ? (
+                  bookingStep === 'review' ? (
+                    <div className="rounded-xl border border-[#E5E2DB] bg-white p-4 space-y-3">
+                      <p className="text-[12px] font-semibold uppercase tracking-[0.16em] text-[#7A7A72]">
+                        Booking summary
+                      </p>
+                      <dl className="space-y-2 text-sm text-[#1A3A4A]">
+                        <div className="flex justify-between gap-2">
+                          <dt className="text-[#7A7A72]">Expert</dt>
+                          <dd className="font-semibold text-right">{mentor.name}</dd>
+                        </div>
+                        <div className="flex justify-between gap-2">
+                          <dt className="text-[#7A7A72]">When</dt>
+                          <dd className="font-semibold text-right">
+                            {pickedStart?.toLocaleString(undefined, {
+                              dateStyle: 'medium',
+                              timeStyle: 'short',
+                            })}
+                          </dd>
+                        </div>
+                        <div className="flex justify-between gap-2">
+                          <dt className="text-[#7A7A72]">Duration</dt>
+                          <dd className="font-semibold">{pickedDuration} min</dd>
+                        </div>
+                        <div className="flex justify-between gap-2 border-t border-[#E5E2DB] pt-2">
+                          <dt className="text-[#7A7A72]">Total</dt>
+                          <dd className="font-serif text-lg font-semibold">
+                            ${oneToOneSessionPrice.toFixed(0)}
+                          </dd>
+                        </div>
+                      </dl>
+                    </div>
+                  ) : bookingStep === 'pay' ? (
+                    <StudentBookingCheckout
+                      type="1:1 session"
+                      price={oneToOneSessionPrice}
+                      returnUrl={studentBookingReturnUrl}
+                      pendingDetails={{
+                        name: bookingEventTitle,
+                        start: pickedStart!.toISOString(),
+                        end: pickedEnd!.toISOString(),
+                        duration: pickedDuration,
+                        price: oneToOneSessionPrice,
+                        expert: String(expertDetails?._id ?? mentor.id),
+                      }}
+                      onPaymentSuccess={submitOneToOneBooking}
+                      onCancel={() => setBookingStep('review')}
+                    />
+                  ) : bookingStep === 'success' ? (
+                    <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-4">
+                      <p className="text-[14px] font-semibold text-emerald-900">
+                        Session booked
+                      </p>
+                      <p className="mt-1 text-[12px] text-emerald-800">
+                        Your request was sent to {mentor.name}. You will see it on your calendar
+                        once confirmed.
+                      </p>
+                      {onGoToCalendar ? (
+                        <button
+                          type="button"
+                          onClick={onGoToCalendar}
+                          className="mt-3 w-full rounded-[4px] bg-[#1A3A4A] px-3 py-2 text-[12px] font-semibold text-white hover:bg-[#122635]"
+                        >
+                          View calendar
+                        </button>
+                      ) : null}
+                    </div>
+                  ) : (
+                  <div className="rounded-xl border border-[#E5E2DB] bg-[#F5F3EF] p-4">
+                    {expertLoading ? (
+                      <p className="text-sm text-[#7A7A72]">Loading expert availability…</p>
+                    ) : !expertDetails?.timeSlots?.length ? (
+                      <p className="text-sm text-[#7A7A72]">
+                        This expert has not published availability yet.
+                      </p>
+                    ) : (
+                      <StudentExpertBookingPicker
+                        expert={expertDetails}
+                        onSlotSelected={handleSlotPicked}
+                      />
+                    )}
+                  </div>
+                  )
+                ) : (
                 <div className="grid grid-cols-2 gap-3">
                   {availability.map(slot => {
                     const active =
@@ -694,6 +925,7 @@ export default function ExpertProfile({
                     );
                   })}
                 </div>
+                )}
               </div>
 
               <div className="rounded-xl border border-[#E5E2DB] bg-[#F5F3EF] px-4 py-4">
@@ -707,13 +939,16 @@ export default function ExpertProfile({
                     </p>
                     <p className="mt-1 text-[12px] text-[#7A7A72]">
                       {serviceChoice === 'oneToOne' ? (
-                        selectedSlot ? (
+                        pickedStart && pickedEnd ? (
                           <>
-                            {sessionDurationMinutes} min · ${oneToOneHourlyRate.toFixed(0)}/hr
-                            {isPeakSlot(selectedSlot) ? ' (peak)' : ' (off-peak)'} · estimated total
+                            {pickedDuration} min · ${oneToOneSessionPrice.toFixed(0)} ·{' '}
+                            {pickedStart.toLocaleString(undefined, {
+                              dateStyle: 'medium',
+                              timeStyle: 'short',
+                            })}
                           </>
                         ) : (
-                          'Pick a slot to see peak vs off-peak hourly rate'
+                          'Select a date and time on the calendar'
                         )
                       ) : (
                         'Estimated total (payment later)'
@@ -728,7 +963,49 @@ export default function ExpertProfile({
                 <div className="text-[12px] font-semibold text-red-600">{bookingError}</div>
               )}
 
-              {!bookingSuccess ? (
+              {serviceChoice === 'oneToOne' ? (
+                bookingStep === 'success' ? (
+                  <button
+                    type="button"
+                    onClick={onBack}
+                    className="inline-flex w-full items-center justify-center rounded-[4px] border border-[#E5E2DB] bg-white px-4 py-3 text-[13px] font-semibold text-[#1A3A4A] hover:bg-[#F5F3EF]"
+                  >
+                    Back to experts
+                  </button>
+                ) : bookingStep === 'pay' ? null : bookingStep === 'review' ? (
+                  <div className="flex flex-col gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setBookingStep('pay')}
+                      className="inline-flex w-full items-center justify-center rounded-[4px] bg-[#1A3A4A] px-4 py-3 text-[13px] font-semibold text-white hover:bg-[#122635]"
+                    >
+                      Continue to payment
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setBookingStep('pick')}
+                      className="inline-flex w-full items-center justify-center rounded-[4px] border border-[#E5E2DB] bg-white px-4 py-3 text-[13px] font-semibold text-[#1A3A4A] hover:bg-[#F5F3EF]"
+                    >
+                      Change time
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!pickedStart || !pickedEnd || !pickedDuration) {
+                        setBookingError('Please select a date and time on the calendar.');
+                        return;
+                      }
+                      setBookingError(null);
+                      setBookingStep('review');
+                    }}
+                    className="inline-flex w-full items-center justify-center rounded-[4px] bg-[#1A3A4A] px-4 py-3 text-[13px] font-semibold text-white hover:bg-[#122635]"
+                  >
+                    Review booking
+                  </button>
+                )
+              ) : !bookingSuccess ? (
                 <button
                   type="button"
                   onClick={() => {
@@ -737,27 +1014,16 @@ export default function ExpertProfile({
                       return;
                     }
 
-                    const duration =
-                      serviceChoice === 'seminar'
-                        ? formatMinutesDuration(selectedSlot)
-                        : sessionDurationMinutes;
-                    const { start, end } =
-                      serviceChoice === 'seminar'
-                        ? slotStartEndAsDates({
-                            day: selectedSlot.day,
-                            start: selectedSlot.start,
-                            end: selectedSlot.end,
-                          })
-                        : slotStartEndAsDatesWithDuration(selectedSlot, sessionDurationMinutes);
+                    const duration = formatMinutesDuration(selectedSlot);
+                    const { start, end } = slotStartEndAsDates({
+                      day: selectedSlot.day,
+                      start: selectedSlot.start,
+                      end: selectedSlot.end,
+                    });
 
-                    const serviceLabel =
-                      serviceChoice === 'seminar' ? 'Seminar' : '1:1 session';
-
-                    // Create pending details for the existing payment pipeline later.
                     const pending = {
-                      // Both keys are added because the existing flow uses `title` while other UI sets `name`.
-                      title: `${serviceLabel} request`,
-                      name: `${serviceLabel} request`,
+                      title: 'Seminar request',
+                      name: 'Seminar request',
                       start,
                       end,
                       duration,
@@ -808,7 +1074,7 @@ export default function ExpertProfile({
                       ${oneToOneRate.toFixed(0)}
                     </p>
                     <p className="mt-1 text-[12px] text-[#7A7A72]">
-                      per hour (mock) — 30 / 60 / 90 min totals scale from this rate
+                      per hour — 30 / 60 / 90 min totals scale from this rate
                     </p>
                   </div>
                   <Star className="h-5 w-5 text-[#C9A84C]" aria-hidden />

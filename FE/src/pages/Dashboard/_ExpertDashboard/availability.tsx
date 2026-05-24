@@ -1,10 +1,17 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Check, ChevronDown, ChevronRight, X } from 'lucide-react';
 import { useDispatch } from 'react-redux';
 import ExpertAvailabilitySchedule from './ExpertAvailabilitySchedule';
 import { useAppSelector } from '../../../store';
-import { doSetExpertBookingNoticeHours } from '../../../api/api';
+import { doSetExpertBookingNoticeHours, doUpdateProfile, doUpdateTimeSlots } from '../../../api/api';
 import { updateMe } from '../../../actions/authActions';
+import {
+  halfHourIndicesToHours,
+  hoursToHalfHourIndices,
+  normalizeExpertPrice,
+  unionDailyAvailabilityHours,
+} from '../../../utils/schedulingSlots';
+import { detectUserTimeZone } from '../../../utils/schedulingTimezone';
 
 type AvailabilityMode = 'common' | 'daily';
 
@@ -24,7 +31,6 @@ interface DailyAvailability {
 
 interface AvailabilityFormState {
   hourlyRate: string;
-  timezone: string;
   sessionDuration: number;   // minutes: 30 | 60 | 90
   bufferTime: number;        // minutes: 0 | 15 | 30
   mode: AvailabilityMode;
@@ -38,17 +44,6 @@ interface BannerState {
   type: BannerType;
   message: string;
 }
-
-const TIMEZONES: string[] = [
-  'UTC',
-  'US/Eastern (EST)',
-  'US/Central (CST)',
-  'US/Pacific (PST)',
-  'India (IST)',
-  'London (GMT)',
-  'Europe (CET)',
-  'Australia (AEST)',
-];
 
 const SESSION_DURATIONS: number[] = [30, 60, 90];
 const BUFFER_TIMES: number[] = [0, 15, 30];
@@ -82,7 +77,6 @@ const initialDailyAvailability: DailyAvailability[] = [
 
 const initialFormState: AvailabilityFormState = {
   hourlyRate: '',
-  timezone: '',
   sessionDuration: 60,
   bufferTime: 15,
   mode: 'common',
@@ -99,6 +93,26 @@ const AvailabilityPage: React.FC = () => {
   const [banner, setBanner] = useState<BannerState>({ type: null, message: '' });
   const [expandedDays, setExpandedDays] = useState<DayOfWeek[]>(['Mon']);
   const [noticeSaving, setNoticeSaving] = useState(false);
+  const [saveBusy, setSaveBusy] = useState(false);
+
+  const detectedTimeZone = useMemo(
+    () => userDetails?.timeZone || detectUserTimeZone(),
+    [userDetails?.timeZone],
+  );
+
+  useEffect(() => {
+    const slots = userDetails?.timeSlots;
+    const hours =
+      Array.isArray(slots) && slots.length > 0
+        ? halfHourIndicesToHours(slots)
+        : [];
+    const price = normalizeExpertPrice(userDetails?.price);
+    setForm((prev) => ({
+      ...prev,
+      commonSlots: hours.length ? hours : prev.commonSlots,
+      hourlyRate: price != null ? String(price) : prev.hourlyRate,
+    }));
+  }, [userDetails?.timeSlots, userDetails?.price]);
 
   const activeBookingNotice = useMemo(() => {
     const n = Number(userDetails?.bookingNoticeHours);
@@ -229,7 +243,7 @@ const AvailabilityPage: React.FC = () => {
     }, 0);
   }, [form]);
 
-  const handleSave = () => {
+  const handleSave = async () => {
     const numRate = Number(form.hourlyRate);
     const rateValid =
       !!form.hourlyRate && !Number.isNaN(numRate) && numRate >= 5 && numRate <= 100;
@@ -247,11 +261,37 @@ const AvailabilityPage: React.FC = () => {
       return;
     }
 
-    // In a real app, fire your API call here
-    setBanner({
-      type: 'success',
-      message: 'Availability saved successfully.',
-    });
+    const selectedHours =
+      form.mode === 'common'
+        ? form.commonSlots
+        : unionDailyAvailabilityHours(form.dailyAvailability);
+    const timeSlots = hoursToHalfHourIndices(selectedHours);
+    const timeZone = detectUserTimeZone();
+
+    setSaveBusy(true);
+    try {
+      const slotsRes = await doUpdateTimeSlots(timeSlots);
+      if (!slotsRes || slotsRes === false) {
+        throw new Error('Could not save time slots.');
+      }
+      const profileOk = await doUpdateProfile({ price: numRate, timeZone });
+      if (!profileOk) {
+        throw new Error('Could not save rate or timezone.');
+      }
+      await (dispatch as any)(updateMe());
+      setBanner({
+        type: 'success',
+        message:
+          'Availability saved. Students will see these slots in the booking flow.',
+      });
+    } catch (e: any) {
+      setBanner({
+        type: 'error',
+        message: e?.message || 'Could not save availability. Please try again.',
+      });
+    } finally {
+      setSaveBusy(false);
+    }
   };
 
   const dismissBanner = () => {
@@ -446,9 +486,10 @@ const AvailabilityPage: React.FC = () => {
           <button
             type="button"
             onClick={handleSave}
-            className="mt-1 inline-flex items-center rounded-lg bg-[#234C6A] px-5 py-2.5 text-sm font-medium text-white hover:bg-[#1b3c53]"
+            disabled={saveBusy}
+            className="mt-1 inline-flex items-center rounded-lg bg-[#234C6A] px-5 py-2.5 text-sm font-medium text-white hover:bg-[#1b3c53] disabled:opacity-60"
           >
-            Save Changes
+            {saveBusy ? 'Saving…' : 'Save Changes'}
           </button>
         </div>
 
@@ -506,23 +547,12 @@ const AvailabilityPage: React.FC = () => {
               {rateError && <p className="mt-1 text-xs text-red-500">{rateError}</p>}
             </div>
 
-            {/* Timezone */}
             <div>
-              <label className="mb-1.5 block text-sm font-medium text-gray-700">
-                Timezone <span className="text-red-400">*</span>
-              </label>
-              <select
-                value={form.timezone}
-                onChange={(e) => updateForm('timezone', e.target.value)}
-                className="w-full rounded-lg border border-gray-200 px-4 py-2.5 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#234C6A] focus:border-transparent"
-              >
-                <option value="">Select a timezone…</option>
-                {TIMEZONES.map((tz) => (
-                  <option key={tz} value={tz}>
-                    {tz}
-                  </option>
-                ))}
-              </select>
+              <p className="mb-1.5 text-sm font-medium text-gray-700">Your timezone</p>
+              <p className="rounded-lg border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm text-gray-700">
+                Availability is saved in <span className="font-semibold">{detectedTimeZone}</span>{' '}
+                (detected from your device). Students can view slots in their own timezone when booking.
+              </p>
             </div>
 
             {/* Session Duration */}

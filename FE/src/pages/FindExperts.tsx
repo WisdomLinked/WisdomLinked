@@ -2,40 +2,12 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Search, Filter, ChevronDown, Check } from 'lucide-react';
 import MentorCard, { MentorCardProps } from '../components/MentorCard';
 import { doFilterExperts, doGetKeywordsAndServices } from '../api/api';
-import {
-  canonicalLabelsFromMixedServiceEntries,
-  serviceDropdownRowsFromApi,
-} from '../constants/serviceOptions';
+import { serviceDropdownRowsFromApi } from '../constants/serviceOptions';
 import { SetLoadingStatus } from '../actions/appActions';
+import { mapExpertToMentorWithImage } from '../utils/mapExpertToMentor';
 
 /** Placeholder follower UI until a backend endpoint exists. */
 export const INITIAL_FOLLOWER_COUNTS: Record<string, number> = {};
-
-function mapExpertToMentor(expert: any): MentorCardProps {
-  const kw = (expert.keywords || []).map((k: any) => k?.value).filter(Boolean);
-  const svc = canonicalLabelsFromMixedServiceEntries(expert.services);
-  const field = kw[0] || 'General';
-  const created = expert.createdAt ? new Date(expert.createdAt).getTime() : 0;
-  const isNew = created > 0 && Date.now() - created < 30 * 24 * 60 * 60 * 1000;
-  return {
-    id: String(expert._id),
-    name: expert.username || expert.email || 'Expert',
-    title: expert.title || 'Expert',
-    institution:
-      (expert.description && String(expert.description).slice(0, 80)) ||
-      expert.specialNote ||
-      'WisdomLinked expert',
-    field,
-    experience:
-      typeof expert.rating === 'number' && expert.rating > 0
-        ? `${expert.rating.toFixed(1)}★`
-        : '—',
-    services: svc,
-    image: expert.image || null,
-    isNew,
-    resume: expert.resume ? String(expert.resume) : null,
-  };
-}
 
 type FilterOption = { value: string; label: string };
 
@@ -268,7 +240,10 @@ export default function FindExpertsPage({
         sortBy: 'Name in ASC',
       });
       if (res?.result && Array.isArray(res.result)) {
-        setMentors(res.result.map(mapExpertToMentor));
+        const mentors = await Promise.all(
+          res.result.map((expert: any) => mapExpertToMentorWithImage(expert, 'small')),
+        );
+        setMentors(mentors);
       } else {
         setMentors([]);
       }

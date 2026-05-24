@@ -786,6 +786,7 @@ export const doExpertFilterSeminars = async (filter: any) => {
     }
 };
 
+/** @deprecated Use createGroupChatByUser for new 1:1 bookings. Legacy Event path only. */
 export const doAppendEvent = async ({ title, start, end, duration, price, paidBy, expert, customer, payment_intent, eventId, createdBy }: any) => {
     try {
         const res = await api.post("customer/appendEvent", { title, start, end, duration, price, paidBy, expert, customer, payment_intent, eventId, createdBy });

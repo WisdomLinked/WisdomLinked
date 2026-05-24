@@ -1,5 +1,6 @@
-import React from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { MapPin, Briefcase, GraduationCap, Users } from 'lucide-react';
+import { isDisplayImageUrl } from '../utils/profileImage';
 
 export interface MentorCardProps {
   id: string | number;
@@ -48,7 +49,14 @@ const MentorCard: React.FC<MentorCardProps> = ({
   const aiHeadshotUrl = (seed: string) =>
     `https://api.dicebear.com/9.x/bottts-neutral/svg?seed=${encodeURIComponent(seed)}`;
 
-  const resolvedImage = image ?? aiHeadshotUrl(name);
+  const placeholder = useMemo(() => aiHeadshotUrl(name), [name]);
+  const initialSrc =
+    image && isDisplayImageUrl(image) ? image : placeholder;
+  const [imgSrc, setImgSrc] = useState(initialSrc);
+
+  useEffect(() => {
+    setImgSrc(image && isDisplayImageUrl(image) ? image : placeholder);
+  }, [image, placeholder]);
 
   return (
     <article
@@ -119,7 +127,12 @@ const MentorCard: React.FC<MentorCardProps> = ({
       <div className={`flex gap-4 ${onToggleFollow ? 'pr-[4.75rem]' : ''}`}>
         <div className="relative shrink-0">
           <div className="h-28 w-20 overflow-hidden rounded-md bg-[#1A3A4A]/90 text-white flex items-center justify-center text-sm font-semibold">
-            <img src={resolvedImage} alt={name} className="h-full w-full object-cover" />
+            <img
+              src={imgSrc}
+              alt={name}
+              className="h-full w-full object-cover"
+              onError={() => setImgSrc(placeholder)}
+            />
           </div>
           {isNew && (
             <span className="absolute -top-2 left-0 rounded-sm bg-[#C9A84C] px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-[#1A3A4A] shadow-sm">

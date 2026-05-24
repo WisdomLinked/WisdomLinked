@@ -1,5 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useDispatch } from 'react-redux';
+import { useLocation, useNavigate } from 'react-router-dom';
+import queryString from 'query-string';
 import { BookOpen, Clock, UserCheck, AlertCircle, MessageSquare } from 'lucide-react';
 import { useAppSelector } from '../store';
 import { doGetMyEvents, getAllCommunityChats, profileImageFetch } from '../api/api';
@@ -20,8 +22,11 @@ import ContactAdmin from './Dashboard/_ExpertDashboard/ContactAdmin';
 import UpcomingCountdownCard from '../components/dashboard/UpcomingCountdownCard';
 import UpcomingSessionModal from '../components/dashboard/UpcomingSessionModal';
 import ExpertProfile from '../components/dashboard/ExpertProfile';
-import StudentChat from '../components/dashboard/StudentChat';
+import { completeStudentBookingFromStorage } from '../components/dashboard/StudentBookingCheckout';
+import { getExpertById } from '../api/api';
 import type { MentorCardProps } from '../components/MentorCard';
+import { mapExpertToMentorWithImage } from '../utils/mapExpertToMentor';
+import StudentChat from '../components/dashboard/StudentChat';
 import {
   connectToRC,
   onSubscriptionChanged,
@@ -52,7 +57,11 @@ function deriveSessionCounts(u: any) {
 export default function StudentDashboard() {
   useEndMeetingOnReturn();
   const dispatch = useDispatch();
+  const location = useLocation();
+  const navigate = useNavigate();
   const [activeItem, setActiveItem] = useState('dashboard');
+  const [paymentReturnSuccess, setPaymentReturnSuccess] = useState(false);
+  const [bookingReturnError, setBookingReturnError] = useState<string | null>(null);
   const [dmUnreadByRid, setDmUnreadByRid] = useState<Record<string, number>>({});
   const [rcRoomNameByRid, setRcRoomNameByRid] = useState<Record<string, string>>({});
   /** Same source as chat sidebar — RC room id → community name (DMs use directConversations only). */
@@ -66,6 +75,54 @@ export default function StudentDashboard() {
     bookedInd: 0,
     pendInd: 0,
   });
+
+  useEffect(() => {
+    const { redirect_status, payment_intent, student_booking } = queryString.parse(
+      location.search,
+    );
+    if (student_booking !== '1') return;
+
+    const clearBookingQuery = () => {
+      navigate({ pathname: location.pathname, search: '' }, { replace: true });
+    };
+
+    if (redirect_status === 'succeeded' && payment_intent) {
+      let cancelled = false;
+      (async () => {
+        const result = await completeStudentBookingFromStorage(String(payment_intent));
+        if (cancelled) return;
+        clearBookingQuery();
+        if (result.ok) {
+          if (result.userDetails) {
+            dispatch({ type: 'updateUserDetails', payload: result.userDetails });
+          }
+          try {
+            const expertRes = await getExpertById(result.expertId);
+            if (expertRes?.result) {
+              setSelectedExpert(
+                await mapExpertToMentorWithImage(expertRes.result, 'medium'),
+              );
+              setActiveItem('expert-profile');
+              setPaymentReturnSuccess(true);
+            }
+          } catch {
+            setBookingReturnError('Booking saved, but we could not open the expert profile.');
+          }
+        } else {
+          setBookingReturnError(result.error);
+        }
+      })();
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    if (redirect_status && redirect_status !== 'succeeded') {
+      window.localStorage.removeItem('pendingDetails');
+      clearBookingQuery();
+      setBookingReturnError('Payment was not completed. Please try again.');
+    }
+  }, [location.search, location.pathname, navigate, dispatch]);
 
   const toggleExpertFollow = useCallback((mentorId: string | number) => {
     const id = String(mentorId);
@@ -435,6 +492,18 @@ export default function StudentDashboard() {
             notifications={chatNotifications}
             notificationsEnabled
           />
+          {bookingReturnError ? (
+            <div className="mx-6 mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-800">
+              {bookingReturnError}
+              <button
+                type="button"
+                className="ml-3 underline"
+                onClick={() => setBookingReturnError(null)}
+              >
+                Dismiss
+              </button>
+            </div>
+          ) : null}
           {activeItem === 'chat' ? (
             <div className="h-[calc(100vh-56px)] bg-wl-page">
               <StudentChat />
@@ -454,7 +523,16 @@ export default function StudentDashboard() {
                 }
                 isFollowing={followedMentorIds.includes(String(selectedExpert.id))}
                 onToggleFollow={toggleExpertFollow}
-                onBack={() => setActiveItem('experts')}
+                paymentReturnSuccess={paymentReturnSuccess}
+                onPaymentReturnHandled={() => setPaymentReturnSuccess(false)}
+                onGoToCalendar={() => {
+                  setPaymentReturnSuccess(false);
+                  setActiveItem('calendar');
+                }}
+                onBack={() => {
+                  setPaymentReturnSuccess(false);
+                  setActiveItem('experts');
+                }}
               />
             ) : (
               <div className="h-[calc(100vh-56px)] overflow-y-auto bg-[#F5F3EF] p-6">

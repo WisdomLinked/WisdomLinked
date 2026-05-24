@@ -75,6 +75,7 @@ async function syncCommunityRocketChannel(groupChatId: string) {
 const { checkTitleNameInvalid } = require('../services/global')
 const { scheduleEmailReminder, sendEmailMeetingRequestToCustomer, sendEmailMeetingRequestToExpert, sendEmailMeetingAcceptance } = require('../services/notifications')
 const { assertBookingLeadTime } = require("../utils/bookingLeadTime");
+const { assertBookingSlotValid } = require("../utils/bookingValidation");
 import { buildRemovedUserNotice, normalizeModerationReason } from '../utils/videoModerationNotice';
 
 const createGeneralChatAndJoinGlobalChat = async (expertId) => {
@@ -566,6 +567,7 @@ const createGroupChatByUser = async (req, res) => {
             throw new Error("Expert not found");
         }
         assertBookingLeadTime(expertUser, start);
+        await assertBookingSlotValid(expertUser, start, end);
 
         // create group
         const chat = await GroupChat.create({
