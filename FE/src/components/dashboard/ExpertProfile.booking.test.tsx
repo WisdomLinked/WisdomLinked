@@ -11,11 +11,9 @@ import ExpertProfile from './ExpertProfile';
 
 
 vi.mock('../../api/api', () => ({
-
   getExpertById: vi.fn(),
-
   createGroupChatByUser: vi.fn(),
-
+  profileImageFetch: vi.fn(async () => null),
 }));
 
 
