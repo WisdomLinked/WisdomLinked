@@ -48,6 +48,7 @@ import {
     AUTH_OAUTH_PASSWORD_RESET_UNAVAILABLE,
     AUTH_EMAIL_NOT_FOUND,
 } from '../utils/authUserFacingCopy';
+import { HTTP_GENERIC_ERROR } from '../utils/httpUserFacingCopy';
 
 
 sgMail.setApiKey(process.env.SENDGRID_API_KEY);
@@ -166,7 +167,7 @@ const getKeywordsAndServices = async (req: Request, res: Response) => {
         });
     } catch (err) {
         console.log(err)
-        return res.status(500).send(err.message);
+        return res.status(500).send(HTTP_GENERIC_ERROR);
     }
 }
 
@@ -336,7 +337,7 @@ const register = async (req: Request, res: Response) => {
         });
     } catch (err) {
         console.log(err)
-        return res.status(500).send(err.message);
+        return res.status(500).send(HTTP_GENERIC_ERROR);
     }
 };
 
@@ -345,7 +346,7 @@ const healthCheck = async (req: Request, res: Response) => {
         res.status(200).send("OK Ready")
     } catch (err) {
         console.log(err)
-        return res.status(500).send(err.message)
+        return res.status(500).send(HTTP_GENERIC_ERROR)
     }
 }
 
@@ -378,7 +379,7 @@ const resendConfirmEmail = async (req: Request, res: Response) => {
         });
     } catch (err) {
         console.log(err)
-        return res.status(500).send(err.message);
+        return res.status(500).send(HTTP_GENERIC_ERROR);
     }
 };
 
@@ -472,7 +473,7 @@ const verifyRegistration = async (req: Request, res: Response) => {
         });
     } catch (err) {
         console.log(err)
-        return res.status(500).send(err.message);
+        return res.status(500).send(HTTP_GENERIC_ERROR);
     }
 };
 
@@ -512,7 +513,7 @@ const checkVerificationStatus = async (req: Request, res: Response) => {
         return res.status(200).json({ status: 'NOT_FOUND' });
     } catch (err: any) {
         console.error(err);
-        return res.status(500).send(err.message);
+        return res.status(500).send(HTTP_GENERIC_ERROR);
     }
 };
 
@@ -591,7 +592,7 @@ const login = async (req: Request, res: Response) => {
 
     } catch (err) {
         console.error(err)
-        return res.status(500).send(err.message);
+        return res.status(500).send(HTTP_GENERIC_ERROR);
     }
 };
 
@@ -667,7 +668,7 @@ const confirmLoginByCode = async (req: Request, res: Response) => {
         });
 
     } catch (err) {
-        return res.status(500).send(err.message);
+        return res.status(500).send(HTTP_GENERIC_ERROR);
     }
 };
 
@@ -735,7 +736,7 @@ const passwordResetRequest = async (req: Request, res: Response) => {
         });
     } catch (err) {
         console.log(err)
-        return res.status(500).send(err.message);
+        return res.status(500).send(HTTP_GENERIC_ERROR);
     }
 };
 
@@ -767,7 +768,7 @@ const verifyPasswordResetOTP = async (req: Request, res: Response) => {
         return res.status(200).json({ status: 'SUCCESS' });
     } catch (err) {
         console.log(err)
-        return res.status(500).send(err.message);
+        return res.status(500).send(HTTP_GENERIC_ERROR);
     }
 };
 
@@ -828,7 +829,7 @@ const confirmPasswordResetByCode = async (req: Request, res: Response) => {
         });
 
     } catch (err) {
-        return res.status(500).send(err.message);
+        return res.status(500).send(HTTP_GENERIC_ERROR);
     }
 };
 
@@ -845,7 +846,7 @@ const getMe = async (req: any, res: Response) => {
         })
     } catch (err) {
         console.log(err)
-        return res.status(500).send(err.message);
+        return res.status(500).send(HTTP_GENERIC_ERROR);
     }
 }
 
@@ -861,7 +862,7 @@ const updateMissedChats = async (req: any, res: Response) => {
         return res.status(200).send('SUCCESS')
     } catch (err) {
         console.log(err)
-        return res.status(500).send(err.message);
+        return res.status(500).send(HTTP_GENERIC_ERROR);
     }
 }
 
@@ -994,7 +995,7 @@ const updateProfile = async (req: any, res: Response) => {
         });
     } catch (err) {
         console.log(err)
-        return res.status(500).send(err.message);
+        return res.status(500).send(HTTP_GENERIC_ERROR);
     }
 }
 
@@ -1026,7 +1027,7 @@ const updateResume = async (req: Request, res: Response) => {
         });
     } catch (err) {
         console.log(err)
-        return res.status(500).send(err.message);
+        return res.status(500).send(HTTP_GENERIC_ERROR);
     }
 }
 
@@ -1041,7 +1042,7 @@ const uploadChatFile = async (req: Request, res: Response) => {
         });
     } catch (err) {
         console.log(err)
-        return res.status(500).send(err.message);
+        return res.status(500).send(HTTP_GENERIC_ERROR);
     }
 }
 
@@ -1102,7 +1103,7 @@ const handleSubmit = async (req: Request, res: Response) => {
         res.status(200).send('SUCCESS')
     } catch (err) {
         console.log(err)
-        return res.status(500).send(err.message);
+        return res.status(500).send(HTTP_GENERIC_ERROR);
     }
 }
 
@@ -1148,7 +1149,7 @@ const leaveFeedback = async (req: any, res: Response) => {
         res.status(200).send('SUCCESS')
     } catch (err) {
         console.log(err)
-        return res.status(500).send(err.message);
+        return res.status(500).send(HTTP_GENERIC_ERROR);
     }
 }
 
@@ -1179,7 +1180,7 @@ const getTimeZone = async (req: Request, res: Response) => {
         res.status(200).send({ response: data })
     } catch (error) {
         console.error('Fetch error:', error);
-        return res.status(500).send(error.message);
+        return res.status(500).send(HTTP_GENERIC_ERROR);
     }
 };
 

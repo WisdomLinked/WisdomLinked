@@ -1,4 +1,26 @@
 import axios from 'axios';
+import { resolveUserFacingError } from '../utils/resolveUserFacingError';
+
+export type ChatApiResult<T> = { ok: true; data: T } | { ok: false; error: string };
+
+export type MeetingJoinInfo = {
+    success?: boolean;
+    meetingThreadId?: string;
+    jitsiRoomName?: string;
+    role?: 'moderator' | 'participant';
+    jitsiUrl?: string;
+    error?: string;
+};
+
+async function requestChatApi<T>(logLabel: string, fn: () => Promise<T>): Promise<ChatApiResult<T>> {
+    try {
+        const data = await fn();
+        return { ok: true, data };
+    } catch (err: unknown) {
+        console.error(logLabel, err);
+        return { ok: false, error: resolveUserFacingError(err) };
+    }
+}
 
 let BASE_URL = process.env.REACT_APP_API_BASE_URL || '/api';
 if (BASE_URL && !BASE_URL.endsWith('/')) {
@@ -252,10 +274,16 @@ export const fetchReadReceiptsBatch = async (messageIds: string[], conversationI
 export const startMeeting = async (data: { conversationId?: string; groupChatId?: string }) => {
     try {
         const res = await api.post('meeting/start', data);
-        return res.data; // { meetingThreadId, jitsiRoomName, jitsiUrl, message }
-    } catch (err: any) {
-        console.error('[chatApi.startMeeting]', err.message);
-        return null;
+        return res.data as {
+            meetingThreadId?: string;
+            jitsiRoomName?: string;
+            jitsiUrl?: string;
+            message?: string;
+            error?: string;
+        };
+    } catch (err: unknown) {
+        console.error('[chatApi.startMeeting]', err);
+        return { error: resolveUserFacingError(err) };
     }
 };
 
@@ -310,21 +338,23 @@ export const getMeetingThread = async (meetingThreadId: string) => {
 };
 
 /** Get signed join URL and role for current authenticated user. */
-export const getMeetingJoinInfo = async (meetingThreadId: string): Promise<{
-    success?: boolean;
-    meetingThreadId?: string;
-    jitsiRoomName?: string;
-    role?: 'moderator' | 'participant';
-    jitsiUrl?: string;
-    error?: string;
-}> => {
-    try {
-        const res = await api.get(`meeting/${meetingThreadId}/join`);
-        return res.data;
-    } catch (err: any) {
-        console.error('[chatApi.getMeetingJoinInfo]', err.message);
-        return { success: false, error: err?.response?.data?.error || err.message };
-    }
+export const getMeetingJoinInfo = async (
+    meetingThreadId: string,
+): Promise<ChatApiResult<MeetingJoinInfo>> => {
+    return requestChatApi('[chatApi.getMeetingJoinInfo]', async () => {
+        const res = await api.get(`meeting/${encodeURIComponent(meetingThreadId)}/join`);
+        const data = res.data as MeetingJoinInfo;
+        if (data?.success && data?.jitsiUrl) {
+            return data;
+        }
+        throw {
+            response: {
+                data: {
+                    error: data?.error || 'Unable to join this meeting. Please check the ID and try again.',
+                },
+            },
+        };
+    });
 };
 
 /** Get current user's rating eligibility/state for a meeting. */

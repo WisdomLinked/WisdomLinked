@@ -1,5 +1,7 @@
 import React, { useState } from "react";
 import CloseIcon from '@mui/icons-material/Close';
+import { store } from '../store';
+import { showErrorAlert } from '../actions/alertActions';
 
 interface AdHocPaymentModalProps {
     isOpen: boolean;
@@ -25,24 +27,24 @@ const AdHocPaymentModal: React.FC<AdHocPaymentModalProps> = ({
     const handleConfirm = () => {
         // Validation
         if (!amount || amount <= 0) {
-            alert('Please enter a valid amount greater than $0');
+            store.dispatch(showErrorAlert('Please enter a valid amount greater than $0'));
             return;
         }
         
         if (!description.trim()) {
-            alert('Please enter a payment description');
+            store.dispatch(showErrorAlert('Please enter a payment description'));
             return;
         }
 
         if (!customerEmail.trim()) {
-            alert('Please enter customer email address');
+            store.dispatch(showErrorAlert('Please enter customer email address'));
             return;
         }
 
         // Basic email validation
         const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
         if (!emailRegex.test(customerEmail.trim())) {
-            alert('Please enter a valid email address');
+            store.dispatch(showErrorAlert('Please enter a valid email address'));
             return;
         }
 

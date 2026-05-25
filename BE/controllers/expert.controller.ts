@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import { safeErrorMessage } from '../utils/httpUserFacingCopy';
 const { ALLOWED_NOTICE_HOURS } = require("../utils/bookingLeadTime");
 const GroupChat = require("../models/GroupChat");
 const User = require("../models/User");
@@ -246,7 +247,7 @@ const setBookingNoticeHours = async (req: any, res: Response) => {
         });
     } catch (err: any) {
         console.log(err);
-        return res.status(500).json({ error: err.message });
+        return res.status(500).json({ error: safeErrorMessage(err) });
     }
 };
 
@@ -278,7 +279,7 @@ const setBlockedBookingDates = async (req: any, res: Response) => {
         });
     } catch (err: any) {
         console.log(err);
-        return res.status(500).json({ error: err.message });
+        return res.status(500).json({ error: safeErrorMessage(err) });
     }
 };
 

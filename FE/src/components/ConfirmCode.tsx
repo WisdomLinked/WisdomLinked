@@ -36,7 +36,8 @@ const ConfirmCode = ({ email, password }: any) => {
     const resend = async () => {
         SetLoadingStatus(true);
         const response: any = await login({ email, password });
-        if (response.status === "SUCCESS") {
+        if (response === false) return;
+        if (response?.status === "SUCCESS") {
             setFormSuccess("Verification code is sent again.");
             clearAllIntervals();
             set_inputCode('')
@@ -50,7 +51,8 @@ const ConfirmCode = ({ email, password }: any) => {
         SetLoadingStatus(true);
         const response: any = await confirmLoginByCode({ email, password, code: inputCode, timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone });
         // console.log(response, '////')
-        if (response.status === "SUCCESS") {
+        if (response === false) return;
+        if (response?.status === "SUCCESS") {
             localStorage.setItem("currentUser", JSON.stringify(response.userDetails));
             dispatch({
                 type: actionTypes.authenticate,

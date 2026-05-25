@@ -28,12 +28,12 @@ export default function JoinMeeting() {
     const pendingWindow = window.open('', '_blank');
     try {
       const res = await getMeetingJoinInfo(meetingThreadId);
-      if (res?.success && res.jitsiUrl) {
-        openMeetingUrl(res.jitsiUrl, pendingWindow);
+      if (res.ok) {
+        openMeetingUrl(res.data.jitsiUrl!, pendingWindow);
         return;
       }
       if (pendingWindow && !pendingWindow.closed) pendingWindow.close();
-      setError(res?.error || 'Unable to join this meeting. Please check the ID and try again.');
+      setError(res.error);
     } catch (err: any) {
       if (pendingWindow && !pendingWindow.closed) pendingWindow.close();
       setError(err?.message || 'Unable to join this meeting. Please check the ID and try again.');

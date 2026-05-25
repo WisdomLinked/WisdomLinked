@@ -8,6 +8,8 @@ import {
 } from '../api/chatApi';
 import { formatMessageTime } from '../utils/formatMessageTime';
 import { trackMeetingJoin } from '../utils/meetingSession';
+import { useDispatch } from 'react-redux';
+import { showErrorAlert, showSuccessAlert } from '../actions/alertActions';
 
 const MEET_EXPIRY_MS = 2 * 60 * 60 * 1000; // 2 hours
 
@@ -59,6 +61,7 @@ const MeetingCard: React.FC<MeetingCardProps> = ({
     theme = 'dark',
     onJoin,
 }) => {
+    const dispatch = useDispatch();
     const [expanded, setExpanded] = useState(false);
     const [transcript, setTranscript] = useState<TranscriptLine[]>([]);
     const [loading, setLoading] = useState(false);
@@ -83,16 +86,17 @@ const MeetingCard: React.FC<MeetingCardProps> = ({
         setJoinBusy(true);
         const info = await getMeetingJoinInfo(meetingThreadId);
         setJoinBusy(false);
-        if (!info?.success || !info?.jitsiUrl) {
+        if (!info.ok || !info.data.jitsiUrl) {
             if (pendingWindow && !pendingWindow.closed) {
                 pendingWindow.close();
             }
-            window.alert(info?.error || 'Could not join call. Please retry from chat.');
+            dispatch(showErrorAlert(info.ok ? 'Could not join call. Please retry from chat.' : info.error));
             return;
         }
-        trackMeetingJoin(info.meetingThreadId ?? meetingThreadId, info.jitsiUrl, pendingWindow);
-        onJoin?.(info.jitsiUrl);
-        openMeetingUrl(info.jitsiUrl, pendingWindow);
+        const joinData = info.data;
+        trackMeetingJoin(joinData.meetingThreadId ?? meetingThreadId, joinData.jitsiUrl, pendingWindow);
+        onJoin?.(joinData.jitsiUrl);
+        openMeetingUrl(joinData.jitsiUrl, pendingWindow);
     };
 
     const loadTranscript = async () => {
@@ -166,12 +170,12 @@ const MeetingCard: React.FC<MeetingCardProps> = ({
             })();
             try {
                 await navigator.clipboard.writeText(normalizedInviteUrl);
-                window.alert('Guest invite link copied (valid up to 2 hours).');
+                dispatch(showSuccessAlert('Guest invite link copied (valid up to 2 hours).'));
             } catch {
-                window.alert(normalizedInviteUrl);
+                dispatch(showSuccessAlert(normalizedInviteUrl));
             }
         } else {
-            window.alert(res?.error || 'Could not create guest invite link');
+            dispatch(showErrorAlert(res?.error || 'Could not create guest invite link'));
         }
     };
 

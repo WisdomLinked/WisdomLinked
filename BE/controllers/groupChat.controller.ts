@@ -19,6 +19,7 @@ const {
     kickUserFromGroupChannel,
     syncRocketGroupChannelMembers,
 } = require("../services/rocketchat.service");
+import { safeErrorMessage } from '../utils/httpUserFacingCopy';
 
 /** Stored in RC; FE shows as centered pill (see ChatSystemNotice). */
 const WL_COMMUNITY_SYS_PREFIX = '__WL_COMMUNITY_SYS__::';
@@ -198,7 +199,7 @@ const createCommunityChat = async (req, res) => {
         console.log('[createCommunityChat]', err.message);
         return res.status(500).json({
             status: 'FAIL',
-            error: err.message
+            error: safeErrorMessage(err)
         });
     }
 }
@@ -296,7 +297,7 @@ const addParticipantsToCommunityChat = async (req, res) => {
         console.log('[addParticipantsToCommunityChat]', err.message);
         return res.status(500).json({
             status: 'FAIL',
-            error: err.message
+            error: safeErrorMessage(err)
         });
     }
 }
@@ -364,7 +365,7 @@ const joinCommunityChat = async (req, res) => {
         console.log('[joinCommunityChat]', err.message);
         return res.status(500).json({
             status: 'FAIL',
-            error: err.message
+            error: safeErrorMessage(err)
         });
     }
 }
@@ -437,7 +438,7 @@ const getAllCommunityChats = async (req, res) => {
         console.log('[getAllCommunityChats] Error:', err);
         return res.status(500).json({
             status: 'FAIL',
-            error: err.message || 'Internal server error'
+            error: safeErrorMessage(err) || 'Internal server error'
         });
     }
 }
@@ -772,7 +773,7 @@ const resolveGroupMemberByRcSlug = async (req: any, res: any) => {
         });
     } catch (err: any) {
         console.error("[resolveGroupMemberByRcSlug]", err);
-        return res.status(500).json({ error: err.message });
+        return res.status(500).json({ error: safeErrorMessage(err) });
     }
 };
 
@@ -1338,7 +1339,7 @@ const removeMemberFromCommunityChat = async (req, res) => {
         });
     } catch (err) {
         console.error('[removeMemberFromCommunityChat]', err);
-        return res.status(500).json({ error: err.message });
+        return res.status(500).json({ error: safeErrorMessage(err) });
     }
 };
 
@@ -1632,7 +1633,7 @@ const setCommunityCoModerator = async (req, res) => {
             coModerators: groupChat.coModerators || [],
         });
     } catch (err) {
-        return res.status(500).json({ error: err.message });
+        return res.status(500).json({ error: safeErrorMessage(err) });
     }
 };
 

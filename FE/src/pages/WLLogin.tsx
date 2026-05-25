@@ -60,7 +60,8 @@ export default function WLLogin() {
         clearFormAlert();
         try {
             const response = await login({ email: form.email, password: form.password }) as any;
-            if (response.status === 'SUCCESS') {
+            if (response === false) return;
+            if (response?.status === 'SUCCESS') {
                 setCodeSent(true);
                 startTimer();
                 // Focus first OTP input after transition
@@ -148,7 +149,8 @@ export default function WLLogin() {
                 code,
                 timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone
             });
-            if (response.status === 'SUCCESS') {
+            if (response === false) return;
+            if (response?.status === 'SUCCESS') {
                 localStorage.setItem('currentUser', JSON.stringify(response.userDetails));
                 dispatch({ type: actionTypes.authenticate, payload: response.userDetails });
                 dispatch(showSuccessAlert(`Hi, ${response.userDetails.username} 👋. Welcome back.`));
@@ -180,7 +182,8 @@ export default function WLLogin() {
         clearFormAlert();
         try {
             const response: any = await login({ email: form.email, password: form.password });
-            if (response.status === 'SUCCESS') {
+            if (response === false) return;
+            if (response?.status === 'SUCCESS') {
                 setFormSuccess('Verification code sent again.');
                 setOtpDigits(['', '', '', '', '', '']);
                 startTimer();

@@ -4,6 +4,7 @@ import { useDispatch } from 'react-redux';
 import { CheckCircle, AlertCircle, Loader2, ArrowRight } from 'lucide-react';
 import { verifyRegistration } from '../api/api';
 import { autoLogin } from '../actions/authActions';
+import FormAlert from '../components/FormAlert';
 
 const VerifyEmail = () => {
     const { email, confirmCode } = useParams<{ email: string; confirmCode: string }>();
@@ -20,6 +21,11 @@ const VerifyEmail = () => {
             hasVerified.current = true;
             try {
                 const response = await verifyRegistration({ email, confirmCode });
+                if (response === false) {
+                    setStatus('error');
+                    setErrorMsg('Verification failed. Please try again.');
+                    return;
+                }
                 if (response?.status === 'SUCCESS' && response.userDetails) {
                     setStatus('success');
                     dispatch(autoLogin() as any);
@@ -86,7 +92,7 @@ const VerifyEmail = () => {
                             <AlertCircle className="w-8 h-8" />
                         </div>
                         <h2 className="text-2xl font-bold mb-2">Verification Failed</h2>
-                        <p className="text-slate-600 mb-8">{errorMsg}</p>
+                        <FormAlert variant="error" message={errorMsg} className="mb-6 text-left" />
                         <button 
                             onClick={() => navigate('/login')}
                             className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-slate-100 text-slate-600 font-medium hover:bg-slate-200 transition-colors"

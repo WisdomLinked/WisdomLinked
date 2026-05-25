@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import { HTTP_GENERIC_ERROR } from '../utils/httpUserFacingCopy';
 const Event = require("../models/Event");
 const User = require("../models/User");
 const FriendInvitation = require("../models/FriendInvitation");
@@ -98,7 +99,7 @@ const createEventByExpert = async (req, res) => {
         });
     } catch (err) {
         console.log(err)
-        return res.status(500).send(err.message);
+        return res.status(500).send(HTTP_GENERIC_ERROR);
     }
 }
 
@@ -276,7 +277,7 @@ const appendEvent = async (req, res) => {
         }
     } catch (err) {
         console.log(err)
-        return res.status(500).send(err.message);
+        return res.status(500).send(HTTP_GENERIC_ERROR);
     }
 }
 
@@ -336,7 +337,7 @@ const updateEvent = async (req, res) => {
         });
     } catch (err) {
         console.error(err);
-        return res.status(500).send(err.message);
+        return res.status(500).send(HTTP_GENERIC_ERROR);
     }
 };
 
@@ -389,7 +390,7 @@ const acceptEvent = async (req, res) => {
         })
     } catch (err) {
         console.log(err)
-        return res.status(500).send(err.message);
+        return res.status(500).send(HTTP_GENERIC_ERROR);
     }
 }
 
@@ -415,7 +416,7 @@ const declineEvent = async (req, res) => {
         })
     } catch (err) {
         console.log(err)
-        return res.status(500).send(err.message);
+        return res.status(500).send(HTTP_GENERIC_ERROR);
     }
 }
 
@@ -452,7 +453,7 @@ const cancelInvitation = async (req, res) => {
         })
     } catch (err) {
         console.log(err)
-        return res.status(500).send(err.message);
+        return res.status(500).send(HTTP_GENERIC_ERROR);
     }
 }
 
@@ -502,7 +503,7 @@ const cancelEvent = async (req, res) => {
         })
     } catch (err) {
         console.log(err.message)
-        return res.status(500).send(err.message);
+        return res.status(500).send(HTTP_GENERIC_ERROR);
     }
 }
 
@@ -518,7 +519,7 @@ const getMyEvents = async (req, res) => {
         })
     } catch (err) {
         console.log(err)
-        return res.status(500).send(err.message);
+        return res.status(500).send(HTTP_GENERIC_ERROR);
     }
 }
 
@@ -538,7 +539,7 @@ const getEventsBetweenCustomerAndExpert = async (req, res) => {
         })
     } catch (err) {
         console.log(err)
-        return res.status(500).send(err.message);
+        return res.status(500).send(HTTP_GENERIC_ERROR);
     }
 }
 

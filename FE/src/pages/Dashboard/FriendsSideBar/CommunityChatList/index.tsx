@@ -177,7 +177,8 @@ const CommunityChatList = () => {
                 isOpenToAll: isOpenToAll
             });
 
-            if (response.status === 'SUCCESS') {
+            if (response === false) return;
+            if (response?.status === 'SUCCESS') {
                 dispatch(showSuccessAlert("Community chat created successfully!"));
                 // Update user details to refresh the list
                 dispatch(updateMe());

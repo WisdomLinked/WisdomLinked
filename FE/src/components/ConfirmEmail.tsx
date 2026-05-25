@@ -45,8 +45,11 @@ const ConfirmEmail: React.FC<ConfirmEmailProps> = ({ email }) => {
         setIsResending(true);
         clearFormAlert();
         try {
-            const response = await callApi('POST', 'auth/resendConfirmEmail', { email }) as any;
-            if (response.status === 'SUCCESS') {
+            const response = await callApi('POST', 'auth/resendConfirmEmail', { email }, undefined, {
+                notify: false,
+            }) as any;
+            if (response === false) return;
+            if (response?.status === 'SUCCESS') {
                 setFormSuccess('A new verification link has been sent to your email.');
             } else {
                 setFormError(response.error || 'Failed to resend the verification link.');

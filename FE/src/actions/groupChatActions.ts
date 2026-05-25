@@ -13,9 +13,14 @@ export const createGroupChatAction = (
     return async (dispatch: Dispatch) => {
         const response = await createGroupChat(name);
 
+        if (response === false) return;
         if (response === "Group created successfully") {
             closeDialogHandler();
             dispatch(showSuccessAlert(response));
+        } else if (typeof response === 'string' && response.length > 0) {
+            dispatch(showErrorAlert(response));
+        } else {
+            dispatch(showErrorAlert('Could not create the community. Please try again.'));
         }
     };
 };

@@ -10,7 +10,7 @@ import DashboardIcon from '@mui/icons-material/Dashboard';
 import PersonSearchIcon from '@mui/icons-material/PersonSearch';
 import Calendar from "./calendar";
 import Dashboard from "./dashboard";
-import JoinMeeting from "../joinMeeting"
+import JoinMeeting from "../../../components/dashboard/JoinMeeting"
 import { useAppSelector } from "../../../store";
 import Search from "./search";
 import { doGetMyEvents } from "../../../api/api";

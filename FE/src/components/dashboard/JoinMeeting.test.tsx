@@ -24,8 +24,11 @@ describe("JoinMeeting", () => {
     } as unknown as Window;
     vi.spyOn(window, "open").mockReturnValue(popup);
     vi.mocked(chatApi.getMeetingJoinInfo).mockResolvedValue({
-      success: true,
-      jitsiUrl: "https://meet.wisdomlinked.com/wl-room?jwt=abc",
+      ok: true,
+      data: {
+        success: true,
+        jitsiUrl: "https://meet.wisdomlinked.com/wl-room?jwt=abc",
+      },
     });
 
     render(<JoinMeeting />);
@@ -48,7 +51,7 @@ describe("JoinMeeting", () => {
     } as unknown as Window;
     vi.spyOn(window, "open").mockReturnValue(popup);
     vi.mocked(chatApi.getMeetingJoinInfo).mockResolvedValue({
-      success: false,
+      ok: false,
       error: "You do not have access to this meeting",
     });
 

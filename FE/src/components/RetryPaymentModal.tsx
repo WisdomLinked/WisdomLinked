@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from "react";
 import CloseIcon from '@mui/icons-material/Close';
+import { store } from '../store';
+import { showErrorAlert } from '../actions/alertActions';
 
 interface RetryPaymentModalProps {
     paymentItem: any;
@@ -32,17 +34,17 @@ const RetryPaymentModal: React.FC<RetryPaymentModalProps> = ({
 
     const handleConfirm = () => {
         if (!customAmount || customAmount <= 0) {
-            alert('Please enter a valid amount');
+            store.dispatch(showErrorAlert('Please enter a valid amount'));
             return;
         }
         
         if (!customDescription.trim()) {
-            alert('Please enter a description');
+            store.dispatch(showErrorAlert('Please enter a description'));
             return;
         }
 
         if (!customerEmail.trim()) {
-            alert('Customer email is required');
+            store.dispatch(showErrorAlert('Customer email is required'));
             return;
         }
 

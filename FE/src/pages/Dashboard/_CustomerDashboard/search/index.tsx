@@ -130,16 +130,22 @@ const Search = () => {
             // because even a $0 payment will create a PaymentIntent and 'succeed' automatically.
             set_paidBy("stripe");
             const response = await createGroupChatByUser(details);
-            if (response) {
-                console.log("response: ",response);
-    
+            if (response === false) return;
+            if (response?.status === 'FAIL' || response?.error) {
+                dispatch(showErrorAlert(response?.error || 'Could not complete booking.'));
+                set_paymentFailed(true);
+                return;
+            }
+            if (response?.result?.groupChats) {
                 const groupChatId = response.result.groupChats[response.result.groupChats.length - 1];
-    
                 if (groupChatId) {
                     goToStep(4);
                 } else {
                     goToStep(3);
                 }
+            } else {
+                dispatch(showErrorAlert('Could not complete booking.'));
+                set_paymentFailed(true);
             }
 
             // const response = await doAppendEvent(details);

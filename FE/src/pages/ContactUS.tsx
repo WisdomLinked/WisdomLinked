@@ -5,8 +5,11 @@ import ShowFieldError from "../components/ShowFieldError";
 import { validateEmail } from "../actions/common";
 import {doContactUs, sendEmailToAdmin} from "../api/api"; // Import the new function
 import { SetLoadingStatus } from "../actions/appActions";
+import { useDispatch } from "react-redux";
+import { showErrorAlert, showSuccessAlert } from "../actions/alertActions";
 
 const ContactUS = () => {
+    const dispatch = useDispatch();
     const CONTACT_MESSAGE_MAX_LENGTH = 100;
     const navigate = useNavigate(); // For programmatic navigation
 
@@ -91,11 +94,16 @@ The WisdomLinked.com Team
                     issue
                 });
 
+                if (response === false) return;
+                if (response?.status === 'FAIL' || response?.error) {
+                    dispatch(showErrorAlert(response?.error || 'Failed to submit contact details. Please try again later.'));
+                    return;
+                }
                 if (response) {
 
                     const finalMessage = createEmailTemplate(name, email, countryCode, contactNumber, subject, issue);
                     await handleSendEmail(finalMessage);
-                    alert("Thank you for contacting us. Your query has been submitted successfully.");
+                    dispatch(showSuccessAlert('Thank you for contacting us. Your query has been submitted successfully.'));
 
                     // Clear input fields
                     set_name("");
@@ -113,11 +121,11 @@ The WisdomLinked.com Team
                         window.scrollTo(0, 0);
                     }, 0);
                 } else {
-                    alert("Failed to submit contact details. Please try again later.");
+                    dispatch(showErrorAlert('Failed to submit contact details. Please try again later.'));
                 }
             } catch (error) {
                 console.error("Error submitting contact:", error);
-                alert("An error occurred. Please try again.");
+                dispatch(showErrorAlert('An error occurred. Please try again.'));
             } finally {
                 SetLoadingStatus(false);
             }

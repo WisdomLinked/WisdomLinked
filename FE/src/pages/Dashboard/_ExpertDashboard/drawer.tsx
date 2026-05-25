@@ -18,7 +18,7 @@ import { useDispatch } from "react-redux";
 import { doGetMyEvents } from "../../../api/api";
 import { isTheEventGoingOn } from "../../../actions/common";
 import ExpertProfile from "./profile";
-import JoinMeeting from "../joinMeeting"
+import JoinMeeting from "../../../components/dashboard/JoinMeeting"
 import FriendsTitle from "../FriendsSideBar/FriendsTitle";
 import GroupChatList from "../FriendsSideBar/GroupChatList";
 import CastForEducationIcon from '@mui/icons-material/CastForEducation';

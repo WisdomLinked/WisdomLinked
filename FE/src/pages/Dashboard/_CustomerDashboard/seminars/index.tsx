@@ -10,7 +10,7 @@ import { useDispatch } from "react-redux";
 import { Swiper, SwiperSlide } from "swiper/react";
 import { Pagination, Navigation } from "swiper";
 import { SetLoadingStatus } from "../../../../actions/appActions";
-import { showWarningAlert } from '../../../../actions/alertActions';
+import { showErrorAlert, showWarningAlert } from '../../../../actions/alertActions';
 import FormAlert from '../../../../components/FormAlert';
 
 const Seminars = () => {
@@ -52,16 +52,29 @@ const Seminars = () => {
     const submit = async (details: any) => {
         set_paidBy('stripe')
         SetLoadingStatus(true)
-        const response = await addMemberToPendingGroup(details);
-        console.log(response.pendingGroupChats, '//////')
-        if (response) {
-            dispatch({
-                type: 'updateUserDetails',
-                payload: {
-                    pendingGroupChats: response.pendingGroupChats
-                }
-            })
-            set_step(2)
+        try {
+            const response = await addMemberToPendingGroup(details);
+            if (response === false) return;
+            if (response?.status === 'FAIL' || response?.error) {
+                dispatch(showErrorAlert(response?.error || 'Could not complete seminar registration.'));
+                set_paymentFailed(true);
+                return;
+            }
+            if (response?.pendingGroupChats) {
+                dispatch({
+                    type: 'updateUserDetails',
+                    payload: {
+                        pendingGroupChats: response.pendingGroupChats
+                    }
+                })
+                set_step(2)
+            } else {
+                dispatch(showErrorAlert('Could not complete seminar registration.'));
+                set_paymentFailed(true);
+            }
+        } catch {
+            dispatch(showErrorAlert('Could not complete seminar registration.'));
+            set_paymentFailed(true);
         }
         SetLoadingStatus(false)
     }

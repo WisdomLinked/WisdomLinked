@@ -13,11 +13,13 @@ import {
 } from "./types";
 
 import { store } from "../store";
-import { actionTypes } from "../actions/types";
-import { showErrorAlert } from "../actions/alertActions";
+import {
+    checkForAuthorization,
+    handleAuthApiFailure,
+} from "./apiErrorHandling";
+import { resolveUserFacingError } from "../utils/resolveUserFacingError";
 import { logoutUser } from "../actions/authActions";
 import { SetLoadingStatus } from "../actions/appActions";
-import { group } from "console";
 
 let BASE_URL = process.env.REACT_APP_API_BASE_URL || '/api';
 if (BASE_URL && !BASE_URL.endsWith('/')) {
@@ -61,30 +63,6 @@ export const callLogout = async () => {
     }
 };
 
-const checkForAuthorization = (error: any) => {
-    const responseCode = error?.response?.status;
-
-    if (responseCode === 401 || responseCode === 403) {
-        logOut();
-        return false
-    }
-    store.dispatch({
-        type: actionTypes.authError,
-        payload: error.message
-    })
-    if (responseCode == 413) {
-        store.dispatch(showErrorAlert('Payload is too large. Try a smaller file or message.'));
-    }
-    else
-        store.dispatch(showErrorAlert(
-            typeof error.response?.data === 'string'
-                ? error.response.data
-                : error.response?.data?.error || error.message || 'Something went wrong. Please try again.'
-        ));
-    SetLoadingStatus(false)
-    return false
-};
-
 export const login = async ({ email, password }: LoginArgs) => {
     try {
         const res = await api.post<AuthResponse>("auth/login", {
@@ -95,7 +73,7 @@ export const login = async ({ email, password }: LoginArgs) => {
         return res.data;
     } catch (err: any) {
         console.error('Login error:', err);
-        return checkForAuthorization(err);
+        return handleAuthApiFailure(err);
     }
 };
 
@@ -105,7 +83,7 @@ export const register = async (userdata: any) => {
 
         return res.data;
     } catch (err: any) {
-        return checkForAuthorization(err);
+        return handleAuthApiFailure(err);
     }
 };
 
@@ -115,7 +93,7 @@ export const resendConfirmEmail = async ({ email }: any) => {
 
         return res.data;
     } catch (err: any) {
-        return checkForAuthorization(err);
+        return handleAuthApiFailure(err);
     }
 };
 
@@ -125,7 +103,7 @@ export const confirmLoginByCode = async ({ email, password, code, timeZone }: an
 
         return res.data;
     } catch (err: any) {
-        return checkForAuthorization(err);
+        return handleAuthApiFailure(err);
     }
 };
 
@@ -135,7 +113,7 @@ export const confirmPasswordResetByCode = async ({ email, password, code }: any)
 
         return res.data;
     } catch (err: any) {
-        return checkForAuthorization(err);
+        return handleAuthApiFailure(err);
     }
 };
 
@@ -145,7 +123,7 @@ export const verifyPasswordResetOTP = async ({ email, code }: any) => {
 
         return res.data;
     } catch (err: any) {
-        return checkForAuthorization(err);
+        return handleAuthApiFailure(err);
     }
 };
 
@@ -154,7 +132,7 @@ export const verifyRegistration = async ({ email, confirmCode }: any) => {
         const res = await api.post<any>("auth/verifyRegistration", { email, confirmCode });
         return res.data;
     } catch (error) {
-        return { status: "FAIL" }
+        return { status: "FAIL", error: resolveUserFacingError(error) };
     }
 }
 
@@ -163,7 +141,7 @@ export const checkVerificationStatus = async (email: string) => {
         const res = await api.get<any>(`auth/checkVerification?email=${encodeURIComponent(email)}`);
         return res.data;
     } catch (error) {
-        return { status: "FAIL" }
+        return { status: "FAIL", error: resolveUserFacingError(error) };
     }
 }
 
@@ -173,7 +151,7 @@ export const passwordResetRequest = async ({ email, password }: any) => {
 
         return res.data;
     } catch (err: any) {
-        return checkForAuthorization(err);
+        return handleAuthApiFailure(err);
     }
 };
 
@@ -531,7 +509,13 @@ export const doGetKeywordsAndServices = async () => {
     }
 }
 
-export const callApi = async (method: string, url: string, data: any, file?: any) => {
+export const callApi = async (
+    method: string,
+    url: string,
+    data: any,
+    file?: any,
+    options?: { notify?: boolean },
+) => {
     try {
 
         const formData = new FormData()
@@ -557,38 +541,45 @@ export const callApi = async (method: string, url: string, data: any, file?: any
             credentials: 'include'
         }
         return fetch(BASE_URL + url, options)
-            .then((response: any) => {
+            .then(async (response: Response) => {
+                const contentType = response.headers.get('content-type');
+                const isJson =
+                    contentType && contentType.indexOf('application/json') > -1;
 
                 if (!response.ok) {
-                    const error = Object.assign({}, response, {
+                    let parsedBody: unknown = null;
+                    if (isJson) {
+                        try {
+                            parsedBody = await response.json();
+                        } catch {
+                            parsedBody = null;
+                        }
+                    }
+                    return Promise.reject({
                         status: response.status,
                         statusText: response.statusText,
+                        parsedBody,
                     });
-
-                    return Promise.reject(error);
                 }
-                const contentType = response.headers.get('content-type');
-                if (contentType && contentType.indexOf('application/json') > -1) {
+
+                if (isJson) {
                     return response
                         .json()
                         .then((json: any) => {
-                            if (Array.isArray(json))
-                                return [...json];
-                            else
-                                return { ...json };
+                            if (Array.isArray(json)) return [...json];
+                            return { ...json };
                         })
                         .catch(() => {
-                            throw new Error(response.status);
+                            throw { status: response.status, statusText: response.statusText };
                         });
-                } else {
-                    return {};
                 }
+                return {};
             })
-            .catch((err) => {
-                return checkForAuthorization(err);
-            });
+            .catch((err) =>
+                options?.notify === false ? handleAuthApiFailure(err) : checkForAuthorization(err),
+            );
     } catch (err: any) {
-        return checkForAuthorization(err);
+        return options?.notify === false ? handleAuthApiFailure(err) : checkForAuthorization(err);
     }
 }
 

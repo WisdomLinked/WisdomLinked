@@ -51,7 +51,12 @@ export default function ContactAdmin() {
         subject: 'Expert contact admin',
         issue: body,
       });
-      if (res && res !== false) {
+      if (res === false) return;
+      if (res?.status === 'FAIL' || res?.error) {
+        dispatch(showErrorAlert(res?.error || 'Could not send your message. Please try again.'));
+        return;
+      }
+      if (res) {
         setMessage('');
         setSubmitted(true);
         dispatch(showSuccessAlert('Your message has been sent to admin.'));

@@ -20,6 +20,7 @@ import {
 } from '../services/rocketchat.service';
 import { wlDisplayName } from '../utils/wlDisplayName';
 import { prepareMessageForRocketChat } from '../utils/chatReplyPlainText';
+import { safeErrorMessage } from '../utils/httpUserFacingCopy';
 
 const Conversation = require('../models/Conversation');
 const GroupChat = require('../models/GroupChat');
@@ -318,7 +319,7 @@ export const getOrCreateDM = async (req: any, res: Response) => {
         });
     } catch (err: any) {
         console.error('[chat.getOrCreateDM]', err.message);
-        return res.status(500).json({ error: err.message });
+        return res.status(500).json({ error: safeErrorMessage(err) });
     }
 };
 
@@ -393,7 +394,7 @@ export const sendMessage = async (req: any, res: Response) => {
         });
     } catch (err: any) {
         console.error('[chat.sendMessage]', err.message);
-        return res.status(500).json({ error: err.message });
+        return res.status(500).json({ error: safeErrorMessage(err) });
     }
 };
 
@@ -459,7 +460,7 @@ export const getDirectHistory = async (req: any, res: Response) => {
         return res.status(200).json({ messages: [] });
     } catch (err: any) {
         console.error('[chat.getDirectHistory]', err.message);
-        return res.status(500).json({ error: err.message });
+        return res.status(500).json({ error: safeErrorMessage(err) });
     }
 };
 
@@ -517,7 +518,7 @@ export const getDirectCallHistory = async (req: any, res: Response) => {
         return res.status(200).json({ history });
     } catch (err: any) {
         console.error('[chat.getDirectCallHistory]', err.message);
-        return res.status(500).json({ error: err.message });
+        return res.status(500).json({ error: safeErrorMessage(err) });
     }
 };
 
@@ -593,7 +594,7 @@ export const getOnlineUsers = async (req: any, res: Response) => {
         return res.status(200).json({ success: true, onlineUsers });
     } catch (err: any) {
         console.error('[chat.getOnlineUsers]', err.message);
-        return res.status(500).json({ success: false, error: err.message, onlineUsers: [] });
+        return res.status(500).json({ success: false, error: safeErrorMessage(err), onlineUsers: [] });
     }
 };
 
@@ -657,7 +658,7 @@ export const sendGroupMessage = async (req: any, res: Response) => {
         });
     } catch (err: any) {
         console.error('[chat.sendGroupMessage]', err.message);
-        return res.status(500).json({ error: err.message });
+        return res.status(500).json({ error: safeErrorMessage(err) });
     }
 };
 
@@ -748,7 +749,7 @@ export const getGroupHistory = async (req: any, res: Response) => {
         return res.status(200).json({ messages: [], rcChannelId: null });
     } catch (err: any) {
         console.error('[chat.getGroupHistory]', err.message);
-        return res.status(500).json({ error: err.message });
+        return res.status(500).json({ error: safeErrorMessage(err) });
     }
 };
 
@@ -803,7 +804,7 @@ export const getReadReceiptsBatch = async (req: any, res: Response) => {
         return res.status(200).json({ success: true, myRcUserId, byMessageId, peerLastSeenMs });
     } catch (err: any) {
         console.error('[chat.getReadReceiptsBatch]', err.message);
-        return res.status(500).json({ error: err.message });
+        return res.status(500).json({ error: safeErrorMessage(err) });
     }
 };
 
@@ -919,7 +920,7 @@ export const deleteChatMessage = async (req: any, res: Response) => {
         return res.status(200).json({ success: ok, mode: 'both' });
     } catch (err: any) {
         console.error('[chat.deleteChatMessage]', err.message);
-        return res.status(500).json({ error: err.message });
+        return res.status(500).json({ error: safeErrorMessage(err) });
     }
 };
 
@@ -952,7 +953,7 @@ export const clearDmThread = async (req: any, res: Response) => {
         });
     } catch (err: any) {
         console.error('[chat.clearDmThread]', err.message);
-        return res.status(500).json({ error: err.message });
+        return res.status(500).json({ error: safeErrorMessage(err) });
     }
 };
 
@@ -972,7 +973,7 @@ export const hideDmFromList = async (req: any, res: Response) => {
         return res.status(200).json({ success: true });
     } catch (err: any) {
         console.error('[chat.hideDmFromList]', err.message);
-        return res.status(500).json({ error: err.message });
+        return res.status(500).json({ error: safeErrorMessage(err) });
     }
 };
 
@@ -994,7 +995,7 @@ export const markChatRead = async (req: any, res: Response) => {
         return res.status(200).json({ success: ok });
     } catch (err: any) {
         console.error('[chat.markChatRead]', err.message);
-        return res.status(500).json({ error: err.message });
+        return res.status(500).json({ error: safeErrorMessage(err) });
     }
 };
 
@@ -1012,7 +1013,7 @@ export const getDmUnreadSnapshot = async (req: any, res: Response) => {
         return res.status(200).json({ success: true, unreadByRid, nameByRid });
     } catch (err: any) {
         console.error('[chat.getDmUnreadSnapshot]', err.message);
-        return res.status(500).json({ error: err.message });
+        return res.status(500).json({ error: safeErrorMessage(err) });
     }
 };
 
@@ -1039,7 +1040,7 @@ export const searchPrivateChatUsers = async (req: any, res: Response) => {
         return res.status(200).json({ success: true, result: users });
     } catch (err: any) {
         console.error('[chat.searchPrivateChatUsers]', err.message);
-        return res.status(500).json({ error: err.message });
+        return res.status(500).json({ error: safeErrorMessage(err) });
     }
 };
 
@@ -1080,7 +1081,7 @@ export const getChatUserProfile = async (req: any, res: Response) => {
         return res.status(200).json({ success: true, result });
     } catch (err: any) {
         console.error('[chat.getChatUserProfile]', err.message);
-        return res.status(500).json({ error: err.message });
+        return res.status(500).json({ error: safeErrorMessage(err) });
     }
 };
 
@@ -1116,7 +1117,7 @@ export const notifyExpertResumeFormat = async (req: any, res: Response) => {
         return res.status(200).json({ success: true });
     } catch (err: any) {
         console.error('[chat.notifyExpertResumeFormat]', err.message);
-        return res.status(500).json({ error: err.message });
+        return res.status(500).json({ error: safeErrorMessage(err) });
     }
 };
 
@@ -1144,6 +1145,6 @@ export const getRCToken = async (req: any, res: Response) => {
         });
     } catch (err: any) {
         console.error('[chat.getRCToken]', err.message);
-        return res.status(500).json({ error: err.message });
+        return res.status(500).json({ error: safeErrorMessage(err) });
     }
 };

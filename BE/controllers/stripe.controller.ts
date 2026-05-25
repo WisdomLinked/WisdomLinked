@@ -22,7 +22,7 @@ const stripePay = async (req, res) => {
         }
     } catch (err) {
         console.log(err);
-        return res.status(500).send(err.message);
+        return res.status(500).send(HTTP_GENERIC_ERROR);
     }
 
 };
@@ -40,7 +40,7 @@ const createStripePaymentIntent = async (req, res) => {
         });
     } catch (err) {
         console.log(err);
-        return res.status(500).send(err.message);
+        return res.status(500).send(HTTP_GENERIC_ERROR);
     }
 
 };
@@ -62,7 +62,7 @@ const setStripeMode = async (req, res) => {
         });
     } catch (err) {
         console.log(err);
-        return res.status(500).send(err.message);
+        return res.status(500).send(HTTP_GENERIC_ERROR);
     }
 };
 
@@ -81,7 +81,7 @@ const getStripeMode = async (req, res) => {
         });
     } catch (err) {
         console.log(err);
-        return res.status(500).send(err.message);
+        return res.status(500).send(HTTP_GENERIC_ERROR);
     }
 };
 

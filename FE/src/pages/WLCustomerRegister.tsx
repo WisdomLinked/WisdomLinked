@@ -205,8 +205,11 @@ export default function WLCustomerRegister() {
                 password: form.password,
                 ...(form.specialNote.trim() && { specialNote: form.specialNote.trim() })
             };
-            const response = await callApi('POST', 'auth/register', data) as any;
-            if (response.status === 'SUCCESS') {
+            const response = await callApi('POST', 'auth/register', data, undefined, {
+                notify: false,
+            }) as any;
+            if (response === false) return;
+            if (response?.status === 'SUCCESS') {
                 setConfirmEmailSent(true);
             } else {
                 setFormError(response.error || 'Registration failed. Please try again.');

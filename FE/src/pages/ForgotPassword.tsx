@@ -78,7 +78,8 @@ export default function ForgotPassword() {
             // Backend still expects a password at this stage. We send a temporary placeholder
             // and the actual password will be set after OTP verification.
             const response = await passwordResetRequest({ email, password: 'temp_placeholder_pwd' }) as any;
-            if (response.status === 'SUCCESS') {
+            if (response === false) return;
+            if (response?.status === 'SUCCESS') {
                 setStep('otp');
                 startTimer();
                 setTimeout(() => inputRefs.current[0]?.focus(), 400);
@@ -131,7 +132,8 @@ export default function ForgotPassword() {
         setOtpError('');
         try {
             const response = await verifyPasswordResetOTP({ email, code }) as any;
-            if (response.status === 'SUCCESS') {
+            if (response === false) return;
+            if (response?.status === 'SUCCESS') {
                 // OTP verified — move to new password step
                 setStep('newPassword');
             } else {
@@ -152,7 +154,8 @@ export default function ForgotPassword() {
         setOtpResendSuccess('');
         try {
             const response = await passwordResetRequest({ email, password: 'temp_placeholder_pwd' }) as any;
-            if (response.status === 'SUCCESS') {
+            if (response === false) return;
+            if (response?.status === 'SUCCESS') {
                 setOtpResendSuccess('A new OTP has been sent to your email.');
                 startTimer();
                 setOtpDigits(['', '', '', '', '', '']);
@@ -179,11 +182,13 @@ export default function ForgotPassword() {
         try {
             // Re-send the password reset request with the actual new password
             const reqResponse = await passwordResetRequest({ email, password: newPassword }) as any;
-            if (reqResponse.status === 'SUCCESS') {
+            if (reqResponse === false) return;
+            if (reqResponse?.status === 'SUCCESS') {
                 // Auto-confirm with the same code since it was just verified
                 const code = otpDigits.join('');
                 const confirmResponse = await confirmPasswordResetByCode({ email, password: newPassword, code }) as any;
-                if (confirmResponse.status === 'SUCCESS') {
+                if (confirmResponse === false) return;
+                if (confirmResponse?.status === 'SUCCESS') {
                     setStep('success');
                 } else {
                     setPwdError(confirmResponse.error || 'Failed to reset password. Please try again.');

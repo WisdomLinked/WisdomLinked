@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { doContactUs } from '../api/api';
+import { store } from '../store';
+import { showErrorAlert } from '../actions/alertActions';
 import SignupModal from '../components/SignupModal';
 import { SERVICE_LABELS } from '../constants/serviceOptions';
 import {
@@ -106,7 +108,7 @@ function ContactFormModal({ onClose }: { onClose: () => void }) {
       setSubmitted(true);
     } catch (err) {
       console.error('Contact form error:', err);
-      alert('Failed to submit. Please try again.');
+      store.dispatch(showErrorAlert('Failed to submit. Please try again.'));
     }
     setSubmitting(false);
   };

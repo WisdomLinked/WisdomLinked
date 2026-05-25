@@ -6,6 +6,11 @@ import * as chatApi from "../api/chatApi";
 
 vi.mock("../api/chatApi");
 
+const mockDispatch = vi.fn();
+vi.mock("react-redux", () => ({
+  useDispatch: () => mockDispatch,
+}));
+
 describe("MeetingCard", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -116,7 +121,10 @@ describe("MeetingCard", () => {
     expect(screen.getByText("Joining…")).toBeDisabled();
 
     // Resolve the API call
-    resolveApi({ success: true, jitsiUrl: "https://mock.jitsi.url" });
+    resolveApi({
+      ok: true,
+      data: { success: true, jitsiUrl: "https://mock.jitsi.url" },
+    });
 
     // Should return to "Join Call" and call onJoin with the correct URL
     await waitFor(() => {
@@ -134,8 +142,8 @@ describe("MeetingCard", () => {
     } as unknown as Window;
     const openSpy = vi.spyOn(window, "open").mockReturnValue(popup);
     vi.mocked(chatApi.getMeetingJoinInfo).mockResolvedValue({
-      success: true,
-      jitsiUrl: "https://mock.jitsi.url/mobile",
+      ok: true,
+      data: { success: true, jitsiUrl: "https://mock.jitsi.url/mobile" },
     });
 
     render(
@@ -160,8 +168,8 @@ describe("MeetingCard", () => {
     vi.spyOn(window, "open").mockReturnValue(null);
     const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
     vi.mocked(chatApi.getMeetingJoinInfo).mockResolvedValue({
-      success: true,
-      jitsiUrl: "https://mock.jitsi.url/fallback",
+      ok: true,
+      data: { success: true, jitsiUrl: "https://mock.jitsi.url/fallback" },
     });
 
     render(
@@ -188,9 +196,8 @@ describe("MeetingCard", () => {
       close: vi.fn(),
     } as unknown as Window;
     vi.spyOn(window, "open").mockReturnValue(popup);
-    const alertSpy = vi.spyOn(window, "alert").mockImplementation(() => {});
     vi.mocked(chatApi.getMeetingJoinInfo).mockResolvedValue({
-      success: false,
+      ok: false,
       error: "Join token failed",
     });
 
@@ -207,7 +214,7 @@ describe("MeetingCard", () => {
     fireEvent.click(screen.getByText("Join call"));
 
     await waitFor(() => {
-      expect(alertSpy).toHaveBeenCalledWith("Join token failed");
+      expect(mockDispatch).toHaveBeenCalled();
       expect((popup.close as any)).toHaveBeenCalled();
       expect(popup.location.href).toBe("");
     });
@@ -219,7 +226,6 @@ describe("MeetingCard", () => {
       value: { writeText },
       configurable: true,
     });
-    vi.spyOn(window, "alert").mockImplementation(() => {});
     vi.mocked(chatApi.createMeetingGuestInvite).mockResolvedValue({
       success: true,
       inviteUrl: "https://meet.wisdomlinked.com/meeting/invite/invite-token-123",

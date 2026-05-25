@@ -5,6 +5,8 @@ import SelectionWithCheckBox from "./SelectionWithCheckBox";
 
 import "react-date-range/dist/styles.css";
 import "react-date-range/dist/theme/default.css";
+import { store } from '../store';
+import { showErrorAlert, showSuccessAlert } from '../actions/alertActions';
 
 interface ContactedUsItem {
     _id: string;
@@ -180,20 +182,20 @@ export default function GetContactedUs() {
             const adminRawMessage = adminMessages[id] || "";
 
             if (!adminRawMessage.trim()) {
-                alert("Please enter a message before sending.");
+                store.dispatch(showErrorAlert('Please enter a message before sending.'));
                 return;
             }
 
             const res = await sendEmailToUser(email, adminRawMessage);
             if (res && res.status === "SUCCESS") {
-                alert("Email sent successfully!");
+                store.dispatch(showSuccessAlert('Email sent successfully!'));
                 setAdminMessages((prev) => ({ ...prev, [id]: "" }));
             } else {
-                alert("Failed to send email.");
+                store.dispatch(showErrorAlert('Failed to send email.'));
             }
         } catch (error) {
             console.error("Error sending email:", error);
-            alert("An error occurred while sending email.");
+            store.dispatch(showErrorAlert('An error occurred while sending email.'));
         }
     };
 

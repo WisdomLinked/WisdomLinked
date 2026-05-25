@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import { HTTP_GENERIC_ERROR } from '../utils/httpUserFacingCopy';
 const FriendInvitation = require("../models/FriendInvitation");
 const User = require("../models/User");
 
@@ -95,7 +96,7 @@ const acceptInvitation = async (req, res) => {
 
         return res.status(200).send("Invitation accepted successfully!");
     } catch (err) {
-        return res.status(500).send(err.message);
+        return res.status(500).send(HTTP_GENERIC_ERROR);
     }
 };
 
