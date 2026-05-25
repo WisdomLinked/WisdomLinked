@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { HTTP_GENERIC_ERROR } from '../utils/httpUserFacingCopy';
+import { HTTP_GENERIC_ERROR, safeHttp500Message } from '../utils/httpUserFacingCopy';
 const Event = require("../models/Event");
 const User = require("../models/User");
 const FriendInvitation = require("../models/FriendInvitation");
@@ -277,7 +277,7 @@ const appendEvent = async (req, res) => {
         }
     } catch (err) {
         console.log(err)
-        return res.status(500).send(HTTP_GENERIC_ERROR);
+        return res.status(500).send(safeHttp500Message(err));
     }
 }
 
