@@ -29,7 +29,7 @@ import {
     removeChatMessage,
     setDmUnreadByRidBulk,
 } from "../../../../actions/chatActions";
-import { showAlert } from "../../../../actions/alertActions";
+import { showErrorAlert, showSuccessAlert, showWarningAlert } from '../../../../actions/alertActions';
 import { store } from "../../../../store";
 import {
     connectToRC,
@@ -173,11 +173,11 @@ const Messages = ({ theme = "dark", onReplyMessage }: { theme?: string; onReplyM
                 }
             }
             if (mode === 'both' && !rid) {
-                dispatch(showAlert('Chat room not ready — try again.'));
+                dispatch(showErrorAlert('Chat room not ready — try again.'));
                 return;
             }
             if (mode === 'me' && !cid && !groupIdStr) {
-                dispatch(showAlert('Chat is not ready — try again.'));
+                dispatch(showErrorAlert('Chat is not ready — try again.'));
                 return;
             }
             const r = await deleteChatMessage({
@@ -188,7 +188,7 @@ const Messages = ({ theme = "dark", onReplyMessage }: { theme?: string; onReplyM
                 groupChatId: groupIdStr || undefined,
             });
             if (!r?.success) {
-                dispatch(showAlert((r as { error?: string })?.error || 'Could not delete message'));
+                dispatch(showErrorAlert((r as { error?: string })?.error || 'Could not delete message'));
                 return;
             }
             if (groupIdStr) {

@@ -27,6 +27,27 @@ const {
     pickUploadedProfileFilename,
     normalizeProfileImageRef,
 } = require("../utils/profileImageFilename");
+import {
+    AUTH_INVALID_CREDENTIALS,
+    AUTH_USER_BLOCKED,
+    AUTH_EMAIL_MISSING,
+    AUTH_OAUTH_LOGIN_REQUIRED,
+    AUTH_LOGIN_REQUEST_EXPIRED,
+    AUTH_INCORRECT_CODE,
+    AUTH_CODE_EXPIRED,
+    AUTH_PASSWORD_RESET_EXPIRED,
+    AUTH_PASSWORD_RESET_INVALID_CODE,
+    AUTH_PASSWORD_WEAK,
+    AUTH_PASSWORD_SAME_AS_OLD,
+    AUTH_REGISTRATION_NOT_FOUND,
+    AUTH_VERIFICATION_EXPIRED,
+    AUTH_INVALID_VERIFICATION_CODE,
+    AUTH_USER_NOT_FOUND,
+    AUTH_PROFILE_PHOTO_REQUIRED,
+    AUTH_PROFILE_PHOTO_UPLOAD_FAILED,
+    AUTH_OAUTH_PASSWORD_RESET_UNAVAILABLE,
+    AUTH_EMAIL_NOT_FOUND,
+} from '../utils/authUserFacingCopy';
 
 
 sgMail.setApiKey(process.env.SENDGRID_API_KEY);
@@ -368,7 +389,7 @@ const verifyRegistration = async (req: Request, res: Response) => {
         // check if user exists
         const pendingUser = await PendingUser.findOne({ email: email.toLowerCase() });
         if (!pendingUser) {
-            return res.status(200).json({ status: 'FAIL', error: 'Pending registration request not found' });
+            return res.status(200).json({ status: 'FAIL', error: AUTH_REGISTRATION_NOT_FOUND });
         }
 
         const lockError = checkRateLimit(pendingUser);
@@ -378,13 +399,13 @@ const verifyRegistration = async (req: Request, res: Response) => {
 
         if (pendingUser.confirmCode !== confirmCode) {
             await handleFailedAttempt(pendingUser);
-            return res.status(200).json({ status: 'FAIL', error: "Invalid verification code" });
+            return res.status(200).json({ status: 'FAIL', error: AUTH_INVALID_VERIFICATION_CODE });
         }
 
         await resetFailedAttempts(pendingUser);
 
         if ((new Date().getTime() - pendingUser.updatedAt.getTime()) >= 24 * 3600 * 1000) {
-            return res.status(200).json({ status: 'FAIL', error: "Verification email was expired." });
+            return res.status(200).json({ status: 'FAIL', error: AUTH_VERIFICATION_EXPIRED });
         }
 
 
@@ -458,7 +479,7 @@ const verifyRegistration = async (req: Request, res: Response) => {
 const checkVerificationStatus = async (req: Request, res: Response) => {
     try {
         const email = String(req.query.email || '');
-        if (!email) return res.status(200).json({ status: 'FAIL', error: 'Email missing' });
+        if (!email) return res.status(200).json({ status: 'FAIL', error: AUTH_EMAIL_MISSING });
 
         // If user is in User collection, they are verified
         const user = await getFullUserData(email);
@@ -501,22 +522,22 @@ const login = async (req: Request, res: Response) => {
 
         const user = await getFullUserData(email)
         if (!user) {
-            return res.status(200).json({ status: 'FAIL', error: "Invalid credentials. Please try again" });
+            return res.status(200).json({ status: 'FAIL', error: AUTH_INVALID_CREDENTIALS });
         }
 
         if (!user.password) {
             const provider = user.oauthProvider ? (user.oauthProvider.charAt(0).toUpperCase() + user.oauthProvider.slice(1)) : 'Google';
-            return res.status(200).json({ status: 'FAIL', error: `This account was created using ${provider} Sign-In. Please use ${provider} to log in.` });
+            return res.status(200).json({ status: 'FAIL', error: AUTH_OAUTH_LOGIN_REQUIRED(provider) });
         }
 
         const passwordsMatch = await bcrypt.compare(String(password), user.password);
 
         if (!passwordsMatch) {
-            return res.status(200).json({ status: 'FAIL', error: "Invalid credentials. Please try again" });
+            return res.status(200).json({ status: 'FAIL', error: AUTH_INVALID_CREDENTIALS });
         }
 
         if (user.status === 'blocked') {
-            return res.status(200).json({ status: 'FAIL', error: "User is blocked" });
+            return res.status(200).json({ status: 'FAIL', error: AUTH_USER_BLOCKED });
         }
 
         // const code = randomize('0', 6)
@@ -580,7 +601,7 @@ const confirmLoginByCode = async (req: Request, res: Response) => {
         const { email, password, code, timeZone } = req.body;
         const loginRequest = await PendingLogin.findOne({ email: { $regex: new RegExp(`^${email}$`, 'i') } })
         if (!loginRequest) {
-            return res.status(200).json({ status: 'FAIL', error: "Login request not found or expired. Please request a new code" });
+            return res.status(200).json({ status: 'FAIL', error: AUTH_LOGIN_REQUEST_EXPIRED });
         }
 
         const lockError = checkRateLimit(loginRequest);
@@ -590,28 +611,28 @@ const confirmLoginByCode = async (req: Request, res: Response) => {
 
         if (loginRequest.code !== Number(code)) {
             await handleFailedAttempt(loginRequest);
-            return res.status(200).json({ status: 'FAIL', error: "Incorrect code" });
+            return res.status(200).json({ status: 'FAIL', error: AUTH_INCORRECT_CODE });
         }
 
         await resetFailedAttempts(loginRequest);
 
         if ((new Date() >= loginRequest.validUntil)) {
-            return res.status(200).json({ status: 'FAIL', error: "Code expired. Please request a new code." });
+            return res.status(200).json({ status: 'FAIL', error: AUTH_CODE_EXPIRED });
         }
 
         const user = await getFullUserData(email)
 
         if (!user) {
-            return res.status(200).json({ status: 'FAIL', error: "Invalid credentials. Please try again" });
+            return res.status(200).json({ status: 'FAIL', error: AUTH_INVALID_CREDENTIALS });
         }
         const passwordsMatch = await bcrypt.compare(String(password), user.password);
 
         if (!passwordsMatch) {
-            return res.status(200).json({ status: 'FAIL', error: "Invalid credentials. Please try again" });
+            return res.status(200).json({ status: 'FAIL', error: AUTH_INVALID_CREDENTIALS });
         }
 
         if (user.status === 'blocked') {
-            return res.status(200).json({ status: 'FAIL', error: "User is blocked" });
+            return res.status(200).json({ status: 'FAIL', error: AUTH_USER_BLOCKED });
         }
 
         await loginRequest.deleteOne()
@@ -657,12 +678,12 @@ const passwordResetRequest = async (req: Request, res: Response) => {
         const user = await User.findOne({ email: { $regex: new RegExp(`^${email}$`, 'i') } }).select('+password')
 
         if (!user) {
-            return res.status(200).json({ status: 'FAIL', error: "Provided email not found." });
+            return res.status(200).json({ status: 'FAIL', error: AUTH_EMAIL_NOT_FOUND });
         }
 
         if (!user.password) {
             const provider = user.oauthProvider ? (user.oauthProvider.charAt(0).toUpperCase() + user.oauthProvider.slice(1)) : 'Google';
-            return res.status(200).json({ status: 'FAIL', error: `This account uses ${provider} Sign-In. Password reset is not available.` });
+            return res.status(200).json({ status: 'FAIL', error: AUTH_OAUTH_PASSWORD_RESET_UNAVAILABLE(provider) });
         }
 
         // const code = randomize('0', 6)
@@ -724,7 +745,7 @@ const verifyPasswordResetOTP = async (req: Request, res: Response) => {
 
         const pwdRequest = await PendingPasswordReset.findOne({ email: { $regex: new RegExp(`^${email}$`, 'i') } });
         if (!pwdRequest) {
-            return res.status(200).json({ status: 'FAIL', error: "Your reset request has expired. Please try again." });
+            return res.status(200).json({ status: 'FAIL', error: AUTH_PASSWORD_RESET_EXPIRED });
         }
 
         const lockError = checkRateLimit(pwdRequest);
@@ -734,13 +755,13 @@ const verifyPasswordResetOTP = async (req: Request, res: Response) => {
 
         if (pwdRequest.code !== Number(code)) {
             await handleFailedAttempt(pwdRequest);
-            return res.status(200).json({ status: 'FAIL', error: "Invalid code. Please try again." });
+            return res.status(200).json({ status: 'FAIL', error: AUTH_PASSWORD_RESET_INVALID_CODE });
         }
 
         await resetFailedAttempts(pwdRequest);
 
         if ((new Date().getTime() - pwdRequest.updatedAt.getTime()) >= 60 * 1000) {
-            return res.status(200).json({ status: 'FAIL', error: "Code was expired." });
+            return res.status(200).json({ status: 'FAIL', error: AUTH_CODE_EXPIRED });
         }
 
         return res.status(200).json({ status: 'SUCCESS' });
@@ -755,12 +776,12 @@ const confirmPasswordResetByCode = async (req: Request, res: Response) => {
         const { email, password, code } = req.body;
 
         if (password.length < 8 || !/[A-Z]/.test(password) || !/[0-9]/.test(password) || !/[^A-Za-z0-9]/.test(password)) {
-            return res.status(200).json({ status: 'FAIL', error: "Password does not meet strong requirements" });
+            return res.status(200).json({ status: 'FAIL', error: AUTH_PASSWORD_WEAK });
         }
 
         const request = await PendingPasswordReset.findOne({ email: { $regex: new RegExp(`^${email}$`, 'i') } })
         if (!request) {
-            return res.status(200).json({ status: 'FAIL', error: "Password reset request not found" });
+            return res.status(200).json({ status: 'FAIL', error: AUTH_PASSWORD_RESET_EXPIRED });
         }
 
         const lockError = checkRateLimit(request);
@@ -770,28 +791,28 @@ const confirmPasswordResetByCode = async (req: Request, res: Response) => {
 
         if (request.code !== Number(code)) {
             await handleFailedAttempt(request);
-            return res.status(200).json({ status: 'FAIL', error: "Incorrect code" });
+            return res.status(200).json({ status: 'FAIL', error: AUTH_INCORRECT_CODE });
         }
 
         await resetFailedAttempts(request);
 
         if ((new Date().getTime() - request.updatedAt.getTime()) >= 60 * 1000) {
-            return res.status(200).json({ status: 'FAIL', error: "Code was expired." });
+            return res.status(200).json({ status: 'FAIL', error: AUTH_CODE_EXPIRED });
         }
 
         const user = await getFullUserData(email)
 
         if (!user) {
-            return res.status(200).json({ status: 'FAIL', error: "Invalid credentials. Please try again" });
+            return res.status(200).json({ status: 'FAIL', error: AUTH_INVALID_CREDENTIALS });
         }
 
         if (user.status === 'blocked') {
-            return res.status(200).json({ status: 'FAIL', error: "User is blocked" });
+            return res.status(200).json({ status: 'FAIL', error: AUTH_USER_BLOCKED });
         }
 
         const isSameAsOld = await bcrypt.compare(String(password), user.password);
         if (isSameAsOld) {
-            return res.status(200).json({ status: 'FAIL', error: "New password cannot be the same as the old password." });
+            return res.status(200).json({ status: 'FAIL', error: AUTH_PASSWORD_SAME_AS_OLD });
         }
 
         const salt = await bcrypt.genSalt(10);
@@ -983,7 +1004,7 @@ const updateResume = async (req: Request, res: Response) => {
         // check if user exists
         const user = await User.findOne({ email: email.toLowerCase() });
         if (!user) {
-            return res.status(200).json({ status: 'FAIL', error: "User not found" });
+            return res.status(200).json({ status: 'FAIL', error: AUTH_USER_NOT_FOUND });
         }
 
         const file = req.file
@@ -1262,14 +1283,14 @@ const uploadProfilePhoto = async (req: any, res: Response) => {
         const { email } = req.user;
         const file = req.file;
         if (!file) {
-            return res.status(400).json({ error: "Image file is required." });
+            return res.status(400).json({ error: AUTH_PROFILE_PHOTO_REQUIRED });
         }
 
         const uploadResult = await uploadImageToStorage(file);
         const filename = pickUploadedProfileFilename(uploadResult, file.originalname);
         if (!filename) {
             return res.status(500).json({
-                error: "Profile photo upload failed.",
+                error: AUTH_PROFILE_PHOTO_UPLOAD_FAILED,
                 details: uploadResult,
             });
         }
@@ -1277,7 +1298,7 @@ const uploadProfilePhoto = async (req: any, res: Response) => {
         await User.findOneAndUpdate({ email }, { image: filename }, { new: true });
         const result = await getFullUserData(email);
         if (!result) {
-            return res.status(404).json({ error: "User not found." });
+            return res.status(404).json({ error: AUTH_USER_NOT_FOUND });
         }
         result.password = null;
         result.token = null;

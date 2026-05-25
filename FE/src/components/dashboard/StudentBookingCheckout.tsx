@@ -7,7 +7,7 @@ import {
   useElements,
 } from '@stripe/react-stripe-js';
 import { createStripePaymentIntent, getStripeMode } from '../../api/api';
-import ShowFieldError from '../ShowFieldError';
+import FormAlert from '../FormAlert';
 import { SetLoadingStatus } from '../../actions/appActions';
 
 export type StudentBookingPendingDetails = {
@@ -100,7 +100,7 @@ const CheckoutForm = ({
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       <PaymentElement />
-      <ShowFieldError show={!!errorMessage} label={errorMessage} />
+      <FormAlert variant="error" message={errorMessage} onDismiss={() => setErrorMessage('')} />
       <button
         type="submit"
         disabled={!stripe || !elements}

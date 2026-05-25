@@ -10,7 +10,7 @@ import React, {
   import { useAppSelector } from '../../../store';
   import { createGroupChat, updateGroupChat } from '../../../api/api';
   import { SetLoadingStatus } from '../../../actions/appActions';
-  import { showAlert } from '../../../actions/alertActions';
+  import { showErrorAlert, showSuccessAlert, showWarningAlert } from '../../../actions/alertActions';
   import { updateMe } from '../../../actions/authActions';
   import { SERVICE_LABELS } from '../../../constants/serviceOptions';
   
@@ -141,7 +141,7 @@ import React, {
   
     useEffect(() => {
       if (userDetails?.status === 'review') {
-        dispatch(showAlert("This feature isn't available while your profile is under review."));
+        dispatch(showWarningAlert("This feature isn't available while your profile is under review."));
       }
     }, [userDetails?.status, dispatch]);
   
@@ -190,7 +190,7 @@ import React, {
     const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
       const file = e.target.files?.[0] || null;
       if (file && file.size > 5 * 1024 * 1024) {
-        dispatch(showAlert('Cover image must be less than 5MB'));
+        dispatch(showErrorAlert('Cover image must be less than 5MB'));
         return;
       }
       updateFormField('coverImage', file);
@@ -218,7 +218,7 @@ import React, {
       const raw = tagInput.trim();
       if (!raw) return;
       if (formData.tags.length >= 5) {
-        dispatch(showAlert('You can add up to 5 tags'));
+        dispatch(showWarningAlert('You can add up to 5 tags'));
         return;
       }
       if (formData.tags.includes(raw)) {
@@ -353,7 +353,7 @@ import React, {
             ...payload,
           });
           if (res) {
-            dispatch(showAlert('Seminar updated successfully'));
+            dispatch(showSuccessAlert('Seminar updated successfully'));
             await (dispatch as any)(updateMe());
             if (onAfterSeminarSave) {
               onAfterSeminarSave();
@@ -364,7 +364,7 @@ import React, {
         } else {
           const res = await createGroupChat(payload);
           if (res) {
-            dispatch(showAlert('Seminar created successfully'));
+            dispatch(showSuccessAlert('Seminar created successfully'));
             await (dispatch as any)(updateMe());
             if (onAfterSeminarSave) {
               onAfterSeminarSave();
@@ -374,14 +374,14 @@ import React, {
           }
         }
       } catch {
-        dispatch(showAlert('Failed to save seminar. Please try again.'));
+        dispatch(showErrorAlert('Failed to save seminar. Please try again.'));
       } finally {
         dispatch(SetLoadingStatus(false));
       }
     };
   
     const handleSaveDraft = () => {
-      dispatch(showAlert('Draft saved locally. Publishing will be added next.'));
+      dispatch(showWarningAlert('Draft saved locally. Publishing will be added next.'));
     };
   
     const renderStepper = () => (

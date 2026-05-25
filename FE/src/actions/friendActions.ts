@@ -1,6 +1,6 @@
 import { Dispatch } from "redux";
 import { acceptFriendRequest, inviteFriendRequest, rejectFriendRequest, removeFriend } from "../api/api";
-import { showAlert } from "./alertActions";
+import { showSuccessAlert } from "./alertActions";
 import { resetChatAction } from "./chatActions";
 import { actionTypes, PendingInvitation, Friend, OnlineUser, GroupChatDetails, ResetFriends } from "./types";
 
@@ -11,7 +11,7 @@ export const inviteFriend = (email: string, closeDialogHandler: () => void) => {
 
         if (response === "Invitation has been sent successfully") {
             closeDialogHandler();
-            dispatch(showAlert(response));
+            dispatch(showSuccessAlert(response));
         }
     };
 };
@@ -60,7 +60,7 @@ export const rejectInvitation = (invitationId: string) => {
 
         if (response === "Invitation rejected successfully!") {
             ;
-            dispatch(showAlert(response));
+            dispatch(showSuccessAlert(response));
         }
     };
 };
@@ -71,7 +71,7 @@ export const acceptInvitation = (invitationId: string) => {
         const response = await acceptFriendRequest(invitationId);
 
         if (response === "Invitation accepted successfully!") {
-            dispatch(showAlert(response));
+            dispatch(showSuccessAlert(response));
         }
     };
 };
@@ -83,7 +83,7 @@ export const removeFriendAction = ({ friendId, friendName }: { friendId: string;
         });
 
         if (response === "Friend removed successfully!") {
-            dispatch(showAlert(`You removed ${friendName} from your list of friends!`));
+            dispatch(showSuccessAlert(`You removed ${friendName} from your list of friends!`));
             dispatch(resetChatAction())
         }
     };

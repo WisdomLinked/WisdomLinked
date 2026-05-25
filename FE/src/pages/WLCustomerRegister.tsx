@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useDispatch } from 'react-redux';
 import { User, Mail, Lock, Phone, AlertCircle, CheckCircle, ChevronDown, ArrowRight, GraduationCap, BookOpen, Eye, EyeOff, Search, Plus, Check } from 'lucide-react';
 import { callApi } from '../api/api';
-import { showAlert } from '../actions/alertActions';
+import FormAlert from '../components/FormAlert';
+import { useFormAlert } from '../hooks/useFormAlert';
 import SocialAuthBlock from '../components/SocialAuthBlock';
 import ConfirmEmail from '../components/ConfirmEmail';
 import logo from '../assets/images/logo.png';
@@ -41,7 +41,7 @@ const COUNTRIES = [
 
 export default function WLCustomerRegister() {
     const navigate = useNavigate();
-    const dispatch = useDispatch();
+    const { message: formBannerMessage, variant: formBannerVariant, setFormError, clearFormAlert } = useFormAlert();
     const [form, setForm] = useState({
         fullName: '', majors: [] as string[], services: [] as string[], country: '', countryCode: '+1', phone: '', email: '', password: '', confirmPassword: '', specialNote: '', terms: false
     });
@@ -186,10 +186,11 @@ export default function WLCustomerRegister() {
         const e = validate();
         if (Object.keys(e).length > 0) {
             setErrors(e);
-            dispatch(showAlert(getValidationPopupMessage(e)));
+            setFormError(getValidationPopupMessage(e));
             return;
         }
         setSubmitting(true);
+        clearFormAlert();
         try {
             const data = {
                 role: 'customer',
@@ -208,10 +209,10 @@ export default function WLCustomerRegister() {
             if (response.status === 'SUCCESS') {
                 setConfirmEmailSent(true);
             } else {
-                dispatch(showAlert(response.error));
+                setFormError(response.error || 'Registration failed. Please try again.');
             }
         } catch (err) {
-            dispatch(showAlert('Registration failed. Please try again.'));
+            setFormError('Registration failed. Please try again.');
         }
         setSubmitting(false);
     };
@@ -282,6 +283,11 @@ export default function WLCustomerRegister() {
 
                         <h2 className="font-display text-2xl font-bold text-slate-800 mb-1">Student sign up</h2>
                         <p className="text-slate-500 text-sm mb-6">Fill in your details to create an account</p>
+                        <FormAlert
+                            variant={formBannerVariant}
+                            message={formBannerMessage}
+                            onDismiss={clearFormAlert}
+                        />
 
                         <div className="space-y-4">
                             <div>

@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useDispatch } from 'react-redux';
 import { User, Mail, Lock, Phone, AlertCircle, CheckCircle, ChevronDown, ArrowRight, Upload, BookOpen, Eye, EyeOff, Check, Search, Plus } from 'lucide-react';
 import { callApi } from '../api/api';
-import { showAlert } from '../actions/alertActions';
+import FormAlert from '../components/FormAlert';
+import { useFormAlert } from '../hooks/useFormAlert';
 import SocialAuthBlock from '../components/SocialAuthBlock';
 import ConfirmEmail from '../components/ConfirmEmail';
 import logo from '../assets/images/logo.png';
@@ -41,7 +41,7 @@ const COUNTRIES = [
 
 export default function WLExpertRegister() {
     const navigate = useNavigate();
-    const dispatch = useDispatch();
+    const { message: formBannerMessage, variant: formBannerVariant, setFormError, clearFormAlert } = useFormAlert();
     const [form, setForm] = useState({
         fullName: '', title: '', bio: '', majors: [] as string[], servicesOffered: [] as string[], country: '', countryCode: '+1', phone: '', email: '', password: '', confirmPassword: '', specialNote: '', resumeFile: null as File | null, terms: false
     });
@@ -195,10 +195,11 @@ export default function WLExpertRegister() {
         const e = validate();
         if (Object.keys(e).length > 0) {
             setErrors(e);
-            dispatch(showAlert(getValidationPopupMessage(e)));
+            setFormError(getValidationPopupMessage(e));
             return;
         }
         setSubmitting(true);
+        clearFormAlert();
         try {
             const data = {
                 role: 'expert',
@@ -220,10 +221,10 @@ export default function WLExpertRegister() {
             if (response.status === 'SUCCESS') {
                 setConfirmEmailSent(true);
             } else {
-                dispatch(showAlert(response.error));
+                setFormError(response.error || 'Registration failed. Please try again.');
             }
         } catch (err) {
-            dispatch(showAlert('Registration failed. Please try again.'));
+            setFormError('Registration failed. Please try again.');
         }
         setSubmitting(false);
     };
@@ -293,6 +294,11 @@ export default function WLExpertRegister() {
 
                         <h2 className="font-display text-2xl font-bold text-slate-800 mb-1">Expert sign up</h2>
                         <p className="text-slate-500 text-sm mb-6">Tell us about your expertise to join as a consultant</p>
+                        <FormAlert
+                            variant={formBannerVariant}
+                            message={formBannerMessage}
+                            onDismiss={clearFormAlert}
+                        />
 
                         <div className="space-y-4">
                             {/* Full Name */}

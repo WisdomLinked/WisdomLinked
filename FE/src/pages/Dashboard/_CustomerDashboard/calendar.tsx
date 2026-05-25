@@ -10,7 +10,7 @@ import { SetLoadingStatus } from "../../../actions/appActions";
 import { localizer } from "../../../actions/common";
 import { useNavigate } from "react-router-dom";
 import { updateMe } from "../../../actions/authActions";
-import { showAlert } from "../../../actions/alertActions";
+import { showErrorAlert, showSuccessAlert, showWarningAlert } from '../../../actions/alertActions';
 import { useAppSelector } from "../../../store";
 import {setChosenChatDetails,setChosenGroupChatDetails} from "../../../actions/chatActions";
 
@@ -171,7 +171,7 @@ const CustomerCalendar = () => {
         if (response) {
             dispatch(updateMe())
             getEvents()
-            dispatch(showAlert('Seminar Appointment Cancelled and your money refunded'))
+            dispatch(showSuccessAlert('Seminar Appointment Cancelled and your money refunded'))
         }
         set_seminarModalShow(false)
         set_selectedEvent(null)
@@ -184,7 +184,7 @@ const CustomerCalendar = () => {
         if (response) {
             dispatch(updateMe())
             getEvents()
-            dispatch(showAlert('Appointment Cancelled and your money refunded'))
+            dispatch(showSuccessAlert('Appointment Cancelled and your money refunded'))
         }
         set_seminarModalShow(false)
         set_selectedEvent(null)
@@ -197,7 +197,7 @@ const CustomerCalendar = () => {
         if (response) {
             dispatch(updateMe())
             getEvents()
-            dispatch(showAlert('You left a seminar and your money refunded'))
+            dispatch(showSuccessAlert('You left a seminar and your money refunded'))
         }
         set_seminarModalShow(false)
         set_selectedEvent(null)
@@ -218,7 +218,7 @@ const CustomerCalendar = () => {
         if (response) {
             dispatch(updateMe())
             getEvents()
-            dispatch(showAlert('Event Appointment Cancelled and your money refunded'))
+            dispatch(showSuccessAlert('Event Appointment Cancelled and your money refunded'))
         }
         set_eventModalShow(false)
         set_selectedEvent(null)

@@ -15,10 +15,13 @@ import {doGetKeywordsAndServices, registerUserByAdmin, sendWelcomeEmail} from ".
 import { filterApiServicesToCanonical } from "../constants/serviceOptions";
 import { SetLoadingStatus } from "../actions/appActions";
 import { useAppSelector } from "../store";
+import FormAlert from './FormAlert';
+import { useFormAlert } from '../hooks/useFormAlert';
 
 function AdminRegisterCustomer() {
     const dispatch = useDispatch();
     const { userDetails } = useAppSelector((state) => state.auth);
+    const { message: formBannerMessage, variant: formBannerVariant, setFormError, setFormSuccess, clearFormAlert } = useFormAlert();
 
     const [keywords, set_keywords] = useState<any[]>([]);
     const [services, set_services] = useState<any[]>([]);
@@ -88,7 +91,12 @@ function AdminRegisterCustomer() {
             emailSendingMsg = "Failed to send email to the Customer";
         }
 
-        alert(`${accountCreationMsg}\n${emailSendingMsg}`);
+        const combined = [accountCreationMsg, emailSendingMsg].filter(Boolean).join(' ');
+        if (response && response.status === 'SUCCESS') {
+            setFormSuccess(combined);
+        } else {
+            setFormError(combined || 'Registration failed. Please try again.');
+        }
         SetLoadingStatus(false);
     };
 
@@ -157,6 +165,11 @@ function AdminRegisterCustomer() {
             <h3 className="text-xl font-semibold text-wl-brand mb-6">
                 Register Customer (By Admin)
             </h3>
+            <FormAlert
+                variant={formBannerVariant}
+                message={formBannerMessage}
+                onDismiss={clearFormAlert}
+            />
 
             <div className={label}>Full name *</div>
             <input

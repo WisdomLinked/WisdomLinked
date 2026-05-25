@@ -68,7 +68,10 @@ interface LogoutAction {
 
 interface ShowAlertAction {
     type: actionTypes.showAlert;
-    payload: string;
+    payload: {
+        message: string;
+        variant?: import('../types/alert').AlertVariant;
+    };
 }
 
 interface HideAlertAction {

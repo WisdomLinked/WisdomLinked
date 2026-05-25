@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { joinMeetingFromGuestInvite, resolveMeetingGuestInvite } from "../api/chatApi";
 import { callLogout } from "../api/api";
+import FormAlert from "../components/FormAlert";
 
 export default function MeetingGuestInvite() {
   const { token } = useParams();
@@ -87,7 +88,7 @@ export default function MeetingGuestInvite() {
         {loading ? (
           <p className="mt-3 text-sm text-slate-600">Validating invite…</p>
         ) : error ? (
-          <p className="mt-3 text-sm text-rose-700">{error}</p>
+          <FormAlert variant="error" message={error} className="mt-3" />
         ) : (
           <>
             <p className="mt-3 text-sm text-slate-600">

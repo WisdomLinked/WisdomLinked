@@ -25,7 +25,7 @@ import { resolveProfileImageSrc } from '../utils/profileImage';
 import { fetchDmUnreadSnapshot } from '../api/chatApi';
 import { useAppSelector } from '../store';
 import { logoutUser, updateMe } from '../actions/authActions';
-import { showAlert } from '../actions/alertActions';
+import { showErrorAlert, showSuccessAlert, showWarningAlert } from '../actions/alertActions';
 import { patchDmUnreadRid, setChosenGroupChatDetails, setDmUnreadByRidBulk } from '../actions/chatActions';
 import { connectToRC, onSubscriptionChanged, subscribeToRoom } from '../services/rcRealtime';
 import { useEndMeetingOnReturn } from '../hooks/useEndMeetingOnReturn';
@@ -502,7 +502,7 @@ export default function ExpertDashboard() {
       bookedSessions.find((x: any) => String(x._id) === id) ||
       acceptedSeminars.find((x: any) => String(x._id) === id);
     if (!raw) {
-      dispatch(showAlert('Could not open this session.'));
+      dispatch(showErrorAlert('Could not open this session.'));
       return;
     }
     dispatch(

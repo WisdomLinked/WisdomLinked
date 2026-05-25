@@ -10,7 +10,8 @@ import { useDispatch } from "react-redux";
 import { Swiper, SwiperSlide } from "swiper/react";
 import { Pagination, Navigation } from "swiper";
 import { SetLoadingStatus } from "../../../../actions/appActions";
-import { showAlert } from "../../../../actions/alertActions";
+import { showWarningAlert } from '../../../../actions/alertActions';
+import FormAlert from '../../../../components/FormAlert';
 
 const Seminars = () => {
     const { auth: { userDetails } } = useAppSelector((state) => state);
@@ -67,7 +68,7 @@ const Seminars = () => {
 
     useEffect(() => {
         if (userDetails.status === 'review') {
-            dispatch(showAlert("This feature isn't available under review"))
+            dispatch(showWarningAlert("This feature isn't available under review"))
             navigate(-1)
         }
         let temp = userDetails.events.map((event: any) => {
@@ -209,9 +210,19 @@ const Seminars = () => {
                         </div>
                 }
             </> :
-            <div className="w-full h-full flex flex-col items-center justify-center">
-                <div className="text-white text-2xl text-center"> Opps, something went wrong with the payment </div>
-                <a href={window.location.href} className="text-lg mt-6 text-green">Refresh page</a>
+            <div className="w-full h-full flex flex-col items-center justify-center px-6">
+                <div className="w-full max-w-md">
+                    <FormAlert
+                        variant="error"
+                        message="Payment did not complete. Your card was not charged for this seminar."
+                    />
+                    <a
+                        href={window.location.href.split('?')[0]}
+                        className="mt-4 inline-flex text-lg text-green hover:underline"
+                    >
+                        Try again
+                    </a>
+                </div>
             </div>
     );
 };

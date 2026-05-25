@@ -11,7 +11,7 @@ import { SetLoadingStatus } from "../../../actions/appActions";
 import { useLocation, useNavigate } from "react-router-dom";
 import CloseIcon from '@mui/icons-material/Close';
 import SelectDateTime from "../selectDateTime";
-import { showAlert } from "../../../actions/alertActions";
+import { showErrorAlert, showSuccessAlert, showWarningAlert } from '../../../actions/alertActions';
 import {setChosenChatDetails, setChosenGroupChatDetails} from "../../../actions/chatActions";
 
 const Dashboard = () => {
@@ -37,7 +37,7 @@ const Dashboard = () => {
         const response = await doCancelPendingSeminar(data._id)
         if (response) {
             dispatch(updateMe())
-            dispatch(showAlert('Seminar Appointment Cancelled and your money refunded'))
+            dispatch(showSuccessAlert('Seminar Appointment Cancelled and your money refunded'))
         }
         SetLoadingStatus(false)
     }
@@ -47,7 +47,7 @@ const Dashboard = () => {
         const response = await cancelIndividualAppointment(data._id)
         if (response) {
             dispatch(updateMe())
-            dispatch(showAlert('Appointment Cancelled and your money refunded'))
+            dispatch(showSuccessAlert('Appointment Cancelled and your money refunded'))
         }
         SetLoadingStatus(false)
     }
@@ -66,7 +66,7 @@ const Dashboard = () => {
         console.log(response)
         if (response) {
             dispatch(updateMe())
-            dispatch(showAlert('Event Appointment Cancelled and your money refunded'))
+            dispatch(showSuccessAlert('Event Appointment Cancelled and your money refunded'))
         }
         SetLoadingStatus(false)
     }

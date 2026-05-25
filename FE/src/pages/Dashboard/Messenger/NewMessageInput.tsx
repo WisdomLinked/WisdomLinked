@@ -7,7 +7,7 @@ import data from '@emoji-mart/data';
 import Picker from '@emoji-mart/react';
 import { Smile } from "lucide-react";
 import { callApi } from "../../../api/api";
-import { showAlert } from "../../../actions/alertActions";
+import { showErrorAlert, showSuccessAlert, showWarningAlert } from '../../../actions/alertActions';
 import { useDispatch } from "react-redux";
 import { addNewMessage, setChatChannelInfo } from "../../../actions/chatActions";
 import { getOrCreateDM, sendDirectMessage as apiSendDM, sendGroupMessage as apiSendGroup } from "../../../api/chatApi";
@@ -128,7 +128,7 @@ const NewMessageInput: React.FC<any> = ({
 
         const extension = getFileExtension(selectedFile.name);
         if (!extension || !ALLOWED_CHAT_FILE_EXTENSIONS.includes(extension)) {
-            dispatch(showAlert(`Unsupported file format. ${CHAT_FILE_REQUIREMENTS_MESSAGE}`));
+            dispatch(showErrorAlert(`Unsupported file format. ${CHAT_FILE_REQUIREMENTS_MESSAGE}`));
             if (fileInputRef.current) fileInputRef.current.value = "";
             set_file(undefined);
             return;
@@ -136,7 +136,7 @@ const NewMessageInput: React.FC<any> = ({
 
         if (selectedFile.size > MAX_CHAT_FILE_SIZE_BYTES) {
             dispatch(
-                showAlert(
+                showErrorAlert(
                     `File is too large (${formatBytes(selectedFile.size)}). Max allowed is 1 MB per file.`,
                 ),
             );
@@ -366,7 +366,7 @@ const NewMessageInput: React.FC<any> = ({
             try {
                 const response = await callApi('POST', 'auth/uploadChatFile', { email: userDetails.email }, file);
                 if (response?.status !== 'SUCCESS' || !response?.chatFile) {
-                    dispatch(showAlert(resolveUploadErrorMessage(response)));
+                    dispatch(showErrorAlert(resolveUploadErrorMessage(response)));
                     return;
                 }
                 const message = `Chatfile: ${response.chatFile}#####${response.fileName || file.name}`;
@@ -394,7 +394,7 @@ const NewMessageInput: React.FC<any> = ({
                 }
                 set_message("");
             } catch (e: any) {
-                dispatch(showAlert(resolveUploadErrorMessage(e)));
+                dispatch(showErrorAlert(resolveUploadErrorMessage(e)));
             } finally {
                 setUploadingFile(false);
                 set_file(undefined);

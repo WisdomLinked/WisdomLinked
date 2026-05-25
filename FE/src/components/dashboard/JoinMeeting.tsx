@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Lock, Video } from 'lucide-react';
 import { getMeetingJoinInfo } from '../../api/chatApi';
+import FormAlert from '../FormAlert';
 
 export default function JoinMeeting() {
   const [code, setCode] = useState('');
@@ -75,11 +76,12 @@ export default function JoinMeeting() {
             className="flex-1 bg-transparent text-xs text-slate-800 placeholder:text-slate-400 outline-none"
           />
         </div>
-        {error ? (
-          <p className="mt-2 text-xs font-medium text-rose-600" role="alert">
-            {error}
-          </p>
-        ) : null}
+        <FormAlert
+          variant="error"
+          message={error}
+          onDismiss={() => setError('')}
+          className="mt-3"
+        />
 
         <button
           type="button"

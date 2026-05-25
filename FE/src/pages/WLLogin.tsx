@@ -3,7 +3,9 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useDispatch } from 'react-redux';
 import { Mail, Lock, AlertCircle, Eye, EyeOff, ArrowLeft, RefreshCw, ShieldCheck } from 'lucide-react';
 import { login, confirmLoginByCode } from '../api/api';
-import { showAlert } from '../actions/alertActions';
+import { showSuccessAlert } from '../actions/alertActions';
+import FormAlert from '../components/FormAlert';
+import { useFormAlert } from '../hooks/useFormAlert';
 import { actionTypes } from '../actions/types';
 import SocialAuthBlock from '../components/SocialAuthBlock';
 import SignupModal from '../components/SignupModal';
@@ -17,6 +19,13 @@ export default function WLLogin() {
     const redirectPath = String(searchParams.get("redirect") || "").trim();
     const dispatch = useDispatch();
     const [oauthError, setOauthError] = useState<string | null>(null);
+    const {
+        message: authBannerMessage,
+        variant: authBannerVariant,
+        setFormError,
+        setFormSuccess,
+        clearFormAlert,
+    } = useFormAlert();
     const [form, setForm] = useState({ email: '', password: '' });
     const [errors, setErrors] = useState<Record<string, string>>({});
     const [submitting, setSubmitting] = useState(false);
@@ -48,6 +57,7 @@ export default function WLLogin() {
         const e = validate();
         if (Object.keys(e).length > 0) { setErrors(e); return; }
         setSubmitting(true);
+        clearFormAlert();
         try {
             const response = await login({ email: form.email, password: form.password }) as any;
             if (response.status === 'SUCCESS') {
@@ -56,10 +66,10 @@ export default function WLLogin() {
                 // Focus first OTP input after transition
                 setTimeout(() => inputRefs.current[0]?.focus(), 400);
             } else {
-                dispatch(showAlert(response.error));
+                setFormError(response.error || 'Invalid credentials. Please try again.');
             }
         } catch (err) {
-            dispatch(showAlert('Login failed. Please try again.'));
+            setFormError('Login failed. Please try again.');
         }
         setSubmitting(false);
     };
@@ -130,6 +140,7 @@ export default function WLLogin() {
 
     const confirmCode = async (code: string) => {
         setVerifying(true);
+        clearFormAlert();
         try {
             const response: any = await confirmLoginByCode({
                 email: form.email,
@@ -140,7 +151,7 @@ export default function WLLogin() {
             if (response.status === 'SUCCESS') {
                 localStorage.setItem('currentUser', JSON.stringify(response.userDetails));
                 dispatch({ type: actionTypes.authenticate, payload: response.userDetails });
-                dispatch(showAlert(`Hi, ${response.userDetails.username} 👋. Welcome back.`));
+                dispatch(showSuccessAlert(`Hi, ${response.userDetails.username} 👋. Welcome back.`));
                 if (redirectPath.startsWith("/")) {
                     navigate(redirectPath);
                     return;
@@ -153,12 +164,12 @@ export default function WLLogin() {
                     navigate('/user/' + role + 'dashboard');
                 }
             } else {
-                dispatch(showAlert(response.error));
+                setFormError(response.error || 'Verification failed. Please try again.');
                 setOtpDigits(['', '', '', '', '', '']);
                 setTimeout(() => inputRefs.current[0]?.focus(), 100);
             }
         } catch {
-            dispatch(showAlert('Verification failed. Please try again.'));
+            setFormError('Verification failed. Please try again.');
             setOtpDigits(['', '', '', '', '', '']);
         }
         setVerifying(false);
@@ -166,16 +177,19 @@ export default function WLLogin() {
 
     const handleResend = async () => {
         setResending(true);
+        clearFormAlert();
         try {
             const response: any = await login({ email: form.email, password: form.password });
             if (response.status === 'SUCCESS') {
-                dispatch(showAlert('Verification code sent again.'));
+                setFormSuccess('Verification code sent again.');
                 setOtpDigits(['', '', '', '', '', '']);
                 startTimer();
                 setTimeout(() => inputRefs.current[0]?.focus(), 100);
+            } else {
+                setFormError(response.error || 'Failed to resend code.');
             }
         } catch {
-            dispatch(showAlert('Failed to resend code.'));
+            setFormError('Failed to resend code.');
         }
         setResending(false);
     };
@@ -183,6 +197,7 @@ export default function WLLogin() {
     const handleBackToLogin = () => {
         setCodeSent(false);
         setOtpDigits(['', '', '', '', '', '']);
+        clearFormAlert();
         if (timerRef.current) clearInterval(timerRef.current);
     };
 
@@ -230,6 +245,12 @@ export default function WLLogin() {
                                 WisdomLinked
                             </span>
                         </div>
+
+                        <FormAlert
+                            variant={authBannerVariant}
+                            message={authBannerMessage}
+                            onDismiss={clearFormAlert}
+                        />
 
                         {!codeSent ? (
                             /* ── LOGIN FORM ── */

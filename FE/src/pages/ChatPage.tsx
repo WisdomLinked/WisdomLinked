@@ -18,7 +18,7 @@ import {
 } from 'lucide-react';
 import { useDispatch } from 'react-redux';
 import { createCommunityChat } from '../api/api';
-import { showAlert } from '../actions/alertActions';
+import { showErrorAlert, showSuccessAlert, showWarningAlert } from '../actions/alertActions';
 import { updateMe } from '../actions/authActions';
 
 interface ChatMessage {
@@ -314,7 +314,7 @@ const ChatPage: React.FC = () => {
 
   const handleOpenCreate = () => {
     if (activeTab !== 'community') {
-      dispatch(showAlert('Switch to Community tab to create a community chat'));
+      dispatch(showErrorAlert('Switch to Community tab to create a community chat'));
       return;
     }
     setCreateOpen(true);
@@ -322,7 +322,7 @@ const ChatPage: React.FC = () => {
 
   const handleCreateCommunity = async () => {
     if (!newName.trim()) {
-      dispatch(showAlert('Community name is required'));
+      dispatch(showErrorAlert('Community name is required'));
       return;
     }
     setCreating(true);
@@ -333,7 +333,7 @@ const ChatPage: React.FC = () => {
         isOpenToAll: newOpenToAll,
       });
       if (res?.status === 'SUCCESS') {
-        dispatch(showAlert('Community created'));
+        dispatch(showSuccessAlert('Community created'));
         const created = (res as any).chat ?? (res as any).groupChat ?? {};
         const newId: string = created._id || created.id || `local-${Date.now()}`;
         const memberCount =
@@ -364,10 +364,10 @@ const ChatPage: React.FC = () => {
 
         dispatch(updateMe() as any);
       } else {
-        dispatch(showAlert(res?.error || 'Failed to create community'));
+        dispatch(showErrorAlert(res?.error || 'Failed to create community'));
       }
     } catch (err) {
-      dispatch(showAlert('Failed to create community'));
+      dispatch(showErrorAlert('Failed to create community'));
     } finally {
       setCreating(false);
     }

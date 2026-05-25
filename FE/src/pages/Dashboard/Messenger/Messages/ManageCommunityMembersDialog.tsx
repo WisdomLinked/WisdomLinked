@@ -9,7 +9,7 @@ import Button from '@mui/material/Button';
 import Avatar from '../../../../components/Avatar';
 import { removeCommunityMember, setCommunityCoModerator } from '../../../../api/api';
 import { useDispatch } from 'react-redux';
-import { showAlert } from '../../../../actions/alertActions';
+import { showErrorAlert, showSuccessAlert, showWarningAlert } from '../../../../actions/alertActions';
 import { setChosenGroupChatDetails } from '../../../../actions/chatActions';
 import { updateMe } from '../../../../actions/authActions';
 
@@ -54,13 +54,13 @@ const ManageCommunityMembersDialog = ({
                         coModerators: Array.isArray(res?.coModerators) ? res.coModerators : [],
                     }),
                 );
-                dispatch(showAlert(isCoModerator ? 'Co-moderator granted' : 'Co-moderator revoked'));
+                dispatch(showSuccessAlert(isCoModerator ? 'Co-moderator granted' : 'Co-moderator revoked'));
                 dispatch(updateMe() as any);
             } else {
-                dispatch(showAlert(res?.error || 'Could not update co-moderator'));
+                dispatch(showErrorAlert(res?.error || 'Could not update co-moderator'));
             }
         } catch (e: any) {
-            dispatch(showAlert(e?.response?.data?.error || e?.message || 'Could not update co-moderator'));
+            dispatch(showErrorAlert(e?.response?.data?.error || e?.message || 'Could not update co-moderator'));
         } finally {
             setSavingCoModId(null);
         }
@@ -81,13 +81,13 @@ const ManageCommunityMembersDialog = ({
                         participants: next,
                     }),
                 );
-                dispatch(showAlert('Member removed from the community'));
+                dispatch(showSuccessAlert('Member removed from the community'));
                 dispatch(updateMe() as any);
             } else {
-                dispatch(showAlert(res?.error || 'Could not remove member'));
+                dispatch(showErrorAlert(res?.error || 'Could not remove member'));
             }
         } catch (e: any) {
-            dispatch(showAlert(e?.response?.data?.error || e?.message || 'Could not remove member'));
+            dispatch(showErrorAlert(e?.response?.data?.error || e?.message || 'Could not remove member'));
         } finally {
             setRemovingId(null);
         }

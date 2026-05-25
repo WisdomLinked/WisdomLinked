@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import { BOOKING_PAYMENT_AMOUNT_INVALID } from '../utils/bookingUserFacingCopy';
 const stripeTest = require('stripe')(process.env.STRIPE_SECRET_KEY_TEST);
 const stripeLive = require('stripe')(process.env.STRIPE_SECRET_KEY_LIVE);
 const AppState = require("../models/AppState");
@@ -316,7 +317,7 @@ const handleStripeWebhook = async (req, res) => {
                             received: session.amount_total,
                             sessionId: session.id
                         });
-                        return res.status(400).json({ error: 'Payment amount validation failed' });
+                        return res.status(400).json({ error: BOOKING_PAYMENT_AMOUNT_INVALID });
                     }
 
                     // Validate customer email matches (if available in session)

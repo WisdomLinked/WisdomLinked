@@ -8,7 +8,7 @@ import Avatar from "../../../../components/Avatar";
 import { Crown, Mail, UserMinus, Users, X } from "lucide-react";
 import { useDispatch } from "react-redux";
 import { removeCommunityMember } from "../../../../api/api";
-import { showAlert } from "../../../../actions/alertActions";
+import { showErrorAlert, showSuccessAlert, showWarningAlert } from '../../../../actions/alertActions';
 import { setChosenGroupChatDetails } from "../../../../actions/chatActions";
 import { updateMe } from "../../../../actions/authActions";
 
@@ -67,13 +67,13 @@ const GroupParticipantsDialog = ({
                         participants: nextParticipants,
                     }),
                 );
-                dispatch(showAlert("Member removed from the community"));
+                dispatch(showSuccessAlert("Member removed from the community"));
                 dispatch(updateMe() as any);
             } else {
-                dispatch(showAlert(res?.error || "Could not remove member"));
+                dispatch(showErrorAlert(res?.error || "Could not remove member"));
             }
         } catch (e: any) {
-            dispatch(showAlert(e?.response?.data?.error || e?.message || "Could not remove member"));
+            dispatch(showErrorAlert(e?.response?.data?.error || e?.message || "Could not remove member"));
         } finally {
             setRemovingId(null);
         }

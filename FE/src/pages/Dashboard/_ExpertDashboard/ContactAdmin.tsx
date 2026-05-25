@@ -4,7 +4,7 @@ import { useDispatch } from 'react-redux';
 
 import { doContactUs } from '../../../api/api';
 import { useAppSelector } from '../../../store';
-import { showAlert } from '../../../actions/alertActions';
+import { showErrorAlert, showSuccessAlert, showWarningAlert } from '../../../actions/alertActions';
 
 export default function ContactAdmin() {
   const MAX_CONTACT_MESSAGE_LENGTH = 100;
@@ -31,15 +31,15 @@ export default function ContactAdmin() {
     e.preventDefault();
     const body = message.trim();
     if (!body) {
-      dispatch(showAlert('Please enter your message before submitting.'));
+      dispatch(showErrorAlert('Please enter your message before submitting.'));
       return;
     }
     if (body.length > MAX_CONTACT_MESSAGE_LENGTH) {
-      dispatch(showAlert(`Please keep the message within ${MAX_CONTACT_MESSAGE_LENGTH} characters.`));
+      dispatch(showErrorAlert(`Please keep the message within ${MAX_CONTACT_MESSAGE_LENGTH} characters.`));
       return;
     }
     if (!email) {
-      dispatch(showAlert('Email not found on your profile. Please update profile first.'));
+      dispatch(showErrorAlert('Email not found on your profile. Please update profile first.'));
       return;
     }
 
@@ -54,7 +54,7 @@ export default function ContactAdmin() {
       if (res && res !== false) {
         setMessage('');
         setSubmitted(true);
-        dispatch(showAlert('Your message has been sent to admin.'));
+        dispatch(showSuccessAlert('Your message has been sent to admin.'));
       }
     } finally {
       setSubmitting(false);

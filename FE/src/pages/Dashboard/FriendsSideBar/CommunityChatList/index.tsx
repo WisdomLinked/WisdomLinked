@@ -7,7 +7,7 @@ import PersonAddIcon from "@mui/icons-material/PersonAdd";
 import GroupAddIcon from "@mui/icons-material/GroupAdd";
 import { Button, Dialog, DialogTitle, DialogContent, DialogActions, TextField, FormControl, InputLabel, Select, MenuItem, Checkbox, ListItemText, OutlinedInput } from "@mui/material";
 import { createCommunityChat, addParticipantsToCommunityChat, doFilterCustomers, getAllCommunityChats, joinCommunityChat } from "../../../../api/api";
-import { showAlert } from "../../../../actions/alertActions";
+import { showErrorAlert, showSuccessAlert, showWarningAlert } from '../../../../actions/alertActions';
 import { updateMe } from "../../../../actions/authActions";
 
 const MainContainer = styled("div")({
@@ -94,10 +94,10 @@ const CommunityChatList = () => {
                 setCommunityChats(mapChatsWithMissed(response.chats));
             } else {
                 const errorMsg = response?.error || response?.message || "Failed to fetch community chats";
-                dispatch(showAlert(errorMsg));
+                dispatch(showErrorAlert(errorMsg));
             }
         } catch (error: any) {
-            dispatch(showAlert(error?.message || "Failed to fetch community chats"));
+            dispatch(showErrorAlert(error?.message || "Failed to fetch community chats"));
         } finally {
             setLoadingChats(false);
         }
@@ -164,7 +164,7 @@ const CommunityChatList = () => {
     // Handle create community chat
     const handleCreateChat = async () => {
         if (!newChatName.trim()) {
-            dispatch(showAlert("Community chat name is required"));
+            dispatch(showErrorAlert("Community chat name is required"));
             return;
         }
 
@@ -178,7 +178,7 @@ const CommunityChatList = () => {
             });
 
             if (response.status === 'SUCCESS') {
-                dispatch(showAlert("Community chat created successfully!"));
+                dispatch(showSuccessAlert("Community chat created successfully!"));
                 // Update user details to refresh the list
                 dispatch(updateMe());
                 // Refresh the community chats list
@@ -190,12 +190,12 @@ const CommunityChatList = () => {
                 setOpenDialog(false);
             } else {
                 const backendError = String(response?.error || response?.message || "");
-                dispatch(showAlert(backendError || "Failed to create community chat"));
+                dispatch(showErrorAlert(backendError || "Failed to create community chat"));
             }
         } catch (error: any) {
             const details = error?.response?.data;
             const backendError = typeof details === "string" ? details : details?.error || details?.message;
-            dispatch(showAlert(backendError || error?.message || "Failed to create community chat"));
+            dispatch(showErrorAlert(backendError || error?.message || "Failed to create community chat"));
         } finally {
             setIsCreating(false);
         }
@@ -204,7 +204,7 @@ const CommunityChatList = () => {
     // Handle add participants to existing chat
     const handleAddParticipants = async () => {
         if (!selectedChatForAddParticipants || selectedParticipantsForAdd.length === 0) {
-            dispatch(showAlert("Please select at least one participant"));
+            dispatch(showErrorAlert("Please select at least one participant"));
             return;
         }
 
@@ -216,7 +216,7 @@ const CommunityChatList = () => {
             });
 
             if (response.status === 'SUCCESS') {
-                dispatch(showAlert("Participants added successfully!"));
+                dispatch(showSuccessAlert("Participants added successfully!"));
                 dispatch(updateMe());
                 // Refresh the community chats list
                 await fetchAllCommunityChats();
@@ -224,10 +224,10 @@ const CommunityChatList = () => {
                 setSelectedChatForAddParticipants(null);
                 setOpenAddParticipantsDialog(false);
             } else {
-                dispatch(showAlert(response.error || "Failed to add participants"));
+                dispatch(showErrorAlert(response.error || "Failed to add participants"));
             }
         } catch (error: any) {
-            dispatch(showAlert(error?.message || "Failed to add participants"));
+            dispatch(showErrorAlert(error?.message || "Failed to add participants"));
         } finally {
             setIsAddingParticipants(false);
         }
@@ -239,16 +239,16 @@ const CommunityChatList = () => {
         try {
             const response = await joinCommunityChat(chat._id);
             if (response.status === 'SUCCESS') {
-                dispatch(showAlert("Successfully joined the community chat!"));
+                dispatch(showSuccessAlert("Successfully joined the community chat!"));
                 // Update user details to refresh the list
                 dispatch(updateMe());
                 // Refresh the community chats list
                 await fetchAllCommunityChats();
             } else {
-                dispatch(showAlert(response.error || "Failed to join community chat"));
+                dispatch(showErrorAlert(response.error || "Failed to join community chat"));
             }
         } catch (error: any) {
-            dispatch(showAlert(error?.message || "Failed to join community chat"));
+            dispatch(showErrorAlert(error?.message || "Failed to join community chat"));
         } finally {
             setJoiningChatId(null);
         }

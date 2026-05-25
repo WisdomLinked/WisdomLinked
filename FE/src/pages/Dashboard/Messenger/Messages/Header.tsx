@@ -30,7 +30,7 @@ import { fetchChatUserProfile } from "../../../../api/chatApi";
 import {doLeftSeminar, doUpdateProfile, shareMeetingViaEmail} from "../../../../api/api";
 import {SetLoadingStatus, SetTotalTimeSpent} from "../../../../actions/appActions";
 import { updateMe } from "../../../../actions/authActions";
-import { showAlert } from "../../../../actions/alertActions";
+import { showErrorAlert, showSuccessAlert, showWarningAlert } from '../../../../actions/alertActions';
 import { addNewMessage, resetChatAction, setChosenGroupChatDetails } from "../../../../actions/chatActions";
 import ProfileModal from "./ProfileModal";
 import CommunityProfileModal from "./CommunityProfileModal";
@@ -129,7 +129,7 @@ const MessagesHeader = ({ events, openCalendarModal, openSeminarModal, openEditS
 
     const handleOpenCallHistory = async () => {
         if (!conversationId) {
-            dispatch(showAlert('Chat is still loading — try again in a moment'));
+            dispatch(showErrorAlert('Chat is still loading — try again in a moment'));
             return;
         }
         set_buttonsModalShow(false);
@@ -163,7 +163,7 @@ const MessagesHeader = ({ events, openCalendarModal, openSeminarModal, openEditS
         const response = await doLeftSeminar(chosenGroupChatDetails.groupId);
         if (response) {
             dispatch(updateMe());
-            dispatch(showAlert('You left a seminar and your money refunded'));
+            dispatch(showSuccessAlert('You left a seminar and your money refunded'));
             dispatch(resetChatAction());
         }
         SetLoadingStatus(false);
@@ -222,7 +222,7 @@ const MessagesHeader = ({ events, openCalendarModal, openSeminarModal, openEditS
             openMeetingUrl(res.jitsiUrl, pendingWindow);
         } else {
             if (pendingWindow && !pendingWindow.closed) pendingWindow.close();
-            dispatch(showAlert(res?.error || 'Could not start the meeting room'));
+            dispatch(showErrorAlert(res?.error || 'Could not start the meeting room'));
         }
     }
 
@@ -335,7 +335,7 @@ const MessagesHeader = ({ events, openCalendarModal, openSeminarModal, openEditS
         }
         if (!conversationId) {
             if (pendingWindow && !pendingWindow.closed) pendingWindow.close();
-            dispatch(showAlert("Chat is still loading — try again in a moment"));
+            dispatch(showErrorAlert("Chat is still loading — try again in a moment"));
             return;
         }
         const res = await startMeeting({ conversationId });
@@ -345,7 +345,7 @@ const MessagesHeader = ({ events, openCalendarModal, openSeminarModal, openEditS
             openMeetingUrl(res.jitsiUrl, pendingWindow);
         } else {
             if (pendingWindow && !pendingWindow.closed) pendingWindow.close();
-            dispatch(showAlert(res?.error || "Could not start the call"));
+            dispatch(showErrorAlert(res?.error || "Could not start the call"));
         }
     };
 
@@ -485,7 +485,7 @@ const MessagesHeader = ({ events, openCalendarModal, openSeminarModal, openEditS
                                 }
                                 if (!conversationId) {
                                     if (pendingWindow && !pendingWindow.closed) pendingWindow.close();
-                                    dispatch(showAlert('Chat is still loading — try again in a moment'));
+                                    dispatch(showErrorAlert('Chat is still loading — try again in a moment'));
                                     return;
                                 }
                                 const res = await startMeeting({ conversationId });
@@ -495,7 +495,7 @@ const MessagesHeader = ({ events, openCalendarModal, openSeminarModal, openEditS
                                     openMeetingUrl(res.jitsiUrl, pendingWindow);
                                 } else {
                                     if (pendingWindow && !pendingWindow.closed) pendingWindow.close();
-                                    dispatch(showAlert(res?.error || 'Could not start the call'));
+                                    dispatch(showErrorAlert(res?.error || 'Could not start the call'));
                                 }
                             }}
                         >
@@ -562,7 +562,7 @@ const MessagesHeader = ({ events, openCalendarModal, openSeminarModal, openEditS
                                             openMeetingUrl(res.jitsiUrl, pendingWindow);
                                         } else {
                                             if (pendingWindow && !pendingWindow.closed) pendingWindow.close();
-                                            dispatch(showAlert(res?.error || 'Could not start the meeting room'));
+                                            dispatch(showErrorAlert(res?.error || 'Could not start the meeting room'));
                                         }
                                     }}
                                 >

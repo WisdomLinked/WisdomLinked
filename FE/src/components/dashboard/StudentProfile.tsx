@@ -13,7 +13,7 @@ import {
 } from 'lucide-react';
 import { useAppSelector } from '../../store';
 import { useDispatch } from 'react-redux';
-import { showAlert } from '../../actions/alertActions';
+import { showErrorAlert, showSuccessAlert } from '../../actions/alertActions';
 import { updateMe } from '../../actions/authActions';
 import { doUpdateProfile, profileImageFetch } from '../../api/api';
 import { resolveProfileImageSrc } from '../../utils/profileImage';
@@ -222,10 +222,10 @@ export default function StudentProfile() {
         profileImageFetch as any,
       );
       setPhotoUrl(src);
-      dispatch(showAlert('Profile photo saved'));
+      dispatch(showSuccessAlert('Profile photo saved'));
     } catch (err: any) {
       dispatch(
-        showAlert(
+        showErrorAlert(
           err?.response?.data?.error || err?.message || 'Could not save profile photo',
         ),
       );
@@ -237,7 +237,7 @@ export default function StudentProfile() {
   const handleSavePersonal = async () => {
     const trimmedName = name.trim();
     if (!trimmedName) {
-      dispatch(showAlert('Name is required'));
+      dispatch(showErrorAlert('Name is required'));
       return;
     }
 
@@ -251,12 +251,12 @@ export default function StudentProfile() {
         setPersonalDirty(false);
         if (userDetails?.email) setEmail(userDetails.email);
         await dispatch(updateMe() as any);
-        dispatch(showAlert('Profile saved'));
+        dispatch(showSuccessAlert('Profile saved'));
       } else {
-        dispatch(showAlert('Could not save profile'));
+        dispatch(showErrorAlert('Could not save profile'));
       }
     } catch (err: any) {
-      dispatch(showAlert(err?.message || 'Could not save profile'));
+      dispatch(showErrorAlert(err?.message || 'Could not save profile'));
     } finally {
       setPersonalSaving(false);
     }

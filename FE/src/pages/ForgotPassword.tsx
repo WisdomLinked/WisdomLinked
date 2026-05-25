@@ -1,16 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useDispatch } from 'react-redux';
 import { Mail, Lock, RefreshCw, AlertCircle, Eye, EyeOff, ArrowLeft, ArrowRight, ShieldCheck, CheckCircle } from 'lucide-react';
 import { passwordResetRequest, verifyPasswordResetOTP, confirmPasswordResetByCode } from '../api/api';
-import { showAlert } from '../actions/alertActions';
 
 const BTN_PRIMARY_STYLE = { background: 'linear-gradient(135deg, #234C6A 0%, #456882 100%)' };
 const FOCUS_RING = 'focus:ring-2 focus:ring-[#234C6A]/60 focus:border-[#234C6A]';
 
 export default function ForgotPassword() {
     const navigate = useNavigate();
-    const dispatch = useDispatch();
 
     // Step: 'email' | 'otp' | 'newPassword' | 'success'
     const [step, setStep] = useState<'email' | 'otp' | 'newPassword' | 'success'>('email');
@@ -26,6 +23,7 @@ export default function ForgotPassword() {
     const [verifying, setVerifying] = useState(false);
     const [resending, setResending] = useState(false);
     const [otpError, setOtpError] = useState('');
+    const [otpResendSuccess, setOtpResendSuccess] = useState('');
     const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
 
     const PasswordRequirement = ({ met, text }: { met: boolean, text: string }) => (
@@ -151,18 +149,19 @@ export default function ForgotPassword() {
         if (resending) return;
         setResending(true);
         setOtpError('');
+        setOtpResendSuccess('');
         try {
             const response = await passwordResetRequest({ email, password: 'temp_placeholder_pwd' }) as any;
             if (response.status === 'SUCCESS') {
-                dispatch(showAlert('A new OTP has been sent to your email.'));
+                setOtpResendSuccess('A new OTP has been sent to your email.');
                 startTimer();
                 setOtpDigits(['', '', '', '', '', '']);
                 setTimeout(() => inputRefs.current[0]?.focus(), 100);
             } else {
-                dispatch(showAlert(response.error || 'Failed to resend code.'));
+                setOtpError(response.error || 'Failed to resend code.');
             }
         } catch (err) {
-            dispatch(showAlert('Failed to resend. Please try again.'));
+            setOtpError('Failed to resend. Please try again.');
         }
         setResending(false);
     };
@@ -308,6 +307,11 @@ export default function ForgotPassword() {
                             ))}
                         </div>
 
+                        {otpResendSuccess && (
+                            <p className="mb-3 text-xs text-emerald-600 flex items-center justify-center gap-1">
+                                <CheckCircle size={12} /> {otpResendSuccess}
+                            </p>
+                        )}
                         {otpError && (
                             <p className="mb-3 text-xs text-red-500 flex items-center justify-center gap-1">
                                 <AlertCircle size={12} /> {otpError}

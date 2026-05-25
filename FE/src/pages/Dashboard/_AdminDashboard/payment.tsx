@@ -1,4 +1,6 @@
 import React, { useEffect, useState } from "react";
+import { useDispatch } from "react-redux";
+import { showErrorAlert, showSuccessAlert } from "../../../actions/alertActions";
 import { doFilterPaymentHistories, getStripeMode, setStripeMode, sendPaymentLinkToUser, processRefund, sendAdHocPaymentLink } from "../../../api/api";
 import { SetLoadingStatus } from "../../../actions/appActions";
 import SelectionWithCheckBox from "../../../components/SelectionWithCheckBox";
@@ -16,6 +18,7 @@ const currentMonth = new Date().getMonth() + 1;
 const currentDate = new Date().getDate();
 
 const Payment = () => {
+    const dispatch = useDispatch();
     const modes = [
         {
             value: "",
@@ -280,13 +283,13 @@ const Payment = () => {
             });
             
             if (response?.status === 'SUCCESS') {
-                alert('Payment link has been sent successfully to the customer!');
+                dispatch(showSuccessAlert('Payment link has been sent successfully to the customer.'));
                 handleRetryModalClose();
             } else {
                 const errorMessage = typeof response?.message === 'string' 
                     ? response.message 
                     : 'Unknown error';
-                alert('Failed to send payment link: ' + errorMessage);
+                dispatch(showErrorAlert('Failed to send payment link: ' + errorMessage));
             }
         } catch (error: any) {
             console.error('Error sending payment link:', error);
@@ -295,7 +298,7 @@ const Payment = () => {
                 : typeof error === 'string'
                 ? error
                 : 'An unexpected error occurred';
-            alert('Failed to send payment link: ' + errorMessage);
+            dispatch(showErrorAlert('Failed to send payment link: ' + errorMessage));
         } finally {
             SetLoadingStatus(false);
         }
@@ -315,7 +318,7 @@ const Payment = () => {
             });
             
             if (response?.status === 'SUCCESS') {
-                alert('Refund processed successfully!');
+                dispatch(showSuccessAlert('Refund processed successfully.'));
                 handleRefundModalClose();
                 // Refresh the payment history to show the refund
                 filterHisotries(currentPage);
@@ -323,7 +326,7 @@ const Payment = () => {
                 const errorMessage = typeof response?.message === 'string' 
                     ? response.message 
                     : 'Unknown error';
-                alert('Failed to process refund: ' + errorMessage);
+                dispatch(showErrorAlert('Failed to process refund: ' + errorMessage));
             }
         } catch (error: any) {
             console.error('Error processing refund:', error);
@@ -332,7 +335,7 @@ const Payment = () => {
                 : typeof error === 'string'
                 ? error
                 : 'An unexpected error occurred';
-            alert('Failed to process refund: ' + errorMessage);
+            dispatch(showErrorAlert('Failed to process refund: ' + errorMessage));
         } finally {
             SetLoadingStatus(false);
         }
@@ -355,7 +358,7 @@ const Payment = () => {
             });
             
             if (response?.status === 'SUCCESS') {
-                alert('Payment link sent successfully to customer!');
+                dispatch(showSuccessAlert('Payment link sent successfully to customer.'));
                 handleAdHocModalClose();
                 // Refresh the payment history to show the new pending payment
                 filterHisotries(currentPage);
@@ -363,7 +366,7 @@ const Payment = () => {
                 const errorMessage = typeof response?.message === 'string' 
                     ? response.message 
                     : 'Unknown error';
-                alert('Failed to send payment link: ' + errorMessage);
+                dispatch(showErrorAlert('Failed to send payment link: ' + errorMessage));
             }
         } catch (error: any) {
             console.error('Error sending ad-hoc payment link:', error);
@@ -372,7 +375,7 @@ const Payment = () => {
                 : typeof error === 'string'
                 ? error
                 : 'An unexpected error occurred';
-            alert('Failed to send payment link: ' + errorMessage);
+            dispatch(showErrorAlert('Failed to send payment link: ' + errorMessage));
         } finally {
             SetLoadingStatus(false);
         }

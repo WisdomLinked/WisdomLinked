@@ -3,7 +3,8 @@ import { Mail, ArrowRight, RefreshCw } from 'lucide-react';
 import { useDispatch } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
 import { callApi, checkVerificationStatus } from '../api/api';
-import { showAlert } from '../actions/alertActions';
+import FormAlert from './FormAlert';
+import { useFormAlert } from '../hooks/useFormAlert';
 import { autoLogin } from '../actions/authActions';
 
 interface ConfirmEmailProps {
@@ -14,6 +15,7 @@ const ConfirmEmail: React.FC<ConfirmEmailProps> = ({ email }) => {
     const dispatch = useDispatch();
     const navigate = useNavigate();
     const [isResending, setIsResending] = useState(false);
+    const { message: formBannerMessage, variant: formBannerVariant, setFormError, setFormSuccess, clearFormAlert } = useFormAlert();
 
     useEffect(() => {
         let timer: NodeJS.Timeout;
@@ -22,7 +24,7 @@ const ConfirmEmail: React.FC<ConfirmEmailProps> = ({ email }) => {
             if (data?.status === 'VERIFIED') {
                 if (data.userDetails) {
                     dispatch(autoLogin() as any);
-                    dispatch(showAlert('Verification successful! Logging you in...'));
+                    setFormSuccess('Verification successful! Logging you in...');
                     setTimeout(() => {
                         navigate(data.userDetails.role === 'customer' 
                             ? '/user/studentdashboard' 
@@ -41,15 +43,16 @@ const ConfirmEmail: React.FC<ConfirmEmailProps> = ({ email }) => {
     const handleResend = async () => {
         if (isResending) return;
         setIsResending(true);
+        clearFormAlert();
         try {
             const response = await callApi('POST', 'auth/resendConfirmEmail', { email }) as any;
             if (response.status === 'SUCCESS') {
-                dispatch(showAlert('A new verification link has been sent to your email.'));
+                setFormSuccess('A new verification link has been sent to your email.');
             } else {
-                dispatch(showAlert(response.error || 'Failed to resend the verification link.'));
+                setFormError(response.error || 'Failed to resend the verification link.');
             }
         } catch (error) {
-            dispatch(showAlert('An error occurred while resending the email.'));
+            setFormError('An error occurred while resending the email.');
         }
         setIsResending(false);
     };
@@ -72,6 +75,12 @@ const ConfirmEmail: React.FC<ConfirmEmailProps> = ({ email }) => {
                 </div>
                 
                 <h2 className="text-2xl font-bold mb-3">Check your email</h2>
+                <FormAlert
+                    variant={formBannerVariant}
+                    message={formBannerMessage}
+                    onDismiss={clearFormAlert}
+                    className="mb-4 text-left"
+                />
                 <p className="text-slate-600 mb-8 leading-relaxed">
                     We've sent a magic link to <strong className="text-slate-900 font-semibold">{email}</strong>. 
                     <br/><br/>

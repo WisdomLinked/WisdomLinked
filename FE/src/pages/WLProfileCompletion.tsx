@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useDispatch } from 'react-redux';
 import { ChevronDown, Check, Loader2 } from 'lucide-react';
 import { callApi } from '../api/api';
-import { showAlert } from '../actions/alertActions';
+import { showErrorAlert, showSuccessAlert, showWarningAlert } from '../actions/alertActions';
 import { useAppSelector } from '../store';
 import { autoLogin } from '../actions/authActions';
 import { SERVICE_LABELS } from '../constants/serviceOptions';
@@ -170,10 +170,10 @@ export default function WLProfileCompletion() {
                 const dashboardPath = role === 'customer' ? '/user/studentdashboard' : `/user/${role}dashboard`;
                 navigate(dashboardPath, { replace: true });
             } else {
-                dispatch(showAlert(response.error || 'Failed to update profile.'));
+                dispatch(showErrorAlert(response.error || 'Failed to update profile.'));
             }
         } catch (err: any) {
-            dispatch(showAlert(err?.message || 'Update failed. Please try again.'));
+            dispatch(showErrorAlert(err?.message || 'Update failed. Please try again.'));
         }
         setSubmitting(false);
     };

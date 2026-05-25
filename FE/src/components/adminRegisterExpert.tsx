@@ -16,11 +16,13 @@ import PhoneInput from "react-phone-input-2";
 import {doGetKeywordsAndServices, registerUserByAdmin, sendWelcomeEmail} from "../api/api";
 import { filterApiServicesToCanonical } from "../constants/serviceOptions";
 import { SetLoadingStatus } from "../actions/appActions";
-import { showAlert } from "../actions/alertActions";
+import FormAlert from './FormAlert';
+import { useFormAlert } from '../hooks/useFormAlert';
 import { useAppSelector } from "../store";
 
 function AdminRegisterExpert() {
     const dispatch = useDispatch();
+    const { message: formBannerMessage, variant: formBannerVariant, setFormError, setFormSuccess, clearFormAlert } = useFormAlert();
     const { userDetails } = useAppSelector((state) => state.auth);
 
     const [keywords, set_keywords] = useState<any[]>([]);
@@ -107,7 +109,12 @@ function AdminRegisterExpert() {
             emailSendingMsg = "Failed to send email to the Expert";
         }
 
-        alert(`${accountCreationMsg}\n${emailSendingMsg}`);
+        const combined = [accountCreationMsg, emailSendingMsg].filter(Boolean).join(' ');
+        if (response && response.status === 'SUCCESS') {
+            setFormSuccess(combined);
+        } else {
+            setFormError(combined || 'Registration failed. Please try again.');
+        }
         SetLoadingStatus(false);
     };
 
@@ -185,6 +192,11 @@ function AdminRegisterExpert() {
             <h3 className="text-xl font-semibold text-wl-brand mb-6">
                 Register Expert (By Admin)
             </h3>
+            <FormAlert
+                variant={formBannerVariant}
+                message={formBannerMessage}
+                onDismiss={clearFormAlert}
+            />
 
             <div className={label}>Full name *</div>
             <input

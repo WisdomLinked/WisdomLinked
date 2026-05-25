@@ -3,7 +3,7 @@ import Dialog from '@mui/material/Dialog';
 import { useDispatch, useSelector } from 'react-redux';
 import { addParticipantsToCommunityChat, doFilterCustomers } from '../../../../api/api';
 import { fetchGroupHistory } from '../../../../api/chatApi';
-import { showAlert } from '../../../../actions/alertActions';
+import { showErrorAlert, showSuccessAlert, showWarningAlert } from '../../../../actions/alertActions';
 import { replaceChatMessages, setChatChannelInfo, setChosenGroupChatDetails } from '../../../../actions/chatActions';
 import { updateMe } from '../../../../actions/authActions';
 import Avatar from '../../../../components/Avatar';
@@ -90,7 +90,7 @@ export default function AddCommunityMembersDialog({ open, onClose, groupDetails,
 
     const handleAdd = async () => {
         if (!gid || selected.size === 0) {
-            dispatch(showAlert('Select at least one person to add.'));
+            dispatch(showErrorAlert('Select at least one person to add.'));
             return;
         }
         setSubmitting(true);
@@ -100,7 +100,7 @@ export default function AddCommunityMembersDialog({ open, onClose, groupDetails,
                 participantIds: Array.from(selected),
             });
             if (res?.status === 'SUCCESS') {
-                dispatch(showAlert('Members added.'));
+                dispatch(showSuccessAlert('Members added.'));
                 const added = rows.filter((r) => selected.has(r.id));
                 const mergedParticipants = [
                     ...(groupDetails.participants || []),
@@ -133,10 +133,10 @@ export default function AddCommunityMembersDialog({ open, onClose, groupDetails,
                 onClose();
                 setSelected(new Set());
             } else {
-                dispatch(showAlert(res?.error || 'Could not add members'));
+                dispatch(showErrorAlert(res?.error || 'Could not add members'));
             }
         } catch (e: any) {
-            dispatch(showAlert(e?.response?.data?.error || e?.message || 'Could not add members'));
+            dispatch(showErrorAlert(e?.response?.data?.error || e?.message || 'Could not add members'));
         } finally {
             setSubmitting(false);
         }

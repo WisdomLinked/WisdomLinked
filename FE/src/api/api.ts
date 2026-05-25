@@ -14,7 +14,7 @@ import {
 
 import { store } from "../store";
 import { actionTypes } from "../actions/types";
-import { showAlert } from "../actions/alertActions";
+import { showErrorAlert } from "../actions/alertActions";
 import { logoutUser } from "../actions/authActions";
 import { SetLoadingStatus } from "../actions/appActions";
 import { group } from "console";
@@ -73,10 +73,14 @@ const checkForAuthorization = (error: any) => {
         payload: error.message
     })
     if (responseCode == 413) {
-        store.dispatch(showAlert('payload size too large'));
+        store.dispatch(showErrorAlert('Payload is too large. Try a smaller file or message.'));
     }
     else
-        store.dispatch(showAlert(error.response?.data || error.message));
+        store.dispatch(showErrorAlert(
+            typeof error.response?.data === 'string'
+                ? error.response.data
+                : error.response?.data?.error || error.message || 'Something went wrong. Please try again.'
+        ));
     SetLoadingStatus(false)
     return false
 };
