@@ -6,6 +6,8 @@ import { useAppSelector } from '../../../store';
 import { doSetExpertBookingNoticeHours, doUpdateProfile, doUpdateTimeSlots } from '../../../api/api';
 import { updateMe } from '../../../actions/authActions';
 import {
+  formatHourRange,
+  formatSubIntervals,
   halfHourIndicesToHours,
   hoursToHalfHourIndices,
   normalizeExpertPrice,
@@ -304,17 +306,35 @@ const AvailabilityPage: React.FC = () => {
     compact: boolean,
     onClick: () => void
   ) => {
-    const slot = ALL_SLOTS[hour];
+    const range = formatHourRange(hour);
+    const sub = formatSubIntervals(hour, form.sessionDuration);
+    const tooltip = sub ? `${range} \u2014 ${sub}` : range;
     const classes = [
-      'rounded-lg border text-center cursor-pointer transition-colors',
-      compact ? 'px-2 py-1 text-[11px]' : 'px-3 py-2 text-sm',
+      'rounded-lg border text-center cursor-pointer transition-colors whitespace-nowrap',
+      compact ? 'px-2 py-1' : 'px-3 py-2',
       selected
         ? 'bg-[#e8f0f8] border-[#234C6A] text-[#234C6A] font-medium'
         : 'bg-white border-gray-200 text-gray-600 hover:border-[#234C6A] hover:text-[#234C6A]',
     ].join(' ');
     return (
-      <button key={hour} type="button" className={classes} onClick={onClick}>
-        {slot.label}
+      <button
+        key={hour}
+        type="button"
+        className={classes}
+        onClick={onClick}
+        title={tooltip}
+      >
+        <div className={compact ? 'text-[11px]' : 'text-sm'}>{range}</div>
+        {sub ? (
+          <div
+            className={[
+              'opacity-75',
+              compact ? 'text-[9px] mt-0.5' : 'text-[10px] mt-0.5',
+            ].join(' ')}
+          >
+            {sub}
+          </div>
+        ) : null}
       </button>
     );
   };
@@ -378,7 +398,8 @@ const AvailabilityPage: React.FC = () => {
       <div className="mt-4 text-sm">
         {form.commonSlots.length > 0 ? (
           <span className="font-medium text-[#234C6A]">
-            {form.commonSlots.length} slots selected
+            {form.commonSlots.length} hour{form.commonSlots.length === 1 ? '' : 's'}{' '}
+            selected (e.g. {formatHourRange(Math.min(...form.commonSlots))})
           </span>
         ) : (
           <span className="text-gray-400">No slots selected</span>
@@ -674,6 +695,34 @@ const AvailabilityPage: React.FC = () => {
               })}
             </div>
           </div>
+
+          <p className="mb-3 rounded-lg border border-blue-100 bg-blue-50 px-3 py-2 text-xs text-[#234C6A]">
+            Each slot is a 1-hour availability window starting at the time shown.{' '}
+            {form.sessionDuration === 30 && (
+              <>
+                With your <span className="font-semibold">30-min</span> session
+                length, students see <span className="font-semibold">two</span>{' '}
+                start times per slot (e.g.{' '}
+                <span className="font-semibold">8:00&ndash;8:30 PM</span> and{' '}
+                <span className="font-semibold">8:30&ndash;9:00 PM</span>).
+              </>
+            )}
+            {form.sessionDuration === 60 && (
+              <>
+                With your <span className="font-semibold">60-min</span> session
+                length, students see <span className="font-semibold">one</span>{' '}
+                start time per slot (e.g.{' '}
+                <span className="font-semibold">8:00&ndash;9:00 PM</span>).
+              </>
+            )}
+            {form.sessionDuration === 90 && (
+              <>
+                <span className="font-semibold">90-min</span> sessions need an
+                adjacent hour selected too (e.g.{' '}
+                <span className="font-semibold">8 PM + 9 PM</span>).
+              </>
+            )}
+          </p>
 
           {form.mode === 'common' ? renderCommonMode() : renderDailyMode()}
         </div>
