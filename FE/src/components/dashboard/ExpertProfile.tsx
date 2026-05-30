@@ -20,9 +20,11 @@ import FilePreviewModal from '../../pages/Dashboard/FilePreviewModal';
 import { hasResumeForPreview, resolveResumePublicUrl } from '../../utils/resumeUrl';
 import StudentExpertBookingPicker from './StudentExpertBookingPicker';
 import StudentBookingCheckout from './StudentBookingCheckout';
+import BookingConfirmationModal from './BookingConfirmationModal';
 import { createGroupChatByUser, getExpertById, profileImageFetch } from '../../api/api';
 import { resolveProfileImageSrc } from '../../utils/profileImage';
 import { normalizeExpertPrice } from '../../utils/schedulingSlots';
+import { detectUserTimeZone, formatBookingConfirmation } from '../../utils/schedulingTimezone';
 import { SetLoadingStatus } from '../../actions/appActions';
 
 type BookingStep = 'pick' | 'review' | 'pay' | 'success';
@@ -70,25 +72,33 @@ export default function ExpertProfile({
   const [pickedEnd, setPickedEnd] = useState<Date | null>(null);
   const [pickedDuration, setPickedDuration] = useState(0);
 
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      setExpertLoading(true);
-      try {
-        const res: any = await getExpertById(mentor.id);
-        if (!cancelled && res?.result) {
-          setExpertDetails(res.result);
-        }
-      } catch {
-        if (!cancelled) setExpertDetails(null);
-      } finally {
-        if (!cancelled) setExpertLoading(false);
+  const loadExpertDetails = useCallback(async () => {
+    setExpertLoading(true);
+    try {
+      const res: any = await getExpertById(mentor.id);
+      if (res?.result) {
+        setExpertDetails(res.result);
       }
-    })();
-    return () => {
-      cancelled = true;
-    };
+    } catch {
+      setExpertDetails(null);
+    } finally {
+      setExpertLoading(false);
+    }
   }, [mentor.id]);
+
+  useEffect(() => {
+    void loadExpertDetails();
+  }, [loadExpertDetails]);
+
+  useEffect(() => {
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        void loadExpertDetails();
+      }
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => document.removeEventListener('visibilitychange', onVisibility);
+  }, [loadExpertDetails]);
 
   const expertHourlyRate = useMemo(
     () => normalizeExpertPrice(expertDetails?.price),
@@ -99,6 +109,8 @@ export default function ExpertProfile({
     () => expertHourlyRate ?? 60 + experienceYears * 18,
     [experienceYears, expertHourlyRate],
   );
+  /** Hourly rate shown to students — only when expert published a price. */
+  const publishedOneToOneRate = expertHourlyRate;
   const seminarRate = useMemo(
     () => 35 + experienceYears * 10,
     [experienceYears],
@@ -133,6 +145,10 @@ export default function ExpertProfile({
   const [bookingStep, setBookingStep] = useState<BookingStep>('pick');
   const [bookingSuccess, setBookingSuccess] = useState(false);
   const [bookingError, setBookingError] = useState<string | null>(null);
+  const [paymentConfirmOpen, setPaymentConfirmOpen] = useState(false);
+  const [bookingViewerTz, setBookingViewerTz] = useState(
+    () => userDetails?.timeZone || detectUserTimeZone(),
+  );
 
   const [seminarBookingSuccessId, setSeminarBookingSuccessId] = useState<string | null>(null);
   const [seminarBookingError, setSeminarBookingError] = useState<string | null>(null);
@@ -175,21 +191,56 @@ export default function ExpertProfile({
   const upcomingSeminarPrice = (item: { date: string; time: string }) =>
     isPeakSeminarDateTime(item.date, item.time) ? peakRate : seminarOffPeakRate;
 
-  const handleSlotPicked = useCallback((start: Date, end: Date, duration: number) => {
-    setPickedStart(start);
-    setPickedEnd(end);
-    setPickedDuration(duration);
+  const applySessionDuration = useCallback((mins: 30 | 60 | 90) => {
+    setSessionDurationMinutes(mins);
     setBookingError(null);
-    if (bookingStep !== 'pick') {
-      setBookingStep('pick');
-    }
-  }, [bookingStep]);
+    setPickedStart((start) => {
+      if (start) {
+        setPickedDuration(mins);
+        setPickedEnd(new Date(start.getTime() + mins * 60_000));
+      }
+      return start;
+    });
+  }, []);
+
+  const handleSlotPicked = useCallback(
+    (start: Date, _end: Date, _duration: number) => {
+      setPickedStart(start);
+      setPickedEnd(new Date(start.getTime() + sessionDurationMinutes * 60_000));
+      setPickedDuration(sessionDurationMinutes);
+      setBookingError(null);
+      if (bookingStep !== 'pick') {
+        setBookingStep('pick');
+      }
+    },
+    [bookingStep, sessionDurationMinutes],
+  );
 
   const oneToOneSessionPrice = useMemo(() => {
     if (!pickedDuration) return 0;
-    const hourly = normalizeExpertPrice(expertDetails?.price) ?? oneToOneRate;
+    const hourly = normalizeExpertPrice(expertDetails?.price);
+    if (hourly == null) return 0;
     return (pickedDuration * hourly) / 60;
-  }, [pickedDuration, expertDetails?.price, oneToOneRate]);
+  }, [pickedDuration, expertDetails?.price]);
+
+  const bookingConfirmationDetails = useMemo(() => {
+    if (!pickedStart || !pickedEnd) return null;
+    const formatted = formatBookingConfirmation(pickedStart, pickedEnd, bookingViewerTz);
+    return {
+      ...formatted,
+      sessionType: '1:1 session',
+      expertName: mentor.name,
+      sessionLengthMinutes: pickedDuration,
+      price: oneToOneSessionPrice,
+    };
+  }, [
+    pickedStart,
+    pickedEnd,
+    bookingViewerTz,
+    mentor.name,
+    pickedDuration,
+    oneToOneSessionPrice,
+  ]);
 
   const bookingEventTitle = useMemo(() => {
     const student = userDetails?.username || 'Student';
@@ -768,17 +819,14 @@ export default function ExpertProfile({
               {serviceChoice === 'oneToOne' && (
                 <div>
                   <p className="text-[12px] font-semibold uppercase tracking-[0.16em] text-[#7A7A72] mb-2">
-                    Session length
+                    Minimum Session Duration
                   </p>
                   <div className="flex flex-wrap gap-2">
                     {([30, 60, 90] as const).map(mins => (
                       <button
                         key={mins}
                         type="button"
-                        onClick={() => {
-                          setSessionDurationMinutes(mins);
-                          setBookingError(null);
-                        }}
+                        onClick={() => applySessionDuration(mins)}
                         className={`rounded-[4px] border px-3 py-1.5 text-[12px] font-semibold transition-colors ${
                           sessionDurationMinutes === mins
                             ? 'border-[#1A3A4A] bg-[#1A3A4A] text-white'
@@ -790,7 +838,7 @@ export default function ExpertProfile({
                     ))}
                   </div>
                   <p className="mt-2 text-[11px] text-[#7A7A72]">
-                    Total uses the hourly rate for your slot (peak or off-peak) × session length.
+                    Total uses the hourly rate for your slot (peak or off-peak) × minimum session duration.
                   </p>
                 </div>
               )}
@@ -878,6 +926,14 @@ export default function ExpertProfile({
                       <StudentExpertBookingPicker
                         expert={expertDetails}
                         onSlotSelected={handleSlotPicked}
+                        hidePriceInDurationSelection
+                        selectedDurationMinutes={sessionDurationMinutes}
+                        onDurationMinutesChange={applySessionDuration}
+                        onViewerTimeZoneChange={setBookingViewerTz}
+                        onFilterSlotConfirmed={() => {
+                          setBookingError(null);
+                          setBookingStep('review');
+                        }}
                       />
                     )}
                   </div>
@@ -928,37 +984,6 @@ export default function ExpertProfile({
                 )}
               </div>
 
-              <div className="rounded-xl border border-[#E5E2DB] bg-[#F5F3EF] px-4 py-4">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="text-[12px] font-semibold uppercase tracking-[0.14em] text-[#7A7A72]">
-                      Rate
-                    </p>
-                    <p className="mt-2 text-[22px] font-serif font-semibold text-[#1A3A4A]">
-                      ${selectedRate.toFixed(0)}
-                    </p>
-                    <p className="mt-1 text-[12px] text-[#7A7A72]">
-                      {serviceChoice === 'oneToOne' ? (
-                        pickedStart && pickedEnd ? (
-                          <>
-                            {pickedDuration} min · ${oneToOneSessionPrice.toFixed(0)} ·{' '}
-                            {pickedStart.toLocaleString(undefined, {
-                              dateStyle: 'medium',
-                              timeStyle: 'short',
-                            })}
-                          </>
-                        ) : (
-                          'Select a date and time on the calendar'
-                        )
-                      ) : (
-                        'Estimated total (payment later)'
-                      )}
-                    </p>
-                  </div>
-                  <Star className="h-5 w-5 text-[#C9A84C]" aria-hidden />
-                </div>
-              </div>
-
               {bookingError && (
                 <div className="text-[12px] font-semibold text-red-600">{bookingError}</div>
               )}
@@ -976,14 +1001,24 @@ export default function ExpertProfile({
                   <div className="flex flex-col gap-2">
                     <button
                       type="button"
-                      onClick={() => setBookingStep('pay')}
+                      onClick={() => {
+                        if (!pickedStart || !pickedEnd || !pickedDuration) {
+                          setBookingError('Please select a date and time on the calendar.');
+                          return;
+                        }
+                        setBookingError(null);
+                        setPaymentConfirmOpen(true);
+                      }}
                       className="inline-flex w-full items-center justify-center rounded-[4px] bg-[#1A3A4A] px-4 py-3 text-[13px] font-semibold text-white hover:bg-[#122635]"
                     >
                       Continue to payment
                     </button>
                     <button
                       type="button"
-                      onClick={() => setBookingStep('pick')}
+                      onClick={() => {
+                        void loadExpertDetails();
+                        setBookingStep('pick');
+                      }}
                       className="inline-flex w-full items-center justify-center rounded-[4px] border border-[#E5E2DB] bg-white px-4 py-3 text-[13px] font-semibold text-[#1A3A4A] hover:bg-[#F5F3EF]"
                     >
                       Change time
@@ -1070,12 +1105,29 @@ export default function ExpertProfile({
                     <p className="text-[12px] font-semibold uppercase tracking-[0.14em] text-[#7A7A72]">
                       1:1 session
                     </p>
-                    <p className="mt-2 text-[20px] font-serif font-semibold text-[#1A3A4A]">
-                      ${oneToOneRate.toFixed(0)}
-                    </p>
-                    <p className="mt-1 text-[12px] text-[#7A7A72]">
-                      per hour — 30 / 60 / 90 min totals scale from this rate
-                    </p>
+                    {expertLoading ? (
+                      <p className="mt-2 text-[14px] text-[#7A7A72]">Loading rates…</p>
+                    ) : publishedOneToOneRate != null ? (
+                      <>
+                        <p className="mt-2 text-[20px] font-serif font-semibold text-[#1A3A4A]">
+                          ${publishedOneToOneRate.toFixed(0)}
+                        </p>
+                        <p className="mt-1 text-[12px] text-[#7A7A72]">
+                          per hour — 30 / 60 / 90 min totals scale from this rate
+                        </p>
+                        {serviceChoice === 'oneToOne' && pickedStart && pickedEnd && pickedDuration ? (
+                          <p className="mt-2 text-[12px] font-semibold text-[#1A3A4A]">
+                            {pickedDuration} min · ${oneToOneSessionPrice.toFixed(0)} ·{' '}
+                            {pickedStart.toLocaleString(undefined, {
+                              dateStyle: 'medium',
+                              timeStyle: 'short',
+                            })}
+                          </p>
+                        ) : null}
+                      </>
+                    ) : (
+                      <p className="mt-2 text-[14px] text-[#7A7A72]">Rate not published yet</p>
+                    )}
                   </div>
                   <Star className="h-5 w-5 text-[#C9A84C]" aria-hidden />
                 </div>
@@ -1111,6 +1163,17 @@ export default function ExpertProfile({
             ? { expertId: String(mentor.id) }
             : undefined
         }
+      />
+    ) : null}
+    {paymentConfirmOpen && bookingConfirmationDetails ? (
+      <BookingConfirmationModal
+        open={paymentConfirmOpen}
+        onClose={() => setPaymentConfirmOpen(false)}
+        onConfirm={() => {
+          setPaymentConfirmOpen(false);
+          setBookingStep('pay');
+        }}
+        details={bookingConfirmationDetails}
       />
     ) : null}
     </>

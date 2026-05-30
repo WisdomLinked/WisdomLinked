@@ -1,26 +1,36 @@
 import React, { useState, useEffect, useCallback, useMemo, Children } from 'react';
 import { Calendar } from 'react-big-calendar';
-import { X, Clock, CalendarDays } from 'lucide-react';
+import { X, Clock, CalendarDays, Check } from 'lucide-react';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
-import { isSlotUnavailable, slotToTime } from '../../actions/common';
+import { isSlotUnavailable } from '../../actions/common';
 import { localizer } from '../../actions/common';
 import { useAppSelector } from '../../store';
 import BookingTimeZoneControl from '../scheduling/BookingTimeZoneControl';
 import StudentSelect from './StudentSelect';
 import StudentBookingToolbar from './StudentBookingToolbar';
 import {
-  convertExpertSlotsToViewer,
   detectUserTimeZone,
+  formatSlotLabel,
+  getViewerDayStartMs,
+  getViewerSlotsForDay,
+  getViewerYmdFromCalendarDate,
   resolveViewerTimeZone,
   toYMDInTimeZone,
+  viewerSlotToInstant,
 } from '../../utils/schedulingTimezone';
-import { normalizeExpertPrice } from '../../utils/schedulingSlots';
+import { normalizeExpertPrice, filterSlotsForDuration } from '../../utils/schedulingSlots';
 import type { BookingDisplayTimeZoneMode } from '../../types/scheduling';
+
+type SessionDurationMinutes = (typeof DURATIONS)[number];
 
 type Props = {
   expert: any;
   onSlotSelected: (start: Date, end: Date, duration: number) => void;
   hidePriceInDurationSelection?: boolean;
+  selectedDurationMinutes?: SessionDurationMinutes;
+  onDurationMinutesChange?: (mins: SessionDurationMinutes) => void;
+  onFilterSlotConfirmed?: () => void;
+  onViewerTimeZoneChange?: (tz: string) => void;
 };
 
 const DURATIONS = [30, 60, 90] as const;
@@ -62,7 +72,7 @@ const DURATION_OPTIONS = DURATIONS.map((d) => ({
 
 const calendarFormats = {
   weekdayFormat: (date: Date, culture?: string, localizer?: any) =>
-    localizer.format(date, 'ddd', culture),
+    localizer.format(date, 'eee', culture),
 };
 
 function expertDisplayName(expert: any): string {
@@ -75,10 +85,30 @@ function expertDisplayName(expert: any): string {
   return 'This expert';
 }
 
-function isExpertBlockedDay(date: Date, expert: any, timeZone: string): boolean {
+function isExpertBlockedOnViewerDay(
+  day: Date,
+  expert: any,
+  expertTz: string,
+  viewerTz: string,
+): boolean {
   const blocked = expert?.blockedBookingDates;
-  if (!Array.isArray(blocked)) return false;
-  return blocked.includes(toYMDInTimeZone(date, timeZone || 'UTC'));
+  if (!Array.isArray(blocked) || !blocked.length) return false;
+
+  const dayStartMs = getViewerDayStartMs(day, viewerTz);
+  const sampleOffsetsMs = [
+    0,
+    6 * 3_600_000,
+    12 * 3_600_000,
+    18 * 3_600_000,
+    23 * 3_600_000 + 30 * 60_000,
+  ];
+  return sampleOffsetsMs.some((offset) =>
+    blocked.includes(toYMDInTimeZone(new Date(dayStartMs + offset), expertTz)),
+  );
+}
+
+function isSameViewerCalendarDay(a: Date, b: Date): boolean {
+  return getViewerYmdFromCalendarDate(a) === getViewerYmdFromCalendarDate(b);
 }
 
 /**
@@ -89,6 +119,10 @@ export default function StudentExpertBookingPicker({
   expert,
   onSlotSelected,
   hidePriceInDurationSelection = false,
+  selectedDurationMinutes,
+  onDurationMinutesChange,
+  onFilterSlotConfirmed,
+  onViewerTimeZoneChange,
 }: Props) {
   const { auth: { userDetails } } = useAppSelector((state: any) => state);
 
@@ -98,22 +132,33 @@ export default function StudentExpertBookingPicker({
   const [tzMode, setTzMode] = useState<BookingDisplayTimeZoneMode>('mine');
   const [customTz, setCustomTz] = useState(detectUserTimeZone());
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
-  const [duration, setDuration] = useState(30);
+  const [internalDuration, setInternalDuration] = useState<SessionDurationMinutes>(60);
+  const duration = selectedDurationMinutes ?? internalDuration;
+
+  const handleDurationChange = useCallback(
+    (value: string) => {
+      const mins = Number(value) as SessionDurationMinutes;
+      if (onDurationMinutesChange) {
+        onDurationMinutesChange(mins);
+      } else {
+        setInternalDuration(mins);
+      }
+    },
+    [onDurationMinutesChange],
+  );
   const [timeSlots, setTimeSlots] = useState<number[]>([]);
   const [selectedTimeSlot, setSelectedTimeSlot] = useState<number | null>(null);
   const [filterSlotIndex, setFilterSlotIndex] = useState(-1);
   const [showTimeFilter, setShowTimeFilter] = useState(false);
+  const [confirmedSlotStart, setConfirmedSlotStart] = useState<Date | null>(null);
+
+  const clearTimeFilter = useCallback(() => {
+    setFilterSlotIndex(-1);
+    setConfirmedSlotStart(null);
+  }, []);
 
   const expertTz = expert?.timeZone || 'UTC';
   const expertName = useMemo(() => expertDisplayName(expert), [expert]);
-
-  const getBlockedDayTitle = useCallback(
-    (date: Date) => {
-      if (!isExpertBlockedDay(date, expert, expertTz)) return undefined;
-      return `${expertName} is not available on this day`;
-    },
-    [expert, expertTz, expertName],
-  );
 
   const viewerTz = resolveViewerTimeZone(
     tzMode,
@@ -122,58 +167,57 @@ export default function StudentExpertBookingPicker({
     customTz,
   );
 
-  const hourlyRate = normalizeExpertPrice(expert?.price) ?? 0;
+  useEffect(() => {
+    onViewerTimeZoneChange?.(viewerTz);
+  }, [viewerTz, onViewerTimeZoneChange]);
 
-  const availableSlots = useMemo(
-    () => convertExpertSlotsToViewer(rawExpertSlots, expertTz, viewerTz),
-    [rawExpertSlots, expertTz, viewerTz],
+  const getBlockedDayTitle = useCallback(
+    (date: Date) => {
+      if (!isExpertBlockedOnViewerDay(date, expert, expertTz, viewerTz)) {
+        return undefined;
+      }
+      return `${expertName} is not available on this date`;
+    },
+    [expert, expertTz, expertName, viewerTz],
   );
 
-  const isToday = (date: Date) => {
-    const today = new Date();
-    return (
-      date.getDate() === today.getDate() &&
-      date.getMonth() === today.getMonth() &&
-      date.getFullYear() === today.getFullYear()
-    );
-  };
+  const hourlyRate = normalizeExpertPrice(expert?.price) ?? 0;
 
   const getAvailableTimeSlots = useCallback(
     (day: Date, dur: number) => {
-      const dayStartTime = new Date(day).getTime();
-      const dayEndTime = dayStartTime + 24 * 60 * 60 * 1000 - 1;
-      const start = new Date(dayStartTime);
-      const end = new Date(dayEndTime);
-      const selectedEvents = events.filter(
-        (item) => item.start >= start && item.end <= end,
-      );
+      const viewerYmd = getViewerYmdFromCalendarDate(day);
+      const viewerTodayYmd = toYMDInTimeZone(new Date(), viewerTz);
+      if (viewerYmd < viewerTodayYmd) return [];
 
-      let slots = [...(availableSlots || [])];
-      slots.splice(slots.length - (dur / 30 - 1), dur / 30 - 1);
+      let slots = getViewerSlotsForDay(day, viewerTz, rawExpertSlots, expertTz);
+      slots = filterSlotsForDuration(slots, dur);
 
-      if (isToday(day)) {
-        const startOfToday = new Date();
-        startOfToday.setHours(0, 0, 0, 0);
-        const now = new Date();
-        const nextSlot = Math.floor(
-          (now.getTime() - startOfToday.getTime()) / (30 * 60 * 1000),
+      const blocked = expert?.blockedBookingDates;
+      if (Array.isArray(blocked)) {
+        slots = slots.filter((slotIdx) => {
+          const instant = viewerSlotToInstant(day, slotIdx, viewerTz);
+          return !blocked.includes(toYMDInTimeZone(instant, expertTz));
+        });
+      }
+
+      if (viewerYmd === viewerTodayYmd) {
+        const now = Date.now();
+        slots = slots.filter(
+          (slotIdx) => viewerSlotToInstant(day, slotIdx, viewerTz).getTime() >= now,
         );
-        for (let i = 0; i < nextSlot; i++) {
-          const idx = slots.indexOf(i);
-          if (idx > -1) slots.splice(idx, 1);
-        }
       }
 
       let updated = [...slots];
       for (let i = 0; i < slots.length; i++) {
-        for (let j = 0; j < selectedEvents.length; j++) {
-          if (selectedEvents[j].status !== 'declined') {
+        const slotStartMs = viewerSlotToInstant(day, slots[i], viewerTz).getTime();
+        for (let j = 0; j < events.length; j++) {
+          if (events[j].status !== 'declined') {
             if (
               isSlotUnavailable(
-                dayStartTime + slots[i] * 1800000,
+                slotStartMs,
                 dur * 60 * 1000,
-                new Date(selectedEvents[j].start).getTime(),
-                new Date(selectedEvents[j].end).getTime(),
+                new Date(events[j].start).getTime(),
+                new Date(events[j].end).getTime(),
               )
             ) {
               updated.splice(updated.indexOf(slots[i]), 1);
@@ -187,37 +231,50 @@ export default function StudentExpertBookingPicker({
       const noticeH = [24, 48, 72].includes(noticeRaw) ? noticeRaw : 24;
       const earliestMs = Date.now() + noticeH * 60 * 60 * 1000;
       updated = updated.filter((slotIdx) => {
-        const slotStartMs = dayStartTime + slotIdx * 30 * 60 * 1000;
-        return slotStartMs >= earliestMs;
+        return viewerSlotToInstant(day, slotIdx, viewerTz).getTime() >= earliestMs;
       });
 
       return updated;
     },
-    [events, availableSlots, expert?.bookingNoticeHours],
+    [
+      events,
+      rawExpertSlots,
+      expert?.bookingNoticeHours,
+      expert?.blockedBookingDates,
+      expertTz,
+      viewerTz,
+    ],
   );
 
-  const isDateAvailable = (date: number) => {
-    const today = new Date().setHours(0, 0, 0, 0);
-    if (date < today) return false;
-    const dayDate = new Date(date);
-    const blocked = expert?.blockedBookingDates;
-    if (
-      Array.isArray(blocked) &&
-      blocked.includes(toYMDInTimeZone(dayDate, expertTz || 'UTC'))
-    ) {
-      return false;
-    }
-    const available = getAvailableTimeSlots(dayDate, duration);
-    if (!available.length) return false;
-    if (filterSlotIndex >= 0) return available.includes(filterSlotIndex);
-    return true;
-  };
+  const isDayClickable = useCallback(
+    (date: Date) => {
+      const viewerTodayYmd = toYMDInTimeZone(new Date(), viewerTz);
+      const viewerDayYmd = getViewerYmdFromCalendarDate(date);
+      if (viewerDayYmd < viewerTodayYmd) return false;
+      if (isExpertBlockedOnViewerDay(date, expert, expertTz, viewerTz)) return false;
+
+      const available = getAvailableTimeSlots(date, duration);
+      if (!available.length) return false;
+      if (filterSlotIndex >= 0) return available.includes(filterSlotIndex);
+      return true;
+    },
+    [viewerTz, expert, expertTz, getAvailableTimeSlots, duration, filterSlotIndex],
+  );
+
+  const isDateAvailable = (date: number) => isDayClickable(new Date(date));
 
   const dayStyleGetter = useCallback(
     (date: Date) => {
-      const today = new Date().setHours(0, 0, 0, 0);
-      if (date.getTime() < today) {
+      const viewerTodayYmd = toYMDInTimeZone(new Date(), viewerTz);
+      const viewerDayYmd = getViewerYmdFromCalendarDate(date);
+      const clickable = isDayClickable(date);
+      const dayClass = clickable
+        ? 'studentBookingCalendar-day-clickable'
+        : 'studentBookingCalendar-day-disabled';
+
+      if (viewerDayYmd < viewerTodayYmd) {
         return {
+          className: dayClass,
           style: {
             backgroundColor: '#E5E2DB',
             color: '#7A7A72',
@@ -226,8 +283,9 @@ export default function StudentExpertBookingPicker({
         };
       }
 
-      if (isExpertBlockedDay(date, expert, expertTz)) {
+      if (isExpertBlockedOnViewerDay(date, expert, expertTz, viewerTz)) {
         return {
+          className: dayClass,
           style: {
             backgroundColor: '#FEE2E2',
             cursor: 'not-allowed',
@@ -235,20 +293,20 @@ export default function StudentExpertBookingPicker({
         };
       }
 
+      const dayStartTime = getViewerDayStartMs(date, viewerTz);
+      const dayEndTime = dayStartTime + 24 * 60 * 60 * 1000 - 1;
       const hasEvent = events.some(
         (event) =>
-          date.getTime() >= new Date(event.start).setHours(0, 0, 0, 0) &&
-          date.getTime() <= new Date(event.end).setHours(23, 59, 59, 999),
+          new Date(event.end).getTime() >= dayStartTime &&
+          new Date(event.start).getTime() <= dayEndTime,
       );
 
       const daySlots = getAvailableTimeSlots(date, duration);
       let backgroundColor: string;
-      let cursorStyle = 'pointer';
 
       if (filterSlotIndex === -1) {
         if (!daySlots.length) {
           backgroundColor = '#FEE2E2';
-          cursorStyle = 'not-allowed';
         } else if (hasEvent) {
           backgroundColor = '#FEF3C7';
         } else {
@@ -258,12 +316,82 @@ export default function StudentExpertBookingPicker({
         backgroundColor = '#E8F0F8';
       } else {
         backgroundColor = '#FEE2E2';
-        cursorStyle = 'not-allowed';
       }
 
-      return { style: { backgroundColor, cursor: cursorStyle } };
+      const isSelectedDay =
+        confirmedSlotStart != null && isSameViewerCalendarDay(date, confirmedSlotStart);
+
+      return {
+        className: dayClass,
+        style: {
+          backgroundColor,
+          cursor: clickable ? 'pointer' : 'not-allowed',
+          ...(isSelectedDay
+            ? { boxShadow: 'inset 0 0 0 2px #1A3A4A' }
+            : {}),
+        },
+      };
     },
-    [events, filterSlotIndex, duration, getAvailableTimeSlots, expert, expertTz],
+    [
+      events,
+      filterSlotIndex,
+      getAvailableTimeSlots,
+      expert,
+      expertTz,
+      viewerTz,
+      confirmedSlotStart,
+      isDayClickable,
+    ],
+  );
+
+  const renderDateHeader = useCallback(
+    (
+      label: string,
+      date: Date,
+      drilldownView?: string,
+      onDrillDown?: (e: React.MouseEvent) => void,
+    ) => {
+      const blockedTitle = getBlockedDayTitle(date);
+      const isSelected =
+        confirmedSlotStart != null && isSameViewerCalendarDay(date, confirmedSlotStart);
+      const clickable = isDayClickable(date);
+      const cursorClass = clickable ? 'cursor-pointer' : 'cursor-not-allowed';
+      const content = (
+        <span
+          className={
+            isSelected
+              ? 'inline-flex items-center gap-1 font-bold text-[#1A3A4A]'
+              : undefined
+          }
+        >
+          {label}
+          {isSelected ? (
+            <Check className="h-3 w-3 shrink-0 text-[#1A3A4A]" aria-hidden />
+          ) : null}
+        </span>
+      );
+
+      if (!drilldownView) {
+        return (
+          <span title={blockedTitle} className={cursorClass}>
+            {content}
+          </span>
+        );
+      }
+
+      return (
+        <button
+          type="button"
+          className={`rbc-button-link ${cursorClass}${isSelected ? ' studentBookingCalendar-day-selected' : ''}`}
+          title={blockedTitle}
+          aria-label={isSelected ? `${label}, selected` : label}
+          onClick={onDrillDown}
+        >
+          {content}
+        </button>
+      );
+    },
+    [confirmedSlotStart, getBlockedDayTitle, isDayClickable],
   );
 
   const calendarComponents = useMemo(
@@ -272,10 +400,14 @@ export default function StudentExpertBookingPicker({
       dateCellWrapper: ({ value, children }: { value: Date; children: React.ReactElement }) => {
         const title = getBlockedDayTitle(value);
         if (!title) return children;
-        return Children.map(children, (child) => {
-          if (!React.isValidElement(child)) return child;
-          return React.cloneElement(child, { title });
-        });
+        return (
+          <div title={title} className="h-full w-full">
+            {Children.map(children, (child) => {
+              if (!React.isValidElement(child)) return child;
+              return React.cloneElement(child, { title });
+            })}
+          </div>
+        );
       },
       month: {
         dateHeader: ({
@@ -288,25 +420,10 @@ export default function StudentExpertBookingPicker({
           date: Date;
           drilldownView?: string;
           onDrillDown?: (e: React.MouseEvent) => void;
-        }) => {
-          const title = getBlockedDayTitle(date);
-          if (!drilldownView) {
-            return <span title={title}>{label}</span>;
-          }
-          return (
-            <button
-              type="button"
-              className="rbc-button-link"
-              title={title}
-              onClick={onDrillDown}
-            >
-              {label}
-            </button>
-          );
-        },
+        }) => renderDateHeader(label, date, drilldownView, onDrillDown),
       },
     }),
-    [getBlockedDayTitle],
+    [getBlockedDayTitle, renderDateHeader],
   );
 
   const eventStyleGetter = (event: any, _s: any, end: Date) => {
@@ -324,14 +441,28 @@ export default function StudentExpertBookingPicker({
     };
   };
 
-  const confirmSlot = (slot: number) => {
-    if (!selectedDate || slot === null || slot === undefined) return;
-    const dayStart = new Date(selectedDate).getTime();
-    const start = new Date(dayStart + slot * 1800 * 1000);
-    const end = new Date(start.getTime() + duration * 60 * 1000);
-    onSlotSelected(start, end, duration);
-    setModalOpen(false);
-  };
+  const confirmSlot = useCallback(
+    (slot: number, dayOverride?: Date) => {
+      const day = dayOverride ?? selectedDate;
+      if (!day || slot === null || slot === undefined) return;
+      const start = viewerSlotToInstant(day, slot, viewerTz);
+      const end = new Date(start.getTime() + duration * 60 * 1000);
+      setConfirmedSlotStart(start);
+      onSlotSelected(start, end, duration);
+      setModalOpen(false);
+      if (filterSlotIndex >= 0) {
+        onFilterSlotConfirmed?.();
+      }
+    },
+    [
+      selectedDate,
+      viewerTz,
+      duration,
+      onSlotSelected,
+      filterSlotIndex,
+      onFilterSlotConfirmed,
+    ],
+  );
 
   const handleSelectDate = ({ start, end }: { start: Date; end: Date }) => {
     const dayStart = new Date(start).getTime();
@@ -343,7 +474,7 @@ export default function StudentExpertBookingPicker({
     setSelectedDate(start);
     if (filterSlotIndex >= 0) {
       setSelectedTimeSlot(filterSlotIndex);
-      confirmSlot(filterSlotIndex);
+      confirmSlot(filterSlotIndex, start);
     } else {
       setModalOpen(true);
     }
@@ -443,12 +574,15 @@ export default function StudentExpertBookingPicker({
                 label="Preferred start time"
                 value={filterSlotIndex >= 0 ? String(filterSlotIndex) : ''}
                 options={TIME_FILTER_OPTIONS}
-                onChange={(v) => setFilterSlotIndex(v === '' ? -1 : Number(v))}
+                onChange={(v) => {
+                  setFilterSlotIndex(v === '' ? -1 : Number(v));
+                  setConfirmedSlotStart(null);
+                }}
               />
             </div>
             <button
               type="button"
-              onClick={() => setFilterSlotIndex(-1)}
+              onClick={clearTimeFilter}
               className="rounded-[4px] border border-[#E5E2DB] bg-white px-3 py-2 text-[12px] font-semibold text-[#1A3A4A] hover:bg-white"
             >
               Clear
@@ -473,6 +607,20 @@ export default function StudentExpertBookingPicker({
           onSelectSlot={handleSelectDate}
         />
       </div>
+
+      {confirmedSlotStart ? (
+        <div
+          data-testid="selection-confirmed-banner"
+          className="mt-3 rounded-lg border border-[#1A3A4A]/20 bg-[#E8F0F8] px-3 py-2 text-[12px] font-semibold text-[#1A3A4A]"
+        >
+          Selected:{' '}
+          {confirmedSlotStart.toLocaleString(undefined, {
+            dateStyle: 'medium',
+            timeStyle: 'short',
+          })}{' '}
+          · {duration} min
+        </div>
+      ) : null}
 
       {modalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -506,9 +654,8 @@ export default function StudentExpertBookingPicker({
             </p>
 
             <StudentSelect
-              label="Session length"
+              label="Minimum Session Duration"
               value={String(duration)}
-              disabled={hidePriceInDurationSelection}
               options={DURATION_OPTIONS.map((opt) => ({
                 ...opt,
                 label:
@@ -516,7 +663,7 @@ export default function StudentExpertBookingPicker({
                     ? `${opt.label} · $${((Number(opt.value) * hourlyRate) / 60).toFixed(0)} est.`
                     : opt.label,
               }))}
-              onChange={(v) => setDuration(Number(v))}
+              onChange={handleDurationChange}
             />
 
             <div className="mt-4 max-h-52 space-y-2 overflow-y-auto">
@@ -534,7 +681,7 @@ export default function StudentExpertBookingPicker({
                         : 'border-[#E5E2DB] bg-[#F5F3EF] text-[#1A3A4A] hover:border-[#234C6A] hover:bg-white'
                     }`}
                   >
-                    {slotToTime(slot)}
+                    {formatSlotLabel(slot, selectedDate!, viewerTz)}
                   </button>
                 ))
               ) : (

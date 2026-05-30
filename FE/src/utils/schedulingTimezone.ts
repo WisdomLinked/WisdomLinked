@@ -54,7 +54,61 @@ export function getTimezoneOffsetHalfHours(timeZone: string, date: Date = new Da
   }
 }
 
-/** Shift expert-local slot indices into the viewer's local day. */
+/** Civil YYYY-MM-DD from a calendar cell (the day number shown on the month grid). */
+export function getViewerYmdFromCalendarDate(date: Date): string {
+  return toYMDLocal(date);
+}
+
+/** UTC ms for midnight at the start of a calendar civil date in viewer TZ. */
+export function getViewerDayStartMs(calendarDate: Date, viewerTz: string): number {
+  const ymd = getViewerYmdFromCalendarDate(calendarDate);
+  return zonedLocalToUtc(ymd, 0, 0, viewerTz).getTime();
+}
+
+/** Build a UTC Date for a wall-clock time on YYYY-MM-DD in an IANA timezone. */
+export function zonedLocalToUtc(
+  ymd: string,
+  hour: number,
+  minute: number,
+  timeZone: string,
+): Date {
+  const [y, m, d] = ymd.split('-').map(Number);
+  let guess = Date.UTC(y, m - 1, d, hour, minute, 0, 0);
+  for (let i = 0; i < 3; i++) {
+    const offset = getTimezoneOffsetHalfHours(timeZone || 'UTC', new Date(guess));
+    const refined = Date.UTC(y, m - 1, d, hour, minute, 0, 0) + offset * 30 * 60 * 1000;
+    if (refined === guess) break;
+    guess = refined;
+  }
+  return new Date(guess);
+}
+
+/** Half-hour slot index 0–47 for an instant in a given timezone (matches BE bookingValidation). */
+export function getSlotIndexInTimeZone(instant: Date, timeZone: string): number {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: timeZone || 'UTC',
+    hour: 'numeric',
+    minute: 'numeric',
+    hour12: false,
+  }).formatToParts(instant);
+  const hour = Number(parts.find((p) => p.type === 'hour')?.value ?? 0);
+  const minute = Number(parts.find((p) => p.type === 'minute')?.value ?? 0);
+  return hour * 2 + (minute >= 30 ? 1 : 0);
+}
+
+/** UTC instant for a viewer-local slot on a calendar day. */
+export function viewerSlotToInstant(
+  calendarDate: Date,
+  slotIndex: number,
+  viewerTz: string,
+): Date {
+  const ymd = getViewerYmdFromCalendarDate(calendarDate);
+  const hour = Math.floor(slotIndex / 2);
+  const minute = (slotIndex % 2) * 30;
+  return zonedLocalToUtc(ymd, hour, minute, viewerTz);
+}
+
+/** Shift expert-local slot indices into the viewer's local day (DST-aware via date). */
 export function convertExpertSlotsToViewer(
   expertSlots: HalfHourSlotIndex[],
   expertTz: string,
@@ -64,9 +118,21 @@ export function convertExpertSlotsToViewer(
   if (!expertSlots?.length) return [];
   const expertOffset = getTimezoneOffsetHalfHours(expertTz || 'UTC', date);
   const viewerOffset = getTimezoneOffsetHalfHours(viewerTz || 'UTC', date);
-  const shift = viewerOffset - expertOffset;
+  const shift = expertOffset - viewerOffset;
   const shifted = expertSlots.map((slot) => (slot + shift + 48) % 48);
   return [...new Set(shifted)].sort((a, b) => a - b);
+}
+
+/** Viewer-local slot indices for a calendar day, converted from expert recurring slots. */
+export function getViewerSlotsForDay(
+  calendarDate: Date,
+  viewerTz: string,
+  expertSlots: HalfHourSlotIndex[],
+  expertTz: string,
+): HalfHourSlotIndex[] {
+  const ymd = getViewerYmdFromCalendarDate(calendarDate);
+  const ref = zonedLocalToUtc(ymd, 12, 0, viewerTz);
+  return convertExpertSlotsToViewer(expertSlots, expertTz, viewerTz, ref);
 }
 
 export function resolveViewerTimeZone(
@@ -81,14 +147,32 @@ export function resolveViewerTimeZone(
 }
 
 export function formatSlotLabel(slotIndex: number, date: Date, timeZone: string): string {
-  const dayStart = new Date(date);
-  dayStart.setHours(0, 0, 0, 0);
-  const instant = new Date(dayStart.getTime() + slotIndex * 30 * 60 * 1000);
+  const instant = new Date(
+    getViewerDayStartMs(date, timeZone) + slotIndex * 30 * 60 * 1000,
+  );
   return new Intl.DateTimeFormat(undefined, {
     timeZone: timeZone || 'UTC',
     hour: 'numeric',
     minute: '2-digit',
   }).format(instant);
+}
+
+export function formatBookingConfirmation(start: Date, end: Date, timeZone: string) {
+  const tz = timeZone || 'UTC';
+  const date = new Intl.DateTimeFormat(undefined, {
+    timeZone: tz,
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  }).format(start);
+  const timeFmt = new Intl.DateTimeFormat(undefined, {
+    timeZone: tz,
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+  const timeRange = `${timeFmt.format(start)} – ${timeFmt.format(end)}`;
+  return { date, timeRange, timeZone: tz };
 }
 
 export function toYMDLocal(d: Date): string {

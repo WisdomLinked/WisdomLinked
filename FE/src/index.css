@@ -362,6 +362,30 @@ code {
   color: #1a3a4a !important;
 }
 
+.studentBookingCalendar .rbc-day-bg {
+  height: 100%;
+}
+
+.studentBookingCalendar .rbc-date-cell .rbc-button-link {
+  pointer-events: auto;
+}
+
+.studentBookingCalendar .studentBookingCalendar-day-clickable,
+.studentBookingCalendar .rbc-date-cell .rbc-button-link.cursor-pointer {
+  cursor: pointer;
+}
+
+.studentBookingCalendar .studentBookingCalendar-day-disabled,
+.studentBookingCalendar .rbc-date-cell .rbc-button-link.cursor-not-allowed {
+  cursor: not-allowed;
+}
+
+.studentBookingCalendar .studentBookingCalendar-day-selected {
+  outline: 2px solid #1a3a4a;
+  outline-offset: 1px;
+  border-radius: 4px;
+}
+
 .studentBookingCalendar .rbc-row-segment {
   pointer-events: none;
 }

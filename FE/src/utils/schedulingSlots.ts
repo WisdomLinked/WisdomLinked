@@ -43,6 +43,19 @@ export function normalizeExpertPrice(price: unknown): number | undefined {
   return undefined;
 }
 
+/** Keep only start slots that have enough consecutive 30-min blocks for the session length. */
+export function filterSlotsForDuration(
+  slots: HalfHourSlotIndex[],
+  durationMinutes: number,
+): HalfHourSlotIndex[] {
+  if (durationMinutes <= 30) return slots;
+  const blocks = durationMinutes / 30;
+  const slotSet = new Set(slots);
+  return slots.filter((slotIdx) =>
+    Array.from({ length: blocks }, (_, i) => slotIdx + i).every((s) => slotSet.has(s)),
+  );
+}
+
 function timePartsForHour(hour: number): {
   displayHour: number;
   period: 'AM' | 'PM';

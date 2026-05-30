@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   formatHourRange,
   formatSubIntervals,
+  filterSlotsForDuration,
   halfHourIndicesToHours,
   hoursToHalfHourIndices,
   normalizeExpertPrice,
@@ -34,6 +35,29 @@ describe('schedulingSlots', () => {
     expect(normalizeExpertPrice(25)).toBe(25);
     expect(normalizeExpertPrice([30])).toBe(30);
     expect(normalizeExpertPrice('x')).toBeUndefined();
+  });
+
+  describe('filterSlotsForDuration', () => {
+    it('returns all slots for 30 min sessions', () => {
+      expect(filterSlotsForDuration([18, 19, 20], 30)).toEqual([18, 19, 20]);
+    });
+
+    it('keeps starts with two consecutive blocks for 60 min', () => {
+      expect(filterSlotsForDuration([18, 19], 60)).toEqual([18]);
+    });
+
+    it('drops 60 min starts missing a trailing block', () => {
+      expect(filterSlotsForDuration([18, 20], 60)).toEqual([]);
+    });
+
+    it('requires three consecutive blocks for 90 min', () => {
+      expect(filterSlotsForDuration([18, 19], 90)).toEqual([]);
+      expect(filterSlotsForDuration([18, 19, 20], 90)).toEqual([18]);
+    });
+
+    it('handles non-contiguous availability windows', () => {
+      expect(filterSlotsForDuration([18, 19, 22, 23, 24], 60)).toEqual([18, 22, 23]);
+    });
   });
 
   describe('formatHourRange', () => {

@@ -576,10 +576,10 @@ const AvailabilityPage: React.FC = () => {
               </p>
             </div>
 
-            {/* Session Duration */}
+            {/* Minimum Session Duration */}
             <div>
               <label className="mb-1.5 block text-sm font-medium text-gray-700">
-                Session Duration
+                Minimum Session Duration
               </label>
               <div className="inline-flex rounded-full bg-gray-50 p-1 text-xs font-medium text-gray-600">
                 {SESSION_DURATIONS.map((duration) => {
