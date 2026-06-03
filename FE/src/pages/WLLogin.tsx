@@ -155,15 +155,15 @@ export default function WLLogin() {
                 dispatch({ type: actionTypes.authenticate, payload: response.userDetails });
                 dispatch(showSuccessAlert(`Hi, ${response.userDetails.username} 👋. Welcome back.`));
                 if (redirectPath.startsWith("/")) {
-                    navigate(redirectPath);
+                    navigate(redirectPath, {replace: true});
                     return;
                 }
                 // Navigate to the correct dashboard based on role
                 const role = response.userDetails.role;
                 if (role === 'customer') {
-                    navigate('/user/studentdashboard');
+                    navigate('/user/studentdashboard',{replace: true});
                 } else {
-                    navigate('/user/' + role + 'dashboard');
+                    navigate('/user/' + role + 'dashboard',{replace: true});
                 }
             } else {
                 setFormError(response.error || 'Verification failed. Please try again.');
