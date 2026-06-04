@@ -228,12 +228,12 @@ function App() {
         }
       }
       if (locationUrl) {
-        navigate(locationUrl)
+        navigate(locationUrl, {replace: true})
       } else {
         if (userDetails?.role === 'customer') {
-          navigate('/user/studentdashboard')
+          navigate('/user/studentdashboard', {replace: true})
         } else {
-          navigate('/user/' + userDetails?.role + "dashboard")
+          navigate('/user/' + userDetails?.role + "dashboard",{replace: true})
         }
       }
     }
