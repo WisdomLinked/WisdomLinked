@@ -3,6 +3,7 @@ import {
   convertExpertSlotsToViewer,
   detectUserTimeZone,
   formatBookingConfirmation,
+  formatPickedSlotWhenDisplay,
   formatSlotLabel,
   getViewerDayStartMs,
   getViewerSlotsForDay,
@@ -133,5 +134,15 @@ describe('schedulingTimezone', () => {
     expect(result.date).toMatch(/Jun 15, 2026/);
     expect(result.timeRange).toMatch(/2:00 PM.*3:00 PM/);
     expect(result.timeZone).toBe('UTC');
+  });
+
+  it('formatPickedSlotWhenDisplay uses viewer timezone not browser default', () => {
+    const start = new Date('2026-06-09T08:00:00.000Z');
+    const end = new Date('2026-06-09T09:00:00.000Z');
+    const utc = formatPickedSlotWhenDisplay(start, end, 'UTC');
+    const chicago = formatPickedSlotWhenDisplay(start, end, 'America/Chicago');
+    expect(utc).toMatch(/8:00 AM.*UTC/);
+    expect(chicago).toMatch(/3:00 AM/);
+    expect(chicago).toContain('America/Chicago');
   });
 });

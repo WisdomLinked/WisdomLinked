@@ -24,7 +24,7 @@ import BookingConfirmationModal from './BookingConfirmationModal';
 import { createGroupChatByUser, getExpertById, profileImageFetch } from '../../api/api';
 import { resolveProfileImageSrc } from '../../utils/profileImage';
 import { normalizeExpertPrice } from '../../utils/schedulingSlots';
-import { detectUserTimeZone, formatBookingConfirmation } from '../../utils/schedulingTimezone';
+import { detectUserTimeZone, formatBookingConfirmation, formatPickedSlotWhenDisplay } from '../../utils/schedulingTimezone';
 import { SetLoadingStatus } from '../../actions/appActions';
 
 type BookingStep = 'pick' | 'review' | 'pay' | 'success';
@@ -191,30 +191,35 @@ export default function ExpertProfile({
   const upcomingSeminarPrice = (item: { date: string; time: string }) =>
     isPeakSeminarDateTime(item.date, item.time) ? peakRate : seminarOffPeakRate;
 
+  const hasLockedDuration = !!pickedStart;
+
   const applySessionDuration = useCallback((mins: 30 | 60 | 90) => {
+    if (pickedStart) return;
     setSessionDurationMinutes(mins);
     setBookingError(null);
-    setPickedStart((start) => {
-      if (start) {
-        setPickedDuration(mins);
-        setPickedEnd(new Date(start.getTime() + mins * 60_000));
-      }
-      return start;
-    });
-  }, []);
+  }, [pickedStart]);
 
   const handleSlotPicked = useCallback(
-    (start: Date, _end: Date, _duration: number) => {
+    (start: Date, end: Date, duration: number) => {
+      const mins = duration as 30 | 60 | 90;
       setPickedStart(start);
-      setPickedEnd(new Date(start.getTime() + sessionDurationMinutes * 60_000));
-      setPickedDuration(sessionDurationMinutes);
+      setPickedEnd(end);
+      setPickedDuration(mins);
+      setSessionDurationMinutes(mins);
       setBookingError(null);
       if (bookingStep !== 'pick') {
         setBookingStep('pick');
       }
     },
-    [bookingStep, sessionDurationMinutes],
+    [bookingStep],
   );
+
+  const clearPickedSlot = useCallback(() => {
+    setPickedStart(null);
+    setPickedEnd(null);
+    setPickedDuration(0);
+    setBookingError(null);
+  }, []);
 
   const oneToOneSessionPrice = useMemo(() => {
     if (!pickedDuration) return 0;
@@ -241,6 +246,11 @@ export default function ExpertProfile({
     pickedDuration,
     oneToOneSessionPrice,
   ]);
+
+  const pickedSlotDisplay = useMemo(() => {
+    if (!pickedStart || !pickedEnd) return null;
+    return formatPickedSlotWhenDisplay(pickedStart, pickedEnd, bookingViewerTz);
+  }, [pickedStart, pickedEnd, bookingViewerTz]);
 
   const bookingEventTitle = useMemo(() => {
     const student = userDetails?.username || 'Student';
@@ -819,27 +829,42 @@ export default function ExpertProfile({
               {serviceChoice === 'oneToOne' && (
                 <div>
                   <p className="text-[12px] font-semibold uppercase tracking-[0.16em] text-[#7A7A72] mb-2">
-                    Minimum Session Duration
+                    Appointment Duration
                   </p>
-                  <div className="flex flex-wrap gap-2">
-                    {([30, 60, 90] as const).map(mins => (
-                      <button
-                        key={mins}
-                        type="button"
-                        onClick={() => applySessionDuration(mins)}
-                        className={`rounded-[4px] border px-3 py-1.5 text-[12px] font-semibold transition-colors ${
-                          sessionDurationMinutes === mins
-                            ? 'border-[#1A3A4A] bg-[#1A3A4A] text-white'
-                            : 'border-[#E5E2DB] bg-white text-[#1A3A4A] hover:bg-[#F5F3EF]'
-                        }`}
-                      >
-                        {mins} min
-                      </button>
-                    ))}
-                  </div>
-                  <p className="mt-2 text-[11px] text-[#7A7A72]">
-                    Total uses the hourly rate for your slot (peak or off-peak) × minimum session duration.
-                  </p>
+                  {hasLockedDuration ? (
+                    <>
+                      <p className="inline-flex rounded-[4px] border border-[#1A3A4A] bg-[#1A3A4A] px-3 py-1.5 text-[12px] font-semibold text-white">
+                        {sessionDurationMinutes} min — fixed for this booking
+                      </p>
+                      <p className="mt-2 text-[11px] text-[#7A7A72]">
+                        Appointment duration is fixed after you select a time. Use Change time to
+                        choose a different length.
+                      </p>
+                    </>
+                  ) : (
+                    <>
+                      <div className="flex flex-wrap gap-2">
+                        {([30, 60, 90] as const).map(mins => (
+                          <button
+                            key={mins}
+                            type="button"
+                            onClick={() => applySessionDuration(mins)}
+                            className={`rounded-[4px] border px-3 py-1.5 text-[12px] font-semibold transition-colors ${
+                              sessionDurationMinutes === mins
+                                ? 'border-[#1A3A4A] bg-[#1A3A4A] text-white'
+                                : 'border-[#E5E2DB] bg-white text-[#1A3A4A] hover:bg-[#F5F3EF]'
+                            }`}
+                          >
+                            {mins} min
+                          </button>
+                        ))}
+                      </div>
+                      <p className="mt-2 text-[11px] text-[#7A7A72]">
+                        Total uses the hourly rate for your slot (peak or off-peak) × appointment
+                        duration.
+                      </p>
+                    </>
+                  )}
                 </div>
               )}
 
@@ -860,15 +885,10 @@ export default function ExpertProfile({
                         </div>
                         <div className="flex justify-between gap-2">
                           <dt className="text-[#7A7A72]">When</dt>
-                          <dd className="font-semibold text-right">
-                            {pickedStart?.toLocaleString(undefined, {
-                              dateStyle: 'medium',
-                              timeStyle: 'short',
-                            })}
-                          </dd>
+                          <dd className="font-semibold text-right">{pickedSlotDisplay}</dd>
                         </div>
                         <div className="flex justify-between gap-2">
-                          <dt className="text-[#7A7A72]">Duration</dt>
+                          <dt className="text-[#7A7A72]">Appointment duration</dt>
                           <dd className="font-semibold">{pickedDuration} min</dd>
                         </div>
                         <div className="flex justify-between gap-2 border-t border-[#E5E2DB] pt-2">
@@ -924,6 +944,7 @@ export default function ExpertProfile({
                       </p>
                     ) : (
                       <StudentExpertBookingPicker
+                        key={pickedStart ? 'selected' : 'idle'}
                         expert={expertDetails}
                         onSlotSelected={handleSlotPicked}
                         hidePriceInDurationSelection
@@ -1016,6 +1037,7 @@ export default function ExpertProfile({
                     <button
                       type="button"
                       onClick={() => {
+                        clearPickedSlot();
                         void loadExpertDetails();
                         setBookingStep('pick');
                       }}
@@ -1117,11 +1139,7 @@ export default function ExpertProfile({
                         </p>
                         {serviceChoice === 'oneToOne' && pickedStart && pickedEnd && pickedDuration ? (
                           <p className="mt-2 text-[12px] font-semibold text-[#1A3A4A]">
-                            {pickedDuration} min · ${oneToOneSessionPrice.toFixed(0)} ·{' '}
-                            {pickedStart.toLocaleString(undefined, {
-                              dateStyle: 'medium',
-                              timeStyle: 'short',
-                            })}
+                            {pickedDuration} min · ${oneToOneSessionPrice.toFixed(0)} · {pickedSlotDisplay}
                           </p>
                         ) : null}
                       </>

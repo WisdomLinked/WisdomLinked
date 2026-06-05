@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo, Children } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, Children, useLayoutEffect } from 'react';
 import { Calendar } from 'react-big-calendar';
 import { X, Clock, CalendarDays, Check } from 'lucide-react';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
@@ -10,6 +10,7 @@ import StudentSelect from './StudentSelect';
 import StudentBookingToolbar from './StudentBookingToolbar';
 import {
   detectUserTimeZone,
+  formatPickedSlotWhenDisplay,
   formatSlotLabel,
   getViewerDayStartMs,
   getViewerSlotsForDay,
@@ -133,10 +134,16 @@ export default function StudentExpertBookingPicker({
   const [customTz, setCustomTz] = useState(detectUserTimeZone());
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [internalDuration, setInternalDuration] = useState<SessionDurationMinutes>(60);
+  const [timeSlots, setTimeSlots] = useState<number[]>([]);
+  const [selectedTimeSlot, setSelectedTimeSlot] = useState<number | null>(null);
+  const [filterSlotIndex, setFilterSlotIndex] = useState(-1);
+  const [showTimeFilter, setShowTimeFilter] = useState(false);
+  const [confirmedSlotStart, setConfirmedSlotStart] = useState<Date | null>(null);
   const duration = selectedDurationMinutes ?? internalDuration;
 
   const handleDurationChange = useCallback(
     (value: string) => {
+      if (confirmedSlotStart) return;
       const mins = Number(value) as SessionDurationMinutes;
       if (onDurationMinutesChange) {
         onDurationMinutesChange(mins);
@@ -144,13 +151,8 @@ export default function StudentExpertBookingPicker({
         setInternalDuration(mins);
       }
     },
-    [onDurationMinutesChange],
+    [confirmedSlotStart, onDurationMinutesChange],
   );
-  const [timeSlots, setTimeSlots] = useState<number[]>([]);
-  const [selectedTimeSlot, setSelectedTimeSlot] = useState<number | null>(null);
-  const [filterSlotIndex, setFilterSlotIndex] = useState(-1);
-  const [showTimeFilter, setShowTimeFilter] = useState(false);
-  const [confirmedSlotStart, setConfirmedSlotStart] = useState<Date | null>(null);
 
   const clearTimeFilter = useCallback(() => {
     setFilterSlotIndex(-1);
@@ -167,7 +169,7 @@ export default function StudentExpertBookingPicker({
     customTz,
   );
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     onViewerTimeZoneChange?.(viewerTz);
   }, [viewerTz, onViewerTimeZoneChange]);
 
@@ -614,10 +616,11 @@ export default function StudentExpertBookingPicker({
           className="mt-3 rounded-lg border border-[#1A3A4A]/20 bg-[#E8F0F8] px-3 py-2 text-[12px] font-semibold text-[#1A3A4A]"
         >
           Selected:{' '}
-          {confirmedSlotStart.toLocaleString(undefined, {
-            dateStyle: 'medium',
-            timeStyle: 'short',
-          })}{' '}
+          {formatPickedSlotWhenDisplay(
+            confirmedSlotStart,
+            new Date(confirmedSlotStart.getTime() + duration * 60 * 1000),
+            viewerTz,
+          )}{' '}
           · {duration} min
         </div>
       ) : null}
@@ -654,7 +657,7 @@ export default function StudentExpertBookingPicker({
             </p>
 
             <StudentSelect
-              label="Minimum Session Duration"
+              label="Appointment Duration"
               value={String(duration)}
               options={DURATION_OPTIONS.map((opt) => ({
                 ...opt,
@@ -664,6 +667,7 @@ export default function StudentExpertBookingPicker({
                     : opt.label,
               }))}
               onChange={handleDurationChange}
+              disabled={!!confirmedSlotStart}
             />
 
             <div className="mt-4 max-h-52 space-y-2 overflow-y-auto">

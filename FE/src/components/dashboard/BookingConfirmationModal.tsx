@@ -82,7 +82,7 @@ export default function BookingConfirmationModal({
             <dd className="font-semibold text-right">{details.expertName}</dd>
           </div>
           <div className="flex justify-between gap-2">
-            <dt className="text-[#7A7A72]">Session length</dt>
+            <dt className="text-[#7A7A72]">Appointment duration</dt>
             <dd className="font-semibold text-right">{details.sessionLengthMinutes} min</dd>
           </div>
           <div className="flex justify-between gap-2 border-t border-[#E5E2DB] pt-2">

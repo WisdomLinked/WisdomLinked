@@ -14,6 +14,12 @@ import {
   unionDailyAvailabilityHours,
 } from '../../../utils/schedulingSlots';
 import { detectUserTimeZone } from '../../../utils/schedulingTimezone';
+import {
+  buildAvailabilitySaveSuccessMessage,
+  buildBookingNoticeSaveSuccessMessage,
+  mapAvailabilitySaveError,
+  slotsIndicesEqual,
+} from '../../../utils/availabilitySaveMessages';
 
 type AvailabilityMode = 'common' | 'daily';
 
@@ -50,6 +56,7 @@ interface BannerState {
 const SESSION_DURATIONS: number[] = [30, 60, 90];
 const BUFFER_TIMES: number[] = [0, 15, 30];
 const BOOKING_NOTICE_HOURS = [24, 48, 72] as const;
+const MIN_HOURLY_RATE = 5;
 
 const DAYS: DayOfWeek[] = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
@@ -133,7 +140,7 @@ const AvailabilityPage: React.FC = () => {
           await (dispatch as any)(updateMe());
           setBanner({
             type: 'success',
-            message: 'Booking notice period saved. Students will only see slots that meet this lead time.',
+            message: buildBookingNoticeSaveSuccessMessage(hours),
           });
         } else {
           setBanner({
@@ -174,8 +181,8 @@ const AvailabilityPage: React.FC = () => {
     const num = Number(value);
     if (!value) {
       setRateError('');
-    } else if (Number.isNaN(num) || num < 5 || num > 100) {
-      setRateError('Hourly rate should be between $5 and $100.');
+    } else if (Number.isNaN(num) || num < MIN_HOURLY_RATE) {
+      setRateError(`Hourly rate should be at least $${MIN_HOURLY_RATE}.`);
     } else {
       setRateError('');
     }
@@ -248,12 +255,12 @@ const AvailabilityPage: React.FC = () => {
   const handleSave = async () => {
     const numRate = Number(form.hourlyRate);
     const rateValid =
-      !!form.hourlyRate && !Number.isNaN(numRate) && numRate >= 5 && numRate <= 100;
+      !!form.hourlyRate && !Number.isNaN(numRate) && numRate >= MIN_HOURLY_RATE;
     const hasSlots = totalSelectedSlots > 0;
 
     if (!rateValid || !hasSlots) {
       const problems: string[] = [];
-      if (!rateValid) problems.push('Please set an hourly rate between $5 and $100.');
+      if (!rateValid) problems.push(`Please set an hourly rate of at least $${MIN_HOURLY_RATE}.`);
       if (!hasSlots) problems.push('Please select at least one available time slot.');
 
       setBanner({
@@ -270,6 +277,19 @@ const AvailabilityPage: React.FC = () => {
     const timeSlots = hoursToHalfHourIndices(selectedHours);
     const timeZone = detectUserTimeZone();
 
+    const savedPrice = normalizeExpertPrice(userDetails?.price);
+    const savedSlots = Array.isArray(userDetails?.timeSlots) ? userDetails.timeSlots : [];
+    const rateChanged = numRate !== savedPrice;
+    const slotsChanged = !slotsIndicesEqual(timeSlots, savedSlots);
+
+    if (!rateChanged && !slotsChanged) {
+      setBanner({
+        type: 'success',
+        message: 'No changes to save.',
+      });
+      return;
+    }
+
     setSaveBusy(true);
     try {
       const slotsRes = await doUpdateTimeSlots(timeSlots);
@@ -283,13 +303,17 @@ const AvailabilityPage: React.FC = () => {
       await (dispatch as any)(updateMe());
       setBanner({
         type: 'success',
-        message:
-          'Availability saved. Students will see these slots in the booking flow.',
+        message: buildAvailabilitySaveSuccessMessage({
+          rateChanged,
+          slotsChanged,
+          hourlyRate: numRate,
+        }),
       });
     } catch (e: any) {
+      const raw = e?.message || '';
       setBanner({
         type: 'error',
-        message: e?.message || 'Could not save availability. Please try again.',
+        message: mapAvailabilitySaveError(raw),
       });
     } finally {
       setSaveBusy(false);
@@ -495,23 +519,13 @@ const AvailabilityPage: React.FC = () => {
 
   return (
     <div className="min-h-full bg-white">
-      <div className="mx-auto max-w-6xl px-6 py-8 bg-[#F5F3EF] rounded-2xl">
-        <div className="mb-4 flex items-start justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-semibold text-gray-900">Your Availability</h1>
-            <p className="mt-1 text-sm text-gray-500">
-              Set your hourly rate and weekly time slots, then use the calendar below to
-              view bookings and block full days when needed.
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={handleSave}
-            disabled={saveBusy}
-            className="mt-1 inline-flex items-center rounded-lg bg-[#234C6A] px-5 py-2.5 text-sm font-medium text-white hover:bg-[#1b3c53] disabled:opacity-60"
-          >
-            {saveBusy ? 'Saving…' : 'Save Changes'}
-          </button>
+      <div className="mx-auto max-w-6xl px-6 py-8 pb-28 bg-[#F5F3EF] rounded-2xl">
+        <div className="mb-4">
+          <h1 className="text-2xl font-semibold text-gray-900">Your Availability</h1>
+          <p className="mt-1 text-sm text-gray-500">
+            Set your hourly rate and weekly time slots, then use the calendar below to
+            view bookings and block full days when needed.
+          </p>
         </div>
 
         {banner.type && (
@@ -563,7 +577,7 @@ const AvailabilityPage: React.FC = () => {
                 <span className="px-3 py-2.5 text-sm text-gray-400">/hr</span>
               </div>
               <p className="mt-1.5 text-xs text-gray-400">
-                Recommended rate: $5 – $100 per hour
+                Minimum rate: ${MIN_HOURLY_RATE} per hour
               </p>
               {rateError && <p className="mt-1 text-xs text-red-500">{rateError}</p>}
             </div>
@@ -576,10 +590,10 @@ const AvailabilityPage: React.FC = () => {
               </p>
             </div>
 
-            {/* Minimum Session Duration */}
+            {/* Appointment Duration */}
             <div>
               <label className="mb-1.5 block text-sm font-medium text-gray-700">
-                Minimum Session Duration
+                Appointment Duration
               </label>
               <div className="inline-flex rounded-full bg-gray-50 p-1 text-xs font-medium text-gray-600">
                 {SESSION_DURATIONS.map((duration) => {
@@ -700,8 +714,8 @@ const AvailabilityPage: React.FC = () => {
             Each slot is a 1-hour availability window starting at the time shown.{' '}
             {form.sessionDuration === 30 && (
               <>
-                With your <span className="font-semibold">30-min</span> session
-                length, students see <span className="font-semibold">two</span>{' '}
+                With your <span className="font-semibold">30-min</span> appointment
+                duration, students see <span className="font-semibold">two</span>{' '}
                 start times per slot (e.g.{' '}
                 <span className="font-semibold">8:00&ndash;8:30 PM</span> and{' '}
                 <span className="font-semibold">8:30&ndash;9:00 PM</span>).
@@ -709,8 +723,8 @@ const AvailabilityPage: React.FC = () => {
             )}
             {form.sessionDuration === 60 && (
               <>
-                With your <span className="font-semibold">60-min</span> session
-                length, students see <span className="font-semibold">one</span>{' '}
+                With your <span className="font-semibold">60-min</span> appointment
+                duration, students see <span className="font-semibold">one</span>{' '}
                 start time per slot (e.g.{' '}
                 <span className="font-semibold">8:00&ndash;9:00 PM</span>).
               </>
@@ -728,6 +742,24 @@ const AvailabilityPage: React.FC = () => {
         </div>
 
         <ExpertAvailabilitySchedule />
+
+        <div className="pointer-events-none fixed bottom-0 left-0 right-0 z-30 lg:left-[70px]">
+          <div className="pointer-events-auto mx-auto max-w-6xl px-6 pb-4">
+            <div className="flex items-center justify-between gap-3 rounded-2xl border border-gray-200 bg-white/95 px-5 py-3.5 shadow-lg backdrop-blur-md">
+              <p className="hidden text-xs text-gray-500 sm:block">
+                Save your hourly rate and weekly time slots when you are done editing.
+              </p>
+              <button
+                type="button"
+                onClick={handleSave}
+                disabled={saveBusy}
+                className="ml-auto inline-flex shrink-0 items-center rounded-lg bg-[#234C6A] px-5 py-2.5 text-sm font-medium text-white hover:bg-[#1b3c53] disabled:opacity-60"
+              >
+                {saveBusy ? 'Saving…' : 'Save Changes'}
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );

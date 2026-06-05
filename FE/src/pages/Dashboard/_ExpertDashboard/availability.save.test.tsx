@@ -18,7 +18,7 @@ vi.mock('./ExpertAvailabilitySchedule', () => ({
   default: () => <div data-testid="schedule" />,
 }));
 
-import { doUpdateTimeSlots, doUpdateProfile } from '../../../api/api';
+import { doUpdateTimeSlots, doUpdateProfile, doSetExpertBookingNoticeHours } from '../../../api/api';
 
 const store = configureStore({
   reducer: {
@@ -66,5 +66,103 @@ describe('AvailabilityPage save', () => {
     );
     expect(screen.queryByText('Select a timezone…')).toBeNull();
     expect(screen.getByText(/detected from your device/i)).toBeInTheDocument();
+  });
+
+  it('saves hourly rate above $100', async () => {
+    render(
+      <Provider store={store}>
+        <AvailabilityPage />
+      </Provider>,
+    );
+
+    fireEvent.change(screen.getByPlaceholderText('0'), { target: { value: '150' } });
+    fireEvent.click(screen.getByRole('button', { name: /Select Business Hours/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Save Changes/i }));
+
+    await waitFor(() => {
+      expect(doUpdateProfile).toHaveBeenCalledWith(
+        expect.objectContaining({ price: 150, timeZone: expect.any(String) }),
+      );
+    });
+    expect(screen.queryByText(/at least \$5/i)).not.toBeInTheDocument();
+  });
+
+  it('blocks save when hourly rate is below minimum', async () => {
+    render(
+      <Provider store={store}>
+        <AvailabilityPage />
+      </Provider>,
+    );
+
+    fireEvent.change(screen.getByPlaceholderText('0'), { target: { value: '3' } });
+    fireEvent.click(screen.getByRole('button', { name: /Select Business Hours/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Save Changes/i }));
+
+    await waitFor(() => {
+      expect(
+        screen.getByText(/Please set an hourly rate of at least \$5/i),
+      ).toBeInTheDocument();
+    });
+    expect(doUpdateTimeSlots).not.toHaveBeenCalled();
+    expect(doUpdateProfile).not.toHaveBeenCalled();
+  });
+
+  it('shows rate-only success message when only hourly rate changes', async () => {
+    render(
+      <Provider store={store}>
+        <AvailabilityPage />
+      </Provider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByPlaceholderText('0')).toHaveValue(50);
+    });
+
+    fireEvent.change(screen.getByPlaceholderText('0'), { target: { value: '75' } });
+    fireEvent.click(screen.getByRole('button', { name: /Save Changes/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText(/Hourly rate saved \(\$75\/hr\)/i)).toBeInTheDocument();
+    });
+    expect(screen.queryByText(/Weekly availability saved/i)).not.toBeInTheDocument();
+  });
+
+  it('shows slots-only success message when only availability changes', async () => {
+    render(
+      <Provider store={store}>
+        <AvailabilityPage />
+      </Provider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByPlaceholderText('0')).toHaveValue(50);
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /Clear All/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Select Business Hours/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Save Changes/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText(/Weekly availability saved/i)).toBeInTheDocument();
+    });
+    expect(screen.queryByText(/Hourly rate saved/i)).not.toBeInTheDocument();
+  });
+
+  it('shows booking notice message with selected hours', async () => {
+    vi.mocked(doSetExpertBookingNoticeHours).mockResolvedValue({ result: {} });
+
+    render(
+      <Provider store={store}>
+        <AvailabilityPage />
+      </Provider>,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: '48 hours' }));
+
+    await waitFor(() => {
+      expect(
+        screen.getByText(/Minimum booking notice set to 48 hours/i),
+      ).toBeInTheDocument();
+    });
   });
 });

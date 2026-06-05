@@ -175,6 +175,11 @@ export function formatBookingConfirmation(start: Date, end: Date, timeZone: stri
   return { date, timeRange, timeZone: tz };
 }
 
+export function formatPickedSlotWhenDisplay(start: Date, end: Date, timeZone: string): string {
+  const { date, timeRange, timeZone: tz } = formatBookingConfirmation(start, end, timeZone);
+  return `${date} · ${timeRange} (${tz})`;
+}
+
 export function toYMDLocal(d: Date): string {
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, '0');

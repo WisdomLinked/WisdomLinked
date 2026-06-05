@@ -1,4 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
+import React from 'react';
 
 import { render, screen, waitFor, fireEvent, within } from '@testing-library/react';
 
@@ -20,8 +21,13 @@ vi.mock('../../api/api', () => ({
 
 vi.mock('./StudentExpertBookingPicker', () => ({
 
-  default: ({ onSlotSelected, onFilterSlotConfirmed, expert }: any) => (
+  default: ({ onSlotSelected, onFilterSlotConfirmed, onViewerTimeZoneChange, expert }: any) => {
 
+    React.useEffect(() => {
+      onViewerTimeZoneChange?.('UTC');
+    }, [onViewerTimeZoneChange]);
+
+    return (
     <div data-testid="slot-picker">
 
       slots:{expert?.timeSlots?.length ?? 0}
@@ -36,9 +42,9 @@ vi.mock('./StudentExpertBookingPicker', () => ({
 
           onSlotSelected(
 
-            new Date('2026-06-15T14:00:00'),
+            new Date('2026-06-15T14:00:00.000Z'),
 
-            new Date('2026-06-15T15:00:00'),
+            new Date('2026-06-15T15:00:00.000Z'),
 
             60,
 
@@ -62,9 +68,9 @@ vi.mock('./StudentExpertBookingPicker', () => ({
 
           onSlotSelected(
 
-            new Date('2026-06-15T09:00:00'),
+            new Date('2026-06-15T09:00:00.000Z'),
 
-            new Date('2026-06-15T10:00:00'),
+            new Date('2026-06-15T10:00:00.000Z'),
 
             60,
 
@@ -81,8 +87,8 @@ vi.mock('./StudentExpertBookingPicker', () => ({
       </button>
 
     </div>
-
-  ),
+    );
+  },
 
 }));
 
@@ -391,6 +397,24 @@ describe('ExpertProfile booking', () => {
     fireEvent.click(screen.getByTestId('pick-slot'));
 
     expect(await screen.findByText(/60 min · \$60 ·/i)).toBeInTheDocument();
+    expect(screen.getByText(/2:00 PM.*3:00 PM.*\(UTC\)/i)).toBeInTheDocument();
+  });
+
+
+
+  it('shows booking summary When in viewer timezone not browser local', async () => {
+    render(
+      <Provider store={store}>
+        <ExpertProfile mentor={mentor} onBack={vi.fn()} />
+      </Provider>,
+    );
+
+    await screen.findByTestId('slot-picker');
+    fireEvent.click(screen.getByTestId('pick-slot'));
+    fireEvent.click(screen.getByRole('button', { name: /review booking/i }));
+
+    const summarySection = screen.getByText('Booking summary').closest('div') as HTMLElement;
+    expect(within(summarySection).getByText(/2:00 PM.*3:00 PM.*\(UTC\)/i)).toBeInTheDocument();
   });
 
 
@@ -446,7 +470,7 @@ describe('ExpertProfile booking', () => {
 
 
 
-  it('updates review total when session length changes', async () => {
+  it('locks appointment duration after a time slot is selected', async () => {
     render(
       <Provider store={store}>
         <ExpertProfile mentor={mentor} onBack={vi.fn()} />
@@ -462,11 +486,26 @@ describe('ExpertProfile booking', () => {
 
     expect(within(summarySection()).getByText('60 min')).toBeInTheDocument();
     expect(within(summarySection()).getByText('$60')).toBeInTheDocument();
+    expect(screen.getByText(/fixed for this booking/i)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '90 min' })).not.toBeInTheDocument();
+  });
 
-    fireEvent.click(screen.getByRole('button', { name: '90 min' }));
+  it('unlocks appointment duration after Change time', async () => {
+    render(
+      <Provider store={store}>
+        <ExpertProfile mentor={mentor} onBack={vi.fn()} />
+      </Provider>,
+    );
 
-    expect(within(summarySection()).getByText('90 min')).toBeInTheDocument();
-    expect(within(summarySection()).getByText('$90')).toBeInTheDocument();
+    await screen.findByTestId('slot-picker');
+    fireEvent.click(screen.getByTestId('pick-slot'));
+    fireEvent.click(screen.getByRole('button', { name: /review booking/i }));
+    fireEvent.click(screen.getByRole('button', { name: /change time/i }));
+
+    const btn90 = screen.getByRole('button', { name: '90 min' });
+    expect(btn90).not.toBeDisabled();
+    fireEvent.click(btn90);
+    expect(btn90).toHaveClass('bg-[#1A3A4A]');
   });
 
 
