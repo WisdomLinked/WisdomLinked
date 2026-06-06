@@ -13,18 +13,30 @@ function rateSuffix(hourlyRate?: number): string {
 export function buildAvailabilitySaveSuccessMessage(opts: {
   rateChanged: boolean;
   slotsChanged: boolean;
+  durationsChanged?: boolean;
   hourlyRate?: number;
 }): string {
   const suffix = opts.rateChanged ? rateSuffix(opts.hourlyRate) : '';
+  const changedParts: string[] = [];
+  if (opts.rateChanged) changedParts.push('hourly rate');
+  if (opts.slotsChanged) changedParts.push('weekly availability');
+  if (opts.durationsChanged) changedParts.push('appointment durations');
 
-  if (opts.rateChanged && opts.slotsChanged) {
-    return `Hourly rate and weekly availability saved${suffix}. Students will see your updates when booking.`;
+  if (changedParts.length > 1) {
+    const list =
+      changedParts.length === 2
+        ? changedParts.join(' and ')
+        : `${changedParts.slice(0, -1).join(', ')}, and ${changedParts[changedParts.length - 1]}`;
+    return `${list.charAt(0).toUpperCase() + list.slice(1)} saved${suffix}. Students will see your updates when booking.`;
   }
   if (opts.rateChanged) {
     return `Hourly rate saved${suffix}.`;
   }
   if (opts.slotsChanged) {
     return 'Weekly availability saved. Students will see your updated time slots when booking.';
+  }
+  if (opts.durationsChanged) {
+    return 'Appointment durations saved. Students will only see the session lengths you offer when booking.';
   }
   return 'Availability settings saved.';
 }
@@ -39,6 +51,9 @@ export function mapAvailabilitySaveError(message: string): string {
   }
   if (message.includes('rate')) {
     return 'Could not save hourly rate. Please try again.';
+  }
+  if (message.includes('duration')) {
+    return 'Could not save appointment durations. Please try again.';
   }
   return message || 'Could not save availability. Please try again.';
 }

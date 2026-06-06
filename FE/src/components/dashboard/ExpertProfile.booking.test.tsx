@@ -396,8 +396,11 @@ describe('ExpertProfile booking', () => {
     await screen.findByTestId('slot-picker');
     fireEvent.click(screen.getByTestId('pick-slot'));
 
-    expect(await screen.findByText(/60 min · \$60 ·/i)).toBeInTheDocument();
-    expect(screen.getByText(/2:00 PM.*3:00 PM.*\(UTC\)/i)).toBeInTheDocument();
+    const ratesSection = () =>
+      screen.getByRole('heading', { name: 'Rates' }).closest('section') as HTMLElement;
+
+    expect(await within(ratesSection()).findByText(/60 min · \$60 ·/i)).toBeInTheDocument();
+    expect(within(ratesSection()).getByText(/2:00 PM.*3:00 PM.*\(UTC\)/i)).toBeInTheDocument();
   });
 
 
@@ -490,6 +493,24 @@ describe('ExpertProfile booking', () => {
     expect(screen.queryByRole('button', { name: '90 min' })).not.toBeInTheDocument();
   });
 
+  it('shows selected slot summary before Review booking', async () => {
+    render(
+      <Provider store={store}>
+        <ExpertProfile mentor={mentor} onBack={vi.fn()} />
+      </Provider>,
+    );
+
+    await screen.findByTestId('slot-picker');
+    fireEvent.click(screen.getByTestId('pick-slot'));
+
+    const summary = await screen.findByTestId('selected-slot-summary');
+    expect(summary).toBeInTheDocument();
+    expect(within(summary).getByText('Your selected appointment')).toBeInTheDocument();
+    expect(within(summary).getByText('60 min')).toBeInTheDocument();
+    expect(within(summary).getByText('$60')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /review booking/i })).toBeInTheDocument();
+  });
+
   it('unlocks appointment duration after Change time', async () => {
     render(
       <Provider store={store}>
@@ -506,6 +527,35 @@ describe('ExpertProfile booking', () => {
     expect(btn90).not.toBeDisabled();
     fireEvent.click(btn90);
     expect(btn90).toHaveClass('bg-[#1A3A4A]');
+  });
+
+  it('only shows appointment durations the expert offers', async () => {
+    vi.mocked(getExpertById).mockResolvedValue({
+      result: {
+        _id: 'expert-1',
+        timeSlots: [18, 19, 20],
+        price: 60,
+        timeZone: 'UTC',
+        appointmentDurations: [60, 90],
+        events: [],
+        groupChats: [],
+        pendingGroupChats: [],
+      },
+    });
+
+    render(
+      <Provider store={store}>
+        <ExpertProfile mentor={mentor} onBack={vi.fn()} />
+      </Provider>,
+    );
+
+    await waitFor(() => {
+      expect(getExpertById).toHaveBeenCalledWith('expert-1');
+    });
+
+    expect(await screen.findByRole('button', { name: '60 min' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '90 min' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '30 min' })).not.toBeInTheDocument();
   });
 
 

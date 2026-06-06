@@ -28,6 +28,7 @@ const store = configureStore({
         price: 50,
         bookingNoticeHours: 24,
         timeZone: 'UTC',
+        appointmentDurations: [30, 60, 90],
       },
     }),
   },
@@ -164,5 +165,53 @@ describe('AvailabilityPage save', () => {
         screen.getByText(/Minimum booking notice set to 48 hours/i),
       ).toBeInTheDocument();
     });
+  });
+
+  it('saves appointment durations when toggled off', async () => {
+    render(
+      <Provider store={store}>
+        <AvailabilityPage />
+      </Provider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByPlaceholderText('0')).toHaveValue(50);
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: '30 minutes, selected' }));
+    fireEvent.click(screen.getByRole('button', { name: /Save Changes/i }));
+
+    await waitFor(() => {
+      expect(doUpdateProfile).toHaveBeenCalledWith(
+        expect.objectContaining({ appointmentDurations: [60, 90] }),
+      );
+    });
+    expect(doUpdateTimeSlots).not.toHaveBeenCalled();
+  });
+
+  it('shows white unselected and blue selected appointment duration pills', async () => {
+    render(
+      <Provider store={store}>
+        <AvailabilityPage />
+      </Provider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: '30 minutes, selected' })).toHaveAttribute(
+        'aria-pressed',
+        'true',
+      );
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: '30 minutes, selected' }));
+
+    expect(screen.getByRole('button', { name: '30 minutes' })).toHaveAttribute(
+      'aria-pressed',
+      'false',
+    );
+    expect(screen.getByRole('button', { name: '60 minutes, selected' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
   });
 });

@@ -224,4 +224,41 @@ describe('StudentExpertBookingPicker', () => {
     fireEvent.click(screen.getByTestId('mock-select-day'));
     expect(onSlotSelected).toHaveBeenCalledTimes(1);
   });
+
+  it('limits modal duration options to allowed durations', () => {
+    render(
+      <Provider store={store}>
+        <StudentExpertBookingPicker
+          expert={expert}
+          allowedDurationMinutes={[60, 90]}
+          onSlotSelected={vi.fn()}
+        />
+      </Provider>,
+    );
+
+    fireEvent.click(screen.getByTestId('mock-select-day'));
+
+    expect(screen.getByText('Appointment Duration')).toBeInTheDocument();
+    expect(screen.queryByText(/30 min/)).not.toBeInTheDocument();
+    expect(screen.getAllByText(/60 min/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/90 min/).length).toBeGreaterThan(0);
+  });
+
+  it('shows selection banner when confirmedSlotStart prop is provided', () => {
+    render(
+      <Provider store={store}>
+        <StudentExpertBookingPicker
+          expert={expert}
+          confirmedSlotStart={new Date('2026-06-15T14:00:00.000Z')}
+          selectedDurationMinutes={60}
+          onSlotSelected={vi.fn()}
+        />
+      </Provider>,
+    );
+
+    const banner = screen.getByTestId('selection-confirmed-banner');
+    expect(banner).toBeInTheDocument();
+    expect(banner).toHaveTextContent('Selected appointment');
+    expect(banner).toHaveTextContent('60 min');
+  });
 });

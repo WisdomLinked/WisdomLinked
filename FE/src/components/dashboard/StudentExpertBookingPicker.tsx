@@ -20,9 +20,14 @@ import {
   viewerSlotToInstant,
 } from '../../utils/schedulingTimezone';
 import { normalizeExpertPrice, filterSlotsForDuration } from '../../utils/schedulingSlots';
+import {
+  defaultAppointmentDuration,
+  normalizeAppointmentDurations,
+  type AppointmentDurationMinutes,
+} from '../../utils/appointmentDurations';
 import type { BookingDisplayTimeZoneMode } from '../../types/scheduling';
 
-type SessionDurationMinutes = (typeof DURATIONS)[number];
+type SessionDurationMinutes = AppointmentDurationMinutes;
 
 type Props = {
   expert: any;
@@ -30,11 +35,13 @@ type Props = {
   hidePriceInDurationSelection?: boolean;
   selectedDurationMinutes?: SessionDurationMinutes;
   onDurationMinutesChange?: (mins: SessionDurationMinutes) => void;
+  allowedDurationMinutes?: SessionDurationMinutes[];
+  confirmedSlotStart?: Date | null;
   onFilterSlotConfirmed?: () => void;
   onViewerTimeZoneChange?: (tz: string) => void;
 };
 
-const DURATIONS = [30, 60, 90] as const;
+const ALL_DURATIONS: SessionDurationMinutes[] = [30, 60, 90];
 
 function generateTimeSlotIndices() {
   const slots: { index: number; time: string }[] = [];
@@ -66,7 +73,7 @@ const TIME_FILTER_OPTIONS = [
   })),
 ];
 
-const DURATION_OPTIONS = DURATIONS.map((d) => ({
+const DURATION_OPTIONS = ALL_DURATIONS.map((d) => ({
   value: String(d),
   label: `${d} min`,
 }));
@@ -122,10 +129,27 @@ export default function StudentExpertBookingPicker({
   hidePriceInDurationSelection = false,
   selectedDurationMinutes,
   onDurationMinutesChange,
+  allowedDurationMinutes,
+  confirmedSlotStart: confirmedSlotStartProp,
   onFilterSlotConfirmed,
   onViewerTimeZoneChange,
 }: Props) {
   const { auth: { userDetails } } = useAppSelector((state: any) => state);
+
+  const offeredDurations = useMemo(
+    () =>
+      allowedDurationMinutes ??
+      normalizeAppointmentDurations(expert?.appointmentDurations),
+    [allowedDurationMinutes, expert?.appointmentDurations],
+  );
+
+  const durationOptions = useMemo(
+    () =>
+      DURATION_OPTIONS.filter((option) =>
+        offeredDurations.includes(Number(option.value) as SessionDurationMinutes),
+      ),
+    [offeredDurations],
+  );
 
   const [events, setEvents] = useState<any[]>([]);
   const [rawExpertSlots, setRawExpertSlots] = useState<number[]>([]);
@@ -133,13 +157,34 @@ export default function StudentExpertBookingPicker({
   const [tzMode, setTzMode] = useState<BookingDisplayTimeZoneMode>('mine');
   const [customTz, setCustomTz] = useState(detectUserTimeZone());
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
-  const [internalDuration, setInternalDuration] = useState<SessionDurationMinutes>(60);
+  const [internalDuration, setInternalDuration] = useState<SessionDurationMinutes>(() =>
+    defaultAppointmentDuration(offeredDurations),
+  );
   const [timeSlots, setTimeSlots] = useState<number[]>([]);
   const [selectedTimeSlot, setSelectedTimeSlot] = useState<number | null>(null);
   const [filterSlotIndex, setFilterSlotIndex] = useState(-1);
   const [showTimeFilter, setShowTimeFilter] = useState(false);
   const [confirmedSlotStart, setConfirmedSlotStart] = useState<Date | null>(null);
   const duration = selectedDurationMinutes ?? internalDuration;
+
+  useEffect(() => {
+    if (confirmedSlotStartProp) {
+      setConfirmedSlotStart(confirmedSlotStartProp);
+    } else {
+      setConfirmedSlotStart(null);
+    }
+  }, [confirmedSlotStartProp]);
+
+  useEffect(() => {
+    const fallback = defaultAppointmentDuration(offeredDurations);
+    if (!offeredDurations.includes(duration)) {
+      if (onDurationMinutesChange) {
+        onDurationMinutesChange(fallback);
+      } else {
+        setInternalDuration(fallback);
+      }
+    }
+  }, [offeredDurations, duration, onDurationMinutesChange]);
 
   const handleDurationChange = useCallback(
     (value: string) => {
@@ -613,15 +658,19 @@ export default function StudentExpertBookingPicker({
       {confirmedSlotStart ? (
         <div
           data-testid="selection-confirmed-banner"
-          className="mt-3 rounded-lg border border-[#1A3A4A]/20 bg-[#E8F0F8] px-3 py-2 text-[12px] font-semibold text-[#1A3A4A]"
+          className="mt-3 rounded-lg border border-[#1A3A4A]/20 bg-[#E8F0F8] px-4 py-3"
         >
-          Selected:{' '}
-          {formatPickedSlotWhenDisplay(
-            confirmedSlotStart,
-            new Date(confirmedSlotStart.getTime() + duration * 60 * 1000),
-            viewerTz,
-          )}{' '}
-          · {duration} min
+          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#1A3A4A]">
+            Selected appointment
+          </p>
+          <p className="mt-1 text-[13px] font-semibold text-[#1A3A4A]">
+            {formatPickedSlotWhenDisplay(
+              confirmedSlotStart,
+              new Date(confirmedSlotStart.getTime() + duration * 60 * 1000),
+              viewerTz,
+            )}{' '}
+            · {duration} min
+          </p>
         </div>
       ) : null}
 
@@ -659,7 +708,7 @@ export default function StudentExpertBookingPicker({
             <StudentSelect
               label="Appointment Duration"
               value={String(duration)}
-              options={DURATION_OPTIONS.map((opt) => ({
+              options={durationOptions.map((opt) => ({
                 ...opt,
                 label:
                   !hidePriceInDurationSelection && hourlyRate > 0

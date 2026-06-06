@@ -10,7 +10,7 @@ const { appendPaymentHistory } = require("./payment.controller");
 const { checkTitleNameInvalid } = require('../services/global')
 const { sendEmailMeetingRequestToExpert, sendEmailMeetingRequestToCustomer, scheduleEmailReminder, sendEmailMeetingAcceptance } = require('../services/notifications')
 const { assertBookingLeadTime } = require("../utils/bookingLeadTime");
-const { assertBookingSlotValid } = require("../utils/bookingValidation");
+const { assertBookingSlotValid, assertDurationAllowed } = require("../utils/bookingValidation");
 
 const createEventByExpert = async (req, res) => {
     try {
@@ -133,6 +133,7 @@ const appendEvent = async (req, res) => {
         }
 
         assertBookingLeadTime(expertUser, start);
+        assertDurationAllowed(expertUser, duration);
 
         let eventExists
         if (eventId) {

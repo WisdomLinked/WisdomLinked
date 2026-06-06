@@ -51,6 +51,16 @@ describe('availabilitySaveMessages', () => {
       );
     });
 
+    it('describes durations-only save', () => {
+      expect(
+        buildAvailabilitySaveSuccessMessage({
+          rateChanged: false,
+          slotsChanged: false,
+          durationsChanged: true,
+        }),
+      ).toMatch(/Appointment durations saved/i);
+    });
+
     it('falls back when nothing flagged', () => {
       expect(
         buildAvailabilitySaveSuccessMessage({

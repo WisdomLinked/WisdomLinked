@@ -24,6 +24,12 @@ import BookingConfirmationModal from './BookingConfirmationModal';
 import { createGroupChatByUser, getExpertById, profileImageFetch } from '../../api/api';
 import { resolveProfileImageSrc } from '../../utils/profileImage';
 import { normalizeExpertPrice } from '../../utils/schedulingSlots';
+import {
+  defaultAppointmentDuration,
+  formatOfferedDurationsList,
+  normalizeAppointmentDurations,
+  type AppointmentDurationMinutes,
+} from '../../utils/appointmentDurations';
 import { detectUserTimeZone, formatBookingConfirmation, formatPickedSlotWhenDisplay } from '../../utils/schedulingTimezone';
 import { SetLoadingStatus } from '../../actions/appActions';
 
@@ -104,6 +110,19 @@ export default function ExpertProfile({
     () => normalizeExpertPrice(expertDetails?.price),
     [expertDetails?.price],
   );
+
+  const offeredDurations = useMemo(
+    () => normalizeAppointmentDurations(expertDetails?.appointmentDurations),
+    [expertDetails?.appointmentDurations],
+  );
+
+  useEffect(() => {
+    if (!expertDetails) return;
+    const fallback = defaultAppointmentDuration(offeredDurations);
+    setSessionDurationMinutes((current) =>
+      offeredDurations.includes(current) ? current : fallback,
+    );
+  }, [expertDetails, offeredDurations]);
 
   const oneToOneRate = useMemo(
     () => expertHourlyRate ?? 60 + experienceYears * 18,
@@ -844,7 +863,7 @@ export default function ExpertProfile({
                   ) : (
                     <>
                       <div className="flex flex-wrap gap-2">
-                        {([30, 60, 90] as const).map(mins => (
+                        {offeredDurations.map(mins => (
                           <button
                             key={mins}
                             type="button"
@@ -944,12 +963,13 @@ export default function ExpertProfile({
                       </p>
                     ) : (
                       <StudentExpertBookingPicker
-                        key={pickedStart ? 'selected' : 'idle'}
                         expert={expertDetails}
                         onSlotSelected={handleSlotPicked}
                         hidePriceInDurationSelection
                         selectedDurationMinutes={sessionDurationMinutes}
                         onDurationMinutesChange={applySessionDuration}
+                        allowedDurationMinutes={offeredDurations}
+                        confirmedSlotStart={pickedStart}
                         onViewerTimeZoneChange={setBookingViewerTz}
                         onFilterSlotConfirmed={() => {
                           setBookingError(null);
@@ -1004,6 +1024,37 @@ export default function ExpertProfile({
                 </div>
                 )}
               </div>
+
+              {serviceChoice === 'oneToOne' &&
+                bookingStep === 'pick' &&
+                pickedStart &&
+                pickedEnd &&
+                pickedDuration ? (
+                <div
+                  data-testid="selected-slot-summary"
+                  className="rounded-xl border border-[#1A3A4A]/20 bg-[#E8F0F8] p-4 space-y-3"
+                >
+                  <p className="text-[12px] font-semibold uppercase tracking-[0.16em] text-[#1A3A4A]">
+                    Your selected appointment
+                  </p>
+                  <dl className="space-y-2 text-sm text-[#1A3A4A]">
+                    <div className="flex justify-between gap-2">
+                      <dt className="text-[#7A7A72]">When</dt>
+                      <dd className="font-semibold text-right">{pickedSlotDisplay}</dd>
+                    </div>
+                    <div className="flex justify-between gap-2">
+                      <dt className="text-[#7A7A72]">Appointment duration</dt>
+                      <dd className="font-semibold">{pickedDuration} min</dd>
+                    </div>
+                    <div className="flex justify-between gap-2 border-t border-[#1A3A4A]/15 pt-2">
+                      <dt className="text-[#7A7A72]">Estimated total</dt>
+                      <dd className="font-serif text-lg font-semibold">
+                        ${oneToOneSessionPrice.toFixed(0)}
+                      </dd>
+                    </div>
+                  </dl>
+                </div>
+              ) : null}
 
               {bookingError && (
                 <div className="text-[12px] font-semibold text-red-600">{bookingError}</div>
@@ -1135,7 +1186,8 @@ export default function ExpertProfile({
                           ${publishedOneToOneRate.toFixed(0)}
                         </p>
                         <p className="mt-1 text-[12px] text-[#7A7A72]">
-                          per hour — 30 / 60 / 90 min totals scale from this rate
+                          per hour — {formatOfferedDurationsList(offeredDurations)} totals scale
+                          from this rate
                         </p>
                         {serviceChoice === 'oneToOne' && pickedStart && pickedEnd && pickedDuration ? (
                           <p className="mt-2 text-[12px] font-semibold text-[#1A3A4A]">

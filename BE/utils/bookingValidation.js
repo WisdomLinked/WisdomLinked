@@ -2,6 +2,8 @@
  * Server-side booking window checks (availability slots, blocked dates, overlaps).
  */
 
+const { normalizeAppointmentDurations } = require("./appointmentDurations");
+
 function toYMDInTimeZone(date, timeZone) {
   return new Intl.DateTimeFormat("en-CA", {
     timeZone: timeZone || "UTC",
@@ -116,6 +118,14 @@ async function assertNoBookingOverlap(expertId, start, end, options = {}) {
   }
 }
 
+function assertDurationAllowed(expertDoc, duration) {
+  const allowed = normalizeAppointmentDurations(expertDoc?.appointmentDurations);
+  const minutes = Number(duration);
+  if (!allowed.includes(minutes)) {
+    throw new Error("Expert does not offer sessions of this duration");
+  }
+}
+
 async function assertBookingSlotValid(expertDoc, start, end, options = {}) {
   assertNotBlockedDate(expertDoc, start);
   assertSlotsInTimeSlots(expertDoc, start, end);
@@ -134,5 +144,6 @@ module.exports = {
   assertNotBlockedDate,
   intervalsOverlap,
   assertNoBookingOverlap,
+  assertDurationAllowed,
   assertBookingSlotValid,
 };

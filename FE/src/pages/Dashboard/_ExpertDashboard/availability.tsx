@@ -20,6 +20,12 @@ import {
   mapAvailabilitySaveError,
   slotsIndicesEqual,
 } from '../../../utils/availabilitySaveMessages';
+import {
+  appointmentDurationsEqual,
+  normalizeAppointmentDurations,
+  previewDurationForSlots,
+  type AppointmentDurationMinutes,
+} from '../../../utils/appointmentDurations';
 
 type AvailabilityMode = 'common' | 'daily';
 
@@ -39,7 +45,7 @@ interface DailyAvailability {
 
 interface AvailabilityFormState {
   hourlyRate: string;
-  sessionDuration: number;   // minutes: 30 | 60 | 90
+  appointmentDurations: AppointmentDurationMinutes[];
   bufferTime: number;        // minutes: 0 | 15 | 30
   mode: AvailabilityMode;
   commonSlots: number[];     // selected hours for Common mode
@@ -86,7 +92,7 @@ const initialDailyAvailability: DailyAvailability[] = [
 
 const initialFormState: AvailabilityFormState = {
   hourlyRate: '',
-  sessionDuration: 60,
+  appointmentDurations: [30, 60, 90],
   bufferTime: 15,
   mode: 'common',
   commonSlots: [],
@@ -116,12 +122,14 @@ const AvailabilityPage: React.FC = () => {
         ? halfHourIndicesToHours(slots)
         : [];
     const price = normalizeExpertPrice(userDetails?.price);
+    const durations = normalizeAppointmentDurations(userDetails?.appointmentDurations);
     setForm((prev) => ({
       ...prev,
       commonSlots: hours.length ? hours : prev.commonSlots,
       hourlyRate: price != null ? String(price) : prev.hourlyRate,
+      appointmentDurations: durations,
     }));
-  }, [userDetails?.timeSlots, userDetails?.price]);
+  }, [userDetails?.timeSlots, userDetails?.price, userDetails?.appointmentDurations]);
 
   const activeBookingNotice = useMemo(() => {
     const n = Number(userDetails?.bookingNoticeHours);
@@ -167,6 +175,25 @@ const AvailabilityPage: React.FC = () => {
   const slotsAfternoon = useMemo(
     () => ALL_SLOTS.filter((slot) => slot.period === 'PM'),
     []
+  );
+
+  const toggleAppointmentDuration = (duration: AppointmentDurationMinutes) => {
+    setForm((prev) => {
+      const current = prev.appointmentDurations;
+      const exists = current.includes(duration);
+      if (exists && current.length === 1) {
+        return prev;
+      }
+      const next = exists
+        ? current.filter((value) => value !== duration)
+        : [...current, duration].sort((a, b) => a - b);
+      return { ...prev, appointmentDurations: next };
+    });
+  };
+
+  const slotPreviewDuration = useMemo(
+    () => previewDurationForSlots(form.appointmentDurations),
+    [form.appointmentDurations],
   );
 
   const updateForm = <K extends keyof AvailabilityFormState>(
@@ -279,10 +306,15 @@ const AvailabilityPage: React.FC = () => {
 
     const savedPrice = normalizeExpertPrice(userDetails?.price);
     const savedSlots = Array.isArray(userDetails?.timeSlots) ? userDetails.timeSlots : [];
+    const savedDurations = normalizeAppointmentDurations(userDetails?.appointmentDurations);
     const rateChanged = numRate !== savedPrice;
     const slotsChanged = !slotsIndicesEqual(timeSlots, savedSlots);
+    const durationsChanged = !appointmentDurationsEqual(
+      form.appointmentDurations,
+      savedDurations,
+    );
 
-    if (!rateChanged && !slotsChanged) {
+    if (!rateChanged && !slotsChanged && !durationsChanged) {
       setBanner({
         type: 'success',
         message: 'No changes to save.',
@@ -292,13 +324,25 @@ const AvailabilityPage: React.FC = () => {
 
     setSaveBusy(true);
     try {
-      const slotsRes = await doUpdateTimeSlots(timeSlots);
-      if (!slotsRes || slotsRes === false) {
-        throw new Error('Could not save time slots.');
+      if (slotsChanged) {
+        const slotsRes = await doUpdateTimeSlots(timeSlots);
+        if (!slotsRes || slotsRes === false) {
+          throw new Error('Could not save time slots.');
+        }
       }
-      const profileOk = await doUpdateProfile({ price: numRate, timeZone });
-      if (!profileOk) {
-        throw new Error('Could not save rate or timezone.');
+      if (rateChanged || durationsChanged) {
+        const profilePayload: Record<string, unknown> = {};
+        if (rateChanged) profilePayload.price = numRate;
+        if (durationsChanged) profilePayload.appointmentDurations = form.appointmentDurations;
+        if (rateChanged) profilePayload.timeZone = timeZone;
+        const profileOk = await doUpdateProfile(profilePayload);
+        if (!profileOk) {
+          throw new Error(
+            durationsChanged && !rateChanged
+              ? 'Could not save appointment durations.'
+              : 'Could not save rate or timezone.',
+          );
+        }
       }
       await (dispatch as any)(updateMe());
       setBanner({
@@ -306,6 +350,7 @@ const AvailabilityPage: React.FC = () => {
         message: buildAvailabilitySaveSuccessMessage({
           rateChanged,
           slotsChanged,
+          durationsChanged,
           hourlyRate: numRate,
         }),
       });
@@ -331,7 +376,7 @@ const AvailabilityPage: React.FC = () => {
     onClick: () => void
   ) => {
     const range = formatHourRange(hour);
-    const sub = formatSubIntervals(hour, form.sessionDuration);
+    const sub = formatSubIntervals(hour, slotPreviewDuration);
     const tooltip = sub ? `${range} \u2014 ${sub}` : range;
     const classes = [
       'rounded-lg border text-center cursor-pointer transition-colors whitespace-nowrap',
@@ -595,21 +640,33 @@ const AvailabilityPage: React.FC = () => {
               <label className="mb-1.5 block text-sm font-medium text-gray-700">
                 Appointment Duration
               </label>
-              <div className="inline-flex rounded-full bg-gray-50 p-1 text-xs font-medium text-gray-600">
+              <p className="mb-2 text-xs text-gray-400">
+                Select every session length you offer. Students choose one when booking.
+              </p>
+              <div className="flex flex-wrap gap-2">
                 {SESSION_DURATIONS.map((duration) => {
-                  const active = form.sessionDuration === duration;
+                  const active = form.appointmentDurations.includes(
+                    duration as AppointmentDurationMinutes,
+                  );
                   return (
                     <button
                       key={duration}
                       type="button"
-                      onClick={() => updateForm('sessionDuration', duration)}
+                      aria-pressed={active}
+                      aria-label={`${duration} minutes${active ? ', selected' : ''}`}
+                      onClick={() =>
+                        toggleAppointmentDuration(duration as AppointmentDurationMinutes)
+                      }
                       className={[
-                        'px-3 py-1.5 rounded-full transition-colors',
+                        'inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-colors',
                         active
-                          ? 'bg-[#234C6A] text-white'
-                          : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50',
+                          ? 'bg-[#234C6A] border border-[#234C6A] text-white'
+                          : 'bg-white border border-gray-200 text-gray-600 hover:border-[#234C6A]/30 hover:text-[#234C6A]',
                       ].join(' ')}
                     >
+                      {active ? (
+                        <Check className="h-3 w-3 shrink-0" aria-hidden />
+                      ) : null}
                       {duration} min
                     </button>
                   );
@@ -711,29 +768,34 @@ const AvailabilityPage: React.FC = () => {
           </div>
 
           <p className="mb-3 rounded-lg border border-blue-100 bg-blue-50 px-3 py-2 text-xs text-[#234C6A]">
-            Each slot is a 1-hour availability window starting at the time shown.{' '}
-            {form.sessionDuration === 30 && (
+            Each slot is a 1-hour availability window starting at the time shown. You offer{' '}
+            <span className="font-semibold">
+              {form.appointmentDurations.map((d) => `${d} min`).join(', ')}
+            </span>{' '}
+            sessions — students choose their length when booking.
+            {form.appointmentDurations.includes(30) && (
               <>
-                With your <span className="font-semibold">30-min</span> appointment
-                duration, students see <span className="font-semibold">two</span>{' '}
-                start times per slot (e.g.{' '}
+                {' '}
+                <span className="font-semibold">30-min</span> sessions show{' '}
+                <span className="font-semibold">two</span> start times per slot (e.g.{' '}
                 <span className="font-semibold">8:00&ndash;8:30 PM</span> and{' '}
                 <span className="font-semibold">8:30&ndash;9:00 PM</span>).
               </>
             )}
-            {form.sessionDuration === 60 && (
+            {form.appointmentDurations.includes(60) &&
+              !form.appointmentDurations.includes(30) && (
+                <>
+                  {' '}
+                  <span className="font-semibold">60-min</span> sessions show{' '}
+                  <span className="font-semibold">one</span> start time per slot (e.g.{' '}
+                  <span className="font-semibold">8:00&ndash;9:00 PM</span>).
+                </>
+              )}
+            {form.appointmentDurations.includes(90) && (
               <>
-                With your <span className="font-semibold">60-min</span> appointment
-                duration, students see <span className="font-semibold">one</span>{' '}
-                start time per slot (e.g.{' '}
-                <span className="font-semibold">8:00&ndash;9:00 PM</span>).
-              </>
-            )}
-            {form.sessionDuration === 90 && (
-              <>
-                <span className="font-semibold">90-min</span> sessions need an
-                adjacent hour selected too (e.g.{' '}
-                <span className="font-semibold">8 PM + 9 PM</span>).
+                {' '}
+                <span className="font-semibold">90-min</span> sessions need an adjacent hour
+                selected too (e.g. <span className="font-semibold">8 PM + 9 PM</span>).
               </>
             )}
           </p>

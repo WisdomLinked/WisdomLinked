@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { Calendar } from "react-big-calendar";
 import CloseIcon from '@mui/icons-material/Close';
 import "react-big-calendar/lib/css/react-big-calendar.css";
@@ -19,6 +19,11 @@ import {
 } from "../../utils/schedulingTimezone";
 import type { BookingDisplayTimeZoneMode } from "../../types/scheduling";
 import { filterSlotsForDuration } from "../../utils/schedulingSlots";
+import {
+  defaultAppointmentDuration,
+  normalizeAppointmentDurations,
+  type AppointmentDurationMinutes,
+} from "../../utils/appointmentDurations";
 
 const SelectDateTime = ({
     setStartEndTime,
@@ -47,8 +52,11 @@ const SelectDateTime = ({
     );
 
     const [selectedDate, set_selectedDate] = useState<any>(null)
-    const durations = [30, 60, 90]
-    const [duration, set_duration] = useState(30)
+    const durations = useMemo(
+        () => normalizeAppointmentDurations((selectedUser as any)?.appointmentDurations),
+        [selectedUser],
+    );
+    const [duration, set_duration] = useState<AppointmentDurationMinutes>(30)
     const [timeSlots, set_timeSlots] = useState<Array<any>>([])
     const [selectedTimeSlot, set_selectedTimeSlot] = useState<any>()
     const [selectedIndex, set_selectedIndex] = useState(-1);
@@ -63,8 +71,15 @@ const SelectDateTime = ({
     };
 
     const handleSetDuration = (value: number) => {
-        set_duration(value);
+        set_duration(value as AppointmentDurationMinutes);
     };
+
+    useEffect(() => {
+        const fallback = defaultAppointmentDuration(durations);
+        set_duration((current) =>
+            durations.includes(current) ? current : fallback,
+        );
+    }, [durations]);
 
     const eventStyleGetter = (event: any, _start: any, end: any) => {
         const now = new Date()

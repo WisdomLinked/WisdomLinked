@@ -896,6 +896,10 @@ const updateProfile = async (req: any, res: Response) => {
         const phoneNumber = safeParse(req.body.phoneNumber) || req.body.phoneNumber;
         const price = safeParse(req.body.price) || req.body.price;
         const joinPopupBlocked = safeParse(req.body.joinPopupBlocked) || req.body.joinPopupBlocked;
+        const appointmentDurationsRaw =
+            getArrayField(req, 'appointmentDurations') ||
+            safeParse(req.body.appointmentDurations) ||
+            req.body.appointmentDurations;
 
         if (username && checkTitleNameInvalid('Username', username)) {
             throw new Error(checkTitleNameInvalid('Username', username))
@@ -934,6 +938,11 @@ const updateProfile = async (req: any, res: Response) => {
 
         if (price !== undefined && price !== null) {
             updates.price = price
+        }
+
+        if (appointmentDurationsRaw !== undefined && appointmentDurationsRaw !== null) {
+            const { parseAppointmentDurationsInput } = require("../utils/appointmentDurations");
+            updates.appointmentDurations = parseAppointmentDurationsInput(appointmentDurationsRaw);
         }
         
         const file = req.file
