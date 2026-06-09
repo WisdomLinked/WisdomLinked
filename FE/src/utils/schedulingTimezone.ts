@@ -64,7 +64,7 @@ export function convertExpertSlotsToViewer(
   if (!expertSlots?.length) return [];
   const expertOffset = getTimezoneOffsetHalfHours(expertTz || 'UTC', date);
   const viewerOffset = getTimezoneOffsetHalfHours(viewerTz || 'UTC', date);
-  const shift = viewerOffset - expertOffset;
+  const shift = expertOffset - viewerOffset;
   const shifted = expertSlots.map((slot) => (slot + shift + 48) % 48);
   return [...new Set(shifted)].sort((a, b) => a - b);
 }
@@ -77,7 +77,7 @@ export function resolveViewerTimeZone(
 ): string {
   if (mode === 'expert') return expertTz || 'UTC';
   if (mode === 'custom' && customTz) return customTz;
-  return studentTz || detectUserTimeZone();
+  return detectUserTimeZone();
 }
 
 export function formatSlotLabel(slotIndex: number, date: Date, timeZone: string): string {

@@ -30,7 +30,7 @@ describe('schedulingTimezone', () => {
   });
 
   it('resolveViewerTimeZone respects mode', () => {
-    expect(resolveViewerTimeZone('mine', 'Asia/Kolkata', 'UTC')).toBe('Asia/Kolkata');
+    expect(resolveViewerTimeZone('mine', 'Asia/Kolkata', 'UTC')).toBe(detectUserTimeZone());
     expect(resolveViewerTimeZone('expert', 'Asia/Kolkata', 'UTC')).toBe('UTC');
     expect(resolveViewerTimeZone('custom', 'Asia/Kolkata', 'UTC', 'Europe/London')).toBe(
       'Europe/London',

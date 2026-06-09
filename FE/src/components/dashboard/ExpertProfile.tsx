@@ -878,6 +878,7 @@ export default function ExpertProfile({
                       <StudentExpertBookingPicker
                         expert={expertDetails}
                         onSlotSelected={handleSlotPicked}
+                        initialDuration={sessionDurationMinutes}
                       />
                     )}
                   </div>

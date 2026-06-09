@@ -13,6 +13,7 @@ import {
   detectUserTimeZone,
   resolveViewerTimeZone,
   toYMDInTimeZone,
+  getTimezoneOffsetHalfHours,
 } from '../../utils/schedulingTimezone';
 import { normalizeExpertPrice } from '../../utils/schedulingSlots';
 import type { BookingDisplayTimeZoneMode } from '../../types/scheduling';
@@ -21,6 +22,7 @@ type Props = {
   expert: any;
   onSlotSelected: (start: Date, end: Date, duration: number) => void;
   hidePriceInDurationSelection?: boolean;
+  initialDuration?: number;
 };
 
 const DURATIONS = [30, 60, 90] as const;
@@ -62,7 +64,7 @@ const DURATION_OPTIONS = DURATIONS.map((d) => ({
 
 const calendarFormats = {
   weekdayFormat: (date: Date, culture?: string, localizer?: any) =>
-    localizer.format(date, 'ddd', culture),
+    localizer.format(date, 'EEE', culture),
 };
 
 function expertDisplayName(expert: any): string {
@@ -89,6 +91,7 @@ export default function StudentExpertBookingPicker({
   expert,
   onSlotSelected,
   hidePriceInDurationSelection = false,
+  initialDuration = 30,
 }: Props) {
   const { auth: { userDetails } } = useAppSelector((state: any) => state);
 
@@ -98,7 +101,8 @@ export default function StudentExpertBookingPicker({
   const [tzMode, setTzMode] = useState<BookingDisplayTimeZoneMode>('mine');
   const [customTz, setCustomTz] = useState(detectUserTimeZone());
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
-  const [duration, setDuration] = useState(30);
+  const [duration, setDuration] = useState(initialDuration ?? 30);
+  useEffect(() => {setDuration(initialDuration);}, [initialDuration]);
   const [timeSlots, setTimeSlots] = useState<number[]>([]);
   const [selectedTimeSlot, setSelectedTimeSlot] = useState<number | null>(null);
   const [filterSlotIndex, setFilterSlotIndex] = useState(-1);
@@ -140,7 +144,14 @@ export default function StudentExpertBookingPicker({
 
   const getAvailableTimeSlots = useCallback(
     (day: Date, dur: number) => {
-      const dayStartTime = new Date(day).getTime();
+      
+      // Gets the reference dayStartTime from viewers time zone
+      const browserTz = detectUserTimeZone(); // matches what RBC uses
+      const dateStr = toYMDInTimeZone(day, browserTz); // correct calendar date
+      const [yr, mo, dy] = dateStr.split('-').map(Number);
+      const tzOffset = getTimezoneOffsetHalfHours(viewerTz, day);
+      const dayStartTime = Date.UTC(yr, mo - 1, dy) + tzOffset * 30 * 60 * 1000;
+
       const dayEndTime = dayStartTime + 24 * 60 * 60 * 1000 - 1;
       const start = new Date(dayStartTime);
       const end = new Date(dayEndTime);
@@ -234,6 +245,19 @@ export default function StudentExpertBookingPicker({
           },
         };
       }
+      // Highlight selected date
+      if (selectedDate) {
+          const selMidnight = new Date(selectedDate).setHours(0, 0, 0, 0);
+          if (date.getTime() === selMidnight) {
+            return {
+              style: {
+                backgroundColor: '#59a8f7',
+                color: '#fff',
+                cursor: 'pointer',
+              },
+            };
+          }
+        }
 
       const hasEvent = events.some(
         (event) =>
@@ -263,7 +287,7 @@ export default function StudentExpertBookingPicker({
 
       return { style: { backgroundColor, cursor: cursorStyle } };
     },
-    [events, filterSlotIndex, duration, getAvailableTimeSlots, expert, expertTz],
+    [events, filterSlotIndex, duration, getAvailableTimeSlots, expert, expertTz, selectedDate],
   );
 
   const calendarComponents = useMemo(

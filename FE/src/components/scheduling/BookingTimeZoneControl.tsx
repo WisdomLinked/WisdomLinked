@@ -54,7 +54,7 @@ const BookingTimeZoneControl: React.FC<BookingTimeZoneControlProps> = ({
 
 }) => {
 
-  const mine = studentTimeZone || detectUserTimeZone();
+  const mine = detectUserTimeZone();
 
   const isStudent = appearance === 'student';
 
