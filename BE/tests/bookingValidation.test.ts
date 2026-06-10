@@ -6,6 +6,7 @@ const {
   assertNotBlockedDate,
   intervalsOverlap,
   assertNoBookingOverlap,
+  assertDurationAllowed,
   assertBookingSlotValid,
 } = require("../utils/bookingValidation");
 
@@ -122,6 +123,36 @@ describe("bookingValidation", () => {
       Event.find = originalEventFind;
       GroupChat.find = originalGroupFind;
     }
+  });
+
+  it("assertDurationAllowed passes when duration is offered", () => {
+    const expert = { appointmentDurations: [60, 90] };
+    assert.doesNotThrow(() => assertDurationAllowed(expert, 60));
+    assert.doesNotThrow(() => assertDurationAllowed(expert, 90));
+  });
+
+  it("assertDurationAllowed defaults to all durations when expert field missing", () => {
+    const expert = {};
+    assert.doesNotThrow(() => assertDurationAllowed(expert, 30));
+    assert.doesNotThrow(() => assertDurationAllowed(expert, 60));
+    assert.doesNotThrow(() => assertDurationAllowed(expert, 90));
+  });
+
+  it("assertDurationAllowed throws when duration not offered", () => {
+    const expert = { appointmentDurations: [60] };
+    assert.throws(
+      () => assertDurationAllowed(expert, 90),
+      /does not offer sessions of this duration/,
+    );
+    assert.throws(
+      () => assertDurationAllowed(expert, 30),
+      /does not offer sessions of this duration/,
+    );
+  });
+
+  it("assertDurationAllowed coerces string duration", () => {
+    const expert = { appointmentDurations: [60, 90] };
+    assert.doesNotThrow(() => assertDurationAllowed(expert, "60"));
   });
 
   it("assertBookingSlotValid happy path with empty bookings", async () => {
