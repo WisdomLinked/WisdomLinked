@@ -15,7 +15,7 @@ import { useAppSelector } from '../../store';
 import { useDispatch } from 'react-redux';
 import { showErrorAlert, showSuccessAlert } from '../../actions/alertActions';
 import { updateMe } from '../../actions/authActions';
-import { doUpdateProfile, profileImageFetch } from '../../api/api';
+import { doUpdateProfile, profileImageFetch, doGetCustomerPaymentHistory } from '../../api/api';
 import { resolveProfileImageSrc } from '../../utils/profileImage';
 import { saveProfilePhotoFile } from '../../utils/profileImageUpload';
 import { SERVICE_OPTIONS } from '../../constants/serviceOptions';
@@ -39,52 +39,17 @@ const inputBase =
 const inputNormal = `${inputBase} border-slate-200`;
 
 type PaymentRecord = {
-  id: string;
-  receiptNumber: string;
-  date: string;
-  amount: string;
+  _id: string;
+  amount: number;
   currency: string;
-  purpose: string;
-  status: 'completed' | 'pending' | 'refunded';
-  sessionType?: string;
-  expertName?: string;
+  description: string;
+  status: 'completed' | 'pending' | 'failed' | 'refunded';
+  paymentKind: 'individual' | 'seminar' | 'other';
+  createdAt: string;
+  expert?: { username: string; email: string };
+  groupChat?: { name: string; type: string };
+  event?: { title: string };
 };
-
-const MOCK_PAYMENTS: PaymentRecord[] = [
-  {
-    id: '1',
-    receiptNumber: 'RCP-2024-001234',
-    date: '2024-03-05',
-    amount: '75.00',
-    currency: 'USD',
-    purpose: 'Study Abroad',
-    status: 'completed',
-    sessionType: 'Individual',
-    expertName: 'Dr. Emily Chen',
-  },
-  {
-    id: '2',
-    receiptNumber: 'RCP-2024-001189',
-    date: '2024-02-28',
-    amount: '25.00',
-    currency: 'USD',
-    purpose: 'Seminar registration',
-    status: 'completed',
-    sessionType: 'Seminar',
-    expertName: 'AI for Healthcare',
-  },
-  {
-    id: '3',
-    receiptNumber: 'RCP-2024-001156',
-    date: '2024-02-15',
-    amount: '50.00',
-    currency: 'USD',
-    purpose: 'Study Abroad',
-    status: 'completed',
-    sessionType: 'Individual',
-    expertName: 'Prof. Daniel Ortiz',
-  },
-];
 
 export default function StudentProfile() {
   const dispatch = useDispatch();
@@ -160,6 +125,19 @@ export default function StudentProfile() {
   const [passwordError, setPasswordError] = useState('');
 
   const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [payments, setPayments] = useState<PaymentRecord[]>([]);
+  const [paymentsLoading, setPaymentsLoading] = useState(false);
+  const [paymentsError, setPaymentsError] = useState('');
+
+  useEffect(() => {
+    if (!showPaymentModal) return;
+    setPaymentsLoading(true);
+    setPaymentsError('');
+    doGetCustomerPaymentHistory()
+      .then((data: any) => setPayments(data?.result ?? []))
+      .catch(() => setPaymentsError('Failed to load payment history.'))
+      .finally(() => setPaymentsLoading(false));
+  }, [showPaymentModal]);
 
   const interestDropdownRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -765,19 +743,16 @@ export default function StudentProfile() {
                 <thead className="bg-slate-50 border-b border-slate-200 sticky top-0">
                   <tr>
                     <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500">
-                      Receipt #
-                    </th>
-                    <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500">
                       Date
                     </th>
                     <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500">
                       Amount
                     </th>
                     <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500">
-                      Purpose
+                      Session / Seminar
                     </th>
                     <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500">
-                      Session / Details
+                      Type / Expert
                     </th>
                     <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500">
                       Status
@@ -785,43 +760,72 @@ export default function StudentProfile() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {MOCK_PAYMENTS.map(p => (
-                    <tr key={p.id} className="hover:bg-slate-50/50">
-                      <td className="px-4 py-3 text-sm font-mono text-slate-800">
-                        {p.receiptNumber}
-                      </td>
-                      <td className="px-4 py-3 text-sm text-slate-600">{p.date}</td>
-                      <td className="px-4 py-3 text-sm font-medium text-slate-800">
-                        {p.currency} {p.amount}
-                      </td>
-                      <td className="px-4 py-3 text-sm text-slate-600">{p.purpose}</td>
-                      <td className="px-4 py-3 text-sm text-slate-600">
-                        {p.sessionType && <span className="text-slate-500">{p.sessionType}</span>}
-                        {p.expertName && (
-                          <span className="block text-slate-700">{p.expertName}</span>
-                        )}
-                      </td>
-                      <td className="px-4 py-3">
-                        <span
-                          className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${
-                            p.status === 'completed'
-                              ? 'bg-emerald-100 text-emerald-700'
-                              : p.status === 'pending'
-                                ? 'bg-amber-100 text-amber-700'
-                                : 'bg-slate-100 text-slate-600'
-                          }`}
-                        >
-                          {p.status}
-                        </span>
+                  {paymentsLoading ? (
+                    <tr>
+                      <td colSpan={5} className="px-4 py-10 text-center text-sm text-slate-400">
+                        <Loader2 className="h-5 w-5 animate-spin mx-auto mb-2" />
+                        Loading payment history…
                       </td>
                     </tr>
-                  ))}
+                  ) : paymentsError ? (
+                    <tr>
+                      <td colSpan={5} className="px-4 py-10 text-center text-sm text-red-500">
+                        {paymentsError}
+                      </td>
+                    </tr>
+                  ) : payments.length === 0 ? (
+                    <tr>
+                      <td colSpan={5} className="px-4 py-10 text-center text-sm text-slate-400">
+                        No payment history yet.
+                      </td>
+                    </tr>
+                  ) : (
+                    payments.map(p => {
+                      const sessionLabel = p.groupChat?.name ?? p.event?.title ?? p.description ?? '—';
+                      const kindLabel = p.paymentKind === 'seminar' ? 'Seminar' : p.paymentKind === 'individual' ? 'Session' : 'Other';
+                      const amountDollars = (p.amount / 100).toFixed(2);
+                      return (
+                        <tr key={p._id} className="hover:bg-slate-50/50">
+                          <td className="px-4 py-3 text-sm text-slate-600">
+                            {new Date(p.createdAt).toLocaleDateString()}
+                          </td>
+                          <td className="px-4 py-3 text-sm font-medium text-slate-800">
+                            {(p.currency ?? 'usd').toUpperCase()} {amountDollars}
+                          </td>
+                          <td className="px-4 py-3 text-sm text-slate-600">{sessionLabel}</td>
+                          <td className="px-4 py-3 text-sm text-slate-600">
+                            <span className="text-slate-500">{kindLabel}</span>
+                            {p.expert && (
+                              <span className="block text-slate-700">{p.expert.username}</span>
+                            )}
+                          </td>
+                          <td className="px-4 py-3">
+                            <span
+                              className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${
+                                p.status === 'completed'
+                                  ? 'bg-emerald-100 text-emerald-700'
+                                  : p.status === 'pending'
+                                    ? 'bg-amber-100 text-amber-700'
+                                    : 'bg-slate-100 text-slate-600'
+                              }`}
+                            >
+                              {p.status}
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
                 </tbody>
               </table>
             </div>
             <div className="border-t border-slate-200 px-6 py-3 bg-slate-50 text-sm text-slate-600 shrink-0">
-              Total payments: {MOCK_PAYMENTS.length} · Total spent: USD{' '}
-              {MOCK_PAYMENTS.reduce((s, p) => s + parseFloat(p.amount), 0).toFixed(2)}
+              {paymentsLoading ? 'Loading…' : (
+                <>
+                  Total payments: {payments.length} · Total spent: USD{' '}
+                  {(payments.filter(p => p.status === 'completed').reduce((s, p) => s + p.amount, 0) / 100).toFixed(2)}
+                </>
+              )}
             </div>
           </div>
         </div>

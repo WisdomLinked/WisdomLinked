@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 const User = require("../models/User");
 const GroupChat = require("../models/GroupChat");
 const Keyword = require("../models/Keyword")
+const PaymentHistory = require("../models/PaymentHistory");
 
 const filterExperts = async (req: any, res: Response) => {
     try {
@@ -179,8 +180,32 @@ const getExpertById = async (req, res) => {
     }
 }
 
+const getMyPaymentHistory = async (req: any, res: Response) => {
+    try {
+        const customerId = req.user.userId;
+        const histories = await PaymentHistory.find({ customer: customerId })
+            .populate("expert", "username email")
+            .populate("groupChat", "name type")
+            .populate("event", "title")
+            .sort({ createdAt: -1 })
+            .limit(500)
+            .lean();
+
+        const enriched = histories.map((h: any) => ({
+            ...h,
+            paymentKind: h.groupChat?.type === "seminar" ? "seminar" : h.groupChat || h.event ? "individual" : "other",
+        }));
+
+        return res.status(200).json({ result: enriched });
+    } catch (err: any) {
+        console.log(err);
+        return res.status(500).send(err.message);
+    }
+};
+
 module.exports = {
     filterExperts,
     filterSeminars,
     getExpertById,
+    getMyPaymentHistory,
 }

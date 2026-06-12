@@ -113,23 +113,29 @@ const appendEvent = async (req, res) => {
             throw new Error(checkTitleNameInvalid('Title', title))
         }
 
-        const paymentIntentSucceeded_test = await checkPaymentIntentSucceeded(payment_intent, 'test')
-        const paymentIntentSucceeded_live = await checkPaymentIntentSucceeded(payment_intent, 'live')
-        // if (!paymentIntentSucceeded_test && !paymentIntentSucceeded_live) {
-        //     throw new Error("Payment intent not succeeded")
-        // }
-        if (price && !paymentIntentSucceeded_test && !paymentIntentSucceeded_live) {
-            throw new Error("Payment intent not succeeded")
-        }
         const expertUser = await User.findOne({ email: expert });
-        const customerUser = await User.findOne({ email: customer })
-        // check if the invited user exists in the database
+        const customerUser = await User.findOne({ email: customer });
         if (!expertUser || !customerUser) {
             return res
                 .status(404)
-                .send(
-                    "Sorry, the user you are trying to invite doesn't exist. Please check the email address"
-                );
+                .send("Sorry, the user you are trying to invite doesn't exist. Please check the email address");
+        }
+        
+        // Getting price and duration from db for correct verification
+        const durationIdx = (expertUser.appointmentDurations ?? []).indexOf(Number(duration));
+        const expectedPrice = durationIdx >= 0 ? (expertUser.price?.[durationIdx] ?? 0) : 0;
+
+        let paymentIntentSucceeded_test: any = false;
+        let paymentIntentSucceeded_live: any = false;
+        if (expectedPrice > 0) {
+            if (!payment_intent) {
+                throw new Error("Payment intent is required");
+            }
+            paymentIntentSucceeded_test = await checkPaymentIntentSucceeded(payment_intent, 'test');
+            paymentIntentSucceeded_live = await checkPaymentIntentSucceeded(payment_intent, 'live');
+            if (!paymentIntentSucceeded_test && !paymentIntentSucceeded_live) {
+                throw new Error("Payment intent not succeeded");
+            }
         }
 
         assertBookingLeadTime(expertUser, start);
@@ -149,7 +155,9 @@ const appendEvent = async (req, res) => {
 
         console.log(eventId, eventExists)
         if (eventExists) {
-            eventExists.paidBy = paymentIntentSucceeded_test ? 'test' : 'live'
+            if (expectedPrice > 0) {
+                eventExists.paidBy = paymentIntentSucceeded_test ? 'test' : 'live';
+            }
             eventExists.status = 'accepted'
             eventExists.start = start
             eventExists.end = end
@@ -158,17 +166,19 @@ const appendEvent = async (req, res) => {
 
             sendEmailMeetingAcceptance(expertUser.email, expertUser.username, customerUser.username, start, duration, expertUser.timeZone);
 
-            await appendPaymentHistory({
-                stripeMode: paymentIntentSucceeded_test ? 'test' : 'live',
-                paymentType: 'charge',
-                amount: paymentIntentSucceeded_test ? paymentIntentSucceeded_test.amount : paymentIntentSucceeded_live.amount,
-                currency: paymentIntentSucceeded_test ? paymentIntentSucceeded_test.currency : paymentIntentSucceeded_live.currency,
-                description: title,
-                paymentIntent: payment_intent,
-                customer: customerUser._id.toString(),
-                expert: expertUser._id.toString(),
-                event: eventExists._id.toString(),
-            })
+            if (expectedPrice > 0) {
+                await appendPaymentHistory({
+                    stripeMode: paymentIntentSucceeded_test ? 'test' : 'live',
+                    paymentType: 'charge',
+                    amount: paymentIntentSucceeded_test ? paymentIntentSucceeded_test.amount : paymentIntentSucceeded_live.amount,
+                    currency: paymentIntentSucceeded_test ? paymentIntentSucceeded_test.currency : paymentIntentSucceeded_live.currency,
+                    description: title,
+                    paymentIntent: payment_intent,
+                    customer: customerUser._id.toString(),
+                    expert: expertUser._id.toString(),
+                    event: eventExists._id.toString(),
+                });
+            }
 
             const invitationExists = await FriendInvitation.findOne({
                 senderId: customerUser._id,
@@ -205,7 +215,7 @@ const appendEvent = async (req, res) => {
                 end: end,
                 duration: duration,
                 price: price,
-                paidBy: paymentIntentSucceeded_test ? 'test' : 'live',
+                paidBy: expectedPrice > 0 ? (paymentIntentSucceeded_test ? 'test' : 'live') : undefined,
                 expert: expertUser._id,
                 customer: customerUser._id,
                 status: 'pending',
@@ -215,17 +225,19 @@ const appendEvent = async (req, res) => {
 
             const event = await newEvent.save()
 
-            await appendPaymentHistory({
-                stripeMode: paymentIntentSucceeded_test ? 'test' : 'live',
-                paymentType: 'charge',
-                amount: paymentIntentSucceeded_test ? paymentIntentSucceeded_test.amount : paymentIntentSucceeded_live.amount,
-                currency: paymentIntentSucceeded_test ? paymentIntentSucceeded_test.currency : paymentIntentSucceeded_live.currency,
-                description: title,
-                paymentIntent: payment_intent,
-                customer: customerUser._id.toString(),
-                expert: expertUser._id.toString(),
-                event: event._id.toString(),
-            })
+            if (expectedPrice > 0) {
+                await appendPaymentHistory({
+                    stripeMode: paymentIntentSucceeded_test ? 'test' : 'live',
+                    paymentType: 'charge',
+                    amount: paymentIntentSucceeded_test ? paymentIntentSucceeded_test.amount : paymentIntentSucceeded_live.amount,
+                    currency: paymentIntentSucceeded_test ? paymentIntentSucceeded_test.currency : paymentIntentSucceeded_live.currency,
+                    description: title,
+                    paymentIntent: payment_intent,
+                    customer: customerUser._id.toString(),
+                    expert: expertUser._id.toString(),
+                    event: event._id.toString(),
+                });
+            }
 
             const newExpert = await User.findByIdAndUpdate(expertUser._id, { events: [...expertUser.events, event._id] }, { new: true })
             let userDetails = await User.findByIdAndUpdate(customerUser._id, { events: [...customerUser.events, event._id] }, { new: true })

@@ -10,6 +10,7 @@ import {
   Video,
   Menu,
   X,
+  CreditCard,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
@@ -24,6 +25,7 @@ const defaultNavItems = [
   { id: 'seminars', label: 'Seminars', icon: BookOpen },
   { id: 'calendar', label: 'Calendar', icon: Calendar },
   { id: 'join-meeting', label: 'Join Meeting', icon: VideoCallNavIcon },
+  { id: 'history', label: 'Payment History', icon: CreditCard },
   { id: 'contact-admin', label: 'Contact admin', icon: MessageSquareMore },
   { id: 'settings', label: 'Settings', icon: Settings },
 ];

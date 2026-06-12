@@ -557,16 +557,28 @@ const createGroupChatByUser = async (req, res) => {
             throw new Error(checkTitleNameInvalid('Name', name))
         }
 
-        const paymentIntentSucceeded_test = await checkPaymentIntentSucceeded(payment_intent, 'test')
-        const paymentIntentSucceeded_live = await checkPaymentIntentSucceeded(payment_intent, 'live')
-        if (price && !paymentIntentSucceeded_test && !paymentIntentSucceeded_live) {
-            throw new Error("Payment intent not succeeded")
-        }
-
         const expertUser = await User.findById(expert);
         if (!expertUser) {
             throw new Error("Expert not found");
         }
+
+        // Getting price and duration from db for correct verification
+        const durationIdx = (expertUser.appointmentDurations ?? []).indexOf(Number(duration));
+        const expectedPrice = durationIdx >= 0 ? (expertUser.price?.[durationIdx] ?? 0) : 0;
+
+        let paymentIntentSucceeded_test: any = false;
+        let paymentIntentSucceeded_live: any = false;
+        if (expectedPrice > 0) {
+            if (!payment_intent) {
+                throw new Error("Payment intent is required");
+            }
+            paymentIntentSucceeded_test = await checkPaymentIntentSucceeded(payment_intent, 'test');
+            paymentIntentSucceeded_live = await checkPaymentIntentSucceeded(payment_intent, 'live');
+            if (!paymentIntentSucceeded_test && !paymentIntentSucceeded_live) {
+                throw new Error("Payment intent not succeeded");
+            }
+        }
+
         assertBookingLeadTime(expertUser, start);
         assertDurationAllowed(expertUser, duration);
         await assertBookingSlotValid(expertUser, start, end);
@@ -601,18 +613,19 @@ const createGroupChatByUser = async (req, res) => {
 
         // [REMOVED] updateUsersGroupChatList(expert.toString());
 
-        await appendPaymentHistory({
-            stripeMode: paymentIntentSucceeded_test ? 'test' : 'live',
-            paymentType: 'charge',
-            amount: paymentIntentSucceeded_test ? paymentIntentSucceeded_test.amount : paymentIntentSucceeded_live.amount,
-            currency: paymentIntentSucceeded_test ? paymentIntentSucceeded_test.currency : paymentIntentSucceeded_live.currency,
-            description: chat.name,
-            paymentIntent: payment_intent,
-            customer: userId.toString(),
-            expert: expert.toString(),
-            groupChat: chat._id.toString(),
-            // pendingAppointmentToGroup: newPendingGroup._id
-        })
+        if (expectedPrice > 0) {
+            await appendPaymentHistory({
+                stripeMode: paymentIntentSucceeded_test ? 'test' : 'live',
+                paymentType: 'charge',
+                amount: paymentIntentSucceeded_test ? paymentIntentSucceeded_test.amount : paymentIntentSucceeded_live.amount,
+                currency: paymentIntentSucceeded_test ? paymentIntentSucceeded_test.currency : paymentIntentSucceeded_live.currency,
+                description: chat.name,
+                paymentIntent: payment_intent,
+                customer: userId.toString(),
+                expert: expert.toString(),
+                groupChat: chat._id.toString(),
+            });
+        }
 
         sendEmailMeetingRequestToExpert(expertUser.email, expertUser.username, name, chat.start, duration, price, true, expertUser.timeZone)
 
