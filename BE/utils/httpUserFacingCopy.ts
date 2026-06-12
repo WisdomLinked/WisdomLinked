@@ -14,7 +14,9 @@ const BOOKING_VALIDATION_MESSAGES = new Set([
     'Selected time conflicts with an existing booking',
     'Selected time conflicts with an existing session',
     'Expert not found',
+    'Payment intent is required',
     'Payment intent not succeeded',
+    'Payment amount does not match expected price',
 ]);
 
 const BOOKING_LEAD_TIME_MESSAGE = /must be at least \d+ hours in advance\.$/;

@@ -985,6 +985,15 @@ export const doGetExpertPaymentHistory = async () => {
     }
 };
 
+export const doGetCustomerPaymentHistory = async () => {
+    try {
+        const res = await api.post("customer/getMyPaymentHistory", {});
+        return res.data;
+    } catch (err: any) {
+        return checkForAuthorization(err);
+    }
+};
+
 // ADMIN APIS ------------------
 
 export type AdminDashboardStatsData = {

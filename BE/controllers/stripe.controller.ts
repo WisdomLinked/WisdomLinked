@@ -32,7 +32,7 @@ const createStripePaymentIntent = async (req, res) => {
         const { stripeMode, amount } = req.body
         const stripe = require('stripe')(stripeMode === 'test' ? process.env.STRIPE_SECRET_KEY_TEST : process.env.STRIPE_SECRET_KEY_LIVE);
         const paymentIntent = await stripe.paymentIntents.create({
-            amount: amount * 100,
+            amount: Math.round(amount * 100), // dollars -> integer cents (Stripe rejects fractional)
             currency: 'usd',
         });
         res.send({

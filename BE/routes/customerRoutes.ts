@@ -5,6 +5,7 @@ const {
     filterExperts,
     filterSeminars,
     getExpertById,
+    getMyPaymentHistory,
 } = require('../controllers/customer.controller')
 const {
     appendEvent,
@@ -26,4 +27,5 @@ router.post("/cancelEvent", customerAuth(false), cancelEvent);
 router.post("/cancelPendingSeminar", customerAuth(false), cancelPendingSeminar);
 router.post("/leftSeminar", customerAuth(false), leftSeminar);
 router.post("/createEventFeedback", customerAuth(true), createFeedback);
+router.post("/getMyPaymentHistory", customerAuth(false), getMyPaymentHistory);
 module.exports = router;
