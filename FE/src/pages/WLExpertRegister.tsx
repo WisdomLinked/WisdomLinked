@@ -215,6 +215,7 @@ export default function WLExpertRegister() {
                 email: form.email,
                 password: form.password,
                 timeSlots: [],
+                timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
                 ...(form.specialNote.trim() && { specialNote: form.specialNote.trim() })
             };
             const response = await callApi('POST', 'auth/register', data, form.resumeFile || undefined, {

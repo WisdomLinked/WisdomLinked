@@ -211,6 +211,7 @@ const register = async (req: Request, res: Response) => {
         const password = safeParse(req.body.password)
         const timeSlots = safeParse(req.body.timeSlots)
         const specialNote = safeParse(req.body.specialNote)
+        const timeZone = safeParse(req.body.timeZone) || 'UTC'
         
         const keywords = getArrayField(req, 'keywords');
         const services = getArrayField(req, 'services');
@@ -294,6 +295,7 @@ const register = async (req: Request, res: Response) => {
             timeSlots,
             price: 10,
             confirmCode,
+            timeZone,
             ...(specialNote && { specialNote })
         });
 
@@ -427,6 +429,7 @@ const verifyRegistration = async (req: Request, res: Response) => {
             role: pendingUser.role,
             timeSlots: pendingUser.timeSlots,
             price: pendingUser.price,
+            timeZone: pendingUser.timeZone || 'UTC',
             ...(pendingUser.specialNote && { specialNote: pendingUser.specialNote })
         });
 

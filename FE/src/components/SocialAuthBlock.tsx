@@ -1,4 +1,5 @@
 import React from 'react';
+import { detectUserTimeZone } from '../utils/schedulingTimezone';
 
 const BASE_URL = (process.env.REACT_APP_API_BASE_URL || '').replace(/\/$/, '');
 function getAuthRedirectUrl(provider: string, role?: string, redirect?: string) {
@@ -8,6 +9,7 @@ function getAuthRedirectUrl(provider: string, role?: string, redirect?: string) 
   const params = new URLSearchParams();
   if (role) params.set('role', role);
   if (redirect) params.set('redirect', redirect);
+  params.set('timezone', detectUserTimeZone());
   const q = params.toString();
   return q ? `${base}?${q}` : base;
 }

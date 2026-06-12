@@ -105,10 +105,11 @@ const oauthCallback = async (req: any, res: any) => {
         const user = result.user || result;
         const isNew = result.isNew || false;
 
-        // Read role + redirect from OAuth state parameter (Google/Facebook) or session (Twitter)
+        // Read role + redirect + timezone from OAuth state parameter (Google/Facebook) or session (Twitter)
         const rawState = String(req.query.state || '').trim();
         let role: string | null = (req.session && req.session.oauthRole) || null;
         let redirectPath = '';
+        let timezone = '';
         if (rawState) {
             try {
                 const parsed = JSON.parse(decodeURIComponent(rawState));
@@ -118,6 +119,9 @@ const oauthCallback = async (req: any, res: any) => {
                     }
                     if (typeof parsed.redirect === 'string' && parsed.redirect.trim()) {
                         redirectPath = parsed.redirect.trim();
+                    }
+                    if (typeof parsed.timezone === 'string' && parsed.timezone.trim()) {
+                        timezone = parsed.timezone.trim();
                     }
                 } else {
                     role = rawState;
@@ -139,6 +143,11 @@ const oauthCallback = async (req: any, res: any) => {
         // Set role for NEW users from registration pages only
         if (isNew && role && (role === 'expert' || role === 'customer')) {
             user.role = role;
+        }
+
+        // Always sync browser timezone — DB defaults to 'UTC' but real location comes from the client
+        if (timezone) {
+            user.timeZone = timezone;
         }
         
         // Block existing users from switching roles via OAuth re-registration
@@ -204,9 +213,11 @@ const oauthCallback = async (req: any, res: any) => {
 router.get('/google', (req: any, res: any, next: any) => {
     const role = req.query.role || 'login';
     const redirectPath = String(req.query.redirect || '').trim();
+    const timezone = String(req.query.timezone || '').trim();
     const state = encodeURIComponent(JSON.stringify({
         role,
         redirect: redirectPath.startsWith('/') ? redirectPath : '',
+        timezone,
     }));
     passport.authenticate('google', { scope: ['profile', 'email'], state, session: false })(req, res, next);
 });
