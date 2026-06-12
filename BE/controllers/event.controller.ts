@@ -114,6 +114,10 @@ const appendEvent = async (req, res) => {
             throw new Error(checkTitleNameInvalid('Title', title))
         }
 
+        if (typeof expert !== 'string' || typeof customer !== 'string') {
+            return res.status(400).send('Invalid expert/customer email');
+        }
+
         const expertUser = await User.findOne({ email: expert });
         const customerUser = await User.findOne({ email: customer });
         if (!expertUser || !customerUser) {
