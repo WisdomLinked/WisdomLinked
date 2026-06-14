@@ -507,7 +507,7 @@ describe('ExpertProfile booking', () => {
     expect(summary).toBeInTheDocument();
     expect(within(summary).getByText('Your selected appointment')).toBeInTheDocument();
     expect(within(summary).getByText('60 min')).toBeInTheDocument();
-    expect(within(summary).getByText('$60')).toBeInTheDocument();
+    expect(within(summary).getByText('$60.00')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /review booking/i })).toBeInTheDocument();
   });
 
