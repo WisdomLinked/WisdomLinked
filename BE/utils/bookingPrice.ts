@@ -1,8 +1,15 @@
 // Single source of truth for booking price math.
 // Mirrored on the client in FE/src/utils/bookingPrice.ts — keep the two in sync.
 
+/** The (expanded) charge on a PaymentIntent, carrying Stripe's receipt fields. */
+export type StripeCharge = { receipt_url?: string | null; receipt_number?: string | null };
+
 /** A succeeded Stripe PaymentIntent, or a falsy value when none matched that mode. */
-export type PaymentIntentResult = false | null | undefined | { amount: number; currency: string };
+export type PaymentIntentResult =
+    | false
+    | null
+    | undefined
+    | { amount: number; currency: string; latest_charge?: StripeCharge | string | null };
 
 /** Price of a 1:1 booking in integer cents: (duration * hourlyRate) / 60. */
 export function computeBookingPriceCents(durationMinutes: number, hourlyRateDollars: number): number {
@@ -32,7 +39,7 @@ export function assertPaymentMatchesExpected(
     payment_intent: string | undefined | null,
     testResult: PaymentIntentResult,
     liveResult: PaymentIntentResult,
-): { paidBy: 'test' | 'live'; amount: number; currency: string } | null {
+): { paidBy: 'test' | 'live'; amount: number; currency: string; receiptUrl: string | null; receiptNumber: string | null } | null {
     if (expectedCents <= 0) return null; // free booking — no payment expected
     if (!payment_intent) {
         throw new Error("Payment intent is required");
@@ -40,9 +47,20 @@ export function assertPaymentMatchesExpected(
     if (!testResult && !liveResult) {
         throw new Error("Payment intent not succeeded");
     }
-    const pi = (testResult || liveResult) as { amount: number; currency: string };
+    const pi = (testResult || liveResult) as {
+        amount: number;
+        currency: string;
+        latest_charge?: StripeCharge | string | null;
+    };
     if (pi.amount !== expectedCents) {
         throw new Error("Payment amount does not match expected price");
     }
-    return { paidBy: testResult ? 'test' : 'live', amount: pi.amount, currency: pi.currency };
+    const charge = pi.latest_charge && typeof pi.latest_charge === 'object' ? pi.latest_charge : null;
+    return {
+        paidBy: testResult ? 'test' : 'live',
+        amount: pi.amount,
+        currency: pi.currency,
+        receiptUrl: charge?.receipt_url ?? null,
+        receiptNumber: charge?.receipt_number ?? null,
+    };
 }

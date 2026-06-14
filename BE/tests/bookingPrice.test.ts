@@ -91,16 +91,68 @@ describe("assertPaymentMatchesExpected", () => {
   });
 
   it("paid path: returns verified test-mode charge details on a correct payment", () => {
+    // No expanded latest_charge on okIntent, so receipt fields default to null.
     assert.deepEqual(
       assertPaymentMatchesExpected(7500, "pi_123", okIntent, false),
-      { paidBy: "test", amount: 7500, currency: "usd" },
+      { paidBy: "test", amount: 7500, currency: "usd", receiptUrl: null, receiptNumber: null },
     );
   });
 
   it("paid path: returns verified live-mode charge details on a correct payment", () => {
     assert.deepEqual(
       assertPaymentMatchesExpected(7500, "pi_123", false, okIntent),
-      { paidBy: "live", amount: 7500, currency: "usd" },
+      { paidBy: "live", amount: 7500, currency: "usd", receiptUrl: null, receiptNumber: null },
+    );
+  });
+
+  it("paid path: extracts receipt url/number from an expanded latest_charge", () => {
+    // When the BE retrieves the intent with { expand: ['latest_charge'] }, the
+    // charge is a full object carrying Stripe's receipt fields — persist them.
+    const intentWithReceipt = {
+      amount: 7500,
+      currency: "usd",
+      latest_charge: {
+        receipt_url: "https://pay.stripe.com/receipts/abc123",
+        receipt_number: "2net-1234",
+      },
+    };
+    assert.deepEqual(
+      assertPaymentMatchesExpected(7500, "pi_123", intentWithReceipt, false),
+      {
+        paidBy: "test",
+        amount: 7500,
+        currency: "usd",
+        receiptUrl: "https://pay.stripe.com/receipts/abc123",
+        receiptNumber: "2net-1234",
+      },
+    );
+  });
+
+  it("paid path: receipt fields are null when latest_charge is an unexpanded id string", () => {
+    // If the intent was not retrieved with expand, latest_charge is just an id.
+    const intentUnexpanded = { amount: 7500, currency: "usd", latest_charge: "ch_123" };
+    assert.deepEqual(
+      assertPaymentMatchesExpected(7500, "pi_123", intentUnexpanded, false),
+      { paidBy: "test", amount: 7500, currency: "usd", receiptUrl: null, receiptNumber: null },
+    );
+  });
+
+  it("paid path: a partial latest_charge fills only the fields Stripe provided", () => {
+    // receipt_number can be absent (e.g. test mode) while receipt_url exists.
+    const intentPartial = {
+      amount: 7500,
+      currency: "usd",
+      latest_charge: { receipt_url: "https://pay.stripe.com/receipts/only-url" },
+    };
+    assert.deepEqual(
+      assertPaymentMatchesExpected(7500, "pi_123", intentPartial, false),
+      {
+        paidBy: "test",
+        amount: 7500,
+        currency: "usd",
+        receiptUrl: "https://pay.stripe.com/receipts/only-url",
+        receiptNumber: null,
+      },
     );
   });
 });

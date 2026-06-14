@@ -615,6 +615,8 @@ const createGroupChatByUser = async (req, res) => {
                 currency: charge.currency,
                 description: chat.name,
                 paymentIntent: payment_intent,
+                receiptUrl: charge.receiptUrl,
+                receiptNumber: charge.receiptNumber,
                 customer: userId.toString(),
                 expert: expert.toString(),
                 groupChat: chat._id.toString(),

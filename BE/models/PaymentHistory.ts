@@ -8,6 +8,8 @@ const PaymentHistorySchema = new mongoose.Schema(
         currency: { type: String, default: 'usd' },
         description: { type: String },
         paymentIntent: { type: String },
+        receiptUrl: { type: String },
+        receiptNumber: { type: String },
         status: { 
             type: String, 
             enum: ['pending', 'completed', 'failed', 'refunded'], 

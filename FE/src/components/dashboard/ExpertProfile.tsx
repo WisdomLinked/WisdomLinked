@@ -1050,7 +1050,7 @@ export default function ExpertProfile({
                     <div className="flex justify-between gap-2 border-t border-[#1A3A4A]/15 pt-2">
                       <dt className="text-[#7A7A72]">Estimated total</dt>
                       <dd className="font-serif text-lg font-semibold">
-                        ${oneToOneSessionPrice.toFixed(0)}
+                        ${oneToOneSessionPrice.toFixed(2)}
                       </dd>
                     </div>
                   </dl>
