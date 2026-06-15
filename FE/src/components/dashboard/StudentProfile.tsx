@@ -16,6 +16,7 @@ import { useDispatch } from 'react-redux';
 import { showErrorAlert, showSuccessAlert } from '../../actions/alertActions';
 import { updateMe } from '../../actions/authActions';
 import { doUpdateProfile, profileImageFetch } from '../../api/api';
+import { usePaymentHistory, PaymentHistoryTable, PaymentHistorySummary } from './PaymentHistoryTable';
 import { resolveProfileImageSrc } from '../../utils/profileImage';
 import { saveProfilePhotoFile } from '../../utils/profileImageUpload';
 import { SERVICE_OPTIONS } from '../../constants/serviceOptions';
@@ -38,53 +39,6 @@ const inputBase =
   'w-full rounded-xl border bg-white px-4 py-2.5 text-sm text-slate-800 placeholder-slate-400 outline-none transition-all focus:ring-2 focus:ring-[#234C6A]/30 focus:border-[#234C6A]';
 const inputNormal = `${inputBase} border-slate-200`;
 
-type PaymentRecord = {
-  id: string;
-  receiptNumber: string;
-  date: string;
-  amount: string;
-  currency: string;
-  purpose: string;
-  status: 'completed' | 'pending' | 'refunded';
-  sessionType?: string;
-  expertName?: string;
-};
-
-const MOCK_PAYMENTS: PaymentRecord[] = [
-  {
-    id: '1',
-    receiptNumber: 'RCP-2024-001234',
-    date: '2024-03-05',
-    amount: '75.00',
-    currency: 'USD',
-    purpose: 'Study Abroad',
-    status: 'completed',
-    sessionType: 'Individual',
-    expertName: 'Dr. Emily Chen',
-  },
-  {
-    id: '2',
-    receiptNumber: 'RCP-2024-001189',
-    date: '2024-02-28',
-    amount: '25.00',
-    currency: 'USD',
-    purpose: 'Seminar registration',
-    status: 'completed',
-    sessionType: 'Seminar',
-    expertName: 'AI for Healthcare',
-  },
-  {
-    id: '3',
-    receiptNumber: 'RCP-2024-001156',
-    date: '2024-02-15',
-    amount: '50.00',
-    currency: 'USD',
-    purpose: 'Study Abroad',
-    status: 'completed',
-    sessionType: 'Individual',
-    expertName: 'Prof. Daniel Ortiz',
-  },
-];
 
 export default function StudentProfile() {
   const dispatch = useDispatch();
@@ -160,6 +114,7 @@ export default function StudentProfile() {
   const [passwordError, setPasswordError] = useState('');
 
   const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const { payments, loading: paymentsLoading, error: paymentsError } = usePaymentHistory(showPaymentModal);
 
   const interestDropdownRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -761,67 +716,10 @@ export default function StudentProfile() {
               </button>
             </div>
             <div className="overflow-x-auto overflow-y-auto flex-1">
-              <table className="w-full text-left">
-                <thead className="bg-slate-50 border-b border-slate-200 sticky top-0">
-                  <tr>
-                    <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500">
-                      Receipt #
-                    </th>
-                    <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500">
-                      Date
-                    </th>
-                    <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500">
-                      Amount
-                    </th>
-                    <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500">
-                      Purpose
-                    </th>
-                    <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500">
-                      Session / Details
-                    </th>
-                    <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500">
-                      Status
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {MOCK_PAYMENTS.map(p => (
-                    <tr key={p.id} className="hover:bg-slate-50/50">
-                      <td className="px-4 py-3 text-sm font-mono text-slate-800">
-                        {p.receiptNumber}
-                      </td>
-                      <td className="px-4 py-3 text-sm text-slate-600">{p.date}</td>
-                      <td className="px-4 py-3 text-sm font-medium text-slate-800">
-                        {p.currency} {p.amount}
-                      </td>
-                      <td className="px-4 py-3 text-sm text-slate-600">{p.purpose}</td>
-                      <td className="px-4 py-3 text-sm text-slate-600">
-                        {p.sessionType && <span className="text-slate-500">{p.sessionType}</span>}
-                        {p.expertName && (
-                          <span className="block text-slate-700">{p.expertName}</span>
-                        )}
-                      </td>
-                      <td className="px-4 py-3">
-                        <span
-                          className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${
-                            p.status === 'completed'
-                              ? 'bg-emerald-100 text-emerald-700'
-                              : p.status === 'pending'
-                                ? 'bg-amber-100 text-amber-700'
-                                : 'bg-slate-100 text-slate-600'
-                          }`}
-                        >
-                          {p.status}
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              <PaymentHistoryTable payments={payments} loading={paymentsLoading} error={paymentsError} stickyHeader />
             </div>
             <div className="border-t border-slate-200 px-6 py-3 bg-slate-50 text-sm text-slate-600 shrink-0">
-              Total payments: {MOCK_PAYMENTS.length} · Total spent: USD{' '}
-              {MOCK_PAYMENTS.reduce((s, p) => s + parseFloat(p.amount), 0).toFixed(2)}
+              <PaymentHistorySummary payments={payments} loading={paymentsLoading} />
             </div>
           </div>
         </div>

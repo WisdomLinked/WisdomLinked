@@ -24,6 +24,7 @@ import BookingConfirmationModal from './BookingConfirmationModal';
 import { createGroupChatByUser, getExpertById, profileImageFetch } from '../../api/api';
 import { resolveProfileImageSrc } from '../../utils/profileImage';
 import { normalizeExpertPrice } from '../../utils/schedulingSlots';
+import { computeBookingPriceDollars } from '../../utils/bookingPrice';
 import {
   defaultAppointmentDuration,
   formatOfferedDurationsList,
@@ -244,7 +245,7 @@ export default function ExpertProfile({
     if (!pickedDuration) return 0;
     const hourly = normalizeExpertPrice(expertDetails?.price);
     if (hourly == null) return 0;
-    return (pickedDuration * hourly) / 60;
+    return computeBookingPriceDollars(pickedDuration, hourly);
   }, [pickedDuration, expertDetails?.price]);
 
   const bookingConfirmationDetails = useMemo(() => {
@@ -1049,7 +1050,7 @@ export default function ExpertProfile({
                     <div className="flex justify-between gap-2 border-t border-[#1A3A4A]/15 pt-2">
                       <dt className="text-[#7A7A72]">Estimated total</dt>
                       <dd className="font-serif text-lg font-semibold">
-                        ${oneToOneSessionPrice.toFixed(0)}
+                        ${oneToOneSessionPrice.toFixed(2)}
                       </dd>
                     </div>
                   </dl>

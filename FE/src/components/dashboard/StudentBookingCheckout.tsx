@@ -135,7 +135,7 @@ export default function StudentBookingCheckout({
   const options = useMemo(
     () => ({
       mode: 'payment' as const,
-      amount: price > 0 ? price * 1000 : 1,
+      amount: price > 0 ? Math.round(price * 100) : 1,
       currency: 'usd',
       appearance: {
         theme: 'stripe' as const,

@@ -27,6 +27,7 @@ import { getExpertById } from '../api/api';
 import type { MentorCardProps } from '../components/MentorCard';
 import { mapExpertToMentorWithImage } from '../utils/mapExpertToMentor';
 import StudentChat from '../components/dashboard/StudentChat';
+import StudentPaymentHistory from '../components/dashboard/StudentPaymentHistory';
 import {
   connectToRC,
   onSubscriptionChanged,
@@ -483,7 +484,9 @@ export default function StudentDashboard() {
                       ? 'Join meeting'
                       : activeItem === 'seminars'
                         ? 'Seminars'
-                        : 'Student Dashboard'
+                        : activeItem === 'history'
+                          ? 'Payment History'
+                          : 'Student Dashboard'
             }
             userName={studentName}
             avatarUrl={avatarUrl}
@@ -559,6 +562,8 @@ export default function StudentDashboard() {
             <ContactAdmin />
           ) : activeItem === 'seminars' ? (
             <StudentSeminars />
+          ) : activeItem === 'history' ? (
+            <StudentPaymentHistory />
           ) : (
             <div className="px-6 py-7">
               <div className="grid gap-6 lg:grid-cols-[1fr_380px]">

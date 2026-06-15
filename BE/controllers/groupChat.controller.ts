@@ -19,7 +19,8 @@ const {
     kickUserFromGroupChannel,
     syncRocketGroupChannelMembers,
 } = require("../services/rocketchat.service");
-import { safeErrorMessage } from '../utils/httpUserFacingCopy';
+import { safeErrorMessage, safeHttp500Message } from '../utils/httpUserFacingCopy';
+import { computeBookingPriceCents, extractHourlyRate, dollarsToCents, assertPaymentMatchesExpected } from '../utils/bookingPrice';
 
 /** Stored in RC; FE shows as centered pill (see ChatSystemNotice). */
 const WL_COMMUNITY_SYS_PREFIX = '__WL_COMMUNITY_SYS__::';
@@ -550,23 +551,28 @@ const joinPrivateChat = async (req, res) => {
 const createGroupChatByUser = async (req, res) => {
     try {
         const { userId } = req.user;
-        const { name, description, services, keywords, start, end, duration, price, expert, payment_intent } = req.body;
+        const { name, description, services, keywords, start, end, duration, expert, payment_intent } = req.body;
 
 
         if (checkTitleNameInvalid('Name', name)) {
             throw new Error(checkTitleNameInvalid('Name', name))
         }
 
-        const paymentIntentSucceeded_test = await checkPaymentIntentSucceeded(payment_intent, 'test')
-        const paymentIntentSucceeded_live = await checkPaymentIntentSucceeded(payment_intent, 'live')
-        if (price && !paymentIntentSucceeded_test && !paymentIntentSucceeded_live) {
-            throw new Error("Payment intent not succeeded")
-        }
-
         const expertUser = await User.findById(expert);
         if (!expertUser) {
             throw new Error("Expert not found");
         }
+
+        const expectedCents = computeBookingPriceCents(Number(duration), extractHourlyRate(expertUser.price));
+
+        let paymentIntentSucceeded_test: any = false;
+        let paymentIntentSucceeded_live: any = false;
+        if (expectedCents > 0) {
+            paymentIntentSucceeded_test = await checkPaymentIntentSucceeded(payment_intent, 'test');
+            paymentIntentSucceeded_live = await checkPaymentIntentSucceeded(payment_intent, 'live');
+        }
+        const charge = assertPaymentMatchesExpected(expectedCents, payment_intent, paymentIntentSucceeded_test, paymentIntentSucceeded_live);
+
         assertBookingLeadTime(expertUser, start);
         assertDurationAllowed(expertUser, duration);
         await assertBookingSlotValid(expertUser, start, end);
@@ -580,7 +586,7 @@ const createGroupChatByUser = async (req, res) => {
             start: start,
             end: end,
             duration: duration,
-            price: price,
+            price: expectedCents / 100,
             participants: [userId, expert],
             admin: expert,
             type: 'individual',
@@ -601,20 +607,23 @@ const createGroupChatByUser = async (req, res) => {
 
         // [REMOVED] updateUsersGroupChatList(expert.toString());
 
-        await appendPaymentHistory({
-            stripeMode: paymentIntentSucceeded_test ? 'test' : 'live',
-            paymentType: 'charge',
-            amount: paymentIntentSucceeded_test ? paymentIntentSucceeded_test.amount : paymentIntentSucceeded_live.amount,
-            currency: paymentIntentSucceeded_test ? paymentIntentSucceeded_test.currency : paymentIntentSucceeded_live.currency,
-            description: chat.name,
-            paymentIntent: payment_intent,
-            customer: userId.toString(),
-            expert: expert.toString(),
-            groupChat: chat._id.toString(),
-            // pendingAppointmentToGroup: newPendingGroup._id
-        })
+        if (charge) {
+            await appendPaymentHistory({
+                stripeMode: charge.paidBy,
+                paymentType: 'charge',
+                amount: charge.amount,
+                currency: charge.currency,
+                description: chat.name,
+                paymentIntent: payment_intent,
+                receiptUrl: charge.receiptUrl,
+                receiptNumber: charge.receiptNumber,
+                customer: userId.toString(),
+                expert: expert.toString(),
+                groupChat: chat._id.toString(),
+            });
+        }
 
-        sendEmailMeetingRequestToExpert(expertUser.email, expertUser.username, name, chat.start, duration, price, true, expertUser.timeZone)
+        sendEmailMeetingRequestToExpert(expertUser.email, expertUser.username, name, chat.start, duration, expectedCents / 100, true, expertUser.timeZone)
 
         return res.status(200).json({
             result: currentUser,
@@ -623,7 +632,7 @@ const createGroupChatByUser = async (req, res) => {
         console.log(err);
         return res
             .status(500)
-            .send(err.message);
+            .send(safeHttp500Message(err));
     }
 };
 
@@ -810,24 +819,28 @@ const joinGroupChat = async (req, res) => {
         if (!currentUser) return res.status(404).send("User not found");
 
         if (currentUser.role === 'customer') {
-            const paymentIntentSucceeded_test = await checkPaymentIntentSucceeded(payment_intent, 'test')
-            const paymentIntentSucceeded_live = await checkPaymentIntentSucceeded(payment_intent, 'live')
-            if (groupChat.price && !paymentIntentSucceeded_test && !paymentIntentSucceeded_live) {
-                throw new Error("Payment intent not succeeded")
+            const expectedCents = dollarsToCents(groupChat.price);
+            let paymentIntentSucceeded_test: any = false;
+            let paymentIntentSucceeded_live: any = false;
+            if (expectedCents > 0) {
+                paymentIntentSucceeded_test = await checkPaymentIntentSucceeded(payment_intent, 'test')
+                paymentIntentSucceeded_live = await checkPaymentIntentSucceeded(payment_intent, 'live')
             }
+            const charge = assertPaymentMatchesExpected(expectedCents, payment_intent, paymentIntentSucceeded_test, paymentIntentSucceeded_live);
 
-            await appendPaymentHistory({
-                stripeMode: paymentIntentSucceeded_test ? 'test' : 'live',
-                paymentType: 'charge',
-                amount: paymentIntentSucceeded_test ? paymentIntentSucceeded_test.amount : paymentIntentSucceeded_live.amount,
-                currency: paymentIntentSucceeded_test ? paymentIntentSucceeded_test.currency : paymentIntentSucceeded_live.currency,
-                description: groupChat.name,
-                paymentIntent: payment_intent,
-                customer: userId.toString(),
-                expert: groupChat.admin.toString(),
-                groupChat: groupChatId.toString(),
-            })
-
+            if (charge) {
+                await appendPaymentHistory({
+                    stripeMode: charge.paidBy,
+                    paymentType: 'charge',
+                    amount: charge.amount,
+                    currency: charge.currency,
+                    description: groupChat.name,
+                    paymentIntent: payment_intent,
+                    customer: userId.toString(),
+                    expert: groupChat.admin.toString(),
+                    groupChat: groupChatId.toString(),
+                })
+            }
         }
 
         currentUser.groupChats.push(groupChatId);
@@ -920,13 +933,7 @@ const updateGroupChat = async (req, res) => {
 const addMemberToPendingGroup = async (req, res) => {
     try {
         const { userId } = req.user;
-        const { groupChatId, payment_intent, price } = req.body;
-
-        const paymentIntentSucceeded_test = await checkPaymentIntentSucceeded(payment_intent, 'test')
-        const paymentIntentSucceeded_live = await checkPaymentIntentSucceeded(payment_intent, 'live')
-        if (price && !paymentIntentSucceeded_test && !paymentIntentSucceeded_live) {
-            throw new Error("Payment intent not succeeded")
-        }
+        const { groupChatId, payment_intent } = req.body;
 
         // check if groupChat exists
         const groupChat = await GroupChat.findOne({ _id: groupChatId });
@@ -942,6 +949,16 @@ const addMemberToPendingGroup = async (req, res) => {
                     "Forbidden. Group admin can't add himself to the group."
                 );
         }
+
+        // Verify payment against the seminar price stored on the group, not the client.
+        const expectedCents = dollarsToCents(groupChat.price);
+        let paymentIntentSucceeded_test: any = false;
+        let paymentIntentSucceeded_live: any = false;
+        if (expectedCents > 0) {
+            paymentIntentSucceeded_test = await checkPaymentIntentSucceeded(payment_intent, 'test')
+            paymentIntentSucceeded_live = await checkPaymentIntentSucceeded(payment_intent, 'live')
+        }
+        const charge = assertPaymentMatchesExpected(expectedCents, payment_intent, paymentIntentSucceeded_test, paymentIntentSucceeded_live);
 
         const expert = await User.findById(groupChat.admin.toString());
         if (!expert) {
@@ -964,7 +981,7 @@ const addMemberToPendingGroup = async (req, res) => {
         const pendingGroup = new PendingAppointmentToGroup({
             customerId: userId,
             groupChatId: groupChatId,
-            paidBy: paymentIntentSucceeded_test ? 'test' : 'live',
+            paidBy: charge ? charge.paidBy : undefined,
         })
         const newPendingGroup = await pendingGroup.save()
 
@@ -975,18 +992,20 @@ const addMemberToPendingGroup = async (req, res) => {
         expert.pendingGroupChats.push(newPendingGroup._id)
         await expert.save()
 
-        await appendPaymentHistory({
-            stripeMode: paymentIntentSucceeded_test ? 'test' : 'live',
-            paymentType: 'charge',
-            amount: paymentIntentSucceeded_test ? paymentIntentSucceeded_test.amount : paymentIntentSucceeded_live.amount,
-            currency: paymentIntentSucceeded_test ? paymentIntentSucceeded_test.currency : paymentIntentSucceeded_live.currency,
-            description: groupChat.name,
-            paymentIntent: payment_intent,
-            customer: customer._id.toString(),
-            expert: expert._id.toString(),
-            groupChat: groupChat._id.toString(),
-            pendingAppointmentToGroup: newPendingGroup._id
-        })
+        if (charge) {
+            await appendPaymentHistory({
+                stripeMode: charge.paidBy,
+                paymentType: 'charge',
+                amount: charge.amount,
+                currency: charge.currency,
+                description: groupChat.name,
+                paymentIntent: payment_intent,
+                customer: customer._id.toString(),
+                expert: expert._id.toString(),
+                groupChat: groupChat._id.toString(),
+                pendingAppointmentToGroup: newPendingGroup._id
+            })
+        }
 
         const user = await User.findById(userId).populate([{
             path: 'pendingGroupChats',
@@ -1024,24 +1043,28 @@ const acceptIndividualAppointment = async (req, res) => {
         let customer, expert;
 
         if (userId.role === 'customer') {
-            const paymentIntentSucceeded_test = await checkPaymentIntentSucceeded(payment_intent, 'test')
-            const paymentIntentSucceeded_live = await checkPaymentIntentSucceeded(payment_intent, 'live')
-            if (!paymentIntentSucceeded_test && !paymentIntentSucceeded_live) {
-                throw new Error("Payment intent not succeeded")
+            const expectedCents = dollarsToCents(groupChat.price);
+            let paymentIntentSucceeded_test: any = false;
+            let paymentIntentSucceeded_live: any = false;
+            if (expectedCents > 0) {
+                paymentIntentSucceeded_test = await checkPaymentIntentSucceeded(payment_intent, 'test')
+                paymentIntentSucceeded_live = await checkPaymentIntentSucceeded(payment_intent, 'live')
             }
+            const charge = assertPaymentMatchesExpected(expectedCents, payment_intent, paymentIntentSucceeded_test, paymentIntentSucceeded_live);
 
-            await appendPaymentHistory({
-                stripeMode: paymentIntentSucceeded_test ? 'test' : 'live',
-                paymentType: 'charge',
-                amount: paymentIntentSucceeded_test ? paymentIntentSucceeded_test.amount : paymentIntentSucceeded_live.amount,
-                currency: paymentIntentSucceeded_test ? paymentIntentSucceeded_test.currency : paymentIntentSucceeded_live.currency,
-                description: groupChat.name,
-                paymentIntent: payment_intent,
-                customer: userId.toString(),
-                expert: groupChat.admin.toString(),
-                groupChat: groupChatId,
-                // pendingAppointmentToGroup: newPendingGroup._id
-            })
+            if (charge) {
+                await appendPaymentHistory({
+                    stripeMode: charge.paidBy,
+                    paymentType: 'charge',
+                    amount: charge.amount,
+                    currency: charge.currency,
+                    description: groupChat.name,
+                    paymentIntent: payment_intent,
+                    customer: userId.toString(),
+                    expert: groupChat.admin.toString(),
+                    groupChat: groupChatId,
+                })
+            }
         }
 
         groupChat.status = 'active';

@@ -32,7 +32,7 @@ const createStripePaymentIntent = async (req, res) => {
         const { stripeMode, amount } = req.body
         const stripe = require('stripe')(stripeMode === 'test' ? process.env.STRIPE_SECRET_KEY_TEST : process.env.STRIPE_SECRET_KEY_LIVE);
         const paymentIntent = await stripe.paymentIntents.create({
-            amount: amount * 100,
+            amount: Math.round(amount * 100), // dollars -> integer cents (Stripe rejects fractional)
             currency: 'usd',
         });
         res.send({
@@ -89,7 +89,7 @@ const checkPaymentIntentSucceeded = async (payment_intent, stripeMode) => {
     // Checking The Payment Intent In Test Mode
     try {
         const stripe = require('stripe')(stripeMode === 'test' ? process.env.STRIPE_SECRET_KEY_TEST : process.env.STRIPE_SECRET_KEY_LIVE);
-        const paymentIntent = await stripe.paymentIntents.retrieve(payment_intent);
+        const paymentIntent = await stripe.paymentIntents.retrieve(payment_intent, { expand: ['latest_charge'] });
         if (paymentIntent?.status === 'succeeded') {
             console.log('Test Payment succeeded');
             return paymentIntent
