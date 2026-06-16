@@ -578,7 +578,7 @@ export default function StudentExpertBookingPicker({
         mode={tzMode}
         customTimeZone={customTz}
         expertTimeZone={expertTz}
-        studentTimeZone={userDetails?.timeZone}
+        studentTimeZone={userDetails?.timeZone || detectUserTimeZone()}
         onModeChange={setTzMode}
         onCustomTimeZoneChange={setCustomTz}
       />
@@ -712,7 +712,7 @@ export default function StudentExpertBookingPicker({
                 ...opt,
                 label:
                   !hidePriceInDurationSelection && hourlyRate > 0
-                    ? `${opt.label} · $${((Number(opt.value) * hourlyRate) / 60).toFixed(0)} est.`
+                    ? `${opt.label} · $${((Number(opt.value) * hourlyRate) / 60).toFixed(2)} est.`
                     : opt.label,
               }))}
               onChange={handleDurationChange}

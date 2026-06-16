@@ -20,7 +20,7 @@ import Sidebar from '../components/layout/Sidebar';
 import TopBar from '../components/layout/TopBar';
 import type { TopBarNotificationItem } from '../components/layout/TopBar';
 import StudentSettings from '../components/dashboard/StudentSettings';
-import { getAllCommunityChats, profileImageFetch } from '../api/api';
+import { getAllCommunityChats, profileImageFetch, acceptIndividualAppointment, addMemberToGroup } from '../api/api';
 import { resolveProfileImageSrc } from '../utils/profileImage';
 import { fetchDmUnreadSnapshot } from '../api/chatApi';
 import { useAppSelector } from '../store';
@@ -228,10 +228,12 @@ export default function ExpertDashboard() {
       if (document.visibilityState !== 'visible') return;
       void hydrateUnreadSnapshot();
       void loadCommunityNotificationRooms();
+      dispatch(updateMe() as any); // pull new bookings (pending sessions/seminars) on tab return
     };
     const onFocus = () => {
       void hydrateUnreadSnapshot();
       void loadCommunityNotificationRooms();
+      dispatch(updateMe() as any);
     };
     document.addEventListener('visibilitychange', onVisible);
     window.addEventListener('focus', onFocus);
@@ -239,7 +241,7 @@ export default function ExpertDashboard() {
       document.removeEventListener('visibilitychange', onVisible);
       window.removeEventListener('focus', onFocus);
     };
-  }, [hydrateUnreadSnapshot, loadCommunityNotificationRooms]);
+  }, [hydrateUnreadSnapshot, loadCommunityNotificationRooms, dispatch]);
 
   useEffect(() => {
     const uid = userDetails?._id ?? userDetails?.id ?? userDetails?.userId;
@@ -454,19 +456,19 @@ export default function ExpertDashboard() {
         inSelectedRange(new Date(g.start))
     );
 
+    // Pending requests are NOT scoped to the today/week range — the expert must
+    // see every booking awaiting action regardless of which date window is shown.
     const pendingSess = (groupChats || []).filter(
       (g: any) =>
         g.type === 'individual' &&
         g.status === 'pending' &&
-        upcoming(g.start, g.end) &&
-        inSelectedRange(new Date(g.start))
+        upcoming(g.start, g.end)
     );
 
     const pendingSemInvites = (pendingGroupChats || []).filter(
       (pg: any) =>
         pg.groupChatId?.type === 'seminar' &&
-        upcoming(pg.groupChatId.start, pg.groupChatId.end) &&
-        inSelectedRange(new Date(pg.groupChatId.start))
+        upcoming(pg.groupChatId.start, pg.groupChatId.end)
     );
 
     return {
@@ -476,6 +478,48 @@ export default function ExpertDashboard() {
       pendingSessions: pendingSess,
     };
   }, [userDetails, range]);
+
+  // Accept flows. The api wrappers return `false` on error (alert/logout already
+  // handled), or the payload on success — refresh via updateMe() either way.
+  const [acceptingId, setAcceptingId] = useState<string | null>(null);
+
+  const handleAcceptSession = useCallback(
+    async (session: any) => {
+      setAcceptingId(String(session._id));
+      try {
+        const res: any = await acceptIndividualAppointment({ groupChatId: session._id });
+        if (res === false) return;
+        dispatch(updateMe() as any);
+        dispatch(showSuccessAlert('1:1 session accepted.'));
+      } catch {
+        dispatch(showErrorAlert('Could not accept the session. Please try again.'));
+      } finally {
+        setAcceptingId(null);
+      }
+    },
+    [dispatch],
+  );
+
+  const handleAcceptSeminar = useCallback(
+    async (pg: any) => {
+      setAcceptingId(String(pg._id));
+      try {
+        const res: any = await addMemberToGroup({
+          _id: pg._id,
+          friendId: pg.customerId?._id,
+          groupChatId: pg.groupChatId?._id,
+        });
+        if (res === false) return;
+        dispatch(updateMe() as any);
+        dispatch(showSuccessAlert('Seminar registration approved.'));
+      } catch {
+        dispatch(showErrorAlert('Could not approve the registration. Please try again.'));
+      } finally {
+        setAcceptingId(null);
+      }
+    },
+    [dispatch],
+  );
 
   const expertModalSessions = useMemo((): UpcomingModalSession[] => {
     if (!expertUpcomingModal) return [];
@@ -684,9 +728,9 @@ export default function ExpertDashboard() {
               {pendingSessions.map((s: any) => (
                 <div
                   key={s._id}
-                  className="flex items-start justify-between rounded-xl border border-amber-100 bg-amber-50 px-3 py-2.5"
+                  className="flex items-start justify-between gap-2 rounded-xl border border-amber-100 bg-amber-50 px-3 py-2.5"
                 >
-                  <div>
+                  <div className="min-w-0">
                     <div className="text-[13px] font-semibold text-slate-900">
                       {s.name}
                     </div>
@@ -694,9 +738,14 @@ export default function ExpertDashboard() {
                       {new Date(s.start).toLocaleString()}
                     </div>
                   </div>
-                  <span className="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-800">
-                    Pending
-                  </span>
+                  <button
+                    type="button"
+                    onClick={() => handleAcceptSession(s)}
+                    disabled={acceptingId === String(s._id)}
+                    className="shrink-0 inline-flex items-center rounded-[4px] bg-[#234C6A] px-3 py-1.5 text-[11px] font-semibold text-white hover:brightness-110 disabled:opacity-60"
+                  >
+                    {acceptingId === String(s._id) ? 'Accepting…' : 'Accept'}
+                  </button>
                 </div>
               ))}
               {!bookedSessions.length && !pendingSessions.length && (
@@ -739,9 +788,9 @@ export default function ExpertDashboard() {
               {pendingSeminars.map((pg: any) => (
                 <div
                   key={pg._id}
-                  className="flex items-start justify-between rounded-xl border border-amber-100 bg-amber-50 px-3 py-2.5"
+                  className="flex items-start justify-between gap-2 rounded-xl border border-amber-100 bg-amber-50 px-3 py-2.5"
                 >
-                  <div>
+                  <div className="min-w-0">
                     <div className="text-[13px] font-semibold text-slate-900">
                       {pg.groupChatId?.name}
                     </div>
@@ -750,10 +799,20 @@ export default function ExpertDashboard() {
                         ? new Date(pg.groupChatId.start).toLocaleString()
                         : ''}
                     </div>
+                    {pg.customerId?.username || pg.customerId?.email ? (
+                      <div className="text-[11px] text-slate-500">
+                        {pg.customerId?.username || pg.customerId?.email}
+                      </div>
+                    ) : null}
                   </div>
-                  <span className="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-800">
-                    Pending invite
-                  </span>
+                  <button
+                    type="button"
+                    onClick={() => handleAcceptSeminar(pg)}
+                    disabled={acceptingId === String(pg._id)}
+                    className="shrink-0 inline-flex items-center rounded-[4px] bg-[#234C6A] px-3 py-1.5 text-[11px] font-semibold text-white hover:brightness-110 disabled:opacity-60"
+                  >
+                    {acceptingId === String(pg._id) ? 'Approving…' : 'Approve'}
+                  </button>
                 </div>
               ))}
               {!acceptedSeminars.length && !pendingSeminars.length && (

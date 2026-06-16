@@ -602,7 +602,7 @@ const login = async (req: Request, res: Response) => {
 const confirmLoginByCode = async (req: Request, res: Response) => {
     try {
 
-        const { email, password, code, timeZone } = req.body;
+        const { email, password, code } = req.body;
         const loginRequest = await PendingLogin.findOne({ email: { $regex: new RegExp(`^${email}$`, 'i') } })
         if (!loginRequest) {
             return res.status(200).json({ status: 'FAIL', error: AUTH_LOGIN_REQUEST_EXPIRED });
@@ -641,10 +641,7 @@ const confirmLoginByCode = async (req: Request, res: Response) => {
 
         await loginRequest.deleteOne()
 
-        if (user.timeZone !== timeZone) {
-            user.timeZone = timeZone
-            await user.save()
-        }
+        // Timezone is captured once at signup (register/verifyRegistration); logins never touch it.
 
         const token = await user.generateAuthToken()
         user.token = null
@@ -693,13 +690,17 @@ const passwordResetRequest = async (req: Request, res: Response) => {
         // const code = randomize('0', 6)
         const code = "123456"
 
-        const encryptedPassword = await bcrypt.hash(String(password), 10);
+        // The new password is supplied at confirm time (confirmPasswordResetByCode),
+        // so it is optional here. When omitted we only (re)issue the OTP code.
+        const encryptedPassword = password
+            ? await bcrypt.hash(String(password), 10)
+            : undefined;
 
         const pwdRequest = await PendingPasswordReset.findOne({ email: { $regex: new RegExp(`^${email}$`, 'i') } })
         if (!pwdRequest) {
             const newRequest = new PendingPasswordReset({
                 email,
-                password: encryptedPassword,
+                ...(encryptedPassword ? { password: encryptedPassword } : {}),
                 code
             })
             await newRequest.save()
@@ -709,7 +710,7 @@ const passwordResetRequest = async (req: Request, res: Response) => {
                 return res.status(200).json({ status: 'FAIL', error: lockError });
             }
             pwdRequest.code = code
-            pwdRequest.password = encryptedPassword
+            if (encryptedPassword) pwdRequest.password = encryptedPassword
             await pwdRequest.save()
         }
 

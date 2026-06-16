@@ -345,7 +345,7 @@ import React, {
       };
   
       try {
-        dispatch(SetLoadingStatus(true));
+        SetLoadingStatus(true);
   
         if (selectedSeminar?.groupId) {
           const res = await updateGroupChat({
@@ -376,7 +376,7 @@ import React, {
       } catch {
         dispatch(showErrorAlert('Failed to save seminar. Please try again.'));
       } finally {
-        dispatch(SetLoadingStatus(false));
+        SetLoadingStatus(false);
       }
     };
   

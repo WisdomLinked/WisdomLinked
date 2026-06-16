@@ -1,6 +1,13 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { useDispatch } from 'react-redux';
 import { Search, Filter, ChevronDown, CalendarDays, Clock, MapPin, ArrowLeft, User } from 'lucide-react';
-import { SERVICE_LABELS } from '../../constants/serviceOptions';
+import { useAppSelector } from '../../store';
+import { addMemberToPendingGroup, doFilterSeminars, profileImageFetch } from '../../api/api';
+import { canonicalLabelsFromMixedServiceEntries } from '../../constants/serviceOptions';
+import { resolveProfileImageSrc } from '../../utils/profileImage';
+import { SetLoadingStatus } from '../../actions/appActions';
+import StudentBookingCheckout from './StudentBookingCheckout';
+import seminarFallbackImg from '../../assets/images/dashboard_img1.png';
 
 type Seminar = {
   id: string;
@@ -10,117 +17,158 @@ type Seminar = {
   time: string;
   major: string;
   tags: string[];
-  level: 'Beginner' | 'Intermediate' | 'Advanced';
+  level?: 'Beginner' | 'Intermediate' | 'Advanced';
   imageUrl: string;
   expertName: string;
   location: string;
   attendees: number;
+  price: number;
 };
 
-const SEMINARS: Seminar[] = [
-  {
-    id: 's1',
-    title: 'Breaking into AI research',
-    description: 'How to start publishing in ML conferences and find a research advisor.',
-    date: '2024-03-22',
-    time: '18:00',
-    major: 'Computer Science',
-    tags: [SERVICE_LABELS[2], SERVICE_LABELS[0]],
-    level: 'Intermediate',
-    expertName: 'Prof. Emily Chen',
-    location: 'Online · WisdomLinked Hall A',
-    attendees: 84,
-    imageUrl:
-      'https://images.pexels.com/photos/1181671/pexels-photo-1181671.jpeg?auto=compress&cs=tinysrgb&w=600',
-  },
-  {
-    id: 's2',
-    title: 'Designing sustainable bridges',
-    description: 'Real-world case studies from structural engineers working on long-span bridges.',
-    date: '2024-03-28',
-    time: '16:30',
-    major: 'Civil Engineering',
-    tags: [SERVICE_LABELS[1]],
-    level: 'Intermediate',
-    expertName: 'Prof. Daniel Ortiz',
-    location: 'Online · WisdomLinked Hall B',
-    attendees: 61,
-    imageUrl:
-      'https://images.pexels.com/photos/5583970/pexels-photo-5583970.jpeg?auto=compress&cs=tinysrgb&w=600',
-  },
-  {
-    id: 's3',
-    title: 'Writing a winning Statement of Purpose',
-    description: 'What top programs look for in SoPs and how to tell your story.',
-    date: '2024-04-02',
-    time: '19:00',
-    major: 'Other',
-    tags: [SERVICE_LABELS[0]],
-    level: 'Beginner',
-    expertName: 'Dr. Sarah Williams',
-    location: 'Online · WisdomLinked Hall C',
-    attendees: 47,
-    imageUrl:
-      'https://images.pexels.com/photos/4145190/pexels-photo-4145190.jpeg?auto=compress&cs=tinysrgb&w=600',
-  },
-  {
-    id: 's4',
-    title: 'From undergrad to PhD in the US',
-    description: 'Funding, applications, and picking advisors for PhD programs.',
-    date: '2024-04-10',
-    time: '17:30',
-    major: 'Computer Science',
-    tags: [SERVICE_LABELS[0], SERVICE_LABELS[2]],
-    level: 'Beginner',
-    expertName: 'Dr. Liam Carter',
-    location: 'Online · WisdomLinked Hall D',
-    attendees: 73,
-    imageUrl:
-      'https://images.pexels.com/photos/1181395/pexels-photo-1181395.jpeg?auto=compress&cs=tinysrgb&w=600',
-  },
-  {
-    id: 's5',
-    title: 'Portfolio & CV for engineering roles',
-    description: 'How to present your projects and research for top-tier companies.',
-    date: '2024-04-15',
-    time: '15:00',
-    major: 'Other Engineering',
-    tags: [SERVICE_LABELS[1], SERVICE_LABELS[2]],
-    level: 'Intermediate',
-    expertName: 'Prof. Aisha Rahman',
-    location: 'Online · WisdomLinked Hall E',
-    attendees: 58,
-    imageUrl:
-      'https://images.pexels.com/photos/1181463/pexels-photo-1181463.jpeg?auto=compress&cs=tinysrgb&w=600',
-  },
-];
+const pad2 = (n: number) => String(n).padStart(2, '0');
 
-const USER_INTERESTS = ['Computer Science', 'Civil Engineering'];
+/** Map a BE seminar (GroupChat of type 'seminar') to the card's Seminar shape. */
+async function mapSeminar(g: any): Promise<Seminar> {
+  const start = g?.start ? new Date(g.start) : null;
+  const hasStart = start && !Number.isNaN(start.getTime());
+  const keywords = (g?.keywords || []).map((k: any) => k?.value).filter(Boolean);
+  const serviceLabels = canonicalLabelsFromMixedServiceEntries(g?.services);
+  const image = await resolveProfileImageSrc(g?.admin?.image, 'small', profileImageFetch);
+  return {
+    id: String(g?._id),
+    title: g?.name || 'Seminar',
+    description: g?.description || 'Live seminar on WisdomLinked.',
+    date: hasStart
+      ? `${start!.getFullYear()}-${pad2(start!.getMonth() + 1)}-${pad2(start!.getDate())}`
+      : 'TBD',
+    time: hasStart ? `${pad2(start!.getHours())}:${pad2(start!.getMinutes())}` : '',
+    major: keywords[0] || 'General',
+    tags: serviceLabels.length ? serviceLabels : keywords.length ? keywords : ['Seminar'],
+    imageUrl: image || seminarFallbackImg,
+    expertName: g?.admin?.username || g?.admin?.email || 'WisdomLinked expert',
+    location: 'Online · WisdomLinked',
+    attendees: Array.isArray(g?.participants) ? g.participants.length : 0,
+    price: typeof g?.price === 'number' ? g.price : 0,
+  };
+}
 
 const containerClass = 'min-h-screen bg-[#F5F3EF] px-6 py-8 text-[#1A3A4A]';
 
 export default function StudentSeminars() {
+  const { auth: { userDetails } } = useAppSelector((state: any) => state);
+  const userInterests = useMemo(
+    () => (userDetails?.keywords || []).map((k: any) => k?.value).filter(Boolean),
+    [userDetails?.keywords],
+  );
+
+  const [seminars, setSeminars] = useState<Seminar[]>([]);
+  const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [majorFilter, setMajorFilter] = useState<string>('all');
   const [tagFilter, setTagFilter] = useState<string>('all');
   const [selectedSeminar, setSelectedSeminar] = useState<Seminar | null>(null);
   const [bookingStep, setBookingStep] = useState<1 | 2 | 3>(1);
   const [selectedTime, setSelectedTime] = useState<string>('');
+  const [paying, setPaying] = useState(false);
   const [bookingDone, setBookingDone] = useState(false);
+  const [bookingError, setBookingError] = useState<string | null>(null);
+  const dispatch = useDispatch();
+
+  // Stripe (3DS) redirects back here; the dashboard finalizes the booking via
+  // the shared pendingDetails contract. Mirror ExpertProfile's return URL so we
+  // land back on the current dashboard page with the booking-return flag set.
+  const seminarReturnUrl = useMemo(() => {
+    try {
+      const url = new URL(window.location.href);
+      url.search = '';
+      url.searchParams.set('student_booking', '1');
+      return url.toString();
+    } catch {
+      return '/user/studentdashboard?student_booking=1';
+    }
+  }, []);
+
+  // Register the student for the seminar once Stripe confirms (or immediately
+  // for free seminars, where the checkout calls back with '0').
+  const joinSeminar = async (paymentIntentId: string) => {
+    if (!selectedSeminar) return;
+    SetLoadingStatus(true);
+    setBookingError(null);
+    try {
+      const response: any = await addMemberToPendingGroup({
+        groupChatId: selectedSeminar.id,
+        price: selectedSeminar.price,
+        payment_intent: paymentIntentId,
+      });
+      if (response === false || response?.status === 'FAIL' || response?.error) {
+        setBookingError(response?.error || 'Could not complete seminar registration.');
+        return;
+      }
+      if (response?.pendingGroupChats) {
+        dispatch({
+          type: 'updateUserDetails',
+          payload: { pendingGroupChats: response.pendingGroupChats },
+        });
+      }
+      setPaying(false);
+      setBookingDone(true);
+    } catch (err: unknown) {
+      setBookingError(
+        err instanceof Error ? err.message : 'Could not complete seminar registration.',
+      );
+    } finally {
+      SetLoadingStatus(false);
+    }
+  };
+
+  // Open a seminar's detail/booking view from a fresh state.
+  const openSeminar = (s: Seminar) => {
+    setSelectedSeminar(s);
+    setBookingStep(1);
+    setSelectedTime(s.time);
+    setPaying(false);
+    setBookingDone(false);
+    setBookingError(null);
+  };
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setLoading(true);
+      try {
+        const res: any = await doFilterSeminars({
+          name: '',
+          keywords: [],
+          services: [],
+          sortBy: 'Name in ASC',
+        });
+        const list = Array.isArray(res?.result) ? res.result : [];
+        const mapped = await Promise.all(list.map(mapSeminar));
+        if (!cancelled) setSeminars(mapped);
+      } catch {
+        if (!cancelled) setSeminars([]);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const majors = useMemo(
-    () => Array.from(new Set(SEMINARS.map(s => s.major))).sort(),
-    [],
+    () => Array.from(new Set(seminars.map(s => s.major))).sort(),
+    [seminars],
   );
 
   const tags = useMemo(
     () =>
       Array.from(
         new Set(
-          SEMINARS.flatMap(s => s.tags),
+          seminars.flatMap(s => s.tags),
         ),
       ).sort(),
-    [],
+    [seminars],
   );
 
   const matchesFilters = (seminar: Seminar) => {
@@ -144,22 +192,26 @@ export default function StudentSeminars() {
 
   const recommended = useMemo(
     () =>
-      SEMINARS.filter(
-        s =>
-          USER_INTERESTS.includes(s.major) ||
-          s.tags.some(t =>
-            USER_INTERESTS.some(interest =>
-              t.toLowerCase().includes(interest.toLowerCase().split(' ')[0]),
-            ),
-          ),
-      ).filter(matchesFilters),
-    [searchQuery, majorFilter, tagFilter],
+      userInterests.length === 0
+        ? []
+        : seminars
+            .filter(
+              s =>
+                userInterests.includes(s.major) ||
+                s.tags.some(t =>
+                  userInterests.some((interest: string) =>
+                    t.toLowerCase().includes(interest.toLowerCase().split(' ')[0]),
+                  ),
+                ),
+            )
+            .filter(matchesFilters),
+    [seminars, userInterests, searchQuery, majorFilter, tagFilter],
   );
 
   const others = useMemo(
     () =>
-      SEMINARS.filter(s => !recommended.includes(s)).filter(matchesFilters),
-    [searchQuery, majorFilter, tagFilter, recommended],
+      seminars.filter(s => !recommended.includes(s)).filter(matchesFilters),
+    [seminars, searchQuery, majorFilter, tagFilter, recommended],
   );
 
   const tagClass = (tag: string) => {
@@ -187,19 +239,11 @@ export default function StudentSeminars() {
       key={s.id}
       role="button"
       tabIndex={0}
-      onClick={() => {
-        setSelectedSeminar(s);
-        setBookingStep(1);
-        setSelectedTime(s.time);
-        setBookingDone(false);
-      }}
+      onClick={() => openSeminar(s)}
       onKeyDown={e => {
         if (e.key === 'Enter' || e.key === ' ') {
           e.preventDefault();
-          setSelectedSeminar(s);
-          setBookingStep(1);
-          setSelectedTime(s.time);
-          setBookingDone(false);
+          openSeminar(s);
         }
       }}
       className="group flex h-full flex-col rounded-2xl border border-[#e8e6e1] bg-white shadow-[0_18px_45px_rgba(15,23,42,0.18)] overflow-hidden transition-transform duration-150 hover:-translate-y-1 hover:shadow-[0_22px_60px_rgba(15,23,42,0.25)]"
@@ -211,10 +255,12 @@ export default function StudentSeminars() {
           className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.03]"
         />
         <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-slate-900/35 via-slate-900/5 to-transparent" />
-        <div className="absolute left-3 top-3 inline-flex items-center gap-1 rounded-full bg-black/60 px-2.5 py-0.5 text-[10px] font-medium text-slate-50 backdrop-blur">
-          <CalendarDays className="h-3 w-3 text-emerald-300" aria-hidden />
-          <span>{s.level}</span>
-        </div>
+        {s.level && (
+          <div className="absolute left-3 top-3 inline-flex items-center gap-1 rounded-full bg-black/60 px-2.5 py-0.5 text-[10px] font-medium text-slate-50 backdrop-blur">
+            <CalendarDays className="h-3 w-3 text-emerald-300" aria-hidden />
+            <span>{s.level}</span>
+          </div>
+        )}
       </div>
 
       <div className="p-5">
@@ -248,10 +294,12 @@ export default function StudentSeminars() {
           <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
           <span>{s.major}</span>
         </span>
-        <span className="inline-flex items-center gap-1 rounded-full bg-slate-50 px-2 py-1">
-          <span className="h-1.5 w-1.5 rounded-full bg-[#234C6A]" />
-          <span>{s.level}</span>
-        </span>
+        {s.level && (
+          <span className="inline-flex items-center gap-1 rounded-full bg-slate-50 px-2 py-1">
+            <span className="h-1.5 w-1.5 rounded-full bg-[#234C6A]" />
+            <span>{s.level}</span>
+          </span>
+        )}
       </div>
       <div className="px-5 pb-4">
         <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500 mb-1">
@@ -275,10 +323,7 @@ export default function StudentSeminars() {
           type="button"
           onClick={e => {
             e.stopPropagation();
-            setSelectedSeminar(s);
-            setBookingStep(1);
-            setSelectedTime(s.time);
-            setBookingDone(false);
+            openSeminar(s);
           }}
           className="inline-flex items-center justify-center rounded-lg bg-[#234C6A] px-3 py-1.5 text-xs font-semibold text-white hover:brightness-110"
         >
@@ -290,10 +335,10 @@ export default function StudentSeminars() {
 
   if (selectedSeminar) {
     const s = selectedSeminar;
-    const timeOptions = [s.time, '17:30', '19:00'];
-    const pastBySameExpert = SEMINARS.filter(
-      item => item.expertName === s.expertName && item.id !== s.id,
-    ).slice(0, 3);
+    const timeOptions = s.time ? [s.time] : [];
+    const pastBySameExpert = seminars
+      .filter(item => item.expertName === s.expertName && item.id !== s.id)
+      .slice(0, 3);
 
     return (
       <div className={containerClass}>
@@ -385,7 +430,32 @@ export default function StudentSeminars() {
             </p>
             <h2 className="mt-2 font-serif text-xl text-[#1A3A4A]">Booking flow</h2>
 
-            {!bookingDone ? (
+            {bookingDone ? (
+              <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-3">
+                <p className="text-sm font-semibold text-emerald-900">
+                  You&apos;re registered for this seminar.
+                </p>
+                <p className="mt-1 text-xs text-emerald-800">
+                  It will appear on your calendar once the host confirms.
+                </p>
+              </div>
+            ) : paying ? (
+              <div className="mt-4 space-y-3">
+                <StudentBookingCheckout
+                  type="Seminar"
+                  price={s.price}
+                  returnUrl={seminarReturnUrl}
+                  pendingDetails={{ groupChatId: s.id, price: s.price, name: s.title }}
+                  onPaymentSuccess={joinSeminar}
+                  onCancel={() => setPaying(false)}
+                />
+                {bookingError ? (
+                  <p className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-medium text-rose-700">
+                    {bookingError}
+                  </p>
+                ) : null}
+              </div>
+            ) : (
               <div className="mt-4 space-y-4">
                 <div className="rounded-lg border border-[#E5E2DB] bg-[#F5F3EF] px-3 py-2 text-[12px] text-[#1A3A4A]">
                   Step {bookingStep} of 3
@@ -447,38 +517,28 @@ export default function StudentSeminars() {
                 {bookingStep === 3 && (
                   <div className="space-y-3">
                     <p className="text-sm text-[#7A7A72]">
-                      Confirm your booking request. Payment flow will be handled next.
+                      {s.price > 0
+                        ? `Confirm and pay $${s.price.toFixed(2)} to reserve your seat.`
+                        : 'Confirm to reserve your seat — this seminar is free.'}
                     </p>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        window.localStorage.setItem(
-                          'pendingDetails',
-                          JSON.stringify({
-                            friendIds: [],
-                            groupChatId: s.id,
-                            price: 0,
-                            seminarTitle: s.title,
-                            seminarTime: selectedTime,
-                          }),
-                        );
-                        setBookingDone(true);
-                      }}
-                      className="w-full rounded-[4px] bg-[#234C6A] px-3 py-2 text-sm font-semibold text-white hover:brightness-110"
-                    >
-                      Book now
-                    </button>
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setBookingStep(2)}
+                        className="flex-1 rounded-[4px] border border-[#E5E2DB] bg-white px-3 py-2 text-sm font-semibold text-slate-700"
+                      >
+                        Back
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setPaying(true)}
+                        className="flex-1 rounded-[4px] bg-[#234C6A] px-3 py-2 text-sm font-semibold text-white hover:brightness-110"
+                      >
+                        {s.price > 0 ? 'Continue to payment' : 'Confirm booking'}
+                      </button>
+                    </div>
                   </div>
                 )}
-              </div>
-            ) : (
-              <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-3">
-                <p className="text-sm font-semibold text-emerald-900">
-                  Booking request saved.
-                </p>
-                <p className="mt-1 text-xs text-emerald-800">
-                  Seminar seat requested successfully. Payment flow can be completed next.
-                </p>
               </div>
             )}
           </aside>
@@ -572,10 +632,14 @@ export default function StudentSeminars() {
             Recommended seminars
           </h2>
           <p className="mt-1 text-xs font-sans text-[#7A7A72]">
-            Curated from your fields like {USER_INTERESTS.join(', ')}.
+            {userInterests.length
+              ? `Curated from your fields like ${userInterests.join(', ')}.`
+              : 'Add fields of interest to your profile to get personalized recommendations.'}
           </p>
         </div>
-        {recommended.length === 0 ? (
+        {loading ? (
+          <p className="text-xs text-slate-500">Loading seminars…</p>
+        ) : recommended.length === 0 ? (
           <p className="text-xs text-slate-500">
             No seminars match your interests with the current filters.
           </p>
@@ -599,9 +663,11 @@ export default function StudentSeminars() {
             Additional sessions you can join across all fields and topics.
           </p>
         </div>
-        {others.length === 0 ? (
+        {loading ? (
+          <p className="text-xs text-slate-500">Loading seminars…</p>
+        ) : others.length === 0 ? (
           <p className="text-xs text-slate-500">
-            No seminars match your search and filters. Try clearing a filter.
+            No seminars available right now. Check back soon.
           </p>
         ) : (
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">

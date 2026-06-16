@@ -31,6 +31,7 @@ export function mapExpertToMentor(expert: any): MentorCardProps {
     image: isDisplayImageUrl(rawImage) ? String(rawImage).trim() : null,
     isNew,
     resume: expert.resume ? String(expert.resume) : null,
+    status: expert.status ? String(expert.status) : undefined,
   };
 }
 

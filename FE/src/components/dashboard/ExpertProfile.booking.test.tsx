@@ -300,7 +300,7 @@ describe('ExpertProfile booking', () => {
     expect(within(modal).getByText('Dr. Smith')).toBeInTheDocument();
     expect(within(modal).getByText('1:1 session')).toBeInTheDocument();
     expect(within(modal).getByText('60 min')).toBeInTheDocument();
-    expect(within(modal).getByText('$60')).toBeInTheDocument();
+    expect(within(modal).getByText('$60.00')).toBeInTheDocument();
     expect(within(modal).getByText('UTC')).toBeInTheDocument();
     expect(screen.queryByTestId('student-checkout')).not.toBeInTheDocument();
   });
@@ -381,7 +381,7 @@ describe('ExpertProfile booking', () => {
 
     expect(screen.getByRole('heading', { name: 'Rates' })).toBeInTheDocument();
     expect(screen.queryByText(/^Rate$/)).not.toBeInTheDocument();
-    expect(await screen.findByText('$60')).toBeInTheDocument();
+    expect(await screen.findByText('$60.00')).toBeInTheDocument();
   });
 
 
@@ -399,7 +399,7 @@ describe('ExpertProfile booking', () => {
     const ratesSection = () =>
       screen.getByRole('heading', { name: 'Rates' }).closest('section') as HTMLElement;
 
-    expect(await within(ratesSection()).findByText(/60 min · \$60 ·/i)).toBeInTheDocument();
+    expect(await within(ratesSection()).findByText(/60 min · \$60\.00 ·/i)).toBeInTheDocument();
     expect(within(ratesSection()).getByText(/2:00 PM.*3:00 PM.*\(UTC\)/i)).toBeInTheDocument();
   });
 
@@ -460,7 +460,7 @@ describe('ExpertProfile booking', () => {
     const ratesSection = () =>
       screen.getByRole('heading', { name: 'Rates' }).closest('section') as HTMLElement;
 
-    expect(within(ratesSection()).getByText('$60')).toBeInTheDocument();
+    expect(within(ratesSection()).getByText('$60.00')).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: /change time/i }));
 
@@ -468,7 +468,7 @@ describe('ExpertProfile booking', () => {
       expect(getExpertById).toHaveBeenCalledTimes(2);
     });
 
-    expect(await within(ratesSection()).findByText('$75')).toBeInTheDocument();
+    expect(await within(ratesSection()).findByText('$75.00')).toBeInTheDocument();
   });
 
 
@@ -488,7 +488,7 @@ describe('ExpertProfile booking', () => {
       screen.getByText('Booking summary').closest('div') as HTMLElement;
 
     expect(within(summarySection()).getByText('60 min')).toBeInTheDocument();
-    expect(within(summarySection()).getByText('$60')).toBeInTheDocument();
+    expect(within(summarySection()).getByText('$60.00')).toBeInTheDocument();
     expect(screen.getByText(/fixed for this booking/i)).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '90 min' })).not.toBeInTheDocument();
   });

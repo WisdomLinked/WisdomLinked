@@ -15,23 +15,74 @@ import { useAppSelector } from '../../store';
 import { useDispatch } from 'react-redux';
 import { showErrorAlert, showSuccessAlert } from '../../actions/alertActions';
 import { updateMe } from '../../actions/authActions';
-import { doUpdateProfile, profileImageFetch } from '../../api/api';
+import { doUpdateProfile, profileImageFetch, passwordResetRequest, confirmPasswordResetByCode } from '../../api/api';
+import FormAlert from '../FormAlert';
+import { useFormAlert } from '../../hooks/useFormAlert';
 import { usePaymentHistory, PaymentHistoryTable, PaymentHistorySummary } from './PaymentHistoryTable';
 import { resolveProfileImageSrc } from '../../utils/profileImage';
 import { saveProfilePhotoFile } from '../../utils/profileImageUpload';
-import { SERVICE_OPTIONS } from '../../constants/serviceOptions';
+import { SERVICE_OPTIONS, canonicalLabelsFromMixedServiceEntries } from '../../constants/serviceOptions';
 
 const PREFERENCE_OPTIONS = SERVICE_OPTIONS.map((o) => ({ id: o.value, label: o.label }));
 
+/** Pull a display string from a stored entry (raw string or populated {value|label|name} doc). */
+function extractEntryValue(item: unknown): string {
+  if (typeof item === 'string') return item.trim();
+  const doc = item as { value?: string; label?: string; name?: string } | null;
+  return String(doc?.value ?? doc?.label ?? doc?.name ?? '').trim();
+}
+
+/** Map the user's stored services -> the three canonical preference toggles. */
+function preferencesFromServices(services: unknown[] | undefined): Record<string, boolean> {
+  const labels = new Set(canonicalLabelsFromMixedServiceEntries(services as any[]));
+  const out: Record<string, boolean> = {};
+  for (const opt of PREFERENCE_OPTIONS) out[opt.id] = labels.has(opt.label);
+  return out;
+}
+
+/** Map the user's stored keywords -> interest chips (de-duped, preserves any non-option majors). */
+function interestsFromKeywords(keywords: unknown[] | undefined): string[] {
+  const list = Array.isArray(keywords) ? keywords : [];
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const k of list) {
+    const v = extractEntryValue(k);
+    if (v && !seen.has(v.toLowerCase())) {
+      seen.add(v.toLowerCase());
+      out.push(v);
+    }
+  }
+  return out;
+}
+
 const INTEREST_OPTIONS = [
-  'Civil Engineering',
-  'Computer Science',
-  'Electrical Engineering',
-  'Mechanical Engineering',
-  'Chemical Engineering',
   'Aerospace Engineering',
+  'Agricultural Engineering',
+  'Artificial Intelligence / Machine Learning',
+  'Automotive Engineering',
   'Biomedical Engineering',
-  'Other Engineering',
+  'Chemical Engineering',
+  'Civil Engineering',
+  'Computer Engineering',
+  'Computer Science',
+  'Data Science',
+  'Electrical Engineering',
+  'Electronics & Communication Engineering',
+  'Environmental Engineering',
+  'Geotechnical Engineering',
+  'Industrial Engineering',
+  'Information Technology',
+  'Marine Engineering',
+  'Materials Science & Engineering',
+  'Mechanical Engineering',
+  'Mechatronics Engineering',
+  'Nuclear Engineering',
+  'Petroleum Engineering',
+  'Robotics Engineering',
+  'Software Engineering',
+  'Structural Engineering',
+  'Systems Engineering',
+  'Telecommunications Engineering',
   'Other',
 ];
 
@@ -58,12 +109,12 @@ export default function StudentProfile() {
       };
       reader.readAsDataURL(file);
     });
-  const [preferences, setPreferences] = useState<Record<string, boolean>>({
-    study_abroad: true,
-    work_abroad: false,
-    research_guidance: true,
-  });
-  const [interests, setInterests] = useState<string[]>(['Computer Science', 'Other Engineering']);
+  const [preferences, setPreferences] = useState<Record<string, boolean>>(
+    () => preferencesFromServices(userDetails?.services),
+  );
+  const [interests, setInterests] = useState<string[]>(
+    () => interestsFromKeywords(userDetails?.keywords),
+  );
   const [showInterestDropdown, setShowInterestDropdown] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -71,7 +122,9 @@ export default function StudentProfile() {
   const [personalSaving, setPersonalSaving] = useState(false);
   const [photoSaving, setPhotoSaving] = useState(false);
   const [preferencesDirty, setPreferencesDirty] = useState(false);
+  const [preferencesSaving, setPreferencesSaving] = useState(false);
   const [interestsDirty, setInterestsDirty] = useState(false);
+  const [interestsSaving, setInterestsSaving] = useState(false);
 
   const SPECIAL_NOTE_MAX = 2000;
   const [specialNote, setSpecialNote] = useState(() => (userDetails as any)?.specialNote ?? '');
@@ -104,6 +157,18 @@ export default function StudentProfile() {
     setSpecialNote((userDetails as any)?.specialNote ?? '');
   }, [notesDirty, (userDetails as any)?.specialNote]);
 
+  // Load saved preferences (services) / interests (keywords) from the account.
+  // Skip while the user has unsaved edits so we don't clobber their changes.
+  useEffect(() => {
+    if (preferencesDirty) return;
+    setPreferences(preferencesFromServices(userDetails?.services));
+  }, [preferencesDirty, userDetails?.services]);
+
+  useEffect(() => {
+    if (interestsDirty) return;
+    setInterests(interestsFromKeywords(userDetails?.keywords));
+  }, [interestsDirty, userDetails?.keywords]);
+
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [passwordStep, setPasswordStep] = useState<'request' | 'verify' | 'done'>('request');
   const [otpSent, setOtpSent] = useState(false);
@@ -111,7 +176,12 @@ export default function StudentProfile() {
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [passwordLoading, setPasswordLoading] = useState(false);
-  const [passwordError, setPasswordError] = useState('');
+  const {
+    message: passwordAlert,
+    variant: passwordAlertVariant,
+    setFormError: setPasswordError,
+    clearFormAlert: clearPasswordAlert,
+  } = useFormAlert();
 
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const { payments, loading: paymentsLoading, error: paymentsError } = usePaymentHistory(showPaymentModal);
@@ -219,18 +289,45 @@ export default function StudentProfile() {
 
   const handleSaveAllProfileChanges = async () => {
     if (hasPersonalTextChanges) await handleSavePersonal();
-    if (preferencesDirty) handleSavePreferences();
-    if (interestsDirty) handleSaveInterests();
+    if (preferencesDirty) await handleSavePreferences();
+    if (interestsDirty) await handleSaveInterests();
   };
 
-  const handleSavePreferences = () => {
-    // TODO: wire up API call to persist preferences
-    setPreferencesDirty(false);
+  // Preferences are persisted as the user's `services` (the three canonical service options).
+  const handleSavePreferences = async () => {
+    setPreferencesSaving(true);
+    try {
+      const services = PREFERENCE_OPTIONS.filter(o => preferences[o.id]).map(o => o.label);
+      const ok = await doUpdateProfile({ services });
+      if (ok) {
+        setPreferencesDirty(false);
+        dispatch(showSuccessAlert('Preferences saved'));
+      } else {
+        dispatch(showErrorAlert('Could not save preferences'));
+      }
+    } catch (err: any) {
+      dispatch(showErrorAlert(err?.message || 'Could not save preferences'));
+    } finally {
+      setPreferencesSaving(false);
+    }
   };
 
-  const handleSaveInterests = () => {
-    // TODO: wire up API call to persist interests
-    setInterestsDirty(false);
+  // Interests are persisted as the user's `keywords` (fields of study / majors).
+  const handleSaveInterests = async () => {
+    setInterestsSaving(true);
+    try {
+      const ok = await doUpdateProfile({ keywords: interests });
+      if (ok) {
+        setInterestsDirty(false);
+        dispatch(showSuccessAlert('Interests saved'));
+      } else {
+        dispatch(showErrorAlert('Could not save interests'));
+      }
+    } catch (err: any) {
+      dispatch(showErrorAlert(err?.message || 'Could not save interests'));
+    } finally {
+      setInterestsSaving(false);
+    }
   };
 
   const handleSaveSpecialNote = async () => {
@@ -244,24 +341,38 @@ export default function StudentProfile() {
     }
   };
 
-  const handleRequestOtp = () => {
-    setPasswordError('');
+  const handleRequestOtp = async () => {
+    clearPasswordAlert();
     setPasswordLoading(true);
-    setTimeout(() => {
+    try {
+      const res = (await passwordResetRequest({ email })) as any;
+      if (res === false) return; // session expired -> handled (logged out) upstream
+      if (res?.status === 'SUCCESS') {
+        setOtpSent(true);
+        setPasswordStep('verify');
+      } else {
+        setPasswordError(res?.error || 'Could not send the code. Please try again.');
+      }
+    } catch (err: any) {
+      setPasswordError(err?.message || 'Could not send the code. Please try again.');
+    } finally {
       setPasswordLoading(false);
-      setOtpSent(true);
-      setPasswordStep('verify');
-    }, 1200);
+    }
   };
 
-  const handleVerifyAndChangePassword = () => {
-    setPasswordError('');
-    if (otpValue.length < 4) {
-      setPasswordError('Please enter the OTP sent to your email.');
+  const handleVerifyAndChangePassword = async () => {
+    clearPasswordAlert();
+    if (otpValue.length < 6) {
+      setPasswordError('Please enter the 6-digit code sent to your email.');
       return;
     }
-    if (newPassword.length < 8) {
-      setPasswordError('Password must be at least 8 characters.');
+    if (
+      newPassword.length < 8 ||
+      !/[A-Z]/.test(newPassword) ||
+      !/[0-9]/.test(newPassword) ||
+      !/[^A-Za-z0-9]/.test(newPassword)
+    ) {
+      setPasswordError('Password must be 8+ characters and include an uppercase letter, a number, and a symbol.');
       return;
     }
     if (newPassword !== confirmPassword) {
@@ -269,13 +380,26 @@ export default function StudentProfile() {
       return;
     }
     setPasswordLoading(true);
-    setTimeout(() => {
+    try {
+      const res = (await confirmPasswordResetByCode({
+        email,
+        password: newPassword,
+        code: otpValue,
+      })) as any;
+      if (res === false) return; // session expired -> handled (logged out) upstream
+      if (res?.status === 'SUCCESS') {
+        setPasswordStep('done');
+        setOtpValue('');
+        setNewPassword('');
+        setConfirmPassword('');
+      } else {
+        setPasswordError(res?.error || 'Could not update your password. Please try again.');
+      }
+    } catch (err: any) {
+      setPasswordError(err?.message || 'Could not update your password. Please try again.');
+    } finally {
       setPasswordLoading(false);
-      setPasswordStep('done');
-      setOtpValue('');
-      setNewPassword('');
-      setConfirmPassword('');
-    }, 1000);
+    }
   };
 
   const closePasswordModal = () => {
@@ -285,7 +409,7 @@ export default function StudentProfile() {
     setOtpValue('');
     setNewPassword('');
     setConfirmPassword('');
-    setPasswordError('');
+    clearPasswordAlert();
   };
 
   const cardClass =
@@ -449,9 +573,11 @@ export default function StudentProfile() {
             <button
               type="button"
               onClick={handleSavePreferences}
-              className="rounded-lg bg-[#234C6A] px-3 py-1.5 text-[11px] font-semibold text-white hover:brightness-110"
+              disabled={preferencesSaving}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-[#234C6A] px-3 py-1.5 text-[11px] font-semibold text-white hover:brightness-110 disabled:opacity-60"
             >
-              Save
+              {preferencesSaving && <Loader2 className="h-3 w-3 animate-spin" aria-hidden />}
+              {preferencesSaving ? 'Saving…' : 'Save'}
             </button>
           )}
         </div>
@@ -486,9 +612,11 @@ export default function StudentProfile() {
             <button
               type="button"
               onClick={handleSaveInterests}
-              className="rounded-lg bg-[#234C6A] px-3 py-1.5 text-[11px] font-semibold text-white hover:brightness-110"
+              disabled={interestsSaving}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-[#234C6A] px-3 py-1.5 text-[11px] font-semibold text-white hover:brightness-110 disabled:opacity-60"
             >
-              Save
+              {interestsSaving && <Loader2 className="h-3 w-3 animate-spin" aria-hidden />}
+              {interestsSaving ? 'Saving…' : 'Save'}
             </button>
           )}
         </div>
@@ -594,6 +722,13 @@ export default function StudentProfile() {
               </button>
             </div>
             <div className="p-6 space-y-4">
+              {passwordStep !== 'done' && passwordAlert && (
+                <FormAlert
+                  variant={passwordAlertVariant}
+                  message={passwordAlert}
+                  onDismiss={clearPasswordAlert}
+                />
+              )}
               {passwordStep === 'request' && (
                 <>
                   <p className="text-sm text-slate-600">
@@ -651,9 +786,6 @@ export default function StudentProfile() {
                       className={inputNormal}
                     />
                   </div>
-                  {passwordError && (
-                    <p className="text-xs text-red-600 flex items-center gap-1">{passwordError}</p>
-                  )}
                   <div className="flex gap-2">
                     <button
                       type="button"

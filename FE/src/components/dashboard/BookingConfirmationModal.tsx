@@ -88,7 +88,7 @@ export default function BookingConfirmationModal({
           <div className="flex justify-between gap-2 border-t border-[#E5E2DB] pt-2">
             <dt className="text-[#7A7A72]">Price</dt>
             <dd className="font-serif text-lg font-semibold">
-              ${details.price.toFixed(0)}
+              ${details.price.toFixed(2)}
             </dd>
           </div>
         </dl>

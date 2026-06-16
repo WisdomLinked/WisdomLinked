@@ -10,14 +10,28 @@ import { createStripePaymentIntent, getStripeMode } from '../../api/api';
 import FormAlert from '../FormAlert';
 import { SetLoadingStatus } from '../../actions/appActions';
 
-export type StudentBookingPendingDetails = {
+
+/** A 1:1 session booking (createGroupChatByUser path). */
+export type StudentOneToOnePendingDetails = {
   name: string;
   start: string | Date;
   end: string | Date;
+  
   duration: number;
   price: number;
   expert: string;
 };
+
+/** A seminar seat (addMemberToPendingGroup path), identified by groupChatId. */
+export type StudentSeminarPendingDetails = {
+  groupChatId: string;
+  price: number;
+  name?: string;
+};
+
+export type StudentBookingPendingDetails =
+  | StudentOneToOnePendingDetails
+  | StudentSeminarPendingDetails;
 
 type CheckoutFormProps = {
   pendingDetails: StudentBookingPendingDetails;
@@ -62,7 +76,12 @@ const CheckoutForm = ({
         stripeMode,
         amount: price,
       });
-      const { client_secret: clientSecret } = response;
+      const clientSecret = response && response.client_secret;
+      if (!clientSecret) {
+        setErrorMessage('Could not start payment. Please try again in a moment.');
+        SetLoadingStatus(false);
+        return;
+      }
 
       window.localStorage.setItem('pendingDetails', JSON.stringify(pendingDetails));
 
@@ -223,7 +242,8 @@ export default function StudentBookingCheckout({
 export async function completeStudentBookingFromStorage(
   paymentIntent: string,
 ): Promise<
-  | { ok: true; expertId: string; userDetails: unknown }
+  | { ok: true; kind: '1:1'; expertId: string; userDetails: unknown }
+  | { ok: true; kind: 'seminar'; userDetails: unknown }
   | { ok: false; error: string }
 > {
   const raw = window.localStorage.getItem('pendingDetails');
@@ -233,6 +253,21 @@ export async function completeStudentBookingFromStorage(
   try {
     const details = JSON.parse(raw);
     window.localStorage.removeItem('pendingDetails');
+
+    // Seminars carry a groupChatId; 1:1 sessions carry an expert + slot.
+    if (details.groupChatId) {
+      const { addMemberToPendingGroup } = await import('../../api/api');
+      const response = await addMemberToPendingGroup({
+        groupChatId: details.groupChatId,
+        price: details.price,
+        payment_intent: paymentIntent,
+      });
+      if (response === false || response?.status === 'FAIL' || response?.error) {
+        return { ok: false, error: response?.error || 'Seminar registration failed after payment.' };
+      }
+      return { ok: true, kind: 'seminar', userDetails: response };
+    }
+
     const { createGroupChatByUser, getExpertById } = await import('../../api/api');
     const expertId = String(details.expert);
     const expertRes = await getExpertById(expertId);
@@ -248,7 +283,7 @@ export async function completeStudentBookingFromStorage(
       payment_intent: paymentIntent,
     });
 
-    return { ok: true, expertId, userDetails: response?.result };
+    return { ok: true, kind: '1:1', expertId, userDetails: response?.result };
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Booking failed after payment.';
     return { ok: false, error: message };

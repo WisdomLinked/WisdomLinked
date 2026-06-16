@@ -81,9 +81,9 @@ router.get("/me", requireAuth(false), getMe);
 router.get("/getMyEvents", requireAuth(false), getMyEvents);
 router.post("/submit", uploadsGeneral, handleSubmit)
 router.post("/leaveFeedback", requireAuth(false), leaveFeedback)
-router.post("/stripePay", requireAuth(false), stripePay)
-router.post("/createStripePaymentIntent", requireAuth(false), createStripePaymentIntent)
-router.post("/getStripeMode", requireAuth(false), getStripeMode)
+router.post("/stripePay", requireAuth(true), stripePay)
+router.post("/createStripePaymentIntent", requireAuth(true), createStripePaymentIntent)
+router.post("/getStripeMode", requireAuth(true), getStripeMode)
 router.get("/healthCheck", healthCheck)
 router.get("/getTimezone",getTimeZone)
 router.post("/contact-form", submitContactForm)
@@ -145,8 +145,8 @@ const oauthCallback = async (req: any, res: any) => {
             user.role = role;
         }
 
-        // Always sync browser timezone — DB defaults to 'UTC' but real location comes from the client
-        if (timezone) {
+        // Capture the browser timezone only on first-time OAuth signup; never touch it on later logins.
+        if (timezone && isNew) {
             user.timeZone = timezone;
         }
         

@@ -11,6 +11,7 @@ type CarouselItem = {
   location?: string;
   cta: string;
   image?: string;
+  onSelect?: () => void;
 };
 
 type CarouselCardProps = {
@@ -122,7 +123,9 @@ export default function CarouselCard({ category, icon: Icon, items }: CarouselCa
       </div>
       <button
         type="button"
-        className="mt-3 inline-flex w-full items-center justify-center rounded-lg border border-[#234c6a] px-3 py-1.5 text-[11px] font-semibold text-[#234c6a] transition-colors hover:bg-[#234c6a] hover:text-white"
+        onClick={() => item.onSelect?.()}
+        disabled={!item.onSelect}
+        className="mt-3 inline-flex w-full items-center justify-center rounded-lg border border-[#234c6a] px-3 py-1.5 text-[11px] font-semibold text-[#234c6a] transition-colors hover:bg-[#234c6a] hover:text-white disabled:cursor-default disabled:opacity-60 disabled:hover:bg-transparent disabled:hover:text-[#234c6a]"
       >
         {item.cta}
       </button>

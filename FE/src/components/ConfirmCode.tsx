@@ -49,7 +49,7 @@ const ConfirmCode = ({ email, password }: any) => {
     const confirmCode = async () => {
         clearFormAlert();
         SetLoadingStatus(true);
-        const response: any = await confirmLoginByCode({ email, password, code: inputCode, timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone });
+        const response: any = await confirmLoginByCode({ email, password, code: inputCode});
         // console.log(response, '////')
         if (response === false) return;
         if (response?.status === "SUCCESS") {

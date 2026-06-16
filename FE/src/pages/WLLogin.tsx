@@ -146,8 +146,7 @@ export default function WLLogin() {
             const response: any = await confirmLoginByCode({
                 email: form.email,
                 password: form.password,
-                code,
-                timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone
+                code
             });
             if (response === false) return;
             if (response?.status === 'SUCCESS') {
