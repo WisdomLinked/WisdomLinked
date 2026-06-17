@@ -3,6 +3,8 @@ import { wlDisplayName } from '../utils/wlDisplayName';
 const mongoose = require("mongoose");
 const User = require("../models/User");
 const GroupChat = require("../models/GroupChat");
+const Keyword = require("../models/Keyword");
+const Service = require("../models/Service");
 const MeetingThread = require("../models/MeetingThread");
 const PendingAppointmentToGroup = require("../models/PendingAppointmentToGroup");
 const PaymentHistory = require("../models/PaymentHistory");
@@ -10,6 +12,37 @@ const PaymentHistory = require("../models/PaymentHistory");
 const { checkPaymentIntentSucceeded, refundPaymentIntent } = require("./stripe.controller");
 const { appendPaymentHistory } = require("./payment.controller");
 const { getFullUserData } = require("../middlewares/requireAuth");
+
+// keywords/services arrive from the client as plain label strings (or legacy { value }
+// objects), but GroupChat stores them as ObjectId refs. Resolve each label to an existing
+// Keyword/Service (case-insensitive) or create it — mirrors the expert-profile flow and
+// prevents Mongoose CastErrors. Keywords match exactly; services match by prefix because the
+// client may send "Study abroad" while the DB stores "Study abroad consultation".
+const escapeRegex = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+const resolveKeywordIds = async (keywords: any): Promise<any[]> => {
+    const ids: any[] = [];
+    if (!Array.isArray(keywords)) return ids;
+    for (const k of keywords) {
+        const value = typeof k === 'string' ? k : k?.value;
+        if (!value) continue;
+        const existing = await Keyword.findOne({ value: { $regex: new RegExp(`^${escapeRegex(value)}$`, 'i') } });
+        ids.push(existing ? existing._id : (await Keyword.create({ value, label: value }))._id);
+    }
+    return ids;
+};
+
+const resolveServiceIds = async (services: any): Promise<any[]> => {
+    const ids: any[] = [];
+    if (!Array.isArray(services)) return ids;
+    for (const s of services) {
+        const value = typeof s === 'string' ? s : s?.value;
+        if (!value) continue;
+        const existing = await Service.findOne({ value: { $regex: new RegExp(`^${escapeRegex(value)}`, 'i') } });
+        ids.push(existing ? existing._id : (await Service.create({ value, label: value }))._id);
+    }
+    return ids;
+};
 const Conversation = require("../models/Conversation");
 const {
     getOrCreateDMChannel,
@@ -577,12 +610,15 @@ const createGroupChatByUser = async (req, res) => {
         assertDurationAllowed(expertUser, duration);
         await assertBookingSlotValid(expertUser, start, end);
 
+        const _services = await resolveServiceIds(services);
+        const _keywords = await resolveKeywordIds(keywords);
+
         // create group
         const chat = await GroupChat.create({
             name: name,
             description: description,
-            services: services,
-            keywords: keywords,
+            services: _services,
+            keywords: _keywords,
             start: start,
             end: end,
             duration: duration,
@@ -645,12 +681,15 @@ const createGroupChat = async (req, res) => {
             throw new Error(checkTitleNameInvalid('Name', name))
         }
 
+        const _services = await resolveServiceIds(services);
+        const _keywords = await resolveKeywordIds(keywords);
+
         // create group
         const chat = await GroupChat.create({
             name: name,
             description: description,
-            services: services,
-            keywords: keywords,
+            services: _services,
+            keywords: _keywords,
             start: start,
             end: end,
             duration: duration,
@@ -899,8 +938,8 @@ const updateGroupChat = async (req, res) => {
         const updateFields: Record<string, any> = {};
         if (name !== undefined) updateFields.name = name;
         if (description !== undefined) updateFields.description = description;
-        if (services !== undefined) updateFields.services = services;
-        if (keywords !== undefined) updateFields.keywords = keywords;
+        if (services !== undefined) updateFields.services = await resolveServiceIds(services);
+        if (keywords !== undefined) updateFields.keywords = await resolveKeywordIds(keywords);
         if (start !== undefined) updateFields.start = start;
         if (end !== undefined) updateFields.end = end;
         if (duration !== undefined) updateFields.duration = duration;
