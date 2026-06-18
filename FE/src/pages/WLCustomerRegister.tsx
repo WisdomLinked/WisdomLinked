@@ -203,6 +203,7 @@ export default function WLCustomerRegister() {
                 phoneNumber: form.countryCode + form.phone,
                 email: form.email,
                 password: form.password,
+                timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
                 ...(form.specialNote.trim() && { specialNote: form.specialNote.trim() })
             };
             const response = await callApi('POST', 'auth/register', data, undefined, {

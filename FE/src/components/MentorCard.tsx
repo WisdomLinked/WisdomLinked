@@ -17,6 +17,8 @@ export interface MentorCardProps {
   followerCount?: number;
   /** Expert resume file path or URL (students may open from profile). */
   resume?: string | null;
+  /** Account status from the BE; only 'active' experts can be booked. */
+  status?: string;
   onViewProfile?: (mentor: MentorCardProps) => void;
   isFollowing?: boolean;
   onToggleFollow?: (mentorId: string | number) => void;
@@ -41,11 +43,15 @@ const MentorCard: React.FC<MentorCardProps> = ({
   compact = false,
   followerCount = 0,
   resume = null,
+  status,
   onViewProfile,
   id,
   isFollowing = false,
   onToggleFollow,
 }) => {
+  // Experts still in review (or otherwise not active) cannot be booked — mirrors the
+  // legacy experts list which disabled the "Select" button for review experts.
+  const isBookable = status === undefined || status === 'active';
   const aiHeadshotUrl = (seed: string) =>
     `https://api.dicebear.com/9.x/bottts-neutral/svg?seed=${encodeURIComponent(seed)}`;
 
@@ -58,44 +64,38 @@ const MentorCard: React.FC<MentorCardProps> = ({
     setImgSrc(image && isDisplayImageUrl(image) ? image : placeholder);
   }, [image, placeholder]);
 
+  const mentorPayload: MentorCardProps = {
+    id,
+    name,
+    title,
+    institution,
+    field,
+    experience,
+    services,
+    image,
+    isNew,
+    compact,
+    followerCount,
+    resume,
+    status,
+  };
+
+  const canView = Boolean(onViewProfile) && isBookable;
+  const handleView = () => {
+    if (!canView) return;
+    onViewProfile?.(mentorPayload);
+  };
+
   return (
     <article
-      onClick={() =>
-        onViewProfile?.({
-          id,
-          name,
-          title,
-          institution,
-          field,
-          experience,
-          services,
-          image,
-          isNew,
-          compact,
-          followerCount,
-          resume,
-        })
-      }
-      role={onViewProfile ? 'button' : undefined}
-      tabIndex={onViewProfile ? 0 : undefined}
+      onClick={handleView}
+      role={canView ? 'button' : undefined}
+      tabIndex={canView ? 0 : undefined}
       onKeyDown={e => {
-        if (!onViewProfile) return;
+        if (!canView) return;
         if (e.key === 'Enter' || e.key === ' ') {
           e.preventDefault();
-          onViewProfile({
-            id,
-            name,
-            title,
-            institution,
-            field,
-            experience,
-            services,
-            image,
-            isNew,
-            compact,
-            followerCount,
-            resume,
-          });
+          handleView();
         }
       }}
       className={`group relative flex flex-col rounded-xl border border-[#E5E2DB] bg-white transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_16px_40px_rgba(26,58,74,0.18)] ${
@@ -185,29 +185,28 @@ const MentorCard: React.FC<MentorCardProps> = ({
       </div>
 
       <div className="mt-4 flex items-center justify-end gap-2">
-        <button
-          type="button"
-          className="rounded-[4px] bg-[#1A3A4A] px-3 py-1.5 text-[0.78rem] font-semibold text-white hover:bg-[#122635]"
-          onClick={e => {
-            e.stopPropagation();
-            onViewProfile?.({
-              id,
-              name,
-              title,
-              institution,
-              field,
-              experience,
-              services,
-              image,
-              isNew,
-              compact,
-              followerCount,
-              resume,
-            });
-          }}
-        >
-          View Profile
-        </button>
+        {isBookable ? (
+          <button
+            type="button"
+            className="rounded-[4px] bg-[#1A3A4A] px-3 py-1.5 text-[0.78rem] font-semibold text-white hover:bg-[#122635]"
+            onClick={e => {
+              e.stopPropagation();
+              handleView();
+            }}
+          >
+            View Profile
+          </button>
+        ) : (
+          <button
+            type="button"
+            disabled
+            title="This expert is not yet available for booking"
+            className="cursor-not-allowed rounded-[4px] bg-[#E5E2DB] px-3 py-1.5 text-[0.78rem] font-semibold text-[#7A7A72]"
+            onClick={e => e.stopPropagation()}
+          >
+            In review
+          </button>
+        )}
       </div>
     </article>
   );

@@ -2,17 +2,33 @@ import { Request, Response } from 'express';
 const User = require("../models/User");
 const GroupChat = require("../models/GroupChat");
 const Keyword = require("../models/Keyword")
+const PaymentHistory = require("../models/PaymentHistory");
+
+// Escape user-supplied text so it can be used safely inside a regex (prevents ReDoS / injection).
+const escapeRegex = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 
 const filterExperts = async (req: any, res: Response) => {
     try {
-        const { email } = req.user
         const { _id, username, keywords, services, sortBy } = req.body
-        let query = User.find({ role: 'expert', status: { $ne: 'blocked' } })
+        // Default to active experts only — excludes experts still in review or blocked.
+        let query = User.find({ role: 'expert', status: 'active' })
         if (_id) {
             query.where({ _id: _id })
         } else {
-            if (username) {
-                query.where({ username: { '$regex': username, '$options': 'i' } })
+            const term = typeof username === 'string' ? username.trim() : ''
+            if (term) {
+                const rx = { $regex: escapeRegex(term), $options: 'i' }
+                // The search box matches across name, institution/title, bio and major (keyword) names.
+                const matchingKeywords = await Keyword.find({ value: rx }).select('_id')
+                const keywordIds = matchingKeywords.map((k: any) => k._id)
+                query.where({
+                    $or: [
+                        { username: rx },
+                        { title: rx },
+                        { description: rx },
+                        ...(keywordIds.length ? [{ keywords: { $in: keywordIds } }] : []),
+                    ],
+                })
             }
             if (keywords?.length) {
                 let _keywords = []
@@ -167,7 +183,13 @@ const getExpertById = async (req, res) => {
     try {
         console.log("inside getExpertById")
         const { id } = req.params
-        const query = await User.findById(id).populate(["keywords", "services"])
+        const query = await User.findById(id).populate(["keywords","services","events","groupChats"
+        ,{
+            path: "pendingGroupChats",
+            populate: ["groupChatId"],  
+        },
+        ])
+
         console.log("inside getExpertById", query)
         return res.status(200).json({
             result: query
@@ -179,8 +201,32 @@ const getExpertById = async (req, res) => {
     }
 }
 
+const getMyPaymentHistory = async (req: any, res: Response) => {
+    try {
+        const customerId = req.user.userId;
+        const histories = await PaymentHistory.find({ customer: customerId })
+            .populate("expert", "username email")
+            .populate("groupChat", "name type")
+            .populate("event", "title")
+            .sort({ createdAt: -1 })
+            .limit(500)
+            .lean();
+
+        const enriched = histories.map((h: any) => ({
+            ...h,
+            paymentKind: h.groupChat?.type === "seminar" ? "seminar" : h.groupChat || h.event ? "individual" : "other",
+        }));
+
+        return res.status(200).json({ result: enriched });
+    } catch (err: any) {
+        console.log(err);
+        return res.status(500).send(err.message);
+    }
+};
+
 module.exports = {
     filterExperts,
     filterSeminars,
     getExpertById,
+    getMyPaymentHistory,
 }

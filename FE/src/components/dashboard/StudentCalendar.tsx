@@ -1,7 +1,8 @@
 import React, { useMemo, useState } from 'react';
-import { CalendarDays, Clock, MapPin, X } from 'lucide-react';
+import { CalendarDays, Clock, MapPin, X, AlertCircle } from 'lucide-react';
+import { toYMDLocal } from '../../utils/schedulingTimezone';
 
-type Meeting = {
+export type Meeting = {
   id: string;
   title: string;
   date: string; // YYYY-MM-DD
@@ -9,62 +10,31 @@ type Meeting = {
   with: string;
   location: string;
   type: 'seminar' | 'session';
+  /** 1:1 sessions can be awaiting expert approval. Seminars are always confirmed. */
+  status?: 'pending' | 'confirmed';
 };
 
 const containerClass = 'h-[calc(100vh-56px)] overflow-y-auto px-6 py-7 bg-[#F5F3EF]';
 
 export default function StudentCalendar({
   onJoinMeeting,
+  meetings = [],
+  loading = false,
+  error = null,
+  onRetry,
 }: {
   onJoinMeeting?: () => void;
+  meetings?: Meeting[];
+  loading?: boolean;
+  error?: string | null;
+  onRetry?: () => void;
 }) {
   const today = new Date();
-  const ymd = (d: Date) => d.toISOString().slice(0, 10);
-  const todayDateStr = ymd(today);
-
-  const initialMeetings: Meeting[] = [
-    {
-      id: 'm1',
-      title: 'AI for Healthcare seminar',
-      date: ymd(new Date(new Date().setDate(new Date().getDate() - 5))),
-      time: '14:00',
-      with: 'Seminar host: Dr. Yuki Tanaka',
-      location: 'Online · WisdomLinked Room',
-      type: 'seminar',
-    },
-    {
-      id: 'm2',
-      title: '1:1 with Dr. Emily Chen',
-      date: ymd(new Date(new Date().setDate(new Date().getDate() - 2))),
-      time: '10:30',
-      with: 'Mentor: Dr. Emily Chen',
-      location: 'Online · WisdomLinked Room',
-      type: 'session',
-    },
-    {
-      id: 'm3',
-      title: 'Seminar: AI in Healthcare Systems',
-      date: ymd(new Date(new Date().setDate(new Date().getDate() + 3))),
-      time: '17:00',
-      with: 'Seminar host: Dr. Yuki Tanaka',
-      location: 'Online · WisdomLinked Room',
-      type: 'seminar',
-    },
-    {
-      id: 'm4',
-      title: '1:1 session with Prof. Daniel Ortiz',
-      date: ymd(new Date(new Date().setDate(new Date().getDate() + 1))),
-      time: '09:30',
-      with: 'Mentor: Prof. Daniel Ortiz',
-      location: 'Online · WisdomLinked Room',
-      type: 'session',
-    },
-  ];
+  const todayDateStr = toYMDLocal(today);
 
   const [currentMonth, setCurrentMonth] = useState(
     new Date(today.getFullYear(), today.getMonth(), 1),
   );
-  const [meetings, setMeetings] = useState<Meeting[]>(initialMeetings);
 
   const [selectedPastId, setSelectedPastId] = useState<string | null>(null);
 
@@ -119,12 +89,21 @@ export default function StudentCalendar({
     return dt.getTime() < Date.now();
   };
 
+  const isPendingMeeting = (m: Meeting) => m.status === 'pending';
+
   const colorForMeeting = (m: Meeting) => {
     if (isPastMeeting(m)) {
       return {
         bg: 'bg-slate-200 text-slate-600',
         dot: 'bg-slate-400',
         label: m.type === 'seminar' ? 'Past seminar' : 'Past 1-1',
+      };
+    }
+    if (isPendingMeeting(m)) {
+      return {
+        bg: 'bg-amber-500 text-white',
+        dot: 'bg-amber-300',
+        label: m.type === 'seminar' ? 'Pending seminar' : 'Pending 1-1',
       };
     }
     if (m.type === 'seminar') {
@@ -213,12 +192,42 @@ export default function StudentCalendar({
             <span className="inline-block h-2 w-2 rounded-full bg-[#2563EB]" />
             1-1 appointment
           </span>
+          <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-1 text-[11px] text-amber-700">
+            <span className="inline-block h-2 w-2 rounded-full bg-amber-500" />
+            Pending
+          </span>
           <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-1 text-[11px] text-slate-600">
             <span className="inline-block h-2 w-2 rounded-full bg-slate-300" />
             Past
           </span>
         </div>
       </div>
+
+      {error ? (
+        <div className="mb-4 flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+          <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
+          <div className="flex-1">
+            <p className="font-semibold">Couldn&apos;t load your calendar</p>
+            <p className="mt-0.5 text-[13px] text-red-700">{error}</p>
+          </div>
+          {onRetry && (
+            <button
+              type="button"
+              onClick={onRetry}
+              className="shrink-0 rounded-[4px] border border-red-300 bg-white px-3 py-1.5 text-[12px] font-semibold text-red-700 hover:bg-red-100"
+            >
+              Retry
+            </button>
+          )}
+        </div>
+      ) : null}
+
+      {loading && !error ? (
+        <div className="mb-4 flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600">
+          <span className="h-4 w-4 animate-spin rounded-full border-2 border-slate-300 border-t-[#234C6A]" />
+          Loading your sessions…
+        </div>
+      ) : null}
 
       <div className="grid gap-6 lg:grid-cols-[2fr_minmax(260px,1fr)]">
         {/* Month grid */}
@@ -258,7 +267,7 @@ export default function StudentCalendar({
               if (isBlank) {
                 return <div key={`blank-${idx}`} />;
               }
-              const dateStr = date.toISOString().slice(0, 10);
+              const dateStr = toYMDLocal(date);
               const dayMeetings = meetingsByDate[dateStr] || [];
               const isToday = isSameDate(date, today);
               return (
@@ -335,12 +344,20 @@ export default function StudentCalendar({
                       </p>
                       <span
                         className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium ${
-                          m.type === 'seminar'
-                            ? 'bg-emerald-100 text-emerald-700'
-                            : 'bg-blue-100 text-blue-700'
+                          isPendingMeeting(m)
+                            ? 'bg-amber-100 text-amber-700'
+                            : m.type === 'seminar'
+                              ? 'bg-emerald-100 text-emerald-700'
+                              : 'bg-blue-100 text-blue-700'
                         }`}
                       >
-                        {m.type === 'seminar' ? 'Seminar' : '1-1 session'}
+                        {isPendingMeeting(m)
+                          ? m.type === 'seminar'
+                            ? 'Pending seminar'
+                            : 'Pending 1-1'
+                          : m.type === 'seminar'
+                            ? 'Seminar'
+                            : '1-1 session'}
                       </span>
                     </div>
                     <div className="mt-0.5 flex items-center gap-2 text-[11px] text-slate-600">
@@ -354,16 +371,22 @@ export default function StudentCalendar({
                       <span className="truncate">{m.location}</span>
                     </div>
                     <p className="mt-0.5 text-[11px] text-slate-500">{m.with}</p>
-                    <div className="mt-2 flex justify-end">
-                      <button
-                        type="button"
-                        onClick={() => onJoinMeeting?.()}
-                        className="inline-flex items-center justify-center rounded-[4px] bg-[#234C6A] px-3 py-1.5 text-[11px] font-semibold text-white hover:brightness-110 disabled:opacity-60"
-                        disabled={!onJoinMeeting}
-                      >
-                        Join meeting
-                      </button>
-                    </div>
+                    {isPendingMeeting(m) ? (
+                      <p className="mt-2 text-[11px] font-medium text-amber-700">
+                        Awaiting expert approval
+                      </p>
+                    ) : (
+                      <div className="mt-2 flex justify-end">
+                        <button
+                          type="button"
+                          onClick={() => onJoinMeeting?.()}
+                          className="inline-flex items-center justify-center rounded-[4px] bg-[#234C6A] px-3 py-1.5 text-[11px] font-semibold text-white hover:brightness-110 disabled:opacity-60"
+                          disabled={!onJoinMeeting}
+                        >
+                          Join meeting
+                        </button>
+                      </div>
+                    )}
                   </div>
                 ))}
               {upcomingMeetings.length === 0 && (
@@ -534,7 +557,12 @@ export default function StudentCalendar({
                             <p className="mt-1 text-[11px] text-slate-500">
                               {m.with}
                             </p>
-                            {!isPastMeeting(m) && onJoinMeeting && (
+                            {!isPastMeeting(m) && isPendingMeeting(m) && (
+                              <p className="mt-2 text-[11px] font-medium text-amber-700">
+                                Awaiting expert approval
+                              </p>
+                            )}
+                            {!isPastMeeting(m) && !isPendingMeeting(m) && onJoinMeeting && (
                               <div className="mt-2">
                                 <button
                                   type="button"

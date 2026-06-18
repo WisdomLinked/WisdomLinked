@@ -97,9 +97,9 @@ export const resendConfirmEmail = async ({ email }: any) => {
     }
 };
 
-export const confirmLoginByCode = async ({ email, password, code, timeZone }: any) => {
+export const confirmLoginByCode = async ({ email, password, code }: any) => {
     try {
-        const res = await api.post<any>("auth/confirmLoginByCode", { email, password, code, timeZone });
+        const res = await api.post<any>("auth/confirmLoginByCode", { email, password, code});
 
         return res.data;
     } catch (err: any) {
@@ -979,6 +979,15 @@ export const shareMeetingViaEmail = async (data: any) => {
 export const doGetExpertPaymentHistory = async () => {
     try {
         const res = await api.post("expert/getMyPaymentHistory", {});
+        return res.data;
+    } catch (err: any) {
+        return checkForAuthorization(err);
+    }
+};
+
+export const doGetCustomerPaymentHistory = async () => {
+    try {
+        const res = await api.post("customer/getMyPaymentHistory", {});
         return res.data;
     } catch (err: any) {
         return checkForAuthorization(err);

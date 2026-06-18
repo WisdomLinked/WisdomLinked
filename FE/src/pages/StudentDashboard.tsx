@@ -2,31 +2,33 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useDispatch } from 'react-redux';
 import { useLocation, useNavigate } from 'react-router-dom';
 import queryString from 'query-string';
-import { BookOpen, Clock, UserCheck, AlertCircle, MessageSquare } from 'lucide-react';
+import { BookOpen, Clock, UserCheck, AlertCircle, MessageSquare, Users } from 'lucide-react';
 import { useAppSelector } from '../store';
-import { doGetMyEvents, getAllCommunityChats, profileImageFetch } from '../api/api';
+import { doGetMyEvents, getAllCommunityChats, profileImageFetch, doFilterExperts, doFilterSeminars } from '../api/api';
 import { resolveProfileImageSrc } from '../utils/profileImage';
 import { fetchDmUnreadSnapshot } from '../api/chatApi';
 import Sidebar from '../components/layout/Sidebar';
 import TopBar, { TopBarNotificationItem } from '../components/layout/TopBar';
 import StatsGrid from '../components/dashboard/StatsGrid';
-import CarouselSection from '../components/dashboard/CarouselSection';
+import CarouselSection, { type CarouselSectionData } from '../components/dashboard/CarouselSection';
 import StudentProfile from '../components/dashboard/StudentProfile';
 import StudentSettings from '../components/dashboard/StudentSettings';
-import StudentCalendar from '../components/dashboard/StudentCalendar';
+import StudentCalendar, { type Meeting as CalendarMeeting } from '../components/dashboard/StudentCalendar';
 import JoinMeeting from '../components/dashboard/JoinMeeting';
 import StudentSeminars from '../components/dashboard/StudentSeminars';
 import FindExpertsPage from './FindExperts';
 import Chatbot from '../components/chatbot';
 import ContactAdmin from './Dashboard/_ExpertDashboard/ContactAdmin';
-import UpcomingCountdownCard from '../components/dashboard/UpcomingCountdownCard';
-import UpcomingSessionModal from '../components/dashboard/UpcomingSessionModal';
+import UpcomingCountdownCard, { type UpcomingSession } from '../components/dashboard/UpcomingCountdownCard';
+import UpcomingSessionModal, { type UpcomingModalSession } from '../components/dashboard/UpcomingSessionModal';
 import ExpertProfile from '../components/dashboard/ExpertProfile';
 import { completeStudentBookingFromStorage } from '../components/dashboard/StudentBookingCheckout';
 import { getExpertById } from '../api/api';
 import type { MentorCardProps } from '../components/MentorCard';
 import { mapExpertToMentorWithImage } from '../utils/mapExpertToMentor';
 import StudentChat from '../components/dashboard/StudentChat';
+import StudentPaymentHistory from '../components/dashboard/StudentPaymentHistory';
+import { detectUserTimeZone, toYMDInTimeZone } from '../utils/schedulingTimezone';
 import {
   connectToRC,
   onSubscriptionChanged,
@@ -39,19 +41,260 @@ function deriveSessionCounts(u: any) {
     return { bookedSem: 0, pendSem: 0, bookedInd: 0, pendInd: 0 };
   }
   const events = u.events || [];
-  const pendInd = events.filter(
+  const gcs = u.groupChats || [];
+
+  // 1:1s live in two disjoint systems: student-booked sessions are individual
+  // groupChats ('pending' → awaiting approval, 'active' → booked); expert-created
+  // / legacy ones are events. Count both so the cards reflect every 1:1.
+  const indChats = gcs.filter((g: any) => g.type === 'individual');
+  const pendIndChats = indChats.filter(
+    (g: any) => (g.status || '').toLowerCase() === 'pending',
+  ).length;
+  const bookedIndChats = indChats.filter(
+    (g: any) => (g.status || '').toLowerCase() === 'active',
+  ).length;
+
+  const pendIndEvents = events.filter(
     (e: any) => (e.status || '').toLowerCase() === 'pending',
   ).length;
-  const bookedInd = events.filter((e: any) => {
+  const bookedIndEvents = events.filter((e: any) => {
     const s = (e.status || '').toLowerCase();
     return s === 'accepted' || s === 'confirmed' || s === 'approved';
   }).length;
-  const gcs = u.groupChats || [];
+
+  const pendInd = pendIndChats + pendIndEvents;
+  const bookedInd = bookedIndChats + bookedIndEvents;
+
   const bookedSem = gcs.filter((g: any) => g.type === 'seminar').length;
   const pendSem = (u.pendingGroupChats || []).filter(
     (p: any) => p.groupChatId?.type === 'seminar',
   ).length;
   return { bookedSem, pendSem, bookedInd, pendInd };
+}
+
+/** Wall-clock HH:MM for an instant in the given IANA timezone (24h, DST-aware). */
+function timeHHMMInTimeZone(d: Date, timeZone: string): string {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: timeZone || 'UTC',
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  }).formatToParts(d);
+  const hour = parts.find((p) => p.type === 'hour')?.value ?? '00';
+  const minute = parts.find((p) => p.type === 'minute')?.value ?? '00';
+  return `${hour}:${minute}`;
+}
+
+/**
+ * Build the calendar's meetings from the user's real bookings, projected into
+ * the student's configured timezone. 1:1 sessions live in two disjoint systems:
+ *  - Seminars + student-booked 1:1s are groupChats. Individual chats carry a
+ *    status: 'pending' (awaiting expert approval) or 'active' (confirmed);
+ *    'cancelled' is dropped. Seminars are always confirmed.
+ *  - Expert-created / legacy 1:1s live in events: 'pending' plus
+ *    accepted/confirmed/approved (declined/cancelled dropped).
+ * Past/upcoming split is handled inside StudentCalendar.
+ */
+function deriveCalendarMeetings(u: any): CalendarMeeting[] {
+  if (!u) return [];
+  const tz = u?.timeZone || detectUserTimeZone();
+  const out: CalendarMeeting[] = [];
+
+  const pushMeeting = (
+    rawId: any,
+    fallback: string,
+    title: string,
+    start: any,
+    type: 'seminar' | 'session',
+    status: 'pending' | 'confirmed',
+    withLabel: string,
+  ) => {
+    // start may be an ISO string (Date field) or epoch ms — new Date handles both.
+    const d = new Date(start);
+    if (Number.isNaN(d.getTime())) return;
+    out.push({
+      id: String(rawId ?? fallback),
+      title,
+      date: toYMDInTimeZone(d, tz),
+      time: timeHHMMInTimeZone(d, tz),
+      with: withLabel,
+      location: 'Online · WisdomLinked Room',
+      type,
+      status,
+    });
+  };
+
+  for (const g of u?.groupChats || []) {
+    const host = g?.admin?.username || g?.admin?.email || 'WisdomLinked';
+    const gStatus = (g?.status || '').toLowerCase();
+    if (g?.type === 'seminar') {
+      pushMeeting(g?._id, `seminar-${g?.start}`, g?.name || 'Seminar', g?.start, 'seminar', 'confirmed', `Seminar host: ${host}`);
+    } else if (g?.type === 'individual' && gStatus !== 'cancelled') {
+      pushMeeting(
+        g?._id,
+        `session-${g?.start}`,
+        g?.name || '1:1 session',
+        g?.start,
+        'session',
+        gStatus === 'active' ? 'confirmed' : 'pending',
+        `Mentor: ${host}`,
+      );
+    }
+  }
+
+  // Seminar registrations awaiting expert approval live in pendingGroupChats, not
+  // groupChats — surface them as pending so a just-booked seminar shows up.
+  for (const p of u?.pendingGroupChats || []) {
+    const g = p?.groupChatId;
+    if (g?.type !== 'seminar') continue;
+    const host = g?.admin?.username || g?.admin?.email || 'WisdomLinked';
+    pushMeeting(
+      p?._id ?? g?._id,
+      `pending-seminar-${g?.start}`,
+      g?.name || 'Seminar',
+      g?.start,
+      'seminar',
+      'pending',
+      `Seminar host: ${host}`,
+    );
+  }
+
+  const CONFIRMED_EVENT = ['accepted', 'confirmed', 'approved'];
+  for (const e of u?.events || []) {
+    const status = (e?.status || '').toLowerCase();
+    const isPending = status === 'pending';
+    if (!isPending && !CONFIRMED_EVENT.includes(status)) continue;
+    const mentor = e?.expert?.username || e?.expert?.email || 'Your mentor';
+    pushMeeting(
+      e?._id,
+      `event-${e?.start}`,
+      e?.title || '1:1 session',
+      e?.start,
+      'session',
+      isPending ? 'pending' : 'confirmed',
+      `Mentor: ${mentor}`,
+    );
+  }
+
+  return out;
+}
+
+function modalWhen(ms: number): string {
+  const d = new Date(ms);
+  if (Number.isNaN(d.getTime())) return '';
+  return d.toLocaleString(undefined, {
+    weekday: 'short',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+}
+
+/**
+ * Build the session list for the UpcomingSessionModal opened from a StatsGrid
+ * card. Mirrors deriveSessionCounts so the rows match the card's number:
+ * seminars come from groupChats / pendingGroupChats, 1:1s from events.
+ */
+function deriveModalSessions(
+  u: any,
+  kind: 'seminar' | 'oneToOne',
+  status: 'booked' | 'pending',
+): UpcomingModalSession[] {
+  if (!u) return [];
+
+  const seminarToModal = (g: any): UpcomingModalSession => {
+    const at = new Date(g?.start).getTime();
+    return {
+      id: String(g?._id ?? `${g?.type}-${at}`),
+      title: g?.name || 'Seminar',
+      at: Number.isNaN(at) ? 0 : at,
+      when: Number.isNaN(at) ? 'TBD' : modalWhen(at),
+      location: 'Online · WisdomLinked Room',
+      with: g?.admin?.username || g?.admin?.email || 'WisdomLinked',
+    };
+  };
+
+  if (kind === 'seminar') {
+    if (status === 'booked') {
+      return (u.groupChats || [])
+        .filter((g: any) => g?.type === 'seminar')
+        .map(seminarToModal);
+    }
+    return (u.pendingGroupChats || [])
+      .filter((p: any) => p?.groupChatId?.type === 'seminar')
+      .map((p: any) => seminarToModal(p.groupChatId));
+  }
+
+  // 1:1s come from two disjoint systems: student-booked sessions are individual
+  // groupChats ('active' = booked, 'pending' = awaiting approval); expert-created
+  // / legacy ones are events. Merge both so the modal matches the card count.
+  const indChatWanted =
+    status === 'pending'
+      ? (s: string) => s === 'pending'
+      : (s: string) => s === 'active';
+  const fromChats = (u.groupChats || [])
+    .filter(
+      (g: any) =>
+        g?.type === 'individual' && indChatWanted((g?.status || '').toLowerCase()),
+    )
+    .map((g: any) => {
+      const at = new Date(g?.start).getTime();
+      return {
+        id: String(g?._id ?? `session-${at}`),
+        title: g?.name || '1:1 session',
+        at: Number.isNaN(at) ? 0 : at,
+        when: Number.isNaN(at) ? 'TBD' : modalWhen(at),
+        location: 'Online · WisdomLinked Room',
+        with: g?.admin?.username || g?.admin?.email || 'Your mentor',
+      };
+    });
+
+  const eventWanted =
+    status === 'pending'
+      ? (s: string) => s === 'pending'
+      : (s: string) => ['accepted', 'confirmed', 'approved'].includes(s);
+  const fromEvents = (u.events || [])
+    .filter((e: any) => eventWanted((e?.status || '').toLowerCase()))
+    .map((e: any) => {
+      const at = new Date(e?.start).getTime();
+      return {
+        id: String(e?._id ?? `event-${at}`),
+        title: e?.title || '1:1 session',
+        at: Number.isNaN(at) ? 0 : at,
+        when: Number.isNaN(at) ? 'TBD' : modalWhen(at),
+        location: 'Online · WisdomLinked Room',
+        with: e?.expert?.username || e?.expert?.email || 'Your mentor',
+      };
+    });
+
+  return [...fromChats, ...fromEvents];
+}
+
+/**
+ * Find the soonest upcoming seminar and 1:1 from the user's real bookings,
+ * for the "Upcoming sessions" countdown card.
+ */
+function deriveUpcomingSessions(u: any): {
+  nextSeminar: UpcomingSession | null;
+  nextOneToOne: UpcomingSession | null;
+} {
+  const now = Date.now();
+  let nextSeminar: UpcomingSession | null = null;
+  let nextOneToOne: UpcomingSession | null = null;
+  for (const g of u?.groupChats || []) {
+    const startAt = new Date(g?.start).getTime();
+    if (Number.isNaN(startAt) || startAt <= now) continue;
+
+    const isSeminar = g?.type === 'seminar';
+    const isSession =
+      g?.type === 'individual' && (g?.status || '').toLowerCase() === 'active';
+
+    if (isSeminar && (!nextSeminar || startAt < nextSeminar.startAt)) {
+      nextSeminar = { title: g?.name || 'Seminar', startAt };
+    } else if (isSession && (!nextOneToOne || startAt < nextOneToOne.startAt)) {
+      nextOneToOne = { title: g?.name || '1:1 session', startAt };
+    }
+  }
+  return { nextSeminar, nextOneToOne };
 }
 
 export default function StudentDashboard() {
@@ -69,12 +312,13 @@ export default function StudentDashboard() {
   const [selectedExpert, setSelectedExpert] = useState<MentorCardProps | null>(null);
   const [followedMentorIds, setFollowedMentorIds] = useState<string[]>([]);
   const [followerCounts, setFollowerCounts] = useState<Record<string, number>>({});
-  const [sessionStats, setSessionStats] = useState({
-    bookedSem: 0,
-    pendSem: 0,
-    bookedInd: 0,
-    pendInd: 0,
-  });
+  const { auth: { userDetails } } = useAppSelector((state: any) => state);
+  // Derived from the store so the stat cards recompute live as bookings change
+  // (booking dispatches updateUserDetails; reloads refetch via doGetMyEvents).
+  const sessionStats = useMemo(() => deriveSessionCounts(userDetails), [userDetails]);
+  const [calendarLoading, setCalendarLoading] = useState(true);
+  const [calendarError, setCalendarError] = useState<string | null>(null);
+  const [eventsReloadKey, setEventsReloadKey] = useState(0);
 
   useEffect(() => {
     const { redirect_status, payment_intent, student_booking } = queryString.parse(
@@ -96,17 +340,23 @@ export default function StudentDashboard() {
           if (result.userDetails) {
             dispatch({ type: 'updateUserDetails', payload: result.userDetails });
           }
-          try {
-            const expertRes = await getExpertById(result.expertId);
-            if (expertRes?.result) {
-              setSelectedExpert(
-                await mapExpertToMentorWithImage(expertRes.result, 'medium'),
-              );
-              setActiveItem('expert-profile');
-              setPaymentReturnSuccess(true);
+          if (result.kind === 'seminar') {
+            // Seminars have no expert profile to reopen — land on the calendar.
+            setActiveItem('calendar');
+            setPaymentReturnSuccess(true);
+          } else {
+            try {
+              const expertRes = await getExpertById(result.expertId);
+              if (expertRes?.result) {
+                setSelectedExpert(
+                  await mapExpertToMentorWithImage(expertRes.result, 'medium'),
+                );
+                setActiveItem('expert-profile');
+                setPaymentReturnSuccess(true);
+              }
+            } catch {
+              setBookingReturnError('Booking saved, but we could not open the expert profile.');
             }
-          } catch {
-            setBookingReturnError('Booking saved, but we could not open the expert profile.');
           }
         } else {
           setBookingReturnError(result.error);
@@ -187,7 +437,16 @@ export default function StudentDashboard() {
     [sessionStats],
   );
 
-  const { auth: { userDetails } } = useAppSelector((state: any) => state);
+  const calendarMeetings = useMemo(
+    () => deriveCalendarMeetings(userDetails),
+    [userDetails],
+  );
+  const { nextSeminar, nextOneToOne } = useMemo(
+    () => deriveUpcomingSessions(userDetails),
+    [userDetails],
+  );
+  const [carouselSections, setCarouselSections] = useState<CarouselSectionData[]>([]);
+  const [carouselLoading, setCarouselLoading] = useState(true);
   const studentName =
     (userDetails?.username as string | undefined) ||
     (userDetails?.name as string | undefined) ||
@@ -217,15 +476,106 @@ export default function StudentDashboard() {
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const res: any = await doGetMyEvents();
-      if (!res?.result || cancelled) return;
-      dispatch({ type: 'updateUserDetails', payload: res.result });
-      setSessionStats(deriveSessionCounts(res.result));
+      setCalendarLoading(true);
+      setCalendarError(null);
+      try {
+        const res: any = await doGetMyEvents();
+        if (cancelled) return;
+        if (!res?.result) {
+          setCalendarError("We couldn't load your sessions. Please try again.");
+          return;
+        }
+        dispatch({ type: 'updateUserDetails', payload: res.result });
+      } catch {
+        if (!cancelled) {
+          setCalendarError("We couldn't load your sessions. Please try again.");
+        }
+      } finally {
+        if (!cancelled) setCalendarLoading(false);
+      }
     })();
     return () => {
       cancelled = true;
     };
-  }, [dispatch]);
+  }, [dispatch, eventsReloadKey]);
+
+  // Carousel ("What's New For You") — real experts + seminars from the BE.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setCarouselLoading(true);
+      try {
+        const filter = { username: '', name: '', keywords: [], services: [], sortBy: 'Name in ASC' };
+        const [expertRes, seminarRes]: [any, any] = await Promise.all([
+          doFilterExperts(filter),
+          doFilterSeminars(filter),
+        ]);
+        if (cancelled) return;
+
+        const sections: CarouselSectionData[] = [];
+
+        const experts = Array.isArray(expertRes?.result) ? expertRes.result : [];
+        if (experts.length) {
+          const mentors = await Promise.all(
+            experts
+              .slice(0, 8)
+              .map((e: any) => mapExpertToMentorWithImage(e, 'small')),
+          );
+          if (cancelled) return;
+          sections.push({
+            id: 'experts',
+            category: 'Expert',
+            icon: Users,
+            items: mentors.map((m) => ({
+              sectionTitle: 'New experts',
+              title: m.name,
+              description: m.institution,
+              tag: m.isNew ? 'New expert' : 'Expert',
+              metaLabel: 'Field',
+              experience: m.field,
+              cta: 'View profile',
+              image: m.image || undefined,
+              onSelect: () => {
+                setSelectedExpert(m);
+                setActiveItem('expert-profile');
+              },
+            })),
+          });
+        }
+
+        const seminars = Array.isArray(seminarRes?.result) ? seminarRes.result : [];
+        if (seminars.length) {
+          sections.push({
+            id: 'seminars',
+            category: 'Seminar',
+            icon: BookOpen,
+            items: seminars.slice(0, 8).map((s: any) => ({
+              sectionTitle: 'Seminars for you',
+              title: s?.name || 'Seminar',
+              description: s?.description || 'Live seminar on WisdomLinked.',
+              tag: 'Seminar',
+              metaLabel: 'Starts',
+              experience: s?.start
+                ? new Date(s.start).toLocaleDateString()
+                : undefined,
+              location: typeof s?.price === 'number' ? `$${s.price}` : undefined,
+              cta: 'View seminars',
+              onSelect: () => setActiveItem('seminars'),
+            })),
+          });
+        }
+
+        if (!cancelled) setCarouselSections(sections);
+      } catch {
+        if (!cancelled) setCarouselSections([]);
+      } finally {
+        if (!cancelled) setCarouselLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const loadCommunityNotificationRooms = useCallback(async () => {
     try {
@@ -293,10 +643,12 @@ export default function StudentDashboard() {
       if (document.visibilityState !== 'visible') return;
       void hydrateUnreadSnapshot();
       void loadCommunityNotificationRooms();
+      setEventsReloadKey((k) => k + 1); // pull booking/acceptance updates on tab return
     };
     const onFocus = () => {
       void hydrateUnreadSnapshot();
       void loadCommunityNotificationRooms();
+      setEventsReloadKey((k) => k + 1);
     };
     document.addEventListener('visibilitychange', onVisible);
     window.addEventListener('focus', onFocus);
@@ -483,7 +835,9 @@ export default function StudentDashboard() {
                       ? 'Join meeting'
                       : activeItem === 'seminars'
                         ? 'Seminars'
-                        : 'Student Dashboard'
+                        : activeItem === 'history'
+                          ? 'Payment History'
+                          : 'Student Dashboard'
             }
             userName={studentName}
             avatarUrl={avatarUrl}
@@ -552,13 +906,21 @@ export default function StudentDashboard() {
               />
             </div>
           ) : activeItem === 'calendar' ? (
-            <StudentCalendar onJoinMeeting={() => setActiveItem('join-meeting')} />
+            <StudentCalendar
+              meetings={calendarMeetings}
+              loading={calendarLoading}
+              error={calendarError}
+              onRetry={() => setEventsReloadKey((k) => k + 1)}
+              onJoinMeeting={() => setActiveItem('join-meeting')}
+            />
           ) : activeItem === 'join-meeting' ? (
             <JoinMeeting />
           ) : activeItem === 'contact-admin' ? (
             <ContactAdmin />
           ) : activeItem === 'seminars' ? (
             <StudentSeminars />
+          ) : activeItem === 'history' ? (
+            <StudentPaymentHistory />
           ) : (
             <div className="px-6 py-7">
               <div className="grid gap-6 lg:grid-cols-[1fr_380px]">
@@ -575,6 +937,8 @@ export default function StudentDashboard() {
                 <div className="hidden lg:block">
                   <div className="mt-16">
                     <UpcomingCountdownCard
+                      nextSeminar={nextSeminar}
+                      nextOneToOne={nextOneToOne}
                       onJoinSeminar={() => setActiveItem('join-meeting')}
                       onJoinOneToOne={() => setActiveItem('join-meeting')}
                     />
@@ -584,12 +948,17 @@ export default function StudentDashboard() {
 
               <div className="mt-6 lg:hidden">
                 <UpcomingCountdownCard
+                  nextSeminar={nextSeminar}
+                  nextOneToOne={nextOneToOne}
                   onJoinSeminar={() => setActiveItem('join-meeting')}
                   onJoinOneToOne={() => setActiveItem('join-meeting')}
                 />
               </div>
 
-              <CarouselSection />
+              <CarouselSection
+                sections={carouselSections}
+                loading={carouselLoading}
+              />
             </div>
           )}
           {activeItem !== 'chat' && activeItem !== 'profile' ? <Chatbot /> : null}
@@ -598,6 +967,11 @@ export default function StudentDashboard() {
           <UpcomingSessionModal
             kind={upcomingModal.kind}
             status={upcomingModal.status}
+            sessions={deriveModalSessions(
+              userDetails,
+              upcomingModal.kind,
+              upcomingModal.status,
+            )}
             onClose={() => setUpcomingModal(null)}
             onJoin={() => {
               setUpcomingModal(null);

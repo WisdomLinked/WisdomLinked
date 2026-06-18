@@ -181,8 +181,7 @@ const Payment = ({
 
     const options: any = {
         mode: 'payment',
-        // amount: price * 1000,
-        amount: price > 0 ? price * 1000 : 1,
+        amount: price > 0 ? Math.round(price * 100) : 1,
         currency: 'usd',
         // Fully customizable with appearance API.
         appearance: {

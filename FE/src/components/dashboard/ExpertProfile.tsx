@@ -21,9 +21,10 @@ import { hasResumeForPreview, resolveResumePublicUrl } from '../../utils/resumeU
 import StudentExpertBookingPicker from './StudentExpertBookingPicker';
 import StudentBookingCheckout from './StudentBookingCheckout';
 import BookingConfirmationModal from './BookingConfirmationModal';
-import { createGroupChatByUser, getExpertById, profileImageFetch } from '../../api/api';
+import { createGroupChatByUser, getExpertById, profileImageFetch, addMemberToPendingGroup } from '../../api/api';
 import { resolveProfileImageSrc } from '../../utils/profileImage';
 import { normalizeExpertPrice } from '../../utils/schedulingSlots';
+import { computeBookingPriceDollars } from '../../utils/bookingPrice';
 import {
   defaultAppointmentDuration,
   formatOfferedDurationsList,
@@ -171,6 +172,10 @@ export default function ExpertProfile({
 
   const [seminarBookingSuccessId, setSeminarBookingSuccessId] = useState<string | null>(null);
   const [seminarBookingError, setSeminarBookingError] = useState<string | null>(null);
+  /** Open seminar checkout (real groupChat id + price) when a student books from the profile. */
+  const [seminarCheckout, setSeminarCheckout] = useState<
+    { id: string; price: number; name: string } | null
+  >(null);
   const [resumePreviewOpen, setResumePreviewOpen] = useState(false);
 
   const [openFaqIndex, setOpenFaqIndex] = useState<number | null>(null);
@@ -196,19 +201,6 @@ export default function ExpertProfile({
     serviceChoice === 'seminar'
       ? seminarSessionRate
       : oneToOneHourlyRate * (sessionDurationMinutes / 60);
-
-  const isPeakSeminarDateTime = (dateStr: string, timeStr: string) => {
-    // dateStr like "2026-04-12", timeStr like "17:00"
-    const d = new Date(dateStr);
-    const day = d.getDay(); // 0=Sun..6=Sat
-    const isWeekend = day === 0 || day === 6;
-    const startHour = Number(timeStr.split(':')[0] || 0);
-    const isDinner = startHour >= 18 && startHour < 22;
-    return isWeekend || isDinner;
-  };
-
-  const upcomingSeminarPrice = (item: { date: string; time: string }) =>
-    isPeakSeminarDateTime(item.date, item.time) ? peakRate : seminarOffPeakRate;
 
   const hasLockedDuration = !!pickedStart;
 
@@ -244,7 +236,7 @@ export default function ExpertProfile({
     if (!pickedDuration) return 0;
     const hourly = normalizeExpertPrice(expertDetails?.price);
     if (hourly == null) return 0;
-    return (pickedDuration * hourly) / 60;
+    return computeBookingPriceDollars(pickedDuration, hourly);
   }, [pickedDuration, expertDetails?.price]);
 
   const bookingConfirmationDetails = useMemo(() => {
@@ -421,39 +413,70 @@ export default function ExpertProfile({
     return `Professor ${mentor.name} is a ${mentor.title} focused on ${mentor.field}. With ${mentor.experience} of experience, they guide students through research and real-world preparation across 1:1 sessions and seminars.`;
   }, [mentor]);
 
+  // Real seminars this expert hosts come from their groupChats (type 'seminar'),
+  // populated by getExpertById. Split into past/upcoming by start time.
   const seminarTimeline = useMemo(() => {
-    const past = [
-      {
-        id: `${mentor.id}-p1`,
-        title: `Research Methods in ${mentor.field}`,
-        date: '2026-02-06',
-        attendees: 42,
-      },
-      {
-        id: `${mentor.id}-p2`,
-        title: `${mentor.field} Career Roadmap`,
-        date: '2026-01-18',
-        attendees: 35,
-      },
-    ];
+    const now = Date.now();
+    const mapSeminar = (g: any) => {
+      const d = new Date(g?.start);
+      const valid = !Number.isNaN(d.getTime());
+      return {
+        id: String(g?._id ?? ''),
+        title: g?.name || 'Seminar',
+        date: valid ? d.toLocaleDateString() : 'TBD',
+        time: valid
+          ? d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+          : '',
+        startTs: valid ? d.getTime() : 0,
+        price: typeof g?.price === 'number' ? g.price : 0,
+        attendees: Array.isArray(g?.participants) ? g.participants.length : 0,
+      };
+    };
 
-    const upcoming = [
-      {
-        id: `${mentor.id}-u1`,
-        title: `Advanced Topics in ${mentor.field}`,
-        date: '2026-04-12',
-        time: '17:00',
-      },
-      {
-        id: `${mentor.id}-u2`,
-        title: 'Grad School Application Strategy',
-        date: '2026-04-26',
-        time: '16:00',
-      },
-    ];
+    const all = (expertDetails?.groupChats || [])
+      .filter((g: any) => g?.type === 'seminar')
+      .map(mapSeminar);
+
+    const past = all
+      .filter((s: any) => s.startTs && s.startTs < now)
+      .sort((a: any, b: any) => b.startTs - a.startTs);
+    const upcoming = all
+      .filter((s: any) => !s.startTs || s.startTs >= now)
+      .sort((a: any, b: any) => a.startTs - b.startTs);
 
     return { past, upcoming };
-  }, [mentor.id, mentor.field]);
+  }, [expertDetails?.groupChats]);
+
+  const registerSeminar = useCallback(
+    async (paymentIntentId: string) => {
+      if (!seminarCheckout) return;
+      SetLoadingStatus(true);
+      setSeminarBookingError(null);
+      try {
+        const res: any = await addMemberToPendingGroup({
+          groupChatId: seminarCheckout.id,
+          price: seminarCheckout.price,
+          payment_intent: paymentIntentId,
+        });
+        if (res === false || res?.status === 'FAIL' || res?.error) {
+          setSeminarBookingError(
+            res?.error || 'Could not complete seminar registration.',
+          );
+          return;
+        }
+        setSeminarBookingSuccessId(seminarCheckout.id);
+        setSeminarCheckout(null);
+        void loadExpertDetails();
+      } catch (e: any) {
+        setSeminarBookingError(
+          e?.message || 'Could not complete seminar registration.',
+        );
+      } finally {
+        SetLoadingStatus(false);
+      }
+    },
+    [seminarCheckout, loadExpertDetails],
+  );
 
   const displayFollowers =
     followerCountLive ?? mentor.followerCount ?? 0;
@@ -604,17 +627,21 @@ export default function ExpertProfile({
                 Sessions previously hosted
               </h3>
               <div className="mt-3 space-y-2">
-                {seminarTimeline.past.map(item => (
-                  <div
-                    key={item.id}
-                    className="rounded-lg border border-[#E5E2DB] bg-white px-3 py-2"
-                  >
-                    <p className="text-[13px] font-semibold text-[#1A3A4A]">{item.title}</p>
-                    <p className="mt-1 text-[11px] text-[#7A7A72]">
-                      {item.date} · {item.attendees} attendees
-                    </p>
-                  </div>
-                ))}
+                {seminarTimeline.past.length === 0 ? (
+                  <p className="text-[12px] text-[#7A7A72]">No past seminars yet.</p>
+                ) : (
+                  seminarTimeline.past.map((item: any) => (
+                    <div
+                      key={item.id}
+                      className="rounded-lg border border-[#E5E2DB] bg-white px-3 py-2"
+                    >
+                      <p className="text-[13px] font-semibold text-[#1A3A4A]">{item.title}</p>
+                      <p className="mt-1 text-[11px] text-[#7A7A72]">
+                        {item.date} · {item.attendees} attendees
+                      </p>
+                    </div>
+                  ))
+                )}
               </div>
             </section>
 
@@ -626,45 +653,42 @@ export default function ExpertProfile({
                 Next public sessions
               </h3>
               <div className="mt-3 space-y-2">
-                {seminarTimeline.upcoming.map(item => (
+                {seminarTimeline.upcoming.length === 0 ? (
+                  <p className="text-[12px] text-[#7A7A72]">
+                    No upcoming seminars scheduled.
+                  </p>
+                ) : (
+                  seminarTimeline.upcoming.map((item: any) => (
                   <div
                     key={item.id}
                     className="rounded-lg border border-[#E5E2DB] bg-[#F5F3EF] px-3 py-2"
                   >
                     <p className="text-[13px] font-semibold text-[#1A3A4A]">{item.title}</p>
                     <p className="mt-1 text-[11px] text-[#7A7A72]">
-                      {item.date} · {item.time}
+                      {item.date}{item.time ? ` · ${item.time}` : ''}
                     </p>
                     <p className="mt-2 text-[12px] font-semibold text-[#1A3A4A]">
-                      ${upcomingSeminarPrice({ date: item.date, time: item.time }).toFixed(0)} est.
+                      {item.price > 0 ? `$${item.price.toFixed(2)}` : 'Free'}
                     </p>
                     <div className="mt-2">
                       {seminarBookingSuccessId === item.id ? (
                         <div className="rounded-[4px] bg-emerald-50 px-3 py-2 text-[11px] font-semibold text-emerald-800">
-                          Request saved. Payment will be handled later.
+                          Registered — awaiting expert approval.
                         </div>
                       ) : (
                         <button
                           type="button"
                           onClick={() => {
                             setSeminarBookingError(null);
-                            try {
-                              const price = upcomingSeminarPrice(item);
-                              if (!userDetails?._id) {
-                                throw new Error('Please log in again to book this session.');
-                              }
-                              window.localStorage.setItem(
-                                'pendingDetails',
-                                JSON.stringify({
-                                  friendIds: [userDetails?._id],
-                                  groupChatId: item.id,
-                                  price,
-                                }),
-                              );
-                              setSeminarBookingSuccessId(item.id);
-                            } catch (e: any) {
-                              setSeminarBookingError(e?.message || 'Failed to save booking.');
+                            if (!userDetails?._id) {
+                              setSeminarBookingError('Please log in again to book this session.');
+                              return;
                             }
+                            setSeminarCheckout({
+                              id: item.id,
+                              price: item.price,
+                              name: item.title,
+                            });
                           }}
                           className="inline-flex w-full items-center justify-center rounded-[4px] bg-[#1A3A4A] px-3 py-1.5 text-[11px] font-semibold text-white hover:bg-[#122635]"
                         >
@@ -673,7 +697,8 @@ export default function ExpertProfile({
                       )}
                     </div>
                   </div>
-                ))}
+                  ))
+                )}
               </div>
               {seminarBookingError && (
                 <div className="mt-3 text-[12px] font-semibold text-red-600">
@@ -913,7 +938,7 @@ export default function ExpertProfile({
                         <div className="flex justify-between gap-2 border-t border-[#E5E2DB] pt-2">
                           <dt className="text-[#7A7A72]">Total</dt>
                           <dd className="font-serif text-lg font-semibold">
-                            ${oneToOneSessionPrice.toFixed(0)}
+                            ${oneToOneSessionPrice.toFixed(2)}
                           </dd>
                         </div>
                       </dl>
@@ -1049,7 +1074,7 @@ export default function ExpertProfile({
                     <div className="flex justify-between gap-2 border-t border-[#1A3A4A]/15 pt-2">
                       <dt className="text-[#7A7A72]">Estimated total</dt>
                       <dd className="font-serif text-lg font-semibold">
-                        ${oneToOneSessionPrice.toFixed(0)}
+                        ${oneToOneSessionPrice.toFixed(2)}
                       </dd>
                     </div>
                   </dl>
@@ -1183,7 +1208,7 @@ export default function ExpertProfile({
                     ) : publishedOneToOneRate != null ? (
                       <>
                         <p className="mt-2 text-[20px] font-serif font-semibold text-[#1A3A4A]">
-                          ${publishedOneToOneRate.toFixed(0)}
+                          ${publishedOneToOneRate.toFixed(2)}
                         </p>
                         <p className="mt-1 text-[12px] text-[#7A7A72]">
                           per hour — {formatOfferedDurationsList(offeredDurations)} totals scale
@@ -1191,7 +1216,7 @@ export default function ExpertProfile({
                         </p>
                         {serviceChoice === 'oneToOne' && pickedStart && pickedEnd && pickedDuration ? (
                           <p className="mt-2 text-[12px] font-semibold text-[#1A3A4A]">
-                            {pickedDuration} min · ${oneToOneSessionPrice.toFixed(0)} · {pickedSlotDisplay}
+                            {pickedDuration} min · ${oneToOneSessionPrice.toFixed(2)} · {pickedSlotDisplay}
                           </p>
                         ) : null}
                       </>
@@ -1245,6 +1270,29 @@ export default function ExpertProfile({
         }}
         details={bookingConfirmationDetails}
       />
+    ) : null}
+    {seminarCheckout ? (
+      <div
+        className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+        onClick={(e) => {
+          if (e.target === e.currentTarget) setSeminarCheckout(null);
+        }}
+      >
+        <div className="w-full max-w-md">
+          <StudentBookingCheckout
+            type="Seminar"
+            price={seminarCheckout.price}
+            returnUrl={studentBookingReturnUrl}
+            pendingDetails={{
+              groupChatId: seminarCheckout.id,
+              price: seminarCheckout.price,
+              name: seminarCheckout.name,
+            }}
+            onPaymentSuccess={registerSeminar}
+            onCancel={() => setSeminarCheckout(null)}
+          />
+        </div>
+      </div>
     ) : null}
     </>
   );

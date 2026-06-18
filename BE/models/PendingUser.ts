@@ -40,6 +40,7 @@ const pendingUserSchema = new mongoose.Schema(
         price: [{ type: Number, default: 5 }],
         rating: { type: Number, default: 0 },
         specialNote: { type: String },
+        timeZone: { type: String, default: 'UTC' },
     },
     { timestamps: true }
 );

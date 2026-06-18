@@ -24,6 +24,12 @@ describe('mapExpertToMentor', () => {
     const m = mapExpertToMentor({ ...expert, image: 'https://cdn.example.com/a.png' });
     expect(m.image).toBe('https://cdn.example.com/a.png');
   });
+
+  it('passes through expert status for booking guards', () => {
+    expect(mapExpertToMentor({ ...expert, status: 'active' }).status).toBe('active');
+    expect(mapExpertToMentor({ ...expert, status: 'review' }).status).toBe('review');
+    expect(mapExpertToMentor(expert).status).toBeUndefined();
+  });
 });
 
 describe('mapExpertToMentorWithImage', () => {

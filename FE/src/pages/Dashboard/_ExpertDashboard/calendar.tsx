@@ -491,6 +491,7 @@ const ExpertCalendar: React.FC = () => {
               participants={selectedEvent?.participants}
               keywords={selectedEvent?.keywords}
               services={selectedEvent?.services}
+              theme="light"
             />
 
             <div className="w-full h-10 flex justify-center mt-6 space-x-4">

@@ -1,4 +1,4 @@
-import { describe, expect, it, vi, beforeEach, beforeAll } from 'vitest';
+import { describe, expect, it, vi, beforeEach, afterEach, beforeAll } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { Provider } from 'react-redux';
 import { configureStore } from '@reduxjs/toolkit';
@@ -71,6 +71,14 @@ beforeAll(() => {
 describe('StudentExpertBookingPicker', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // Pin "now" so the 24h booking-notice window doesn't make the fixture's
+    // June 15 2026 day flaky depending on when the suite runs.
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(new Date('2026-06-10T12:00:00.000Z'));
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it('renders custom toolbar with Back/Next and no native time-filter select', () => {
@@ -260,5 +268,93 @@ describe('StudentExpertBookingPicker', () => {
     expect(banner).toBeInTheDocument();
     expect(banner).toHaveTextContent('Selected appointment');
     expect(banner).toHaveTextContent('60 min');
+  });
+
+  it('blocks a day when an existing booking overlaps its slots', () => {
+    const onSlotSelected = vi.fn();
+
+    render(
+      <Provider store={store}>
+        <StudentExpertBookingPicker
+          expert={{
+            ...expert,
+            groupChats: [
+              {
+                _id: 'gc-overlap',
+                name: 'Booked session',
+                type: 'individual',
+                // Spans well beyond June 15 in any viewer time zone, so every
+                // slot on the 15th conflicts and the day must become unavailable.
+                start: '2026-06-14T00:00:00.000Z',
+                end: '2026-06-17T00:00:00.000Z',
+              },
+            ],
+          }}
+          onSlotSelected={onSlotSelected}
+        />
+      </Provider>,
+    );
+
+    expect(screen.getByRole('button', { name: '15' })).toHaveClass(
+      'cursor-not-allowed',
+    );
+
+    // Clicking an unavailable day must not select a slot.
+    fireEvent.click(screen.getByTestId('mock-select-day'));
+    expect(onSlotSelected).not.toHaveBeenCalled();
+  });
+
+  it('keeps a day available when bookings fall on other days', () => {
+    render(
+      <Provider store={store}>
+        <StudentExpertBookingPicker
+          expert={{
+            ...expert,
+            groupChats: [
+              {
+                _id: 'gc-other-day',
+                name: 'Unrelated session',
+                type: 'seminar',
+                start: '2026-06-20T00:00:00.000Z',
+                end: '2026-06-20T01:00:00.000Z',
+              },
+            ],
+          }}
+          onSlotSelected={vi.fn()}
+        />
+      </Provider>,
+    );
+
+    expect(screen.getByRole('button', { name: '15' })).toHaveClass(
+      'cursor-pointer',
+    );
+  });
+
+  it('ignores declined bookings when computing availability', () => {
+    render(
+      <Provider store={store}>
+        <StudentExpertBookingPicker
+          expert={{
+            ...expert,
+            groupChats: [
+              {
+                _id: 'gc-declined',
+                name: 'Declined session',
+                type: 'individual',
+                status: 'declined',
+                start: '2026-06-14T00:00:00.000Z',
+                end: '2026-06-17T00:00:00.000Z',
+              },
+            ],
+          }}
+          onSlotSelected={vi.fn()}
+        />
+      </Provider>,
+    );
+
+    // A declined booking overlapping the 15th must not block it.
+    expect(screen.getByRole('button', { name: '15' })).toHaveClass(
+      'cursor-pointer',
+    );
   });
 });

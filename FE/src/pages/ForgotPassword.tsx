@@ -75,9 +75,9 @@ export default function ForgotPassword() {
 
         setSubmitting(true);
         try {
-            // Backend still expects a password at this stage. We send a temporary placeholder
-            // and the actual password will be set after OTP verification.
-            const response = await passwordResetRequest({ email, password: 'temp_placeholder_pwd' }) as any;
+            // The actual password is set later via confirmPasswordResetByCode, so only the
+            // email is needed to issue the OTP.
+            const response = await passwordResetRequest({ email }) as any;
             if (response === false) return;
             if (response?.status === 'SUCCESS') {
                 setStep('otp');
@@ -153,7 +153,7 @@ export default function ForgotPassword() {
         setOtpError('');
         setOtpResendSuccess('');
         try {
-            const response = await passwordResetRequest({ email, password: 'temp_placeholder_pwd' }) as any;
+            const response = await passwordResetRequest({ email }) as any;
             if (response === false) return;
             if (response?.status === 'SUCCESS') {
                 setOtpResendSuccess('A new OTP has been sent to your email.');

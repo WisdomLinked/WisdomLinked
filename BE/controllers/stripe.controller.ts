@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { BOOKING_PAYMENT_AMOUNT_INVALID } from '../utils/bookingUserFacingCopy';
+import { HTTP_GENERIC_ERROR } from '../utils/httpUserFacingCopy';
 const stripeTest = require('stripe')(process.env.STRIPE_SECRET_KEY_TEST);
 const stripeLive = require('stripe')(process.env.STRIPE_SECRET_KEY_LIVE);
 const AppState = require("../models/AppState");
@@ -32,8 +33,12 @@ const createStripePaymentIntent = async (req, res) => {
         const { stripeMode, amount } = req.body
         const stripe = require('stripe')(stripeMode === 'test' ? process.env.STRIPE_SECRET_KEY_TEST : process.env.STRIPE_SECRET_KEY_LIVE);
         const paymentIntent = await stripe.paymentIntents.create({
-            amount: amount * 100,
+            amount: Math.round(amount * 100), // dollars -> integer cents (Stripe rejects fractional)
             currency: 'usd',
+            // Required for the deferred PaymentElement flow: the client renders the
+            // Element from dashboard settings, so the intent must enable the same
+            // automatic methods or confirmPayment throws a mismatch error.
+            automatic_payment_methods: { enabled: true },
         });
         res.send({
             client_secret: paymentIntent.client_secret,
@@ -89,7 +94,7 @@ const checkPaymentIntentSucceeded = async (payment_intent, stripeMode) => {
     // Checking The Payment Intent In Test Mode
     try {
         const stripe = require('stripe')(stripeMode === 'test' ? process.env.STRIPE_SECRET_KEY_TEST : process.env.STRIPE_SECRET_KEY_LIVE);
-        const paymentIntent = await stripe.paymentIntents.retrieve(payment_intent);
+        const paymentIntent = await stripe.paymentIntents.retrieve(payment_intent, { expand: ['latest_charge'] });
         if (paymentIntent?.status === 'succeeded') {
             console.log('Test Payment succeeded');
             return paymentIntent

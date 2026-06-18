@@ -81,9 +81,9 @@ router.get("/me", requireAuth(false), getMe);
 router.get("/getMyEvents", requireAuth(false), getMyEvents);
 router.post("/submit", uploadsGeneral, handleSubmit)
 router.post("/leaveFeedback", requireAuth(false), leaveFeedback)
-router.post("/stripePay", requireAuth(false), stripePay)
-router.post("/createStripePaymentIntent", requireAuth(false), createStripePaymentIntent)
-router.post("/getStripeMode", requireAuth(false), getStripeMode)
+router.post("/stripePay", requireAuth(true), stripePay)
+router.post("/createStripePaymentIntent", requireAuth(true), createStripePaymentIntent)
+router.post("/getStripeMode", requireAuth(true), getStripeMode)
 router.get("/healthCheck", healthCheck)
 router.get("/getTimezone",getTimeZone)
 router.post("/contact-form", submitContactForm)
@@ -105,10 +105,11 @@ const oauthCallback = async (req: any, res: any) => {
         const user = result.user || result;
         const isNew = result.isNew || false;
 
-        // Read role + redirect from OAuth state parameter (Google/Facebook) or session (Twitter)
+        // Read role + redirect + timezone from OAuth state parameter (Google/Facebook) or session (Twitter)
         const rawState = String(req.query.state || '').trim();
         let role: string | null = (req.session && req.session.oauthRole) || null;
         let redirectPath = '';
+        let timezone = '';
         if (rawState) {
             try {
                 const parsed = JSON.parse(decodeURIComponent(rawState));
@@ -118,6 +119,9 @@ const oauthCallback = async (req: any, res: any) => {
                     }
                     if (typeof parsed.redirect === 'string' && parsed.redirect.trim()) {
                         redirectPath = parsed.redirect.trim();
+                    }
+                    if (typeof parsed.timezone === 'string' && parsed.timezone.trim()) {
+                        timezone = parsed.timezone.trim();
                     }
                 } else {
                     role = rawState;
@@ -139,6 +143,11 @@ const oauthCallback = async (req: any, res: any) => {
         // Set role for NEW users from registration pages only
         if (isNew && role && (role === 'expert' || role === 'customer')) {
             user.role = role;
+        }
+
+        // Capture the browser timezone only on first-time OAuth signup; never touch it on later logins.
+        if (timezone && isNew) {
+            user.timeZone = timezone;
         }
         
         // Block existing users from switching roles via OAuth re-registration
@@ -204,9 +213,11 @@ const oauthCallback = async (req: any, res: any) => {
 router.get('/google', (req: any, res: any, next: any) => {
     const role = req.query.role || 'login';
     const redirectPath = String(req.query.redirect || '').trim();
+    const timezone = String(req.query.timezone || '').trim();
     const state = encodeURIComponent(JSON.stringify({
         role,
         redirect: redirectPath.startsWith('/') ? redirectPath : '',
+        timezone,
     }));
     passport.authenticate('google', { scope: ['profile', 'email'], state, session: false })(req, res, next);
 });
