@@ -43,8 +43,9 @@ const baseBody = {
   description: "d",
   services: [],
   keywords: [],
-  start: new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString(),
-  end: new Date(Date.now() + 49 * 60 * 60 * 1000).toISOString(),
+  // Fixed UTC window (same calendar day) so CI is not flaky near midnight.
+  start: "2026-06-25T18:00:00.000Z",
+  end: "2026-06-25T19:00:00.000Z",
   duration: 60,
   price: 0,
   expert: "expert-id-1",
