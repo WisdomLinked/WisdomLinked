@@ -1310,7 +1310,12 @@ export const getMeetingPermissions = async (req: any, res: Response) => {
         );
         if (!meeting) return res.status(404).json({ error: 'Meeting not found' });
         if (meeting.status !== 'active') {
-            return res.status(200).json({ success: true, canDrawWhiteboard: false, status: meeting.status });
+            return res.status(200).json({
+                success: true,
+                canDrawWhiteboard: false,
+                canCreatePoll: false,
+                status: meeting.status,
+            });
         }
         if (isRemovedFromMeeting(meeting, userId)) {
             return res.status(403).json({ error: MEETING_REMOVED_BY_HOST });
@@ -1324,6 +1329,8 @@ export const getMeetingPermissions = async (req: any, res: Response) => {
         return res.status(200).json({
             success: true,
             canDrawWhiteboard: auth.moderator,
+            /** Same policy as whiteboard: host, group admin, or delegated expert. */
+            canCreatePoll: auth.moderator,
         });
     } catch (err: any) {
         console.error('[meeting.permissions]', err.message);

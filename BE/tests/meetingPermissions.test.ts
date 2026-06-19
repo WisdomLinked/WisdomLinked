@@ -58,6 +58,7 @@ test("permissions: host can draw", async () => {
     await getMeetingPermissions(req, res);
     assert.equal(res.statusCode, 200);
     assert.equal(res.body?.canDrawWhiteboard, true);
+    assert.equal(res.body?.canCreatePoll, true);
   } finally {
     MeetingThread.findById = originalFindById;
     Conversation.findById = originalConv;
@@ -77,6 +78,7 @@ test("permissions: delegated guest can draw", async () => {
     await getMeetingPermissions(req, res);
     assert.equal(res.statusCode, 200);
     assert.equal(res.body?.canDrawWhiteboard, true);
+    assert.equal(res.body?.canCreatePoll, true);
   } finally {
     MeetingThread.findById = originalFindById;
     Conversation.findById = originalConv;
@@ -96,6 +98,7 @@ test("permissions: non-delegated guest cannot draw", async () => {
     await getMeetingPermissions(req, res);
     assert.equal(res.statusCode, 200);
     assert.equal(res.body?.canDrawWhiteboard, false);
+    assert.equal(res.body?.canCreatePoll, false);
   } finally {
     MeetingThread.findById = originalFindById;
     Conversation.findById = originalConv;

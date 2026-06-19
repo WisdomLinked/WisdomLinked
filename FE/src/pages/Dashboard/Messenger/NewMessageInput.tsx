@@ -1,11 +1,10 @@
 import React, { useState, useEffect, useRef } from "react";
-import { Paperclip, Send } from "lucide-react";
+import { Send } from "lucide-react";
 import { useAppSelector } from "../../../store";
 import ReactQuill from 'react-quill'
 import 'react-quill/dist/quill.snow.css'
 import data from '@emoji-mart/data';
 import Picker from '@emoji-mart/react';
-import { Smile } from "lucide-react";
 import { callApi } from "../../../api/api";
 import { showErrorAlert, showSuccessAlert, showWarningAlert } from '../../../actions/alertActions';
 import { useDispatch } from "react-redux";
@@ -17,16 +16,6 @@ import { sanitizeMessageHtml } from "../../../utils/safeMessageHtml";
 import type { ReplyDraft } from "./ChatDetails";
 import ReplyQuoteCard from "../../../components/messenger/ReplyQuoteCard";
 import { buildReplyQuoteHtml, flattenReplyTextForNextQuote } from "../../../utils/chatReplyLayout";
-
-function plainTextToMessageHtml(text: string): string {
-    const trimmed = text.trim();
-    if (!trimmed) return "";
-    const escaped = trimmed
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;");
-    return "<p>" + escaped.replace(/\n/g, "<br>") + "</p>";
-}
 
 const MAX_CHAT_FILE_SIZE_BYTES = 1024 * 1024; // 1 MB per file
 const ALLOWED_CHAT_FILE_EXTENSIONS = [
@@ -95,14 +84,7 @@ const NewMessageInput: React.FC<any> = ({
     const [uploadingFile, setUploadingFile] = useState(false);
 
     const fileInputRef = useRef<HTMLInputElement | null>(null);
-    const textareaRef = useRef<HTMLTextAreaElement | null>(null);
     const quillRef = useRef<ReactQuill | null>(null);
-
-    const resizeTextarea = (textarea: HTMLTextAreaElement | null = textareaRef.current) => {
-        if (!textarea) return;
-        textarea.style.height = "auto";
-        textarea.style.height = `${Math.min(Math.max(textarea.scrollHeight, 36), 160)}px`;
-    };
 
     const resizeQuillEditor = () => {
         const editor = quillRef.current?.getEditor?.().root;
@@ -220,12 +202,6 @@ const NewMessageInput: React.FC<any> = ({
         onCancelReply?.();
     };
 
-    const sendPlainMessage = () => {
-        const html = plainTextToMessageHtml(_message);
-        if (!html) return;
-        dispatchOutgoingHtml(html);
-    };
-
     const sendMessage = () => {
         if (_message.trim()) {
             let arr = _message.split("<p>");
@@ -298,7 +274,6 @@ const NewMessageInput: React.FC<any> = ({
 
     // Ensure RC connection for typing whenever room/identity changes.
     useEffect(() => {
-        resizeTextarea();
         resizeQuillEditor();
 
         if (!rcChannelId || !rcTypingName) return;
@@ -410,10 +385,6 @@ const NewMessageInput: React.FC<any> = ({
         setShowEmojiPicker(false);
     };
 
-    const toggleEmojiPicker = () => {
-        setShowEmojiPicker(!showEmojiPicker);
-    };
-
     // Standard toolbar configuration
     const modules = {
         toolbar: [
@@ -429,8 +400,9 @@ const NewMessageInput: React.FC<any> = ({
 
     // Add custom buttons to toolbar after component mounts (rich editor only)
     useEffect(() => {
-        if (theme === "light") return;
-        const toolbar = document.querySelector('.ql-toolbar');
+        const toolbar = document.querySelector(
+            theme === 'light' ? '.chat-composer-quill-light .ql-toolbar' : '.chat-composer-quill .ql-toolbar',
+        );
         if (toolbar && !toolbar.querySelector('.custom-attachment-btn')) {
             // Create attachment button
             const attachmentBtn = document.createElement('button');
@@ -449,9 +421,9 @@ const NewMessageInput: React.FC<any> = ({
             emojiBtn.innerHTML = '😊';
             emojiBtn.title = 'Add emoji';
             emojiBtn.style.cssText = 'margin-left: 4px; padding: 6px 8px; border: none; background: transparent; border-radius: 3px; cursor: pointer; font-size: 12px;';
-            attachmentBtn.onclick = (e) => {
+            emojiBtn.onclick = (e) => {
                 e.preventDefault();
-                handleButtonClick();
+                setShowEmojiPicker(prev => !prev);
             };
 
             // Add buttons to toolbar
@@ -482,40 +454,20 @@ const NewMessageInput: React.FC<any> = ({
                         onCancel={onCancelReply}
                     />
                 ) : null}
-                <div className="flex items-end gap-1.5 rounded-2xl border border-stone-200 bg-white px-2 py-1.5 shadow-sm">
-                    <button
-                        type="button"
-                        onClick={handleButtonClick}
-                        className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-wl-muted transition hover:bg-wl-page hover:text-wl-brand"
-                        aria-label="Attach file"
-                    >
-                        <Paperclip className="h-3.5 w-3.5" />
-                    </button>
-                    <button
-                        type="button"
-                        onClick={toggleEmojiPicker}
-                        className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-wl-muted transition hover:bg-wl-page hover:text-wl-brand"
-                        aria-label="Add emoji"
-                    >
-                        <Smile className="h-3.5 w-3.5" />
-                    </button>
-                    <textarea
-                        ref={textareaRef}
+                <div className="rounded-2xl border border-stone-200 bg-white px-2 py-1.5 shadow-sm">
+                    <ReactQuill
+                        ref={quillRef}
+                        theme="snow"
+                        className="chat-composer-quill chat-composer-quill-light flex w-full flex-col-reverse"
                         value={_message}
-                        onChange={(e) => {
-                            set_message(e.target.value);
-                            resizeTextarea(e.currentTarget);
+                        onChange={(value) => {
+                            set_message(value);
+                            requestAnimationFrame(resizeQuillEditor);
                         }}
-                        onKeyDown={(e) => {
-                            if (e.key === "Enter" && !e.shiftKey) {
-                                e.preventDefault();
-                                sendPlainMessage();
-                            }
-                        }}
+                        onKeyDown={handleSendMessage}
                         onBlur={onBlur}
                         placeholder="Type a message…"
-                        rows={1}
-                        className="max-h-40 min-h-9 w-0 flex-1 resize-none overflow-y-auto bg-transparent py-1.5 text-[13px] leading-5 text-wl-ink placeholder:text-slate-400 outline-none sm:text-sm"
+                        modules={modules}
                     />
                     <input
                         type="file"
@@ -524,15 +476,18 @@ const NewMessageInput: React.FC<any> = ({
                         onChange={handleFileChange}
                         accept={ALLOWED_CHAT_FILE_EXTENSIONS.map(ext => `.${ext}`).join(",")}
                     />
-                    <button
-                        type="button"
-                        onClick={sendPlainMessage}
-                        disabled={!_message.trim() || uploadingFile}
-                        className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-wl-brand text-white shadow-sm transition hover:brightness-95 disabled:pointer-events-none disabled:opacity-35"
-                        aria-label="Send message"
-                    >
-                        <Send className="h-3.5 w-3.5" strokeWidth={2.5} />
-                    </button>
+                    <div className="mt-1 flex justify-end">
+                        <button
+                            type="button"
+                            onClick={sendMessage}
+                            disabled={!_message.trim() || uploadingFile}
+                            className="inline-flex h-8 items-center gap-1.5 rounded-full bg-wl-brand px-3 text-[12px] font-semibold text-white shadow-sm transition hover:brightness-95 disabled:pointer-events-none disabled:opacity-35"
+                            aria-label="Send message"
+                        >
+                            <Send className="h-3.5 w-3.5" strokeWidth={2.5} />
+                            Send
+                        </button>
+                    </div>
                 </div>
                 {showEmojiPicker && (
                     <div className="absolute bottom-12 left-3 z-[1000]">

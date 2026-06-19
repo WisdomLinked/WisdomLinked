@@ -103,6 +103,50 @@ code {
   overflow-y: auto;
 }
 
+.chat-composer-quill-light .ql-editor {
+  min-height: 44px;
+  max-height: 180px;
+  overflow-y: auto;
+  color: #1e293b;
+}
+
+.chat-composer-quill-light .ql-toolbar {
+  background-color: #f8fafc !important;
+  border: 0 !important;
+  border-bottom: 1px solid #e2e8f0 !important;
+  border-radius: 0.75rem 0.75rem 0 0;
+}
+
+.chat-composer-quill-light .ql-container {
+  background-color: #fff !important;
+  color: #1e293b;
+  border: 0 !important;
+  max-height: 220px !important;
+}
+
+.chat-composer-quill-light .ql-editor.ql-blank::before {
+  color: #94a3b8;
+  font-style: normal;
+}
+
+.chat-composer-quill-light .ql-picker-options {
+  background-color: #fff !important;
+  color: #1e293b;
+  transform: none;
+}
+
+.chat-composer-quill-light .ql-stroke {
+  stroke: #475569;
+}
+
+.chat-composer-quill-light .ql-fill {
+  fill: #475569;
+}
+
+.chat-composer-quill-light .ql-picker-label {
+  color: #475569;
+}
+
 .ql-container img {
   max-height: 270px;
 }

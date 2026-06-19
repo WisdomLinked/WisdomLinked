@@ -11,6 +11,7 @@ They bind-mount into `/usr/share/jitsi-meet/` in `docker-jitsi-meet` (see `docke
 ```bash
 scp jitsi/server-scripts/wisdomlinked-meeting-end-on-hangup.js \
     jitsi/server-scripts/wisdomlinked-whiteboard-initials.js \
+    jitsi/server-scripts/wisdomlinked-poll-moderator.js \
     jitsi/server-scripts/wisdomlinked-expert-labels.js \
     jitsi/branding/wisdomlinked-branding.json \
     jitsi/branding/wisdomlinked-labels-en.json \
@@ -19,6 +20,8 @@ ssh wisdomlinked-comms 'cd /root/wisdomlinked-comms/jitsi/docker-jitsi-meet && d
 ```
 
 Hard-refresh meet clients after deploy (incognito if labels look cached). **Also deploy staging/production BE** so join URLs include `config.wisdomlinkedMessengerOrigin` and chat-sync hashes.
+
+**New custom `.js` files:** copy to `/root/.jitsi-meet-cfg/web/custom/`, add a `<script src="…" defer></script>` line in custom `index.html`, and add an explicit bind mount in `/root/wisdomlinked-comms/jitsi/docker-jitsi-meet/docker-compose.yml` under the `web` service (same pattern as `wisdomlinked-whiteboard-initials.js`). Then `docker compose up -d --force-recreate web`.
 
 Add docker-compose volume mounts on `wisdomlinked-comms` (paths must be under `lang/`, not `/custom/`, because nginx treats `custom` as a room subdomain):
 
@@ -53,6 +56,7 @@ Verify in browser DevTools: fetches `wisdomlinked-branding.json` and `wisdomlink
 | `wisdomlinked-copy-meeting-id.js` | Expert/host “Copy Meeting ID” control |
 | `wisdomlinked-meeting-chat-sync.js` | In-call text chat → `POST /api/meeting/chat-sync` |
 | `wisdomlinked-whiteboard-initials.js` | Whiteboard initials; live permissions poll; Jitsi grant → delegate sync |
+| `wisdomlinked-poll-moderator.js` | Poll creation restricted to meeting moderators (guests/students can vote only) |
 | `wisdomlinked-meeting-end-on-hangup.js` | `POST /api/meeting/end-call` when last participant hangs up |
 | `wisdomlinked-expert-labels.js` | UI fallback: Moderator → Expert i18n overrides |
 
@@ -92,6 +96,22 @@ Verify in browser DevTools: fetches `wisdomlinked-branding.json` and `wisdomlink
 | Host + guest in call | Guest whiteboard view-only |
 | Host: Jitsi Grant expert rights on guest | Within ~5–10s guest can draw |
 | Host revokes expert rights | Guest returns to view-only |
+
+## Poll creation (moderators only)
+
+- **Policy:** Only meeting moderators (host / group admin / delegated expert) may **create** polls in the Meet chat panel. Guests and students may **view and vote** on existing polls.
+- **Authoritative:** Poll `GET /api/meeting/permissions` → `canCreatePoll` (same as `canDrawWhiteboard`). Script polls every 5s.
+- **Initial:** `config.wisdomlinkedIsMeetingModerator` on join URL → sessionStorage.
+- **UI:** `wisdomlinked-poll-moderator.js` hides “Create poll” controls when `canCreatePoll` is false (CSS + DOM observer).
+- Debug: `config.wisdomlinkedPollDebug=true` → `[wl-poll]` in console.
+
+### Poll test checklist
+
+| Step | Expected |
+|------|----------|
+| Expert host opens polls tab | “Create poll” visible |
+| Guest/student joins same call | No create poll button; can vote if poll exists |
+| Host grants expert rights to guest | Within ~5–10s guest may create polls |
 
 ## Hash keys (backend join URL)
 
