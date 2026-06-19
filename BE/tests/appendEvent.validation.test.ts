@@ -31,8 +31,9 @@ test("appendEvent rejects outside expert availability", async () => {
   const originalEventFind = Event.find;
   const originalGroupFind = GroupChat.find;
 
-  const start = new Date(Date.now() + 48 * 60 * 60 * 1000);
-  const end = new Date(start.getTime() + 60 * 60 * 1000);
+  // Fixed UTC window (same calendar day) so CI is not flaky near midnight.
+  const start = new Date("2026-06-25T18:00:00.000Z");
+  const end = new Date("2026-06-25T19:00:00.000Z");
 
   try {
     User.findOne = async (query: any) => {
