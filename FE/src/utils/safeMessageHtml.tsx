@@ -51,6 +51,24 @@ function filterSafeSpanStyle(raw: string): string {
   return parts.join("; ");
 }
 
+function toReactStyleProp(prop: string): string {
+  return prop.replace(/-([a-z])/g, (_, ch: string) => ch.toUpperCase());
+}
+
+function filterSafeSpanStyleObject(raw: string): React.CSSProperties {
+  const style: Record<string, string> = {};
+  for (const chunk of String(raw || "").split(";")) {
+    const idx = chunk.indexOf(":");
+    if (idx < 0) continue;
+    const prop = chunk.slice(0, idx).trim().toLowerCase();
+    const value = chunk.slice(idx + 1).trim();
+    if (!SAFE_SPAN_STYLE_PROPS.has(prop) || !value) continue;
+    if (/url\s*\(|expression\s*\(|javascript:/i.test(value)) continue;
+    style[toReactStyleProp(prop)] = value;
+  }
+  return style;
+}
+
 function filterSafeQuillClass(raw: string): string {
   return String(raw || "")
     .split(/\s+/)
@@ -157,7 +175,7 @@ export function renderSafeMessageHtml(html: string | undefined | null): React.Re
         tag === "a"
           ? anchorProps(element.attribs ?? {})
           : tag === "span" && element.attribs?.style
-            ? { style: filterSafeSpanStyle(element.attribs.style) }
+            ? { style: filterSafeSpanStyleObject(element.attribs.style) }
             : tag === "p" || tag === "li"
               ? {
                   ...(element.attribs?.class

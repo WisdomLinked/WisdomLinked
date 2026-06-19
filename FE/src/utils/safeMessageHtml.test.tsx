@@ -39,6 +39,17 @@ describe("renderSafeMessageHtml", () => {
     ).toContain("color: rgb(230, 0, 0)");
   });
 
+  it("renders span color styles as React style objects", () => {
+    const { container } = render(
+      <div>
+        {renderSafeMessageHtml('<p><span style="color: rgb(230, 0, 0);">red</span></p>')}
+      </div>,
+    );
+    const span = container.querySelector("span");
+    expect(span).toBeTruthy();
+    expect(span).toHaveStyle({ color: "rgb(230, 0, 0)" });
+  });
+
   it("keeps Quill list markers and alignment classes", () => {
     expect(
       sanitizeMessageHtml(
