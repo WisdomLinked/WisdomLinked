@@ -107,5 +107,13 @@ describe('Message outgoing rendering', () => {
         expect(screen.getByText('bold').tagName.toLowerCase()).toBe('strong');
         expect(screen.getByText(/text/)).toBeInTheDocument();
     });
+
+    it('renders list wire-format messages with list items', () => {
+        const html = '<ol><li data-list="ordered">one</li><li data-list="bullet">two</li></ol>';
+        const wire = `__WL_HTML__|${encodeURIComponent(html)}`;
+        const { container } = render(<Message {...baseProps} content={wire} />);
+        expect(container.querySelector('ol li[data-list="ordered"]')).toBeTruthy();
+        expect(container.querySelector('ol li[data-list="bullet"]')).toBeTruthy();
+    });
 });
 

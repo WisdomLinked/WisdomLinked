@@ -51,6 +51,32 @@ function filterSafeSpanStyle(raw: string): string {
   return parts.join("; ");
 }
 
+function filterSafeQuillClass(raw: string): string {
+  return String(raw || "")
+    .split(/\s+/)
+    .filter((token) => /^ql-align-(center|right|justify)$/.test(token) || /^ql-indent-\d+$/.test(token))
+    .join(" ");
+}
+
+function safeElementAttrs(element: HTMLElement, tag: string): string {
+  let attrs = "";
+  if (tag === "span") {
+    const safeStyle = filterSafeSpanStyle(element.getAttribute("style") || "");
+    if (safeStyle) attrs += ` style="${escapeText(safeStyle)}"`;
+  }
+  if (tag === "p" || tag === "li") {
+    const safeClass = filterSafeQuillClass(element.getAttribute("class") || "");
+    if (safeClass) attrs += ` class="${escapeText(safeClass)}"`;
+  }
+  if (tag === "li") {
+    const listKind = element.getAttribute("data-list");
+    if (listKind === "bullet" || listKind === "ordered") {
+      attrs += ` data-list="${listKind}"`;
+    }
+  }
+  return attrs;
+}
+
 export function isSafeMessageHref(raw: unknown): boolean {
   const href = String(raw ?? "").trim();
   if (!href) return false;
@@ -107,7 +133,8 @@ export function sanitizeMessageHtml(html: string | undefined | null): string {
         ? `<span style="${escapeText(safeStyle)}">${children}</span>`
         : `<span>${children}</span>`;
     }
-    return `<${tag}>${children}</${tag}>`;
+    const attrs = safeElementAttrs(element, tag);
+    return `<${tag}${attrs}>${children}</${tag}>`;
   };
 
   return Array.from(doc.body.childNodes).map(walk).join("").trim();
@@ -131,7 +158,18 @@ export function renderSafeMessageHtml(html: string | undefined | null): React.Re
           ? anchorProps(element.attribs ?? {})
           : tag === "span" && element.attribs?.style
             ? { style: filterSafeSpanStyle(element.attribs.style) }
-            : {};
+            : tag === "p" || tag === "li"
+              ? {
+                  ...(element.attribs?.class
+                    ? { className: filterSafeQuillClass(element.attribs.class) }
+                    : {}),
+                  ...(tag === "li" &&
+                  (element.attribs?.["data-list"] === "bullet" ||
+                    element.attribs?.["data-list"] === "ordered")
+                    ? { "data-list": element.attribs["data-list"] }
+                    : {}),
+                }
+              : {};
       if (VOID_TAGS.has(tag)) {
         return React.createElement(tag, props);
       }

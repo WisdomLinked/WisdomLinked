@@ -370,7 +370,7 @@ const Message = ({
                     {renderReplyAction()}
                     {showThreadDelete ? renderDeleteActions() : null}
                     <div
-                        className={`chat-message-rich min-w-0 max-w-full px-2 py-1.5 text-sm leading-5 shadow-sm break-words whitespace-pre-wrap ${threadBubbleShellClassName}`}
+                        className={`chat-message-rich min-w-0 max-w-full px-2 py-1.5 text-sm leading-5 shadow-sm break-words ${threadBubbleShellClassName}`}
                     >
                         {renderChatRichContent(content, theme, "outgoing", onJumpToParent, replyLabelOpts)}
                     </div>
@@ -395,7 +395,7 @@ const Message = ({
                                 theme === "light" ? "text-white bg-[#234C6A]" : "text-white bg-[#234C6A]"
                             }`}
                         >
-                            <div className="chat-message-rich break-words whitespace-pre-wrap">
+                            <div className="chat-message-rich break-words">
                                 {renderChatRichContent(content, theme, "outgoing", onJumpToParent, replyLabelOpts)}
                             </div>
                         </div>
@@ -484,7 +484,7 @@ const Message = ({
                                     : "text-white bg-[#456882]"
                             }`}
                         >
-                            <div className="chat-message-rich break-words whitespace-pre-wrap">
+                            <div className="chat-message-rich break-words">
                                 {renderChatRichContent(content, theme, "incoming", onJumpToParent, replyLabelOpts)}
                             </div>
                         </div>

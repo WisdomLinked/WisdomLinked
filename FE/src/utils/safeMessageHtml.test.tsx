@@ -38,4 +38,17 @@ describe("renderSafeMessageHtml", () => {
       sanitizeMessageHtml('<p><span style="color: rgb(230, 0, 0);">red</span></p>'),
     ).toContain("color: rgb(230, 0, 0)");
   });
+
+  it("keeps Quill list markers and alignment classes", () => {
+    expect(
+      sanitizeMessageHtml(
+        '<ol><li data-list="ordered">a</li><li data-list="bullet" class="ql-indent-1">b</li></ol><p class="ql-align-center">center</p>',
+      ),
+    ).toContain('data-list="ordered"');
+    expect(
+      sanitizeMessageHtml(
+        '<ol><li data-list="ordered">a</li><li data-list="bullet" class="ql-indent-1">b</li></ol><p class="ql-align-center">center</p>',
+      ),
+    ).toContain('class="ql-align-center"');
+  });
 });

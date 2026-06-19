@@ -153,6 +153,10 @@ code {
   color: #475569;
 }
 
+.chat-message-rich {
+  white-space: normal;
+}
+
 .chat-message-rich p {
   margin: 0;
 }
@@ -161,6 +165,40 @@ code {
 .chat-message-rich ul,
 .chat-message-rich ol {
   margin-top: 0.35rem;
+}
+
+.chat-message-rich ul {
+  list-style-type: disc;
+  padding-left: 1.25rem;
+}
+
+.chat-message-rich ol {
+  list-style-type: decimal;
+  padding-left: 1.25rem;
+}
+
+.chat-message-rich li[data-list="bullet"] {
+  list-style-type: disc;
+}
+
+.chat-message-rich li[data-list="ordered"] {
+  list-style-type: decimal;
+}
+
+.chat-message-rich li + li {
+  margin-top: 0.15rem;
+}
+
+.chat-message-rich .ql-align-center {
+  text-align: center;
+}
+
+.chat-message-rich .ql-align-right {
+  text-align: right;
+}
+
+.chat-message-rich .ql-align-justify {
+  text-align: justify;
 }
 
 .chat-message-rich strong,
