@@ -1,4 +1,5 @@
 import { wlHtmlToPlainTextForRocketChat } from './wlHtmlPlainText';
+import { encodeRichHtmlWire, hasRichHtmlMarkup } from './chatRichHtmlWire';
 
 export const WL_REPLY_WIRE_PREFIX = '__WL_REPLY__';
 
@@ -53,9 +54,17 @@ export function encodeReplyWireFormat(quote: PeeledHtmlReplyQuote, bodyPlain: st
     return `${WL_REPLY_WIRE_PREFIX}|${messageId}|${author}|${excerpt}|\n${body}`;
 }
 
+/** Encode reply body for RC: rich HTML uses __WL_HTML__ wire; plain uses stripped text. */
+function encodeReplyBodyForRocketChat(bodyHtml: string): string {
+    const raw = String(bodyHtml ?? '').trim();
+    if (!raw) return '';
+    if (hasRichHtmlMarkup(raw)) return encodeRichHtmlWire(raw);
+    return wlHtmlToPlainTextForRocketChat(raw);
+}
+
 /**
  * Convert outbound messenger HTML for Rocket.Chat storage.
- * Replies become __WL_REPLY__ wire lines; other messages use standard HTML→plain.
+ * Replies become __WL_REPLY__ wire lines; rich text uses __WL_HTML__ wire; else plain.
  */
 export function prepareMessageForRocketChat(html: string): string {
     const raw = String(html ?? '').trim();
@@ -63,9 +72,12 @@ export function prepareMessageForRocketChat(html: string): string {
     if (raw.startsWith(`${WL_REPLY_WIRE_PREFIX}|`)) return raw;
 
     const { quotes, bodyHtml } = peelHtmlReplyQuotesRegex(raw);
-    if (!quotes.length) return wlHtmlToPlainTextForRocketChat(raw);
+    if (!quotes.length) {
+        if (hasRichHtmlMarkup(raw)) return encodeRichHtmlWire(raw);
+        return wlHtmlToPlainTextForRocketChat(raw);
+    }
 
     const quote = quotes[quotes.length - 1];
-    const bodyPlain = wlHtmlToPlainTextForRocketChat(bodyHtml || '');
-    return encodeReplyWireFormat(quote, bodyPlain);
+    const bodyStored = encodeReplyBodyForRocketChat(bodyHtml || '');
+    return encodeReplyWireFormat(quote, bodyStored);
 }

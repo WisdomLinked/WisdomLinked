@@ -56,7 +56,7 @@ function renderChatRichContent(
     const quote = immediateReplyQuote(quotes);
 
     if (!quote) {
-        return <>{parseHtml(html)}</>;
+        return <>{parseHtml(bodyHtml || html)}</>;
     }
 
     const divider =

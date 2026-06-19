@@ -16,6 +16,7 @@ import { sanitizeMessageHtml } from "../../../utils/safeMessageHtml";
 import type { ReplyDraft } from "./ChatDetails";
 import ReplyQuoteCard from "../../../components/messenger/ReplyQuoteCard";
 import { buildReplyQuoteHtml, flattenReplyTextForNextQuote } from "../../../utils/chatReplyLayout";
+import { isQuillComposerEmpty, normalizeQuillHtmlForSend } from "../../../utils/quillSendHtml";
 
 const MAX_CHAT_FILE_SIZE_BYTES = 1024 * 1024; // 1 MB per file
 const ALLOWED_CHAT_FILE_EXTENSIONS = [
@@ -146,17 +147,6 @@ const NewMessageInput: React.FC<any> = ({
         }
     };
 
-    const correctStyling = (text: any, tag: any) => {
-        let temp1 = text.split(`<${tag}>`)
-        let temp2 = temp1[0]
-        for (let i = 1; i < temp1.length; i++) {
-            let val = temp1[i].replace('<li><br></li><<', `</${tag}><<`)
-            val = val.replace('<<', `</${tag}><`)
-            temp2 += `<${tag}>${val}`
-        }
-        return temp2
-    }
-
     const dispatchOutgoingHtml = async (message: string) => {
         const replyHtml = replyTo
             ? buildReplyQuoteHtml({
@@ -203,72 +193,18 @@ const NewMessageInput: React.FC<any> = ({
     };
 
     const sendMessage = () => {
-        if (_message.trim()) {
-            let arr = _message.split("<p>");
-            let temp = "";
-            for (let i = 0; i < arr.length; i++) {
-                let val = arr[i].slice(0, -4);
-                val = val.trim();
-                if ((val && val !== "<br>") || temp) {
-                    temp += `<p>${arr[i].slice(0, -4)}</p>`;
-                }
-            }
-            if (!temp) {
-                set_message("");
-                return;
-            }
-            let arr1 = temp.split("<p>");
-            let temp1 = "";
-            for (let i = arr1.length - 1; i > -1; i--) {
-                let val = arr1[i].slice(0, -4);
-                val = val.trim();
-                if ((val && val !== "<br>") || temp1) {
-                    temp1 = `<p>${arr1[i].slice(0, -4)}</p>` + temp1;
-                }
-            }
-            let message: any = correctStyling(temp1, 'ol')
-            message = correctStyling(message, 'ul')
-            message = correctStyling(message, 'h1')
-            message = correctStyling(message, 'h2')
-            message = correctStyling(message, 'h3')
-
-            dispatchOutgoingHtml(message);
+        const message = normalizeQuillHtmlForSend(_message);
+        if (!message) {
+            set_message("");
+            return;
         }
+        void dispatchOutgoingHtml(message);
     };
 
-    const handleSendMessage = (e: any) => {
-        if (e.key === 'Enter' || e.keyCode === 13) {
-            if (!e.shiftKey && _message) {
-                let arr = _message.split('<p>')
-                let temp = ''
-                for (let i = 0; i < arr.length; i++) {
-                    let val = arr[i].slice(0, -4)
-                    val = val.trim()
-                    if ((val && val !== '<br>') || temp) {
-                        temp += `<p>${arr[i].slice(0, -4)}</p>`
-                    }
-                }
-                if (!temp) {
-                    set_message('')
-                    return
-                }
-                let arr1 = temp.split('<p>')
-                let temp1 = ''
-                for (let i = arr1.length - 1; i > -1; i--) {
-                    let val = arr1[i].slice(0, -4)
-                    val = val.trim()
-                    if ((val && val !== '<br>') || temp1) {
-                        temp1 = `<p>${arr1[i].slice(0, -4)}</p>` + temp1
-                    }
-                }
-                let message: any = correctStyling(temp1, 'ol')
-                message = correctStyling(message, 'ul')
-                message = correctStyling(message, 'h1')
-                message = correctStyling(message, 'h2')
-                message = correctStyling(message, 'h3')
-
-                dispatchOutgoingHtml(message);
-            }
+    const handleSendMessage = (e: React.KeyboardEvent) => {
+        if (e.key === "Enter" && !e.shiftKey) {
+            e.preventDefault();
+            sendMessage();
         }
     };
 
@@ -458,7 +394,7 @@ const NewMessageInput: React.FC<any> = ({
                     <ReactQuill
                         ref={quillRef}
                         theme="snow"
-                        className="chat-composer-quill chat-composer-quill-light flex w-full flex-col-reverse"
+                        className="chat-composer-quill chat-composer-quill-light w-full"
                         value={_message}
                         onChange={(value) => {
                             set_message(value);
@@ -480,7 +416,7 @@ const NewMessageInput: React.FC<any> = ({
                         <button
                             type="button"
                             onClick={sendMessage}
-                            disabled={!_message.trim() || uploadingFile}
+                            disabled={isQuillComposerEmpty(_message) || uploadingFile}
                             className="inline-flex h-8 items-center gap-1.5 rounded-full bg-wl-brand px-3 text-[12px] font-semibold text-white shadow-sm transition hover:brightness-95 disabled:pointer-events-none disabled:opacity-35"
                             aria-label="Send message"
                         >

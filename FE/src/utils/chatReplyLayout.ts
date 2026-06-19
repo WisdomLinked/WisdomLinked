@@ -4,6 +4,8 @@
  * This module peels wire/plain/HTML into structured data for layout.
  */
 
+import { decodeRichHtmlWire } from "./chatRichHtmlWire";
+
 export const WL_REPLY_WIRE_PREFIX = "__WL_REPLY__";
 
 export type PeeledReplyQuote = {
@@ -171,22 +173,31 @@ function plainBodyToDisplayHtml(body: string): string {
   return `<p>${escaped.replace(/\r?\n/g, "<br>")}</p>`;
 }
 
+function bodyContentToDisplayHtml(body: string): string {
+  const decoded = decodeRichHtmlWire(body);
+  if (decoded) return decoded;
+  return plainBodyToDisplayHtml(body);
+}
+
 /** Match WisdomLinked reply blockquotes (with optional data-wl-reply-id). */
 export function peelWisdomLinkedReplyQuotes(html: string): {
   quotes: PeeledReplyQuote[];
   bodyHtml: string;
 } {
   const raw = String(html ?? "").trim();
-  if (!raw) return { quotes, bodyHtml: "" };
+  if (!raw) return { quotes: [], bodyHtml: "" };
+
+  const richOnly = decodeRichHtmlWire(raw);
+  if (richOnly) return { quotes: [], bodyHtml: richOnly };
 
   const wire = peelWireFormatReply(raw);
   if (wire) {
-    return { quotes: wire.quotes, bodyHtml: plainBodyToDisplayHtml(wire.bodyHtml) };
+    return { quotes: wire.quotes, bodyHtml: bodyContentToDisplayHtml(wire.bodyHtml) };
   }
 
   const legacy = peelLegacyPlainReplyQuotes(raw);
   if (legacy.quotes.length > 0) {
-    return { quotes: legacy.quotes, bodyHtml: plainBodyToDisplayHtml(legacy.bodyHtml) };
+    return { quotes: legacy.quotes, bodyHtml: bodyContentToDisplayHtml(legacy.bodyHtml) };
   }
 
   if (typeof document === "undefined") {

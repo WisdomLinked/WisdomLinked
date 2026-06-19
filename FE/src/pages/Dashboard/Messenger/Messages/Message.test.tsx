@@ -99,5 +99,13 @@ describe('Message outgoing rendering', () => {
         expect(screen.getByText('?going good la')).toBeInTheDocument();
         expect(screen.queryByText(/replying to/i)).not.toBeInTheDocument();
     });
+
+    it('renders rich wire-format messages with formatting preserved', () => {
+        const html = '<p><strong>bold</strong> text</p>';
+        const wire = `__WL_HTML__|${encodeURIComponent(html)}`;
+        render(<Message {...baseProps} content={wire} />);
+        expect(screen.getByText('bold').tagName.toLowerCase()).toBe('strong');
+        expect(screen.getByText(/text/)).toBeInTheDocument();
+    });
 });
 

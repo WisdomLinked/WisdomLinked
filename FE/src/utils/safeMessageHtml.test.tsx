@@ -32,4 +32,10 @@ describe("renderSafeMessageHtml", () => {
       sanitizeMessageHtml('<p>Hello <img src=x onerror=alert(1)><a href="javascript:alert(1)">bad</a></p>'),
     ).toBe("<p>Hello <a>bad</a></p>");
   });
+
+  it("keeps safe span color styles", () => {
+    expect(
+      sanitizeMessageHtml('<p><span style="color: rgb(230, 0, 0);">red</span></p>'),
+    ).toContain("color: rgb(230, 0, 0)");
+  });
 });

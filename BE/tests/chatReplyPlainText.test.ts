@@ -6,7 +6,7 @@ import {
     prepareMessageForRocketChat,
     WL_REPLY_WIRE_PREFIX,
 } from '../utils/chatReplyPlainText';
-import { wlHtmlToPlainTextForRocketChat } from '../utils/wlHtmlPlainText';
+import { decodeRichHtmlWire, WL_HTML_WIRE_PREFIX } from '../utils/chatRichHtmlWire';
 
 test('prepareMessageForRocketChat encodes HTML reply as wire format', () => {
     const html =
@@ -25,7 +25,9 @@ test('prepareMessageForRocketChat passes through existing wire format', () => {
 
 test('prepareMessageForRocketChat strips normal HTML without reply', () => {
     const html = '<p>Hello <strong>world</strong></p>';
-    assert.equal(prepareMessageForRocketChat(html), wlHtmlToPlainTextForRocketChat(html));
+    const out = prepareMessageForRocketChat(html);
+    assert.ok(out.startsWith(`${WL_HTML_WIRE_PREFIX}|`));
+    assert.equal(decodeRichHtmlWire(out), html);
 });
 
 test('encodeReplyWireFormat uses pipe-delimited encoded fields', () => {

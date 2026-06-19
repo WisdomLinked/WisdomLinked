@@ -9,6 +9,12 @@ const ALLOWED_TAGS = new Set([
   "code",
   "div",
   "em",
+  "h1",
+  "h2",
+  "h3",
+  "h4",
+  "h5",
+  "h6",
   "i",
   "li",
   "ol",
@@ -23,12 +29,27 @@ const ALLOWED_TAGS = new Set([
 
 const VOID_TAGS = new Set(["br"]);
 const BLOCKED_TAGS = new Set(["iframe", "object", "script", "style"]);
+const SAFE_SPAN_STYLE_PROPS = new Set(["color", "background-color"]);
 
 const escapeText = (value: string): string =>
   value
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;");
+
+function filterSafeSpanStyle(raw: string): string {
+  const parts: string[] = [];
+  for (const chunk of String(raw || "").split(";")) {
+    const idx = chunk.indexOf(":");
+    if (idx < 0) continue;
+    const prop = chunk.slice(0, idx).trim().toLowerCase();
+    const value = chunk.slice(idx + 1).trim();
+    if (!SAFE_SPAN_STYLE_PROPS.has(prop) || !value) continue;
+    if (/url\s*\(|expression\s*\(|javascript:/i.test(value)) continue;
+    parts.push(`${prop}: ${value}`);
+  }
+  return parts.join("; ");
+}
 
 export function isSafeMessageHref(raw: unknown): boolean {
   const href = String(raw ?? "").trim();
@@ -80,6 +101,12 @@ export function sanitizeMessageHtml(html: string | undefined | null): string {
       const safeHref = isSafeMessageHref(href) ? ` href="${escapeText(href)}" target="_blank" rel="noopener noreferrer nofollow"` : "";
       return `<a${safeHref}>${children}</a>`;
     }
+    if (tag === "span") {
+      const safeStyle = filterSafeSpanStyle(element.getAttribute("style") || "");
+      return safeStyle
+        ? `<span style="${escapeText(safeStyle)}">${children}</span>`
+        : `<span>${children}</span>`;
+    }
     return `<${tag}>${children}</${tag}>`;
   };
 
@@ -99,7 +126,12 @@ export function renderSafeMessageHtml(html: string | undefined | null): React.Re
         return <>{domToReact(element.children as DOMNode[], options)}</>;
       }
 
-      const props = tag === "a" ? anchorProps(element.attribs ?? {}) : {};
+      const props =
+        tag === "a"
+          ? anchorProps(element.attribs ?? {})
+          : tag === "span" && element.attribs?.style
+            ? { style: filterSafeSpanStyle(element.attribs.style) }
+            : {};
       if (VOID_TAGS.has(tag)) {
         return React.createElement(tag, props);
       }

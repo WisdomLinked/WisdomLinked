@@ -104,10 +104,11 @@ code {
 }
 
 .chat-composer-quill-light .ql-editor {
-  min-height: 44px;
-  max-height: 180px;
+  min-height: 40px;
+  max-height: 160px;
   overflow-y: auto;
   color: #1e293b;
+  padding: 8px 12px;
 }
 
 .chat-composer-quill-light .ql-toolbar {
@@ -115,13 +116,18 @@ code {
   border: 0 !important;
   border-bottom: 1px solid #e2e8f0 !important;
   border-radius: 0.75rem 0.75rem 0 0;
+  padding: 4px 6px;
 }
 
 .chat-composer-quill-light .ql-container {
   background-color: #fff !important;
   color: #1e293b;
   border: 0 !important;
-  max-height: 220px !important;
+  font-size: 14px;
+}
+
+.chat-composer-quill-light .ql-container.ql-snow {
+  border-top: 0 !important;
 }
 
 .chat-composer-quill-light .ql-editor.ql-blank::before {
@@ -145,6 +151,34 @@ code {
 
 .chat-composer-quill-light .ql-picker-label {
   color: #475569;
+}
+
+.chat-message-rich p {
+  margin: 0;
+}
+
+.chat-message-rich p + p,
+.chat-message-rich ul,
+.chat-message-rich ol {
+  margin-top: 0.35rem;
+}
+
+.chat-message-rich strong,
+.chat-message-rich b {
+  font-weight: 700;
+}
+
+.chat-message-rich em,
+.chat-message-rich i {
+  font-style: italic;
+}
+
+.chat-message-rich u {
+  text-decoration: underline;
+}
+
+.chat-message-rich s {
+  text-decoration: line-through;
 }
 
 .ql-container img {
