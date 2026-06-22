@@ -40,6 +40,7 @@ const SelectDateTime = ({
     const [rawExpertSlots, set_rawExpertSlots] = useState<number[]>([])
 
     const [modalShow, set_modalShow] = useState(false)
+    const [calendarResetKey, setCalendarResetKey] = useState(0)
     const [tzMode, setTzMode] = useState<BookingDisplayTimeZoneMode>('mine');
     const [customTz, setCustomTz] = useState(detectUserTimeZone());
 
@@ -234,6 +235,12 @@ const SelectDateTime = ({
         [events, selectedIndex, duration, getAvailableTimeSlots, viewerTz]
     );
 
+    const closeTimeModal = () => {
+        set_modalShow(false);
+        set_selectedTimeSlot(undefined);
+        setCalendarResetKey((k) => k + 1);
+    };
+
     const saveAndNext = (slotOverride?: number) => {
         const slot = slotOverride !== undefined ? slotOverride : selectedTimeSlot;
         if (!selectedDate || slot === undefined || slot === null) {
@@ -377,6 +384,7 @@ const SelectDateTime = ({
             </div>
 
             <Calendar
+                key={calendarResetKey}
                 className="customerSelectDateTimeCalendar !h min-h-[400px] pt-1 pb-6 text-white"
                 views={["month"]}
                 selectable
@@ -391,11 +399,11 @@ const SelectDateTime = ({
             {
                 modalShow ?
                     <div className={`absolute top-0 left-0 w-full h-full bg-white bg-opacity-10 backdrop-blur-sm z-10 flex items-center justify-center p-8`}>
-                        <div className="absolute top-0 left-0 w-full h-full cursor-pointer" onClick={() => set_modalShow(false)} />
+                        <div className="absolute top-0 left-0 w-full h-full cursor-pointer" onClick={closeTimeModal} />
                         <div className="w-full max-w-[400px] bg-black rounded-lg text-white p-6 relative">
                             <button
                                 className="absolute right-4 top-4 rounded-md hover:bg-grey"
-                                onClick={() => set_modalShow(false)}
+                                onClick={closeTimeModal}
                             >
                                 <CloseIcon />
                             </button>
@@ -431,7 +439,7 @@ const SelectDateTime = ({
                             <div className="w-full h-10 flex justify-between">
                                 <button
                                     className="w-[calc(50%-8px)] rounded-lg border border-lightgrey flex items-center justify-center"
-                                    onClick={() => set_modalShow(false)}
+                                    onClick={closeTimeModal}
                                 >
                                     Cancel
                                 </button>

@@ -154,6 +154,8 @@ export default function StudentExpertBookingPicker({
   const [events, setEvents] = useState<any[]>([]);
   const [rawExpertSlots, setRawExpertSlots] = useState<number[]>([]);
   const [modalOpen, setModalOpen] = useState(false);
+  /** Remount calendar after closing time modal so the same day can be clicked again (RBC keeps slot selected). */
+  const [calendarResetKey, setCalendarResetKey] = useState(0);
   const [tzMode, setTzMode] = useState<BookingDisplayTimeZoneMode>('mine');
   const [customTz, setCustomTz] = useState(detectUserTimeZone());
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
@@ -488,6 +490,12 @@ export default function StudentExpertBookingPicker({
     };
   };
 
+  const closeTimeModal = useCallback(() => {
+    setModalOpen(false);
+    setSelectedTimeSlot(null);
+    setCalendarResetKey((k) => k + 1);
+  }, []);
+
   const confirmSlot = useCallback(
     (slot: number, dayOverride?: Date) => {
       const day = dayOverride ?? selectedDate;
@@ -496,7 +504,7 @@ export default function StudentExpertBookingPicker({
       const end = new Date(start.getTime() + duration * 60 * 1000);
       setConfirmedSlotStart(start);
       onSlotSelected(start, end, duration);
-      setModalOpen(false);
+      closeTimeModal();
       if (filterSlotIndex >= 0) {
         onFilterSlotConfirmed?.();
       }
@@ -508,6 +516,7 @@ export default function StudentExpertBookingPicker({
       onSlotSelected,
       filterSlotIndex,
       onFilterSlotConfirmed,
+      closeTimeModal,
     ],
   );
 
@@ -640,6 +649,7 @@ export default function StudentExpertBookingPicker({
 
       <div className="overflow-hidden rounded-xl border border-[#E5E2DB] bg-white p-2">
         <Calendar
+          key={calendarResetKey}
           className="studentBookingCalendar min-h-[380px] text-[#1A3A4A]"
           views={['month']}
           selectable
@@ -680,13 +690,13 @@ export default function StudentExpertBookingPicker({
             type="button"
             className="absolute inset-0 bg-[#1A3A4A]/40 backdrop-blur-sm"
             aria-label="Close"
-            onClick={() => setModalOpen(false)}
+            onClick={closeTimeModal}
           />
           <div className="relative w-full max-w-md rounded-2xl border border-[#E5E2DB] bg-white p-6 shadow-[0_20px_50px_rgba(26,58,74,0.15)]">
             <button
               type="button"
               className="absolute right-4 top-4 rounded-lg p-1 text-[#7A7A72] hover:bg-[#F5F3EF]"
-              onClick={() => setModalOpen(false)}
+              onClick={closeTimeModal}
             >
               <X className="h-5 w-5" />
             </button>
@@ -747,7 +757,7 @@ export default function StudentExpertBookingPicker({
             <div className="mt-6 flex gap-3">
               <button
                 type="button"
-                onClick={() => setModalOpen(false)}
+                onClick={closeTimeModal}
                 className="flex-1 rounded-[4px] border border-[#E5E2DB] py-2.5 text-[13px] font-semibold text-[#1A3A4A] hover:bg-[#F5F3EF]"
               >
                 Cancel

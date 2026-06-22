@@ -36,7 +36,7 @@ sendEmailUserAccountApproved = (targetEmail, userName) => {
     sendNotificationEmail(targetEmail, subject, html);
 }
 
-scheduleEmailReminder = (targetEmail, userName, title,start, duration, timeZone) => {
+scheduleEmailReminder = async (targetEmail, userName, title,start, duration, timeZone) => {
     subject = "You have a meeting: " + title;
     // timezone is like "America/New_York" so we need to send the date as per time zone
     const options = { timeZone: timeZone || "UTC" };
@@ -54,10 +54,10 @@ scheduleEmailReminder = (targetEmail, userName, title,start, duration, timeZone)
             <a href="${website_url}">Visit Website</a>
         </p>
     `;
-    sendNotificationEmail(targetEmail, subject, html, scheduledTime);
+    return sendNotificationEmail(targetEmail, subject, html, scheduledTime);
 }
 
-sendEmailMeetingAcceptance = (targetEmail, userName, title,start, duration, timeZone) => {
+sendEmailMeetingAcceptance = async (targetEmail, userName, title,start, duration, timeZone) => {
     subject = "Meeting accepted :" + title;
     const options = { timeZone: timeZone || "UTC" };
     const date = new Date(start).toLocaleString("en-US", options);
@@ -71,7 +71,7 @@ sendEmailMeetingAcceptance = (targetEmail, userName, title,start, duration, time
             <a href="${website_url}">Visit Website</a>
         </p>
     `;
-    sendNotificationEmail(targetEmail, subject, html);
+    return sendNotificationEmail(targetEmail, subject, html);
 }
 
 sendEmailMeetingRequestToExpert = (targetEmail, expertName, name,start, duration,price, newEvent, timeZone) => {

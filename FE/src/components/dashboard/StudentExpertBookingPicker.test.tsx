@@ -352,9 +352,25 @@ describe('StudentExpertBookingPicker', () => {
       </Provider>,
     );
 
-    // A declined booking overlapping the 15th must not block it.
     expect(screen.getByRole('button', { name: '15' })).toHaveClass(
       'cursor-pointer',
     );
+  });
+
+  it('reopens time modal after cancel closes it (calendar remount)', () => {
+    render(
+      <Provider store={store}>
+        <StudentExpertBookingPicker expert={expert} onSlotSelected={vi.fn()} />
+      </Provider>,
+    );
+
+    fireEvent.click(screen.getByTestId('mock-select-day'));
+    expect(screen.getByText('Choose a time')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(screen.queryByText('Choose a time')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId('mock-select-day'));
+    expect(screen.getByText('Choose a time')).toBeInTheDocument();
   });
 });

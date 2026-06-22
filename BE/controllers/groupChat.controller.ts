@@ -1070,7 +1070,7 @@ const addMemberToPendingGroup = async (req, res) => {
 
 const acceptIndividualAppointment = async (req, res) => {
     try {
-        const { userId } = req.user;
+        const { userId, role } = req.user;
         const { groupChatId, payment_intent } = req.body;
 
         const groupChat = await GroupChat.findOne({ _id: groupChatId });
@@ -1079,9 +1079,7 @@ const acceptIndividualAppointment = async (req, res) => {
             return res.status(404).send("Sorry, the group chat doesn't exist");
         }
 
-        let customer, expert;
-
-        if (userId.role === 'customer') {
+        if (role === 'customer') {
             const expectedCents = dollarsToCents(groupChat.price);
             let paymentIntentSucceeded_test: any = false;
             let paymentIntentSucceeded_live: any = false;
@@ -1099,7 +1097,7 @@ const acceptIndividualAppointment = async (req, res) => {
                     currency: charge.currency,
                     description: groupChat.name,
                     paymentIntent: payment_intent,
-                    customer: userId.toString(),
+                    customer: String(userId),
                     expert: groupChat.admin.toString(),
                     groupChat: groupChatId,
                 })
@@ -1109,14 +1107,43 @@ const acceptIndividualAppointment = async (req, res) => {
         groupChat.status = 'active';
         await groupChat.save();
 
-        let user1 = await User.findById(userId);
-        let user2 = await User.findById(groupChat.createdBy);
+        const expertUser = await User.findById(userId);
+        const customerUser = await User.findById(groupChat.createdBy);
 
-        sendEmailMeetingAcceptance(user2.email, user2.username, groupChat.name, groupChat.start, groupChat.duration, user2.timeZone);
-
-
-        scheduleEmailReminder(user1.email, user1.username, groupChat.name, groupChat.start, groupChat.duration, user1.timeZone);
-        scheduleEmailReminder(user2.email, user2.username, groupChat.name, groupChat.start, groupChat.duration, user2.timeZone);
+        try {
+            if (customerUser?.email) {
+                await sendEmailMeetingAcceptance(
+                    customerUser.email,
+                    customerUser.username,
+                    groupChat.name,
+                    groupChat.start,
+                    groupChat.duration,
+                    customerUser.timeZone,
+                );
+            }
+            if (expertUser?.email) {
+                await scheduleEmailReminder(
+                    expertUser.email,
+                    expertUser.username,
+                    groupChat.name,
+                    groupChat.start,
+                    groupChat.duration,
+                    expertUser.timeZone,
+                );
+            }
+            if (customerUser?.email) {
+                await scheduleEmailReminder(
+                    customerUser.email,
+                    customerUser.username,
+                    groupChat.name,
+                    groupChat.start,
+                    groupChat.duration,
+                    customerUser.timeZone,
+                );
+            }
+        } catch (notifyErr) {
+            console.error('[acceptIndividualAppointment] notification failed:', notifyErr?.message || notifyErr);
+        }
 
         return res.status(200).send("Group chat accepted successfully!");
 
