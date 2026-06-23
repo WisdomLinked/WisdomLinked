@@ -162,7 +162,7 @@ describe('StudentExpertBookingPicker', () => {
       'title',
       'Jane Doe is not available on this date',
     );
-    expect(wrapper).toHaveClass('h-full', 'w-full');
+    expect(wrapper).toHaveClass('relative', 'h-full');
   });
 
   it('confirms filter-by-time slot on day click and shows selection banner', () => {
