@@ -675,7 +675,7 @@ const createGroupChatByUser = async (req, res) => {
 const createGroupChat = async (req, res) => {
     try {
         const { userId } = req.user;
-        const { name, description, services, keywords, start, end, duration, price, type, status, customerId } = req.body;
+        const { name, description, image, services, keywords, start, end, duration, price, type, status, customerId } = req.body;
 
         if (checkTitleNameInvalid('Name', name)) {
             throw new Error(checkTitleNameInvalid('Name', name))
@@ -688,6 +688,7 @@ const createGroupChat = async (req, res) => {
         const chat = await GroupChat.create({
             name: name,
             description: description,
+            image: image,
             services: _services,
             keywords: _keywords,
             start: start,
@@ -916,7 +917,7 @@ const joinGroupChat = async (req, res) => {
 const updateGroupChat = async (req, res) => {
     try {
         const { userId } = req.user;
-        const { groupId, name, description, services, keywords, start, end, duration, price, totalTimeSpent, type } = req.body;
+        const { groupId, name, description, image, services, keywords, start, end, duration, price, totalTimeSpent, type, status } = req.body;
 
         if (!groupId) {
             throw new Error("Group ID is required");
@@ -938,6 +939,11 @@ const updateGroupChat = async (req, res) => {
         const updateFields: Record<string, any> = {};
         if (name !== undefined) updateFields.name = name;
         if (description !== undefined) updateFields.description = description;
+        if (image !== undefined) updateFields.image = image;
+        // Allow flipping a draft to a published seminar (or saving back as draft).
+        if (status !== undefined && ['draft', 'active', 'pending'].includes(status)) {
+            updateFields.status = status;
+        }
         if (services !== undefined) updateFields.services = await resolveServiceIds(services);
         if (keywords !== undefined) updateFields.keywords = await resolveKeywordIds(keywords);
         if (start !== undefined) updateFields.start = start;

@@ -168,9 +168,11 @@ const ExpertProfile = ({
         set_savingSpecialNote(false);
     };
 
-    const mapServiceIds = (items: Array<any>) =>
+    const mapServiceValues = (items: Array<any>) =>
         items
-            .map((x: any) => (typeof x === 'string' ? x : x?._id ?? x?.id))
+            .map((x: any) =>
+                typeof x === 'string' ? x : x?.value ?? x?.label ?? x?.name,
+            )
             .filter(Boolean);
 
     const handlePhotoFilePick = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -249,7 +251,7 @@ const ExpertProfile = ({
             title,
             description,
             keywords: selectedKeywords,
-            services: mapServiceIds(selectedServices),
+            services: mapServiceValues(selectedServices),
             country,
             state,
             city,

@@ -207,12 +207,13 @@ export default function StudentExpertBookingPicker({
   const expertTz = expert?.timeZone || 'UTC';
   const expertName = useMemo(() => expertDisplayName(expert), [expert]);
 
-  const viewerTz = resolveViewerTimeZone(
-    tzMode,
-    userDetails?.timeZone || detectUserTimeZone(),
-    expertTz,
-    customTz,
-  );
+  // Default the calendar to the viewer's actual zone. A saved timeZone of 'UTC'
+  // is the User-model default (often never set), so fall back to the detected
+  // browser zone rather than showing everything in UTC.
+  const savedTz = userDetails?.timeZone;
+  const studentTz = savedTz && savedTz !== 'UTC' ? savedTz : detectUserTimeZone();
+
+  const viewerTz = resolveViewerTimeZone(tzMode, studentTz, expertTz, customTz);
 
   useLayoutEffect(() => {
     onViewerTimeZoneChange?.(viewerTz);
@@ -446,13 +447,28 @@ export default function StudentExpertBookingPicker({
       toolbar: StudentBookingToolbar,
       dateCellWrapper: ({ value, children }: { value: Date; children: React.ReactElement }) => {
         const title = getBlockedDayTitle(value);
-        if (!title) return children;
-        return (
-          <div title={title} className="h-full w-full">
-            {Children.map(children, (child) => {
+        // "Today" follows the selected viewer timezone (same basis the calendar
+        // uses to disable past days), so picking e.g. India can advance it a day.
+        const isToday =
+          getViewerYmdFromCalendarDate(value) === toYMDInTimeZone(new Date(), viewerTz);
+        if (!title && !isToday) return children;
+        const wrapped = title
+          ? Children.map(children, (child) => {
               if (!React.isValidElement(child)) return child;
-              return React.cloneElement(child, { title });
-            })}
+              return React.cloneElement(child as React.ReactElement<any>, { title });
+            })
+          : children;
+        // Match react-big-calendar's own day-cell flex sizing (flex: 1 0 0%) so
+        // wrapping the cell doesn't collapse/shift it out of alignment with the
+        // date numbers in the content row.
+        return (
+          <div title={title} className="relative h-full" style={{ flex: '1 0 0%' }}>
+            {wrapped}
+            {isToday && (
+              <span className="pointer-events-none absolute bottom-1 left-1/2 -translate-x-1/2 rounded-full bg-[#1A3A4A] px-2 py-[2px] text-[9px] font-semibold leading-none text-white shadow-sm">
+                Today
+              </span>
+            )}
           </div>
         );
       },
@@ -470,7 +486,7 @@ export default function StudentExpertBookingPicker({
         }) => renderDateHeader(label, date, drilldownView, onDrillDown),
       },
     }),
-    [getBlockedDayTitle, renderDateHeader],
+    [getBlockedDayTitle, renderDateHeader, viewerTz],
   );
 
   const eventStyleGetter = (event: any, _s: any, end: Date) => {
@@ -578,7 +594,7 @@ export default function StudentExpertBookingPicker({
         mode={tzMode}
         customTimeZone={customTz}
         expertTimeZone={expertTz}
-        studentTimeZone={userDetails?.timeZone || detectUserTimeZone()}
+        studentTimeZone={studentTz}
         onModeChange={setTzMode}
         onCustomTimeZoneChange={setCustomTz}
       />

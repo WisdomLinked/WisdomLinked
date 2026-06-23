@@ -100,9 +100,12 @@ const CustomerProfile = ({
         set_phoneNumber(userDetails.phoneNumber)
     }
 
-    const mapServiceIds = (items: Array<any>) =>
+
+    const mapServiceValues = (items: Array<any>) =>
         items
-            .map((x: any) => (typeof x === 'string' ? x : x?._id ?? x?.id))
+            .map((x: any) =>
+                typeof x === 'string' ? x : x?.value ?? x?.label ?? x?.name,
+            )
             .filter(Boolean);
 
     const handleSavePhoto = async () => {
@@ -157,7 +160,7 @@ const CustomerProfile = ({
             email: userDetails.email,
             username: name,
             keywords: selectedKeywords,
-            services: mapServiceIds(selectedServices),
+            services: mapServiceValues(selectedServices),
             country,
             state,
             city,

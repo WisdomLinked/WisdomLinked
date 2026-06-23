@@ -7,6 +7,20 @@ const PaymentHistory = require("../models/PaymentHistory");
 // Escape user-supplied text so it can be used safely inside a regex (prevents ReDoS / injection).
 const escapeRegex = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 
+//  - followerCount: how many customers follow the expert
+//  - isFollowing:   whether the requesting customer already follows them
+const withFollowInfo = (expert: any, myFollowingIds: Set<string>) => {
+    const plain = typeof expert.toObject === 'function' ? expert.toObject() : expert;
+    return {
+        ...plain,
+        followerCount: Array.isArray(plain.followers) ? plain.followers.length : 0,
+        isFollowing: myFollowingIds.has(String(plain._id)),
+    };
+};
+
+const followingIdSet = (reqUser: any): Set<string> =>
+    new Set((reqUser?.following || []).map((id: any) => String(id)));
+
 const filterExperts = async (req: any, res: Response) => {
     try {
         const { _id, username, keywords, services, sortBy } = req.body
@@ -65,6 +79,9 @@ const filterExperts = async (req: any, res: Response) => {
             case "Price in DESC":
                 query.sort({ price: -1 })
                 break;
+            case "Recently joined":
+                query.sort({ createdAt: -1 })
+                break;
             default:
                 break;
         }
@@ -85,9 +102,10 @@ const filterExperts = async (req: any, res: Response) => {
                 ]
             }])
         const experts = await query.exec();
+        const myFollowing = followingIdSet(req.user);
 
         return res.status(200).json({
-            result: experts
+            result: experts.map((e: any) => withFollowInfo(e, myFollowing))
         })
     } catch (err) {
         console.log(err)
@@ -102,6 +120,7 @@ const filterSeminars = async (req, res) => {
 
         let query = GroupChat.find({
             type: 'seminar',
+            status: { $ne: 'draft' }, // never surface an expert's unfinished drafts to students
             $or: [
                 {
                     start: { $gt: new Date() },
@@ -181,21 +200,71 @@ const filterSeminars = async (req, res) => {
 
 const getExpertById = async (req, res) => {
     try {
-        console.log("inside getExpertById")
         const { id } = req.params
         const query = await User.findById(id).populate(["keywords","services","events","groupChats"
         ,{
             path: "pendingGroupChats",
-            populate: ["groupChatId"],  
+            populate: ["groupChatId"],
         },
         ])
 
-        console.log("inside getExpertById", query)
+        if (!query) {
+            return res.status(404).send("Expert not found");
+        }
+
         return res.status(200).json({
-            result: query
+            result: withFollowInfo(query, followingIdSet(req.user))
         })
     }
     catch (err) {
+        console.log(err)
+        return res.status(500).send(err.message);
+    }
+}
+
+const followExpert = async (req: any, res: Response) => {
+    try {
+        const { userId } = req.user
+        const { expertId } = req.params
+
+        if (String(userId) === String(expertId)) {
+            return res.status(400).send("You cannot follow yourself");
+        }
+
+        const expert = await User.findOne({ _id: expertId, role: 'expert' });
+        if (!expert) {
+            return res.status(404).send("Expert not found");
+        }
+
+        await User.updateOne({ _id: userId }, { $addToSet: { following: expertId } });
+        await User.updateOne({ _id: expertId }, { $addToSet: { followers: userId } });
+
+        const updated = await User.findById(expertId).select('followers');
+        return res.status(200).json({
+            following: true,
+            followerCount: updated?.followers?.length ?? 0,
+        });
+    } catch (err: any) {
+        console.log(err)
+        return res.status(500).send(err.message);
+    }
+}
+
+// Unfollow an expert: remove the link from both sides.
+const unfollowExpert = async (req: any, res: Response) => {
+    try {
+        const { userId } = req.user
+        const { expertId } = req.params
+
+        await User.updateOne({ _id: userId }, { $pull: { following: expertId } });
+        await User.updateOne({ _id: expertId }, { $pull: { followers: userId } });
+
+        const updated = await User.findById(expertId).select('followers');
+        return res.status(200).json({
+            following: false,
+            followerCount: updated?.followers?.length ?? 0,
+        });
+    } catch (err: any) {
         console.log(err)
         return res.status(500).send(err.message);
     }
@@ -228,5 +297,7 @@ module.exports = {
     filterExperts,
     filterSeminars,
     getExpertById,
+    followExpert,
+    unfollowExpert,
     getMyPaymentHistory,
 }

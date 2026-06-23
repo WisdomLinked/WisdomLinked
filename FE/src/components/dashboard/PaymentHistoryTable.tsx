@@ -1,3 +1,6 @@
+
+
+
 import { useEffect, useState } from 'react';
 import { Loader2 } from 'lucide-react';
 import { doGetCustomerPaymentHistory } from '../../api/api';
@@ -65,7 +68,7 @@ export function PaymentHistoryTable({ payments, loading, error, stickyHeader = f
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-left">
-        <thead className={`bg-slate-50 border-b border-slate-200${stickyHeader ? ' sticky top-0' : ''}`}>
+        <thead className={`bg-slate-50 border-b border-[#e8e6e1]${stickyHeader ? ' sticky top-0' : ''}`}>
           <tr>
             <th className={TH}>Receipt #</th>
             <th className={TH}>Date</th>

@@ -96,7 +96,7 @@ vi.mock('./StudentExpertBookingPicker', () => ({
 
 vi.mock('./StudentBookingCheckout', () => ({
 
-  default: ({ onPaymentSuccess, onCancel }: any) => (
+  default: ({ onPaymentSuccess, onCancel, cancelLabel = 'Cancel pay' }: any) => (
 
     <div data-testid="student-checkout">
 
@@ -108,7 +108,7 @@ vi.mock('./StudentBookingCheckout', () => ({
 
       <button type="button" onClick={onCancel}>
 
-        Cancel pay
+        {cancelLabel}
 
       </button>
 
@@ -270,21 +270,20 @@ describe('ExpertProfile booking', () => {
 
     await screen.findByTestId('slot-picker');
     fireEvent.click(screen.getByTestId('pick-slot'));
-    fireEvent.click(screen.getByRole('button', { name: /review booking/i }));
+
+    // Review step first, with Change time, before continuing to payment.
+    expect(await screen.findByText('Review your booking')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /change time/i })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: /continue to payment/i }));
 
-    expect(await screen.findByTestId('booking-confirmation-modal')).toBeInTheDocument();
-    expect(screen.queryByTestId('student-checkout')).not.toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole('button', { name: /proceed to payment/i }));
+    expect(await screen.findByTestId('student-checkout')).toBeInTheDocument();
 
     expect(String(window.location.href)).not.toContain('customerdashboard/search');
-    expect(await screen.findByTestId('student-checkout')).toBeInTheDocument();
   });
 
 
 
-  it('shows confirmation modal with booking details before checkout', async () => {
+  it('opens checkout directly without the old confirmation modal', async () => {
     render(
       <Provider store={store}>
         <ExpertProfile mentor={mentor} onBack={vi.fn()} />
@@ -293,16 +292,11 @@ describe('ExpertProfile booking', () => {
 
     await screen.findByTestId('slot-picker');
     fireEvent.click(screen.getByTestId('pick-slot'));
-    fireEvent.click(screen.getByRole('button', { name: /review booking/i }));
-    fireEvent.click(screen.getByRole('button', { name: /continue to payment/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /continue to payment/i }));
 
-    const modal = await screen.findByTestId('booking-confirmation-modal');
-    expect(within(modal).getByText('Dr. Smith')).toBeInTheDocument();
-    expect(within(modal).getByText('1:1 session')).toBeInTheDocument();
-    expect(within(modal).getByText('60 min')).toBeInTheDocument();
-    expect(within(modal).getByText('$60.00')).toBeInTheDocument();
-    expect(within(modal).getByText('UTC')).toBeInTheDocument();
-    expect(screen.queryByTestId('student-checkout')).not.toBeInTheDocument();
+    expect(await screen.findByTestId('student-checkout')).toBeInTheDocument();
+    expect(screen.queryByTestId('booking-confirmation-modal')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /proceed to payment/i })).not.toBeInTheDocument();
   });
 
 
@@ -325,10 +319,7 @@ describe('ExpertProfile booking', () => {
 
     fireEvent.click(screen.getByTestId('pick-slot'));
 
-    fireEvent.click(screen.getByRole('button', { name: /review booking/i }));
-
-    fireEvent.click(screen.getByRole('button', { name: /continue to payment/i }));
-    fireEvent.click(screen.getByRole('button', { name: /proceed to payment/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /continue to payment/i }));
 
     fireEvent.click(screen.getByRole('button', { name: /pay mock/i }));
 
@@ -414,9 +405,8 @@ describe('ExpertProfile booking', () => {
 
     await screen.findByTestId('slot-picker');
     fireEvent.click(screen.getByTestId('pick-slot'));
-    fireEvent.click(screen.getByRole('button', { name: /review booking/i }));
 
-    const summarySection = screen.getByText('Booking summary').closest('div') as HTMLElement;
+    const summarySection = (await screen.findByText('Review your booking')).closest('div') as HTMLElement;
     expect(within(summarySection).getByText(/2:00 PM.*3:00 PM.*\(UTC\)/i)).toBeInTheDocument();
   });
 
@@ -455,7 +445,7 @@ describe('ExpertProfile booking', () => {
 
     await screen.findByTestId('slot-picker');
     fireEvent.click(screen.getByTestId('pick-slot'));
-    fireEvent.click(screen.getByRole('button', { name: /review booking/i }));
+    await screen.findByText('Review your booking');
 
     const ratesSection = () =>
       screen.getByRole('heading', { name: 'Rates' }).closest('section') as HTMLElement;
@@ -482,33 +472,15 @@ describe('ExpertProfile booking', () => {
 
     await screen.findByTestId('slot-picker');
     fireEvent.click(screen.getByTestId('pick-slot'));
-    fireEvent.click(screen.getByRole('button', { name: /review booking/i }));
 
     const summarySection = () =>
-      screen.getByText('Booking summary').closest('div') as HTMLElement;
+      screen.getByText('Review your booking').closest('div') as HTMLElement;
 
+    await screen.findByText('Review your booking');
     expect(within(summarySection()).getByText('60 min')).toBeInTheDocument();
     expect(within(summarySection()).getByText('$60.00')).toBeInTheDocument();
     expect(screen.getByText(/fixed for this booking/i)).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '90 min' })).not.toBeInTheDocument();
-  });
-
-  it('shows selected slot summary before Review booking', async () => {
-    render(
-      <Provider store={store}>
-        <ExpertProfile mentor={mentor} onBack={vi.fn()} />
-      </Provider>,
-    );
-
-    await screen.findByTestId('slot-picker');
-    fireEvent.click(screen.getByTestId('pick-slot'));
-
-    const summary = await screen.findByTestId('selected-slot-summary');
-    expect(summary).toBeInTheDocument();
-    expect(within(summary).getByText('Your selected appointment')).toBeInTheDocument();
-    expect(within(summary).getByText('60 min')).toBeInTheDocument();
-    expect(within(summary).getByText('$60.00')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /review booking/i })).toBeInTheDocument();
   });
 
   it('unlocks appointment duration after Change time', async () => {
@@ -520,7 +492,7 @@ describe('ExpertProfile booking', () => {
 
     await screen.findByTestId('slot-picker');
     fireEvent.click(screen.getByTestId('pick-slot'));
-    fireEvent.click(screen.getByRole('button', { name: /review booking/i }));
+    await screen.findByText('Review your booking');
     fireEvent.click(screen.getByRole('button', { name: /change time/i }));
 
     const btn90 = screen.getByRole('button', { name: '90 min' });
@@ -570,9 +542,8 @@ describe('ExpertProfile booking', () => {
     await screen.findByTestId('slot-picker');
     fireEvent.click(screen.getByTestId('pick-slot-filter'));
 
-    expect(await screen.findByText('Booking summary')).toBeInTheDocument();
+    expect(await screen.findByText('Review your booking')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /review booking/i })).not.toBeInTheDocument();
   });
 
 });
-

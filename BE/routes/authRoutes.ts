@@ -29,6 +29,7 @@ const {
 
 } = require("../controllers/auth.controller");
 const { requireAuth } = require("../middlewares/requireAuth");
+const { apiLimiter, sensitiveLimiter } = require("../middlewares/rateLimit");
 const {
     validateLoginSchema,
     validateRegisterSchema
@@ -49,7 +50,10 @@ const {
     getChatBotAnswer
 } = require('../controllers/chatBotQA.controller')
 
-router.post("/register", uploadsGeneral, register);
+// Baseline rate limiting for every auth route below.
+router.use(apiLimiter);
+
+router.post("/register", sensitiveLimiter, uploadsGeneral, register);
 router.post("/updateResume", uploadsGeneral, updateResume);
 router.post("/uploadChatFile", (req: any, res: any, next: any) => {
     uploadsChatFile(req, res, (err: any) => {
@@ -65,12 +69,12 @@ router.post("/uploadChatFile", (req: any, res: any, next: any) => {
 router.post("/resendConfirmEmail", resendConfirmEmail);
 router.post("/verifyRegistration", verifyRegistration);
 router.get("/checkVerification", checkVerificationStatus);
-router.post("/login", validateLoginSchema, login);
+router.post("/login", sensitiveLimiter, validateLoginSchema, login);
 router.post("/logout", logout);
-router.post("/confirmLoginByCode", confirmLoginByCode);
-router.post("/passwordResetRequest", passwordResetRequest);
-router.post("/verifyPasswordResetOTP", verifyPasswordResetOTP);
-router.post("/confirmPasswordResetByCode", confirmPasswordResetByCode);
+router.post("/confirmLoginByCode", sensitiveLimiter, confirmLoginByCode);
+router.post("/passwordResetRequest", sensitiveLimiter, passwordResetRequest);
+router.post("/verifyPasswordResetOTP", sensitiveLimiter, verifyPasswordResetOTP);
+router.post("/confirmPasswordResetByCode", sensitiveLimiter, confirmPasswordResetByCode);
 router.get("/getKeywordsAndServices", getKeywordsAndServices);
 router.post("/updateMissedChats", requireAuth(false), updateMissedChats);
 router.post("/updateProfile", requireAuth(false), updateProfile);
@@ -81,9 +85,9 @@ router.get("/me", requireAuth(false), getMe);
 router.get("/getMyEvents", requireAuth(false), getMyEvents);
 router.post("/submit", uploadsGeneral, handleSubmit)
 router.post("/leaveFeedback", requireAuth(false), leaveFeedback)
-router.post("/stripePay", requireAuth(true), stripePay)
-router.post("/createStripePaymentIntent", requireAuth(true), createStripePaymentIntent)
-router.post("/getStripeMode", requireAuth(true), getStripeMode)
+router.post("/stripePay", sensitiveLimiter, requireAuth(true), stripePay)
+router.post("/createStripePaymentIntent", sensitiveLimiter, requireAuth(true), createStripePaymentIntent)
+router.post("/getStripeMode", sensitiveLimiter, requireAuth(true), getStripeMode)
 router.get("/healthCheck", healthCheck)
 router.get("/getTimezone",getTimeZone)
 router.post("/contact-form", submitContactForm)
@@ -222,6 +226,35 @@ router.get('/google', (req: any, res: any, next: any) => {
     passport.authenticate('google', { scope: ['profile', 'email'], state, session: false })(req, res, next);
 });
 router.get('/google/callback', passport.authenticate('google', { failureRedirect: '/login?error=google_failed', session: false }), oauthCallback);
+
+// WeChat (website QR / web login) — not a passport strategy, plain server-side HTTP.
+const { buildWeChatAuthUrl, exchangeCodeForUser, findOrCreateWeChatUser } = require('../services/wechatOAuth');
+
+router.get('/wechat', (req: any, res: any) => {
+    const role = req.query.role || 'login';
+    const redirectPath = String(req.query.redirect || '').trim();
+    const timezone = String(req.query.timezone || '').trim();
+    const state = encodeURIComponent(JSON.stringify({
+        role,
+        redirect: redirectPath.startsWith('/') ? redirectPath : '',
+        timezone,
+    }));
+    res.redirect(buildWeChatAuthUrl(state));
+});
+
+router.get('/wechat/callback', async (req: any, res: any) => {
+    try {
+        if (req.query.errcode || !req.query.code) {
+            return res.redirect(`${process.env.FE_URL}/login?error=wechat_failed`);
+        }
+        const profile = await exchangeCodeForUser(String(req.query.code));
+        req.user = await findOrCreateWeChatUser(profile); // { user, isNew }
+        return oauthCallback(req, res); // reuse the shared OAuth callback (state, role, token, redirect)
+    } catch (err) {
+        console.error('[WeChat OAuth Callback Error]', err);
+        return res.redirect(`${process.env.FE_URL}/login?error=wechat_failed`);
+    }
+});
 
 
 

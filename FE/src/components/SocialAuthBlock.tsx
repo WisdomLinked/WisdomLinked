@@ -24,6 +24,13 @@ const GoogleIcon = () => (
   </svg>
 );
 
+const WeChatIcon = () => (
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="#07C160" xmlns="http://www.w3.org/2000/svg" className="shrink-0">
+    <path d="M8.69 4C4.62 4 1.33 6.77 1.33 10.19c0 1.97 1.1 3.73 2.82 4.88l-.7 2.13 2.46-1.24c.88.26 1.82.41 2.78.41.24 0 .48-.01.71-.03a4.7 4.7 0 0 1-.2-1.34c0-2.9 2.82-5.25 6.3-5.25.23 0 .46.01.69.04C15.5 6.05 12.46 4 8.69 4zM6.3 8.6a.92.92 0 1 1 0-1.84.92.92 0 0 1 0 1.84zm4.78 0a.92.92 0 1 1 0-1.84.92.92 0 0 1 0 1.84z"/>
+    <path d="M22.67 15c0-2.87-2.79-5.2-6.07-5.2-3.42 0-6.07 2.39-6.07 5.2 0 2.82 2.65 5.2 6.07 5.2.71 0 1.42-.12 2.07-.32l1.94.99-.55-1.7C21.6 18.27 22.67 16.71 22.67 15zm-7.93-.84a.77.77 0 1 1 0-1.53.77.77 0 0 1 0 1.53zm3.84 0a.77.77 0 1 1 0-1.53.77.77 0 0 1 0 1.53z"/>
+  </svg>
+);
+
 export default function SocialAuthBlock({ role, redirect }: { role?: string; redirect?: string } = {}) {
   const navigateTo = (url: string) => {
     window.location.assign(url);
@@ -48,6 +55,14 @@ export default function SocialAuthBlock({ role, redirect }: { role?: string; red
           aria-label="Continue with Google"
         >
           <GoogleIcon /> <span className="hidden sm:inline">Google</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => handleSocialClick('wechat')}
+          className="flex items-center justify-center gap-2 w-full flex-1 min-w-0 py-3 px-4 rounded-xl border border-slate-200 bg-white text-slate-700 text-sm font-medium hover:border-slate-300 hover:bg-slate-50 transition-colors"
+          aria-label="Continue with WeChat"
+        >
+          <WeChatIcon /> <span className="hidden sm:inline">WeChat</span>
         </button>
       </div>
     </div>

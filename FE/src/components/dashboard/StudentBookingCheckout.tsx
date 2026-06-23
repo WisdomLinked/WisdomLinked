@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { loadStripe } from '@stripe/stripe-js';
 import {
   PaymentElement,
@@ -51,6 +51,41 @@ const CheckoutForm = ({
   const stripe = useStripe();
   const elements = useElements();
   const [errorMessage, setErrorMessage] = useState('');
+  // Animated progress shown under the Pay button while the charge is processing,
+  // so the student sees that the payment is working through to completion.
+  const [processing, setProcessing] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const progressTimer = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const clearProgressTimer = () => {
+    if (progressTimer.current) {
+      clearInterval(progressTimer.current);
+      progressTimer.current = null;
+    }
+  };
+
+  const beginProgress = () => {
+    setProcessing(true);
+    setProgress(10);
+    clearProgressTimer();
+    // Ease toward ~90% while we wait on Stripe (true completion time is unknown).
+    progressTimer.current = setInterval(() => {
+      setProgress((p) => (p < 90 ? p + (90 - p) * 0.15 : p));
+    }, 350);
+  };
+
+  const endProgress = (success: boolean) => {
+    clearProgressTimer();
+    if (success) {
+      setProgress(100);
+      setTimeout(() => setProcessing(false), 450);
+    } else {
+      setProgress(0);
+      setProcessing(false);
+    }
+  };
+
+  useEffect(() => clearProgressTimer, []);
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -71,6 +106,7 @@ const CheckoutForm = ({
       }
 
       SetLoadingStatus(true);
+      beginProgress();
 
       const response = await createStripePaymentIntent({
         stripeMode,
@@ -80,6 +116,7 @@ const CheckoutForm = ({
       if (!clientSecret) {
         setErrorMessage('Could not start payment. Please try again in a moment.');
         SetLoadingStatus(false);
+        endProgress(false);
         return;
       }
 
@@ -97,16 +134,22 @@ const CheckoutForm = ({
       SetLoadingStatus(false);
 
       if (paymentIntent?.status === 'succeeded') {
+        endProgress(true);
         window.localStorage.removeItem('pendingDetails');
         onPaymentSuccess(paymentIntent.id);
       } else if (paymentIntent) {
+        endProgress(false);
         window.localStorage.removeItem('pendingDetails');
         setErrorMessage('Payment failed, try again.');
+      } else {
+        // Redirect-based payment is taking over; show it as complete.
+        endProgress(true);
       }
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Error while processing payment.';
       setErrorMessage(message);
       SetLoadingStatus(false);
+      endProgress(false);
     }
   };
 
@@ -120,13 +163,30 @@ const CheckoutForm = ({
     <form onSubmit={handleSubmit} className="space-y-4">
       <PaymentElement />
       <FormAlert variant="error" message={errorMessage} onDismiss={() => setErrorMessage('')} />
-      <button
-        type="submit"
-        disabled={!stripe || !elements}
-        className="inline-flex w-full items-center justify-center rounded-[4px] bg-[#1A3A4A] px-4 py-3 text-[13px] font-semibold text-white hover:bg-[#122635] disabled:opacity-50"
-      >
-        {price > 0 ? `Pay $${price}` : 'Confirm booking'}
-      </button>
+      <div>
+        <button
+          type="submit"
+          disabled={!stripe || !elements || processing}
+          className="inline-flex w-full items-center justify-center rounded-[4px] bg-[#1A3A4A] px-4 py-3 text-[13px] font-semibold text-white hover:bg-[#122635] disabled:opacity-60"
+        >
+          {processing ? 'Processing payment…' : price > 0 ? `Pay $${price}` : 'Confirm booking'}
+        </button>
+        {/* Animated progress line under the button while the charge is processing. */}
+        <div
+          className="mt-2 h-1 w-full overflow-hidden rounded-full bg-[#1A3A4A]/10 transition-opacity duration-200"
+          style={{ opacity: processing ? 1 : 0 }}
+          role="progressbar"
+          aria-label="Payment progress"
+          aria-valuenow={Math.round(progress)}
+          aria-valuemin={0}
+          aria-valuemax={100}
+        >
+          <div
+            className="h-full rounded-full bg-[#234C6A]"
+            style={{ width: `${progress}%`, transition: 'width 0.35s ease' }}
+          />
+        </div>
+      </div>
     </form>
   );
 };
@@ -138,6 +198,7 @@ type Props = {
   returnUrl?: string;
   onPaymentSuccess: (paymentIntentId: string) => void;
   onCancel?: () => void;
+  cancelLabel?: string;
 };
 
 export default function StudentBookingCheckout({
@@ -147,6 +208,7 @@ export default function StudentBookingCheckout({
   returnUrl,
   onPaymentSuccess,
   onCancel,
+  cancelLabel = 'Back',
 }: Props) {
   const stripeReturnBase =
     returnUrl ?? `${window.location.pathname}${window.location.search}`;
@@ -208,7 +270,7 @@ export default function StudentBookingCheckout({
   }
 
   return (
-    <div className="rounded-2xl border border-[#E5E2DB] bg-white p-6">
+    <div className="rounded-2xl border border-[#E5E2DB] bg-white p-4 sm:p-6">
       <p className="font-serif text-lg font-medium text-[#1A3A4A]">
         Pay for your {type}
       </p>
@@ -216,22 +278,24 @@ export default function StudentBookingCheckout({
         Total: <span className="font-semibold text-[#1A3A4A]">${price}</span>
         {stripeMode === 'test' ? ' · test mode' : ''}
       </p>
-      <Elements stripe={stripePromise} options={options}>
-        <CheckoutForm
-          pendingDetails={pendingDetails}
-          stripeMode={stripeMode}
-          price={price}
-          returnUrl={stripeReturnBase}
-          onPaymentSuccess={onPaymentSuccess}
-        />
-      </Elements>
+      <div className="mt-4">
+        <Elements stripe={stripePromise} options={options}>
+          <CheckoutForm
+            pendingDetails={pendingDetails}
+            stripeMode={stripeMode}
+            price={price}
+            returnUrl={stripeReturnBase}
+            onPaymentSuccess={onPaymentSuccess}
+          />
+        </Elements>
+      </div>
       {onCancel ? (
         <button
           type="button"
           onClick={onCancel}
           className="mt-4 w-full rounded-[4px] border border-[#E5E2DB] py-2.5 text-[13px] font-semibold text-[#1A3A4A] hover:bg-[#F5F3EF]"
         >
-          Back
+          {cancelLabel}
         </button>
       ) : null}
     </div>

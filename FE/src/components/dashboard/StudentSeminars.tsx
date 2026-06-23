@@ -33,7 +33,10 @@ async function mapSeminar(g: any): Promise<Seminar> {
   const hasStart = start && !Number.isNaN(start.getTime());
   const keywords = (g?.keywords || []).map((k: any) => k?.value).filter(Boolean);
   const serviceLabels = canonicalLabelsFromMixedServiceEntries(g?.services);
-  const image = await resolveProfileImageSrc(g?.admin?.image, 'small', profileImageFetch);
+  // Prefer the seminar's own cover image; only fall back to the host's photo when absent.
+  const image = g?.image
+    ? String(g.image)
+    : await resolveProfileImageSrc(g?.admin?.image, 'small', profileImageFetch);
   return {
     id: String(g?._id),
     title: g?.name || 'Seminar',
@@ -67,7 +70,7 @@ export default function StudentSeminars() {
   const [majorFilter, setMajorFilter] = useState<string>('all');
   const [tagFilter, setTagFilter] = useState<string>('all');
   const [selectedSeminar, setSelectedSeminar] = useState<Seminar | null>(null);
-  const [bookingStep, setBookingStep] = useState<1 | 2 | 3>(1);
+  const [bookingStep, setBookingStep] = useState<1 | 2>(1);
   const [selectedTime, setSelectedTime] = useState<string>('');
   const [paying, setPaying] = useState(false);
   const [bookingDone, setBookingDone] = useState(false);
@@ -447,7 +450,11 @@ export default function StudentSeminars() {
                   returnUrl={seminarReturnUrl}
                   pendingDetails={{ groupChatId: s.id, price: s.price, name: s.title }}
                   onPaymentSuccess={joinSeminar}
-                  onCancel={() => setPaying(false)}
+                  onCancel={() => {
+                    setPaying(false);
+                    setBookingStep(2);
+                  }}
+                  cancelLabel="Change time"
                 />
                 {bookingError ? (
                   <p className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-medium text-rose-700">
@@ -458,7 +465,7 @@ export default function StudentSeminars() {
             ) : (
               <div className="mt-4 space-y-4">
                 <div className="rounded-lg border border-[#E5E2DB] bg-[#F5F3EF] px-3 py-2 text-[12px] text-[#1A3A4A]">
-                  Step {bookingStep} of 3
+                  Step {bookingStep} of 2
                 </div>
 
                 {bookingStep === 1 && (
@@ -499,32 +506,6 @@ export default function StudentSeminars() {
                       <button
                         type="button"
                         onClick={() => setBookingStep(1)}
-                        className="flex-1 rounded-[4px] border border-[#E5E2DB] bg-white px-3 py-2 text-sm font-semibold text-slate-700"
-                      >
-                        Back
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setBookingStep(3)}
-                        className="flex-1 rounded-[4px] bg-[#234C6A] px-3 py-2 text-sm font-semibold text-white hover:brightness-110"
-                      >
-                        Continue
-                      </button>
-                    </div>
-                  </div>
-                )}
-
-                {bookingStep === 3 && (
-                  <div className="space-y-3">
-                    <p className="text-sm text-[#7A7A72]">
-                      {s.price > 0
-                        ? `Confirm and pay $${s.price.toFixed(2)} to reserve your seat.`
-                        : 'Confirm to reserve your seat — this seminar is free.'}
-                    </p>
-                    <div className="flex gap-2">
-                      <button
-                        type="button"
-                        onClick={() => setBookingStep(2)}
                         className="flex-1 rounded-[4px] border border-[#E5E2DB] bg-white px-3 py-2 text-sm font-semibold text-slate-700"
                       >
                         Back
@@ -678,4 +659,3 @@ export default function StudentSeminars() {
     </div>
   );
 }
-

@@ -32,6 +32,13 @@ export function mapExpertToMentor(expert: any): MentorCardProps {
     isNew,
     resume: expert.resume ? String(expert.resume) : null,
     status: expert.status ? String(expert.status) : undefined,
+    followerCount:
+      typeof expert.followerCount === 'number'
+        ? expert.followerCount
+        : Array.isArray(expert.followers)
+          ? expert.followers.length
+          : 0,
+    isFollowing: !!expert.isFollowing,
   };
 }
 

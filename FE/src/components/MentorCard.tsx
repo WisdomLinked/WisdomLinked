@@ -118,9 +118,6 @@ const MentorCard: React.FC<MentorCardProps> = ({
           >
             {isFollowing ? 'Following' : 'Follow +'}
           </button>
-          <span className="text-[10px] font-medium tabular-nums text-[#7A7A72]">
-            {followerCount.toLocaleString()} followers
-          </span>
         </div>
       ) : null}
 

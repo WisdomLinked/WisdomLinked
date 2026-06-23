@@ -998,9 +998,66 @@ const updateProfile = async (req: any, res: Response) => {
                     : String(req.body.specialNote);
             updates.specialNote = raw.slice(0, 5000);
         }
+
+        const timeZone = safeParse(req.body.timeZone) || req.body.timeZone;
+        if (timeZone && typeof timeZone === 'string') {
+            updates.timeZone = timeZone;
+        }
+
+        const notificationPreferences =
+            safeParse(req.body.notificationPreferences) || req.body.notificationPreferences;
+        if (notificationPreferences && typeof notificationPreferences === 'object') {
+            const prefKeys = ['email', 'push', 'seminarReminders', 'sessionReminders', 'marketing'];
+            for (const key of prefKeys) {
+                if (typeof notificationPreferences[key] === 'boolean') {
+                    updates[`notificationPreferences.${key}`] = notificationPreferences[key];
+                }
+            }
+        }
+        // synthetic wechat_<id>@wechat.local placeholder email (WeChat returns no email).
+        // Allow them to set a real one here. Only placeholder accounts may change their
+        // email via this endpoint, so normal users can't repoint their account.
+        const { isWeChatPlaceholderEmail } = require('../services/wechatOAuth');
+        const newEmailRaw = safeParse(req.body.email) || req.body.email;
+        if (
+            typeof newEmailRaw === 'string' &&
+            newEmailRaw.trim() &&
+            isWeChatPlaceholderEmail(email) &&
+            !isWeChatPlaceholderEmail(newEmailRaw)
+        ) {
+            const newEmail = newEmailRaw.trim().toLowerCase();
+            if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newEmail)) {
+                return res.status(400).json({ status: 'FAIL', error: 'Please enter a valid email address.' });
+            }
+            // v1: block when the email already belongs to another account (no auto-merge).
+            const existing = await User.findOne({ email: { $regex: new RegExp(`^${newEmail}$`, 'i') } });
+            if (existing) {
+                return res.status(409).json({
+                    status: 'FAIL',
+                    error: 'This email is already in use. Please sign in to that account instead.',
+                });
+            }
+            updates.email = newEmail;
+        }
+
         // [User Model] -- add more updating fields based on the user model
         await User.findOneAndUpdate({ email: email }, updates, { new: true })
-        const result = await getFullUserData(email)
+
+        // If the email changed (WeChat bind-email), the email-keyed session token is now
+        // stale — re-issue it so the user stays logged in under the new email.
+        const updatedEmail = updates.email && updates.email !== email ? updates.email : email;
+        if (updatedEmail !== email) {
+            const updatedUser = await User.findOne({ email: updatedEmail });
+            if (updatedUser) {
+                const newToken = await updatedUser.generateAuthToken();
+                res.cookie('accessToken', newToken, {
+                    maxAge: Number(process.env.COOKIE_EXPIRED_TIME) || 86400000,
+                    httpOnly: true,
+                });
+            }
+        }
+
+        const result = await getFullUserData(updatedEmail)
         result.password = null
         result.token = null
         return res.status(200).json({

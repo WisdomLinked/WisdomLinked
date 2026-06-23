@@ -314,6 +314,18 @@ export const createGroupChat = async (details: any) => {
     }
 };
 
+export const uploadSeminarCover = async (file: File): Promise<string | null> => {
+    try {
+        const formData = new FormData();
+        formData.append("media", file, file.name);
+        const res = await api.post("auth/uploadChatFile", formData);
+        return res.data?.chatFile || null;
+    } catch (err: any) {
+        checkForAuthorization(err);
+        return null;
+    }
+};
+
 export const createGroupChatByUser = async (details: any) => {
     try {
         const res = await api.post("group-chat/create-by-user", details);
@@ -832,6 +844,26 @@ export const getExpertById = async (id: any) => {
         const res = await api.get(`customer/getUser/${id}`);
 
         return res.data;
+    } catch (err: any) {
+        return checkForAuthorization(err);
+    }
+};
+
+// Follow / unfollow an expert. Returns { following, followerCount } from the
+// server (the source of truth) so the caller can reconcile optimistic UI.
+export const doFollowExpert = async (expertId: string) => {
+    try {
+        const res = await api.post(`customer/follow/${expertId}`);
+        return res.data as { following: boolean; followerCount: number };
+    } catch (err: any) {
+        return checkForAuthorization(err);
+    }
+};
+
+export const doUnfollowExpert = async (expertId: string) => {
+    try {
+        const res = await api.post(`customer/unfollow/${expertId}`);
+        return res.data as { following: boolean; followerCount: number };
     } catch (err: any) {
         return checkForAuthorization(err);
     }

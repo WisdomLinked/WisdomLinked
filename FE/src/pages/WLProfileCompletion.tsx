@@ -25,10 +25,15 @@ export default function WLProfileCompletion() {
     const { auth: { userDetails } } = useAppSelector((state) => state);
     
     // We expect the user to have been created by OAuth, so role should be present.
-    const role = userDetails?.role || 'customer'; 
+    const role = userDetails?.role || 'customer';
     const isExpert = role === 'expert';
 
+    // WeChat-only accounts get a synthetic wechat_<id>@wechat.local placeholder email
+    // (WeChat returns no email). Ask them to bind a real one here.
+    const needsEmail = String(userDetails?.email || '').toLowerCase().endsWith('@wechat.local');
+
     const [form, setForm] = useState({
+        email: '',                       // WeChat bind-email only
         majors: [] as string[],
         servicesOffered: [] as string[], // expert
         services: [] as string[],         // customer — same options as email/password sign-up
@@ -68,6 +73,11 @@ export default function WLProfileCompletion() {
     const toTitleCase = (str: string) => str.toLowerCase().split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
 
     const validateField = (field: string, value: any) => {
+        if (field === 'email') {
+            if (!value.trim()) return 'Email is required';
+            if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim())) return 'Enter a valid email address';
+            return '';
+        }
         if (field === 'majors') return value.length === 0 ? 'Select at least one major' : '';
         if (isExpert) {
             if (field === 'title') return !value.trim() ? 'Title is required' : '';
@@ -128,6 +138,9 @@ export default function WLProfileCompletion() {
     const validate = () => {
         const e: Record<string, string> = {};
         const fieldsToValidate = ['majors'];
+        if (needsEmail) {
+            fieldsToValidate.push('email');
+        }
         if (isExpert) {
             fieldsToValidate.push('title', 'bio', 'servicesOffered');
         } else {
@@ -156,9 +169,10 @@ export default function WLProfileCompletion() {
             const data = {
                 keywords: form.majors,
                 services: isExpert ? form.servicesOffered : form.services,
-                ...(isExpert && { 
-                    title: form.title, 
-                    description: form.bio 
+                ...(needsEmail && { email: form.email.trim().toLowerCase() }),
+                ...(isExpert && {
+                    title: form.title,
+                    description: form.bio
                 })
             };
 
@@ -214,7 +228,28 @@ export default function WLProfileCompletion() {
 
                 <div className="bg-white rounded-3xl shadow-xl shadow-slate-200/50 p-6 sm:p-10 border border-slate-100">
                     <div className="space-y-6">
-                        
+
+                        {needsEmail && (
+                            <div>
+                                <label className="block text-sm font-semibold text-slate-700 mb-2">
+                                    Email Address <span className="text-red-500">*</span>
+                                </label>
+                                <input
+                                    type="email"
+                                    placeholder="you@example.com"
+                                    value={form.email}
+                                    onChange={e => handleChange('email', e.target.value)}
+                                    onBlur={() => handleBlur('email')}
+                                    className={errors.email ? inputError : inputNormal}
+                                />
+                                {errors.email ? (
+                                    <p className="mt-1.5 text-xs text-red-500 font-medium">{errors.email}</p>
+                                ) : (
+                                    <p className="mt-1.5 text-xs text-slate-500">WeChat didn't share an email — add one so we can reach you and secure your account.</p>
+                                )}
+                            </div>
+                        )}
+
                         {isExpert && (
                             <>
                                 <div>

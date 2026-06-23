@@ -8,12 +8,15 @@ import React, {
   import { useDispatch } from 'react-redux';
   import { useNavigate } from 'react-router-dom';
   import { useAppSelector } from '../../../store';
-  import { createGroupChat, updateGroupChat } from '../../../api/api';
+  import { createGroupChat, updateGroupChat, uploadSeminarCover } from '../../../api/api';
   import { SetLoadingStatus } from '../../../actions/appActions';
   import { showErrorAlert, showSuccessAlert, showWarningAlert } from '../../../actions/alertActions';
   import { updateMe } from '../../../actions/authActions';
   import { SERVICE_LABELS } from '../../../constants/serviceOptions';
-  
+  import DatePickerField from '../../../components/ui/DatePickerField';
+  import TimePickerField from '../../../components/ui/TimePickerField';
+  import SelectField from '../../../components/ui/SelectField';
+
   type StepId = 1 | 2 | 3;
   
   interface StepConfig {
@@ -51,6 +54,8 @@ import React, {
       end?: string | Date;
       duration?: number;
       price?: number;
+      image?: string | null;
+      status?: string;
     };
     /** New expert shell: refresh user + switch tab without full page navigation */
     onAfterSeminarSave?: () => void;
@@ -138,6 +143,8 @@ import React, {
     const [tagInput, setTagInput] = useState<string>('');
     const [errors, setErrors] = useState<SeminarErrors>({});
     const [coverPreview, setCoverPreview] = useState<string | null>(null);
+    // URL of an already-uploaded cover (when editing/resuming); reused if no new file is picked.
+    const [existingImageUrl, setExistingImageUrl] = useState<string | null>(null);
   
     useEffect(() => {
       if (userDetails?.status === 'review') {
@@ -171,6 +178,11 @@ import React, {
         ...prev,
         ...patched,
       }));
+
+      if (selectedSeminar.image) {
+        setExistingImageUrl(selectedSeminar.image);
+        setCoverPreview(selectedSeminar.image);
+      }
     }, [selectedSeminar]);
   
     const updateFormField = <K extends keyof SeminarFormData>(
@@ -195,6 +207,7 @@ import React, {
       }
       updateFormField('coverImage', file);
       if (file) {
+        setExistingImageUrl(null); // a new file replaces any previously uploaded cover
         const reader = new FileReader();
         reader.onload = () => {
           setCoverPreview(typeof reader.result === 'string' ? reader.result : null);
@@ -312,65 +325,76 @@ import React, {
       return { start, end, durationMinutes };
     };
   
-    const handlePublish = async () => {
-      if (!validateStep(3)) {
-        setCurrentStep(3);
+    // Shared save path for both "Publish" (status: active) and "Save as Draft"
+    // (status: draft). Publishing fully validates; a draft only needs a title.
+    const persistSeminar = async (status: 'active' | 'draft') => {
+      if (status === 'active') {
+        if (!validateStep(3)) {
+          setCurrentStep(3);
+          return;
+        }
+      } else if (!formData.title.trim()) {
+        setErrors((prev) => ({ ...prev, title: 'Add a title to save a draft.' }));
+        setCurrentStep(1);
         return;
       }
-  
-      const timeInfo = computeStartEndAndDuration();
-      if (!timeInfo) {
+
+      // Publishing requires a valid date/time; a draft may be saved without one.
+      let timeInfo = null;
+      if (formData.date && formData.startTime && formData.endTime) {
+        timeInfo = computeStartEndAndDuration();
+      }
+      if (status === 'active' && !timeInfo) {
         setCurrentStep(2);
         return;
       }
-  
-      const { start, end, durationMinutes } = timeInfo;
-  
-      const payload = {
-        name: formData.title.trim(),
-        description: formData.description.trim(),
-        services: formData.services,
-        keywords: formData.majors,
-        start,
-        end,
-        duration: durationMinutes,
-        price: formData.isFree ? 0 : Number(formData.price || 0),
-        type: 'seminar' as const,
-        status: 'active' as const,
-        createdBy: userDetails?._id,
-        maxAttendees: formData.maxAttendees === '' ? undefined : Number(formData.maxAttendees),
-        currency: formData.currency,
-        isRecurring: formData.isRecurring,
-        timezone: formData.timezone,
-      };
-  
+
       try {
         SetLoadingStatus(true);
-  
-        if (selectedSeminar?.groupId) {
-          const res = await updateGroupChat({
-            groupId: selectedSeminar.groupId,
-            ...payload,
-          });
-          if (res) {
-            dispatch(showSuccessAlert('Seminar updated successfully'));
-            await (dispatch as any)(updateMe());
-            if (onAfterSeminarSave) {
-              onAfterSeminarSave();
-            } else {
-              navigate(`${process.env.REACT_APP_AUTH_URL}expertdashboard/calendar`);
-            }
-          }
-        } else {
-          const res = await createGroupChat(payload);
-          if (res) {
-            dispatch(showSuccessAlert('Seminar created successfully'));
-            await (dispatch as any)(updateMe());
-            if (onAfterSeminarSave) {
-              onAfterSeminarSave();
-            } else {
-              navigate(`${process.env.REACT_APP_AUTH_URL}expertdashboard/calendar`);
-            }
+
+        // Upload a newly chosen cover; otherwise keep the existing one.
+        let imageUrl = existingImageUrl;
+        if (formData.coverImage) {
+          const uploaded = await uploadSeminarCover(formData.coverImage);
+          if (uploaded) imageUrl = uploaded;
+        }
+
+        const payload = {
+          name: formData.title.trim(),
+          description: formData.description.trim(),
+          image: imageUrl || undefined,
+          services: formData.services,
+          keywords: formData.majors,
+          start: timeInfo?.start,
+          end: timeInfo?.end,
+          duration: timeInfo?.durationMinutes,
+          price: formData.isFree ? 0 : Number(formData.price || 0),
+          type: 'seminar' as const,
+          status,
+          createdBy: userDetails?._id,
+          maxAttendees: formData.maxAttendees === '' ? undefined : Number(formData.maxAttendees),
+          currency: formData.currency,
+          isRecurring: formData.isRecurring,
+          timezone: formData.timezone,
+        };
+
+        const res = selectedSeminar?.groupId
+          ? await updateGroupChat({ groupId: selectedSeminar.groupId, ...payload })
+          : await createGroupChat(payload);
+
+        if (res) {
+          const msg =
+            status === 'draft'
+              ? 'Draft saved'
+              : selectedSeminar?.groupId
+                ? 'Seminar updated successfully'
+                : 'Seminar created successfully';
+          dispatch(showSuccessAlert(msg));
+          await (dispatch as any)(updateMe());
+          if (onAfterSeminarSave) {
+            onAfterSeminarSave();
+          } else {
+            navigate(`${process.env.REACT_APP_AUTH_URL}expertdashboard/calendar`);
           }
         }
       } catch {
@@ -379,10 +403,9 @@ import React, {
         SetLoadingStatus(false);
       }
     };
-  
-    const handleSaveDraft = () => {
-      dispatch(showWarningAlert('Draft saved locally. Publishing will be added next.'));
-    };
+
+    const handlePublish = () => persistSeminar('active');
+    const handleSaveDraft = () => persistSeminar('draft');
   
     const renderStepper = () => (
       <div className="mb-8 rounded-xl border border-gray-100 bg-white px-8 py-5">
@@ -450,6 +473,7 @@ import React, {
                     onClick={() => {
                       updateFormField('coverImage', null);
                       setCoverPreview(null);
+                      setExistingImageUrl(null);
                     }}
                     className="absolute right-2 top-2 inline-flex h-7 w-7 items-center justify-center rounded-full bg-white/80 text-gray-600 shadow hover:bg-white"
                   >
@@ -694,11 +718,12 @@ import React, {
           <label className="mb-1.5 block text-sm font-medium text-gray-700">
             Seminar Date <span className="text-red-400">*</span>
           </label>
-        <input
-          type="date"
+        <DatePickerField
+          id="seminar-date"
           value={formData.date}
-          onChange={(e) => updateFormField('date', e.target.value)}
-          className="w-full rounded-lg border border-gray-200 px-4 py-2.5 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#234C6A] focus:border-transparent"
+          onChange={(v) => updateFormField('date', v)}
+          min={new Date().toLocaleDateString('en-CA')}
+          placeholder="Select a date"
         />
           {errors.date && <p className="mt-1 text-xs text-red-500">{errors.date}</p>}
         </div>
@@ -708,11 +733,11 @@ import React, {
             <label className="mb-1.5 block text-sm font-medium text-gray-700">
               Start Time <span className="text-red-400">*</span>
             </label>
-          <input
-            type="time"
+          <TimePickerField
+            id="seminar-start-time"
             value={formData.startTime}
-            onChange={(e) => updateFormField('startTime', e.target.value)}
-            className="w-full rounded-lg border border-gray-200 px-4 py-2.5 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#234C6A] focus:border-transparent"
+            onChange={(v) => updateFormField('startTime', v)}
+            placeholder="Select start time"
           />
             {errors.startTime && (
               <p className="mt-1 text-xs text-red-500">{errors.startTime}</p>
@@ -722,11 +747,11 @@ import React, {
             <label className="mb-1.5 block text-sm font-medium text-gray-700">
               End Time <span className="text-red-400">*</span>
             </label>
-          <input
-            type="time"
+          <TimePickerField
+            id="seminar-end-time"
             value={formData.endTime}
-            onChange={(e) => updateFormField('endTime', e.target.value)}
-            className="w-full rounded-lg border border-gray-200 px-4 py-2.5 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#234C6A] focus:border-transparent"
+            onChange={(v) => updateFormField('endTime', v)}
+            placeholder="Select end time"
           />
             {errors.endTime && (
               <p className="mt-1 text-xs text-red-500">{errors.endTime}</p>
@@ -738,18 +763,13 @@ import React, {
           <label className="mb-1.5 block text-sm font-medium text-gray-700">
             Timezone <span className="text-red-400">*</span>
           </label>
-        <select
+        <SelectField
+          id="seminar-timezone"
           value={formData.timezone}
-          onChange={(e) => updateFormField('timezone', e.target.value)}
-          className="w-full rounded-lg border border-gray-200 px-4 py-2.5 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#234C6A] focus:border-transparent"
-        >
-            <option value="">Select a timezone…</option>
-            {TIMEZONE_OPTIONS.map((tz) => (
-              <option key={tz} value={tz}>
-                {tz}
-              </option>
-            ))}
-          </select>
+          onChange={(v) => updateFormField('timezone', v)}
+          options={TIMEZONE_OPTIONS.map((tz) => ({ value: tz, label: tz }))}
+          placeholder="Select a timezone…"
+        />
           {errors.timezone && (
             <p className="mt-1 text-xs text-red-500">{errors.timezone}</p>
           )}

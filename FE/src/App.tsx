@@ -201,9 +201,12 @@ function App() {
       
       const path = window.location.pathname;
       const search = window.location.search;
+      if (path.startsWith('/user/')) {
+        return;
+      }
       if (
-        path.includes('/oauth-callback') || 
-        path.includes('/verification/') || 
+        path.includes('/oauth-callback') ||
+        path.includes('/verification/') ||
         path.includes('/auth-complete-profile') ||
         path.includes('/meeting/invite/') ||
         (path.includes('/login') && search.includes('error='))
