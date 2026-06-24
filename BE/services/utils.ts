@@ -5,6 +5,8 @@ const noReplyEmail = "noreply@wisdomlinked.com";
 
 sgMail.setApiKey(process.env.SENDGRID_API_KEY);
 
+exports.escapeRegExp = (value) => String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
 exports.getCurrentDateString = () => {
   const date = new Date();
   const day = String(date.getDate()).padStart(2, "0");

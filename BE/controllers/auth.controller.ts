@@ -547,7 +547,7 @@ const login = async (req: Request, res: Response) => {
         // const code = randomize('0', 6)
         const code = "123456"
 
-        let loginRequest = await PendingLogin.findOne({ email: { $regex: new RegExp(`^${email}$`, 'i') } })
+        let loginRequest = await PendingLogin.findOne({ email: { $regex: new RegExp(`^${utils.escapeRegExp(email)}$`, 'i') } })
         if (!loginRequest) {
             loginRequest = new PendingLogin({
                 email,
@@ -603,7 +603,7 @@ const confirmLoginByCode = async (req: Request, res: Response) => {
     try {
 
         const { email, password, code } = req.body;
-        const loginRequest = await PendingLogin.findOne({ email: { $regex: new RegExp(`^${email}$`, 'i') } })
+        const loginRequest = await PendingLogin.findOne({ email: { $regex: new RegExp(`^${utils.escapeRegExp(email)}$`, 'i') } })
         if (!loginRequest) {
             return res.status(200).json({ status: 'FAIL', error: AUTH_LOGIN_REQUEST_EXPIRED });
         }
@@ -676,7 +676,7 @@ const passwordResetRequest = async (req: Request, res: Response) => {
     try {
         const { email, password } = req.body
 
-        const user = await User.findOne({ email: { $regex: new RegExp(`^${email}$`, 'i') } }).select('+password')
+        const user = await User.findOne({ email: { $regex: new RegExp(`^${utils.escapeRegExp(email)}$`, 'i') } }).select('+password')
 
         if (!user) {
             return res.status(200).json({ status: 'FAIL', error: AUTH_EMAIL_NOT_FOUND });
@@ -696,7 +696,7 @@ const passwordResetRequest = async (req: Request, res: Response) => {
             ? await bcrypt.hash(String(password), 10)
             : undefined;
 
-        const pwdRequest = await PendingPasswordReset.findOne({ email: { $regex: new RegExp(`^${email}$`, 'i') } })
+        const pwdRequest = await PendingPasswordReset.findOne({ email: { $regex: new RegExp(`^${utils.escapeRegExp(email)}$`, 'i') } })
         if (!pwdRequest) {
             const newRequest = new PendingPasswordReset({
                 email,
@@ -748,7 +748,7 @@ const verifyPasswordResetOTP = async (req: Request, res: Response) => {
     try {
         const { email, code } = req.body;
 
-        const pwdRequest = await PendingPasswordReset.findOne({ email: { $regex: new RegExp(`^${email}$`, 'i') } });
+        const pwdRequest = await PendingPasswordReset.findOne({ email: { $regex: new RegExp(`^${utils.escapeRegExp(email)}$`, 'i') } });
         if (!pwdRequest) {
             return res.status(200).json({ status: 'FAIL', error: AUTH_PASSWORD_RESET_EXPIRED });
         }
@@ -784,7 +784,7 @@ const confirmPasswordResetByCode = async (req: Request, res: Response) => {
             return res.status(200).json({ status: 'FAIL', error: AUTH_PASSWORD_WEAK });
         }
 
-        const request = await PendingPasswordReset.findOne({ email: { $regex: new RegExp(`^${email}$`, 'i') } })
+        const request = await PendingPasswordReset.findOne({ email: { $regex: new RegExp(`^${utils.escapeRegExp(email)}$`, 'i') } })
         if (!request) {
             return res.status(200).json({ status: 'FAIL', error: AUTH_PASSWORD_RESET_EXPIRED });
         }
@@ -1026,11 +1026,11 @@ const updateProfile = async (req: any, res: Response) => {
             !isWeChatPlaceholderEmail(newEmailRaw)
         ) {
             const newEmail = newEmailRaw.trim().toLowerCase();
-            if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newEmail)) {
+            if (!/^[^\s@.]+(\.[^\s@.]+)*@[^\s@.]+(\.[^\s@.]+)+$/.test(newEmail)) {
                 return res.status(400).json({ status: 'FAIL', error: 'Please enter a valid email address.' });
             }
             // v1: block when the email already belongs to another account (no auto-merge).
-            const existing = await User.findOne({ email: { $regex: new RegExp(`^${newEmail}$`, 'i') } });
+            const existing = await User.findOne({ email: { $eq: newEmail } });
             if (existing) {
                 return res.status(409).json({
                     status: 'FAIL',
@@ -1046,8 +1046,9 @@ const updateProfile = async (req: any, res: Response) => {
         // If the email changed (WeChat bind-email), the email-keyed session token is now
         // stale — re-issue it so the user stays logged in under the new email.
         const updatedEmail = updates.email && updates.email !== email ? updates.email : email;
-        if (updatedEmail !== email) {
-            const updatedUser = await User.findOne({ email: updatedEmail });
+        const safeUpdatedEmail = typeof updatedEmail === 'string' ? updatedEmail.trim() : null;
+        if (safeUpdatedEmail && safeUpdatedEmail !== email) {
+            const updatedUser = await User.findOne({ email: { $eq: safeUpdatedEmail } });
             if (updatedUser) {
                 const newToken = await updatedUser.generateAuthToken();
                 res.cookie('accessToken', newToken, {
