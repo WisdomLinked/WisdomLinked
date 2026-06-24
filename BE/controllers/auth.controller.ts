@@ -4,6 +4,7 @@ const PendingUser = require("../models/PendingUser");
 const jwt = require("jsonwebtoken");
 const PendingLogin = require("../models/PendingLogin");
 const PendingPasswordReset = require("../models/PendingPasswordReset");
+const PendingEmailChange = require("../models/PendingEmailChange");
 const Keyword = require("../models/Keyword")
 const Service = require("../models/Service")
 const bcrypt = require("bcryptjs");
@@ -1019,6 +1020,7 @@ const updateProfile = async (req: any, res: Response) => {
         // email via this endpoint, so normal users can't repoint their account.
         const { isWeChatPlaceholderEmail } = require('../services/wechatOAuth');
         const newEmailRaw = safeParse(req.body.email) || req.body.email;
+        let emailVerificationSent = false;
         if (
             typeof newEmailRaw === 'string' &&
             newEmailRaw.trim() &&
@@ -1037,33 +1039,95 @@ const updateProfile = async (req: any, res: Response) => {
                     error: 'This email is already in use. Please sign in to that account instead.',
                 });
             }
-            updates.email = newEmail;
+            const me = await User.findOne({ email: { $eq: email } });
+            if (me) {
+                const confirmCode = uuidv4();
+                await PendingEmailChange.deleteOne({ userId: me._id });
+                await PendingEmailChange.create({
+                    userId: me._id,
+                    currentEmail: email,
+                    newEmail,
+                    confirmCode,
+                });
+                await utils.sendEmailChangeVerification(newEmail, confirmCode);
+                emailVerificationSent = true;
+            }
         }
 
         // [User Model] -- add more updating fields based on the user model
         await User.findOneAndUpdate({ email: email }, updates, { new: true })
 
-        // If the email changed (WeChat bind-email), the email-keyed session token is now
-        // stale — re-issue it so the user stays logged in under the new email.
-        const updatedEmail = updates.email && updates.email !== email ? updates.email : email;
-        const safeUpdatedEmail = typeof updatedEmail === 'string' ? updatedEmail.trim() : null;
-        if (safeUpdatedEmail && safeUpdatedEmail !== email) {
-            const updatedUser = await User.findOne({ email: { $eq: safeUpdatedEmail } });
-            if (updatedUser) {
-                const newToken = await updatedUser.generateAuthToken();
-                res.cookie('accessToken', newToken, {
-                    maxAge: Number(process.env.COOKIE_EXPIRED_TIME) || 86400000,
-                    httpOnly: true,
-                });
-            }
-        }
-
-        const result = await getFullUserData(updatedEmail)
+        const result = await getFullUserData(email)
         result.password = null
         result.token = null
         return res.status(200).json({
             result: result,
+            emailVerificationSent,
         });
+    } catch (err) {
+        console.log(err)
+        return res.status(500).send(HTTP_GENERIC_ERROR);
+    }
+}
+
+const confirmEmailChange = async (req: Request, res: Response) => {
+    try {
+        const { isWeChatPlaceholderEmail } = require('../services/wechatOAuth');
+        const confirmCode = typeof req.body.confirmCode === 'string' ? req.body.confirmCode.trim() : '';
+        if (!confirmCode) {
+            return res.status(200).json({ status: 'FAIL', error: 'This verification link is invalid or has expired.' });
+        }
+
+        const pending = await PendingEmailChange.findOne({ confirmCode: { $eq: confirmCode } });
+        if (!pending) {
+            return res.status(200).json({ status: 'FAIL', error: 'This verification link is invalid or has expired.' });
+        }
+
+        if ((Date.now() - new Date(pending.createdAt).getTime()) >= 24 * 3600 * 1000) {
+            await pending.deleteOne();
+            return res.status(200).json({ status: 'FAIL', error: 'This verification link has expired. Please request a new one.' });
+        }
+
+        const newEmail = String(pending.newEmail).toLowerCase();
+        const existing = await User.findOne({ email: { $eq: newEmail } });
+        if (existing && String(existing._id) !== String(pending.userId)) {
+            await pending.deleteOne();
+            return res.status(409).json({
+                status: 'FAIL',
+                error: 'This email is already in use. Please sign in to that account instead.',
+            });
+        }
+
+        const user = await User.findById(pending.userId);
+        if (!user) {
+            await pending.deleteOne();
+            return res.status(200).json({ status: 'FAIL', error: AUTH_USER_NOT_FOUND });
+        }
+        if (!isWeChatPlaceholderEmail(user.email)) {
+            await pending.deleteOne();
+            return res.status(200).json({ status: 'FAIL', error: 'An email is already set for this account.' });
+        }
+
+        user.email = newEmail;
+        const token = await user.generateAuthToken();
+        await user.save();
+        await pending.deleteOne();
+
+        res.cookie('accessToken', token, {
+            maxAge: Number(process.env.COOKIE_EXPIRED_TIME) || 86400000,
+            httpOnly: true,
+        });
+
+        syncUserToRocketChat({
+            email: user.email,
+            username: user.username,
+            name: user.username,
+        }).catch(err => console.error('RC sync failed (email-change):', err.message));
+
+        const result = await getFullUserData(newEmail);
+        result.password = null;
+        result.token = null;
+        return res.status(200).json({ status: 'SUCCESS', userDetails: result });
     } catch (err) {
         console.log(err)
         return res.status(500).send(HTTP_GENERIC_ERROR);
@@ -1404,6 +1468,7 @@ module.exports = {
     passwordResetRequest,
     verifyPasswordResetOTP,
     confirmPasswordResetByCode,
+    confirmEmailChange,
     updateResume,
     uploadChatFile,
     healthCheck,

@@ -424,7 +424,7 @@ export default function StudentDashboard() {
       );
       setFollowerCounts(fc => ({
         ...fc,
-        [id]: (fc[id] ?? 0) + (wasFollowing ? -1 : 1),
+        [id]: Math.max(0, (fc[id] ?? 0) + (wasFollowing ? -1 : 1)),
       }));
 
       const res = wasFollowing
@@ -445,7 +445,7 @@ export default function StudentDashboard() {
         );
         setFollowerCounts(fc => ({
           ...fc,
-          [id]: (fc[id] ?? 0) + (wasFollowing ? 1 : -1),
+          [id]: Math.max(0, (fc[id] ?? 0) + (wasFollowing ? 1 : -1)),
         }));
       }
     },

@@ -15,6 +15,7 @@ import { connectToRC, isRCConnected } from './services/rcRealtime';
 import 'swiper/swiper.min.css';
 import LeaveFeedback from './components/LeaveFeedback';
 import VerifyEmail from './pages/VerifyEmail';
+import VerifyEmailChange from './pages/VerifyEmailChange';
 import ForgotPassword from './pages/ForgotPassword';
 
 // Lazy-loaded pages — only downloaded when the user navigates to them
@@ -55,6 +56,7 @@ const UnauthenticatedRoutes = () => {
         <Route path="/expertregister" element={<WLExpertRegister />} />
         <Route path="/forgotpassword" element={<ForgotPassword />} />
         <Route path="/verification/:email/:confirmCode" element={<VerifyEmail />} />
+        <Route path="/verify-email-change/:confirmCode" element={<VerifyEmailChange />} />
         <Route path="/meeting/invite/:token" element={<MeetingGuestInvite />} />
         <Route path="/login" element={<WLLogin />} />
         <Route path="/aboutus" element={
@@ -207,6 +209,7 @@ function App() {
       if (
         path.includes('/oauth-callback') ||
         path.includes('/verification/') ||
+        path.includes('/verify-email-change/') ||
         path.includes('/auth-complete-profile') ||
         path.includes('/meeting/invite/') ||
         (path.includes('/login') && search.includes('error='))

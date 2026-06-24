@@ -180,6 +180,11 @@ export default function WLProfileCompletion() {
 
             if (response === false) return;
             if (response.result || response.status === 'SUCCESS' || response.success) {
+                if (needsEmail && response.emailVerificationSent) {
+                    dispatch(showSuccessAlert(
+                        `We've sent a confirmation link to ${form.email.trim().toLowerCase()}. Click it to finish setting your email.`
+                    ));
+                }
                 // Refresh user details
                 await dispatch(autoLogin() as any);
                 const dashboardPath = role === 'customer' ? '/user/studentdashboard' : `/user/${role}dashboard`;
@@ -245,7 +250,7 @@ export default function WLProfileCompletion() {
                                 {errors.email ? (
                                     <p className="mt-1.5 text-xs text-red-500 font-medium">{errors.email}</p>
                                 ) : (
-                                    <p className="mt-1.5 text-xs text-slate-500">WeChat didn't share an email — add one so we can reach you and secure your account.</p>
+                                    <p className="mt-1.5 text-xs text-slate-500">WeChat didn't share an email — add one so we can reach you. We'll send a link to confirm it's yours.</p>
                                 )}
                             </div>
                         )}

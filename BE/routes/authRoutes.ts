@@ -20,6 +20,7 @@ const {
     passwordResetRequest,
     verifyPasswordResetOTP,
     confirmPasswordResetByCode,
+    confirmEmailChange,
     updateResume,
     uploadChatFile,
     healthCheck,
@@ -75,6 +76,7 @@ router.post("/confirmLoginByCode", sensitiveLimiter, confirmLoginByCode);
 router.post("/passwordResetRequest", sensitiveLimiter, passwordResetRequest);
 router.post("/verifyPasswordResetOTP", sensitiveLimiter, verifyPasswordResetOTP);
 router.post("/confirmPasswordResetByCode", sensitiveLimiter, confirmPasswordResetByCode);
+router.post("/confirmEmailChange", sensitiveLimiter, confirmEmailChange);
 router.get("/getKeywordsAndServices", getKeywordsAndServices);
 router.post("/updateMissedChats", requireAuth(false), updateMissedChats);
 router.post("/updateProfile", requireAuth(false), updateProfile);

@@ -8,10 +8,10 @@ const { apiLimiter, sensitiveLimiter } = require("../middlewares/rateLimit");
 router.use(apiLimiter);
 
 // create a new MeetingAnalytics record
-router.post("/create", sensitiveLimiter, requireAuth(), meetingAnalyticsController.createMeetingAnalytics);
+router.post("/create", requireAuth(), sensitiveLimiter, meetingAnalyticsController.createMeetingAnalytics);
 
 // update an existing MeetingAnalytics record (add feedback, update times, etc.)
-router.post("/update", sensitiveLimiter, requireAuth(), meetingAnalyticsController.updateMeetingAnalytics);
+router.post("/update", requireAuth(), sensitiveLimiter, meetingAnalyticsController.updateMeetingAnalytics);
 
 // get meeting analytics by referenceId (eventId or groupChatId)
 router.post("/get", requireAuth(), meetingAnalyticsController.getMeetingAnalytics);

@@ -127,6 +127,15 @@ export const verifyPasswordResetOTP = async ({ email, code }: any) => {
     }
 };
 
+export const confirmEmailChange = async ({ confirmCode }: any) => {
+    try {
+        const res = await api.post<any>("auth/confirmEmailChange", { confirmCode });
+        return res.data;
+    } catch (error) {
+        return { status: "FAIL", error: resolveUserFacingError(error) };
+    }
+}
+
 export const verifyRegistration = async ({ email, confirmCode }: any) => {
     try {
         const res = await api.post<any>("auth/verifyRegistration", { email, confirmCode });
