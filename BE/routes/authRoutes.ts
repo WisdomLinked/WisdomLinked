@@ -85,9 +85,9 @@ router.get("/me", requireAuth(false), getMe);
 router.get("/getMyEvents", requireAuth(false), getMyEvents);
 router.post("/submit", uploadsGeneral, handleSubmit)
 router.post("/leaveFeedback", requireAuth(false), leaveFeedback)
-router.post("/stripePay", sensitiveLimiter, requireAuth(true), stripePay)
-router.post("/createStripePaymentIntent", sensitiveLimiter, requireAuth(true), createStripePaymentIntent)
-router.post("/getStripeMode", sensitiveLimiter, requireAuth(true), getStripeMode)
+router.post("/stripePay", requireAuth(true), sensitiveLimiter, stripePay)
+router.post("/createStripePaymentIntent", requireAuth(true), sensitiveLimiter, createStripePaymentIntent)
+router.post("/getStripeMode", requireAuth(true), sensitiveLimiter, getStripeMode)
 router.get("/healthCheck", healthCheck)
 router.get("/getTimezone",getTimeZone)
 router.post("/contact-form", submitContactForm)
