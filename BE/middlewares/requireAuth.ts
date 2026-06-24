@@ -4,9 +4,11 @@ const UserModel = require('../models/User')
 
 const config = process.env;
 
+const escapeRegExp = (value) => String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
 const getFullUserData = async (email) => {
     return await UserModel.findOne({
-        email: { $regex: new RegExp(`^${email}$`, 'i') }
+        email: { $regex: new RegExp(`^${escapeRegExp(email)}$`, 'i') }
     })
         .select("+password")
         .populate([

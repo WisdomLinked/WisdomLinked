@@ -709,7 +709,7 @@ const createGroupChat = async (req, res) => {
         // [REMOVED] updateUsersGroupChatList(userId.toString());
 
         if (type === 'individual' && customerId) {
-            const customer = await User.findById(customerId);
+            const customer = await User.findById(String(customerId));
             if (!customer) {
                 throw new Error("Customer not found");
             }
@@ -732,7 +732,7 @@ const createGroupChat = async (req, res) => {
     } catch (err) {
         return res
             .status(500)
-            .send(err.message);
+            .send(safeErrorMessage(err));
     }
 };
 
@@ -923,7 +923,7 @@ const updateGroupChat = async (req, res) => {
             throw new Error("Group ID is required");
         }
 
-        const groupChat = await GroupChat.findById(groupId);
+        const groupChat = await GroupChat.findById(String(groupId));
 
         if (!groupChat) {
             throw new Error("Group chat not found");
@@ -958,7 +958,7 @@ const updateGroupChat = async (req, res) => {
         }
 
         // Update group chat with only provided fields
-        await GroupChat.findByIdAndUpdate(groupId, updateFields, { new: true });
+        await GroupChat.findByIdAndUpdate(String(groupId), updateFields, { new: true });
 
         // [REMOVED] updateUsersGroupChatList(userId.toString());
 
@@ -970,7 +970,7 @@ const updateGroupChat = async (req, res) => {
             result: userDetails,
         });
     } catch (err) {
-        return res.status(500).send(err.message);
+        return res.status(500).send(safeErrorMessage(err));
     }
 };
 
