@@ -18,6 +18,7 @@ import {
     handleAuthApiFailure,
 } from "./apiErrorHandling";
 import { resolveUserFacingError } from "../utils/resolveUserFacingError";
+import { ensureCsrfToken, clearCsrfToken, needsCsrf, isCsrfError } from "./csrf";
 import { logoutUser } from "../actions/authActions";
 import { SetLoadingStatus } from "../actions/appActions";
 
@@ -30,6 +31,36 @@ const api = axios.create({
     withCredentials: true,
     baseURL: BASE_URL
 });
+
+api.interceptors.request.use(async (config) => {
+    if (needsCsrf(config.method)) {
+        const t = await ensureCsrfToken();
+        if (t) {
+            config.headers = config.headers || {};
+            (config.headers as any)['X-CSRF-Token'] = t;
+        }
+    }
+    return config;
+});
+
+api.interceptors.response.use(
+    (res) => res,
+    async (error) => {
+        const cfg = error?.config;
+        const resp = error?.response;
+        if (cfg && !cfg.__csrfRetried && isCsrfError(resp?.data, resp?.status)) {
+            cfg.__csrfRetried = true;
+            clearCsrfToken();
+            const t = await ensureCsrfToken();
+            if (t) {
+                cfg.headers = cfg.headers || {};
+                cfg.headers['X-CSRF-Token'] = t;
+                return api.request(cfg);
+            }
+        }
+        return Promise.reject(error);
+    }
+);
 
 // api.interceptors.request.use(
 //     (config) => {
@@ -126,6 +157,15 @@ export const verifyPasswordResetOTP = async ({ email, code }: any) => {
         return handleAuthApiFailure(err);
     }
 };
+
+export const confirmEmailChange = async ({ confirmCode }: any) => {
+    try {
+        const res = await api.post<any>("auth/confirmEmailChange", { confirmCode });
+        return res.data;
+    } catch (error) {
+        return { status: "FAIL", error: resolveUserFacingError(error) };
+    }
+}
 
 export const verifyRegistration = async ({ email, confirmCode }: any) => {
     try {
@@ -311,6 +351,18 @@ export const createGroupChat = async (details: any) => {
         return res.data;
     } catch (err: any) {
         return checkForAuthorization(err);
+    }
+};
+
+export const uploadSeminarCover = async (file: File): Promise<string | null> => {
+    try {
+        const formData = new FormData();
+        formData.append("media", file, file.name);
+        const res = await api.post("auth/uploadChatFile", formData);
+        return res.data?.chatFile || null;
+    } catch (err: any) {
+        checkForAuthorization(err);
+        return null;
     }
 };
 
@@ -535,10 +587,17 @@ export const callApi = async (
 
 
 
+        const headers: Record<string, string> = {};
+        if (needsCsrf(method)) {
+            const t = await ensureCsrfToken();
+            if (t) headers['X-CSRF-Token'] = t;
+        }
+
         let options: RequestInit = {
             method: method,
             body: formData,
-            credentials: 'include'
+            credentials: 'include',
+            headers,
         }
         return fetch(BASE_URL + url, options)
             .then(async (response: Response) => {
@@ -832,6 +891,26 @@ export const getExpertById = async (id: any) => {
         const res = await api.get(`customer/getUser/${id}`);
 
         return res.data;
+    } catch (err: any) {
+        return checkForAuthorization(err);
+    }
+};
+
+// Follow / unfollow an expert. Returns { following, followerCount } from the
+// server (the source of truth) so the caller can reconcile optimistic UI.
+export const doFollowExpert = async (expertId: string) => {
+    try {
+        const res = await api.post(`customer/follow/${expertId}`);
+        return res.data as { following: boolean; followerCount: number };
+    } catch (err: any) {
+        return checkForAuthorization(err);
+    }
+};
+
+export const doUnfollowExpert = async (expertId: string) => {
+    try {
+        const res = await api.post(`customer/unfollow/${expertId}`);
+        return res.data as { following: boolean; followerCount: number };
     } catch (err: any) {
         return checkForAuthorization(err);
     }

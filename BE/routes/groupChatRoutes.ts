@@ -25,6 +25,10 @@ const {
 } = require("../controllers/groupChat.controller");
 
 const { requireAuth, expertAuth } = require("../middlewares/requireAuth");
+const { apiLimiter } = require("../middlewares/rateLimit");
+
+// Rate-limit every group-chat route (mirrors authRoutes / customerRoutes).
+router.use(apiLimiter);
 
 // IMPORTANT: Specific routes must come before parameterized routes
 router.get(

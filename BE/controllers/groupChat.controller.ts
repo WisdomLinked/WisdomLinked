@@ -675,7 +675,7 @@ const createGroupChatByUser = async (req, res) => {
 const createGroupChat = async (req, res) => {
     try {
         const { userId } = req.user;
-        const { name, description, services, keywords, start, end, duration, price, type, status, customerId } = req.body;
+        const { name, description, image, services, keywords, start, end, duration, price, type, status, customerId } = req.body;
 
         if (checkTitleNameInvalid('Name', name)) {
             throw new Error(checkTitleNameInvalid('Name', name))
@@ -688,6 +688,7 @@ const createGroupChat = async (req, res) => {
         const chat = await GroupChat.create({
             name: name,
             description: description,
+            image: image,
             services: _services,
             keywords: _keywords,
             start: start,
@@ -708,7 +709,7 @@ const createGroupChat = async (req, res) => {
         // [REMOVED] updateUsersGroupChatList(userId.toString());
 
         if (type === 'individual' && customerId) {
-            const customer = await User.findById(customerId);
+            const customer = await User.findById(String(customerId));
             if (!customer) {
                 throw new Error("Customer not found");
             }
@@ -731,7 +732,7 @@ const createGroupChat = async (req, res) => {
     } catch (err) {
         return res
             .status(500)
-            .send(err.message);
+            .send(safeErrorMessage(err));
     }
 };
 
@@ -916,13 +917,13 @@ const joinGroupChat = async (req, res) => {
 const updateGroupChat = async (req, res) => {
     try {
         const { userId } = req.user;
-        const { groupId, name, description, services, keywords, start, end, duration, price, totalTimeSpent, type } = req.body;
+        const { groupId, name, description, image, services, keywords, start, end, duration, price, totalTimeSpent, type, status } = req.body;
 
         if (!groupId) {
             throw new Error("Group ID is required");
         }
 
-        const groupChat = await GroupChat.findById(groupId);
+        const groupChat = await GroupChat.findById(String(groupId));
 
         if (!groupChat) {
             throw new Error("Group chat not found");
@@ -934,25 +935,31 @@ const updateGroupChat = async (req, res) => {
             return res.status(403).send("Forbidden");
         }
 
-        // Construct dynamic update object
+        // Construct dynamic update object. Each field is accepted only when it is a
+        // primitive (string/number) via an inline typeof check, so a query object
+        // (e.g. { $gt: '' }) can never be injected into findByIdAndUpdate.
         const updateFields: Record<string, any> = {};
-        if (name !== undefined) updateFields.name = name;
-        if (description !== undefined) updateFields.description = description;
+        if (typeof name === 'string') updateFields.name = name;
+        if (typeof description === 'string') updateFields.description = description;
+        if (typeof image === 'string') updateFields.image = image;
+        // Allow flipping a draft to a published seminar (or saving back as draft).
+        if (typeof status === 'string' && ['draft', 'active', 'pending'].includes(status)) {
+            updateFields.status = status;
+        }
         if (services !== undefined) updateFields.services = await resolveServiceIds(services);
         if (keywords !== undefined) updateFields.keywords = await resolveKeywordIds(keywords);
-        if (start !== undefined) updateFields.start = start;
-        if (end !== undefined) updateFields.end = end;
-        if (duration !== undefined) updateFields.duration = duration;
-        if (price !== undefined) updateFields.price = price;
-        if (type !== undefined && normalizeId(groupChat.admin) === String(userId)) updateFields.type = type;
-        if (totalTimeSpent !== undefined) {
-            //updateFields.totalTimeSpend = totalTimeSpent;
+        if (typeof start === 'string' || typeof start === 'number') updateFields.start = new Date(start);
+        if (typeof end === 'string' || typeof end === 'number') updateFields.end = new Date(end);
+        if (typeof duration === 'string' || typeof duration === 'number') updateFields.duration = Number(duration);
+        if (typeof price === 'string' || typeof price === 'number') updateFields.price = Number(price);
+        if (typeof type === 'string' && normalizeId(groupChat.admin) === String(userId)) updateFields.type = type;
+        if (typeof totalTimeSpent === 'string' || typeof totalTimeSpent === 'number') {
             const existingTotalTimeSpent = groupChat.totalTimeSpent || 0;
-            updateFields.totalTimeSpent = existingTotalTimeSpent + totalTimeSpent;
+            updateFields.totalTimeSpent = existingTotalTimeSpent + Number(totalTimeSpent);
         }
 
         // Update group chat with only provided fields
-        await GroupChat.findByIdAndUpdate(groupId, updateFields, { new: true });
+        await GroupChat.findByIdAndUpdate(String(groupId), updateFields, { new: true });
 
         // [REMOVED] updateUsersGroupChatList(userId.toString());
 
@@ -964,7 +971,7 @@ const updateGroupChat = async (req, res) => {
             result: userDetails,
         });
     } catch (err) {
-        return res.status(500).send(err.message);
+        return res.status(500).send(safeErrorMessage(err));
     }
 };
 

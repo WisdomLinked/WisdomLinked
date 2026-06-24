@@ -23,7 +23,6 @@ const CUSTOM_TZ_TOOLTIP =
 const BookingTimeZoneControl: React.FC<BookingTimeZoneControlProps> = ({
   mode,
   customTimeZone,
-  expertTimeZone,
   studentTimeZone,
   onModeChange,
   onCustomTimeZoneChange,
@@ -58,17 +57,6 @@ const BookingTimeZoneControl: React.FC<BookingTimeZoneControlProps> = ({
           }`}
         >
           My timezone ({mine})
-        </button>
-        <button
-          type="button"
-          onClick={() => onModeChange('expert')}
-          className={`rounded-[4px] border px-3 py-1.5 text-[12px] font-semibold transition-colors ${
-            mode === 'expert'
-              ? 'border-[#1A3A4A] bg-[#1A3A4A] text-white'
-              : 'border-[#E5E2DB] bg-white text-[#1A3A4A] hover:bg-white'
-          }`}
-        >
-          Expert ({expertTimeZone || 'UTC'})
         </button>
         <button
           type="button"

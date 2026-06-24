@@ -8,6 +8,7 @@ const cookieParser = require("cookie-parser");
 const path = require("path");
 const session = require("express-session");
 const passport = require("./config/passport");
+const { csrfProtection, csrfErrorHandler } = require("./config/csrf");
 const imageUploadRoutes = require("./routes/imageUploadRoutes");
 const fetchImageRoute = require("./routes/fetchImageRoute");
 
@@ -43,7 +44,7 @@ const corsOptions = {
     origin: [process.env.FE_URL, "https://www.wisdomlinked.com", "http://localhost:3000", jitOrigin].filter(Boolean),
     methods: ['GET', 'POST', 'PUT', 'DELETE'],
     credentials: true,
-    allowedHeaders: ['Content-Type', 'Authorization']
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-CSRF-Token']
 };
 app.use(cors(corsOptions));
 app.options('*', cors(corsOptions)); // Pre-flight handling
@@ -68,6 +69,8 @@ app.use(session({
 app.use(passport.initialize());
 app.use(passport.session());
 
+app.use(csrfProtection);
+
 // register the routes
 app.use("/api/auth", authRoutes);
 app.use("/api/invite-friend", friendInvitationRoutes);
@@ -81,6 +84,8 @@ app.use("/api", contactRoutes);
 app.use("/api/meeting-analytics", meetingAnalyticsRoutes);
 app.use("/api/chat", chatRoutes);
 app.use("/api/meeting", meetingRoutes);
+
+app.use(csrfErrorHandler);
 
 app.use(express.static('./uploads'));
 app.get('/uploads/*', (req, res) => {

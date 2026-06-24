@@ -5,7 +5,6 @@ import {
   BookOpen,
   Calendar,
   ChevronDown,
-  Clock,
   FileText,
   MapPin,
   MessageSquare,
@@ -15,12 +14,10 @@ import {
 } from 'lucide-react';
 import type { MentorCardProps } from '../MentorCard';
 import { useAppSelector } from '../../store';
-import { SERVICE_LABELS } from '../../constants/serviceOptions';
 import FilePreviewModal from '../../pages/Dashboard/FilePreviewModal';
 import { hasResumeForPreview, resolveResumePublicUrl } from '../../utils/resumeUrl';
 import StudentExpertBookingPicker from './StudentExpertBookingPicker';
 import StudentBookingCheckout from './StudentBookingCheckout';
-import BookingConfirmationModal from './BookingConfirmationModal';
 import { createGroupChatByUser, getExpertById, profileImageFetch, addMemberToPendingGroup } from '../../api/api';
 import { resolveProfileImageSrc } from '../../utils/profileImage';
 import { normalizeExpertPrice } from '../../utils/schedulingSlots';
@@ -31,19 +28,13 @@ import {
   normalizeAppointmentDurations,
   type AppointmentDurationMinutes,
 } from '../../utils/appointmentDurations';
-import { detectUserTimeZone, formatBookingConfirmation, formatPickedSlotWhenDisplay } from '../../utils/schedulingTimezone';
+import { detectUserTimeZone, formatPickedSlotWhenDisplay } from '../../utils/schedulingTimezone';
 import { SetLoadingStatus } from '../../actions/appActions';
 
 type BookingStep = 'pick' | 'review' | 'pay' | 'success';
 
 const aiHeadshotUrl = (seed: string) =>
   `https://api.dicebear.com/9.x/bottts-neutral/svg?seed=${encodeURIComponent(seed)}`;
-
-function extractExperienceYears(experience: string) {
-  // Examples: "8+ yrs", "15+ yrs"
-  const m = experience.match(/(\d+)/);
-  return m ? Number(m[1]) : 0;
-}
 
 export default function ExpertProfile({
   mentor,
@@ -68,10 +59,6 @@ export default function ExpertProfile({
 }) {
   const dispatch = useDispatch();
   const { auth: { userDetails } } = useAppSelector((state: any) => state);
-  const experienceYears = useMemo(
-    () => extractExperienceYears(mentor.experience),
-    [mentor.experience],
-  );
 
   const [expertDetails, setExpertDetails] = useState<any>(null);
   const [expertLoading, setExpertLoading] = useState(false);
@@ -125,47 +112,14 @@ export default function ExpertProfile({
     );
   }, [expertDetails, offeredDurations]);
 
-  const oneToOneRate = useMemo(
-    () => expertHourlyRate ?? 60 + experienceYears * 18,
-    [experienceYears, expertHourlyRate],
-  );
   /** Hourly rate shown to students — only when expert published a price. */
   const publishedOneToOneRate = expertHourlyRate;
-  const seminarRate = useMemo(
-    () => 35 + experienceYears * 10,
-    [experienceYears],
-  );
 
-  const supportsOneToOne = useMemo(
-    () =>
-      mentor.services.some(s => /1\s*[-–]?\s*on\s*[-–]?\s*1/i.test(s) || /1:1/i.test(s)) ||
-      mentor.services.some(s => SERVICE_LABELS.includes(s)),
-    [mentor.services],
-  );
-  const supportsSeminar = useMemo(
-    () => mentor.services.some(s => /seminar/i.test(s)),
-    [mentor.services],
-  );
-
-  const [serviceChoice, setServiceChoice] = useState<'oneToOne' | 'seminar'>(() => {
-    if (supportsOneToOne) return 'oneToOne';
-    if (supportsSeminar) return 'seminar';
-    return 'oneToOne';
-  });
-
-  const [selectedSlot, setSelectedSlot] = useState<{
-    day: string;
-    start: string; // HH:MM
-    end: string; // HH:MM
-  } | null>(null);
-
-  /** 1:1 only — price scales from hourly peak/off-peak rate. */
+  /** 1:1 session length — price scales from the expert's published hourly rate. */
   const [sessionDurationMinutes, setSessionDurationMinutes] = useState<30 | 60 | 90>(60);
 
   const [bookingStep, setBookingStep] = useState<BookingStep>('pick');
-  const [bookingSuccess, setBookingSuccess] = useState(false);
   const [bookingError, setBookingError] = useState<string | null>(null);
-  const [paymentConfirmOpen, setPaymentConfirmOpen] = useState(false);
   const [bookingViewerTz, setBookingViewerTz] = useState(
     () => userDetails?.timeZone || detectUserTimeZone(),
   );
@@ -180,27 +134,6 @@ export default function ExpertProfile({
 
   const [openFaqIndex, setOpenFaqIndex] = useState<number | null>(null);
   const [displayImage, setDisplayImage] = useState(() => aiHeadshotUrl(mentor.name));
-
-  const peakRate = 50;
-  const oneToOneOffPeakRate = Math.min(oneToOneRate, 45);
-  const seminarOffPeakRate = Math.min(seminarRate, 40);
-
-  const isPeakSlot = (slot: { day: string; start: string; end: string } | null) => {
-    if (!slot) return false;
-    const isWeekend = slot.day === 'Sat' || slot.day === 'Sun';
-    const startHour = Number(slot.start.split(':')[0] || 0);
-    // Dinner window (mock): 18:00 - 22:00
-    const isDinner = startHour >= 18 && startHour < 22;
-    return isWeekend || isDinner;
-  };
-
-  const oneToOneHourlyRate = isPeakSlot(selectedSlot) ? peakRate : oneToOneOffPeakRate;
-  const seminarSessionRate = isPeakSlot(selectedSlot) ? peakRate : seminarOffPeakRate;
-
-  const selectedRate =
-    serviceChoice === 'seminar'
-      ? seminarSessionRate
-      : oneToOneHourlyRate * (sessionDurationMinutes / 60);
 
   const hasLockedDuration = !!pickedStart;
 
@@ -218,11 +151,12 @@ export default function ExpertProfile({
       setPickedDuration(mins);
       setSessionDurationMinutes(mins);
       setBookingError(null);
-      if (bookingStep !== 'pick') {
-        setBookingStep('pick');
-      }
+      // Keep the flow inside one continuous popup: confirming a time in the
+      // picker advances straight to the review popup (which then continues to
+      // payment), with no intermediate sidebar step.
+      setBookingStep('review');
     },
-    [bookingStep],
+    [],
   );
 
   const clearPickedSlot = useCallback(() => {
@@ -239,29 +173,16 @@ export default function ExpertProfile({
     return computeBookingPriceDollars(pickedDuration, hourly);
   }, [pickedDuration, expertDetails?.price]);
 
-  const bookingConfirmationDetails = useMemo(() => {
-    if (!pickedStart || !pickedEnd) return null;
-    const formatted = formatBookingConfirmation(pickedStart, pickedEnd, bookingViewerTz);
-    return {
-      ...formatted,
-      sessionType: '1:1 session',
-      expertName: mentor.name,
-      sessionLengthMinutes: pickedDuration,
-      price: oneToOneSessionPrice,
-    };
-  }, [
-    pickedStart,
-    pickedEnd,
-    bookingViewerTz,
-    mentor.name,
-    pickedDuration,
-    oneToOneSessionPrice,
-  ]);
-
   const pickedSlotDisplay = useMemo(() => {
     if (!pickedStart || !pickedEnd) return null;
     return formatPickedSlotWhenDisplay(pickedStart, pickedEnd, bookingViewerTz);
   }, [pickedStart, pickedEnd, bookingViewerTz]);
+
+  const changeOneToOneTime = useCallback(() => {
+    clearPickedSlot();
+    void loadExpertDetails();
+    setBookingStep('pick');
+  }, [clearPickedSlot, loadExpertDetails]);
 
   const bookingEventTitle = useMemo(() => {
     const student = userDetails?.username || 'Student';
@@ -301,7 +222,6 @@ export default function ExpertProfile({
         if (response?.result) {
           dispatch({ type: 'updateUserDetails', payload: response.result });
         }
-        setBookingSuccess(true);
         setBookingStep('success');
       } catch (err: unknown) {
         const message = err instanceof Error ? err.message : 'Booking failed. Please try again.';
@@ -324,90 +244,10 @@ export default function ExpertProfile({
 
   useEffect(() => {
     if (paymentReturnSuccess) {
-      setBookingSuccess(true);
       setBookingStep('success');
       onPaymentReturnHandled?.();
     }
   }, [paymentReturnSuccess, onPaymentReturnHandled]);
-
-  const availability = useMemo(() => {
-    // Mock schedule for seminar picker only.
-    const dayNames = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-    return dayNames.map((day, idx) => {
-      const available = (idx + mentor.id) % 7 !== 6; // mostly available days
-      // Mix daytime and dinner-time slots so peak pricing is visible.
-      // Weekend and Thu/Fri often fall into evening windows.
-      const isWeekend = day === 'Sat' || day === 'Sun';
-      const isLateWeek = day === 'Thu' || day === 'Fri';
-      const startHour = isWeekend
-        ? 18 + ((mentor.id + idx) % 3) // 18..20
-        : isLateWeek
-          ? 17 + ((mentor.id + idx) % 3) // 17..19
-          : 10 + ((mentor.id + idx) % 4); // 10..13
-      const endHour = startHour + 1;
-      const start = `${String(startHour).padStart(2, '0')}:00`;
-      const end = `${String(endHour).padStart(2, '0')}:00`;
-      return { day, available, start, end };
-    });
-  }, [mentor.id]);
-
-  const resolveNextDateForDay = (day: string) => {
-    // Convert e.g. "Mon" => next matching local date.
-    const map: Record<string, number> = {
-      Mon: 1,
-      Tue: 2,
-      Wed: 3,
-      Thu: 4,
-      Fri: 5,
-      Sat: 6,
-      Sun: 0,
-    };
-    const targetDow = map[day] ?? 1;
-    const now = new Date();
-    const diff = (targetDow - now.getDay() + 7) % 7;
-    const date = new Date(now);
-    date.setDate(now.getDate() + diff);
-    return date;
-  };
-
-  const parseTimeToMinutes = (t: string) => {
-    const [hh, mm] = t.split(':').map(Number);
-    return hh * 60 + mm;
-  };
-
-  const formatMinutesDuration = (slot: { start: string; end: string }) => {
-    const startM = parseTimeToMinutes(slot.start);
-    const endM = parseTimeToMinutes(slot.end);
-    const mins = Math.max(30, endM - startM); // guard
-    return mins;
-  };
-
-  const slotStartEndAsDates = (slot: { day: string; start: string; end: string }) => {
-    const base = resolveNextDateForDay(slot.day);
-    const [sh, sm] = slot.start.split(':').map(Number);
-    const [eh, em] = slot.end.split(':').map(Number);
-
-    const startDt = new Date(base);
-    startDt.setHours(sh, sm, 0, 0);
-
-    const endDt = new Date(base);
-    endDt.setHours(eh, em, 0, 0);
-
-    return { start: startDt.toISOString(), end: endDt.toISOString() };
-  };
-
-  /** 1:1 booking end time follows chosen session length, not the slot window. */
-  const slotStartEndAsDatesWithDuration = (
-    slot: { day: string; start: string; end: string },
-    durationMinutes: number,
-  ) => {
-    const base = resolveNextDateForDay(slot.day);
-    const [sh, sm] = slot.start.split(':').map(Number);
-    const startDt = new Date(base);
-    startDt.setHours(sh, sm, 0, 0);
-    const endDt = new Date(startDt.getTime() + durationMinutes * 60_000);
-    return { start: startDt.toISOString(), end: endDt.toISOString() };
-  };
 
   const bio = useMemo(() => {
     return `Professor ${mentor.name} is a ${mentor.title} focused on ${mentor.field}. With ${mentor.experience} of experience, they guide students through research and real-world preparation across 1:1 sessions and seminars.`;
@@ -533,10 +373,10 @@ export default function ExpertProfile({
               </div>
 
               <div className="min-w-0 flex-1">
-                <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-                  <h1 className="font-serif text-[2rem] font-medium text-[#1A3A4A] leading-tight">
-                    {mentor.name}
-                  </h1>
+                <h1 className="font-serif text-[2rem] font-medium text-[#1A3A4A] leading-tight">
+                  {mentor.name}
+                </h1>
+                <div className="mt-1.5">
                   <span className="inline-flex items-center gap-1 rounded-[3px] border border-slate-200 bg-slate-100 px-2 py-0.5 text-[12px] font-semibold tabular-nums text-slate-700">
                     <Users className="h-3.5 w-3.5" aria-hidden />
                     {displayFollowers.toLocaleString()} followers
@@ -813,10 +653,11 @@ export default function ExpertProfile({
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
                 <h2 className="font-serif text-[1.15rem] font-medium text-[#1A3A4A]">
-                  Book availability
+                  Book a 1:1 session
                 </h2>
                 <p className="mt-1 text-[12px] text-[#7A7A72]">
-                  Choose a service, pick a time on the expert&apos;s calendar, then continue to payment.
+                  Pick a time on the expert&apos;s calendar, then continue to payment. To join a
+                  seminar, use the Upcoming seminars list.
                 </p>
               </div>
               <span className="inline-flex items-center gap-1 rounded-[4px] bg-[#F5F3EF] px-2 py-1 text-[11px] font-semibold text-[#1A3A4A]">
@@ -828,138 +669,48 @@ export default function ExpertProfile({
             <div className="mt-4 space-y-4">
               <div>
                 <p className="text-[12px] font-semibold uppercase tracking-[0.16em] text-[#7A7A72] mb-2">
-                  Service offered
+                  Appointment Duration
                 </p>
-                <div className="flex flex-wrap gap-2">
-                  {supportsOneToOne && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setServiceChoice('oneToOne');
-                        setSelectedSlot(null);
-                        setBookingError(null);
-                        setSessionDurationMinutes(60);
-                      }}
-                      className={`rounded-[4px] border px-3 py-1.5 text-[12px] font-semibold transition-colors ${
-                        serviceChoice === 'oneToOne'
-                          ? 'border-[#1A3A4A] bg-[#1A3A4A] text-white'
-                          : 'border-[#E5E2DB] bg-white text-[#1A3A4A] hover:bg-[#F5F3EF]'
-                      }`}
-                    >
-                      1:1 session
-                    </button>
-                  )}
-                  {supportsSeminar && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setServiceChoice('seminar');
-                        setSelectedSlot(null);
-                        setBookingError(null);
-                        setSessionDurationMinutes(60);
-                      }}
-                      className={`rounded-[4px] border px-3 py-1.5 text-[12px] font-semibold transition-colors ${
-                        serviceChoice === 'seminar'
-                          ? 'border-[#1A3A4A] bg-[#1A3A4A] text-white'
-                          : 'border-[#E5E2DB] bg-white text-[#1A3A4A] hover:bg-[#F5F3EF]'
-                      }`}
-                    >
-                      Seminar
-                    </button>
-                  )}
-                </div>
+                {hasLockedDuration ? (
+                  <>
+                    <p className="inline-flex rounded-[4px] border border-[#1A3A4A] bg-[#1A3A4A] px-3 py-1.5 text-[12px] font-semibold text-white">
+                      {sessionDurationMinutes} min — fixed for this booking
+                    </p>
+                    <p className="mt-2 text-[11px] text-[#7A7A72]">
+                      Appointment duration is fixed after you select a time. Use Change time to
+                      choose a different length.
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <div className="flex flex-wrap gap-2">
+                      {offeredDurations.map(mins => (
+                        <button
+                          key={mins}
+                          type="button"
+                          onClick={() => applySessionDuration(mins)}
+                          className={`rounded-[4px] border px-3 py-1.5 text-[12px] font-semibold transition-colors ${
+                            sessionDurationMinutes === mins
+                              ? 'border-[#1A3A4A] bg-[#1A3A4A] text-white'
+                              : 'border-[#E5E2DB] bg-white text-[#1A3A4A] hover:bg-[#F5F3EF]'
+                          }`}
+                        >
+                          {mins} min
+                        </button>
+                      ))}
+                    </div>
+                    <p className="mt-2 text-[11px] text-[#7A7A72]">
+                      Total uses the expert&apos;s hourly rate × appointment duration.
+                    </p>
+                  </>
+                )}
               </div>
-
-              {serviceChoice === 'oneToOne' && (
-                <div>
-                  <p className="text-[12px] font-semibold uppercase tracking-[0.16em] text-[#7A7A72] mb-2">
-                    Appointment Duration
-                  </p>
-                  {hasLockedDuration ? (
-                    <>
-                      <p className="inline-flex rounded-[4px] border border-[#1A3A4A] bg-[#1A3A4A] px-3 py-1.5 text-[12px] font-semibold text-white">
-                        {sessionDurationMinutes} min — fixed for this booking
-                      </p>
-                      <p className="mt-2 text-[11px] text-[#7A7A72]">
-                        Appointment duration is fixed after you select a time. Use Change time to
-                        choose a different length.
-                      </p>
-                    </>
-                  ) : (
-                    <>
-                      <div className="flex flex-wrap gap-2">
-                        {offeredDurations.map(mins => (
-                          <button
-                            key={mins}
-                            type="button"
-                            onClick={() => applySessionDuration(mins)}
-                            className={`rounded-[4px] border px-3 py-1.5 text-[12px] font-semibold transition-colors ${
-                              sessionDurationMinutes === mins
-                                ? 'border-[#1A3A4A] bg-[#1A3A4A] text-white'
-                                : 'border-[#E5E2DB] bg-white text-[#1A3A4A] hover:bg-[#F5F3EF]'
-                            }`}
-                          >
-                            {mins} min
-                          </button>
-                        ))}
-                      </div>
-                      <p className="mt-2 text-[11px] text-[#7A7A72]">
-                        Total uses the hourly rate for your slot (peak or off-peak) × appointment
-                        duration.
-                      </p>
-                    </>
-                  )}
-                </div>
-              )}
 
               <div>
                 <p className="text-[12px] font-semibold uppercase tracking-[0.16em] text-[#7A7A72] mb-2">
                   Availability
                 </p>
-                {serviceChoice === 'oneToOne' ? (
-                  bookingStep === 'review' ? (
-                    <div className="rounded-xl border border-[#E5E2DB] bg-white p-4 space-y-3">
-                      <p className="text-[12px] font-semibold uppercase tracking-[0.16em] text-[#7A7A72]">
-                        Booking summary
-                      </p>
-                      <dl className="space-y-2 text-sm text-[#1A3A4A]">
-                        <div className="flex justify-between gap-2">
-                          <dt className="text-[#7A7A72]">Expert</dt>
-                          <dd className="font-semibold text-right">{mentor.name}</dd>
-                        </div>
-                        <div className="flex justify-between gap-2">
-                          <dt className="text-[#7A7A72]">When</dt>
-                          <dd className="font-semibold text-right">{pickedSlotDisplay}</dd>
-                        </div>
-                        <div className="flex justify-between gap-2">
-                          <dt className="text-[#7A7A72]">Appointment duration</dt>
-                          <dd className="font-semibold">{pickedDuration} min</dd>
-                        </div>
-                        <div className="flex justify-between gap-2 border-t border-[#E5E2DB] pt-2">
-                          <dt className="text-[#7A7A72]">Total</dt>
-                          <dd className="font-serif text-lg font-semibold">
-                            ${oneToOneSessionPrice.toFixed(2)}
-                          </dd>
-                        </div>
-                      </dl>
-                    </div>
-                  ) : bookingStep === 'pay' ? (
-                    <StudentBookingCheckout
-                      type="1:1 session"
-                      price={oneToOneSessionPrice}
-                      returnUrl={studentBookingReturnUrl}
-                      pendingDetails={{
-                        name: bookingEventTitle,
-                        start: pickedStart!.toISOString(),
-                        end: pickedEnd!.toISOString(),
-                        duration: pickedDuration,
-                        price: oneToOneSessionPrice,
-                        expert: String(expertDetails?._id ?? mentor.id),
-                      }}
-                      onPaymentSuccess={submitOneToOneBooking}
-                      onCancel={() => setBookingStep('review')}
-                    />
-                  ) : bookingStep === 'success' ? (
+                {bookingStep === 'success' ? (
                     <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-4">
                       <p className="text-[14px] font-semibold text-emerald-900">
                         Session booked
@@ -1003,193 +754,22 @@ export default function ExpertProfile({
                       />
                     )}
                   </div>
-                  )
-                ) : (
-                <div className="grid grid-cols-2 gap-3">
-                  {availability.map(slot => {
-                    const active =
-                      selectedSlot?.day === slot.day &&
-                      selectedSlot?.start === slot.start &&
-                      selectedSlot?.end === slot.end;
-                    return (
-                      <button
-                        key={slot.day}
-                        type="button"
-                        disabled={!slot.available}
-                        onClick={() => {
-                          setSelectedSlot({ day: slot.day, start: slot.start, end: slot.end });
-                          setBookingError(null);
-                        }}
-                        className={`rounded-xl border px-3 py-3 text-left transition-colors ${
-                          !slot.available
-                            ? 'border-[#E5E2DB] bg-white opacity-60 cursor-not-allowed'
-                            : active
-                              ? 'border-[#1A3A4A] bg-[#F5F3EF] ring-2 ring-[#1A3A4A]/20'
-                              : 'border-[#E5E2DB] bg-[#F5F3EF] hover:bg-white'
-                        } ${active ? 'shadow-[0_10px_25px_rgba(26,58,74,0.10)]' : ''}`}
-                      >
-                        <div className="flex items-center justify-between">
-                          <span className="text-[12px] font-semibold">{slot.day}</span>
-                          {isPeakSlot(slot) ? (
-                            <span className="inline-flex items-center justify-center rounded-full bg-[#C9A84C]/25 px-2 py-0.5 text-[10px] font-semibold text-[#1A3A4A]">
-                              Peak
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center justify-center rounded-full bg-[#1A3A4A]/10 px-2 py-0.5 text-[11px] font-semibold text-[#1A3A4A]">
-                              <Clock className="h-3 w-3" aria-hidden />
-                            </span>
-                          )}
-                        </div>
-                        <div className="mt-2 text-[12px] font-semibold text-[#1A3A4A]">
-                          {slot.start} - {slot.end}
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
                 )}
               </div>
-
-              {serviceChoice === 'oneToOne' &&
-                bookingStep === 'pick' &&
-                pickedStart &&
-                pickedEnd &&
-                pickedDuration ? (
-                <div
-                  data-testid="selected-slot-summary"
-                  className="rounded-xl border border-[#1A3A4A]/20 bg-[#E8F0F8] p-4 space-y-3"
-                >
-                  <p className="text-[12px] font-semibold uppercase tracking-[0.16em] text-[#1A3A4A]">
-                    Your selected appointment
-                  </p>
-                  <dl className="space-y-2 text-sm text-[#1A3A4A]">
-                    <div className="flex justify-between gap-2">
-                      <dt className="text-[#7A7A72]">When</dt>
-                      <dd className="font-semibold text-right">{pickedSlotDisplay}</dd>
-                    </div>
-                    <div className="flex justify-between gap-2">
-                      <dt className="text-[#7A7A72]">Appointment duration</dt>
-                      <dd className="font-semibold">{pickedDuration} min</dd>
-                    </div>
-                    <div className="flex justify-between gap-2 border-t border-[#1A3A4A]/15 pt-2">
-                      <dt className="text-[#7A7A72]">Estimated total</dt>
-                      <dd className="font-serif text-lg font-semibold">
-                        ${oneToOneSessionPrice.toFixed(2)}
-                      </dd>
-                    </div>
-                  </dl>
-                </div>
-              ) : null}
 
               {bookingError && (
                 <div className="text-[12px] font-semibold text-red-600">{bookingError}</div>
               )}
 
-              {serviceChoice === 'oneToOne' ? (
-                bookingStep === 'success' ? (
-                  <button
-                    type="button"
-                    onClick={onBack}
-                    className="inline-flex w-full items-center justify-center rounded-[4px] border border-[#E5E2DB] bg-white px-4 py-3 text-[13px] font-semibold text-[#1A3A4A] hover:bg-[#F5F3EF]"
-                  >
-                    Back to experts
-                  </button>
-                ) : bookingStep === 'pay' ? null : bookingStep === 'review' ? (
-                  <div className="flex flex-col gap-2">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (!pickedStart || !pickedEnd || !pickedDuration) {
-                          setBookingError('Please select a date and time on the calendar.');
-                          return;
-                        }
-                        setBookingError(null);
-                        setPaymentConfirmOpen(true);
-                      }}
-                      className="inline-flex w-full items-center justify-center rounded-[4px] bg-[#1A3A4A] px-4 py-3 text-[13px] font-semibold text-white hover:bg-[#122635]"
-                    >
-                      Continue to payment
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        clearPickedSlot();
-                        void loadExpertDetails();
-                        setBookingStep('pick');
-                      }}
-                      className="inline-flex w-full items-center justify-center rounded-[4px] border border-[#E5E2DB] bg-white px-4 py-3 text-[13px] font-semibold text-[#1A3A4A] hover:bg-[#F5F3EF]"
-                    >
-                      Change time
-                    </button>
-                  </div>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (!pickedStart || !pickedEnd || !pickedDuration) {
-                        setBookingError('Please select a date and time on the calendar.');
-                        return;
-                      }
-                      setBookingError(null);
-                      setBookingStep('review');
-                    }}
-                    className="inline-flex w-full items-center justify-center rounded-[4px] bg-[#1A3A4A] px-4 py-3 text-[13px] font-semibold text-white hover:bg-[#122635]"
-                  >
-                    Review booking
-                  </button>
-                )
-              ) : !bookingSuccess ? (
+              {bookingStep === 'success' ? (
                 <button
                   type="button"
-                  onClick={() => {
-                    if (!selectedSlot) {
-                      setBookingError('Please select an available day/time slot.');
-                      return;
-                    }
-
-                    const duration = formatMinutesDuration(selectedSlot);
-                    const { start, end } = slotStartEndAsDates({
-                      day: selectedSlot.day,
-                      start: selectedSlot.start,
-                      end: selectedSlot.end,
-                    });
-
-                    const pending = {
-                      title: 'Seminar request',
-                      name: 'Seminar request',
-                      start,
-                      end,
-                      duration,
-                      price: selectedRate,
-                      expert: mentor.id,
-                      eventId: null,
-                      serviceChoice,
-                    };
-
-                    window.localStorage.setItem('pendingDetails', JSON.stringify(pending));
-                    setBookingSuccess(true);
-                  }}
-                  className="inline-flex w-full items-center justify-center rounded-[4px] bg-[#234C6A] px-4 py-3 text-[13px] font-semibold text-white hover:brightness-110"
+                  onClick={onBack}
+                  className="inline-flex w-full items-center justify-center rounded-[4px] border border-[#E5E2DB] bg-white px-4 py-3 text-[13px] font-semibold text-[#1A3A4A] hover:bg-[#F5F3EF]"
                 >
-                  Book availability
+                  Back to experts
                 </button>
-              ) : (
-                <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-4">
-                  <div className="text-[14px] font-semibold text-emerald-900">
-                    Request saved.
-                  </div>
-                  <div className="mt-1 text-[12px] text-emerald-800">
-                    Next step (payment) will be handled later.
-                  </div>
-                  <button
-                    type="button"
-                    onClick={onBack}
-                    className="mt-3 w-full rounded-[4px] border border-emerald-200 bg-white px-3 py-2 text-[12px] font-semibold text-[#1A3A4A] hover:bg-[#F5F3EF]"
-                  >
-                    Back to experts
-                  </button>
-                </div>
-              )}
+              ) : null}
             </div>
           </section>
 
@@ -1214,7 +794,7 @@ export default function ExpertProfile({
                           per hour — {formatOfferedDurationsList(offeredDurations)} totals scale
                           from this rate
                         </p>
-                        {serviceChoice === 'oneToOne' && pickedStart && pickedEnd && pickedDuration ? (
+                        {pickedStart && pickedEnd && pickedDuration ? (
                           <p className="mt-2 text-[12px] font-semibold text-[#1A3A4A]">
                             {pickedDuration} min · ${oneToOneSessionPrice.toFixed(2)} · {pickedSlotDisplay}
                           </p>
@@ -1225,21 +805,6 @@ export default function ExpertProfile({
                     )}
                   </div>
                   <Star className="h-5 w-5 text-[#C9A84C]" aria-hidden />
-                </div>
-              </div>
-
-              <div className="rounded-xl border border-[#E5E2DB] bg-white px-4 py-4">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="text-[12px] font-semibold uppercase tracking-[0.14em] text-[#7A7A72]">
-                      Seminar
-                    </p>
-                    <p className="mt-2 text-[20px] font-serif font-semibold text-[#1A3A4A]">
-                      ${seminarRate.toFixed(0)}
-                    </p>
-                    <p className="mt-1 text-[12px] text-[#7A7A72]">per attendee (mock)</p>
-                  </div>
-                  <Star className="h-5 w-5 text-[#E07B54]" aria-hidden />
                 </div>
               </div>
             </div>
@@ -1260,25 +825,89 @@ export default function ExpertProfile({
         }
       />
     ) : null}
-    {paymentConfirmOpen && bookingConfirmationDetails ? (
-      <BookingConfirmationModal
-        open={paymentConfirmOpen}
-        onClose={() => setPaymentConfirmOpen(false)}
-        onConfirm={() => {
-          setPaymentConfirmOpen(false);
-          setBookingStep('pay');
+    {bookingStep === 'review' ? (
+      <div
+        className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-[#1A3A4A]/40 p-4 backdrop-blur-sm"
+        onClick={(e) => {
+          if (e.target === e.currentTarget) changeOneToOneTime();
         }}
-        details={bookingConfirmationDetails}
-      />
+      >
+        <div className="my-auto w-full max-w-md">
+          <div className="rounded-2xl border border-[#E5E2DB] bg-white p-4 sm:p-6 space-y-4">
+            <p className="font-serif text-lg font-medium text-[#1A3A4A]">Review your booking</p>
+            <dl className="space-y-2 text-sm text-[#1A3A4A]">
+              <div className="flex justify-between gap-2">
+                <dt className="text-[#7A7A72]">Expert</dt>
+                <dd className="font-semibold text-right">{mentor.name}</dd>
+              </div>
+              <div className="flex justify-between gap-2">
+                <dt className="text-[#7A7A72]">When</dt>
+                <dd className="font-semibold text-right">{pickedSlotDisplay}</dd>
+              </div>
+              <div className="flex justify-between gap-2">
+                <dt className="text-[#7A7A72]">Appointment duration</dt>
+                <dd className="font-semibold">{pickedDuration} min</dd>
+              </div>
+              <div className="flex justify-between gap-2 border-t border-[#E5E2DB] pt-2">
+                <dt className="text-[#7A7A72]">Total</dt>
+                <dd className="font-serif text-lg font-semibold">
+                  ${oneToOneSessionPrice.toFixed(2)}
+                </dd>
+              </div>
+            </dl>
+            <button
+              type="button"
+              onClick={() => setBookingStep('pay')}
+              className="inline-flex w-full items-center justify-center rounded-[4px] bg-[#1A3A4A] px-4 py-3 text-[13px] font-semibold text-white hover:bg-[#122635]"
+            >
+              Continue to payment
+            </button>
+            <button
+              type="button"
+              onClick={changeOneToOneTime}
+              className="inline-flex w-full items-center justify-center rounded-[4px] border border-[#E5E2DB] px-4 py-2.5 text-[13px] font-semibold text-[#1A3A4A] hover:bg-[#F5F3EF]"
+            >
+              Change time
+            </button>
+          </div>
+        </div>
+      </div>
+    ) : null}
+    {bookingStep === 'pay' ? (
+      <div
+        className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-[#1A3A4A]/40 p-4 backdrop-blur-sm"
+        onClick={(e) => {
+          if (e.target === e.currentTarget) setBookingStep('review');
+        }}
+      >
+        <div className="my-auto w-full max-w-lg">
+          <StudentBookingCheckout
+            type="1:1 session"
+            price={oneToOneSessionPrice}
+            returnUrl={studentBookingReturnUrl}
+            pendingDetails={{
+              name: bookingEventTitle,
+              start: pickedStart!.toISOString(),
+              end: pickedEnd!.toISOString(),
+              duration: pickedDuration,
+              price: oneToOneSessionPrice,
+              expert: String(expertDetails?._id ?? mentor.id),
+            }}
+            onPaymentSuccess={submitOneToOneBooking}
+            onCancel={() => setBookingStep('review')}
+            cancelLabel="Back"
+          />
+        </div>
+      </div>
     ) : null}
     {seminarCheckout ? (
       <div
-        className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+        className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-[#1A3A4A]/40 p-4 backdrop-blur-sm"
         onClick={(e) => {
           if (e.target === e.currentTarget) setSeminarCheckout(null);
         }}
       >
-        <div className="w-full max-w-md">
+        <div className="my-auto w-full max-w-lg">
           <StudentBookingCheckout
             type="Seminar"
             price={seminarCheckout.price}
@@ -1297,4 +926,3 @@ export default function ExpertProfile({
     </>
   );
 }
-

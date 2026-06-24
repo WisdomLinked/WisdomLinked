@@ -1,5 +1,7 @@
 const express = require("express");
 const router = express.Router();
+const { apiLimiter } = require("../middlewares/rateLimit");
+router.use(apiLimiter);
 
 const { inviteFriend, acceptInvitation, rejectInvitation, removeFriend } = require("../controllers/friendInvitation.controller");
 

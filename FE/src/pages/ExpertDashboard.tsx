@@ -105,11 +105,17 @@ export default function ExpertDashboard() {
     auth: { userDetails },
   } = useAppSelector((state) => state);
 
-  const [activeItem, setActiveItem] = useState('dashboard');
+  // Persist the active view so a refresh keeps the user on the same tab.
+  const [activeItem, setActiveItem] = useState(
+    () => window.localStorage.getItem('expertDashboardView') || 'dashboard',
+  );
+  useEffect(() => {
+    window.localStorage.setItem('expertDashboardView', activeItem);
+  }, [activeItem]);
   const [dmUnreadByRid, setDmUnreadByRid] = useState<Record<string, number>>({});
   const [rcRoomNameByRid, setRcRoomNameByRid] = useState<Record<string, string>>({});
   const [communityRidToName, setCommunityRidToName] = useState<Record<string, string>>({});
-  const [range, setRange] = useState<'today' | 'week' | 'all'>('today');
+  const [range, setRange] = useState<'today' | 'week' | 'all'>('all');
   const [avatarUrl, setAvatarUrl] = useState<string | undefined>(undefined);
   const [expertUpcomingModal, setExpertUpcomingModal] = useState<{
     kind: 'seminar' | 'oneToOne';

@@ -3,7 +3,7 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import BookingTimeZoneControl from './BookingTimeZoneControl';
 
 describe('BookingTimeZoneControl', () => {
-  it('defaults to mine mode and switches to expert', () => {
+  it('offers mine and custom modes, with no expert option', () => {
     const onModeChange = vi.fn();
     render(
       <BookingTimeZoneControl
@@ -15,8 +15,9 @@ describe('BookingTimeZoneControl', () => {
         onCustomTimeZoneChange={vi.fn()}
       />,
     );
-    fireEvent.click(screen.getByRole('button', { name: /Expert/i }));
-    expect(onModeChange).toHaveBeenCalledWith('expert');
+    expect(screen.queryByRole('button', { name: /Expert/i })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: /Choose timezone/i }));
+    expect(onModeChange).toHaveBeenCalledWith('custom');
   });
 
   it('shows timezone select in custom mode', () => {

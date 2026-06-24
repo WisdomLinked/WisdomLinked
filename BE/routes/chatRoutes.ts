@@ -1,6 +1,8 @@
 const express = require('express');
 const router = express.Router();
 const { requireAuth } = require('../middlewares/requireAuth');
+const { apiLimiter } = require('../middlewares/rateLimit');
+router.use(apiLimiter);
 
 import {
     getOrCreateDM,

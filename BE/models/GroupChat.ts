@@ -10,6 +10,7 @@ const groupChatSchema = new mongoose.Schema(
         description: {
             type: String,
         },
+        image: { type: String },
         keywords: [{ type: mongoose.Schema.Types.ObjectId, ref: "Keyword" }],
         services: [{ type: mongoose.Schema.Types.ObjectId, ref: "Service" }],
         start: { type: Date },
@@ -22,7 +23,7 @@ const groupChatSchema = new mongoose.Schema(
             enum: ["seminar", "individual", "community"],
             default: "seminar",
         },
-        status: {type: String, enum: ["pending", "active", "cancelled"], default: 'pending'},
+        status: {type: String, enum: ["draft", "pending", "active", "cancelled"], default: 'pending'},
         createdBy: {
             type: mongoose.Schema.Types.ObjectId,
             ref: "User",

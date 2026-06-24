@@ -48,7 +48,9 @@ test("getExpertById populates the booking fields the overlap check needs", async
     await getExpertById(req, res);
 
     assert.equal(res.statusCode, 200);
-    assert.equal(res.body?.result, fakeExpert);
+
+    assert.equal(res.body?.result?._id, fakeExpert._id);
+    assert.equal(res.body?.result?.username, fakeExpert.username);
 
     const names = pathNames(capturedPaths);
     // Existing profile data must still be populated.

@@ -18,6 +18,8 @@ const userSchema = new mongoose.Schema(
         image: { type: String },
         role: { type: String, required: true, default: 'customer' },
         friends: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
+        following: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
+        followers: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
         /** 1:1 DM threads (Rocket.Chat IM); not used for community/group sessions. */
         directConversations: [{ type: mongoose.Schema.Types.ObjectId, ref: "Conversation" }],
         groupChats: [{ type: mongoose.Schema.Types.ObjectId, ref: "GroupChat" }],
@@ -31,13 +33,22 @@ const userSchema = new mongoose.Schema(
         feedbacks: [{ type: mongoose.Schema.Types.Mixed }],
         status: { type: String, default: 'review' },
         timeZone: { type: String, default: 'UTC' },
+
+        notificationPreferences: {
+            email: { type: Boolean, default: true },
+            push: { type: Boolean, default: true },
+            seminarReminders: { type: Boolean, default: true },
+            sessionReminders: { type: Boolean, default: true },
+            marketing: { type: Boolean, default: false },
+        },
         isActive: { type: Boolean, default: true },
         isAdHocCustomer: { type: Boolean, default: false },
         token: { type: String, select: false },
         password: { type: String, select: false },
 
         // OAUTH ---------------
-        oauthProvider: { type: String }, // 'google' | 'facebook' | 'twitter'
+        oauthProvider: { type: String }, // 'google' | 'wechat' | 'facebook' | 'twitter'
+        // For WeChat (no email returned), oauthId holds unionid (preferred) or openid.
         oauthId: { type: String },
 
         // EXPERT -------------

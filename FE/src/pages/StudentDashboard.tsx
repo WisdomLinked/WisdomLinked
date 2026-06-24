@@ -23,7 +23,7 @@ import UpcomingCountdownCard, { type UpcomingSession } from '../components/dashb
 import UpcomingSessionModal, { type UpcomingModalSession } from '../components/dashboard/UpcomingSessionModal';
 import ExpertProfile from '../components/dashboard/ExpertProfile';
 import { completeStudentBookingFromStorage } from '../components/dashboard/StudentBookingCheckout';
-import { getExpertById } from '../api/api';
+import { getExpertById, doFollowExpert, doUnfollowExpert } from '../api/api';
 import type { MentorCardProps } from '../components/MentorCard';
 import { mapExpertToMentorWithImage } from '../utils/mapExpertToMentor';
 import StudentChat from '../components/dashboard/StudentChat';
@@ -271,7 +271,11 @@ function deriveModalSessions(
 
 /**
  * Find the soonest upcoming seminar and 1:1 from the user's real bookings,
- * for the "Upcoming sessions" countdown card.
+ * for the "Upcoming sessions" countdown card. Mirrors deriveSessionCounts /
+ * deriveModalSessions: seminars come from groupChats, but 1:1s live in two
+ * disjoint systems — student-booked individual groupChats ('active' = booked)
+ * and expert-created / legacy events (accepted/confirmed/approved) — so both
+ * are scanned for the next 1:1.
  */
 function deriveUpcomingSessions(u: any): {
   nextSeminar: UpcomingSession | null;
@@ -280,6 +284,13 @@ function deriveUpcomingSessions(u: any): {
   const now = Date.now();
   let nextSeminar: UpcomingSession | null = null;
   let nextOneToOne: UpcomingSession | null = null;
+
+  const considerOneToOne = (title: string, startAt: number) => {
+    if (!nextOneToOne || startAt < nextOneToOne.startAt) {
+      nextOneToOne = { title, startAt };
+    }
+  };
+
   for (const g of u?.groupChats || []) {
     const startAt = new Date(g?.start).getTime();
     if (Number.isNaN(startAt) || startAt <= now) continue;
@@ -290,10 +301,19 @@ function deriveUpcomingSessions(u: any): {
 
     if (isSeminar && (!nextSeminar || startAt < nextSeminar.startAt)) {
       nextSeminar = { title: g?.name || 'Seminar', startAt };
-    } else if (isSession && (!nextOneToOne || startAt < nextOneToOne.startAt)) {
-      nextOneToOne = { title: g?.name || '1:1 session', startAt };
+    } else if (isSession) {
+      considerOneToOne(g?.name || '1:1 session', startAt);
     }
   }
+
+  const CONFIRMED_EVENT = ['accepted', 'confirmed', 'approved'];
+  for (const e of u?.events || []) {
+    const startAt = new Date(e?.start).getTime();
+    if (Number.isNaN(startAt) || startAt <= now) continue;
+    if (!CONFIRMED_EVENT.includes((e?.status || '').toLowerCase())) continue;
+    considerOneToOne(e?.title || '1:1 session', startAt);
+  }
+
   return { nextSeminar, nextOneToOne };
 }
 
@@ -302,7 +322,15 @@ export default function StudentDashboard() {
   const dispatch = useDispatch();
   const location = useLocation();
   const navigate = useNavigate();
-  const [activeItem, setActiveItem] = useState('dashboard');
+  // Persist the active view so a refresh keeps the user where they were.
+  // 'expert-profile' depends on a selected expert that isn't restored on reload.
+  const [activeItem, setActiveItem] = useState(() => {
+    const saved = window.localStorage.getItem('studentDashboardView');
+    return saved && saved !== 'expert-profile' ? saved : 'dashboard';
+  });
+  useEffect(() => {
+    window.localStorage.setItem('studentDashboardView', activeItem);
+  }, [activeItem]);
   const [paymentReturnSuccess, setPaymentReturnSuccess] = useState(false);
   const [bookingReturnError, setBookingReturnError] = useState<string | null>(null);
   const [dmUnreadByRid, setDmUnreadByRid] = useState<Record<string, number>>({});
@@ -374,17 +402,55 @@ export default function StudentDashboard() {
     }
   }, [location.search, location.pathname, navigate, dispatch]);
 
-  const toggleExpertFollow = useCallback((mentorId: string | number) => {
-    const id = String(mentorId);
-    setFollowedMentorIds(prev => {
-      const isFollowing = prev.includes(id);
+  // Seed which experts the user already follows from their profile so the
+  // Follow buttons render in the correct state on load and after a refresh.
+  useEffect(() => {
+    const following = userDetails?.following;
+    if (!Array.isArray(following)) return;
+    setFollowedMentorIds(following.map((id: any) => String(id)));
+  }, [userDetails?.following]);
+
+  const toggleExpertFollow = useCallback(
+    async (mentorId: string | number) => {
+      // Auth guard: only a logged-in customer may follow.
+      if (!userDetails?.email) return;
+
+      const id = String(mentorId);
+      const wasFollowing = followedMentorIds.includes(id);
+
+      // Optimistic update — flip immediately, reconcile with the server below.
+      setFollowedMentorIds(prev =>
+        wasFollowing ? prev.filter(x => x !== id) : [...prev, id],
+      );
       setFollowerCounts(fc => ({
         ...fc,
-        [id]: (fc[id] ?? 0) + (isFollowing ? -1 : 1),
+        [id]: Math.max(0, (fc[id] ?? 0) + (wasFollowing ? -1 : 1)),
       }));
-      return isFollowing ? prev.filter(x => x !== id) : [...prev, id];
-    });
-  }, []);
+
+      const res = wasFollowing
+        ? await doUnfollowExpert(id)
+        : await doFollowExpert(id);
+
+      if (res && typeof res === 'object' && 'following' in res) {
+        // Reconcile with server truth (handles count drift / races).
+        setFollowedMentorIds(prev => {
+          const without = prev.filter(x => x !== id);
+          return res.following ? [...without, id] : without;
+        });
+        setFollowerCounts(fc => ({ ...fc, [id]: res.followerCount }));
+      } else {
+        // Request failed — revert the optimistic change.
+        setFollowedMentorIds(prev =>
+          wasFollowing ? [...prev, id] : prev.filter(x => x !== id),
+        );
+        setFollowerCounts(fc => ({
+          ...fc,
+          [id]: Math.max(0, (fc[id] ?? 0) + (wasFollowing ? 1 : -1)),
+        }));
+      }
+    },
+    [userDetails?.email, followedMentorIds],
+  );
   const [upcomingModal, setUpcomingModal] = useState<{
     kind: 'seminar' | 'oneToOne';
     status: 'booked' | 'pending';
@@ -505,10 +571,12 @@ export default function StudentDashboard() {
     (async () => {
       setCarouselLoading(true);
       try {
-        const filter = { username: '', name: '', keywords: [], services: [], sortBy: 'Name in ASC' };
+        // Carousel highlights the newest experts — BE "Recently joined" sorts by createdAt desc.
+        const expertFilter = { username: '', name: '', keywords: [], services: [], sortBy: 'Recently joined' };
+        const seminarFilter = { username: '', name: '', keywords: [], services: [], sortBy: 'Name in ASC' };
         const [expertRes, seminarRes]: [any, any] = await Promise.all([
-          doFilterExperts(filter),
-          doFilterSeminars(filter),
+          doFilterExperts(expertFilter),
+          doFilterSeminars(seminarFilter),
         ]);
         if (cancelled) return;
 
@@ -518,7 +586,7 @@ export default function StudentDashboard() {
         if (experts.length) {
           const mentors = await Promise.all(
             experts
-              .slice(0, 8)
+              .slice(0, 5)
               .map((e: any) => mapExpertToMentorWithImage(e, 'small')),
           );
           if (cancelled) return;

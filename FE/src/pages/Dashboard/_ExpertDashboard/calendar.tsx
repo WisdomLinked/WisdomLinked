@@ -65,6 +65,12 @@ const ExpertCalendar: React.FC = () => {
       textColor = "#9ca3af";
     }
 
+    if (event.status === "draft") {
+      backgroundColor = "#fef3c7";
+      borderColor = "#fcd34d";
+      textColor = "#92400e";
+    }
+
     return {
       style: {
         backgroundColor,
@@ -170,13 +176,21 @@ const ExpertCalendar: React.FC = () => {
           g.status !== "pending" || !g.createdBy || iAmCreator;
 
         if (shouldPush) {
+          const start = g.start ? new Date(g.start) : null;
+          // A draft may be saved without a date yet — can't place it on the grid.
+          if (!start || Number.isNaN(start.getTime())) return;
           const isSeminar = g.type === "seminar";
+          const isDraft = g.status === "draft";
           temp.push({
             ...g,
             id: g._id,
-            start: new Date(g.start),
-            end: new Date(g.end),
-            title: isSeminar ? `(S) ${g.name}` : g.name || "1:1 session",
+            start,
+            end: g.end ? new Date(g.end) : start,
+            title: isSeminar
+              ? isDraft
+                ? `(Draft) ${g.name}`
+                : `(S) ${g.name}`
+              : g.name || "1:1 session",
             type: g.type,
             status: g.status,
           });

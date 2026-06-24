@@ -6,11 +6,12 @@ import { detectUserTimeZone } from '../../utils/schedulingTimezone';
 
 export default function StudentSettings() {
   const { auth: { userDetails } } = useAppSelector((s: any) => s);
-  const [emailNotifications, setEmailNotifications] = useState(true);
-  const [pushNotifications, setPushNotifications] = useState(true);
-  const [seminarReminders, setSeminarReminders] = useState(true);
-  const [sessionReminders, setSessionReminders] = useState(true);
-  const [marketingEmails, setMarketingEmails] = useState(false);
+  const prefs = userDetails?.notificationPreferences;
+  const [emailNotifications, setEmailNotifications] = useState(prefs?.email ?? true);
+  const [pushNotifications, setPushNotifications] = useState(prefs?.push ?? true);
+  const [seminarReminders, setSeminarReminders] = useState(prefs?.seminarReminders ?? true);
+  const [sessionReminders, setSessionReminders] = useState(prefs?.sessionReminders ?? true);
+  const [marketingEmails, setMarketingEmails] = useState(prefs?.marketing ?? false);
   const [darkMode, setDarkMode] = useState(false);
   const [timeZone, setTimeZone] = useState(
     () => userDetails?.timeZone || detectUserTimeZone(),
@@ -24,6 +25,16 @@ export default function StudentSettings() {
     }
   }, [userDetails?.timeZone]);
 
+  // Hydrate toggles from the saved preferences once they load from the server.
+  useEffect(() => {
+    if (!prefs) return;
+    if (typeof prefs.email === 'boolean') setEmailNotifications(prefs.email);
+    if (typeof prefs.push === 'boolean') setPushNotifications(prefs.push);
+    if (typeof prefs.seminarReminders === 'boolean') setSeminarReminders(prefs.seminarReminders);
+    if (typeof prefs.sessionReminders === 'boolean') setSessionReminders(prefs.sessionReminders);
+    if (typeof prefs.marketing === 'boolean') setMarketingEmails(prefs.marketing);
+  }, [prefs]);
+
   const cardClass =
     'rounded-2xl border border-[#E5E2DB] bg-white p-5 shadow-[0_10px_30px_rgba(0,0,0,0.04)]';
 
@@ -34,7 +45,16 @@ export default function StudentSettings() {
 
   const handleSave = async () => {
     setSaveError('');
-    const ok = await doUpdateProfile({ timeZone });
+    const ok = await doUpdateProfile({
+      timeZone,
+      notificationPreferences: {
+        email: emailNotifications,
+        push: pushNotifications,
+        seminarReminders,
+        sessionReminders,
+        marketing: marketingEmails,
+      },
+    });
     if (ok) {
       setSaveMessage('Settings saved successfully.');
       window.setTimeout(() => setSaveMessage(''), 2200);
@@ -115,6 +135,7 @@ export default function StudentSettings() {
                   onClick={() => item.setEnabled((v: boolean) => !v)}
                   className={toggleClass(item.enabled)}
                   aria-pressed={item.enabled}
+                  aria-label={item.label}
                 >
                   <span
                     className={`inline-block h-5 w-5 transform rounded-full bg-white transition-transform ${

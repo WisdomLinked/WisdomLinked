@@ -51,6 +51,8 @@ function mapGroupChatToExpertSeminar(g: any) {
     end: g.end,
     duration: g.duration,
     price: g.price,
+    image: g.image ?? null,
+    status: g.status,
   };
 }
 
@@ -88,13 +90,25 @@ function SeminarCard({
       className="group flex h-full flex-col rounded-2xl border border-[#e8e6e1] bg-white shadow-[0_12px_32px_rgba(15,23,42,0.08)] overflow-hidden transition-transform duration-150 hover:-translate-y-0.5 hover:shadow-[0_18px_44px_rgba(15,23,42,0.14)] cursor-pointer text-left"
     >
       <div className="relative h-36 w-full overflow-hidden bg-gradient-to-br from-[#234C6A] to-slate-800 sm:h-40">
-        <div className="absolute inset-0 flex items-center justify-center text-white/90">
-          <span className="text-3xl font-serif font-semibold opacity-90">
-            {(seminar?.name || 'S').slice(0, 1).toUpperCase()}
-          </span>
-        </div>
+        {seminar?.image ? (
+          <img
+            src={seminar.image}
+            alt={seminar?.name || 'Seminar cover'}
+            className="absolute inset-0 h-full w-full object-cover"
+          />
+        ) : (
+          <div className="absolute inset-0 flex items-center justify-center text-white/90">
+            <span className="text-3xl font-serif font-semibold opacity-90">
+              {(seminar?.name || 'S').slice(0, 1).toUpperCase()}
+            </span>
+          </div>
+        )}
         {badge ? (
-          <div className="absolute left-3 top-3 rounded-full bg-black/55 px-2.5 py-0.5 text-[10px] font-medium text-white backdrop-blur">
+          <div
+            className={`absolute left-3 top-3 rounded-full px-2.5 py-0.5 text-[10px] font-semibold text-white backdrop-blur ${
+              badge === 'Draft' ? 'bg-amber-500/90' : 'bg-black/55'
+            }`}
+          >
             {badge}
           </div>
         ) : null}
@@ -180,10 +194,18 @@ function SeminarDetailPane({
 
       <div className="max-w-6xl mx-auto grid gap-6 lg:grid-cols-[1fr_340px]">
         <section className="rounded-2xl border border-[#E5E2DB] bg-white overflow-hidden shadow-sm">
-          <div className="h-56 w-full bg-gradient-to-br from-[#234C6A] to-slate-900 sm:h-72 flex items-center justify-center">
-            <span className="text-5xl font-serif font-semibold text-white/90">
-              {(seminar?.name || 'S').slice(0, 1).toUpperCase()}
-            </span>
+          <div className="relative h-56 w-full bg-gradient-to-br from-[#234C6A] to-slate-900 sm:h-72 flex items-center justify-center">
+            {seminar?.image ? (
+              <img
+                src={seminar.image}
+                alt={seminar?.name || 'Seminar cover'}
+                className="absolute inset-0 h-full w-full object-cover"
+              />
+            ) : (
+              <span className="text-5xl font-serif font-semibold text-white/90">
+                {(seminar?.name || 'S').slice(0, 1).toUpperCase()}
+              </span>
+            )}
           </div>
           <div className="p-6">
             <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[#7A7A72]">
@@ -405,7 +427,7 @@ export default function ExpertSeminarHub() {
     null,
   );
 
-  const mySeminars = useMemo(() => {
+  const allSeminars = useMemo(() => {
     const chats = (userDetails?.groupChats || []).filter(
       (g: any) => g && g.type === 'seminar',
     );
@@ -415,6 +437,22 @@ export default function ExpertSeminarHub() {
       return tb - ta;
     });
   }, [userDetails?.groupChats]);
+
+  // Drafts the host saved earlier but hasn't published — surfaced separately so
+  // they can be resumed; everything else shows in the main "Your seminars" list.
+  const myDrafts = useMemo(
+    () => allSeminars.filter((g: any) => g.status === 'draft' && getRefId(g.admin) === String(me)),
+    [allSeminars, me],
+  );
+  const mySeminars = useMemo(
+    () => allSeminars.filter((g: any) => g.status !== 'draft'),
+    [allSeminars],
+  );
+
+  const resumeDraft = (s: any) => {
+    setEditPayload(mapGroupChatToExpertSeminar(s));
+    setScreen('edit');
+  };
 
   const handleAfterSave = async () => {
     await (dispatch as any)(updateMe());
@@ -491,6 +529,27 @@ export default function ExpertSeminarHub() {
       </header>
 
       <div className="max-w-6xl mx-auto space-y-10">
+        {myDrafts.length > 0 ? (
+          <section>
+            <h2 className="text-lg font-semibold text-slate-900 mb-1">
+              Drafts <span className="text-slate-400">({myDrafts.length})</span>
+            </h2>
+            <p className="text-sm text-slate-600 mb-4">
+              Unfinished seminars saved earlier — select one to continue editing and publish.
+            </p>
+            <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
+              {myDrafts.map((s: any) => (
+                <SeminarCard
+                  key={s._id || getRefId(s)}
+                  seminar={s}
+                  onClick={() => resumeDraft(s)}
+                  badge="Draft"
+                />
+              ))}
+            </div>
+          </section>
+        ) : null}
+
         <section>
           <h2 className="text-lg font-semibold text-slate-900 mb-1">Your seminars</h2>
           <p className="text-sm text-slate-600 mb-4">

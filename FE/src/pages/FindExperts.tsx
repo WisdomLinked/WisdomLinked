@@ -356,7 +356,9 @@ export default function FindExpertsPage({
                 >
                   <MentorCard
                     {...mentor}
-                    followerCount={followerCounts[String(mentor.id)] ?? 0}
+                    followerCount={
+                      followerCounts[String(mentor.id)] ?? mentor.followerCount ?? 0
+                    }
                     onViewProfile={onViewExpert}
                     isFollowing={followedMentorIds.some(
                       id => String(id) === String(mentor.id),
@@ -389,7 +391,9 @@ export default function FindExpertsPage({
                   key={String(mentor.id)}
                   {...mentor}
                   compact
-                  followerCount={followerCounts[String(mentor.id)] ?? 0}
+                  followerCount={
+                    followerCounts[String(mentor.id)] ?? mentor.followerCount ?? 0
+                  }
                   onViewProfile={onViewExpert}
                   isFollowing={followedMentorIds.some(
                     id => String(id) === String(mentor.id),
