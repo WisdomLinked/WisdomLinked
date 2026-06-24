@@ -935,26 +935,26 @@ const updateGroupChat = async (req, res) => {
             return res.status(403).send("Forbidden");
         }
 
-        // Construct dynamic update object
+        // Construct dynamic update object. Coerce every user-supplied value to its
+        // expected primitive so a query object (e.g. { $gt: '' }) can't be injected.
         const updateFields: Record<string, any> = {};
-        if (name !== undefined) updateFields.name = name;
-        if (description !== undefined) updateFields.description = description;
-        if (image !== undefined) updateFields.image = image;
+        if (name !== undefined) updateFields.name = String(name);
+        if (description !== undefined) updateFields.description = String(description);
+        if (image !== undefined) updateFields.image = String(image);
         // Allow flipping a draft to a published seminar (or saving back as draft).
         if (status !== undefined && ['draft', 'active', 'pending'].includes(status)) {
             updateFields.status = status;
         }
         if (services !== undefined) updateFields.services = await resolveServiceIds(services);
         if (keywords !== undefined) updateFields.keywords = await resolveKeywordIds(keywords);
-        if (start !== undefined) updateFields.start = start;
-        if (end !== undefined) updateFields.end = end;
-        if (duration !== undefined) updateFields.duration = duration;
-        if (price !== undefined) updateFields.price = price;
-        if (type !== undefined && normalizeId(groupChat.admin) === String(userId)) updateFields.type = type;
+        if (start !== undefined) updateFields.start = new Date(start);
+        if (end !== undefined) updateFields.end = new Date(end);
+        if (duration !== undefined) updateFields.duration = Number(duration);
+        if (price !== undefined) updateFields.price = Number(price);
+        if (type !== undefined && normalizeId(groupChat.admin) === String(userId)) updateFields.type = String(type);
         if (totalTimeSpent !== undefined) {
-            //updateFields.totalTimeSpend = totalTimeSpent;
             const existingTotalTimeSpent = groupChat.totalTimeSpent || 0;
-            updateFields.totalTimeSpent = existingTotalTimeSpent + totalTimeSpent;
+            updateFields.totalTimeSpent = existingTotalTimeSpent + Number(totalTimeSpent);
         }
 
         // Update group chat with only provided fields
