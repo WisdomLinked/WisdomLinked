@@ -935,24 +935,25 @@ const updateGroupChat = async (req, res) => {
             return res.status(403).send("Forbidden");
         }
 
-        // Construct dynamic update object. Coerce every user-supplied value to its
-        // expected primitive so a query object (e.g. { $gt: '' }) can't be injected.
+        // Construct dynamic update object. Each field is accepted only when it is a
+        // primitive (string/number) via an inline typeof check, so a query object
+        // (e.g. { $gt: '' }) can never be injected into findByIdAndUpdate.
         const updateFields: Record<string, any> = {};
-        if (name !== undefined) updateFields.name = String(name);
-        if (description !== undefined) updateFields.description = String(description);
-        if (image !== undefined) updateFields.image = String(image);
+        if (typeof name === 'string') updateFields.name = name;
+        if (typeof description === 'string') updateFields.description = description;
+        if (typeof image === 'string') updateFields.image = image;
         // Allow flipping a draft to a published seminar (or saving back as draft).
-        if (status !== undefined && ['draft', 'active', 'pending'].includes(status)) {
+        if (typeof status === 'string' && ['draft', 'active', 'pending'].includes(status)) {
             updateFields.status = status;
         }
         if (services !== undefined) updateFields.services = await resolveServiceIds(services);
         if (keywords !== undefined) updateFields.keywords = await resolveKeywordIds(keywords);
-        if (start !== undefined) updateFields.start = new Date(start);
-        if (end !== undefined) updateFields.end = new Date(end);
-        if (duration !== undefined) updateFields.duration = Number(duration);
-        if (price !== undefined) updateFields.price = Number(price);
-        if (type !== undefined && normalizeId(groupChat.admin) === String(userId)) updateFields.type = String(type);
-        if (totalTimeSpent !== undefined) {
+        if (typeof start === 'string' || typeof start === 'number') updateFields.start = new Date(start);
+        if (typeof end === 'string' || typeof end === 'number') updateFields.end = new Date(end);
+        if (typeof duration === 'string' || typeof duration === 'number') updateFields.duration = Number(duration);
+        if (typeof price === 'string' || typeof price === 'number') updateFields.price = Number(price);
+        if (typeof type === 'string' && normalizeId(groupChat.admin) === String(userId)) updateFields.type = type;
+        if (typeof totalTimeSpent === 'string' || typeof totalTimeSpent === 'number') {
             const existingTotalTimeSpent = groupChat.totalTimeSpent || 0;
             updateFields.totalTimeSpent = existingTotalTimeSpent + Number(totalTimeSpent);
         }
