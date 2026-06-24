@@ -38,14 +38,21 @@ const expertDoc = {
   populate: async () => {},
 };
 
+const futureUtcDate = (daysFromNow: number, hourUtc: number) => {
+  const date = new Date(Date.now() + daysFromNow * 24 * 60 * 60 * 1000);
+  date.setUTCHours(hourUtc, 0, 0, 0);
+  return date;
+};
+
+const bookingStart = futureUtcDate(14, 9);
+
 const baseBody = {
   name: "Session",
   description: "d",
   services: [],
   keywords: [],
-  // Fixed UTC window (same calendar day) so CI is not flaky near midnight.
-  start: "2026-06-25T18:00:00.000Z",
-  end: "2026-06-25T19:00:00.000Z",
+  start: bookingStart.toISOString(),
+  end: new Date(bookingStart.getTime() + 60 * 60 * 1000).toISOString(),
   duration: 60,
   price: 0,
   expert: "expert-id-1",
