@@ -26,14 +26,19 @@ const createRes = () => {
   return res;
 };
 
+const futureUtcDate = (daysFromNow: number, hourUtc: number) => {
+  const date = new Date(Date.now() + daysFromNow * 24 * 60 * 60 * 1000);
+  date.setUTCHours(hourUtc, 0, 0, 0);
+  return date;
+};
+
 test("appendEvent rejects outside expert availability", async () => {
   const originalFindOne = User.findOne;
   const originalEventFind = Event.find;
   const originalGroupFind = GroupChat.find;
 
-  // Fixed UTC window (same calendar day) so CI is not flaky near midnight.
-  const start = new Date("2026-06-25T18:00:00.000Z");
-  const end = new Date("2026-06-25T19:00:00.000Z");
+  const start = futureUtcDate(14, 9);
+  const end = new Date(start.getTime() + 60 * 60 * 1000);
 
   try {
     User.findOne = async (query: any) => {
