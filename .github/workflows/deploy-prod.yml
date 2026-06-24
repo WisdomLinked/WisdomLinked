@@ -219,6 +219,8 @@ jobs:
               -e ZOHONOREPLY_PASS="${{ secrets.ZOHONOREPLY_PASS }}" \
               -e ZOHOADMIN_USER="${{ secrets.ZOHOADMIN_USER }}" \
               -e ZOHOADMIN_PASS="${{ secrets.ZOHOADMIN_PASS }}" \
+              -e WECHAT_APP_ID="${{ secrets.WECHAT_APP_ID }}" \
+              -e WECHAT_APP_SECRET="${{ secrets.WECHAT_APP_SECRET }}" \
               -e ROCKETCHAT_URL="${{ secrets.ROCKETCHAT_URL }}" \
               -e ROCKETCHAT_ADMIN_USER="${{ secrets.ROCKETCHAT_ADMIN_USER }}" \
               -e ROCKETCHAT_ADMIN_PASS="${{ secrets.ROCKETCHAT_ADMIN_PASS }}" \
