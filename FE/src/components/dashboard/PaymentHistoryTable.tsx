@@ -1,6 +1,3 @@
-
-
-
 import { useEffect, useState } from 'react';
 import { Loader2 } from 'lucide-react';
 import { doGetCustomerPaymentHistory } from '../../api/api';
