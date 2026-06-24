@@ -35,5 +35,5 @@ router.post("/leftSeminar", customerAuth(false), leftSeminar);
 router.post("/createEventFeedback", customerAuth(true), createFeedback);
 router.post("/follow/:expertId", customerAuth(false), followExpert);
 router.post("/unfollow/:expertId", customerAuth(false), unfollowExpert);
-router.post("/getMyPaymentHistory", sensitiveLimiter, customerAuth(false), getMyPaymentHistory);
+router.post("/getMyPaymentHistory", customerAuth(false), sensitiveLimiter, getMyPaymentHistory);
 module.exports = router;
