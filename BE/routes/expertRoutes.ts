@@ -1,6 +1,8 @@
 const express = require("express");
 const router = express.Router();
 const { expertAuth, requireAuth } = require("../middlewares/requireAuth");
+const { apiLimiter } = require("../middlewares/rateLimit");
+router.use(apiLimiter);
 const {
     updateTimeSlots,
     getDailyTimeSlots,
