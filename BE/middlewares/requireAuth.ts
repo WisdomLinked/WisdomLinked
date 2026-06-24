@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 const jwt = require("jsonwebtoken");
 const UserModel = require('../models/User')
+const { authCookieOptions } = require('../config/authCookie')
 
 const config = process.env;
 
@@ -125,7 +126,7 @@ const requireAuth = (restrictUnderReview = false) => async (req, res, next) => {
             throw new Error("server side cookie has been expired.");
 
         const newToken = await user.generateAuthToken()
-        res.cookie('accessToken', newToken, { maxAge: process.env.COOKIE_EXPIRED_TIME, httpOnly: true });
+        res.cookie('accessToken', newToken, authCookieOptions());
 
         req.user = {
             userId: user._id.toString(),
@@ -183,7 +184,7 @@ const customerAuth = (restrictUnderReview = false) => async (req, res, next) => 
             throw new Error("server side cookie has been expired.");
 
         const newToken = await user.generateAuthToken()
-        res.cookie('accessToken', newToken, { maxAge: process.env.COOKIE_EXPIRED_TIME, httpOnly: true });
+        res.cookie('accessToken', newToken, authCookieOptions());
         req.user = {
             userId: user._id.toString(),
             ...user._doc,
@@ -240,7 +241,7 @@ const expertAuth = (restrictUnderReview = false) => async (req, res, next) => {
             throw new Error("server side cookie has been expired.");
 
         const newToken = await user.generateAuthToken()
-        res.cookie('accessToken', newToken, { maxAge: process.env.COOKIE_EXPIRED_TIME, httpOnly: true });
+        res.cookie('accessToken', newToken, authCookieOptions());
         req.user = {
             userId: user._id.toString(),
             ...user._doc,
@@ -289,7 +290,7 @@ const adminAuth = async (req, res, next) => {
             throw new Error("server side cookie has been expired.");
 
         const newToken = await user.generateAuthToken()
-        res.cookie('accessToken', newToken, { maxAge: process.env.COOKIE_EXPIRED_TIME, httpOnly: true });
+        res.cookie('accessToken', newToken, authCookieOptions());
         req.user = {
             userId: user._id.toString(),
             ...user._doc,

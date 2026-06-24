@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { resolveUserFacingError } from '../utils/resolveUserFacingError';
+import { ensureCsrfToken, clearCsrfToken, needsCsrf, isCsrfError } from './csrf';
 
 export type ChatApiResult<T> = { ok: true; data: T } | { ok: false; error: string };
 
@@ -31,6 +32,36 @@ const api = axios.create({
     withCredentials: true,
     baseURL: BASE_URL,
 });
+
+api.interceptors.request.use(async (config) => {
+    if (needsCsrf(config.method)) {
+        const t = await ensureCsrfToken();
+        if (t) {
+            config.headers = config.headers || {};
+            (config.headers as any)['X-CSRF-Token'] = t;
+        }
+    }
+    return config;
+});
+
+api.interceptors.response.use(
+    (res) => res,
+    async (error) => {
+        const cfg = error?.config;
+        const resp = error?.response;
+        if (cfg && !cfg.__csrfRetried && isCsrfError(resp?.data, resp?.status)) {
+            cfg.__csrfRetried = true;
+            clearCsrfToken();
+            const t = await ensureCsrfToken();
+            if (t) {
+                cfg.headers = cfg.headers || {};
+                cfg.headers['X-CSRF-Token'] = t;
+                return api.request(cfg);
+            }
+        }
+        return Promise.reject(error);
+    }
+);
 
 export const CHAT_HISTORY_PAGE_SIZE = 50;
 

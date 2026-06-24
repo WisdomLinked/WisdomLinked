@@ -11,6 +11,7 @@ import { updateLocation } from './actions/appActions';
 import { siteMap } from './actions/siteMap';
 import { isTheEventGoingOn } from './actions/common';
 import { autoLogin } from './actions/authActions';
+import { ensureCsrfToken } from './api/csrf';
 import { connectToRC, isRCConnected } from './services/rcRealtime';
 import 'swiper/swiper.min.css';
 import LeaveFeedback from './components/LeaveFeedback';
@@ -181,6 +182,7 @@ function App() {
   const [oldUserDetails, set_oldUserDetails] = useState(userDetails)
 
   useEffect(() => {
+    ensureCsrfToken();
     const storedUser = localStorage.getItem("currentUser");
     const currentUser: CurrentUser = JSON.parse(
       storedUser && storedUser !== "undefined" ? storedUser : "{}"

@@ -30,6 +30,7 @@ const {
 
 } = require("../controllers/auth.controller");
 const { requireAuth } = require("../middlewares/requireAuth");
+const { authCookieOptions } = require("../config/authCookie");
 const { apiLimiter, sensitiveLimiter } = require("../middlewares/rateLimit");
 const {
     validateLoginSchema,
@@ -77,6 +78,7 @@ router.post("/passwordResetRequest", sensitiveLimiter, passwordResetRequest);
 router.post("/verifyPasswordResetOTP", sensitiveLimiter, verifyPasswordResetOTP);
 router.post("/confirmPasswordResetByCode", sensitiveLimiter, confirmPasswordResetByCode);
 router.post("/confirmEmailChange", sensitiveLimiter, confirmEmailChange);
+router.get("/csrf-token", (req: any, res: any) => res.status(200).json({ csrfToken: req.csrfToken() }));
 router.get("/getKeywordsAndServices", getKeywordsAndServices);
 router.post("/updateMissedChats", requireAuth(false), updateMissedChats);
 router.post("/updateProfile", requireAuth(false), updateProfile);
@@ -170,10 +172,7 @@ const oauthCallback = async (req: any, res: any) => {
         user.token = token;
         await user.save();
         
-        res.cookie('accessToken', token, {
-            maxAge: Number(process.env.COOKIE_EXPIRED_TIME) || 86400000,
-            httpOnly: true
-        });
+        res.cookie('accessToken', token, authCookieOptions());
         
         // Sync user to Rocket.Chat (fire-and-forget)
         syncUserToRocketChat({

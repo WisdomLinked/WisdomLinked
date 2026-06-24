@@ -5,6 +5,7 @@ const jwt = require("jsonwebtoken");
 const PendingLogin = require("../models/PendingLogin");
 const PendingPasswordReset = require("../models/PendingPasswordReset");
 const PendingEmailChange = require("../models/PendingEmailChange");
+const { authCookieOptions, clearAuthCookieOptions } = require("../config/authCookie");
 const Keyword = require("../models/Keyword")
 const Service = require("../models/Service")
 const bcrypt = require("bcryptjs");
@@ -464,11 +465,8 @@ const verifyRegistration = async (req: Request, res: Response) => {
         
         user.token = null;
         user.password = null;
-        
-        res.cookie('accessToken', token, {
-            maxAge: Number(process.env.COOKIE_EXPIRED_TIME) || 86400000,
-            httpOnly: true
-        });
+
+        res.cookie('accessToken', token, authCookieOptions());
 
 
         res.status(200).json({
@@ -500,10 +498,7 @@ const checkVerificationStatus = async (req: Request, res: Response) => {
             user.token = null;
             user.password = null;
 
-            res.cookie('accessToken', token, {
-                maxAge: Number(process.env.COOKIE_EXPIRED_TIME) || 86400000,
-                httpOnly: true
-            });
+            res.cookie('accessToken', token, authCookieOptions());
 
             return res.status(200).json({ status: 'VERIFIED', userDetails: user });
         }
@@ -647,7 +642,7 @@ const confirmLoginByCode = async (req: Request, res: Response) => {
         const token = await user.generateAuthToken()
         user.token = null
         user.password = null
-        res.cookie('accessToken', token, { maxAge: Number(process.env.COOKIE_EXPIRED_TIME) || 86400000, httpOnly: true })
+        res.cookie('accessToken', token, authCookieOptions())
 
         // Ensure user exists in Rocket.Chat (fire-and-forget)
         syncUserToRocketChat({
@@ -1113,10 +1108,7 @@ const confirmEmailChange = async (req: Request, res: Response) => {
         await user.save();
         await pending.deleteOne();
 
-        res.cookie('accessToken', token, {
-            maxAge: Number(process.env.COOKIE_EXPIRED_TIME) || 86400000,
-            httpOnly: true,
-        });
+        res.cookie('accessToken', token, authCookieOptions());
 
         syncUserToRocketChat({
             email: user.email,
@@ -1401,10 +1393,7 @@ const sendEmailToAdmin = async (req: Request, res: Response) => {
 
 const logout = async (req: Request, res: Response) => {
     try {
-        res.clearCookie('accessToken', {
-            httpOnly: true,
-            path: '/'
-        });
+        res.clearCookie('accessToken', clearAuthCookieOptions());
         return res.status(200).json({
             status: "SUCCESS"
         });
