@@ -1013,21 +1013,16 @@ const updateProfile = async (req: any, res: Response) => {
         // synthetic wechat_<id>@wechat.local placeholder email (WeChat returns no email).
         // Allow them to set a real one here. Only placeholder accounts may change their
         // email via this endpoint, so normal users can't repoint their account.
-        const { isWeChatPlaceholderEmail } = require('../services/wechatOAuth');
+        const { isWeChatPlaceholderEmail, parseWeChatEmailBind } = require('../services/wechatOAuth');
         const newEmailRaw = safeParse(req.body.email) || req.body.email;
         let emailVerificationSent = false;
         let boundEmail: string | null = null;
-        if (
-            typeof newEmailRaw === 'string' &&
-            newEmailRaw.trim() &&
-            isWeChatPlaceholderEmail(email) &&
-            !isWeChatPlaceholderEmail(newEmailRaw)
-        ) {
-            const newEmail = newEmailRaw.trim().toLowerCase();
-            if (!/^[^\s@.]+(\.[^\s@.]+)*@[^\s@.]+(\.[^\s@.]+)+$/.test(newEmail)) {
-                return res.status(400).json({ status: 'FAIL', error: 'Please enter a valid email address.' });
-            }
-            const existing = await User.findOne({ email: { $eq: newEmail } });
+        const emailBind = parseWeChatEmailBind(email, newEmailRaw);
+        if (emailBind.action === 'invalid') {
+            return res.status(400).json({ status: 'FAIL', error: emailBind.error });
+        }
+        if (emailBind.action === 'bind') {
+            const existing = await User.findOne({ email: { $eq: emailBind.newEmail } });
             if (existing) {
                 return res.status(409).json({
                     status: 'FAIL',
@@ -1036,8 +1031,8 @@ const updateProfile = async (req: any, res: Response) => {
             }
             const me = await User.findOne({ email: { $eq: email } });
             if (me) {
-                updates.email = newEmail;
-                boundEmail = newEmail;
+                updates.email = emailBind.newEmail;
+                boundEmail = emailBind.newEmail;
             }
         }
 

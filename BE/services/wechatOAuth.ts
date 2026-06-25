@@ -36,6 +36,49 @@ export function isWeChatPlaceholderEmail(email: string | undefined | null): bool
   return String(email || "").toLowerCase().endsWith(`@${WECHAT_PLACEHOLDER_EMAIL_DOMAIN}`);
 }
 
+const EMAIL_REGEX = /^[^\s@.]+(\.[^\s@.]+)*@[^\s@.]+(\.[^\s@.]+)+$/;
+
+export type WeChatEmailBindResult =
+  | { action: "skip" }
+  | { action: "bind"; newEmail: string }
+  | { action: "invalid"; error: string };
+
+/** Decide whether profile completion should replace a WeChat placeholder email. */
+export function parseWeChatEmailBind(
+  currentEmail: string,
+  newEmailRaw: unknown,
+): WeChatEmailBindResult {
+  if (typeof newEmailRaw !== "string" || !newEmailRaw.trim()) return { action: "skip" };
+  if (!isWeChatPlaceholderEmail(currentEmail)) return { action: "skip" };
+  const newEmail = newEmailRaw.trim().toLowerCase();
+  if (isWeChatPlaceholderEmail(newEmail)) return { action: "skip" };
+  if (!EMAIL_REGEX.test(newEmail)) {
+    return { action: "invalid", error: "Please enter a valid email address." };
+  }
+  return { action: "bind", newEmail };
+}
+
+/** Map OAuth state/session role to the role used when creating a new WeChat user. */
+export function resolveWeChatDefaultRole(role: string | null | undefined): "customer" | "expert" {
+  return role === "expert" || role === "customer" ? role : "customer";
+}
+
+/** True when OAuth user still needs the post-login complete-profile step. */
+export function isOAuthProfileIncomplete(user: any, roleHint?: string | null): boolean {
+  if (isWeChatPlaceholderEmail(user?.email)) return true;
+  if (!user?.keywords || user.keywords.length === 0) return true;
+
+  const role = user?.role || roleHint;
+  if (role === "customer") {
+    if (!user.services || user.services.length === 0) return true;
+  } else if (role === "expert") {
+    if (!user.services || user.services.length === 0) return true;
+    if (!user.title || String(user.title).trim() === "") return true;
+    if (!user.description || String(user.description).trim() === "") return true;
+  }
+  return false;
+}
+
 function wechatPlaceholderEmail(oauthId: string): string {
   return `wechat_${oauthId}@${WECHAT_PLACEHOLDER_EMAIL_DOMAIN}`;
 }
@@ -167,4 +210,7 @@ module.exports = {
   exchangeCodeForUser,
   findOrCreateWeChatUser,
   isWeChatPlaceholderEmail,
+  parseWeChatEmailBind,
+  resolveWeChatDefaultRole,
+  isOAuthProfileIncomplete,
 };

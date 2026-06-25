@@ -6,6 +6,9 @@ const {
   exchangeCodeForUser,
   findOrCreateWeChatUser,
   isWeChatPlaceholderEmail,
+  parseWeChatEmailBind,
+  resolveWeChatDefaultRole,
+  isOAuthProfileIncomplete,
 } = require("../services/wechatOAuth");
 
 // fetch stub that returns a queue of JSON bodies (WeChat replies 200 + JSON text).
@@ -36,6 +39,67 @@ test("isWeChatPlaceholderEmail detects synthetic addresses only", () => {
   assert.equal(isWeChatPlaceholderEmail("real@gmail.com"), false);
   assert.equal(isWeChatPlaceholderEmail(""), false);
   assert.equal(isWeChatPlaceholderEmail(null), false);
+});
+
+test("parseWeChatEmailBind skips non-placeholder accounts and empty input", () => {
+  assert.deepEqual(parseWeChatEmailBind("real@gmail.com", "other@gmail.com"), { action: "skip" });
+  assert.deepEqual(parseWeChatEmailBind("wechat_x@wechat.local", ""), { action: "skip" });
+  assert.deepEqual(parseWeChatEmailBind("wechat_x@wechat.local", "   "), { action: "skip" });
+  assert.deepEqual(parseWeChatEmailBind("wechat_x@wechat.local", "wechat_y@wechat.local"), {
+    action: "skip",
+  });
+});
+
+test("parseWeChatEmailBind validates and normalizes a real email for placeholder accounts", () => {
+  assert.deepEqual(parseWeChatEmailBind("wechat_x@wechat.local", "Warren18522@yahoo.com"), {
+    action: "bind",
+    newEmail: "warren18522@yahoo.com",
+  });
+  const invalid = parseWeChatEmailBind("wechat_x@wechat.local", "not-an-email");
+  assert.equal(invalid.action, "invalid");
+  assert.match(invalid.error, /valid email/i);
+});
+
+test("resolveWeChatDefaultRole maps register roles and defaults login to customer", () => {
+  assert.equal(resolveWeChatDefaultRole("expert"), "expert");
+  assert.equal(resolveWeChatDefaultRole("customer"), "customer");
+  assert.equal(resolveWeChatDefaultRole("login"), "customer");
+  assert.equal(resolveWeChatDefaultRole(null), "customer");
+});
+
+test("isOAuthProfileIncomplete requires real email and role-specific fields", () => {
+  const base = {
+    email: "wechat_x@wechat.local",
+    keywords: ["k1"],
+    services: ["s1"],
+    title: "Dr",
+    description: "Bio long enough",
+  };
+  assert.equal(isOAuthProfileIncomplete(base), true);
+
+  const customerReady = {
+    email: "student@gmail.com",
+    role: "customer",
+    keywords: ["k1"],
+    services: ["s1"],
+  };
+  assert.equal(isOAuthProfileIncomplete(customerReady), false);
+
+  const expertMissingBio = {
+    email: "expert@gmail.com",
+    role: "expert",
+    keywords: ["k1"],
+    services: ["s1"],
+    title: "Dr",
+    description: "",
+  };
+  assert.equal(isOAuthProfileIncomplete(expertMissingBio), true);
+
+  const expertReady = {
+    ...expertMissingBio,
+    description: "I help students with aerospace applications and interviews.",
+  };
+  assert.equal(isOAuthProfileIncomplete(expertReady), false);
 });
 
 test("buildWeChatAuthUrl builds a qrconnect URL with encoded callback + state", () => {

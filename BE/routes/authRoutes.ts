@@ -182,20 +182,8 @@ const oauthCallback = async (req: any, res: any) => {
             .catch(err => console.error('RC sync failed (oauth):', err.message));
 
         // Check for incomplete profile (skip re-onboarding once email + required fields are set).
-        let isProfileIncomplete = false;
-        const { isWeChatPlaceholderEmail } = require('../services/wechatOAuth');
-        if (isWeChatPlaceholderEmail(user.email)) {
-            isProfileIncomplete = true;
-        }
-        if (!user.keywords || user.keywords.length === 0) isProfileIncomplete = true;
-        
-        if (user.role === 'customer' || role === 'customer') {
-            if (!user.services || user.services.length === 0) isProfileIncomplete = true;
-        } else if (user.role === 'expert' || role === 'expert') {
-            if (!user.services || user.services.length === 0) isProfileIncomplete = true;
-            if (!user.title || user.title.trim() === '') isProfileIncomplete = true;
-            if (!user.description || user.description.trim() === '') isProfileIncomplete = true;
-        }
+        const { isOAuthProfileIncomplete } = require('../services/wechatOAuth');
+        const isProfileIncomplete = isOAuthProfileIncomplete(user, role);
 
         const needsProfile = isNew || isProfileIncomplete;
 
@@ -227,7 +215,7 @@ router.get('/google', (req: any, res: any, next: any) => {
 router.get('/google/callback', passport.authenticate('google', { failureRedirect: '/login?error=google_failed', session: false }), oauthCallback);
 
 // WeChat (website QR / web login) — not a passport strategy, plain server-side HTTP.
-const { buildWeChatAuthUrl, exchangeCodeForUser, findOrCreateWeChatUser } = require('../services/wechatOAuth');
+const { buildWeChatAuthUrl, exchangeCodeForUser, findOrCreateWeChatUser, resolveWeChatDefaultRole } = require('../services/wechatOAuth');
 
 router.get('/wechat', (req: any, res: any) => {
     const role = req.query.role || 'login';
@@ -257,8 +245,7 @@ router.get('/wechat/callback', async (req: any, res: any) => {
         const parsedState = parseOAuthState(req.query.state);
         const sessionOAuth = req.session?.wechatOAuth;
         let role = parsedState.role || sessionOAuth?.role || 'login';
-        const defaultRole =
-            role === 'expert' || role === 'customer' ? role : 'customer';
+        const defaultRole = resolveWeChatDefaultRole(role);
 
         const profile = await exchangeCodeForUser(String(req.query.code));
         req.user = await findOrCreateWeChatUser(profile, { defaultRole });
