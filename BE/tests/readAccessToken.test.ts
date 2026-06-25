@@ -3,12 +3,12 @@ import assert from 'node:assert/strict';
 
 const { readAccessToken } = require('../middlewares/requireAuth');
 
-test('readAccessToken prefers cookie over Authorization header', () => {
+test('readAccessToken prefers Authorization header over cookie', () => {
   const req = {
     cookies: { accessToken: 'from-cookie' },
     headers: { authorization: 'Bearer from-header' },
   };
-  assert.equal(readAccessToken(req), 'from-cookie');
+  assert.equal(readAccessToken(req), 'from-header');
 });
 
 test('readAccessToken falls back to Bearer token when cookie missing', () => {

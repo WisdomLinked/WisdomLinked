@@ -6,6 +6,9 @@ import { callApi, getMe } from '../api/api';
 import { showErrorAlert } from '../actions/alertActions';
 import { useAppSelector } from '../store';
 import { actionTypes } from '../actions/types';
+import FormAlert from '../components/FormAlert';
+import { useFormAlert } from '../hooks/useFormAlert';
+import { clearCsrfToken, ensureCsrfToken } from '../api/csrf';
 
 export default function WLOAuthRolePicker() {
     const navigate = useNavigate();
@@ -13,6 +16,20 @@ export default function WLOAuthRolePicker() {
     const { auth: { userDetails } } = useAppSelector((state) => state);
     const [bootstrapping, setBootstrapping] = useState(!userDetails?.email);
     const [submitting, setSubmitting] = useState(false);
+    const {
+        message: formBannerMessage,
+        variant: formBannerVariant,
+        setFormError,
+        clearFormAlert,
+    } = useFormAlert();
+
+    const handleSessionAuthFailure = async (response?: { error?: string }) => {
+        setFormError(
+            response?.error || 'Session expired — please refresh the page and try again.',
+        );
+        clearCsrfToken();
+        await ensureCsrfToken();
+    };
 
     useEffect(() => {
         if (userDetails?.email) {
@@ -42,9 +59,23 @@ export default function WLOAuthRolePicker() {
 
     const chooseRole = async (role: 'customer' | 'expert') => {
         setSubmitting(true);
+        clearFormAlert();
         try {
-            const response = await callApi('PUT', 'auth/oauth-role', { role }) as any;
-            if (response === false) return;
+            const response = await callApi(
+                'PUT',
+                'auth/oauth-role',
+                { role },
+                undefined,
+                { notify: false, logoutOnAuth: false },
+            ) as any;
+            if (response === false) {
+                await handleSessionAuthFailure();
+                return;
+            }
+            if (response?.status === 'FAIL') {
+                setFormError(response.error || 'Could not save your role. Please try again.');
+                return;
+            }
             if (response.result || response.status === 'SUCCESS') {
                 const updatedUser = response.result;
                 if (updatedUser?.email) {
@@ -92,6 +123,12 @@ export default function WLOAuthRolePicker() {
                 </div>
 
                 <div className="bg-white rounded-3xl shadow-xl shadow-slate-200/50 p-6 sm:p-8 border border-slate-100">
+                    <FormAlert
+                        variant={formBannerVariant}
+                        message={formBannerMessage}
+                        onDismiss={clearFormAlert}
+                        className="mb-4"
+                    />
                     <div className="grid sm:grid-cols-2 gap-4">
                         <button
                             type="button"

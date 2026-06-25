@@ -31,7 +31,7 @@ const {
 
 } = require("../controllers/auth.controller");
 const { requireAuth } = require("../middlewares/requireAuth");
-const { authCookieOptions } = require("../config/authCookie");
+const { authCookieOptions, clearAuthCookieOptions } = require("../config/authCookie");
 const { apiLimiter, sensitiveLimiter } = require("../middlewares/rateLimit");
 const {
     validateLoginSchema,
@@ -41,7 +41,7 @@ const {
     getEventsBetweenCustomerAndExpert,
     getMyEvents
 } = require('../controllers/event.controller')
-const { uploadsGeneral, uploadsChatFile, uploadsProfilePhoto } = require("../middlewares/multerConfig");
+const { uploadsGeneral, uploadsChatFile, uploadsProfilePhoto, parseMultipartFields } = require("../middlewares/multerConfig");
 const { mapChatUploadMulterError } = require("../middlewares/multerConfig");
 const {
     stripePay,
@@ -85,7 +85,7 @@ router.post("/updateMissedChats", requireAuth(false), updateMissedChats);
 router.post("/updateProfile", requireAuth(false), updateProfile);
 router.post("/profilePhoto", requireAuth(false), uploadsProfilePhoto, uploadProfilePhoto);
 router.put("/profile", requireAuth(false), uploadsGeneral, updateProfile); // Used by complete profile flow
-router.put("/oauth-role", requireAuth(false), setOAuthRole);
+router.put("/oauth-role", requireAuth(false), parseMultipartFields, setOAuthRole);
 router.post("/getEventsBetweenCustomerAndExpert", requireAuth(false), getEventsBetweenCustomerAndExpert);
 router.get("/me", requireAuth(false), getMe);
 router.get("/getMyEvents", requireAuth(false), getMyEvents);
@@ -159,6 +159,7 @@ const oauthCallback = async (req: any, res: any) => {
         user.token = token;
         await user.save();
         
+        res.clearCookie('accessToken', clearAuthCookieOptions());
         res.cookie('accessToken', token, authCookieOptions());
         
         // Sync user to Rocket.Chat (fire-and-forget)

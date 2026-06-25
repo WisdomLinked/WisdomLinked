@@ -28,9 +28,18 @@ export function parseOAuthState(rawState: string | undefined | null): {
     }
   };
 
-  let parsed = tryParseJson(trimmed);
-  if (!parsed) parsed = tryParseJson(decodeURIComponent(trimmed));
-  if (parsed) return parsed;
+  let candidate = trimmed;
+  for (let i = 0; i < 3; i++) {
+    const parsed = tryParseJson(candidate);
+    if (parsed) return parsed;
+    try {
+      const decoded = decodeURIComponent(candidate);
+      if (decoded === candidate) break;
+      candidate = decoded;
+    } catch {
+      break;
+    }
+  }
 
   // Legacy: state was the role string directly.
   return { role: trimmed, redirectPath: '', timezone: '' };

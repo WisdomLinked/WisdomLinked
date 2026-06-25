@@ -65,12 +65,14 @@ export function checkForAuthorization(error: unknown): ApiFailure {
 
 export function handleAuthApiFailure(
     error: unknown,
+    options: HandleApiFailureOptions = {},
 ): ApiFailure | AuthApiFailBody {
-    const err = error as { response?: { status?: number; data?: unknown }; status?: number };
+    const logoutOnAuth = options.logoutOnAuth !== false;
+    const err = error as { response?: { status?: number; data?: unknown }; status?: number; parsedBody?: unknown };
     const responseCode = err?.response?.status ?? err?.status;
-    const responseData = err?.response?.data;
+    const responseData = err?.response?.data ?? err?.parsedBody;
 
-    if (shouldForceLogout(responseCode, responseData)) {
+    if (logoutOnAuth && shouldForceLogout(responseCode, responseData)) {
         store.dispatch(logoutUser());
         SetLoadingStatus(false);
         return false;

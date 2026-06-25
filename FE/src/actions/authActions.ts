@@ -3,12 +3,6 @@ import { getMe, callLogout } from "../api/api";
 import { resetChatAction } from "./chatActions";
 import { resetFriendsAction } from "./friendActions";
 import { actionTypes, CurrentUser } from "./types";
-
-import { Dispatch, } from "redux";
-import { getMe, callLogout } from "../api/api";
-import { resetChatAction } from "./chatActions";
-import { resetFriendsAction } from "./friendActions";
-import { actionTypes, CurrentUser } from "./types";
 import { clearCsrfToken } from "../api/csrf";
 import { clearClientAccessTokenCookie } from "../utils/authCookie";
 

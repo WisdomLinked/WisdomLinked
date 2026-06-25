@@ -8,11 +8,11 @@ const config = process.env;
 const escapeRegExp = (value) => String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 const readAccessToken = (req) => {
-    if (req.cookies?.accessToken) return req.cookies.accessToken;
     const header = req.headers?.authorization;
     if (typeof header === 'string' && header.startsWith('Bearer ')) {
         return header.slice(7).trim();
     }
+    if (req.cookies?.accessToken) return req.cookies.accessToken;
     return null;
 };
 

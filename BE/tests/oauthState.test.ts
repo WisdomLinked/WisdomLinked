@@ -32,3 +32,13 @@ test('blocksNewUserWithoutRegisterRole blocks Google login signup but not WeChat
   assert.equal(blocksNewUserWithoutRegisterRole(true, 'login', 'wechat'), false);
   assert.equal(blocksNewUserWithoutRegisterRole(false, 'login', 'google'), false);
 });
+
+test('parseOAuthState handles double-encoded JSON state from WeChat', () => {
+  const once = encodeURIComponent(
+    JSON.stringify({ role: 'expert', redirect: '', timezone: 'Asia/Shanghai' }),
+  );
+  const twice = encodeURIComponent(once);
+  const parsed = parseOAuthState(twice);
+  assert.equal(parsed.role, 'expert');
+  assert.equal(parsed.timezone, 'Asia/Shanghai');
+});

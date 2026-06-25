@@ -574,8 +574,9 @@ export const callApi = async (
     url: string,
     data: any,
     file?: any,
-    options?: { notify?: boolean },
+    options?: { notify?: boolean; logoutOnAuth?: boolean },
 ) => {
+    const callOptions = options || {};
     try {
 
         const formData = new FormData()
@@ -601,13 +602,13 @@ export const callApi = async (
             if (t) headers['X-CSRF-Token'] = t;
         }
 
-        let options: RequestInit = {
+        const fetchInit: RequestInit = {
             method: method,
             body: formData,
             credentials: 'include',
             headers,
         }
-        return fetch(BASE_URL + url, options)
+        return fetch(BASE_URL + url, fetchInit)
             .then(async (response: Response) => {
                 const contentType = response.headers.get('content-type');
                 const isJson =
@@ -643,10 +644,14 @@ export const callApi = async (
                 return {};
             })
             .catch((err) =>
-                options?.notify === false ? handleAuthApiFailure(err) : checkForAuthorization(err),
+                callOptions.notify === false
+                    ? handleAuthApiFailure(err, { logoutOnAuth: callOptions.logoutOnAuth })
+                    : handleApiFailure(err, { logoutOnAuth: callOptions.logoutOnAuth }),
             );
     } catch (err: any) {
-        return options?.notify === false ? handleAuthApiFailure(err) : checkForAuthorization(err);
+        return callOptions.notify === false
+            ? handleAuthApiFailure(err, { logoutOnAuth: callOptions.logoutOnAuth })
+            : handleApiFailure(err, { logoutOnAuth: callOptions.logoutOnAuth });
     }
 }
 

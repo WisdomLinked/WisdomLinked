@@ -8,6 +8,9 @@ import { useAppSelector } from '../store';
 import { autoLogin } from '../actions/authActions';
 import { actionTypes } from '../actions/types';
 import { SERVICE_LABELS } from '../constants/serviceOptions';
+import FormAlert from '../components/FormAlert';
+import { useFormAlert } from '../hooks/useFormAlert';
+import { clearCsrfToken, ensureCsrfToken } from '../api/csrf';
 
 // Same majors / services as WLCustomerRegister & WLExpertRegister (regular sign-up)
 const ENGINEERING_MAJORS = [
@@ -51,6 +54,20 @@ export default function WLProfileCompletion() {
     const [touched, setTouched] = useState<Record<string, boolean>>({});
     const [submitting, setSubmitting] = useState(false);
     const [bootstrapping, setBootstrapping] = useState(!userDetails?.email);
+    const {
+        message: formBannerMessage,
+        variant: formBannerVariant,
+        setFormError,
+        clearFormAlert,
+    } = useFormAlert();
+
+    const handleSessionAuthFailure = async (response?: { error?: string }) => {
+        setFormError(
+            response?.error || 'Session expired — please refresh the page and try again.',
+        );
+        clearCsrfToken();
+        await ensureCsrfToken();
+    };
     
     // Dropdown states
     const [showMajorDrop, setShowMajorDrop] = useState(false);
@@ -209,6 +226,7 @@ export default function WLProfileCompletion() {
         }
 
         setSubmitting(true);
+        clearFormAlert();
         try {
             const data = {
                 keywords: form.majors,
@@ -223,9 +241,22 @@ export default function WLProfileCompletion() {
                 })
             };
 
-            const response = await callApi('PUT', 'auth/profile', data, form.resumeFile || undefined) as any;
+            const response = await callApi(
+                'PUT',
+                'auth/profile',
+                data,
+                form.resumeFile || undefined,
+                { notify: false, logoutOnAuth: false },
+            ) as any;
 
-            if (response === false) return;
+            if (response === false) {
+                await handleSessionAuthFailure();
+                return;
+            }
+            if (response?.status === 'FAIL') {
+                setFormError(response.error || 'Failed to update profile.');
+                return;
+            }
             if (response.result || response.status === 'SUCCESS' || response.success) {
                 const updatedUser = response.result;
                 if (updatedUser?.email) {
@@ -305,6 +336,12 @@ export default function WLProfileCompletion() {
                 </div>
 
                 <div className="bg-white rounded-3xl shadow-xl shadow-slate-200/50 p-6 sm:p-10 border border-slate-100">
+                    <FormAlert
+                        variant={formBannerVariant}
+                        message={formBannerMessage}
+                        onDismiss={clearFormAlert}
+                        className="mb-6"
+                    />
                     <div className="space-y-6">
 
                         {isWeChatSignup && (

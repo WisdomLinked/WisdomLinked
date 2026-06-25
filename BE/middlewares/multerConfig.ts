@@ -78,10 +78,13 @@ const mapChatUploadMulterError = (err: any): string => {
   return CHAT_FILE_REQUIREMENTS_MESSAGE;
 };
 
+const parseMultipartFields = multer().none();
+
 module.exports = {
     uploadsGeneral,
     uploadsProfilePhoto,
     uploadsChatFile,
+    parseMultipartFields,
     MAX_GENERAL_FILE_SIZE_BYTES,
     MAX_CHAT_FILE_SIZE_BYTES,
     ALLOWED_CHAT_FILE_EXTENSIONS,
