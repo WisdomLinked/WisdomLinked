@@ -107,10 +107,16 @@ const passport = require('passport');
 const jwt = require('jsonwebtoken');
 import { syncUserToRocketChat } from '../services/rocketchat.service';
 
+const redirectLoginError = (res: any, code: string, extraParams: Record<string, string> = {}) => {
+    res.clearCookie('accessToken', clearAuthCookieOptions());
+    const params = new URLSearchParams({ error: code, ...extraParams });
+    return res.redirect(`${process.env.FE_URL}/login?${params.toString()}`);
+};
+
 const oauthCallback = async (req: any, res: any) => {
     try {
         const result = req.user;
-        if (!result) return res.redirect(`${process.env.FE_URL}/login?error=auth_failed`);
+        if (!result) return redirectLoginError(res, 'auth_failed');
 
         // Unpack { user, isNew } from findOrCreateOAuthUser
         const user = result.user || result;
@@ -133,7 +139,7 @@ const oauthCallback = async (req: any, res: any) => {
         if (blocksNewUserWithoutRegisterRole(isNew, role, user.oauthProvider)) {
             const User = require('../models/User');
             await User.findByIdAndDelete(user._id);
-            return res.redirect(`${process.env.FE_URL}/login?error=no_account`);
+            return redirectLoginError(res, 'no_account');
         }
 
         // Set role for NEW users from registration pages only
@@ -149,7 +155,7 @@ const oauthCallback = async (req: any, res: any) => {
         // Block existing users from switching roles via OAuth re-registration
         if (!isNew && role && (role === 'expert' || role === 'customer') && user.role !== role) {
             const roleName = user.role === 'customer' ? 'student' : (user.role || 'user');
-            return res.redirect(`${process.env.FE_URL}/login?error=role_mismatch&existingRole=${roleName}`);
+            return redirectLoginError(res, 'role_mismatch', { existingRole: roleName });
         }
         
         const token = jwt.sign(
@@ -194,7 +200,7 @@ const oauthCallback = async (req: any, res: any) => {
         res.redirect(redirectUrl);
     } catch (err) {
         console.error('[OAuth Callback Error]', err);
-        res.redirect(`${process.env.FE_URL}/login?error=auth_failed`);
+        return redirectLoginError(res, 'auth_failed');
     }
 };
 
@@ -237,7 +243,7 @@ router.get('/wechat', (req: any, res: any) => {
 router.get('/wechat/callback', async (req: any, res: any) => {
     try {
         if (req.query.errcode || !req.query.code) {
-            return res.redirect(`${process.env.FE_URL}/login?error=wechat_failed`);
+            return redirectLoginError(res, 'wechat_failed');
         }
         const { parseOAuthState } = require('../utils/oauthState');
         const parsedState = parseOAuthState(req.query.state);
@@ -250,7 +256,7 @@ router.get('/wechat/callback', async (req: any, res: any) => {
         return oauthCallback(req, res);
     } catch (err) {
         console.error('[WeChat OAuth Callback Error]', err);
-        return res.redirect(`${process.env.FE_URL}/login?error=wechat_failed`);
+        return redirectLoginError(res, 'wechat_failed');
     }
 });
 

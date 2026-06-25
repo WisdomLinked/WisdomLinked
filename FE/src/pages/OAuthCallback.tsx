@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useDispatch } from 'react-redux';
 import { getMe } from '../api/api';
 import { actionTypes } from '../actions/types';
+import { resetAuthSessionForLogin } from '../utils/resetAuthSession';
 
 export default function OAuthCallback() {
     const navigate = useNavigate();
@@ -13,26 +14,30 @@ export default function OAuthCallback() {
         const token = searchParams.get('token');
         const role = searchParams.get('role') || 'customer';
         const redirect = String(searchParams.get('redirect') || '').trim();
-        
-        if (!token) {
+
+        const fail = async () => {
+            await resetAuthSessionForLogin({ skipLogoutPost: true });
             navigate('/login?error=auth_failed', { replace: true });
+        };
+
+        if (!token) {
+            fail();
             return;
         }
 
         const needsProfile = searchParams.get('needsProfile') === 'true';
         const needsRole = searchParams.get('needsRole') === 'true';
 
-        localStorage.setItem('isLoginRemembered', 'true');
-
         const doLogin = async () => {
             const response: any = await getMe(token, { logoutOnAuth: false });
             dispatch({ type: 'SetLoadingStatus', payload: false });
 
             if (!response?.me?.email) {
-                navigate('/login?error=auth_failed', { replace: true });
+                await fail();
                 return;
             }
 
+            localStorage.setItem('isLoginRemembered', 'true');
             localStorage.setItem('currentUser', JSON.stringify(response.me));
             dispatch({
                 type: actionTypes.authenticate,

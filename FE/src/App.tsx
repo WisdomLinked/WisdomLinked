@@ -212,6 +212,18 @@ function App() {
 
   useEffect(() => {
     if (!userDetails?.email) return;
+    const path = window.location.pathname;
+    const isAuthSurface =
+      path.includes('/login') ||
+      path.includes('/oauth-callback') ||
+      path.includes('/auth-complete-profile') ||
+      path.includes('/auth-choose-role') ||
+      path.includes('/customerregister') ||
+      path.includes('/expertregister') ||
+      path.includes('/forgotpassword') ||
+      path.includes('/verification/') ||
+      path.includes('/verify-email-change/');
+    if (isAuthSurface) return;
     if (isRCConnected()) return;
     connectToRC().catch(() => {});
   }, [userDetails?.email])

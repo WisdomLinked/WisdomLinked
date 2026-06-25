@@ -11,6 +11,7 @@ import { SERVICE_LABELS } from '../constants/serviceOptions';
 import FormAlert from '../components/FormAlert';
 import { useFormAlert } from '../hooks/useFormAlert';
 import { refreshCsrfToken } from '../api/csrf';
+import { resetAuthSessionForLogin } from '../utils/resetAuthSession';
 
 // Same majors / services as WLCustomerRegister & WLExpertRegister (regular sign-up)
 const ENGINEERING_MAJORS = [
@@ -103,7 +104,10 @@ export default function WLProfileCompletion() {
 
     useEffect(() => {
         if (!bootstrapping && !userDetails?.email) {
-            navigate('/login?error=auth_failed', { replace: true });
+            (async () => {
+                await resetAuthSessionForLogin({ skipLogoutPost: true });
+                navigate('/login?error=auth_failed', { replace: true });
+            })();
         }
     }, [bootstrapping, userDetails?.email, navigate]);
 

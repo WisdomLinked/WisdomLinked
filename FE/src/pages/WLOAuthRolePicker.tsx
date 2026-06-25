@@ -9,6 +9,7 @@ import { actionTypes } from '../actions/types';
 import FormAlert from '../components/FormAlert';
 import { useFormAlert } from '../hooks/useFormAlert';
 import { refreshCsrfToken } from '../api/csrf';
+import { resetAuthSessionForLogin } from '../utils/resetAuthSession';
 
 export default function WLOAuthRolePicker() {
     const navigate = useNavigate();
@@ -56,7 +57,10 @@ export default function WLOAuthRolePicker() {
 
     useEffect(() => {
         if (!bootstrapping && !userDetails?.email) {
-            navigate('/login?error=auth_failed', { replace: true });
+            (async () => {
+                await resetAuthSessionForLogin({ skipLogoutPost: true });
+                navigate('/login?error=auth_failed', { replace: true });
+            })();
         }
     }, [bootstrapping, userDetails?.email, navigate]);
 

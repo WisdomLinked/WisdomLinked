@@ -4,6 +4,7 @@ import { useDispatch } from 'react-redux';
 import { Mail, Lock, AlertCircle, Eye, EyeOff, ArrowLeft, RefreshCw, ShieldCheck } from 'lucide-react';
 import { login, confirmLoginByCode } from '../api/api';
 import { refreshCsrfToken, bootstrapCsrfToken, isCsrfError } from '../api/csrf';
+import { resetAuthSessionForLogin } from '../utils/resetAuthSession';
 import { clearClientAccessTokenCookie } from '../utils/authCookie';
 import { showSuccessAlert } from '../actions/alertActions';
 import FormAlert from '../components/FormAlert';
@@ -105,7 +106,18 @@ export default function WLLogin() {
     };
 
     useEffect(() => {
-        bootstrapCsrf();
+        const err = searchParams.get('error');
+        if (err) {
+            setOauthError(err);
+        }
+
+        const init = async () => {
+            if (err === 'auth_failed' || err === 'wechat_failed') {
+                await resetAuthSessionForLogin({ skipLogoutPost: true });
+            }
+            await bootstrapCsrf();
+        };
+        init();
     }, []);
 
     const validate = () => {
@@ -348,6 +360,16 @@ export default function WLLogin() {
                                             {searchParams.get('existingRole') 
                                                 ? `This email is already registered as a ${searchParams.get('existingRole')} account. Please log in to your existing account, or use a different email to register a new role.`
                                                 : "An account already exists with a different role. Please log in with your existing role."}
+                                        </span>
+                                    </div>
+                                )}
+                                {(oauthError === 'auth_failed' || oauthError === 'wechat_failed') && (
+                                    <div className="mb-4 p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-sm flex items-start gap-2">
+                                        <AlertCircle size={16} className="mt-0.5 shrink-0" />
+                                        <span>
+                                            {oauthError === 'wechat_failed'
+                                                ? 'WeChat sign-in was cancelled or failed. You can try again or sign in with email below.'
+                                                : 'Social sign-in could not be completed. You can try again or sign in with email below.'}
                                         </span>
                                     </div>
                                 )}
