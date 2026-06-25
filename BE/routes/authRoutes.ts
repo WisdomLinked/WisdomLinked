@@ -113,36 +113,22 @@ const oauthCallback = async (req: any, res: any) => {
         const user = result.user || result;
         const isNew = result.isNew || false;
 
-        // Read role + redirect + timezone from OAuth state parameter (Google/Facebook) or session (Twitter)
-        const rawState = String(req.query.state || '').trim();
-        let role: string | null = (req.session && req.session.oauthRole) || null;
-        let redirectPath = '';
-        let timezone = '';
-        if (rawState) {
-            try {
-                const parsed = JSON.parse(decodeURIComponent(rawState));
-                if (parsed && typeof parsed === 'object') {
-                    if (typeof parsed.role === 'string' && parsed.role.trim()) {
-                        role = parsed.role.trim();
-                    }
-                    if (typeof parsed.redirect === 'string' && parsed.redirect.trim()) {
-                        redirectPath = parsed.redirect.trim();
-                    }
-                    if (typeof parsed.timezone === 'string' && parsed.timezone.trim()) {
-                        timezone = parsed.timezone.trim();
-                    }
-                } else {
-                    role = rawState;
-                }
-            } catch {
-                // Backward compatibility: old state format used role directly.
-                role = rawState;
-            }
+        const { parseOAuthState, blocksNewUserWithoutRegisterRole } = require('../utils/oauthState');
+        const parsedState = parseOAuthState(req.query.state);
+        let role: string | null = (req.session && req.session.oauthRole) || parsedState.role;
+        let redirectPath = parsedState.redirectPath;
+        let timezone = parsedState.timezone;
+
+        // WeChat from login sends role=login — treat as signup (no email to match an existing account).
+        if (
+            isNew &&
+            user.oauthProvider === 'wechat' &&
+            (!role || role === 'login' || (role !== 'expert' && role !== 'customer'))
+        ) {
+            role = user.role || 'customer';
         }
 
-        // If new user came from login page (no role), block signup and redirect to register
-        if (isNew && (!role || (role !== 'expert' && role !== 'customer'))) {
-            // Delete the auto-created user since they should register first
+        if (blocksNewUserWithoutRegisterRole(isNew, role, user.oauthProvider)) {
             const User = require('../models/User');
             await User.findByIdAndDelete(user._id);
             return res.redirect(`${process.env.FE_URL}/login?error=no_account`);
