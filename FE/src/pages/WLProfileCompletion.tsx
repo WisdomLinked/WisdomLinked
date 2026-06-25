@@ -67,6 +67,10 @@ export default function WLProfileCompletion() {
         );
         await refreshCsrfToken();
     };
+
+    useEffect(() => {
+        refreshCsrfToken();
+    }, []);
     
     // Dropdown states
     const [showMajorDrop, setShowMajorDrop] = useState(false);

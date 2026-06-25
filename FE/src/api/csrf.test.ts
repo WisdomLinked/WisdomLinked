@@ -58,4 +58,26 @@ describe('csrf', () => {
         expect(refreshed).toBe('token-c');
         expect(axiosGet).toHaveBeenCalledTimes(2);
     });
+
+    it('force refresh waits for in-flight fetch before starting a new one', async () => {
+        const csrf = await import('./csrf');
+        let resolveFirst: (value: { data: { csrfToken: string } }) => void = () => {};
+        axiosGet.mockImplementationOnce(
+            () =>
+                new Promise((resolve) => {
+                    resolveFirst = resolve;
+                }),
+        );
+
+        const first = csrf.ensureCsrfToken();
+        axiosGet.mockResolvedValueOnce({ data: { csrfToken: 'token-final' } });
+        const forced = csrf.refreshCsrfToken();
+        resolveFirst({ data: { csrfToken: 'token-stale' } });
+
+        await first;
+        const result = await forced;
+
+        expect(result).toBe('token-final');
+        expect(axiosGet).toHaveBeenCalledTimes(2);
+    });
 });

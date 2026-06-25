@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { User, Mail, Lock, Phone, AlertCircle, CheckCircle, ChevronDown, ArrowRight, Upload, BookOpen, Eye, EyeOff, Check, Search, Plus } from 'lucide-react';
 import { callApi } from '../api/api';
+import { refreshCsrfToken } from '../api/csrf';
 import FormAlert from '../components/FormAlert';
 import { useFormAlert } from '../hooks/useFormAlert';
 import SocialAuthBlock from '../components/SocialAuthBlock';
@@ -65,6 +66,10 @@ export default function WLExpertRegister() {
     const countryRef = useRef<HTMLDivElement>(null);
     const codeRef = useRef<HTMLDivElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
+
+    useEffect(() => {
+        refreshCsrfToken();
+    }, []);
 
     const getPasswordUnmetRules = (password: string) => {
         const unmet: string[] = [];

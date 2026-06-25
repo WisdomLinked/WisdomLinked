@@ -184,7 +184,6 @@ function App() {
   const [oldUserDetails, set_oldUserDetails] = useState(userDetails)
 
   useEffect(() => {
-    ensureCsrfToken();
     const path = window.location.pathname;
     const isAuthSurface =
       path.includes('/login') ||
@@ -196,6 +195,9 @@ function App() {
       path.includes('/forgotpassword') ||
       path.includes('/verification/') ||
       path.includes('/verify-email-change/');
+    if (!isAuthSurface) {
+      ensureCsrfToken();
+    }
     if (isAuthSurface) return;
 
     const storedUser = localStorage.getItem("currentUser");

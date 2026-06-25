@@ -31,6 +31,10 @@ export default function WLOAuthRolePicker() {
     };
 
     useEffect(() => {
+        refreshCsrfToken();
+    }, []);
+
+    useEffect(() => {
         if (userDetails?.email) {
             setBootstrapping(false);
             return;

@@ -37,6 +37,9 @@ const fetchCsrfToken = (): Promise<string | null> => {
 
 export const ensureCsrfToken = async (options?: { force?: boolean }): Promise<string | null> => {
     if (options?.force) {
+        if (inflight) {
+            await inflight.catch(() => null);
+        }
         clearCsrfToken();
     } else if (token) {
         return token;

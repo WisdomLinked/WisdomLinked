@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Mail, Lock, RefreshCw, AlertCircle, Eye, EyeOff, ArrowLeft, ArrowRight, ShieldCheck, CheckCircle } from 'lucide-react';
 import { passwordResetRequest, verifyPasswordResetOTP, confirmPasswordResetByCode } from '../api/api';
+import { refreshCsrfToken } from '../api/csrf';
 
 const BTN_PRIMARY_STYLE = { background: 'linear-gradient(135deg, #234C6A 0%, #456882 100%)' };
 const FOCUS_RING = 'focus:ring-2 focus:ring-[#234C6A]/60 focus:border-[#234C6A]';
@@ -25,6 +26,10 @@ export default function ForgotPassword() {
     const [otpError, setOtpError] = useState('');
     const [otpResendSuccess, setOtpResendSuccess] = useState('');
     const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
+
+    useEffect(() => {
+        refreshCsrfToken();
+    }, []);
 
     const PasswordRequirement = ({ met, text }: { met: boolean, text: string }) => (
         <p className={`text-xs flex items-center gap-1 ${met ? 'text-green-600' : 'text-slate-400'}`}>
