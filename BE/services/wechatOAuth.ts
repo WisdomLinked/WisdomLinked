@@ -27,6 +27,8 @@ type FindOrCreateDeps = {
   importPhoto?: (user: any, url: string | null | undefined) => Promise<unknown>;
   createGeneralChat?: (userId: any) => Promise<unknown>;
   sendApprovalEmail?: (username: string) => unknown;
+  /** customer | expert — only applied when creating a new user */
+  defaultRole?: "customer" | "expert";
 };
 
 // True for emails minted for WeChat-only accounts that still need a real email.
@@ -131,7 +133,7 @@ export async function findOrCreateWeChatUser(
     username: profile.nickname || "WeChat User",
     oauthProvider: "wechat",
     oauthId: profile.oauthId,
-    role: "customer",
+    role: deps.defaultRole === "expert" ? "expert" : "customer",
     status: "review", // OAuth users still need admin approval
   });
   await user.save();

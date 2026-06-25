@@ -6,6 +6,7 @@ import { callApi } from '../api/api';
 import { showErrorAlert, showSuccessAlert, showWarningAlert } from '../actions/alertActions';
 import { useAppSelector } from '../store';
 import { autoLogin } from '../actions/authActions';
+import { actionTypes } from '../actions/types';
 import { SERVICE_LABELS } from '../constants/serviceOptions';
 
 // Same majors / services as WLCustomerRegister & WLExpertRegister (regular sign-up)
@@ -49,6 +50,7 @@ export default function WLProfileCompletion() {
     const [errors, setErrors] = useState<Record<string, string>>({});
     const [touched, setTouched] = useState<Record<string, boolean>>({});
     const [submitting, setSubmitting] = useState(false);
+    const [bootstrapping, setBootstrapping] = useState(!userDetails?.email);
     
     // Dropdown states
     const [showMajorDrop, setShowMajorDrop] = useState(false);
@@ -58,6 +60,25 @@ export default function WLProfileCompletion() {
 
     const [majorSearch, setMajorSearch] = useState('');
     const [customMajors, setCustomMajors] = useState<string[]>([]);
+
+    useEffect(() => {
+        if (userDetails?.email) {
+            setBootstrapping(false);
+            return;
+        }
+        let cancelled = false;
+        (async () => {
+            await dispatch(autoLogin() as any);
+            if (!cancelled) setBootstrapping(false);
+        })();
+        return () => { cancelled = true; };
+    }, [dispatch, userDetails?.email]);
+
+    useEffect(() => {
+        if (!bootstrapping && !userDetails?.email) {
+            navigate('/login?error=auth_failed', { replace: true });
+        }
+    }, [bootstrapping, userDetails?.email, navigate]);
 
     useEffect(() => {
         if (!isWeChatSignup) return;
@@ -199,14 +220,23 @@ export default function WLProfileCompletion() {
 
             if (response === false) return;
             if (response.result || response.status === 'SUCCESS' || response.success) {
-                if (isWeChatSignup && response.emailVerificationSent) {
-                    dispatch(showSuccessAlert(
-                        `We've sent a confirmation link to ${form.email.trim().toLowerCase()}. Click it to finish setting your email.`
-                    ));
+                if (response.token) {
+                    document.cookie = `accessToken=${response.token}; path=/; max-age=86400`;
                 }
-                // Refresh user details
+                const updatedUser = response.result;
+                if (updatedUser?.email) {
+                    localStorage.setItem('currentUser', JSON.stringify(updatedUser));
+                    dispatch({
+                        type: actionTypes.authenticate,
+                        payload: updatedUser,
+                    });
+                }
                 await dispatch(autoLogin() as any);
-                const dashboardPath = role === 'customer' ? '/user/studentdashboard' : `/user/${role}dashboard`;
+                const dashboardRole = updatedUser?.role || userDetails?.role || role;
+                const dashboardPath =
+                    dashboardRole === 'customer'
+                        ? '/user/studentdashboard'
+                        : `/user/${dashboardRole}dashboard`;
                 navigate(dashboardPath, { replace: true });
             } else {
                 dispatch(showErrorAlert(response.error || 'Failed to update profile.'));
@@ -220,6 +250,14 @@ export default function WLProfileCompletion() {
     const inputBase = `w-full rounded-xl border bg-white px-4 py-3 text-sm text-slate-800 placeholder-slate-400 outline-none transition-all duration-200 ${FOCUS_RING}`;
     const inputNormal = `${inputBase} border-slate-200`;
     const inputError = `${inputBase} border-red-300 focus:ring-red-300 focus:border-red-400 bg-red-50/30`;
+
+    if (bootstrapping) {
+        return (
+            <div className="w-full min-h-screen flex items-center justify-center bg-slate-50">
+                <Loader2 className="h-8 w-8 animate-spin text-[#234C6A]" />
+            </div>
+        );
+    }
 
     return (
         <div className="relative min-h-screen py-12 px-4 bg-slate-50">

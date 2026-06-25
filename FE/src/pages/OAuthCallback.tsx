@@ -1,7 +1,8 @@
 import React, { useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useDispatch } from 'react-redux';
-import { autoLogin } from '../actions/authActions';
+import { getMe } from '../api/api';
+import { actionTypes } from '../actions/types';
 
 export default function OAuthCallback() {
     const navigate = useNavigate();
@@ -25,12 +26,21 @@ export default function OAuthCallback() {
         document.cookie = `accessToken=${token}; path=/; max-age=86400`;
 
         localStorage.setItem('isLoginRemembered', 'true');
-        localStorage.setItem('currentUser', JSON.stringify({ email: 'oauth-user' }));
 
-        // Dispatch autoLogin which calls /auth/me using the cookie
         const doLogin = async () => {
-            await dispatch(autoLogin() as any);
+            const response: any = await getMe();
             dispatch({ type: 'SetLoadingStatus', payload: false });
+
+            if (!response?.me?.email) {
+                navigate('/login?error=auth_failed', { replace: true });
+                return;
+            }
+
+            localStorage.setItem('currentUser', JSON.stringify(response.me));
+            dispatch({
+                type: actionTypes.authenticate,
+                payload: response.me,
+            });
 
             if (needsProfile) {
                 navigate('/auth-complete-profile', { replace: true });

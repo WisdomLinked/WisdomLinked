@@ -115,15 +115,23 @@ const oauthCallback = async (req: any, res: any) => {
 
         const { parseOAuthState, blocksNewUserWithoutRegisterRole } = require('../utils/oauthState');
         const parsedState = parseOAuthState(req.query.state);
-        let role: string | null = (req.session && req.session.oauthRole) || parsedState.role;
-        let redirectPath = parsedState.redirectPath;
-        let timezone = parsedState.timezone;
+        const sessionOAuth = req.session?.wechatOAuth;
+        let role: string | null =
+            (req.session && req.session.oauthRole) ||
+            parsedState.role ||
+            (sessionOAuth && sessionOAuth.role) ||
+            null;
+        let redirectPath = parsedState.redirectPath || String(sessionOAuth?.redirect || '').trim();
+        let timezone = parsedState.timezone || String(sessionOAuth?.timezone || '').trim();
+        if (req.session?.wechatOAuth) {
+            delete req.session.wechatOAuth;
+        }
 
-        // WeChat from login sends role=login — treat as signup (no email to match an existing account).
+        // WeChat from login page (role=login): default to student signup, not block.
         if (
             isNew &&
             user.oauthProvider === 'wechat' &&
-            (!role || role === 'login' || (role !== 'expert' && role !== 'customer'))
+            (role === 'login' || !role)
         ) {
             role = user.role || 'customer';
         }
@@ -173,10 +181,12 @@ const oauthCallback = async (req: any, res: any) => {
             })
             .catch(err => console.error('RC sync failed (oauth):', err.message));
 
-        // Check for incomplete profile
+        // Check for incomplete profile (skip re-onboarding once email + required fields are set).
         let isProfileIncomplete = false;
         const { isWeChatPlaceholderEmail } = require('../services/wechatOAuth');
-        if (isWeChatPlaceholderEmail(user.email)) isProfileIncomplete = true;
+        if (isWeChatPlaceholderEmail(user.email)) {
+            isProfileIncomplete = true;
+        }
         if (!user.keywords || user.keywords.length === 0) isProfileIncomplete = true;
         
         if (user.role === 'customer' || role === 'customer') {
@@ -223,6 +233,13 @@ router.get('/wechat', (req: any, res: any) => {
     const role = req.query.role || 'login';
     const redirectPath = String(req.query.redirect || '').trim();
     const timezone = String(req.query.timezone || '').trim();
+    if (req.session) {
+        req.session.wechatOAuth = {
+            role,
+            redirect: redirectPath.startsWith('/') ? redirectPath : '',
+            timezone,
+        };
+    }
     const state = encodeURIComponent(JSON.stringify({
         role,
         redirect: redirectPath.startsWith('/') ? redirectPath : '',
@@ -236,9 +253,16 @@ router.get('/wechat/callback', async (req: any, res: any) => {
         if (req.query.errcode || !req.query.code) {
             return res.redirect(`${process.env.FE_URL}/login?error=wechat_failed`);
         }
+        const { parseOAuthState } = require('../utils/oauthState');
+        const parsedState = parseOAuthState(req.query.state);
+        const sessionOAuth = req.session?.wechatOAuth;
+        let role = parsedState.role || sessionOAuth?.role || 'login';
+        const defaultRole =
+            role === 'expert' || role === 'customer' ? role : 'customer';
+
         const profile = await exchangeCodeForUser(String(req.query.code));
-        req.user = await findOrCreateWeChatUser(profile); // { user, isNew }
-        return oauthCallback(req, res); // reuse the shared OAuth callback (state, role, token, redirect)
+        req.user = await findOrCreateWeChatUser(profile, { defaultRole });
+        return oauthCallback(req, res);
     } catch (err) {
         console.error('[WeChat OAuth Callback Error]', err);
         return res.redirect(`${process.env.FE_URL}/login?error=wechat_failed`);

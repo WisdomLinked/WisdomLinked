@@ -1016,6 +1016,7 @@ const updateProfile = async (req: any, res: Response) => {
         const { isWeChatPlaceholderEmail } = require('../services/wechatOAuth');
         const newEmailRaw = safeParse(req.body.email) || req.body.email;
         let emailVerificationSent = false;
+        let boundEmail: string | null = null;
         if (
             typeof newEmailRaw === 'string' &&
             newEmailRaw.trim() &&
@@ -1026,7 +1027,6 @@ const updateProfile = async (req: any, res: Response) => {
             if (!/^[^\s@.]+(\.[^\s@.]+)*@[^\s@.]+(\.[^\s@.]+)+$/.test(newEmail)) {
                 return res.status(400).json({ status: 'FAIL', error: 'Please enter a valid email address.' });
             }
-            // v1: block when the email already belongs to another account (no auto-merge).
             const existing = await User.findOne({ email: { $eq: newEmail } });
             if (existing) {
                 return res.status(409).json({
@@ -1036,28 +1036,33 @@ const updateProfile = async (req: any, res: Response) => {
             }
             const me = await User.findOne({ email: { $eq: email } });
             if (me) {
-                const confirmCode = uuidv4();
-                await PendingEmailChange.deleteOne({ userId: me._id });
-                await PendingEmailChange.create({
-                    userId: me._id,
-                    currentEmail: email,
-                    newEmail,
-                    confirmCode,
-                });
-                await utils.sendEmailChangeVerification(newEmail, confirmCode);
-                emailVerificationSent = true;
+                updates.email = newEmail;
+                boundEmail = newEmail;
             }
         }
 
         // [User Model] -- add more updating fields based on the user model
         await User.findOneAndUpdate({ email: email }, updates, { new: true })
 
-        const result = await getFullUserData(email)
+        const resultEmail = boundEmail || email;
+        let freshToken: string | null = null;
+        if (boundEmail) {
+            const jwt = require('jsonwebtoken');
+            freshToken = jwt.sign(
+                { email: boundEmail },
+                process.env.JWT_SECRET,
+                { expiresIn: process.env.COOKIE_EXPIRED_TIME || '24h' },
+            );
+            res.cookie('accessToken', freshToken, authCookieOptions());
+        }
+
+        const result = await getFullUserData(resultEmail)
         result.password = null
         result.token = null
         return res.status(200).json({
             result: result,
             emailVerificationSent,
+            token: freshToken,
         });
     } catch (err) {
         console.log(err)

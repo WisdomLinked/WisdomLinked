@@ -145,6 +145,21 @@ test("findOrCreateWeChatUser creates a placeholder-email user (isNew=true) and r
   assert.equal(photoUrl, "https://wx/jane.png");
 });
 
+test("findOrCreateWeChatUser creates expert when defaultRole is expert", async () => {
+  const UserModel = makeFakeUserModel(null);
+  const result = await findOrCreateWeChatUser(
+    { oauthId: "union_expert", nickname: "Expert", headimgurl: "" },
+    {
+      UserModel,
+      importPhoto: async () => {},
+      createGeneralChat: async () => {},
+      sendApprovalEmail: () => {},
+      defaultRole: "expert",
+    },
+  );
+  assert.equal(result.user.role, "expert");
+});
+
 test("findOrCreateWeChatUser falls back to 'WeChat User' when nickname is empty", async () => {
   const UserModel = makeFakeUserModel(null);
   const result = await findOrCreateWeChatUser(
