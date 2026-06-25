@@ -10,7 +10,7 @@ import { actionTypes } from '../actions/types';
 import { SERVICE_LABELS } from '../constants/serviceOptions';
 import FormAlert from '../components/FormAlert';
 import { useFormAlert } from '../hooks/useFormAlert';
-import { clearCsrfToken, ensureCsrfToken } from '../api/csrf';
+import { refreshCsrfToken } from '../api/csrf';
 
 // Same majors / services as WLCustomerRegister & WLExpertRegister (regular sign-up)
 const ENGINEERING_MAJORS = [
@@ -65,8 +65,7 @@ export default function WLProfileCompletion() {
         setFormError(
             response?.error || 'Session expired — please refresh the page and try again.',
         );
-        clearCsrfToken();
-        await ensureCsrfToken();
+        await refreshCsrfToken();
     };
     
     // Dropdown states

@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useDispatch } from 'react-redux';
 import { Mail, Lock, AlertCircle, Eye, EyeOff, ArrowLeft, RefreshCw, ShieldCheck } from 'lucide-react';
 import { login, confirmLoginByCode } from '../api/api';
-import { clearCsrfToken, ensureCsrfToken } from '../api/csrf';
+import { refreshCsrfToken, isCsrfError } from '../api/csrf';
 import { clearClientAccessTokenCookie } from '../utils/authCookie';
 import { showSuccessAlert } from '../actions/alertActions';
 import FormAlert from '../components/FormAlert';
@@ -49,9 +49,20 @@ export default function WLLogin() {
 
     const handleSessionAuthFailure = async () => {
         setFormError('Session expired — please refresh the page and try again.');
-        clearCsrfToken();
-        await ensureCsrfToken();
+        await refreshCsrfToken();
     };
+
+    const handleCsrfFailure = async () => {
+        await refreshCsrfToken();
+        setFormError('Session token expired — try again.');
+    };
+
+    const isCsrfFailResponse = (response: any) =>
+        response?.status === 'FAIL' && isCsrfError({ error: response?.error }, 403);
+
+    useEffect(() => {
+        refreshCsrfToken();
+    }, []);
 
     const validate = () => {
         const e: Record<string, string> = {};
@@ -77,6 +88,8 @@ export default function WLLogin() {
                 startTimer();
                 // Focus first OTP input after transition
                 setTimeout(() => inputRefs.current[0]?.focus(), 400);
+            } else if (isCsrfFailResponse(response)) {
+                await handleCsrfFailure();
             } else {
                 setFormError(response.error || 'Invalid credentials. Please try again.');
             }
@@ -180,6 +193,8 @@ export default function WLLogin() {
                 } else {
                     navigate('/user/' + role + 'dashboard',{replace: true});
                 }
+            } else if (isCsrfFailResponse(response)) {
+                await handleCsrfFailure();
             } else {
                 setFormError(response.error || 'Verification failed. Please try again.');
                 setOtpDigits(['', '', '', '', '', '']);
@@ -206,6 +221,8 @@ export default function WLLogin() {
                 setOtpDigits(['', '', '', '', '', '']);
                 startTimer();
                 setTimeout(() => inputRefs.current[0]?.focus(), 100);
+            } else if (isCsrfFailResponse(response)) {
+                await handleCsrfFailure();
             } else {
                 setFormError(response.error || 'Failed to resend code.');
             }

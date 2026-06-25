@@ -8,7 +8,7 @@ import { useAppSelector } from '../store';
 import { actionTypes } from '../actions/types';
 import FormAlert from '../components/FormAlert';
 import { useFormAlert } from '../hooks/useFormAlert';
-import { clearCsrfToken, ensureCsrfToken } from '../api/csrf';
+import { refreshCsrfToken } from '../api/csrf';
 
 export default function WLOAuthRolePicker() {
     const navigate = useNavigate();
@@ -27,8 +27,7 @@ export default function WLOAuthRolePicker() {
         setFormError(
             response?.error || 'Session expired — please refresh the page and try again.',
         );
-        clearCsrfToken();
-        await ensureCsrfToken();
+        await refreshCsrfToken();
     };
 
     useEffect(() => {

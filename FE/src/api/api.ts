@@ -19,7 +19,7 @@ import {
     handleAuthApiFailure,
 } from "./apiErrorHandling";
 import { resolveUserFacingError } from "../utils/resolveUserFacingError";
-import { ensureCsrfToken, clearCsrfToken, needsCsrf, isCsrfError } from "./csrf";
+import { ensureCsrfToken, needsCsrf, isCsrfError } from "./csrf";
 import { logoutUser } from "../actions/authActions";
 import { SetLoadingStatus } from "../actions/appActions";
 
@@ -51,8 +51,7 @@ api.interceptors.response.use(
         const resp = error?.response;
         if (cfg && !cfg.__csrfRetried && isCsrfError(resp?.data, resp?.status)) {
             cfg.__csrfRetried = true;
-            clearCsrfToken();
-            const t = await ensureCsrfToken();
+            const t = await ensureCsrfToken({ force: true });
             if (t) {
                 cfg.headers = cfg.headers || {};
                 cfg.headers['X-CSRF-Token'] = t;
@@ -577,24 +576,20 @@ export const callApi = async (
     options?: { notify?: boolean; logoutOnAuth?: boolean },
 ) => {
     const callOptions = options || {};
-    try {
 
-        const formData = new FormData()
+    const runRequest = async (csrfRetried = false): Promise<unknown> => {
+        const formData = new FormData();
         for (const x in data) {
-            // Only stringify if the target is an object/array (like keywords or services)
-            // Otherwise, append primitive strings, booleans, and numbers directly
             if (typeof data[x] === 'object' && data[x] !== null) {
-                formData.append(x, JSON.stringify(data[x]))
+                formData.append(x, JSON.stringify(data[x]));
             } else {
-                formData.append(x, data[x])
+                formData.append(x, data[x]);
             }
         }
 
         if (file) {
             formData.append("media", file, file.name);
         }
-
-
 
         const headers: Record<string, string> = {};
         if (needsCsrf(method)) {
@@ -607,47 +602,46 @@ export const callApi = async (
             body: formData,
             credentials: 'include',
             headers,
+        };
+
+        const response = await fetch(BASE_URL + url, fetchInit);
+        const contentType = response.headers.get('content-type');
+        const isJson = contentType && contentType.indexOf('application/json') > -1;
+
+        if (!response.ok) {
+            let parsedBody: unknown = null;
+            if (isJson) {
+                try {
+                    parsedBody = await response.json();
+                } catch {
+                    parsedBody = null;
+                }
+            }
+            if (!csrfRetried && isCsrfError(parsedBody, response.status)) {
+                await ensureCsrfToken({ force: true });
+                return runRequest(true);
+            }
+            throw {
+                status: response.status,
+                statusText: response.statusText,
+                parsedBody,
+            };
         }
-        return fetch(BASE_URL + url, fetchInit)
-            .then(async (response: Response) => {
-                const contentType = response.headers.get('content-type');
-                const isJson =
-                    contentType && contentType.indexOf('application/json') > -1;
 
-                if (!response.ok) {
-                    let parsedBody: unknown = null;
-                    if (isJson) {
-                        try {
-                            parsedBody = await response.json();
-                        } catch {
-                            parsedBody = null;
-                        }
-                    }
-                    return Promise.reject({
-                        status: response.status,
-                        statusText: response.statusText,
-                        parsedBody,
-                    });
-                }
+        if (isJson) {
+            try {
+                const json = await response.json();
+                if (Array.isArray(json)) return [...json];
+                return { ...json };
+            } catch {
+                throw { status: response.status, statusText: response.statusText };
+            }
+        }
+        return {};
+    };
 
-                if (isJson) {
-                    return response
-                        .json()
-                        .then((json: any) => {
-                            if (Array.isArray(json)) return [...json];
-                            return { ...json };
-                        })
-                        .catch(() => {
-                            throw { status: response.status, statusText: response.statusText };
-                        });
-                }
-                return {};
-            })
-            .catch((err) =>
-                callOptions.notify === false
-                    ? handleAuthApiFailure(err, { logoutOnAuth: callOptions.logoutOnAuth })
-                    : handleApiFailure(err, { logoutOnAuth: callOptions.logoutOnAuth }),
-            );
+    try {
+        return await runRequest();
     } catch (err: any) {
         return callOptions.notify === false
             ? handleAuthApiFailure(err, { logoutOnAuth: callOptions.logoutOnAuth })

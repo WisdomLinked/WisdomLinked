@@ -1,6 +1,6 @@
 import axios from 'axios';
 import { resolveUserFacingError } from '../utils/resolveUserFacingError';
-import { ensureCsrfToken, clearCsrfToken, needsCsrf, isCsrfError } from './csrf';
+import { ensureCsrfToken, needsCsrf, isCsrfError } from './csrf';
 
 export type ChatApiResult<T> = { ok: true; data: T } | { ok: false; error: string };
 
@@ -51,8 +51,7 @@ api.interceptors.response.use(
         const resp = error?.response;
         if (cfg && !cfg.__csrfRetried && isCsrfError(resp?.data, resp?.status)) {
             cfg.__csrfRetried = true;
-            clearCsrfToken();
-            const t = await ensureCsrfToken();
+            const t = await ensureCsrfToken({ force: true });
             if (t) {
                 cfg.headers = cfg.headers || {};
                 cfg.headers['X-CSRF-Token'] = t;
