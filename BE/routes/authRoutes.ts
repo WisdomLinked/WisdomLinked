@@ -175,6 +175,8 @@ const oauthCallback = async (req: any, res: any) => {
 
         // Check for incomplete profile
         let isProfileIncomplete = false;
+        const { isWeChatPlaceholderEmail } = require('../services/wechatOAuth');
+        if (isWeChatPlaceholderEmail(user.email)) isProfileIncomplete = true;
         if (!user.keywords || user.keywords.length === 0) isProfileIncomplete = true;
         
         if (user.role === 'customer' || role === 'customer') {

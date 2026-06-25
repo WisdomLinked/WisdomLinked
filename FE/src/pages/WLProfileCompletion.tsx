@@ -31,9 +31,13 @@ export default function WLProfileCompletion() {
     // WeChat-only accounts get a synthetic wechat_<id>@wechat.local placeholder email
     // (WeChat returns no email). Ask them to bind a real one here.
     const needsEmail = String(userDetails?.email || '').toLowerCase().endsWith('@wechat.local');
+    const isWeChatSignup = needsEmail;
 
     const [form, setForm] = useState({
-        email: '',                       // WeChat bind-email only
+        fullName: userDetails?.username && userDetails.username !== 'WeChat User'
+            ? userDetails.username
+            : '',
+        email: '',
         majors: [] as string[],
         servicesOffered: [] as string[], // expert
         services: [] as string[],         // customer — same options as email/password sign-up
@@ -56,6 +60,13 @@ export default function WLProfileCompletion() {
     const [customMajors, setCustomMajors] = useState<string[]>([]);
 
     useEffect(() => {
+        if (!isWeChatSignup) return;
+        const fromWeChat = String(userDetails?.username || '').trim();
+        if (!fromWeChat || fromWeChat === 'WeChat User') return;
+        setForm((prev) => (prev.fullName.trim() ? prev : { ...prev, fullName: fromWeChat }));
+    }, [isWeChatSignup, userDetails?.username]);
+
+    useEffect(() => {
         const handler = (e: MouseEvent) => {
             if (majorRef.current && !majorRef.current.contains(e.target as Node)) {
                 if (showMajorDrop) handleBlur('majors');
@@ -73,6 +84,11 @@ export default function WLProfileCompletion() {
     const toTitleCase = (str: string) => str.toLowerCase().split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
 
     const validateField = (field: string, value: any) => {
+        if (field === 'fullName') {
+            if (!value.trim()) return 'Name is required';
+            if (value.trim().length < 2) return 'Name must be at least 2 characters';
+            return '';
+        }
         if (field === 'email') {
             if (!value.trim()) return 'Email is required';
             if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim())) return 'Enter a valid email address';
@@ -138,8 +154,8 @@ export default function WLProfileCompletion() {
     const validate = () => {
         const e: Record<string, string> = {};
         const fieldsToValidate = ['majors'];
-        if (needsEmail) {
-            fieldsToValidate.push('email');
+        if (isWeChatSignup) {
+            fieldsToValidate.push('fullName', 'email');
         }
         if (isExpert) {
             fieldsToValidate.push('title', 'bio', 'servicesOffered');
@@ -169,7 +185,10 @@ export default function WLProfileCompletion() {
             const data = {
                 keywords: form.majors,
                 services: isExpert ? form.servicesOffered : form.services,
-                ...(needsEmail && { email: form.email.trim().toLowerCase() }),
+                ...(isWeChatSignup && {
+                    email: form.email.trim().toLowerCase(),
+                    username: form.fullName.trim(),
+                }),
                 ...(isExpert && {
                     title: form.title,
                     description: form.bio
@@ -180,7 +199,7 @@ export default function WLProfileCompletion() {
 
             if (response === false) return;
             if (response.result || response.status === 'SUCCESS' || response.success) {
-                if (needsEmail && response.emailVerificationSent) {
+                if (isWeChatSignup && response.emailVerificationSent) {
                     dispatch(showSuccessAlert(
                         `We've sent a confirmation link to ${form.email.trim().toLowerCase()}. Click it to finish setting your email.`
                     ));
@@ -227,32 +246,60 @@ export default function WLProfileCompletion() {
                         Complete your profile
                     </h1>
                     <p className="text-slate-500 text-sm">
-                        Just a few more details to set up your WisdomLinked {role} account.
+                        {isWeChatSignup
+                            ? 'WeChat connected — add your email and finish the same profile details as other sign-ups.'
+                            : `Just a few more details to set up your WisdomLinked ${role} account.`}
                     </p>
                 </div>
 
                 <div className="bg-white rounded-3xl shadow-xl shadow-slate-200/50 p-6 sm:p-10 border border-slate-100">
                     <div className="space-y-6">
 
-                        {needsEmail && (
-                            <div>
-                                <label className="block text-sm font-semibold text-slate-700 mb-2">
-                                    Email Address <span className="text-red-500">*</span>
-                                </label>
-                                <input
-                                    type="email"
-                                    placeholder="you@example.com"
-                                    value={form.email}
-                                    onChange={e => handleChange('email', e.target.value)}
-                                    onBlur={() => handleBlur('email')}
-                                    className={errors.email ? inputError : inputNormal}
-                                />
-                                {errors.email ? (
-                                    <p className="mt-1.5 text-xs text-red-500 font-medium">{errors.email}</p>
-                                ) : (
-                                    <p className="mt-1.5 text-xs text-slate-500">WeChat didn't share an email — add one so we can reach you. We'll send a link to confirm it's yours.</p>
-                                )}
-                            </div>
+                        {isWeChatSignup && (
+                            <>
+                                <div>
+                                    <label className="block text-sm font-semibold text-slate-700 mb-2">
+                                        Full name <span className="text-red-500">*</span>
+                                    </label>
+                                    <input
+                                        type="text"
+                                        placeholder="e.g. Sarah Chen"
+                                        value={form.fullName}
+                                        onChange={e => handleChange('fullName', e.target.value)}
+                                        onBlur={() => handleBlur('fullName')}
+                                        className={errors.fullName ? inputError : inputNormal}
+                                        autoComplete="name"
+                                    />
+                                    {errors.fullName ? (
+                                        <p className="mt-1.5 text-xs text-red-500 font-medium">{errors.fullName}</p>
+                                    ) : (
+                                        <p className="mt-1.5 text-xs text-slate-500">
+                                            Pre-filled from WeChat when available — you can edit how your name appears.
+                                        </p>
+                                    )}
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-semibold text-slate-700 mb-2">
+                                        Email address <span className="text-red-500">*</span>
+                                    </label>
+                                    <input
+                                        type="email"
+                                        placeholder="you@example.com"
+                                        value={form.email}
+                                        onChange={e => handleChange('email', e.target.value)}
+                                        onBlur={() => handleBlur('email')}
+                                        className={errors.email ? inputError : inputNormal}
+                                        autoComplete="email"
+                                    />
+                                    {errors.email ? (
+                                        <p className="mt-1.5 text-xs text-red-500 font-medium">{errors.email}</p>
+                                    ) : (
+                                        <p className="mt-1.5 text-xs text-slate-500">
+                                            Required — WeChat does not share email. We will send a confirmation link.
+                                        </p>
+                                    )}
+                                </div>
+                            </>
                         )}
 
                         {isExpert && (
