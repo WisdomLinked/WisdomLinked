@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useDispatch } from 'react-redux';
 import { Mail, Lock, AlertCircle, Eye, EyeOff, ArrowLeft, RefreshCw, ShieldCheck } from 'lucide-react';
 import { login, confirmLoginByCode } from '../api/api';
-import { refreshCsrfToken, isCsrfError } from '../api/csrf';
+import { refreshCsrfToken, bootstrapCsrfToken, isCsrfError } from '../api/csrf';
 import { clearClientAccessTokenCookie } from '../utils/authCookie';
 import { showSuccessAlert } from '../actions/alertActions';
 import FormAlert from '../components/FormAlert';
@@ -31,6 +31,7 @@ export default function WLLogin() {
     const [form, setForm] = useState({ email: '', password: '' });
     const [errors, setErrors] = useState<Record<string, string>>({});
     const [submitting, setSubmitting] = useState(false);
+    const [csrfBootstrapping, setCsrfBootstrapping] = useState(true);
     const [csrfReady, setCsrfReady] = useState(false);
     const [showPassword, setShowPassword] = useState(false);
 
@@ -54,15 +55,15 @@ export default function WLLogin() {
     };
 
     const handleCsrfFailure = async () => {
-        setFormError('Session token expired — please refresh the page and try again.');
-        await refreshCsrfToken();
+        setFormError('Security token mismatch. Please try again.');
+        const token = await refreshCsrfToken();
+        setCsrfReady(Boolean(token));
     };
 
     const isCsrfFailResponse = (response: any) =>
         response?.status === 'FAIL' && isCsrfError({ error: response?.error }, 403);
 
     const requestLogin = async () => {
-        await refreshCsrfToken();
         let response: any = await login({ email: form.email, password: form.password });
         if (isCsrfFailResponse(response)) {
             await refreshCsrfToken();
@@ -72,7 +73,6 @@ export default function WLLogin() {
     };
 
     const requestConfirmLogin = async (code: string) => {
-        await refreshCsrfToken();
         let response: any = await confirmLoginByCode({
             email: form.email,
             password: form.password,
@@ -89,12 +89,23 @@ export default function WLLogin() {
         return response;
     };
 
+    const bootstrapCsrf = async () => {
+        setCsrfBootstrapping(true);
+        setCsrfReady(false);
+        clearFormAlert();
+        try {
+            await bootstrapCsrfToken();
+            setCsrfReady(true);
+        } catch {
+            setCsrfReady(false);
+            setFormError('Could not prepare sign-in. Wait a moment and try again.');
+        } finally {
+            setCsrfBootstrapping(false);
+        }
+    };
+
     useEffect(() => {
-        let cancelled = false;
-        refreshCsrfToken().finally(() => {
-            if (!cancelled) setCsrfReady(true);
-        });
-        return () => { cancelled = true; };
+        bootstrapCsrf();
     }, []);
 
     const validate = () => {
@@ -366,11 +377,20 @@ export default function WLLogin() {
                                 <div className="flex justify-end mt-2">
                                     <button type="button" onClick={() => navigate('/forgotpassword')} className="text-xs font-semibold hover:underline" style={{ color: '#234C6A' }}>Forgot password?</button>
                                 </div>
-                                <button onClick={handleSubmit} disabled={submitting || !csrfReady}
+                                <button onClick={handleSubmit} disabled={submitting || csrfBootstrapping || !csrfReady}
                                     className="mt-4 w-full flex items-center justify-center gap-2 px-6 py-3.5 rounded-2xl text-sm font-semibold text-white shadow-lg transition-all duration-200 disabled:opacity-70"
-                                    style={submitting || !csrfReady ? { background: '#9AA6B2' } : BTN_PRIMARY_STYLE}>
-                                    {submitting || !csrfReady ? (<><svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" /></svg>{csrfReady ? 'Signing in...' : 'Preparing...'}</>) : 'Sign in'}
+                                    style={submitting || csrfBootstrapping || !csrfReady ? { background: '#9AA6B2' } : BTN_PRIMARY_STYLE}>
+                                    {submitting ? (<><svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" /></svg>Signing in...</>) : csrfBootstrapping ? (<><svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" /></svg>Preparing...</>) : 'Sign in'}
                                 </button>
+                                {!csrfReady && !csrfBootstrapping && (
+                                    <button
+                                        type="button"
+                                        onClick={bootstrapCsrf}
+                                        className="mt-2 w-full py-2.5 rounded-xl border border-slate-200 text-slate-600 font-semibold text-sm hover:bg-slate-50"
+                                    >
+                                        Retry setup
+                                    </button>
+                                )}
                                 <SocialAuthBlock redirect={redirectPath.startsWith("/") ? redirectPath : undefined} />
                                 <p className="text-center text-slate-500 text-sm mt-4">
                                     Don't have an account? <button type="button" onClick={() => setShowSignupModal(true)} className="font-semibold hover:underline" style={{ color: '#234C6A' }}>Sign up</button>

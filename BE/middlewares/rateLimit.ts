@@ -19,13 +19,19 @@ function isOAuthAuthRoute(req: { path?: string; originalUrl?: string }): boolean
     return /\/api\/auth\/(google|wechat)(\/callback)?(\?|$)/.test(url);
 }
 
+/** CSRF bootstrap must never be rate-limited during login setup. */
+function isCsrfTokenRoute(req: { path?: string; method?: string }): boolean {
+    const path = req.path || '';
+    return req.method === 'GET' && /^\/csrf-token\/?$/.test(path);
+}
+
 export const apiLimiter = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minutes
     max: 300,
     standardHeaders: true,
     legacyHeaders: false,
     keyGenerator: keyByUserOrIp,
-    skip: (req) => RATE_LIMIT_DISABLED || isOAuthAuthRoute(req),
+    skip: (req) => RATE_LIMIT_DISABLED || isOAuthAuthRoute(req) || isCsrfTokenRoute(req),
     message,
 });
 

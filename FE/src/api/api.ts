@@ -1,4 +1,3 @@
-import axios from "axios";
 import { Method } from "axios";
 
 import {
@@ -22,16 +21,11 @@ import { resolveUserFacingError } from "../utils/resolveUserFacingError";
 import { ensureCsrfToken, needsCsrf, isCsrfError } from "./csrf";
 import { logoutUser } from "../actions/authActions";
 import { SetLoadingStatus } from "../actions/appActions";
+import { apiClient, BASE_URL } from "./apiClient";
 
-let BASE_URL = process.env.REACT_APP_API_BASE_URL || '/api';
-if (BASE_URL && !BASE_URL.endsWith('/')) {
-    BASE_URL += '/';
-}
+const api = apiClient;
 
-const api = axios.create({
-    withCredentials: true,
-    baseURL: BASE_URL
-});
+export { apiClient };
 
 api.interceptors.request.use(async (config) => {
     if (needsCsrf(config.method)) {

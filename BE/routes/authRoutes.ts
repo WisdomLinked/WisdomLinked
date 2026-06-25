@@ -53,6 +53,8 @@ const {
     getChatBotAnswer
 } = require('../controllers/chatBotQA.controller')
 
+router.get("/csrf-token", (req: any, res: any) => res.status(200).json({ csrfToken: req.csrfToken() }));
+
 // Baseline rate limiting for every auth route below.
 router.use(apiLimiter);
 
@@ -79,7 +81,6 @@ router.post("/passwordResetRequest", sensitiveLimiter, passwordResetRequest);
 router.post("/verifyPasswordResetOTP", sensitiveLimiter, verifyPasswordResetOTP);
 router.post("/confirmPasswordResetByCode", sensitiveLimiter, confirmPasswordResetByCode);
 router.post("/confirmEmailChange", sensitiveLimiter, confirmEmailChange);
-router.get("/csrf-token", (req: any, res: any) => res.status(200).json({ csrfToken: req.csrfToken() }));
 router.get("/getKeywordsAndServices", getKeywordsAndServices);
 router.post("/updateMissedChats", requireAuth(false), updateMissedChats);
 router.post("/updateProfile", requireAuth(false), updateProfile);
