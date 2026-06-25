@@ -11,13 +11,21 @@ const RATE_LIMIT_DISABLED = process.env.RATE_LIMIT_DISABLED === 'true';
 
 const message = { success: false, message: 'Too many requests, please try again later.' };
 
+/** OAuth browser redirects must not count toward API limits (breaks login after retries). */
+function isOAuthAuthRoute(req: { path?: string; originalUrl?: string }): boolean {
+    const path = req.path || '';
+    if (/^\/(google|wechat)(\/callback)?\/?$/.test(path)) return true;
+    const url = req.originalUrl || '';
+    return /\/api\/auth\/(google|wechat)(\/callback)?(\?|$)/.test(url);
+}
+
 export const apiLimiter = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minutes
     max: 300,
     standardHeaders: true,
     legacyHeaders: false,
     keyGenerator: keyByUserOrIp,
-    skip: () => RATE_LIMIT_DISABLED,
+    skip: (req) => RATE_LIMIT_DISABLED || isOAuthAuthRoute(req),
     message,
 });
 
