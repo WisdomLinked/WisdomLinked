@@ -22,9 +22,6 @@ export default function OAuthCallback() {
         const needsProfile = searchParams.get('needsProfile') === 'true';
         const needsRole = searchParams.get('needsRole') === 'true';
 
-        // Backend cookie is httpOnly; also pass token for bootstrap via Authorization header.
-        document.cookie = `accessToken=${token}; path=/; max-age=86400`;
-
         localStorage.setItem('isLoginRemembered', 'true');
 
         const doLogin = async () => {

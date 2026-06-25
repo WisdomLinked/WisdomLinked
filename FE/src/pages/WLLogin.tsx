@@ -3,6 +3,8 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useDispatch } from 'react-redux';
 import { Mail, Lock, AlertCircle, Eye, EyeOff, ArrowLeft, RefreshCw, ShieldCheck } from 'lucide-react';
 import { login, confirmLoginByCode } from '../api/api';
+import { clearCsrfToken, ensureCsrfToken } from '../api/csrf';
+import { clearClientAccessTokenCookie } from '../utils/authCookie';
 import { showSuccessAlert } from '../actions/alertActions';
 import FormAlert from '../components/FormAlert';
 import { useFormAlert } from '../hooks/useFormAlert';
@@ -45,6 +47,12 @@ export default function WLLogin() {
     const inputNormal = `${inputBase} border-slate-200`;
     const inputError = `${inputBase} border-red-300 focus:ring-red-300 focus:border-red-400 bg-red-50/30`;
 
+    const handleSessionAuthFailure = async () => {
+        setFormError('Session expired — please refresh the page and try again.');
+        clearCsrfToken();
+        await ensureCsrfToken();
+    };
+
     const validate = () => {
         const e: Record<string, string> = {};
         if (!form.email.trim()) e.email = 'Email is required';
@@ -60,7 +68,10 @@ export default function WLLogin() {
         clearFormAlert();
         try {
             const response = await login({ email: form.email, password: form.password }) as any;
-            if (response === false) return;
+            if (response === false) {
+                await handleSessionAuthFailure();
+                return;
+            }
             if (response?.status === 'SUCCESS') {
                 setCodeSent(true);
                 startTimer();
@@ -148,8 +159,13 @@ export default function WLLogin() {
                 password: form.password,
                 code
             });
-            if (response === false) return;
+            if (response === false) {
+                await handleSessionAuthFailure();
+                return;
+            }
             if (response?.status === 'SUCCESS') {
+                clearClientAccessTokenCookie();
+                localStorage.setItem('isLoginRemembered', 'true');
                 localStorage.setItem('currentUser', JSON.stringify(response.userDetails));
                 dispatch({ type: actionTypes.authenticate, payload: response.userDetails });
                 dispatch(showSuccessAlert(`Hi, ${response.userDetails.username} 👋. Welcome back.`));
@@ -181,7 +197,10 @@ export default function WLLogin() {
         clearFormAlert();
         try {
             const response: any = await login({ email: form.email, password: form.password });
-            if (response === false) return;
+            if (response === false) {
+                await handleSessionAuthFailure();
+                return;
+            }
             if (response?.status === 'SUCCESS') {
                 setFormSuccess('Verification code sent again.');
                 setOtpDigits(['', '', '', '', '', '']);

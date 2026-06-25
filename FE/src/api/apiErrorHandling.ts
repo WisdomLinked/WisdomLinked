@@ -3,6 +3,7 @@ import { showErrorAlert } from '../actions/alertActions';
 import { logoutUser } from '../actions/authActions';
 import { SetLoadingStatus } from '../actions/appActions';
 import { resolveUserFacingError } from '../utils/resolveUserFacingError';
+import { isCsrfError } from './csrf';
 
 export type ApiFailure = false;
 
@@ -15,6 +16,23 @@ export type HandleApiFailureOptions = {
     logoutOnAuth?: boolean;
 };
 
+function hasStoredSession(): boolean {
+    try {
+        const raw = localStorage.getItem('currentUser');
+        if (!raw || raw === '{}' || raw === 'undefined') return false;
+        const parsed = JSON.parse(raw);
+        return Boolean(parsed?.email);
+    } catch {
+        return false;
+    }
+}
+
+function shouldForceLogout(responseCode: number | undefined, responseData: unknown): boolean {
+    if (responseCode !== 401 && responseCode !== 403) return false;
+    if (isCsrfError(responseData, responseCode)) return false;
+    return hasStoredSession();
+}
+
 export function handleApiFailure(
     error: unknown,
     options: HandleApiFailureOptions = {},
@@ -22,10 +40,11 @@ export function handleApiFailure(
     const notify = options.notify !== false;
     const logoutOnAuth = options.logoutOnAuth !== false;
 
-    const err = error as { response?: { status?: number }; status?: number };
+    const err = error as { response?: { status?: number; data?: unknown }; status?: number };
     const responseCode = err?.response?.status ?? err?.status;
+    const responseData = err?.response?.data;
 
-    if (logoutOnAuth && (responseCode === 401 || responseCode === 403)) {
+    if (logoutOnAuth && shouldForceLogout(responseCode, responseData)) {
         store.dispatch(logoutUser());
         SetLoadingStatus(false);
         return false;
@@ -47,10 +66,11 @@ export function checkForAuthorization(error: unknown): ApiFailure {
 export function handleAuthApiFailure(
     error: unknown,
 ): ApiFailure | AuthApiFailBody {
-    const err = error as { response?: { status?: number }; status?: number };
+    const err = error as { response?: { status?: number; data?: unknown }; status?: number };
     const responseCode = err?.response?.status ?? err?.status;
+    const responseData = err?.response?.data;
 
-    if (responseCode === 401 || responseCode === 403) {
+    if (shouldForceLogout(responseCode, responseData)) {
         store.dispatch(logoutUser());
         SetLoadingStatus(false);
         return false;

@@ -185,6 +185,19 @@ function App() {
 
   useEffect(() => {
     ensureCsrfToken();
+    const path = window.location.pathname;
+    const isAuthSurface =
+      path.includes('/login') ||
+      path.includes('/oauth-callback') ||
+      path.includes('/auth-complete-profile') ||
+      path.includes('/auth-choose-role') ||
+      path.includes('/customerregister') ||
+      path.includes('/expertregister') ||
+      path.includes('/forgotpassword') ||
+      path.includes('/verification/') ||
+      path.includes('/verify-email-change/');
+    if (isAuthSurface) return;
+
     const storedUser = localStorage.getItem("currentUser");
     const currentUser: CurrentUser = JSON.parse(
       storedUser && storedUser !== "undefined" ? storedUser : "{}"

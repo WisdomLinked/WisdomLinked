@@ -318,5 +318,6 @@ module.exports = {
     customerAuth,
     expertAuth,
     getFullUserData,
-    adminAuth
+    adminAuth,
+    readAccessToken,
 };

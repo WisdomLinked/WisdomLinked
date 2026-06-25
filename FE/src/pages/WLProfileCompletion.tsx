@@ -227,9 +227,6 @@ export default function WLProfileCompletion() {
 
             if (response === false) return;
             if (response.result || response.status === 'SUCCESS' || response.success) {
-                if (response.token) {
-                    document.cookie = `accessToken=${response.token}; path=/; max-age=86400`;
-                }
                 const updatedUser = response.result;
                 if (updatedUser?.email) {
                     localStorage.setItem('currentUser', JSON.stringify(updatedUser));
