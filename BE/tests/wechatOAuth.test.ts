@@ -9,6 +9,8 @@ const {
   parseWeChatEmailBind,
   resolveWeChatDefaultRole,
   isOAuthProfileIncomplete,
+  needsOAuthRolePick,
+  buildOAuthCallbackParams,
 } = require("../services/wechatOAuth");
 
 // fetch stub that returns a queue of JSON bodies (WeChat replies 200 + JSON text).
@@ -65,6 +67,59 @@ test("resolveWeChatDefaultRole maps register roles and defaults login to custome
   assert.equal(resolveWeChatDefaultRole("customer"), "customer");
   assert.equal(resolveWeChatDefaultRole("login"), "customer");
   assert.equal(resolveWeChatDefaultRole(null), "customer");
+});
+
+test("needsOAuthRolePick is only true for brand-new WeChat users from login", () => {
+  assert.equal(needsOAuthRolePick(true, "login", "wechat"), true);
+  assert.equal(needsOAuthRolePick(true, null, "wechat"), true);
+  assert.equal(needsOAuthRolePick(true, "customer", "wechat"), false);
+  assert.equal(needsOAuthRolePick(true, "expert", "wechat"), false);
+  assert.equal(needsOAuthRolePick(false, "login", "wechat"), false);
+  assert.equal(needsOAuthRolePick(true, "login", "google"), false);
+});
+
+test("buildOAuthCallbackParams adds needsRole and needsProfile flags for login signup", () => {
+  const params = buildOAuthCallbackParams({
+    token: "jwt-token",
+    userRole: "customer",
+    isNew: true,
+    roleFromState: "login",
+    oauthProvider: "wechat",
+    isProfileIncomplete: true,
+    redirectPath: "/foo",
+  });
+  assert.equal(params.get("token"), "jwt-token");
+  assert.equal(params.get("role"), "customer");
+  assert.equal(params.get("needsRole"), "true");
+  assert.equal(params.get("needsProfile"), "true");
+  assert.equal(params.get("redirect"), "/foo");
+});
+
+test("buildOAuthCallbackParams skips needsRole for expert register", () => {
+  const params = buildOAuthCallbackParams({
+    token: "jwt-token",
+    userRole: "expert",
+    isNew: true,
+    roleFromState: "expert",
+    oauthProvider: "wechat",
+    isProfileIncomplete: true,
+  });
+  assert.equal(params.get("needsRole"), null);
+  assert.equal(params.get("needsProfile"), "true");
+  assert.equal(params.get("role"), "expert");
+});
+
+test("buildOAuthCallbackParams skips profile flags for returning users", () => {
+  const params = buildOAuthCallbackParams({
+    token: "jwt-token",
+    userRole: "customer",
+    isNew: false,
+    roleFromState: "login",
+    oauthProvider: "wechat",
+    isProfileIncomplete: false,
+  });
+  assert.equal(params.get("needsRole"), null);
+  assert.equal(params.get("needsProfile"), null);
 });
 
 test("isOAuthProfileIncomplete requires real email and role-specific fields", () => {

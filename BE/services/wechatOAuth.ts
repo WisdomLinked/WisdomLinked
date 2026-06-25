@@ -58,6 +58,43 @@ export function parseWeChatEmailBind(
   return { action: "bind", newEmail };
 }
 
+/** True when a brand-new WeChat user started from the login page and must pick a role. */
+export function needsOAuthRolePick(
+  isNew: boolean,
+  role: string | null | undefined,
+  oauthProvider: string | null | undefined,
+): boolean {
+  if (!isNew) return false;
+  if (oauthProvider !== "wechat") return false;
+  return role === "login" || !role;
+}
+
+export function buildOAuthCallbackParams(input: {
+  token: string;
+  userRole: string;
+  isNew: boolean;
+  roleFromState: string | null | undefined;
+  oauthProvider: string | null | undefined;
+  isProfileIncomplete: boolean;
+  redirectPath?: string;
+}): URLSearchParams {
+  const needsRolePick = needsOAuthRolePick(
+    input.isNew,
+    input.roleFromState,
+    input.oauthProvider,
+  );
+  const needsProfile = input.isNew || input.isProfileIncomplete;
+  const params = new URLSearchParams();
+  params.set("token", input.token);
+  params.set("role", input.userRole);
+  if (needsProfile) params.set("needsProfile", "true");
+  if (needsRolePick) params.set("needsRole", "true");
+  if (input.redirectPath?.startsWith("/")) {
+    params.set("redirect", input.redirectPath);
+  }
+  return params;
+}
+
 /** Map OAuth state/session role to the role used when creating a new WeChat user. */
 export function resolveWeChatDefaultRole(role: string | null | undefined): "customer" | "expert" {
   return role === "expert" || role === "customer" ? role : "customer";
@@ -213,4 +250,6 @@ module.exports = {
   parseWeChatEmailBind,
   resolveWeChatDefaultRole,
   isOAuthProfileIncomplete,
+  needsOAuthRolePick,
+  buildOAuthCallbackParams,
 };

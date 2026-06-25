@@ -31,6 +31,7 @@ const Rules = React.lazy(() => import('./pages/Ruels'));
 const Services = React.lazy(() => import('./pages/Services'));
 const ContactUS = React.lazy(() => import('./pages/ContactUS'));
 const OAuthCallback = React.lazy(() => import('./pages/OAuthCallback'));
+const WLOAuthRolePicker = React.lazy(() => import('./pages/WLOAuthRolePicker'));
 const WLProfileCompletion = React.lazy(() => import('./pages/WLProfileCompletion'));
 const MeetingGuestInvite = React.lazy(() => import('./pages/MeetingGuestInvite'));
 
@@ -52,6 +53,7 @@ const UnauthenticatedRoutes = () => {
     <React.Fragment>
       <Routes>
         <Route path="/oauth-callback" element={<OAuthCallback />} />
+        <Route path="/auth-choose-role" element={<WLOAuthRolePicker />} />
         <Route path="/auth-complete-profile" element={<WLProfileCompletion />} />
         <Route path="/customerregister" element={<WLCustomerRegister />} />
         <Route path="/expertregister" element={<WLExpertRegister />} />
@@ -213,6 +215,7 @@ function App() {
         path.includes('/verification/') ||
         path.includes('/verify-email-change/') ||
         path.includes('/auth-complete-profile') ||
+        path.includes('/auth-choose-role') ||
         path.includes('/meeting/invite/') ||
         (path.includes('/login') && search.includes('error='))
       ) {

@@ -1021,6 +1021,7 @@ const updateProfile = async (req: any, res: Response) => {
         if (emailBind.action === 'invalid') {
             return res.status(400).json({ status: 'FAIL', error: emailBind.error });
         }
+        let freshToken: string | null = null;
         if (emailBind.action === 'bind') {
             const existing = await User.findOne({ email: { $eq: emailBind.newEmail } });
             if (existing) {
@@ -1033,6 +1034,12 @@ const updateProfile = async (req: any, res: Response) => {
             if (me) {
                 updates.email = emailBind.newEmail;
                 boundEmail = emailBind.newEmail;
+                freshToken = jwt.sign(
+                    { email: emailBind.newEmail },
+                    process.env.JWT_SECRET,
+                    { expiresIn: process.env.COOKIE_EXPIRED_TIME || '24h' },
+                );
+                updates.token = freshToken;
             }
         }
 
@@ -1040,14 +1047,7 @@ const updateProfile = async (req: any, res: Response) => {
         await User.findOneAndUpdate({ email: email }, updates, { new: true })
 
         const resultEmail = boundEmail || email;
-        let freshToken: string | null = null;
-        if (boundEmail) {
-            const jwt = require('jsonwebtoken');
-            freshToken = jwt.sign(
-                { email: boundEmail },
-                process.env.JWT_SECRET,
-                { expiresIn: process.env.COOKIE_EXPIRED_TIME || '24h' },
-            );
+        if (freshToken) {
             res.cookie('accessToken', freshToken, authCookieOptions());
         }
 
@@ -1125,6 +1125,50 @@ const confirmEmailChange = async (req: Request, res: Response) => {
         return res.status(500).send(HTTP_GENERIC_ERROR);
     }
 }
+
+const setOAuthRole = async (req: any, res: Response) => {
+    try {
+        const role = typeof req.body.role === 'string' ? req.body.role.trim() : '';
+        if (role !== 'expert' && role !== 'customer') {
+            return res.status(400).json({ status: 'FAIL', error: 'Please choose student or expert.' });
+        }
+
+        const { email } = req.user;
+        const user = await User.findOne({ email: { $eq: email } });
+        if (!user) {
+            return res.status(404).json({ status: 'FAIL', error: AUTH_USER_NOT_FOUND });
+        }
+        if (!user.oauthProvider) {
+            return res.status(403).json({
+                status: 'FAIL',
+                error: 'Role selection is only available for social sign-up accounts.',
+            });
+        }
+        if (user.status !== 'review') {
+            return res.status(403).json({
+                status: 'FAIL',
+                error: 'Your account role is already set.',
+            });
+        }
+        if (user.keywords && user.keywords.length > 0) {
+            return res.status(403).json({
+                status: 'FAIL',
+                error: 'Complete your profile before changing role.',
+            });
+        }
+
+        user.role = role;
+        await user.save();
+
+        const result = await getFullUserData(email);
+        result.password = null;
+        result.token = null;
+        return res.status(200).json({ status: 'SUCCESS', result });
+    } catch (err) {
+        console.log(err);
+        return res.status(500).send(HTTP_GENERIC_ERROR);
+    }
+};
 
 const updateResume = async (req: Request, res: Response) => {
     try {
@@ -1458,6 +1502,7 @@ module.exports = {
     verifyPasswordResetOTP,
     confirmPasswordResetByCode,
     confirmEmailChange,
+    setOAuthRole,
     updateResume,
     uploadChatFile,
     healthCheck,

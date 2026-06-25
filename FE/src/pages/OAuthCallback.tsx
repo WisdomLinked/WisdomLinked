@@ -20,15 +20,15 @@ export default function OAuthCallback() {
         }
 
         const needsProfile = searchParams.get('needsProfile') === 'true';
+        const needsRole = searchParams.get('needsRole') === 'true';
 
-        // Set the accessToken cookie on the frontend domain
-        // (the backend cookie may not persist across redirect in some setups)
+        // Backend cookie is httpOnly; also pass token for bootstrap via Authorization header.
         document.cookie = `accessToken=${token}; path=/; max-age=86400`;
 
         localStorage.setItem('isLoginRemembered', 'true');
 
         const doLogin = async () => {
-            const response: any = await getMe();
+            const response: any = await getMe(token, { logoutOnAuth: false });
             dispatch({ type: 'SetLoadingStatus', payload: false });
 
             if (!response?.me?.email) {
@@ -42,7 +42,9 @@ export default function OAuthCallback() {
                 payload: response.me,
             });
 
-            if (needsProfile) {
+            if (needsRole) {
+                navigate('/auth-choose-role', { replace: true });
+            } else if (needsProfile) {
                 navigate('/auth-complete-profile', { replace: true });
             } else if (redirect.startsWith('/')) {
                 navigate(redirect, { replace: true });

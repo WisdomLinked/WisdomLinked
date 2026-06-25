@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useDispatch } from 'react-redux';
 import { ChevronDown, Check, Loader2 } from 'lucide-react';
-import { callApi } from '../api/api';
+import { callApi, getMe } from '../api/api';
 import { showErrorAlert, showSuccessAlert, showWarningAlert } from '../actions/alertActions';
 import { useAppSelector } from '../store';
 import { autoLogin } from '../actions/authActions';
@@ -68,7 +68,14 @@ export default function WLProfileCompletion() {
         }
         let cancelled = false;
         (async () => {
-            await dispatch(autoLogin() as any);
+            const response: any = await getMe(undefined, { logoutOnAuth: false });
+            if (response?.me?.email) {
+                localStorage.setItem('currentUser', JSON.stringify(response.me));
+                dispatch({
+                    type: actionTypes.authenticate,
+                    payload: response.me,
+                });
+            }
             if (!cancelled) setBootstrapping(false);
         })();
         return () => { cancelled = true; };
@@ -230,8 +237,18 @@ export default function WLProfileCompletion() {
                         type: actionTypes.authenticate,
                         payload: updatedUser,
                     });
+                } else if (response.token) {
+                    const meResponse: any = await getMe(response.token, { logoutOnAuth: false });
+                    if (meResponse?.me?.email) {
+                        localStorage.setItem('currentUser', JSON.stringify(meResponse.me));
+                        dispatch({
+                            type: actionTypes.authenticate,
+                            payload: meResponse.me,
+                        });
+                    }
+                } else {
+                    await dispatch(autoLogin() as any);
                 }
-                await dispatch(autoLogin() as any);
                 const dashboardRole = updatedUser?.role || userDetails?.role || role;
                 const dashboardPath =
                     dashboardRole === 'customer'

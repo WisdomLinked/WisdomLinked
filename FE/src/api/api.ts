@@ -15,6 +15,7 @@ import {
 import { store } from "../store";
 import {
     checkForAuthorization,
+    handleApiFailure,
     handleAuthApiFailure,
 } from "./apiErrorHandling";
 import { resolveUserFacingError } from "../utils/resolveUserFacingError";
@@ -208,9 +209,13 @@ export const getTimezone = async ({ lat, lng }: { lat: number; lng: number }) =>
 
 // protected routes
 
-export const getMe = async () => {
+export const getMe = async (accessToken?: string, options?: { logoutOnAuth?: boolean }) => {
     try {
-        const res = await api.get<GetMeResponse>("auth/me");
+        const headers: Record<string, string> = {};
+        if (accessToken) {
+            headers.Authorization = `Bearer ${accessToken}`;
+        }
+        const res = await api.get<GetMeResponse>("auth/me", { headers });
 
         return {
             me: res.data.me,
@@ -218,7 +223,10 @@ export const getMe = async () => {
         };
 
     } catch (err: any) {
-        return checkForAuthorization(err);
+        return handleApiFailure(err, {
+            notify: false,
+            logoutOnAuth: options?.logoutOnAuth !== false,
+        });
     }
 };
 

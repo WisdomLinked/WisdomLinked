@@ -7,6 +7,15 @@ const config = process.env;
 
 const escapeRegExp = (value) => String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
+const readAccessToken = (req) => {
+    if (req.cookies?.accessToken) return req.cookies.accessToken;
+    const header = req.headers?.authorization;
+    if (typeof header === 'string' && header.startsWith('Bearer ')) {
+        return header.slice(7).trim();
+    }
+    return null;
+};
+
 const getFullUserData = async (email) => {
     return await UserModel.findOne({
         email: { $regex: new RegExp(`^${escapeRegExp(email)}$`, 'i') }
@@ -90,7 +99,7 @@ const getFullUserData = async (email) => {
 
 const requireAuth = (restrictUnderReview = false) => async (req, res, next) => {
     try {
-        const { accessToken } = req.cookies
+        const accessToken = readAccessToken(req)
         if (!accessToken) {
             throw new Error("cookie has been expired");
         }
@@ -144,7 +153,7 @@ const requireAuth = (restrictUnderReview = false) => async (req, res, next) => {
 const customerAuth = (restrictUnderReview = false) => async (req, res, next) => {
     try {
 
-        const { accessToken } = req.cookies
+        const accessToken = readAccessToken(req)
         if (!accessToken) {
             throw new Error("cookie has been expired");
         }
@@ -201,7 +210,7 @@ const customerAuth = (restrictUnderReview = false) => async (req, res, next) => 
 const expertAuth = (restrictUnderReview = false) => async (req, res, next) => {
     try {
 
-        const { accessToken } = req.cookies
+        const accessToken = readAccessToken(req)
         if (!accessToken) {
             throw new Error("cookie has been expired");
         }
@@ -258,7 +267,7 @@ const expertAuth = (restrictUnderReview = false) => async (req, res, next) => {
 const adminAuth = async (req, res, next) => {
     try {
 
-        const { accessToken } = req.cookies
+        const accessToken = readAccessToken(req)
         if (!accessToken) {
             throw new Error("cookie has been expired");
         }

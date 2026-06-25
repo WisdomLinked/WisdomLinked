@@ -21,6 +21,7 @@ const {
     verifyPasswordResetOTP,
     confirmPasswordResetByCode,
     confirmEmailChange,
+    setOAuthRole,
     updateResume,
     uploadChatFile,
     healthCheck,
@@ -84,6 +85,7 @@ router.post("/updateMissedChats", requireAuth(false), updateMissedChats);
 router.post("/updateProfile", requireAuth(false), updateProfile);
 router.post("/profilePhoto", requireAuth(false), uploadsProfilePhoto, uploadProfilePhoto);
 router.put("/profile", requireAuth(false), uploadsGeneral, updateProfile); // Used by complete profile flow
+router.put("/oauth-role", requireAuth(false), setOAuthRole);
 router.post("/getEventsBetweenCustomerAndExpert", requireAuth(false), getEventsBetweenCustomerAndExpert);
 router.get("/me", requireAuth(false), getMe);
 router.get("/getMyEvents", requireAuth(false), getMyEvents);
@@ -125,15 +127,6 @@ const oauthCallback = async (req: any, res: any) => {
         let timezone = parsedState.timezone || String(sessionOAuth?.timezone || '').trim();
         if (req.session?.wechatOAuth) {
             delete req.session.wechatOAuth;
-        }
-
-        // WeChat from login page (role=login): default to student signup, not block.
-        if (
-            isNew &&
-            user.oauthProvider === 'wechat' &&
-            (role === 'login' || !role)
-        ) {
-            role = user.role || 'customer';
         }
 
         if (blocksNewUserWithoutRegisterRole(isNew, role, user.oauthProvider)) {
@@ -182,16 +175,19 @@ const oauthCallback = async (req: any, res: any) => {
             .catch(err => console.error('RC sync failed (oauth):', err.message));
 
         // Check for incomplete profile (skip re-onboarding once email + required fields are set).
-        const { isOAuthProfileIncomplete } = require('../services/wechatOAuth');
+        const { isOAuthProfileIncomplete, buildOAuthCallbackParams } = require('../services/wechatOAuth');
         const isProfileIncomplete = isOAuthProfileIncomplete(user, role);
 
-        const needsProfile = isNew || isProfileIncomplete;
-
-        // Redirect to FE with token so it can bootstrap the session
-        const encodedRedirect = redirectPath.startsWith('/') ? `&redirect=${encodeURIComponent(redirectPath)}` : '';
-        const redirectUrl = needsProfile 
-            ? `${process.env.FE_URL}/oauth-callback?token=${token}&role=${user.role}&needsProfile=true${encodedRedirect}`
-            : `${process.env.FE_URL}/oauth-callback?token=${token}&role=${user.role}${encodedRedirect}`;
+        const callbackParams = buildOAuthCallbackParams({
+            token,
+            userRole: user.role,
+            isNew,
+            roleFromState: role,
+            oauthProvider: user.oauthProvider,
+            isProfileIncomplete,
+            redirectPath,
+        });
+        const redirectUrl = `${process.env.FE_URL}/oauth-callback?${callbackParams.toString()}`;
         
         res.redirect(redirectUrl);
     } catch (err) {
