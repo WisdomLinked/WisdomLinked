@@ -25,20 +25,40 @@ function isCsrfTokenRoute(req: { path?: string; method?: string }): boolean {
     return req.method === 'GET' && /^\/csrf-token\/?$/.test(path);
 }
 
+function isLogoutRoute(req: { path?: string; method?: string }): boolean {
+    const path = req.path || '';
+    return req.method === 'POST' && /^\/logout\/?$/.test(path);
+}
+
 export const apiLimiter = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minutes
-    max: 300,
+    max: 500,
     standardHeaders: true,
     legacyHeaders: false,
     keyGenerator: keyByUserOrIp,
-    skip: (req) => RATE_LIMIT_DISABLED || isOAuthAuthRoute(req) || isCsrfTokenRoute(req),
+    skip: (req) =>
+        RATE_LIMIT_DISABLED ||
+        isOAuthAuthRoute(req) ||
+        isCsrfTokenRoute(req) ||
+        isLogoutRoute(req),
     message,
 });
 
+/** Login / OTP — failed attempts (CSRF, bad password) must not burn the cap during QA. */
+export const authLoginLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 100,
+    standardHeaders: true,
+    legacyHeaders: false,
+    keyGenerator: keyByUserOrIp,
+    skip: () => RATE_LIMIT_DISABLED,
+    skipFailedRequests: true,
+    message,
+});
 
 export const sensitiveLimiter = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minutes
-    max: 50,
+    max: 80,
     standardHeaders: true,
     legacyHeaders: false,
     keyGenerator: keyByUserOrIp,
@@ -46,4 +66,4 @@ export const sensitiveLimiter = rateLimit({
     message,
 });
 
-module.exports = { apiLimiter, sensitiveLimiter };
+module.exports = { apiLimiter, sensitiveLimiter, authLoginLimiter };

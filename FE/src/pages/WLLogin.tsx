@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useDispatch } from 'react-redux';
 import { Mail, Lock, AlertCircle, Eye, EyeOff, ArrowLeft, RefreshCw, ShieldCheck } from 'lucide-react';
 import { login, confirmLoginByCode } from '../api/api';
-import { refreshCsrfToken, bootstrapCsrfToken, isCsrfError } from '../api/csrf';
+import { refreshCsrfToken, bootstrapCsrfToken, isCsrfError, CsrfFetchError } from '../api/csrf';
 import { resetAuthSessionForLogin } from '../utils/resetAuthSession';
 import { clearClientAccessTokenCookie } from '../utils/authCookie';
 import { showSuccessAlert } from '../actions/alertActions';
@@ -90,6 +90,17 @@ export default function WLLogin() {
         return response;
     };
 
+    const isRateLimitFailResponse = (response: any) =>
+        response?.status === 'FAIL' &&
+        /too many requests/i.test(String(response?.error || ''));
+
+    const formatLoginError = (response: any) => {
+        if (isRateLimitFailResponse(response)) {
+            return 'Too many sign-in attempts. Please wait a few minutes and try again.';
+        }
+        return response?.error || 'Invalid credentials. Please try again.';
+    };
+
     const bootstrapCsrf = async () => {
         setCsrfBootstrapping(true);
         setCsrfReady(false);
@@ -97,9 +108,13 @@ export default function WLLogin() {
         try {
             await bootstrapCsrfToken();
             setCsrfReady(true);
-        } catch {
+        } catch (err) {
             setCsrfReady(false);
-            setFormError('Could not prepare sign-in. Wait a moment and try again.');
+            if (err instanceof CsrfFetchError && err.isRateLimit) {
+                setFormError('Too many sign-in attempts. Please wait a few minutes and try again.');
+            } else {
+                setFormError('Could not prepare sign-in. Wait a moment and try again.');
+            }
         } finally {
             setCsrfBootstrapping(false);
         }
@@ -147,7 +162,7 @@ export default function WLLogin() {
             } else if (isCsrfFailResponse(response)) {
                 await handleCsrfFailure();
             } else {
-                setFormError(response.error || 'Invalid credentials. Please try again.');
+                setFormError(formatLoginError(response));
             }
         } catch (err) {
             setFormError('Login failed. Please try again.');
@@ -248,7 +263,7 @@ export default function WLLogin() {
             } else if (isCsrfFailResponse(response)) {
                 await handleCsrfFailure();
             } else {
-                setFormError(response.error || 'Verification failed. Please try again.');
+                setFormError(formatLoginError(response) || 'Verification failed. Please try again.');
                 setOtpDigits(['', '', '', '', '', '']);
                 setTimeout(() => inputRefs.current[0]?.focus(), 100);
             }
@@ -276,7 +291,7 @@ export default function WLLogin() {
             } else if (isCsrfFailResponse(response)) {
                 await handleCsrfFailure();
             } else {
-                setFormError(response.error || 'Failed to resend code.');
+                setFormError(formatLoginError(response) || 'Failed to resend code.');
             }
         } catch {
             setFormError('Failed to resend code.');

@@ -32,7 +32,7 @@ const {
 } = require("../controllers/auth.controller");
 const { requireAuth } = require("../middlewares/requireAuth");
 const { authCookieOptions, clearAuthCookieOptions } = require("../config/authCookie");
-const { apiLimiter, sensitiveLimiter } = require("../middlewares/rateLimit");
+const { apiLimiter, sensitiveLimiter, authLoginLimiter } = require("../middlewares/rateLimit");
 const {
     validateLoginSchema,
     validateRegisterSchema
@@ -54,6 +54,7 @@ const {
 } = require('../controllers/chatBotQA.controller')
 
 router.get("/csrf-token", (req: any, res: any) => res.status(200).json({ csrfToken: req.csrfToken() }));
+router.post("/logout", logout);
 
 // Baseline rate limiting for every auth route below.
 router.use(apiLimiter);
@@ -74,9 +75,8 @@ router.post("/uploadChatFile", (req: any, res: any, next: any) => {
 router.post("/resendConfirmEmail", resendConfirmEmail);
 router.post("/verifyRegistration", verifyRegistration);
 router.get("/checkVerification", checkVerificationStatus);
-router.post("/login", sensitiveLimiter, validateLoginSchema, login);
-router.post("/logout", logout);
-router.post("/confirmLoginByCode", sensitiveLimiter, confirmLoginByCode);
+router.post("/login", authLoginLimiter, validateLoginSchema, login);
+router.post("/confirmLoginByCode", authLoginLimiter, confirmLoginByCode);
 router.post("/passwordResetRequest", sensitiveLimiter, passwordResetRequest);
 router.post("/verifyPasswordResetOTP", sensitiveLimiter, verifyPasswordResetOTP);
 router.post("/confirmPasswordResetByCode", sensitiveLimiter, confirmPasswordResetByCode);

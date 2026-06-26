@@ -106,14 +106,24 @@ describe('csrf', () => {
         expect(csrf.getCsrfToken()).toBe('token-fresh');
     });
 
-    it('returns null when response is missing csrfToken', async () => {
+    it('rejects when response is missing csrfToken', async () => {
         const csrf = await import('./csrf');
         apiGet.mockResolvedValueOnce({ status: 200, data: { success: false } });
 
-        const result = await csrf.ensureCsrfToken();
-
-        expect(result).toBeNull();
+        await expect(csrf.ensureCsrfToken()).rejects.toThrow('Could not fetch CSRF token');
         expect(csrf.getCsrfToken()).toBeNull();
+    });
+
+    it('rejects with rate-limit message on HTTP 429', async () => {
+        const csrf = await import('./csrf');
+        apiGet.mockRejectedValueOnce({
+            response: { status: 429, data: { message: 'Too many requests, please try again later.' } },
+        });
+
+        await expect(csrf.bootstrapCsrfToken()).rejects.toMatchObject({
+            isRateLimit: true,
+            message: 'Too many requests, please try again later.',
+        });
     });
 
     it('bootstrapCsrfToken rejects when fetch fails', async () => {
