@@ -159,7 +159,57 @@ shareMeetingId = (targetEmail, name, meetingId, title) =>{
     sendNotificationEmail(targetEmail, subject, html);
 }
 
-sendNotificationEmail = async (targetEmails, subject, html,scheduledTime = null) => {  
+sendPaymentConfirmationEmail = async ({ to, sessionType, sessionName, expertName, studentName, start, duration, amount, currency, receiptUrl, timeZone }) => {
+    const dateStr = new Date(start).toLocaleString("en-US", {
+        timeZone: timeZone || "UTC",
+        weekday: "short",
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+        hour: "numeric",
+        minute: "2-digit",
+        timeZoneName: "short",
+    });
+    const amountStr = `$${(Number(amount) / 100).toFixed(2)} ${(currency || "usd").toUpperCase()}`;
+    const row = (label, value) => `
+        <tr>
+            <td style="padding: 8px 0; color: #64748b; font-size: 14px; vertical-align: top; width: 140px;">${label}</td>
+            <td style="padding: 8px 0; color: #1e293b; font-size: 14px; font-weight: 600;">${value}</td>
+        </tr>`;
+    const receiptButton = receiptUrl
+        ? `<div style="text-align: center; margin: 28px 0 8px 0;">
+                <a href="${receiptUrl}" style="display: inline-block; background: linear-gradient(135deg, #234C6A 0%, #456882 100%); color: #ffffff; text-decoration: none; padding: 13px 36px; border-radius: 12px; font-size: 15px; font-weight: 600; letter-spacing: 0.3px;">View your receipt</a>
+            </div>`
+        : "";
+    const html = `<div style="font-family: Arial, sans-serif; max-width: 560px; margin: 0 auto; background: #ffffff; border-radius: 16px; overflow: hidden; border: 1px solid #e2e8f0;">
+            <div style="background: linear-gradient(135deg, #234C6A 0%, #456882 100%); padding: 28px 24px; text-align: center;">
+                <img src="https://wisdomlinked.com/wisdomlinked-logo.png" alt="WisdomLinked" width="180" style="max-width: 180px; height: auto; margin: 0 auto;" />
+            </div>
+            <div style="padding: 32px 24px;">
+                <h2 style="color: #1e293b; font-size: 22px; margin: 0 0 8px 0;">Payment confirmed</h2>
+                <p style="color: #475569; font-size: 15px; line-height: 1.6; margin: 0 0 24px 0;">Thank you, ${studentName}. Your payment has been received and your session is booked. Here are the details:</p>
+                <table style="width: 100%; border-collapse: collapse; background: #f8fafc; border-radius: 12px; padding: 8px 16px;" cellpadding="0" cellspacing="0">
+                    <tbody style="display: table-row-group;">
+                        ${row("Session type", sessionType)}
+                        ${row("Session", sessionName)}
+                        ${row("Expert", expertName)}
+                        ${row("Student", studentName)}
+                        ${row("Date &amp; time", dateStr)}
+                        ${row("Duration", `${duration} min`)}
+                        ${row("Amount paid", amountStr)}
+                    </tbody>
+                </table>
+                ${receiptButton}
+                <p style="color: #94a3b8; font-size: 13px; line-height: 1.5; margin: 24px 0 0 0;">You can view and manage this session anytime by logging in to WisdomLinked.</p>
+            </div>
+            <div style="background: #f8fafc; padding: 16px 24px; text-align: center; border-top: 1px solid #e2e8f0;">
+                <p style="color: #94a3b8; font-size: 12px; margin: 0;">&copy; ${new Date().getFullYear()} WisdomLinked. All rights reserved.</p>
+            </div>
+        </div>`;
+    await sendNotificationEmail(to, "Payment Confirmation - WisdomLinked", html);
+}
+
+sendNotificationEmail = async (targetEmails, subject, html,scheduledTime = null) => {
     const msg = {
       to: Array.isArray(targetEmails) ? targetEmails : [targetEmails],
       from: {
@@ -195,5 +245,6 @@ module.exports = {
     sendEmailNewUserAccountApproval,
     sendEmailUserAccountApproved,
     sendExpertResumeFormatReminderEmail,
-    shareMeetingId
+    shareMeetingId,
+    sendPaymentConfirmationEmail
 };

@@ -18,6 +18,20 @@ const groupChatSchema = new mongoose.Schema(
         duration: { type: Number },
         price: { type: Number },
         paidBy: { type: String },
+        maxAttendees: { type: Number },
+        currency: { type: String, default: "USD" },
+        timezone: { type: String },
+        isRecurring: { type: Boolean, default: false },
+        recurrenceFrequency: {
+            type: String,
+            enum: ["weekly", "biweekly", "monthly"],
+            default: undefined,
+        },
+        seriesId: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: "GroupChat",
+            default: null,
+        },
         type: {
             type: String,
             enum: ["seminar", "individual", "community"],

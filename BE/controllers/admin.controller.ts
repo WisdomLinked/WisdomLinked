@@ -1,4 +1,6 @@
 import { Request, Response } from 'express';
+import { safeErrorMessage } from '../utils/httpUserFacingCopy';
+const escapeRegExp = (value: unknown) => String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const { uploadFileToS3 } = require("./auth.controller")
 const User = require("../models/User");
 const Event = require("../models/Event");
@@ -79,16 +81,16 @@ const filterUsers = async (req, res) => {
         let countQuery = User.countDocuments({ role: { $ne: 'admin' } })
 
         if (username) {
-            query.where({ username: { '$regex': username, '$options': 'i' } })
-            countQuery.where({ username: { '$regex': username, '$options': 'i' } })
+            query.where({ username: { '$regex': escapeRegExp(username), '$options': 'i' } })
+            countQuery.where({ username: { '$regex': escapeRegExp(username), '$options': 'i' } })
         }
         if (email) {
-            query.where({ email: { '$regex': email, '$options': 'i' } })
-            countQuery.where({ email: { '$regex': email, '$options': 'i' } })
+            query.where({ email: { '$regex': escapeRegExp(email), '$options': 'i' } })
+            countQuery.where({ email: { '$regex': escapeRegExp(email), '$options': 'i' } })
         }
         if (role) {
-            query.where({ role: role })
-            countQuery.where({ role: role })
+            query.where({ role: String(role) })
+            countQuery.where({ role: String(role) })
         }
 
         // Dynamic sorting based on `sortBy` and `sortOrder`
@@ -105,7 +107,7 @@ const filterUsers = async (req, res) => {
         })
     } catch (err) {
         console.log(err)
-        return res.status(500).send(err.message);
+        return res.status(500).send(safeErrorMessage(err));
     }
 }
 
@@ -116,7 +118,7 @@ const filterPaymentHistories = async (req, res) => {
         const countQuery = PaymentHistory.countDocuments()
 
         if (email) {
-            const user = await User.findOne({ email: email })
+            const user = await User.findOne({ email: String(email) })
             if (!user) {
                 return res.status(200).json({
                     result: [],
@@ -130,18 +132,18 @@ const filterPaymentHistories = async (req, res) => {
         }
 
         if (stripeMode) {
-            query.where({ stripeMode })
-            countQuery.where({ stripeMode })
+            query.where({ stripeMode: String(stripeMode) })
+            countQuery.where({ stripeMode: String(stripeMode) })
         }
 
         if (paymentType) {
-            query.where({ paymentType })
-            countQuery.where({ paymentType })
+            query.where({ paymentType: String(paymentType) })
+            countQuery.where({ paymentType: String(paymentType) })
         }
 
         if (status) {
-            query.where({ status })
-            countQuery.where({ status })
+            query.where({ status: String(status) })
+            countQuery.where({ status: String(status) })
         }
 
         if (dateFrom) {
@@ -164,7 +166,7 @@ const filterPaymentHistories = async (req, res) => {
         })
     } catch (err) {
         console.log(err)
-        return res.status(500).send(err.message);
+        return res.status(500).send(safeErrorMessage(err));
     }
 }
 
@@ -177,7 +179,7 @@ const getFullUserDataByEmail = async (req, res) => {
         })
     } catch (err) {
         console.log(err)
-        return res.status(500).send(err.message);
+        return res.status(500).send(safeErrorMessage(err));
     }
 }
 
@@ -210,7 +212,7 @@ const updateProfileOfUser = async (req, res) => {
             let _keywords = []
             for (let i = 0; i < keywords.length; i++) {
                 if (keywords[i].new) {
-                    const sameKeywordExist = await Keyword.find({ value: keywords[i].value })
+                    const sameKeywordExist = await Keyword.find({ value: String(keywords[i].value) })
                     if (sameKeywordExist.length) {
                         _keywords.push(sameKeywordExist[0]._id)
                     } else {
@@ -222,7 +224,7 @@ const updateProfileOfUser = async (req, res) => {
                     _keywords.push(keywords[i]._id)
                 }
             }
-            console.log(keywords, _keywords)
+            console.log('[filterUsers keywords]', keywords, _keywords)
             updates.keywords = keywords
         }
         if (country) {
@@ -245,7 +247,7 @@ const updateProfileOfUser = async (req, res) => {
                 typeof specialNote === 'string' ? specialNote.slice(0, 5000) : String(specialNote).slice(0, 5000);
         }
 
-        await User.findOneAndUpdate({ email: email }, updates, { new: true })
+        await User.findOneAndUpdate({ email: String(email) }, updates, { new: true })
         const result = await getFullUserData(email)
         if (status && status === 'active') {
             // If the user is activated, send an email notification
@@ -258,7 +260,7 @@ const updateProfileOfUser = async (req, res) => {
         });
     } catch (err) {
         console.log(err)
-        return res.status(500).send(err.message);
+        return res.status(500).send(safeErrorMessage(err));
     }
 }
 
@@ -266,7 +268,7 @@ const getDirectChatHistory = async (req, res) => {
     try {
         const { senderId, receiverId, currentPage } = req.body
         let conversation = await Conversation.findOne({
-            participants: { $all: [receiverId, senderId] },
+            participants: { $all: [String(receiverId), String(senderId)] },
             type: "DIRECT",
         });
         if (!conversation) {
@@ -303,14 +305,14 @@ const getDirectChatHistory = async (req, res) => {
 
     } catch (err) {
         console.log(err)
-        return res.status(500).send(err.message);
+        return res.status(500).send(safeErrorMessage(err));
     }
 }
 
 const getGroupChatHistory = async (req, res) => {
     try {
         const { groupChatId, currentPage } = req.body
-        const groupChat = await GroupChat.findById(groupChatId).populate({
+        const groupChat = await GroupChat.findById(String(groupChatId)).populate({
             path: "messages",
             model: "Message",
             populate: {
@@ -337,7 +339,7 @@ const getGroupChatHistory = async (req, res) => {
         });
     } catch (err) {
         console.log(err)
-        return res.status(500).send(err.message);
+        return res.status(500).send(safeErrorMessage(err));
     }
 }
 
@@ -347,7 +349,7 @@ const getUserFeedbacks = async (req, res) => {
         if (!userId) {
             return res.status(400).send("userId is required");
         }
-        const user = await User.findById(userId);
+        const user = await User.findById(String(userId));
         if (!user) {
             return res.status(404).send("User not found");
         }
@@ -389,7 +391,7 @@ const getUserFeedbacks = async (req, res) => {
         return res.status(200).json({ result: enriched });
     } catch (err) {
         console.log(err);
-        return res.status(500).send(err.message);
+        return res.status(500).send(safeErrorMessage(err));
     }
 };
 
@@ -400,11 +402,11 @@ const getContactedUs = async (req, res) => {
         let query = ContactedUs.find({});
 
         if (name) {
-            query = query.where("name", new RegExp(name, "i"));
+            query = query.where("name", new RegExp(escapeRegExp(name), "i"));
         }
 
         if (email) {
-            query = query.where("email", new RegExp(email, "i"));
+            query = query.where("email", new RegExp(escapeRegExp(email), "i"));
         }
 
         if (dateFrom && dateTo) {
@@ -435,14 +437,14 @@ const getContactedUs = async (req, res) => {
         });
     } catch (err) {
         console.error(err);
-        return res.status(500).send(err.message);
+        return res.status(500).send(safeErrorMessage(err));
     }
 };
 
 const toggleActionedStatus = async (req, res) => {
     try {
         const { id } = req.body;
-        const contactEntry = await ContactedUs.findById(id);
+        const contactEntry = await ContactedUs.findById(String(id));
 
         if (!contactEntry) {
             return res.status(404).json({ message: "Record not found" });
@@ -618,7 +620,7 @@ const getDashboardStats = async (req: Request, res: Response) => {
         });
     } catch (err: any) {
         console.error(err);
-        return res.status(500).json({ status: "FAILED", message: err?.message || "Server error" });
+        return res.status(500).json({ status: "FAILED", message: safeErrorMessage(err) });
     }
 };
 
@@ -709,7 +711,7 @@ const getAdminPlatformEvents = async (req: Request, res: Response) => {
         return res.status(200).json({ status: "SUCCESS", items });
     } catch (err: any) {
         console.error(err);
-        return res.status(500).json({ status: "FAILED", message: err?.message || "Server error" });
+        return res.status(500).json({ status: "FAILED", message: safeErrorMessage(err) });
     }
 };
 
@@ -718,7 +720,7 @@ const getPendingUsers = async (req, res) => {
         const pendingUsers = await PendingUser.find();
         return res.status(200).json(pendingUsers);
     } catch (err) {
-        return res.status(500).json({ message: err.message });
+        return res.status(500).json({ message: safeErrorMessage(err) });
     }
 };
 
@@ -727,7 +729,7 @@ const getPendingLogins = async (req, res) => {
         const pendingLogins = await PendingLogin.find();
         return res.status(200).json(pendingLogins);
     } catch (err) {
-        return res.status(500).json({ message: err.message });
+        return res.status(500).json({ message: safeErrorMessage(err) });
     }
 };
 
@@ -737,10 +739,10 @@ const deletePendingUser = async (req, res) => {
         if (!pendingUserId) {
             return res.status(400).json({ message: "pendingUserId is required" });
         }
-        await PendingUser.findByIdAndDelete(pendingUserId);
+        await PendingUser.findByIdAndDelete(String(pendingUserId));
         return res.status(200).json({ message: "Pending User deleted successfully" });
     } catch (err) {
-        return res.status(500).json({ message: err.message });
+        return res.status(500).json({ message: safeErrorMessage(err) });
     }
 };
 
@@ -750,10 +752,10 @@ const deletePendingLogin = async (req, res) => {
         if (!pendingLoginId) {
             return res.status(400).json({ message: "pendingLoginId is required" });
         }
-        await PendingLogin.findByIdAndDelete(pendingLoginId);
+        await PendingLogin.findByIdAndDelete(String(pendingLoginId));
         return res.status(200).json({ message: "Pending Login deleted successfully" });
     } catch (err) {
-        return res.status(500).json({ message: err.message });
+        return res.status(500).json({ message: safeErrorMessage(err) });
     }
 };
 
@@ -764,7 +766,7 @@ const convertPendingUserToUserByAdmin = async (req, res) => {
             return res.status(400).json({ message: "pendingUserId is required" });
         }
 
-        const pendingUser = await PendingUser.findById(pendingUserId);
+        const pendingUser = await PendingUser.findById(String(pendingUserId));
         if (!pendingUser) {
             return res.status(404).json({ message: "Pending User not found" });
         }
@@ -790,11 +792,11 @@ const convertPendingUserToUserByAdmin = async (req, res) => {
 
         await newUser.save();
 
-        await PendingUser.findByIdAndDelete(pendingUserId);
+        await PendingUser.findByIdAndDelete(String(pendingUserId));
 
         return res.status(200).json({ message: "Pending User converted to a regular User successfully" });
     } catch (err) {
-        return res.status(500).json({ message: err.message });
+        return res.status(500).json({ message: safeErrorMessage(err) });
     }
 };
 
@@ -839,7 +841,7 @@ const registerUserByAdmin = async (req, res) => {
         if (keywords?.length) {
             for (let i = 0; i < keywords.length; i++) {
                 if (keywords[i].new) {
-                    const sameKeywordExist = await Keyword.find({ value: keywords[i].value })
+                    const sameKeywordExist = await Keyword.find({ value: String(keywords[i].value) })
                     if (sameKeywordExist.length) {
                         _keywords.push(sameKeywordExist[0]._id)
                     } else {
@@ -884,13 +886,81 @@ const registerUserByAdmin = async (req, res) => {
         });
     } catch (err) {
         console.log(err);
-        return res.status(500).send(err.message);
+        return res.status(500).send(safeErrorMessage(err));
     }
 };
 
 
+const getCustomMajors = async (req: Request, res: Response) => {
+    try {
+        const rows = await User.aggregate([
+            { $unwind: "$customKeywords" },
+            { $match: { customKeywords: { $type: "string", $ne: "" } } },
+            {
+                $group: {
+                    _id: { $toLower: { $trim: { input: "$customKeywords" } } },
+                    value: { $first: "$customKeywords" },
+                    count: { $sum: 1 },
+                    userIds: { $addToSet: "$_id" },
+                },
+            },
+            { $project: { _id: 0, value: 1, count: { $size: "$userIds" } } },
+            { $sort: { count: -1, value: 1 } },
+        ]);
+        return res.status(200).json({ result: rows });
+    } catch (err) {
+        console.log(err);
+        return res.status(500).send(safeErrorMessage(err));
+    }
+};
+
+const consolidateMajors = async (req: Request, res: Response) => {
+    try {
+        const sourcesRaw = Array.isArray(req.body?.sources) ? req.body.sources : [];
+        const target = String(req.body?.target || "").trim();
+        const sources = sourcesRaw
+            .map((s: any) => String(s || "").trim())
+            .filter((s: string) => s.length);
+
+        if (!target) {
+            return res.status(400).json({ status: "FAIL", error: "A target official major is required." });
+        }
+        if (!sources.length) {
+            return res.status(400).json({ status: "FAIL", error: "Select at least one custom major to consolidate." });
+        }
+
+        let keyword = await Keyword.findOne({
+            value: { $regex: new RegExp(`^${escapeRegExp(target)}$`, "i") },
+        });
+        if (!keyword) {
+            keyword = await Keyword.create({ value: target, label: target });
+        }
+
+        const sourceRegexes = sources.map((s: string) => new RegExp(`^${escapeRegExp(s)}$`, "i"));
+        const affected = await User.find({ customKeywords: { $in: sourceRegexes } }).select("_id keywords customKeywords");
+
+        for (const user of affected) {
+            const hasKeyword = (user.keywords || []).some((k: any) => String(k) === String(keyword._id));
+            if (!hasKeyword) user.keywords.push(keyword._id);
+            user.customKeywords = (user.customKeywords || []).filter(
+                (c: string) => !sources.some((s: string) => s.toLowerCase() === String(c).trim().toLowerCase()),
+            );
+            await user.save();
+        }
+
+        return res.status(200).json({
+            result: { major: keyword.value, usersUpdated: affected.length },
+        });
+    } catch (err) {
+        console.log(err);
+        return res.status(500).send(safeErrorMessage(err));
+    }
+};
+
 module.exports = {
     filterUsers,
+    getCustomMajors,
+    consolidateMajors,
     getFullUserDataByEmail,
     updateProfileOfUser,
     filterPaymentHistories,

@@ -12,6 +12,9 @@ export type UpcomingModalSession = {
   when: string;
   location?: string;
   with?: string;
+  /** Pending 1:1 the student must pay to confirm (expert-proposed). */
+  payable?: boolean;
+  price?: number;
 };
 
 const pad2 = (n: number) => String(n).padStart(2, '0');
@@ -35,6 +38,7 @@ export default function UpcomingSessionModal({
   onClose,
   onJoin,
   onJoinSession,
+  onPay,
   sessions: sessionsProp,
   role = 'student',
 }: {
@@ -45,6 +49,8 @@ export default function UpcomingSessionModal({
   onJoin?: () => void;
   /** Expert (or future): open a specific session (e.g. group chat) */
   onJoinSession?: (session: UpcomingModalSession) => void;
+  /** Student pays to confirm an expert-proposed pending 1:1. */
+  onPay?: (session: UpcomingModalSession) => void;
   /** When set (including `[]`), replaces demo data */
   sessions?: UpcomingModalSession[];
   role?: 'student' | 'expert';
@@ -239,6 +245,14 @@ export default function UpcomingSessionModal({
                         className="mt-2 rounded-lg bg-[#234C6A] px-3 py-1.5 text-[11px] font-semibold text-white hover:brightness-110"
                       >
                         Join meeting
+                      </button>
+                    ) : session.payable && onPay ? (
+                      <button
+                        type="button"
+                        onClick={() => onPay(session)}
+                        className="mt-2 rounded-lg bg-[#234C6A] px-3 py-1.5 text-[11px] font-semibold text-white hover:brightness-110"
+                      >
+                        {typeof session.price === 'number' ? `Pay $${session.price}` : 'Pay'}
                       </button>
                     ) : (
                       <span className="mt-2 inline-flex rounded-lg border border-[#234C6A]/30 px-2 py-1 text-[10px] font-semibold text-[#234C6A]">

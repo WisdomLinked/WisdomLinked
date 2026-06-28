@@ -6,10 +6,9 @@ const GroupChat = require("../models/GroupChat");
 const Keyword = require("../models/Keyword");
 const Service = require("../models/Service");
 const MeetingThread = require("../models/MeetingThread");
-const PendingAppointmentToGroup = require("../models/PendingAppointmentToGroup");
 const PaymentHistory = require("../models/PaymentHistory");
 // Socket notifications removed — Rocket.Chat handles real-time updates now
-const { checkPaymentIntentSucceeded, refundPaymentIntent } = require("./stripe.controller");
+const { checkPaymentIntentSucceeded, refundPaymentIntent, sendBookingReceiptAndConfirmation } = require("./stripe.controller");
 const { appendPaymentHistory } = require("./payment.controller");
 const { getFullUserData } = require("../middlewares/requireAuth");
 
@@ -75,35 +74,77 @@ const groupMemberIds = (groupChat: any): string[] => [
     ...(Array.isArray(groupChat?.coModerators) ? groupChat.coModerators.map((p: any) => normalizeId(p)) : []),
 ].filter(Boolean);
 
+// Enrolled students = participants minus the host (the admin is always a
+// participant of their own seminar). Used for both the full-capacity check and
+// the "students already enrolled" delete guard.
+const enrolledStudentIds = (groupChat: any): string[] => {
+    const adminId = normalizeId(groupChat?.admin);
+    return (Array.isArray(groupChat?.participants) ? groupChat.participants : [])
+        .map((p: any) => normalizeId(p))
+        .filter((id: string) => id && id !== adminId);
+};
+
+// A seminar is full once its capacity (maxAttendees) is set and reached.
+const seminarIsFull = (groupChat: any): boolean => {
+    const cap = typeof groupChat?.maxAttendees === 'number' ? groupChat.maxAttendees : null;
+    if (cap == null || cap <= 0) return false;
+    return enrolledStudentIds(groupChat).length >= cap;
+};
+
 const userCanAccessGroupChat = (groupChat: any, userId: string, opts: { allowOpenCommunity?: boolean } = {}): boolean => {
     if (!groupChat || !userId) return false;
     if (groupMemberIds(groupChat).includes(String(userId))) return true;
     return Boolean(opts.allowOpenCommunity && groupChat.type === "community" && groupChat.isOpenToAll === true);
 };
 
-async function syncCommunityRocketChannel(groupChatId: string) {
+async function syncGroupRocketChannel(groupChatId: string) {
     try {
-        const reloaded = await GroupChat.findById(groupChatId)
+        const reloaded = await GroupChat.findById(String(groupChatId))
             .populate('participants', 'email username rocketChatUsername image role status')
             .populate('admin', 'email username rocketChatUsername image role status');
         if (!reloaded) return null;
+
+        const channelKeyId = reloaded.seriesId ? String(reloaded.seriesId) : String(reloaded._id);
+
         const emails: string[] = [];
-        for (const p of reloaded.participants || []) {
-            if (p?.email) emails.push(String(p.email).toLowerCase());
+        if (reloaded.seriesId) {
+            const seriesDocs = await GroupChat.find({ seriesId: reloaded.seriesId })
+                .populate('participants', 'email')
+                .populate('admin', 'email');
+            for (const d of seriesDocs) {
+                for (const p of d.participants || []) {
+                    if (p?.email) emails.push(String(p.email).toLowerCase());
+                }
+                const a = d.admin as any;
+                if (a?.email) emails.push(String(a.email).toLowerCase());
+            }
+        } else {
+            for (const p of reloaded.participants || []) {
+                if (p?.email) emails.push(String(p.email).toLowerCase());
+            }
+            const adm = reloaded.admin as any;
+            if (adm?.email) emails.push(String(adm.email).toLowerCase());
         }
-        const adm = reloaded.admin as any;
-        if (adm?.email) emails.push(String(adm.email).toLowerCase());
-        const rcId = await syncRocketGroupChannelMembers(String(reloaded._id), emails);
+
+        const rcId = await syncRocketGroupChannelMembers(channelKeyId, emails);
         if (rcId) {
-            await GroupChat.updateOne(
-                { _id: reloaded._id },
-                { $set: { rcChannelId: rcId } },
-                { timestamps: false },
-            ).exec();
+            if (reloaded.seriesId) {
+                await GroupChat.updateMany(
+                    { seriesId: reloaded.seriesId },
+                    { $set: { rcChannelId: rcId } },
+                    { timestamps: false },
+                ).exec();
+            } else {
+                await GroupChat.updateOne(
+                    { _id: reloaded._id },
+                    { $set: { rcChannelId: rcId } },
+                    { timestamps: false },
+                ).exec();
+            }
         }
         return rcId;
     } catch (e) {
-        console.warn('[syncCommunityRocketChannel]', e);
+        console.warn('[syncGroupRocketChannel]', e);
         return null;
     }
 }
@@ -177,7 +218,7 @@ const createCommunityChat = async (req, res) => {
 
             // Validate that all participant IDs exist
             const validParticipants = await User.find({
-                _id: { $in: uniqueParticipants }
+                _id: { $in: uniqueParticipants.map((p: any) => String(p)) }
             }).select('_id');
 
             const validParticipantIds = validParticipants.map(p => p._id.toString());
@@ -211,7 +252,7 @@ const createCommunityChat = async (req, res) => {
 
         // For open-to-all we only need the RC channel created with the creator;
         // others will be invited when they join.
-        await syncCommunityRocketChannel(String(communityChat._id));
+        await syncGroupRocketChannel(String(communityChat._id));
 
         // Update all participants' chat lists via socket
         participantsToUpdate.forEach(participantId => {
@@ -259,7 +300,7 @@ const addParticipantsToCommunityChat = async (req, res) => {
 
         // Find the community chat
         const communityChat = await GroupChat.findOne({
-            _id: communityChatId,
+            _id: String(communityChatId),
             type: 'community'
         });
 
@@ -280,7 +321,7 @@ const addParticipantsToCommunityChat = async (req, res) => {
 
         // Validate that all participant IDs exist
         const validParticipants = await User.find({
-            _id: { $in: participantIds }
+            _id: { $in: participantIds.map((p: any) => String(p)) }
         }).select('_id');
 
         const validParticipantIds = validParticipants.map(p => p._id.toString());
@@ -300,7 +341,7 @@ const addParticipantsToCommunityChat = async (req, res) => {
         communityChat.participants = [...communityChat.participants, ...newParticipantIds];
         await communityChat.save();
 
-        await syncCommunityRocketChannel(String(communityChat._id));
+        await syncGroupRocketChannel(String(communityChat._id));
 
         // Add chat to new participants' generalChats arrays
         await User.updateMany(
@@ -350,7 +391,7 @@ const joinCommunityChat = async (req, res) => {
 
         // Find the community chat
         const communityChat = await GroupChat.findOne({
-            _id: communityChatId,
+            _id: String(communityChatId),
             type: 'community'
         });
 
@@ -380,7 +421,7 @@ const joinCommunityChat = async (req, res) => {
             await currentUser.save();
         }
 
-        await syncCommunityRocketChannel(String(communityChat._id));
+        await syncGroupRocketChannel(String(communityChat._id));
 
         // Update user's chat list via socket
         // [REMOVED] updateUsersGroupChatList(userId.toString());
@@ -483,8 +524,8 @@ const joinGeneralChat = async (req, res) => {
         const { adminId } = req.body;
 
         // check if groupChat exists
-        const generalChat = await GroupChat.findOne({ admin: adminId, name: { $ne: 'Global Chat' } });
-        console.log(generalChat, '////')
+        const generalChat = await GroupChat.findOne({ admin: String(adminId), name: { $ne: 'Global Chat' } });
+        console.log('[joinGeneralChat]', generalChat)
         if (!generalChat.participants.includes(userId)) {
             generalChat.participants.push(userId);
             await generalChat.save()
@@ -507,7 +548,7 @@ const joinGeneralChat = async (req, res) => {
         console.log(err);
         return res
             .status(500)
-            .send(err.message);
+            .send(safeErrorMessage(err));
     }
 };
 
@@ -521,14 +562,14 @@ const joinPrivateChat = async (req, res) => {
         if (String(userId) === String(personId)) return res.status(400).send("Cannot open chat with yourself");
 
         // Ensure the clicked person exists
-        const otherUser = await User.findById(personId).select("username email image role").exec();
+        const otherUser = await User.findById(String(personId)).select("username email image role").exec();
         if (!otherUser) return res.status(404).send("User not found");
 
         // 1:1 DM = Mongo Conversation + Rocket.Chat IM — not a GroupChat / wl-group-* channel.
         let conversation = await Conversation.findOne({
             $and: [
                 { participants: userId },
-                { participants: personId },
+                { participants: String(personId) },
                 { participants: { $size: 2 } },
             ],
         }).exec();
@@ -554,7 +595,7 @@ const joinPrivateChat = async (req, res) => {
         }
 
         await User.updateOne({ _id: userId }, { $addToSet: { directConversations: conversation._id } }).exec();
-        await User.updateOne({ _id: personId }, { $addToSet: { directConversations: conversation._id } }).exec();
+        await User.updateOne({ _id: String(personId) }, { $addToSet: { directConversations: conversation._id } }).exec();
 
         const userDoc = await User.findById(userId).select("email").exec();
         const fullUser = await getFullUserData(userDoc.email);
@@ -577,7 +618,7 @@ const joinPrivateChat = async (req, res) => {
         });
     } catch (err) {
         console.error("joinPrivateChat error:", err);
-        return res.status(500).send(err.message || "Server error");
+        return res.status(500).send(safeErrorMessage(err));
     }
 };
 
@@ -591,7 +632,7 @@ const createGroupChatByUser = async (req, res) => {
             throw new Error(checkTitleNameInvalid('Name', name))
         }
 
-        const expertUser = await User.findById(expert);
+        const expertUser = await User.findById(String(expert));
         if (!expertUser) {
             throw new Error("Expert not found");
         }
@@ -657,6 +698,19 @@ const createGroupChatByUser = async (req, res) => {
                 expert: expert.toString(),
                 groupChat: chat._id.toString(),
             });
+
+            await sendBookingReceiptAndConfirmation({
+                payment_intent,
+                charge,
+                sessionType: '1:1 Session',
+                sessionName: chat.name,
+                expertName: expertUser.username,
+                studentName: currentUser.username,
+                studentEmail: currentUser.email,
+                start: chat.start,
+                duration,
+                timeZone: currentUser.timeZone,
+            });
         }
 
         sendEmailMeetingRequestToExpert(expertUser.email, expertUser.username, name, chat.start, duration, expectedCents / 100, true, expertUser.timeZone)
@@ -672,10 +726,97 @@ const createGroupChatByUser = async (req, res) => {
     }
 };
 
+const proposeIndividualAppointment = async (req, res) => {
+    try {
+        const { userId } = req.user;
+        const { name, description, start, end, duration, price, customer } = req.body;
+
+        if (checkTitleNameInvalid('Name', name)) {
+            throw new Error(checkTitleNameInvalid('Name', name))
+        }
+
+        const expertUser = await User.findById(userId);
+        if (!expertUser) {
+            throw new Error("Expert not found");
+        }
+
+        const customerUser = await User.findOne({ email: String(customer) });
+        if (!customerUser) {
+            return res.status(404).send("Sorry, the student you are trying to invite doesn't exist. Please check the email address");
+        }
+
+        await assertBookingSlotValid(expertUser, start, end);
+
+        const finalPrice = Math.max(0, Math.round(Number(price) * 100) / 100);
+
+        const chat = await GroupChat.create({
+            name,
+            description,
+            start,
+            end,
+            duration,
+            price: finalPrice,
+            participants: [customerUser._id, expertUser._id],
+            admin: expertUser._id,
+            type: 'individual',
+            status: 'pending',
+            createdBy: expertUser._id,
+        });
+
+        expertUser.groupChats.push(chat._id);
+        await expertUser.save();
+
+        customerUser.groupChats.push(chat._id);
+        await customerUser.save();
+
+        sendEmailMeetingRequestToCustomer(customerUser.email, name, customerUser.username, chat.start, duration, finalPrice, customerUser.timeZone);
+
+        let userDetails = await getFullUserData(expertUser.email);
+        userDetails.token = null;
+        userDetails.password = null;
+
+        return res.status(200).json({
+            result: userDetails,
+            userDetails,
+        });
+    } catch (err) {
+        console.log(err);
+        return res
+            .status(500)
+            .send(safeHttp500Message(err));
+    }
+};
+
+const RECURRENCE_FREQUENCIES = ['weekly', 'biweekly', 'monthly'];
+
+const buildRecurrenceStartDates = (start, frequency) => {
+    const base = new Date(start);
+    if (Number.isNaN(base.getTime())) return [base];
+    const horizon = new Date(base);
+    horizon.setFullYear(horizon.getFullYear() + 1);
+    const out = [];
+    if (frequency === 'monthly') {
+        for (let i = 0; ; i += 1) {
+            const d = new Date(base);
+            d.setMonth(base.getMonth() + i);
+            if (d >= horizon) break;
+            out.push(d);
+        }
+    } else {
+        const stepDays = frequency === 'biweekly' ? 14 : 7;
+        for (let i = 0; ; i += 1) {
+            const d = new Date(base.getTime() + i * stepDays * 24 * 60 * 60 * 1000);
+            if (d >= horizon) break;
+            out.push(d);
+        }
+    }
+    return out;
+};
+
 const createGroupChat = async (req, res) => {
     try {
         const { userId } = req.user;
-        const { name, description, image, services, keywords, start, end, duration, price, type, status, customerId } = req.body;
+        const { name, description, image, services, keywords, start, end, duration, price, type, status, customerId, maxAttendees, currency, timezone, isRecurring, recurrenceFrequency } = req.body;
 
         if (checkTitleNameInvalid('Name', name)) {
             throw new Error(checkTitleNameInvalid('Name', name))
@@ -684,15 +825,12 @@ const createGroupChat = async (req, res) => {
         const _services = await resolveServiceIds(services);
         const _keywords = await resolveKeywordIds(keywords);
 
-        // create group
-        const chat = await GroupChat.create({
+        const sharedFields = {
             name: name,
             description: description,
             image: image,
             services: _services,
             keywords: _keywords,
-            start: start,
-            end: end,
             duration: duration,
             price: price,
             participants: type === 'individual' ? [customerId, userId] : [userId],
@@ -700,9 +838,66 @@ const createGroupChat = async (req, res) => {
             type: type,
             status: status,
             createdBy: userId,
-        });
+            maxAttendees: typeof maxAttendees === 'number' ? maxAttendees : undefined,
+            currency: typeof currency === 'string' ? currency : undefined,
+            timezone: typeof timezone === 'string' ? timezone : undefined,
+        };
+
+        const recurring =
+            type === 'seminar' &&
+            status === 'active' &&
+            isRecurring === true &&
+            RECURRENCE_FREQUENCIES.includes(recurrenceFrequency) &&
+            !!start &&
+            !!end;
 
         const currentUser = await User.findById(userId);
+
+        if (recurring) {
+            const startDates = buildRecurrenceStartDates(start, recurrenceFrequency);
+            const durationMs = new Date(end).getTime() - new Date(start).getTime();
+            const created = [];
+            for (const occurrenceStart of startDates) {
+                const occurrenceEnd = new Date(occurrenceStart.getTime() + durationMs);
+                const occurrence = await GroupChat.create({
+                    ...sharedFields,
+                    start: occurrenceStart,
+                    end: occurrenceEnd,
+                    isRecurring: true,
+                    recurrenceFrequency,
+                });
+                created.push(occurrence);
+            }
+            const seriesId = created[0]._id;
+            await GroupChat.updateMany(
+                { _id: { $in: created.map((c) => c._id) } },
+                { seriesId },
+            );
+            currentUser.groupChats.push(...created.map((c) => c._id));
+            await currentUser.save();
+
+            if (status === 'active') {
+                await syncGroupRocketChannel(String(created[0]._id));
+            }
+
+            const recurringUserDetails = await getFullUserData(currentUser.email);
+            recurringUserDetails.token = null;
+            recurringUserDetails.password = null;
+            return res.status(200).json({ result: recurringUserDetails });
+        }
+
+        // create group
+        const chat = await GroupChat.create({
+            ...sharedFields,
+            start: start,
+            end: end,
+            isRecurring: type === 'seminar' && isRecurring === true,
+            recurrenceFrequency:
+                type === 'seminar' && RECURRENCE_FREQUENCIES.includes(recurrenceFrequency)
+                    ? recurrenceFrequency
+                    : undefined,
+        });
+
         currentUser.groupChats.push(chat._id);
         await currentUser.save();
 
@@ -720,6 +915,12 @@ const createGroupChat = async (req, res) => {
 
             sendEmailMeetingRequestToCustomer(customer.email, name, customer.username, start, duration, price, customer.timeZone)
 
+        }
+
+        // A published seminar gets its group chat (Rocket.Chat channel) created up
+        // front so the host — and later, joining students — can chat in it.
+        if (type === 'seminar' && status === 'active') {
+            await syncGroupRocketChannel(String(chat._id));
         }
 
         const userDetails = await getFullUserData(currentUser.email);
@@ -747,7 +948,7 @@ const getGroupChat = async (req, res) => {
         }
 
         // check if groupChat exists
-        const groupChat = await GroupChat.findOne({ _id: groupChatId })
+        const groupChat = await GroupChat.findOne({ _id: String(groupChatId) })
 
         if (!groupChat) {
             return res.status(404).send("Sorry, Invalid meeting ID");
@@ -761,7 +962,7 @@ const getGroupChat = async (req, res) => {
         console.log(err);
         return res
             .status(500)
-            .send(err.message);
+            .send(safeErrorMessage(err));
     }
 };
 
@@ -781,7 +982,7 @@ const resolveGroupMemberByRcSlug = async (req: any, res: any) => {
             return res.status(400).json({ error: "slug query is required" });
         }
 
-        const groupChat = await GroupChat.findById(groupChatId)
+        const groupChat = await GroupChat.findById(String(groupChatId))
             .populate("participants", "email username rocketChatUsername image role status")
             .populate("admin", "email username rocketChatUsername image role status")
             .populate("coModerators", "email username rocketChatUsername image role status");
@@ -836,7 +1037,7 @@ const joinGroupChat = async (req, res) => {
         }
 
         // check if groupChat exists
-        const groupChat = await GroupChat.findOne({ _id: groupChatId });
+        const groupChat = await GroupChat.findOne({ _id: String(groupChatId) });
         if (!groupChat) {
             return res.status(404).send("Sorry, Invalid meeting ID");
         }
@@ -908,7 +1109,7 @@ const joinGroupChat = async (req, res) => {
         console.log(err);
         return res
             .status(500)
-            .send(err.message);
+            .send(safeErrorMessage(err));
     }
 
 }
@@ -917,7 +1118,7 @@ const joinGroupChat = async (req, res) => {
 const updateGroupChat = async (req, res) => {
     try {
         const { userId } = req.user;
-        const { groupId, name, description, image, services, keywords, start, end, duration, price, totalTimeSpent, type, status } = req.body;
+        const { groupId, name, description, image, services, keywords, start, end, duration, price, totalTimeSpent, type, status, maxAttendees, currency, timezone, isRecurring, recurrenceFrequency } = req.body;
 
         if (!groupId) {
             throw new Error("Group ID is required");
@@ -952,6 +1153,13 @@ const updateGroupChat = async (req, res) => {
         if (typeof end === 'string' || typeof end === 'number') updateFields.end = new Date(end);
         if (typeof duration === 'string' || typeof duration === 'number') updateFields.duration = Number(duration);
         if (typeof price === 'string' || typeof price === 'number') updateFields.price = Number(price);
+        if (typeof maxAttendees === 'number') updateFields.maxAttendees = maxAttendees;
+        if (typeof currency === 'string') updateFields.currency = currency;
+        if (typeof timezone === 'string') updateFields.timezone = timezone;
+        if (typeof isRecurring === 'boolean') updateFields.isRecurring = isRecurring;
+        if (isRecurring === true && RECURRENCE_FREQUENCIES.includes(recurrenceFrequency)) {
+            updateFields.recurrenceFrequency = recurrenceFrequency;
+        }
         if (typeof type === 'string' && normalizeId(groupChat.admin) === String(userId)) updateFields.type = type;
         if (typeof totalTimeSpent === 'string' || typeof totalTimeSpent === 'number') {
             const existingTotalTimeSpent = groupChat.totalTimeSpent || 0;
@@ -962,6 +1170,64 @@ const updateGroupChat = async (req, res) => {
         await GroupChat.findByIdAndUpdate(String(groupId), updateFields, { new: true });
 
         // [REMOVED] updateUsersGroupChatList(userId.toString());
+
+        const anchor = await GroupChat.findById(String(groupId));
+
+        const becomesRecurring =
+            anchor &&
+            anchor.type === 'seminar' &&
+            anchor.status === 'active' &&
+            isRecurring === true &&
+            RECURRENCE_FREQUENCIES.includes(recurrenceFrequency) &&
+            !anchor.seriesId &&
+            anchor.start &&
+            anchor.end;
+
+        if (becomesRecurring) {
+            await GroupChat.findByIdAndUpdate(String(groupId), { seriesId: anchor._id });
+            const startDates = buildRecurrenceStartDates(anchor.start, recurrenceFrequency);
+            const durationMs = new Date(anchor.end).getTime() - new Date(anchor.start).getTime();
+            const created = [];
+            for (let i = 1; i < startDates.length; i += 1) {
+                const occurrenceStart = startDates[i];
+                const occurrenceEnd = new Date(occurrenceStart.getTime() + durationMs);
+                const occurrence = await GroupChat.create({
+                    name: anchor.name,
+                    description: anchor.description,
+                    image: anchor.image,
+                    services: anchor.services,
+                    keywords: anchor.keywords,
+                    duration: anchor.duration,
+                    price: anchor.price,
+                    participants: [anchor.admin],
+                    admin: anchor.admin,
+                    type: 'seminar',
+                    status: 'active',
+                    createdBy: anchor.createdBy,
+                    maxAttendees: anchor.maxAttendees,
+                    currency: anchor.currency,
+                    timezone: anchor.timezone,
+                    start: occurrenceStart,
+                    end: occurrenceEnd,
+                    isRecurring: true,
+                    recurrenceFrequency,
+                    seriesId: anchor._id,
+                });
+                created.push(occurrence._id);
+            }
+            if (created.length) {
+                const host = await User.findById(anchor.admin);
+                if (host) {
+                    host.groupChats.push(...created);
+                    await host.save();
+                }
+            }
+        }
+
+        // Publishing a seminar (draft -> active) should ensure its group chat exists.
+        if (groupChat.type === 'seminar' && updateFields.status === 'active' && !groupChat.rcChannelId) {
+            await syncGroupRocketChannel(String(groupId));
+        }
 
         const userDetails = await getFullUserData(req.user.email);
         userDetails.token = null;
@@ -976,24 +1242,46 @@ const updateGroupChat = async (req, res) => {
 };
 
 
-const addMemberToPendingGroup = async (req, res) => {
+// Direct seminar registration — no host approval. Enrolling in one occurrence
+// enrolls the student across the whole recurring series. Full seminars are
+// rejected. (1:1 appointments keep their approval flow elsewhere.)
+const registerForSeminar = async (req, res) => {
     try {
         const { userId } = req.user;
         const { groupChatId, payment_intent } = req.body;
 
-        // check if groupChat exists
-        const groupChat = await GroupChat.findOne({ _id: groupChatId });
+        const groupChat = await GroupChat.findOne({ _id: String(groupChatId) });
 
         if (!groupChat) {
             return res.status(404).send("Sorry, the group chat doesn't exist");
         }
 
+        if (groupChat.type !== 'seminar') {
+            return res.status(400).send("This group is not a seminar");
+        }
+
         if (groupChat.admin.toString() === userId) {
             return res
                 .status(403)
-                .send(
-                    "Forbidden. Group admin can't add himself to the group."
-                );
+                .send("Forbidden. Group admin can't register for their own seminar.");
+        }
+
+        if (groupChat.status !== 'active') {
+            return res.status(400).send("Sorry, the seminar is not active");
+        }
+
+        // Series enrollment is shared, so any occurrence the student already sits
+        // in means they're registered for the whole series.
+        const alreadyParticipant = (groupChat.participants || []).some(
+            (p: any) => p.toString() === userId,
+        );
+        if (alreadyParticipant) {
+            return res.status(409).send("You are already registered for this seminar.");
+        }
+
+        // Capacity guard — a full seminar can't take more students.
+        if (seminarIsFull(groupChat)) {
+            return res.status(409).send("Sorry, this seminar is full.");
         }
 
         // Verify payment against the seminar price stored on the group, not the client.
@@ -1016,27 +1304,38 @@ const addMemberToPendingGroup = async (req, res) => {
             "Seminar registrations"
         );
 
-        // add friends to the pending group
-
-        const friendsToAdd = [];
-
-        if (!groupChat.participants.includes(userId)) {
-            friendsToAdd.push(userId);
+        const customer = await User.findById(userId);
+        if (!customer) {
+            return res.status(404).send("User not found");
         }
 
-        const pendingGroup = new PendingAppointmentToGroup({
-            customerId: userId,
-            groupChatId: groupChatId,
-            paidBy: charge ? charge.paidBy : undefined,
-        })
-        const newPendingGroup = await pendingGroup.save()
+        // Enroll in the target occurrence plus every future sibling in the series.
+        const occurrences = [groupChat];
+        if (groupChat.seriesId) {
+            const now = Date.now();
+            const siblings = await GroupChat.find({
+                seriesId: groupChat.seriesId,
+                type: 'seminar',
+                _id: { $ne: groupChat._id },
+            });
+            for (const sib of siblings) {
+                const sibStart = sib.start ? new Date(sib.start).getTime() : 0;
+                if (sibStart && sibStart >= now) occurrences.push(sib);
+            }
+        }
 
-        const customer = await User.findById(userId)
-        customer.pendingGroupChats.push(newPendingGroup._id)
-        await customer.save()
+        for (const occ of occurrences) {
+            if (!occ.participants.map(String).includes(String(userId))) {
+                occ.participants = [...occ.participants, userId];
+                await occ.save();
+                customer.groupChats.push(occ._id);
+            }
+        }
+        await customer.save();
 
-        expert.pendingGroupChats.push(newPendingGroup._id)
-        await expert.save()
+        // Pull the newly-enrolled student into the seminar's chat channel. The
+        // channel is keyed by seriesId, so one sync covers the whole series.
+        await syncGroupRocketChannel(String(groupChat._id));
 
         if (charge) {
             await appendPaymentHistory({
@@ -1049,29 +1348,37 @@ const addMemberToPendingGroup = async (req, res) => {
                 customer: customer._id.toString(),
                 expert: expert._id.toString(),
                 groupChat: groupChat._id.toString(),
-                pendingAppointmentToGroup: newPendingGroup._id
             })
+
+            await sendBookingReceiptAndConfirmation({
+                payment_intent,
+                charge,
+                sessionType: 'Seminar',
+                sessionName: groupChat.name,
+                expertName: expert.username,
+                studentName: customer.username,
+                studentEmail: customer.email,
+                start: groupChat.start,
+                duration: groupChat.duration,
+                timeZone: customer.timeZone,
+            });
         }
 
-        const user = await User.findById(userId).populate([{
-            path: 'pendingGroupChats',
-            populate: [
-                {
-                    path: 'customerId',
-                    select: 'email username image role status'
-                },
-                'groupChatId'
-            ]
-        }])
+        scheduleEmailReminder(customer.email, customer.username, groupChat.name, groupChat.start, groupChat.duration, customer.timeZone);
+
+        const userDetails = await getFullUserData(customer.email);
+        userDetails.token = null;
+        userDetails.password = null;
 
         return res.status(200).json({
-            pendingGroupChats: user.pendingGroupChats
+            success: true,
+            result: userDetails,
         });
     } catch (err) {
         console.log(err);
         return res
             .status(500)
-            .send(err.message);
+            .send(safeErrorMessage(err));
     }
 };
 
@@ -1080,7 +1387,7 @@ const acceptIndividualAppointment = async (req, res) => {
         const { userId, role } = req.user;
         const { groupChatId, payment_intent } = req.body;
 
-        const groupChat = await GroupChat.findOne({ _id: groupChatId });
+        const groupChat = await GroupChat.findOne({ _id: String(groupChatId) });
 
         if (!groupChat) {
             return res.status(404).send("Sorry, the group chat doesn't exist");
@@ -1108,130 +1415,81 @@ const acceptIndividualAppointment = async (req, res) => {
                     expert: groupChat.admin.toString(),
                     groupChat: groupChatId,
                 })
+
+                const payer = await User.findById(userId);
+                const expertUser = await User.findById(groupChat.admin.toString());
+                await sendBookingReceiptAndConfirmation({
+                    payment_intent,
+                    charge,
+                    sessionType: '1:1 Session',
+                    sessionName: groupChat.name,
+                    expertName: expertUser?.username,
+                    studentName: payer?.username,
+                    studentEmail: payer?.email,
+                    start: groupChat.start,
+                    duration: groupChat.duration,
+                    timeZone: payer?.timeZone,
+                });
             }
         }
 
         groupChat.status = 'active';
         await groupChat.save();
 
-        const expertUser = await User.findById(userId);
-        const customerUser = await User.findById(groupChat.createdBy);
+        res.status(200).send("Group chat accepted successfully!");
 
-        try {
-            if (customerUser?.email) {
-                await sendEmailMeetingAcceptance(
-                    customerUser.email,
-                    customerUser.username,
-                    groupChat.name,
-                    groupChat.start,
-                    groupChat.duration,
-                    customerUser.timeZone,
-                );
+        void (async () => {
+            try {
+                const expertUser = await User.findById(userId);
+                const customerUser = await User.findById(groupChat.createdBy);
+                if (customerUser?.email) {
+                    await sendEmailMeetingAcceptance(
+                        customerUser.email,
+                        customerUser.username,
+                        groupChat.name,
+                        groupChat.start,
+                        groupChat.duration,
+                        customerUser.timeZone,
+                    );
+                }
+                if (expertUser?.email) {
+                    await scheduleEmailReminder(
+                        expertUser.email,
+                        expertUser.username,
+                        groupChat.name,
+                        groupChat.start,
+                        groupChat.duration,
+                        expertUser.timeZone,
+                    );
+                }
+                if (customerUser?.email) {
+                    await scheduleEmailReminder(
+                        customerUser.email,
+                        customerUser.username,
+                        groupChat.name,
+                        groupChat.start,
+                        groupChat.duration,
+                        customerUser.timeZone,
+                    );
+                }
+            } catch (notifyErr) {
+                console.error('[acceptIndividualAppointment] notification failed:', notifyErr?.message || notifyErr);
             }
-            if (expertUser?.email) {
-                await scheduleEmailReminder(
-                    expertUser.email,
-                    expertUser.username,
-                    groupChat.name,
-                    groupChat.start,
-                    groupChat.duration,
-                    expertUser.timeZone,
-                );
-            }
-            if (customerUser?.email) {
-                await scheduleEmailReminder(
-                    customerUser.email,
-                    customerUser.username,
-                    groupChat.name,
-                    groupChat.start,
-                    groupChat.duration,
-                    customerUser.timeZone,
-                );
-            }
-        } catch (notifyErr) {
-            console.error('[acceptIndividualAppointment] notification failed:', notifyErr?.message || notifyErr);
-        }
-
-        return res.status(200).send("Group chat accepted successfully!");
+        })();
+        return;
 
     } catch (err) {
         console.log(err);
-        return res.status(500).send(err.message);
+        return res.status(500).send(safeErrorMessage(err));
     }
 }
-
-const addMemberToGroup = async (req, res) => {
-    try {
-        const { email, userId } = req.user;
-        const { _id, friendId, groupChatId } = req.body;
-        console.log('[addMemberToGroup]', _id, friendId, groupChatId)
-
-        // check if groupChat exists
-        const groupChat = await GroupChat.findOne({ _id: groupChatId });
-
-        if (!groupChat) {
-            return res.status(404).send("Sorry, the group chat doesn't exist");
-        }
-
-        if (groupChat.admin.toString() === friendId) {
-            return res
-                .status(403)
-                .send(
-                    "Forbidden. Group admin can't add himself to the group."
-                );
-        }
-
-        const pendingGroupChat = await PendingAppointmentToGroup.findById(_id)
-        if (!pendingGroupChat)
-            throw new Error('No pending appointment found')
-
-        const customer = await User.findById(friendId)
-        if (!customer)
-            throw new Error('No registered customer found')
-        let index = customer.pendingGroupChats.findIndex(item => item.toString() === _id)
-        if (index > -1)
-            customer.pendingGroupChats.splice(index, 1)
-
-        const expert = await User.findById(userId)
-        index = expert.pendingGroupChats.findIndex(item => item.toString() === _id)
-        if (index > -1)
-            expert.pendingGroupChats.splice(index, 1)
-
-
-        // add friend to the group
-        if (!groupChat.participants.includes(friendId)) {
-            groupChat.participants = [...groupChat.participants, friendId];
-            customer.groupChats.push(groupChatId);
-
-            // update the user's(user who has been added to the group) chat list
-            // [REMOVED] updateUsersGroupChatList(friendId.toString());
-        }
-
-        await customer.save();
-        await expert.save();
-        await groupChat.save();
-
-        // update the chat list of all participants
-        groupChat.participants.map(userId => {
-            // [REMOVED] updateUsersGroupChatList(userId.toString());
-        })
-
-        // Check if the room is enable in this group, if so, update active rooms of this user
-        // [REMOVED] updateActiveRoomsOfUsers(friendId, [groupChat])
-
-        return res.status(200).send("Members added successfully!");
-    } catch (err) {
-        console.log(err);
-        return res.status(500).send(err.message);
-    }
-};
 
 const leaveGroup = async (req, res) => {
     try {
         const { userId } = req.user;
         const { groupChatId } = req.body;
 
-        const groupChat = await GroupChat.findOne({ _id: groupChatId });
+        const groupChat = await GroupChat.findOne({ _id: String(groupChatId) });
 
         if (!groupChat) {
             return res.status(404).send("Sorry, the group chat doesn't exist");
@@ -1324,7 +1582,7 @@ const leaveGroup = async (req, res) => {
         console.log(err);
         return res
             .status(500)
-            .send(err.message);
+            .send(safeErrorMessage(err));
     }
 };
 
@@ -1337,7 +1595,7 @@ const removeMemberFromCommunityChat = async (req, res) => {
             return res.status(400).json({ error: 'groupChatId and memberUserId are required' });
         }
 
-        const groupChat = await GroupChat.findOne({ _id: groupChatId, type: 'community' });
+        const groupChat = await GroupChat.findOne({ _id: String(groupChatId), type: 'community' });
         if (!groupChat) {
             return res.status(404).json({ error: 'Community chat not found' });
         }
@@ -1350,7 +1608,7 @@ const removeMemberFromCommunityChat = async (req, res) => {
             return res.status(400).json({ error: 'Use Leave community to leave yourself' });
         }
 
-        const member = await User.findById(memberUserId);
+        const member = await User.findById(String(memberUserId));
         if (!member) {
             return res.status(404).json({ error: 'Member not found' });
         }
@@ -1443,9 +1701,12 @@ const removeMemberFromCommunityChat = async (req, res) => {
 const deleteGroup = async (req, res) => {
     try {
         const { userId } = req.user;
-        const { groupChatId } = req.body;
+        // scope: 'series' removes every occurrence sharing the seriesId,
+        // 'occurrence' removes only the targeted session. Ignored for
+        // non-recurring groups (always a single doc).
+        const { groupChatId, scope } = req.body;
 
-        const groupChat = await GroupChat.findOne({ _id: groupChatId });
+        const groupChat = await GroupChat.findOne({ _id: String(groupChatId) });
 
         if (!groupChat) {
             throw new Error("Sorry, the group chat doesn't exist");
@@ -1455,30 +1716,68 @@ const deleteGroup = async (req, res) => {
             throw new Error("Forbidden. Only group admins can delete a group.");
         }
 
-        const participantIds = Array.isArray(groupChat.participants) ? groupChat.participants : [];
+        // Recurring seminars span multiple docs sharing a seriesId. Enrolling in
+        // one occurrence enrolls a student across the whole series, so a seminar
+        // with students enrolled can't be self-deleted regardless of scope —
+        // the host must contact an admin.
+        const seriesDocs =
+            groupChat.type === 'seminar' && groupChat.seriesId
+                ? await GroupChat.find({ seriesId: groupChat.seriesId })
+                : [groupChat];
+
+        if (groupChat.type === 'seminar') {
+            const enrolled = new Set<string>();
+            for (const g of seriesDocs) {
+                enrolledStudentIds(g).forEach((id) => enrolled.add(id));
+            }
+            if (enrolled.size > 0) {
+                return res.status(409).json({
+                    status: 'FAIL',
+                    error:
+                        'You cannot delete this seminar right now since students are already enrolled in it. If you still want to delete it, please contact admin.',
+                });
+            }
+        }
+
+        // No students enrolled: honour the host's scope choice. 'occurrence'
+        // deletes just this session; anything else (incl. non-recurring) removes
+        // the whole series so no orphan occurrences remain.
+        const groupChats =
+            scope === 'occurrence' ? [groupChat] : seriesDocs;
+
+        const deleteIds = groupChats.map((g: any) => g._id.toString());
+
+        // Pull the deleted group(s) from every participant's chat lists so they
+        // disappear from calendars, upcoming lists, and seminar hubs on refresh.
+        const participantIds = new Set<string>();
+        for (const g of groupChats) {
+            (Array.isArray(g.participants) ? g.participants : []).forEach((p: any) =>
+                participantIds.add(p.toString()),
+            );
+        }
         for (const friendId of participantIds) {
-            const participant = await User.findById(friendId);
+            const participant = await User.findById(String(friendId));
             if (!participant) continue;
 
             participant.groupChats = (participant.groupChats || []).filter(
-                (chat: any) => chat.toString() !== groupChat._id.toString(),
+                (chat: any) => !deleteIds.includes(chat.toString()),
             );
 
             if (groupChat.type === 'community' && Array.isArray(participant.generalChats)) {
                 participant.generalChats = participant.generalChats.filter(
-                    (chat: any) => chat.toString() !== groupChat._id.toString(),
+                    (chat: any) => !deleteIds.includes(chat.toString()),
                 );
             }
 
             await participant.save();
         }
 
-        await GroupChat.deleteOne({ _id: groupChat._id });
+        await GroupChat.deleteMany({ _id: { $in: groupChats.map((g: any) => g._id) } });
 
         return res.status(200).send("Group deleted successfully!");
     } catch (err: any) {
         console.log(err);
-        return res.status(500).send(err.message);
+        return res.status(500).send(safeErrorMessage(err));
     }
 };
 
@@ -1488,7 +1787,7 @@ const cancelIndividualAppointment = async (req, res) => {
         const { groupChatId } = req.body;
 
         // check if groupChat exists
-        const groupChat = await GroupChat.findOne({ _id: groupChatId });
+        const groupChat = await GroupChat.findOne({ _id: String(groupChatId) });
         if (!groupChat) {
             throw new Error("Sorry, the group chat doesn't exist");
         }
@@ -1502,7 +1801,7 @@ const cancelIndividualAppointment = async (req, res) => {
         }
 
         groupChat.participants.forEach(async (participantId) => {
-            const participant = await User.findById(participantId);
+            const participant = await User.findById(String(participantId));
             if (participant) {
                 participant.groupChats = participant.groupChats.filter((chat) => chat.toString() !== groupChatId);
                 await participant.save();
@@ -1513,7 +1812,7 @@ const cancelIndividualAppointment = async (req, res) => {
 
         if (groupChat.admin.toString() !== userId) {
 
-            const payment = await PaymentHistory.findOne({ groupChat: groupChatId, customer: userId });
+            const payment = await PaymentHistory.findOne({ groupChat: String(groupChatId), customer: userId });
 
             if (payment) {
                 const refund = await refundPaymentIntent(payment.paymentIntent, payment.amount, payment.stripeMode)
@@ -1543,81 +1842,7 @@ const cancelIndividualAppointment = async (req, res) => {
         console.log(err);
         return res
             .status(500)
-            .send(err.message);
-    }
-}
-
-const cancelPendingSeminar = async (req, res) => {
-    try {
-        const { userId } = req.user;
-        const { pendingSeminarId } = req.body;
-
-        // check if groupChat exists
-        const pendingAppointment = await PendingAppointmentToGroup.findOne({ _id: pendingSeminarId });
-        if (!pendingAppointment) {
-            throw new Error("Sorry, the join request to seminar doesn't exist");
-        }
-        if (pendingAppointment.customerId.toString() !== userId) {
-            throw new Error("Forbidden. Only the customer can cancel the request to join the seminar.");
-        }
-
-        const currentUser = await User.findById(userId);
-        if (!currentUser) {
-            throw new Error("User not found");
-        }
-
-        // remove groupChat from the list of user's groupChats
-        currentUser.pendingGroupChats = currentUser.pendingGroupChats.filter((chat) => {
-            return chat.toString() !== pendingSeminarId;
-        });
-        await currentUser.save();
-
-        const groupChat = await GroupChat.findById(pendingAppointment.groupChatId);
-        if (!groupChat) {
-            throw new Error("Group chat not found");
-        }
-
-        const expert = await User.findById(groupChat.admin);
-        if (!expert) {
-            throw new Error("Expert not found");
-        }
-
-        // remove groupChat from the list of user's groupChats
-        expert.pendingGroupChats = expert.pendingGroupChats.filter((chat) => {
-            return chat.toString() !== pendingSeminarId;
-        });
-        await expert.save();
-
-        // update the chat list of user who left the chat.
-        // [REMOVED] updateUsersGroupChatList(currentUser._id.toString());
-        // [REMOVED] updateUsersGroupChatList(expert._id.toString());
-
-        const payment = await PaymentHistory.findOne({ pendingAppointmentToGroup: pendingSeminarId })
-        if (payment) {
-            const refund = await refundPaymentIntent(payment.paymentIntent, payment.amount, payment.stripeMode)
-            if (refund) {
-                appendPaymentHistory({
-                    stripeMode: payment.stripeMode,
-                    amount: payment.amount,
-                    currency: payment.currency,
-                    description: payment.description,
-                    customer: payment.customer,
-                    expert: payment.expert,
-                    pendingAppointmentToGroup: payment.pendingAppointmentToGroup,
-                    groupChat: payment.groupChat,
-                    event: payment.event,
-                    paymentType: 'refund',
-                    paymentIntent: refund.payment_intent,
-                })
-            }
-        }
-
-        return res.status(200).send("Your join request to a seminar has been canceled!");
-    } catch (err) {
-        console.log(err);
-        return res
-            .status(500)
-            .send(err.message);
+            .send(safeErrorMessage(err));
     }
 }
 
@@ -1626,7 +1851,7 @@ const leftSeminar = async (req, res) => {
         const { userId } = req.user;
         const { seminarId } = req.body;
 
-        const groupChat = await GroupChat.findById(seminarId);
+        const groupChat = await GroupChat.findById(String(seminarId));
         if (!groupChat) {
             throw new Error("Group chat not found");
         }
@@ -1656,8 +1881,9 @@ const leftSeminar = async (req, res) => {
             // [REMOVED] updateUsersGroupChatList(participant.toString());
         });
 
-        const pendingAppointmentToGroups = await PendingAppointmentToGroup.where({ groupChatId: seminarId, customerId: userId })
-        const payment = await PaymentHistory.findOne({ pendingAppointmentToGroup: pendingAppointmentToGroups[0]?._id.toString() })
+        // Seminar charges are recorded against the groupChat (direct enroll), so
+        // refund the matching charge for this student.
+        const payment = await PaymentHistory.findOne({ groupChat: String(seminarId), customer: userId, paymentType: 'charge' })
         if (payment) {
             const refund = await refundPaymentIntent(payment.paymentIntent, payment.amount, payment.stripeMode)
             if (refund) {
@@ -1682,7 +1908,7 @@ const leftSeminar = async (req, res) => {
         console.log(err);
         return res
             .status(500)
-            .send(err.message);
+            .send(safeErrorMessage(err));
     }
 }
 
@@ -1694,7 +1920,7 @@ const setCommunityCoModerator = async (req, res) => {
             return res.status(400).json({ error: "groupChatId and memberUserId are required" });
         }
 
-        const groupChat = await GroupChat.findOne({ _id: groupChatId, type: "community" });
+        const groupChat = await GroupChat.findOne({ _id: String(groupChatId), type: "community" });
         if (!groupChat) return res.status(404).json({ error: "Community chat not found" });
 
         const adminId = String(groupChat?.admin?._id ?? groupChat?.admin ?? "");
@@ -1734,22 +1960,55 @@ const setCommunityCoModerator = async (req, res) => {
     }
 };
 
+/**
+ * Lazily ensure a seminar's Rocket.Chat group channel exists (back-fills seminars
+ * created before auto-provisioning). Any seminar member may trigger it; returns the
+ * channel id so the client can open the chat.
+ */
+const ensureSeminarChannel = async (req, res) => {
+    try {
+        const { userId } = req.user;
+        const { groupChatId } = req.body;
+
+        if (!groupChatId || String(groupChatId).length !== 24) {
+            return res.status(400).json({ status: 'FAIL', error: 'Invalid seminar id' });
+        }
+
+        const groupChat = await GroupChat.findById(String(groupChatId));
+        if (!groupChat || groupChat.type !== 'seminar') {
+            return res.status(404).json({ status: 'FAIL', error: 'Seminar not found' });
+        }
+        if (!userCanAccessGroupChat(groupChat, String(userId))) {
+            return res.status(403).json({ status: 'FAIL', error: 'Forbidden' });
+        }
+
+        let rcChannelId = groupChat.rcChannelId ? String(groupChat.rcChannelId) : null;
+        if (!rcChannelId) {
+            rcChannelId = await syncGroupRocketChannel(String(groupChat._id));
+        }
+
+        return res.status(200).json({ status: 'SUCCESS', rcChannelId });
+    } catch (err) {
+        return res.status(500).json({ status: 'FAIL', error: safeErrorMessage(err) });
+    }
+};
+
 module.exports = {
     createGroupChat,
     createGroupChatByUser,
+    proposeIndividualAppointment,
+    ensureSeminarChannel,
     getGroupChat,
     resolveGroupMemberByRcSlug,
     joinGroupChat,
     updateGroupChat,
-    addMemberToPendingGroup,
+    registerForSeminar,
     acceptIndividualAppointment,
-    addMemberToGroup,
     leaveGroup,
     deleteGroup,
     createGeneralChatAndJoinGlobalChat,
     joinGeneralChat,
     joinPrivateChat,
-    cancelPendingSeminar,
     cancelIndividualAppointment,
     createCommunityChat,
     joinCommunityChat,

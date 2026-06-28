@@ -9,6 +9,7 @@ const {
     updateDailyTimeSlots,
     setBookingNoticeHours,
     setBlockedBookingDates,
+    setBlockedBookingSlots,
     filterCustomers,
     getCustomerById,
     shareMeetingViaEmail,
@@ -46,6 +47,12 @@ router.post(
     "/blockedBookingDates",
     expertAuth(false),
     setBlockedBookingDates
+);
+
+router.post(
+    "/blockedBookingSlots",
+    expertAuth(false),
+    setBlockedBookingSlots
 );
 
 router.post(

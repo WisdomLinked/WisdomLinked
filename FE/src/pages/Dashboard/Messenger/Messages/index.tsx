@@ -910,6 +910,8 @@ const Messages = ({ theme = "dark", onReplyMessage }: { theme?: string; onReplyM
                                 services={chosenGroupChatDetails?.services}
                                 type={chosenGroupChatDetails?.type}
                                 createdAt={chosenGroupChatDetails?.createdAt}
+                                isRecurring={chosenGroupChatDetails?.isRecurring}
+                                recurrenceFrequency={chosenGroupChatDetails?.recurrenceFrequency}
                                 canDeleteCommunityChat={
                                     (() => {
                                         if (chosenGroupChatDetails?.type !== "community") return false;

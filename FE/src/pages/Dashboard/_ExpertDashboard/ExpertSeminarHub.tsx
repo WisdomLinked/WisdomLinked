@@ -7,11 +7,16 @@ import {
   User,
   Plus,
   Pencil,
+  Repeat,
+  Trash2,
 } from 'lucide-react';
 import { useDispatch } from 'react-redux';
 
 import { useAppSelector } from '../../../store';
 import { updateMe } from '../../../actions/authActions';
+import { SetLoadingStatus } from '../../../actions/appActions';
+import { showSuccessAlert } from '../../../actions/alertActions';
+import { deleteGroup } from '../../../api/api';
 import { formatDateYYYY_MM_DD_h_m } from '../../../actions/common';
 import { canonicalLabelsFromMixedServiceEntries } from '../../../constants/serviceOptions';
 import Avatar from '../../../components/Avatar';
@@ -19,6 +24,43 @@ import GroupParticipantsDialog from '../Messenger/Messages/GroupParticipantsDial
 import ExpertSeminar from './seminar';
 
 type HubScreen = 'list' | 'create' | 'edit' | 'detail';
+
+const RECURRENCE_LABEL: Record<string, string> = {
+  weekly: 'Weekly',
+  biweekly: 'Biweekly',
+  monthly: 'Monthly',
+};
+
+function recurrenceLabelOf(g: any): string | undefined {
+  const f = g?.recurrenceFrequency;
+  return g?.isRecurring && RECURRENCE_LABEL[f] ? RECURRENCE_LABEL[f] : undefined;
+}
+
+function groupSeminarSeries(list: any[]): { seminar: any; occurrenceCount: number }[] {
+  const now = Date.now();
+  const bySeries = new Map<string, any[]>();
+  const out: { seminar: any; occurrenceCount: number }[] = [];
+  for (const g of list) {
+    const sid = g?.seriesId ? String(g.seriesId) : '';
+    if (sid) {
+      const arr = bySeries.get(sid) || [];
+      arr.push(g);
+      bySeries.set(sid, arr);
+    } else {
+      out.push({ seminar: g, occurrenceCount: 1 });
+    }
+  }
+  bySeries.forEach((arr) => {
+    const sorted = [...arr].sort((a, b) => {
+      const ta = a?.start ? new Date(a.start).getTime() : 0;
+      const tb = b?.start ? new Date(b.start).getTime() : 0;
+      return ta - tb;
+    });
+    const rep = sorted.find((x) => (x?.start ? new Date(x.start).getTime() : 0) >= now) || sorted[0];
+    out.push({ seminar: rep, occurrenceCount: arr.length });
+  });
+  return out;
+}
 
 function getRefId(ref: unknown): string {
   if (ref == null) return '';
@@ -53,6 +95,8 @@ function mapGroupChatToExpertSeminar(g: any) {
     price: g.price,
     image: g.image ?? null,
     status: g.status,
+    isRecurring: !!g.isRecurring,
+    recurrenceFrequency: g.recurrenceFrequency,
   };
 }
 
@@ -60,10 +104,14 @@ function SeminarCard({
   seminar,
   onClick,
   badge,
+  recurrenceLabel,
+  occurrenceCount,
 }: {
   seminar: any;
   onClick: () => void;
   badge?: string;
+  recurrenceLabel?: string;
+  occurrenceCount?: number;
 }) {
   const start = seminar?.start ? new Date(seminar.start) : null;
   const admin = seminar?.admin;
@@ -112,6 +160,12 @@ function SeminarCard({
             {badge}
           </div>
         ) : null}
+        {recurrenceLabel ? (
+          <div className="absolute right-3 top-3 inline-flex items-center gap-1 rounded-full bg-[#234C6A]/90 px-2.5 py-0.5 text-[10px] font-semibold text-white backdrop-blur">
+            <Repeat className="h-3 w-3" aria-hidden />
+            {recurrenceLabel}
+          </div>
+        ) : null}
       </div>
       <div className="p-4 flex-1 flex flex-col">
         <h3 className="text-[15px] font-semibold text-slate-900 leading-snug line-clamp-2">
@@ -134,6 +188,12 @@ function SeminarCard({
             <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
             {n} enrolled
           </span>
+          {recurrenceLabel && occurrenceCount && occurrenceCount > 1 ? (
+            <span className="inline-flex items-center gap-1 rounded-full bg-[#E8EEF4] px-2 py-1 text-[#234C6A]">
+              <Repeat className="h-3 w-3" aria-hidden />
+              {recurrenceLabel} · {occurrenceCount} sessions
+            </span>
+          ) : null}
         </div>
         {majors.length > 0 ? (
           <div className="mt-2 flex flex-wrap gap-1">
@@ -162,16 +222,25 @@ function SeminarDetailPane({
   isHost,
   onBack,
   onEdit,
+  onDelete,
 }: {
   seminar: any;
   isHost: boolean;
   onBack: () => void;
   onEdit: () => void;
+  onDelete: (scope: 'occurrence' | 'series') => void;
 }) {
   const { auth: { userDetails } } = useAppSelector((s) => s);
   const [showParticipants, setShowParticipants] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const isRecurring = !!seminar?.isRecurring;
   const admin = seminar?.admin;
   const participants: any[] = Array.isArray(seminar?.participants) ? seminar.participants : [];
+  // Enrolled students = participants minus the host. A seminar with anyone
+  // enrolled can't be self-deleted; the host is told to contact an admin.
+  const adminId = getRefId(admin);
+  const enrolledCount = participants.filter((p) => getRefId(p) !== adminId).length;
+  const hasEnrolledStudents = enrolledCount > 0;
   const start = seminar?.start ? new Date(seminar.start) : null;
   const end = seminar?.end ? new Date(seminar.end) : null;
   const now = Date.now();
@@ -214,6 +283,12 @@ function SeminarDetailPane({
             <h1 className="mt-2 font-serif text-[1.65rem] leading-tight text-[#1A3A4A]">
               {seminar?.name || 'Seminar'}
             </h1>
+            {recurrenceLabelOf(seminar) && (
+              <span className="mt-2 inline-flex items-center gap-1 rounded-full bg-[#E8EEF4] px-3 py-1 text-[12px] font-medium text-[#234C6A]">
+                <Repeat className="h-3.5 w-3.5" aria-hidden />
+                Repeats {recurrenceLabelOf(seminar)!.toLowerCase()}
+              </span>
+            )}
 
             <div className="mt-4 rounded-xl border border-[#E5E2DB] bg-[#F5F3EF] px-4 py-3">
               <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[#7A7A72]">
@@ -376,14 +451,92 @@ function SeminarDetailPane({
               <p className="mt-2 text-sm text-[#5c5c56]">
                 Update schedule, pricing, or description anytime before the session.
               </p>
-              <button
-                type="button"
-                onClick={onEdit}
-                className="mt-4 w-full inline-flex items-center justify-center gap-2 rounded-lg bg-[#234C6A] px-4 py-2.5 text-sm font-semibold text-white hover:brightness-110"
-              >
-                <Pencil className="h-4 w-4" aria-hidden />
-                Edit seminar
-              </button>
+              <div className="mt-4 flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={onEdit}
+                  className="flex-1 inline-flex items-center justify-center gap-2 rounded-lg bg-[#234C6A] px-4 py-2.5 text-sm font-semibold text-white hover:brightness-110"
+                >
+                  <Pencil className="h-4 w-4" aria-hidden />
+                  Edit seminar
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setConfirmDelete(true)}
+                  className="inline-flex items-center justify-center gap-2 rounded-lg border border-rose-200 bg-white px-4 py-2.5 text-sm font-semibold text-rose-600 hover:bg-rose-50"
+                >
+                  <Trash2 className="h-4 w-4" aria-hidden />
+                  Delete
+                </button>
+              </div>
+              {confirmDelete ? (
+                hasEnrolledStudents ? (
+                  <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-3">
+                    <p className="text-xs text-amber-800">
+                      You cannot delete this seminar right now since students are
+                      already enrolled in it. If you still want to delete it,
+                      please contact admin.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => setConfirmDelete(false)}
+                      className="mt-3 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50"
+                    >
+                      Close
+                    </button>
+                  </div>
+                ) : (
+                  <div className="mt-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-3">
+                    <p className="text-xs text-rose-700">
+                      {isRecurring
+                        ? 'This is a recurring seminar. Choose what to delete — it will be removed from everyone’s calendars. This cannot be undone.'
+                        : 'Delete this seminar? It will be removed from everyone’s calendars. This cannot be undone.'}
+                    </p>
+                    {isRecurring ? (
+                      <div className="mt-3 space-y-2">
+                        <button
+                          type="button"
+                          onClick={() => onDelete('occurrence')}
+                          className="w-full rounded-lg bg-rose-600 px-3 py-2 text-xs font-semibold text-white hover:bg-rose-700"
+                        >
+                          Delete only this session
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => onDelete('series')}
+                          className="w-full rounded-lg bg-rose-600 px-3 py-2 text-xs font-semibold text-white hover:bg-rose-700"
+                        >
+                          Delete all upcoming sessions
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setConfirmDelete(false)}
+                          className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="mt-3 flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => onDelete('series')}
+                          className="flex-1 rounded-lg bg-rose-600 px-3 py-2 text-xs font-semibold text-white hover:bg-rose-700"
+                        >
+                          Yes, delete
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setConfirmDelete(false)}
+                          className="flex-1 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )
+              ) : null}
             </>
           ) : (
             <>
@@ -445,7 +598,7 @@ export default function ExpertSeminarHub() {
     [allSeminars, me],
   );
   const mySeminars = useMemo(
-    () => allSeminars.filter((g: any) => g.status !== 'draft'),
+    () => groupSeminarSeries(allSeminars.filter((g: any) => g.status !== 'draft')),
     [allSeminars],
   );
 
@@ -458,6 +611,24 @@ export default function ExpertSeminarHub() {
     await (dispatch as any)(updateMe());
     setScreen('list');
     setEditPayload(null);
+  };
+
+  const handleDeleteSeminar = async (s: any, scope: 'occurrence' | 'series') => {
+    const groupId = s?._id ? String(s._id) : getRefId(s);
+    if (!groupId) return;
+    SetLoadingStatus(true);
+    const res = await deleteGroup({ groupChatId: groupId, scope });
+    SetLoadingStatus(false);
+    if (res !== false) {
+      dispatch(
+        showSuccessAlert(
+          scope === 'occurrence' ? 'Seminar session deleted' : 'Seminar deleted',
+        ),
+      );
+      await (dispatch as any)(updateMe());
+      setDetailSeminar(null);
+      setScreen('list');
+    }
   };
 
   const adminIdOf = (s: any) => getRefId(s?.admin);
@@ -505,6 +676,7 @@ export default function ExpertSeminarHub() {
           setEditPayload(mapGroupChatToExpertSeminar(detailSeminar));
           setScreen('edit');
         }}
+        onDelete={(scope) => handleDeleteSeminar(detailSeminar, scope)}
       />
     );
   }
@@ -562,7 +734,7 @@ export default function ExpertSeminarHub() {
             </div>
           ) : (
             <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
-              {mySeminars.map((s: any) => {
+              {mySeminars.map(({ seminar: s, occurrenceCount }) => {
                 const host = adminIdOf(s) === String(me);
                 return (
                   <SeminarCard
@@ -570,6 +742,8 @@ export default function ExpertSeminarHub() {
                     seminar={s}
                     onClick={() => openDetail(s)}
                     badge={host ? 'Hosted' : 'Joined'}
+                    recurrenceLabel={recurrenceLabelOf(s)}
+                    occurrenceCount={occurrenceCount}
                   />
                 );
               })}

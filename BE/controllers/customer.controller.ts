@@ -3,6 +3,7 @@ const User = require("../models/User");
 const GroupChat = require("../models/GroupChat");
 const Keyword = require("../models/Keyword")
 const PaymentHistory = require("../models/PaymentHistory");
+import { safeErrorMessage } from '../utils/httpUserFacingCopy';
 
 // Escape user-supplied text so it can be used safely inside a regex (prevents ReDoS / injection).
 const escapeRegex = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
@@ -10,7 +11,11 @@ const escapeRegex = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$
 //  - followerCount: how many customers follow the expert
 //  - isFollowing:   whether the requesting customer already follows them
 const withFollowInfo = (expert: any, myFollowingIds: Set<string>) => {
-    const plain = typeof expert.toObject === 'function' ? expert.toObject() : expert;
+    // flattenMaps so Map fields (e.g. blockedBookingSlots) serialize to plain objects;
+    // toObject() defaults to flattenMaps:false, which JSON.stringify turns into {}.
+    const plain = typeof expert.toObject === 'function'
+        ? expert.toObject({ flattenMaps: true })
+        : expert;
     return {
         ...plain,
         followerCount: Array.isArray(plain.followers) ? plain.followers.length : 0,
@@ -27,7 +32,7 @@ const filterExperts = async (req: any, res: Response) => {
         // Default to active experts only — excludes experts still in review or blocked.
         let query = User.find({ role: 'expert', status: 'active' })
         if (_id) {
-            query.where({ _id: _id })
+            query.where({ _id: String(_id) })
         } else {
             const term = typeof username === 'string' ? username.trim() : ''
             if (term) {
@@ -109,7 +114,7 @@ const filterExperts = async (req: any, res: Response) => {
         })
     } catch (err) {
         console.log(err)
-        return res.status(500).send(err.message);
+        return res.status(500).send(safeErrorMessage(err));
     }
 }
 
@@ -133,7 +138,7 @@ const filterSeminars = async (req, res) => {
             participants: { $nin: userId }
         })
         if (name) {
-            query.where({ name: { '$regex': name, '$options': 'i' } })
+            query.where({ name: { '$regex': escapeRegex(String(name)), '$options': 'i' } })
         }
         if (keywords?.length) {
             let _keywords = []
@@ -193,7 +198,7 @@ const filterSeminars = async (req, res) => {
         })
     } catch (err) {
         console.log(err)
-        return res.status(500).send(err.message);
+        return res.status(500).send(safeErrorMessage(err));
     }
 }
 
@@ -201,7 +206,7 @@ const filterSeminars = async (req, res) => {
 const getExpertById = async (req, res) => {
     try {
         const { id } = req.params
-        const query = await User.findById(id).populate(["keywords","services","events","groupChats"
+        const query = await User.findById(String(id)).populate(["keywords","services","events","groupChats"
         ,{
             path: "pendingGroupChats",
             populate: ["groupChatId"],
@@ -218,16 +223,16 @@ const getExpertById = async (req, res) => {
     }
     catch (err) {
         console.log(err)
-        return res.status(500).send(err.message);
+        return res.status(500).send(safeErrorMessage(err));
     }
 }
 
 const followExpert = async (req: any, res: Response) => {
     try {
         const { userId } = req.user
-        const { expertId } = req.params
+        const expertId = String(req.params.expertId)
 
-        if (String(userId) === String(expertId)) {
+        if (String(userId) === expertId) {
             return res.status(400).send("You cannot follow yourself");
         }
 
@@ -246,7 +251,7 @@ const followExpert = async (req: any, res: Response) => {
         });
     } catch (err: any) {
         console.log(err)
-        return res.status(500).send(err.message);
+        return res.status(500).send(safeErrorMessage(err));
     }
 }
 
@@ -254,7 +259,7 @@ const followExpert = async (req: any, res: Response) => {
 const unfollowExpert = async (req: any, res: Response) => {
     try {
         const { userId } = req.user
-        const { expertId } = req.params
+        const expertId = String(req.params.expertId)
 
         await User.updateOne({ _id: userId }, { $pull: { following: expertId } });
         await User.updateOne({ _id: expertId }, { $pull: { followers: userId } });
@@ -266,7 +271,7 @@ const unfollowExpert = async (req: any, res: Response) => {
         });
     } catch (err: any) {
         console.log(err)
-        return res.status(500).send(err.message);
+        return res.status(500).send(safeErrorMessage(err));
     }
 }
 
@@ -289,7 +294,7 @@ const getMyPaymentHistory = async (req: any, res: Response) => {
         return res.status(200).json({ result: enriched });
     } catch (err: any) {
         console.log(err);
-        return res.status(500).send(err.message);
+        return res.status(500).send(safeErrorMessage(err));
     }
 };
 

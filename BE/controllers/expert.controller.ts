@@ -32,11 +32,39 @@ function normalizeBlockedDates(dates: unknown): string[] | null {
     return unique;
 }
 
+function normalizeBlockedSlots(
+    slots: unknown,
+): Record<string, number[]> | null {
+    if (!slots || typeof slots !== "object" || Array.isArray(slots)) return null;
+    const out: Record<string, number[]> = {};
+    for (const [rawKey, rawVal] of Object.entries(slots as Record<string, unknown>)) {
+        const key = String(rawKey || "").trim().slice(0, 10);
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(key)) continue;
+        if (!Array.isArray(rawVal)) continue;
+        const indices = [
+            ...new Set(
+                rawVal
+                    .map((v: unknown) => Math.trunc(Number(v)))
+                    .filter((n: number) => Number.isInteger(n) && n >= 0 && n <= 47),
+            ),
+        ].sort((a, b) => a - b);
+        if (indices.length) out[key] = indices;
+    }
+    return out;
+}
+
 const updateTimeSlots = async (req: any, res: Response) => {
     try {
         const { email } = req.user
-        const { timeSlots } = req.body
-        const newUser = await User.findOneAndUpdate({ email: email }, { timeSlots: timeSlots }, { new: true })
+        const { timeSlots, availabilityMode, weeklyTimeSlots } = req.body
+        const update: any = { timeSlots: timeSlots }
+        if (availabilityMode === 'common' || availabilityMode === 'daily') {
+            update.availabilityMode = availabilityMode
+        }
+        if (weeklyTimeSlots && typeof weeklyTimeSlots === 'object') {
+            update.weeklyTimeSlots = weeklyTimeSlots
+        }
+        const newUser = await User.findOneAndUpdate({ email: email }, update, { new: true })
         newUser.token = null
         newUser.password = null
         return res.status(200).json({
@@ -44,7 +72,7 @@ const updateTimeSlots = async (req: any, res: Response) => {
         })
     } catch (err) {
         console.log(err)
-        return res.status(500).send(err.message);
+        return res.status(500).send(safeErrorMessage(err));
     }
 }
 
@@ -52,7 +80,7 @@ const getDailyTimeSlots = async (req, res) => {
     try {
         const { email } = req.user
         const { startTime, endTime, userId } = req.body
-        const user = await User.findOne(userId ? { _id: userId } : { email: email }).select('dailyTimeSlots')
+        const user = await User.findOne(userId ? { _id: String(userId) } : { email: email }).select('dailyTimeSlots')
         if (!user) {
             throw new Error("User not found")
         }
@@ -67,7 +95,7 @@ const getDailyTimeSlots = async (req, res) => {
         })
     } catch (err) {
         console.log(err)
-        return res.status(500).send(err.message);
+        return res.status(500).send(safeErrorMessage(err));
     }
 }
 
@@ -94,7 +122,7 @@ const updateDailyTimeSlots = async (req, res) => {
         })
     } catch (err) {
         console.log(err)
-        return res.status(500).send(err.message);
+        return res.status(500).send(safeErrorMessage(err));
     }
 }
 
@@ -102,7 +130,7 @@ const getCustomerById = async (req, res) => {
     try {
         console.log("inside getCustomerByid")
         const { id } = req.params
-        const query = await User.findById(id).populate(["keywords", "services"])
+        const query = await User.findById(String(id)).populate(["keywords", "services"])
         console.log("inside getCustomerByid", query)
         return res.status(200).json({
             result: query
@@ -110,7 +138,7 @@ const getCustomerById = async (req, res) => {
     }
     catch (err) {
         console.log(err)
-        return res.status(500).send(err.message);
+        return res.status(500).send(safeErrorMessage(err));
     }
 }
 const escapeRegex = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -121,7 +149,7 @@ const filterCustomers = async (req, res) => {
         const { _id, username, keywords, services, sortBy } = req.body
         let query = User.find({ role: 'customer', status: { $ne: 'blocked' } })
         if (_id) {
-            query.where({ _id: _id })
+            query.where({ _id: String(_id) })
         } else {
             const nameOrEmail = username && String(username).trim();
             if (nameOrEmail) {
@@ -189,14 +217,14 @@ const filterCustomers = async (req, res) => {
         })
     } catch (err) {
         console.log(err)
-        return res.status(500).send(err.message);
+        return res.status(500).send(safeErrorMessage(err));
     }
 }
 
 const shareMeetingViaEmail = async (req, res) => {
     try {
         const { email, groupchatId } = req.body;
-        const groupChat = await GroupChat.findById(groupchatId);
+        const groupChat = await GroupChat.findById(String(groupchatId));
 
         const user = await User.findOne({ email: email.toLowerCase() })
         const name = user?.username ?? "Guest"
@@ -207,7 +235,7 @@ const shareMeetingViaEmail = async (req, res) => {
 
     } catch (err) {
         console.log(err)
-        return res.status(500).send(err.message);
+        return res.status(500).send(safeErrorMessage(err));
     }
 }
 
@@ -283,6 +311,37 @@ const setBlockedBookingDates = async (req: any, res: Response) => {
     }
 };
 
+/** Replace expert per-date blocked time slots ({ "YYYY-MM-DD": [halfHourIndex, ...] }). */
+const setBlockedBookingSlots = async (req: any, res: Response) => {
+    try {
+        const filter = expertUserUpdateFilter(req);
+        if (!filter) {
+            return res.status(401).json({ error: "Unauthorized" });
+        }
+        const normalized = normalizeBlockedSlots(req.body?.slots);
+        if (normalized === null) {
+            return res.status(400).json({
+                error: "slots must be an object of YYYY-MM-DD to half-hour index arrays",
+            });
+        }
+        const user = await User.findByIdAndUpdate(
+            filter,
+            { blockedBookingSlots: normalized },
+            { new: true },
+        ).select("blockedBookingSlots timeZone email");
+        if (!user) {
+            return res.status(404).json({ error: "User not found" });
+        }
+        return res.status(200).json({
+            blockedBookingSlots: user.blockedBookingSlots || {},
+            timeZone: user.timeZone || "UTC",
+        });
+    } catch (err: any) {
+        console.log(err);
+        return res.status(500).json({ error: safeErrorMessage(err) });
+    }
+};
+
 const getMyPaymentHistory = async (req: any, res: Response) => {
     try {
         const expertId = req.user.userId;
@@ -323,7 +382,7 @@ const getMyPaymentHistory = async (req: any, res: Response) => {
         });
     } catch (err: any) {
         console.log(err);
-        return res.status(500).send(err.message);
+        return res.status(500).send(safeErrorMessage(err));
     }
 };
 
@@ -333,6 +392,7 @@ module.exports = {
     updateDailyTimeSlots,
     setBookingNoticeHours,
     setBlockedBookingDates,
+    setBlockedBookingSlots,
     filterCustomers,
     getCustomerById,
     shareMeetingViaEmail,

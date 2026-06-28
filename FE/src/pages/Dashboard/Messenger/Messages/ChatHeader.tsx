@@ -1,6 +1,6 @@
 import React from 'react';
 import { format, isToday, isYesterday } from 'date-fns';
-import { Video, MoreHorizontal } from 'lucide-react';
+import { Video, MoreHorizontal, CalendarPlus } from 'lucide-react';
 
 export interface ChatHeaderProps {
     name: string;
@@ -23,6 +23,9 @@ type ChatHeaderInnerProps = ChatHeaderProps & {
     videoDisabled?: boolean;
     videoTitle?: string;
     onMoreClick?: () => void;
+    /** Shown as a hover shortcut over the peer's name to jump to the appointment flow. */
+    onNewAppointment?: () => void;
+    newAppointmentLabel?: string;
 };
 
 export function getStatusLabel(status: 'online' | 'offline' | 'away', lastSeen?: Date): string {
@@ -62,6 +65,8 @@ const ChatHeader: React.FC<ChatHeaderInnerProps> = ({
     videoDisabled,
     videoTitle,
     onMoreClick,
+    onNewAppointment,
+    newAppointmentLabel = 'Make a new appointment',
 }) => {
     const statusText = getStatusLabel(status, lastSeen);
     const isLight = theme === 'light';
@@ -81,43 +86,64 @@ const ChatHeader: React.FC<ChatHeaderInnerProps> = ({
         <div
             className={`flex w-full min-w-0 items-center justify-between -mx-5 px-5 ${barClass} ${className}`.trim()}
         >
-            <button
-                type="button"
-                className="flex min-w-0 flex-1 items-center gap-3 cursor-pointer rounded-lg text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1A3A4A]/20"
-                onClick={onNameAreaClick}
-            >
-                {photoSrc ? (
-                    <img
-                        src={photoSrc}
-                        alt={name}
-                        className="h-10 w-10 shrink-0 rounded-full object-cover"
-                    />
-                ) : (
-                    <div
-                        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-teal-700 text-sm font-semibold text-white"
-                        aria-hidden
-                    >
-                        {name
-                            ?.split(' ')
-                            .map(n => n[0])
-                            .join('')
-                            .slice(0, 2)
-                            .toUpperCase() || avatarInitials}
+            <div className="group/appt relative flex min-w-0 flex-1 items-center">
+                <button
+                    type="button"
+                    className="flex min-w-0 flex-1 items-center gap-3 cursor-pointer rounded-lg text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1A3A4A]/20"
+                    onClick={onNameAreaClick}
+                >
+                    {photoSrc ? (
+                        <img
+                            src={photoSrc}
+                            alt={name}
+                            className="h-10 w-10 shrink-0 rounded-full object-cover"
+                        />
+                    ) : (
+                        <div
+                            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-teal-700 text-sm font-semibold text-white"
+                            aria-hidden
+                        >
+                            {name
+                                ?.split(' ')
+                                .map(n => n[0])
+                                .join('')
+                                .slice(0, 2)
+                                .toUpperCase() || avatarInitials}
+                        </div>
+                    )}
+                    <div className="flex min-w-0 flex-1 flex-col gap-0 leading-tight">
+                        <h2 className={`truncate ${nameHeadingClass}`}>{name}</h2>
+                        <p
+                            className={
+                                isLight
+                                    ? 'text-sm text-stone-400 font-normal'
+                                    : 'text-xs text-gray-400 font-normal'
+                            }
+                        >
+                            {statusText}
+                        </p>
                     </div>
-                )}
-                <div className="flex min-w-0 flex-1 flex-col gap-0 leading-tight">
-                    <h2 className={`truncate ${nameHeadingClass}`}>{name}</h2>
-                    <p
-                        className={
-                            isLight
-                                ? 'text-sm text-stone-400 font-normal'
-                                : 'text-xs text-gray-400 font-normal'
-                        }
-                    >
-                        {statusText}
-                    </p>
-                </div>
-            </button>
+                </button>
+                {onNewAppointment ? (
+                    <div className="pointer-events-none absolute left-12 top-full z-30 pt-1.5 opacity-0 transition-opacity duration-150 group-hover/appt:pointer-events-auto group-hover/appt:opacity-100 focus-within:pointer-events-auto focus-within:opacity-100">
+                        <button
+                            type="button"
+                            onClick={e => {
+                                e.stopPropagation();
+                                onNewAppointment();
+                            }}
+                            className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-lg border px-3 py-1.5 text-xs font-semibold shadow-lg ${
+                                isLight
+                                    ? 'border-slate-200 bg-white text-[#234C6A] hover:bg-slate-50'
+                                    : 'border-slate-700 bg-[#141414] text-white hover:bg-white/10'
+                            }`}
+                        >
+                            <CalendarPlus className="h-3.5 w-3.5" aria-hidden />
+                            {newAppointmentLabel}
+                        </button>
+                    </div>
+                ) : null}
+            </div>
             <div className="flex shrink-0 items-center gap-1">
                 <button
                     type="button"

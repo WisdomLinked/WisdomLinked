@@ -19,7 +19,27 @@ import FileBrowser from "../../../components/fileBrowser";
 import { useDispatch } from "react-redux";
 import { showErrorAlert, showSuccessAlert, showWarningAlert } from '../../../actions/alertActions';
 import { updateMe } from "../../../actions/authActions";
-import { filterApiServicesToCanonical } from "../../../constants/serviceOptions";
+import { SERVICE_OPTIONS, matchesServiceOption } from "../../../constants/serviceOptions";
+
+/** react-select options for the three canonical services (value === label for clean round-trips). */
+const SERVICE_SELECT_OPTIONS = SERVICE_OPTIONS.map((o) => ({ value: o.label, label: o.label }));
+
+/**
+ * Stored services are populated Service docs (or strings) whose value/label may be legacy or
+ * corrupted (e.g. an ObjectId saved as the label). Map each entry to its canonical option so the
+ * UI shows real labels instead of ids; keep `_id` so the unsaved-changes check (compares by _id)
+ * still matches userDetails.services. Entries that match no canonical service are dropped.
+ */
+const toServiceOptions = (entries: unknown[] | undefined) =>
+    (Array.isArray(entries) ? entries : [])
+        .map((entry: any) => {
+            const doc =
+                typeof entry === 'string' ? { value: entry, name: entry, label: entry } : entry;
+            const opt = SERVICE_OPTIONS.find((o) => matchesServiceOption(doc, o));
+            if (!opt) return null;
+            return { _id: typeof entry === 'object' ? entry?._id : undefined, value: opt.label, label: opt.label };
+        })
+        .filter(Boolean);
 import {
     dataUriToImageFile,
     saveProfilePhotoFile,
@@ -80,7 +100,7 @@ const ExpertProfile = ({
     const [title, set_title] = useState('');
     const [description, set_description] = useState('');
     const [keywords, set_keywords] = useState([]);
-    const [services, set_services] = useState([]);
+    const [services, set_services] = useState<Array<any>>([]);
     const [selectedKeywords, set_selectedKeywords] = useState<Array<any>>([]);
     const [selectedServices, set_selectedServices] = useState<Array<any>>([]);
     const [country, set_country] = useState<any>();
@@ -110,7 +130,7 @@ const ExpertProfile = ({
         set_title(userDetails.title || '');
         set_description(userDetails.description || '');
         set_selectedKeywords(userDetails.keywords || []);
-        set_selectedServices(userDetails.services || []);
+        set_selectedServices(toServiceOptions(userDetails.services));
         set_country(userDetails.country || null);
         set_state(userDetails.state || null);
         set_city(userDetails.city || null);
@@ -137,7 +157,7 @@ const ExpertProfile = ({
         set_title(userDetails.title || '');
         set_description(userDetails.description || '');
         set_selectedKeywords(userDetails.keywords || []);
-        set_selectedServices(userDetails.services || []);
+        set_selectedServices(toServiceOptions(userDetails.services));
         set_country(userDetails.country || null);
         set_state(userDetails.state || null);
         set_city(userDetails.city || null);
@@ -295,7 +315,7 @@ const ExpertProfile = ({
         const response: any = await doGetKeywordsAndServices();
         if (response) {
             set_keywords(response.keywords || []);
-            set_services(filterApiServicesToCanonical(response.services || []));
+            set_services(SERVICE_SELECT_OPTIONS);
         }
     };
 

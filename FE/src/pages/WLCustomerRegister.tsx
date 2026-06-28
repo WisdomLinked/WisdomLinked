@@ -9,6 +9,7 @@ import SocialAuthBlock from '../components/SocialAuthBlock';
 import ConfirmEmail from '../components/ConfirmEmail';
 import logo from '../assets/images/logo.png';
 import { SERVICE_LABELS } from '../constants/serviceOptions';
+import { MAJOR_OPTIONS_WITH_OTHER } from '../constants/majorOptions';
 
 const BTN_PRIMARY_STYLE = { background: 'linear-gradient(135deg, #234C6A 0%, #456882 100%)' };
 const FOCUS_RING = 'focus:ring-2 focus:ring-[#234C6A]/60 focus:border-[#234C6A]';
@@ -25,13 +26,7 @@ const COUNTRY_CODES = [
     { code: '+92', country: 'Pakistan', flag: '🇵🇰' }, { code: '+234', country: 'Nigeria', flag: '🇳🇬' },
 ];
 
-const ENGINEERING_MAJORS = [
-    'Aerospace Engineering', 'Biomedical Engineering', 'Chemical Engineering',
-    'Civil Engineering', 'Computer Engineering', 'Electrical Engineering',
-    'Environmental Engineering', 'Industrial Engineering', 'Mechanical Engineering',
-    'Materials Science & Engineering', 'Nuclear Engineering', 'Petroleum Engineering',
-    'Software Engineering', 'Systems Engineering', 'Other',
-];
+const ENGINEERING_MAJORS = MAJOR_OPTIONS_WITH_OTHER;
 
 const COUNTRIES = [
     'United States', 'United Kingdom', 'Canada', 'Australia', 'Germany', 'France',

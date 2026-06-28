@@ -18,7 +18,7 @@ import FilePreviewModal from '../../pages/Dashboard/FilePreviewModal';
 import { hasResumeForPreview, resolveResumePublicUrl } from '../../utils/resumeUrl';
 import StudentExpertBookingPicker from './StudentExpertBookingPicker';
 import StudentBookingCheckout from './StudentBookingCheckout';
-import { createGroupChatByUser, getExpertById, profileImageFetch, addMemberToPendingGroup } from '../../api/api';
+import { createGroupChatByUser, getExpertById, profileImageFetch, registerForSeminar } from '../../api/api';
 import { resolveProfileImageSrc } from '../../utils/profileImage';
 import { normalizeExpertPrice } from '../../utils/schedulingSlots';
 import { computeBookingPriceDollars } from '../../utils/bookingPrice';
@@ -187,7 +187,7 @@ export default function ExpertProfile({
   const bookingEventTitle = useMemo(() => {
     const student = userDetails?.username || 'Student';
     const expertName = mentor.name || expertDetails?.username || 'Expert';
-    return `${student}, ${expertName}`;
+    return `${student} & ${expertName}`;
   }, [userDetails?.username, mentor.name, expertDetails?.username]);
 
   const studentBookingReturnUrl = useMemo(() => {
@@ -257,9 +257,20 @@ export default function ExpertProfile({
   // populated by getExpertById. Split into past/upcoming by start time.
   const seminarTimeline = useMemo(() => {
     const now = Date.now();
+    const freqLabel: Record<string, string> = {
+      weekly: 'Weekly',
+      biweekly: 'Biweekly',
+      monthly: 'Monthly',
+    };
     const mapSeminar = (g: any) => {
       const d = new Date(g?.start);
       const valid = !Number.isNaN(d.getTime());
+      // Enrolled students exclude the host (the admin is always a participant).
+      const enrolled = Math.max(
+        0,
+        (Array.isArray(g?.participants) ? g.participants.length : 0) - 1,
+      );
+      const maxAttendees = typeof g?.maxAttendees === 'number' ? g.maxAttendees : null;
       return {
         id: String(g?._id ?? ''),
         title: g?.name || 'Seminar',
@@ -269,20 +280,40 @@ export default function ExpertProfile({
           : '',
         startTs: valid ? d.getTime() : 0,
         price: typeof g?.price === 'number' ? g.price : 0,
-        attendees: Array.isArray(g?.participants) ? g.participants.length : 0,
+        attendees: enrolled,
+        isFull: maxAttendees != null && maxAttendees > 0 && enrolled >= maxAttendees,
+        seriesId: g?.seriesId ? String(g.seriesId) : null,
+        recurrenceLabel: g?.isRecurring ? freqLabel[g?.recurrenceFrequency] ?? null : null,
       };
+    };
+
+    const collapseSeries = (list: any[]) => {
+      const seen = new Set<string>();
+      const out: any[] = [];
+      for (const s of list) {
+        if (s.seriesId) {
+          if (seen.has(s.seriesId)) continue;
+          seen.add(s.seriesId);
+        }
+        out.push(s);
+      }
+      return out;
     };
 
     const all = (expertDetails?.groupChats || [])
       .filter((g: any) => g?.type === 'seminar')
       .map(mapSeminar);
 
-    const past = all
-      .filter((s: any) => s.startTs && s.startTs < now)
-      .sort((a: any, b: any) => b.startTs - a.startTs);
-    const upcoming = all
-      .filter((s: any) => !s.startTs || s.startTs >= now)
-      .sort((a: any, b: any) => a.startTs - b.startTs);
+    const past = collapseSeries(
+      all
+        .filter((s: any) => s.startTs && s.startTs < now)
+        .sort((a: any, b: any) => b.startTs - a.startTs),
+    );
+    const upcoming = collapseSeries(
+      all
+        .filter((s: any) => !s.startTs || s.startTs >= now)
+        .sort((a: any, b: any) => a.startTs - b.startTs),
+    );
 
     return { past, upcoming };
   }, [expertDetails?.groupChats]);
@@ -293,9 +324,8 @@ export default function ExpertProfile({
       SetLoadingStatus(true);
       setSeminarBookingError(null);
       try {
-        const res: any = await addMemberToPendingGroup({
+        const res: any = await registerForSeminar({
           groupChatId: seminarCheckout.id,
-          price: seminarCheckout.price,
           payment_intent: paymentIntentId,
         });
         if (res === false || res?.status === 'FAIL' || res?.error) {
@@ -503,9 +533,16 @@ export default function ExpertProfile({
                     key={item.id}
                     className="rounded-lg border border-[#E5E2DB] bg-[#F5F3EF] px-3 py-2"
                   >
-                    <p className="text-[13px] font-semibold text-[#1A3A4A]">{item.title}</p>
+                    <div className="flex items-center gap-2">
+                      <p className="text-[13px] font-semibold text-[#1A3A4A]">{item.title}</p>
+                      {item.recurrenceLabel ? (
+                        <span className="inline-flex items-center rounded-full bg-[#E8EEF4] px-2 py-0.5 text-[10px] font-medium text-[#234C6A]">
+                          {item.recurrenceLabel}
+                        </span>
+                      ) : null}
+                    </div>
                     <p className="mt-1 text-[11px] text-[#7A7A72]">
-                      {item.date}{item.time ? ` · ${item.time}` : ''}
+                      {item.recurrenceLabel ? 'Next: ' : ''}{item.date}{item.time ? ` · ${item.time}` : ''}
                     </p>
                     <p className="mt-2 text-[12px] font-semibold text-[#1A3A4A]">
                       {item.price > 0 ? `$${item.price.toFixed(2)}` : 'Free'}
@@ -513,7 +550,20 @@ export default function ExpertProfile({
                     <div className="mt-2">
                       {seminarBookingSuccessId === item.id ? (
                         <div className="rounded-[4px] bg-emerald-50 px-3 py-2 text-[11px] font-semibold text-emerald-800">
-                          Registered — awaiting expert approval.
+                          You're enrolled in this seminar.
+                        </div>
+                      ) : item.isFull ? (
+                        <div className="flex items-center justify-between rounded-[4px] bg-rose-50 px-3 py-2">
+                          <span className="text-[11px] font-semibold text-rose-700">
+                            Seminar full
+                          </span>
+                          <button
+                            type="button"
+                            disabled
+                            className="cursor-not-allowed rounded-[4px] bg-slate-200 px-3 py-1.5 text-[11px] font-semibold text-slate-500"
+                          >
+                            Full
+                          </button>
                         </div>
                       ) : (
                         <button
@@ -880,7 +930,7 @@ export default function ExpertProfile({
           if (e.target === e.currentTarget) setBookingStep('review');
         }}
       >
-        <div className="my-auto w-full max-w-lg">
+        <div className="my-auto w-full max-w-2xl">
           <StudentBookingCheckout
             type="1:1 session"
             price={oneToOneSessionPrice}
@@ -907,7 +957,7 @@ export default function ExpertProfile({
           if (e.target === e.currentTarget) setSeminarCheckout(null);
         }}
       >
-        <div className="my-auto w-full max-w-lg">
+        <div className="my-auto w-full max-w-2xl">
           <StudentBookingCheckout
             type="Seminar"
             price={seminarCheckout.price}

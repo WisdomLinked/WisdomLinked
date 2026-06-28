@@ -1,13 +1,16 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useDispatch } from 'react-redux';
-import { Search, Filter, ChevronDown, CalendarDays, Clock, MapPin, ArrowLeft, User } from 'lucide-react';
+import { Search, Filter, ChevronDown, CalendarDays, Clock, MapPin, ArrowLeft, User, Repeat, Check } from 'lucide-react';
 import { useAppSelector } from '../../store';
-import { addMemberToPendingGroup, doFilterSeminars, profileImageFetch } from '../../api/api';
+import { registerForSeminar, doFilterSeminars, profileImageFetch } from '../../api/api';
 import { canonicalLabelsFromMixedServiceEntries } from '../../constants/serviceOptions';
 import { resolveProfileImageSrc } from '../../utils/profileImage';
 import { SetLoadingStatus } from '../../actions/appActions';
+import { updateMe } from '../../actions/authActions';
 import StudentBookingCheckout from './StudentBookingCheckout';
 import seminarFallbackImg from '../../assets/images/dashboard_img1.png';
+
+type RecurrenceFrequency = 'weekly' | 'biweekly' | 'monthly';
 
 type Seminar = {
   id: string;
@@ -15,6 +18,7 @@ type Seminar = {
   description: string;
   date: string;
   time: string;
+  startMs: number;
   major: string;
   tags: string[];
   level?: 'Beginner' | 'Intermediate' | 'Advanced';
@@ -22,10 +26,43 @@ type Seminar = {
   expertName: string;
   location: string;
   attendees: number;
+  maxAttendees: number | null;
+  isFull: boolean;
   price: number;
+  seriesId: string | null;
+  recurrenceFrequency: RecurrenceFrequency | null;
+  occurrenceCount: number;
+};
+
+const RECURRENCE_LABEL: Record<RecurrenceFrequency, string> = {
+  weekly: 'Weekly',
+  biweekly: 'Biweekly',
+  monthly: 'Monthly',
 };
 
 const pad2 = (n: number) => String(n).padStart(2, '0');
+
+function groupSeminarSeries(list: Seminar[]): Seminar[] {
+  const now = Date.now();
+  const bySeries = new Map<string, Seminar[]>();
+  const singles: Seminar[] = [];
+  for (const s of list) {
+    if (s.seriesId) {
+      const arr = bySeries.get(s.seriesId) || [];
+      arr.push(s);
+      bySeries.set(s.seriesId, arr);
+    } else {
+      singles.push(s);
+    }
+  }
+  const reps: Seminar[] = [];
+  bySeries.forEach((arr) => {
+    const sorted = [...arr].sort((a, b) => a.startMs - b.startMs);
+    const rep = sorted.find((x) => x.startMs >= now) || sorted[0];
+    reps.push({ ...rep, occurrenceCount: arr.length });
+  });
+  return [...reps, ...singles];
+}
 
 /** Map a BE seminar (GroupChat of type 'seminar') to the card's Seminar shape. */
 async function mapSeminar(g: any): Promise<Seminar> {
@@ -37,6 +74,11 @@ async function mapSeminar(g: any): Promise<Seminar> {
   const image = g?.image
     ? String(g.image)
     : await resolveProfileImageSrc(g?.admin?.image, 'small', profileImageFetch);
+  const freq = g?.recurrenceFrequency;
+  // Enrolled students exclude the host (the admin is always a participant).
+  const participantCount = Array.isArray(g?.participants) ? g.participants.length : 0;
+  const enrolled = Math.max(0, participantCount - 1);
+  const maxAttendees = typeof g?.maxAttendees === 'number' ? g.maxAttendees : null;
   return {
     id: String(g?._id),
     title: g?.name || 'Seminar',
@@ -45,13 +87,22 @@ async function mapSeminar(g: any): Promise<Seminar> {
       ? `${start!.getFullYear()}-${pad2(start!.getMonth() + 1)}-${pad2(start!.getDate())}`
       : 'TBD',
     time: hasStart ? `${pad2(start!.getHours())}:${pad2(start!.getMinutes())}` : '',
+    startMs: hasStart ? start!.getTime() : Number.MAX_SAFE_INTEGER,
     major: keywords[0] || 'General',
     tags: serviceLabels.length ? serviceLabels : keywords.length ? keywords : ['Seminar'],
     imageUrl: image || seminarFallbackImg,
     expertName: g?.admin?.username || g?.admin?.email || 'WisdomLinked expert',
     location: 'Online · WisdomLinked',
-    attendees: Array.isArray(g?.participants) ? g.participants.length : 0,
+    attendees: enrolled,
+    maxAttendees,
+    isFull: maxAttendees != null && maxAttendees > 0 && enrolled >= maxAttendees,
     price: typeof g?.price === 'number' ? g.price : 0,
+    seriesId: g?.seriesId ? String(g.seriesId) : null,
+    recurrenceFrequency:
+      g?.isRecurring && (freq === 'weekly' || freq === 'biweekly' || freq === 'monthly')
+        ? freq
+        : null,
+    occurrenceCount: 1,
   };
 }
 
@@ -70,12 +121,20 @@ export default function StudentSeminars() {
   const [majorFilter, setMajorFilter] = useState<string>('all');
   const [tagFilter, setTagFilter] = useState<string>('all');
   const [selectedSeminar, setSelectedSeminar] = useState<Seminar | null>(null);
-  const [bookingStep, setBookingStep] = useState<1 | 2>(1);
-  const [selectedTime, setSelectedTime] = useState<string>('');
-  const [paying, setPaying] = useState(false);
+  const [checkout, setCheckout] = useState<'review' | 'pay' | null>(null);
   const [bookingDone, setBookingDone] = useState(false);
   const [bookingError, setBookingError] = useState<string | null>(null);
   const dispatch = useDispatch();
+
+  // Seminars the student is already enrolled in (confirmed participants live in
+  // groupChats). Used to stop re-booking the same seminar.
+  const mySeminarStatus = useMemo(() => {
+    const booked = new Set<string>();
+    (userDetails?.groupChats || []).forEach((g: any) => {
+      if (g?.type === 'seminar' && g?._id) booked.add(String(g._id));
+    });
+    return { booked };
+  }, [userDetails?.groupChats]);
 
   // Stripe (3DS) redirects back here; the dashboard finalizes the booking via
   // the shared pendingDetails contract. Mirror ExpertProfile's return URL so we
@@ -92,28 +151,23 @@ export default function StudentSeminars() {
   }, []);
 
   // Register the student for the seminar once Stripe confirms (or immediately
-  // for free seminars, where the checkout calls back with '0').
+  // for free seminars, where the checkout calls back with '0'). Enrollment is
+  // immediate — no host approval — and covers the whole recurring series.
   const joinSeminar = async (paymentIntentId: string) => {
     if (!selectedSeminar) return;
     SetLoadingStatus(true);
     setBookingError(null);
     try {
-      const response: any = await addMemberToPendingGroup({
+      const response: any = await registerForSeminar({
         groupChatId: selectedSeminar.id,
-        price: selectedSeminar.price,
         payment_intent: paymentIntentId,
       });
       if (response === false || response?.status === 'FAIL' || response?.error) {
         setBookingError(response?.error || 'Could not complete seminar registration.');
         return;
       }
-      if (response?.pendingGroupChats) {
-        dispatch({
-          type: 'updateUserDetails',
-          payload: { pendingGroupChats: response.pendingGroupChats },
-        });
-      }
-      setPaying(false);
+      dispatch(updateMe() as any);
+      setCheckout(null);
       setBookingDone(true);
     } catch (err: unknown) {
       setBookingError(
@@ -127,9 +181,7 @@ export default function StudentSeminars() {
   // Open a seminar's detail/booking view from a fresh state.
   const openSeminar = (s: Seminar) => {
     setSelectedSeminar(s);
-    setBookingStep(1);
-    setSelectedTime(s.time);
-    setPaying(false);
+    setCheckout(null);
     setBookingDone(false);
     setBookingError(null);
   };
@@ -159,19 +211,21 @@ export default function StudentSeminars() {
     };
   }, []);
 
+  const groupedSeminars = useMemo(() => groupSeminarSeries(seminars), [seminars]);
+
   const majors = useMemo(
-    () => Array.from(new Set(seminars.map(s => s.major))).sort(),
-    [seminars],
+    () => Array.from(new Set(groupedSeminars.map(s => s.major))).sort(),
+    [groupedSeminars],
   );
 
   const tags = useMemo(
     () =>
       Array.from(
         new Set(
-          seminars.flatMap(s => s.tags),
+          groupedSeminars.flatMap(s => s.tags),
         ),
       ).sort(),
-    [seminars],
+    [groupedSeminars],
   );
 
   const matchesFilters = (seminar: Seminar) => {
@@ -197,7 +251,7 @@ export default function StudentSeminars() {
     () =>
       userInterests.length === 0
         ? []
-        : seminars
+        : groupedSeminars
             .filter(
               s =>
                 userInterests.includes(s.major) ||
@@ -208,13 +262,13 @@ export default function StudentSeminars() {
                 ),
             )
             .filter(matchesFilters),
-    [seminars, userInterests, searchQuery, majorFilter, tagFilter],
+    [groupedSeminars, userInterests, searchQuery, majorFilter, tagFilter],
   );
 
   const others = useMemo(
     () =>
-      seminars.filter(s => !recommended.includes(s)).filter(matchesFilters),
-    [seminars, searchQuery, majorFilter, tagFilter, recommended],
+      groupedSeminars.filter(s => !recommended.includes(s)).filter(matchesFilters),
+    [groupedSeminars, searchQuery, majorFilter, tagFilter, recommended],
   );
 
   const tagClass = (tag: string) => {
@@ -235,6 +289,17 @@ export default function StudentSeminars() {
       return 'bg-rose-50 text-rose-700';
     }
     return 'bg-[#F3F4F6] text-slate-700';
+  };
+
+  // True when the student is enrolled in this seminar — for a
+  // recurring series, any booked occurrence counts so the card reflects it.
+  const seminarRegistered = (s: Seminar): boolean => {
+    if (s.seriesId) {
+      return seminars.some(
+        x => x.seriesId === s.seriesId && mySeminarStatus.booked.has(x.id),
+      );
+    }
+    return mySeminarStatus.booked.has(s.id);
   };
 
   const renderSeminarCard = (s: Seminar) => (
@@ -264,6 +329,23 @@ export default function StudentSeminars() {
             <span>{s.level}</span>
           </div>
         )}
+        {s.recurrenceFrequency && (
+          <div className="absolute right-3 top-3 inline-flex items-center gap-1 rounded-full bg-[#234C6A]/90 px-2.5 py-0.5 text-[10px] font-medium text-white backdrop-blur">
+            <Repeat className="h-3 w-3" aria-hidden />
+            <span>{RECURRENCE_LABEL[s.recurrenceFrequency]}</span>
+          </div>
+        )}
+        {seminarRegistered(s) && (
+          <div className="absolute bottom-3 left-3 inline-flex items-center gap-1 rounded-full bg-emerald-600/95 px-2.5 py-0.5 text-[10px] font-semibold text-white backdrop-blur">
+            <Check className="h-3 w-3" aria-hidden />
+            <span>Registered</span>
+          </div>
+        )}
+        {!seminarRegistered(s) && s.isFull && (
+          <div className="absolute bottom-3 right-3 inline-flex items-center gap-1 rounded-full bg-rose-600/95 px-2.5 py-0.5 text-[10px] font-semibold text-white backdrop-blur">
+            <span>Full</span>
+          </div>
+        )}
       </div>
 
       <div className="p-5">
@@ -286,9 +368,15 @@ export default function StudentSeminars() {
         <span className="inline-flex items-center gap-1 rounded-full bg-slate-50 px-2 py-1">
           <Clock className="h-3 w-3 text-[#234C6A]" aria-hidden />
           <span>
-            {s.date} · {s.time}
+            {s.recurrenceFrequency ? 'Next: ' : ''}{s.date} · {s.time}
           </span>
         </span>
+        {s.recurrenceFrequency && s.occurrenceCount > 1 && (
+          <span className="inline-flex items-center gap-1 rounded-full bg-[#E8EEF4] px-2 py-1 text-[#234C6A]">
+            <Repeat className="h-3 w-3" aria-hidden />
+            <span>{RECURRENCE_LABEL[s.recurrenceFrequency]} · {s.occurrenceCount} sessions</span>
+          </span>
+        )}
         <span className="inline-flex items-center gap-1 rounded-full bg-slate-50 px-2 py-1">
           <MapPin className="h-3 w-3 text-[#234C6A]" aria-hidden />
           <span>Online · WisdomLinked</span>
@@ -338,10 +426,13 @@ export default function StudentSeminars() {
 
   if (selectedSeminar) {
     const s = selectedSeminar;
-    const timeOptions = s.time ? [s.time] : [];
+    const viewerTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
     const pastBySameExpert = seminars
       .filter(item => item.expertName === s.expertName && item.id !== s.id)
       .slice(0, 3);
+
+    const alreadyRegistered = mySeminarStatus.booked.has(s.id) || bookingDone;
+    const isFull = s.isFull && !alreadyRegistered;
 
     return (
       <div className={containerClass}>
@@ -368,6 +459,12 @@ export default function StudentSeminars() {
               <h1 className="mt-2 font-serif text-[1.8rem] leading-tight text-[#1A3A4A]">
                 {s.title}
               </h1>
+              {s.recurrenceFrequency && (
+                <span className="mt-2 inline-flex items-center gap-1 rounded-full bg-[#E8EEF4] px-3 py-1 text-[12px] font-medium text-[#234C6A]">
+                  <Repeat className="h-3.5 w-3.5" aria-hidden />
+                  Repeats {RECURRENCE_LABEL[s.recurrenceFrequency].toLowerCase()}
+                </span>
+              )}
               <div className="mt-3 rounded-xl border border-[#E5E2DB] bg-[#F5F3EF] px-4 py-3">
                 <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[#7A7A72]">
                   Seminar description
@@ -386,7 +483,7 @@ export default function StudentSeminars() {
                 </div>
                 <div className="inline-flex items-center gap-1.5 rounded-lg border border-[#E5E2DB] bg-[#F5F3EF] px-3 py-2">
                   <Clock className="h-4 w-4 text-[#234C6A]" aria-hidden />
-                  <span>{selectedTime}</span>
+                  <span className="text-[#7A7A72]">{s.time} · {viewerTz}</span>
                 </div>
                 <div className="inline-flex items-center gap-1.5 rounded-lg border border-[#E5E2DB] bg-[#F5F3EF] px-3 py-2">
                   <MapPin className="h-4 w-4 text-[#234C6A]" aria-hidden />
@@ -433,97 +530,132 @@ export default function StudentSeminars() {
             </p>
             <h2 className="mt-2 font-serif text-xl text-[#1A3A4A]">Booking flow</h2>
 
-            {bookingDone ? (
+            {s.recurrenceFrequency && (
+              <p className="mt-2 text-xs text-[#7A7A72]">
+                Registering enrolls you in every session of this recurring series.
+              </p>
+            )}
+
+            {alreadyRegistered ? (
               <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-3">
                 <p className="text-sm font-semibold text-emerald-900">
-                  You&apos;re registered for this seminar.
+                  You're enrolled in this seminar.
                 </p>
                 <p className="mt-1 text-xs text-emerald-800">
-                  It will appear on your calendar once the host confirms.
+                  It’s on your calendar — join from your seminars or calendar.
                 </p>
-              </div>
-            ) : paying ? (
-              <div className="mt-4 space-y-3">
-                <StudentBookingCheckout
-                  type="Seminar"
-                  price={s.price}
-                  returnUrl={seminarReturnUrl}
-                  pendingDetails={{ groupChatId: s.id, price: s.price, name: s.title }}
-                  onPaymentSuccess={joinSeminar}
-                  onCancel={() => {
-                    setPaying(false);
-                    setBookingStep(2);
-                  }}
-                  cancelLabel="Change time"
-                />
-                {bookingError ? (
-                  <p className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-medium text-rose-700">
-                    {bookingError}
-                  </p>
-                ) : null}
               </div>
             ) : (
               <div className="mt-4 space-y-4">
-                <div className="rounded-lg border border-[#E5E2DB] bg-[#F5F3EF] px-3 py-2 text-[12px] text-[#1A3A4A]">
-                  Step {bookingStep} of 2
+                <div className="space-y-2">
+                  <p className="text-sm text-[#7A7A72]">Seminar schedule</p>
+                  <div className="rounded-[4px] border border-[#E5E2DB] bg-white px-3 py-2 space-y-1.5">
+                    <div className="flex items-center gap-2 text-sm font-semibold text-[#1A3A4A]">
+                      <CalendarDays className="h-4 w-4 text-[#234C6A]" aria-hidden />
+                      <span>{s.date}</span>
+                    </div>
+                    <div className="flex items-center gap-2 text-sm text-[#7A7A72]">
+                      <Clock className="h-4 w-4 text-[#234C6A]" aria-hidden />
+                      <span>{s.time} · {viewerTz}</span>
+                    </div>
+                  </div>
                 </div>
-
-                {bookingStep === 1 && (
-                  <div className="space-y-3">
-                    <p className="text-sm text-[#7A7A72]">
-                      Review seminar and continue to slot selection.
-                    </p>
+                {isFull ? (
+                  <>
+                    <span className="inline-flex items-center gap-1 rounded-full bg-rose-100 px-3 py-1 text-xs font-semibold text-rose-700">
+                      Seminar full
+                    </span>
                     <button
                       type="button"
-                      onClick={() => setBookingStep(2)}
-                      className="w-full rounded-[4px] bg-[#234C6A] px-3 py-2 text-sm font-semibold text-white hover:brightness-110"
+                      disabled
+                      className="w-full cursor-not-allowed rounded-[4px] bg-slate-200 px-3 py-2 text-sm font-semibold text-slate-500"
                     >
-                      Continue
+                      Seminar is full
                     </button>
-                  </div>
-                )}
-
-                {bookingStep === 2 && (
-                  <div className="space-y-3">
-                    <p className="text-sm text-[#7A7A72]">Select preferred time</p>
-                    <div className="grid grid-cols-1 gap-2">
-                      {timeOptions.map(option => (
-                        <button
-                          key={option}
-                          type="button"
-                          onClick={() => setSelectedTime(option)}
-                          className={`rounded-[4px] border px-3 py-2 text-left text-sm font-semibold ${
-                            selectedTime === option
-                              ? 'border-[#234C6A] bg-[#E8EEF4] text-[#234C6A]'
-                              : 'border-[#E5E2DB] bg-white text-slate-700'
-                          }`}
-                        >
-                          {option}
-                        </button>
-                      ))}
-                    </div>
-                    <div className="flex gap-2">
-                      <button
-                        type="button"
-                        onClick={() => setBookingStep(1)}
-                        className="flex-1 rounded-[4px] border border-[#E5E2DB] bg-white px-3 py-2 text-sm font-semibold text-slate-700"
-                      >
-                        Back
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setPaying(true)}
-                        className="flex-1 rounded-[4px] bg-[#234C6A] px-3 py-2 text-sm font-semibold text-white hover:brightness-110"
-                      >
-                        {s.price > 0 ? 'Continue to payment' : 'Confirm booking'}
-                      </button>
-                    </div>
-                  </div>
+                  </>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setCheckout('review')}
+                    className="w-full rounded-[4px] bg-[#234C6A] px-3 py-2 text-sm font-semibold text-white hover:brightness-110"
+                  >
+                    {s.price > 0 ? 'Continue to payment' : 'Confirm booking'}
+                  </button>
                 )}
               </div>
             )}
           </aside>
         </div>
+
+        {checkout === 'review' ? (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-[#1A3A4A]/40 p-4 backdrop-blur-sm"
+            onClick={e => {
+              if (e.target === e.currentTarget) setCheckout(null);
+            }}
+          >
+            <div className="my-auto w-full max-w-md">
+              <div className="rounded-2xl border border-[#E5E2DB] bg-white p-4 sm:p-6 space-y-4">
+                <p className="font-serif text-lg font-medium text-[#1A3A4A]">Review your booking</p>
+                <dl className="space-y-2 text-sm text-[#1A3A4A]">
+                  <div className="flex justify-between gap-2">
+                    <dt className="text-[#7A7A72]">Seminar</dt>
+                    <dd className="font-semibold text-right">{s.title}</dd>
+                  </div>
+                  <div className="flex justify-between gap-2">
+                    <dt className="text-[#7A7A72]">Host</dt>
+                    <dd className="font-semibold text-right">{s.expertName}</dd>
+                  </div>
+                  <div className="flex justify-between gap-2">
+                    <dt className="text-[#7A7A72]">Date</dt>
+                    <dd className="font-semibold text-right">{s.date}</dd>
+                  </div>
+                  <div className="flex justify-between gap-2">
+                    <dt className="text-[#7A7A72]">Time</dt>
+                    <dd className="text-right text-[#7A7A72]">{s.time} · {viewerTz}</dd>
+                  </div>
+                  <div className="flex justify-between gap-2 border-t border-[#E5E2DB] pt-2">
+                    <dt className="text-[#7A7A72]">Total</dt>
+                    <dd className="font-serif text-lg font-semibold">${s.price.toFixed(2)}</dd>
+                  </div>
+                </dl>
+                <button
+                  type="button"
+                  onClick={() => setCheckout('pay')}
+                  className="inline-flex w-full items-center justify-center rounded-[4px] bg-[#1A3A4A] px-4 py-3 text-[13px] font-semibold text-white hover:bg-[#122635]"
+                >
+                  {s.price > 0 ? 'Continue to payment' : 'Confirm booking'}
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : null}
+
+        {checkout === 'pay' ? (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-[#1A3A4A]/40 p-4 backdrop-blur-sm"
+            onClick={e => {
+              if (e.target === e.currentTarget) setCheckout('review');
+            }}
+          >
+            <div className="my-auto w-full max-w-2xl space-y-3">
+              <StudentBookingCheckout
+                type="Seminar"
+                price={s.price}
+                returnUrl={seminarReturnUrl}
+                pendingDetails={{ groupChatId: s.id, price: s.price, name: s.title }}
+                onPaymentSuccess={joinSeminar}
+                onCancel={() => setCheckout('review')}
+                cancelLabel="Back"
+              />
+              {bookingError ? (
+                <p className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-medium text-rose-700">
+                  {bookingError}
+                </p>
+              ) : null}
+            </div>
+          </div>
+        ) : null}
       </div>
     );
   }

@@ -12,6 +12,7 @@ import {
   Bot,
   Shield,
   Calendar,
+  GraduationCap,
 } from 'lucide-react';
 
 import Sidebar from '../components/layout/Sidebar';
@@ -42,6 +43,7 @@ import RegisterUserByAdmin from '../components/registerUserByAdmin';
 import ChatBotQA from './Dashboard/_AdminDashboard/chatBotQA';
 import UserMgmt from './Dashboard/_AdminDashboard/usermgmt';
 import Payment from './Dashboard/_AdminDashboard/payment';
+import AdminMajors from './Dashboard/_AdminDashboard/majors';
 import AdminUpcomingEvents from './Dashboard/_AdminDashboard/adminUpcomingEvents';
 import Chatbot from '../components/chatbot';
 
@@ -56,6 +58,7 @@ const adminNavItems = [
   { id: 'feedbacks', label: 'Feedback', icon: MessageCircleWarning },
   { id: 'contactedus', label: 'Contact requests', icon: Inbox },
   { id: 'registerUser', label: 'Register user', icon: UserPlus },
+  { id: 'majors', label: 'Majors', icon: GraduationCap },
   { id: 'chatBotQA', label: 'Chatbot Q&A', icon: Bot },
 ];
 
@@ -492,7 +495,9 @@ export default function AdminDashboard() {
                       ? 'Chatbot Q&A'
                       : section === 'upcomingEvents'
                         ? 'Upcoming events'
-                        : 'Admin Dashboard';
+                        : section === 'majors'
+                          ? 'Majors'
+                          : 'Admin Dashboard';
 
   const handleSidebarNavigate = (id: string) => {
     if (id === 'logout') {
@@ -516,6 +521,7 @@ export default function AdminDashboard() {
         <Route path="feedbacks" element={<Feedback />} />
         <Route path="contactedus" element={<GetContactedUs />} />
         <Route path="registerUser" element={<RegisterUserByAdmin />} />
+        <Route path="majors" element={<AdminMajors />} />
         <Route path="upcomingEvents" element={<AdminUpcomingEvents />} />
         <Route path="chatBotQA" element={<ChatBotQA />} />
         <Route path="*" element={<AdminOverview go={goToSection} />} />

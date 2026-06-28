@@ -357,6 +357,47 @@ describe('StudentExpertBookingPicker', () => {
     );
   });
 
+  it('makes a day unavailable when all its slots are per-date blocked', () => {
+    const onSlotSelected = vi.fn();
+
+    render(
+      <Provider store={store}>
+        <StudentExpertBookingPicker
+          expert={{
+            ...expert,
+            // Expert-local half-hour indices 18,19,20 (09:00–10:30) blocked on Jun 15.
+            blockedBookingSlots: { '2026-06-15': [18, 19, 20] },
+          }}
+          onSlotSelected={onSlotSelected}
+        />
+      </Provider>,
+    );
+
+    expect(screen.getByRole('button', { name: '15' })).toHaveClass(
+      'cursor-not-allowed',
+    );
+    fireEvent.click(screen.getByTestId('mock-select-day'));
+    expect(onSlotSelected).not.toHaveBeenCalled();
+  });
+
+  it('keeps a day available when per-date blocks target another date', () => {
+    render(
+      <Provider store={store}>
+        <StudentExpertBookingPicker
+          expert={{
+            ...expert,
+            blockedBookingSlots: { '2026-06-20': [18, 19, 20] },
+          }}
+          onSlotSelected={vi.fn()}
+        />
+      </Provider>,
+    );
+
+    expect(screen.getByRole('button', { name: '15' })).toHaveClass(
+      'cursor-pointer',
+    );
+  });
+
   it('reopens time modal after cancel closes it (calendar remount)', () => {
     render(
       <Provider store={store}>

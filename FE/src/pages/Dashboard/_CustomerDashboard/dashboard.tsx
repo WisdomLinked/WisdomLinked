@@ -4,7 +4,7 @@ import queryString from "query-string";
 import Avatar from "../../../components/Avatar";
 import Payment from "./payment";
 import { formatDateYYYY_MM_DD_h_m } from "../../../actions/common";
-import {doCancelEvent,cancelIndividualAppointment, doCancelPendingSeminar, doUpdateEvent, profileImageFetch,acceptIndividualAppointment} from "../../../api/api";
+import {doCancelEvent,cancelIndividualAppointment, doUpdateEvent, profileImageFetch,acceptIndividualAppointment} from "../../../api/api";
 import { updateMe } from "../../../actions/authActions";
 import { useDispatch } from "react-redux";
 import { SetLoadingStatus } from "../../../actions/appActions";
@@ -16,12 +16,11 @@ import {setChosenChatDetails, setChosenGroupChatDetails} from "../../../actions/
 
 const Dashboard = () => {
 
-    const { auth: { userDetails: { pendingGroupChats, events, groupChats:groupChat, status,_id:userId } }, friends: { groupChatList }} = useAppSelector(state => state)
+    const { auth: { userDetails: { events, groupChats:groupChat, status,_id:userId } }, friends: { groupChatList }} = useAppSelector(state => state)
     const dispatch = useDispatch()
     const navigate = useNavigate()
     const location = useLocation()
 
-    const [groupChats, set_groupChats] = useState<any>([])
     const [sessions, set_sessions] = useState<any>([])
     const [pendingSessions, set_pendingSessions] = useState<any>([])
     const [acceptedSeminars, set_acceptedSeminars] = useState<any>([])
@@ -31,16 +30,6 @@ const Dashboard = () => {
     const fetchImagesRef = useRef(false); // Ref to track image fetch calls
     const [showPayment, set_showPayment] = useState(false);
     const [item, set_item] = useState<any>(null);
-
-    const cancelSeminarAppointment = async (data: any) => {
-        SetLoadingStatus(true)
-        const response = await doCancelPendingSeminar(data._id)
-        if (response) {
-            dispatch(updateMe())
-            dispatch(showSuccessAlert('Seminar Appointment Cancelled and your money refunded'))
-        }
-        SetLoadingStatus(false)
-    }
 
     const cancelAppointment = async (data: any) => {
         SetLoadingStatus(true)
@@ -127,30 +116,25 @@ const Dashboard = () => {
         dispatch(setChosenGroupChatDetails( selectedGroupChat ));
     };
 
-    // Batch state updates for sessions and groupChats
+    // Batch state updates for sessions and seminars
     useEffect(() => {
         const now = new Date().getTime();
-        console.log("Pending Group Chats:", pendingGroupChats);
 
         const updatedSessions = groupChat.filter((item: any) => new Date(item.end).getTime() >= now && item.type === 'individual' && item.status === 'active');
-        // const pendingSessions = pendingGroupChats.filter((item: any) => new Date(item.groupChatId.end).getTime() >= now && item.groupChatId.type === 'individual');
         const pendingSessions = groupChat.filter((item: any) => new Date(item.end).getTime() >= now && item.type === 'individual' && item.status === 'pending');
-        // pendingSessions.push(...otherpendingSessions);
-        const updatedGroupChats = pendingGroupChats.filter((item: any) => new Date(item.groupChatId.end).getTime() >= now);
         const updatedSeminars = groupChat.filter((item: any) => new Date(item.end).getTime() >= now && item.type === 'seminar');
-    
+
         set_sessions(updatedSessions);
-        set_groupChats(updatedGroupChats);
         set_acceptedSeminars(updatedSeminars);
         set_pendingSessions(pendingSessions);
 
         // Trigger image fetch only once
         if (!fetchImagesRef.current) {
             fetchImagesRef.current = true;
-            const allExperts = [...updatedSessions, ...groupChats, ...updatedSeminars];
+            const allExperts = [...updatedSessions, ...updatedSeminars];
             fetchImages(allExperts);
         }
-    }, [events, pendingGroupChats, groupChat]);
+    }, [events, groupChat]);
 
     const fetchImages = async (sessionList: any[]) => {
         const uniqueExperts = new Map<string, string>();
@@ -261,49 +245,6 @@ const Dashboard = () => {
             }
 
 
-            <div className="text-center text-2xl my-6">Pending Seminar Sessions</div>
-            {
-                groupChats.length ?
-                    <div className="flex flex-wrap justify-center gap-6">
-                        {
-                            groupChats.map((item: any, index: number) => (
-                                // <div key={index} className="w-fit p-4 bg-darkgrey">
-                                <div key={index} className="w-fit p-4 bg-darkgrey rounded-lg shadow-md transform transition-all duration-300 hover:scale-105 hover:shadow-lg overflow-hidden">
-                                    <div className="flex space-x-3 items-center">
-                                        <Avatar
-                                            username={item.groupChatId.admin.username}
-                                            //image={item.groupChatId.admin.image}
-                                            image={base64Images.get(item.groupChatId.admin._id)}
-                                        />
-                                        <div>
-                                            <div className="text-lg">{item.groupChatId.admin.username}</div>
-                                            <div className="text-sm">{item.groupChatId.admin.email}</div>
-                                        </div>
-                                    </div>
-                                    <hr className="my-2"/>
-                                    <div><span className="font-bold">Title  : </span> {item.groupChatId.name}</div>
-                                    <div><span
-                                        className="font-bold">Description  : </span> {item.groupChatId.description}
-                                    </div>
-                                    <div><span
-                                        className="font-bold">Starts at : </span> {formatDateYYYY_MM_DD_h_m(item.groupChatId.start)}
-                                    </div>
-                                    <div><span className="font-bold">Duration  : </span> {item.groupChatId.duration} min
-                                    </div>
-                                    <div><span className="font-bold">Price  : </span> ${item.groupChatId.price}</div>
-                                    <hr className="my-3"/>
-                                    <button
-                                        className="py-1 w-full bg-green rounded-lg flex items-center justify-center disabled:opacity-50"
-                                        onClick={() => cancelSeminarAppointment(item)}
-                                    >
-                                        Cancel
-                                    </button>
-                                </div>
-                            ))
-                        }
-                    </div> :
-                    <div className="text-center text-lightgrey my-10">No pending seminar sessions</div>
-            }
             <div className="text-center text-2xl mb-6">Booked Individual Sessions</div>
             {
                 sessions.length ?

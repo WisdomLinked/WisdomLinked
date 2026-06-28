@@ -22,6 +22,7 @@ import { usePaymentHistory, PaymentHistoryTable, PaymentHistorySummary } from '.
 import { resolveProfileImageSrc } from '../../utils/profileImage';
 import { saveProfilePhotoFile } from '../../utils/profileImageUpload';
 import { SERVICE_OPTIONS, canonicalLabelsFromMixedServiceEntries } from '../../constants/serviceOptions';
+import { MAJOR_OPTIONS_WITH_OTHER, OTHER_MAJOR } from '../../constants/majorOptions';
 
 const PREFERENCE_OPTIONS = SERVICE_OPTIONS.map((o) => ({ id: o.value, label: o.label }));
 
@@ -55,36 +56,7 @@ function interestsFromKeywords(keywords: unknown[] | undefined): string[] {
   return out;
 }
 
-const INTEREST_OPTIONS = [
-  'Aerospace Engineering',
-  'Agricultural Engineering',
-  'Artificial Intelligence / Machine Learning',
-  'Automotive Engineering',
-  'Biomedical Engineering',
-  'Chemical Engineering',
-  'Civil Engineering',
-  'Computer Engineering',
-  'Computer Science',
-  'Data Science',
-  'Electrical Engineering',
-  'Electronics & Communication Engineering',
-  'Environmental Engineering',
-  'Geotechnical Engineering',
-  'Industrial Engineering',
-  'Information Technology',
-  'Marine Engineering',
-  'Materials Science & Engineering',
-  'Mechanical Engineering',
-  'Mechatronics Engineering',
-  'Nuclear Engineering',
-  'Petroleum Engineering',
-  'Robotics Engineering',
-  'Software Engineering',
-  'Structural Engineering',
-  'Systems Engineering',
-  'Telecommunications Engineering',
-  'Other',
-];
+const INTEREST_OPTIONS = MAJOR_OPTIONS_WITH_OTHER;
 
 const inputBase =
   'w-full rounded-xl border bg-white px-4 py-2.5 text-sm text-slate-800 placeholder-slate-400 outline-none transition-all focus:ring-2 focus:ring-[#234C6A]/30 focus:border-[#234C6A]';
@@ -113,9 +85,11 @@ export default function StudentProfile() {
     () => preferencesFromServices(userDetails?.services),
   );
   const [interests, setInterests] = useState<string[]>(
-    () => interestsFromKeywords(userDetails?.keywords),
+    () => interestsFromKeywords([...(userDetails?.keywords || []), ...(userDetails?.customKeywords || [])]),
   );
   const [showInterestDropdown, setShowInterestDropdown] = useState(false);
+  const [showCustomInterestInput, setShowCustomInterestInput] = useState(false);
+  const [customInterest, setCustomInterest] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [personalDirty, setPersonalDirty] = useState(false);
@@ -166,8 +140,8 @@ export default function StudentProfile() {
 
   useEffect(() => {
     if (interestsDirty) return;
-    setInterests(interestsFromKeywords(userDetails?.keywords));
-  }, [interestsDirty, userDetails?.keywords]);
+    setInterests(interestsFromKeywords([...(userDetails?.keywords || []), ...(userDetails?.customKeywords || [])]));
+  }, [interestsDirty, userDetails?.keywords, userDetails?.customKeywords]);
 
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [passwordStep, setPasswordStep] = useState<'request' | 'verify' | 'done'>('request');
@@ -208,6 +182,15 @@ export default function StudentProfile() {
       return next;
     });
     setInterestsDirty(true);
+  };
+
+  const addCustomInterest = () => {
+    const v = customInterest.trim();
+    if (!v) return;
+    if (!interests.some(i => i.toLowerCase() === v.toLowerCase())) toggleInterest(v);
+    setCustomInterest('');
+    setShowCustomInterestInput(false);
+    setShowInterestDropdown(false);
   };
 
   const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -653,7 +636,7 @@ export default function StudentProfile() {
             </button>
             {showInterestDropdown && (
               <div className="absolute left-0 top-full mt-1 w-64 rounded-xl border border-slate-200 bg-white py-2 shadow-lg z-10 max-h-56 overflow-y-auto">
-                {INTEREST_OPTIONS.filter(i => !interests.includes(i)).map(interest => (
+                {INTEREST_OPTIONS.filter(i => i !== OTHER_MAJOR && !interests.includes(i)).map(interest => (
                   <button
                     key={interest}
                     type="button"
@@ -666,8 +649,33 @@ export default function StudentProfile() {
                     {interest}
                   </button>
                 ))}
-                {INTEREST_OPTIONS.every(i => interests.includes(i)) && (
-                  <p className="px-4 py-2 text-xs text-slate-500">All interests selected.</p>
+                {showCustomInterestInput ? (
+                  <div className="flex items-center gap-1 px-3 py-2">
+                    <input
+                      type="text"
+                      autoFocus
+                      value={customInterest}
+                      onChange={e => setCustomInterest(e.target.value)}
+                      onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addCustomInterest(); } }}
+                      placeholder="Type your branch"
+                      className="min-w-0 flex-1 rounded-lg border border-slate-200 px-2 py-1.5 text-sm text-slate-800 outline-none focus:ring-2 focus:ring-[#234C6A]/40"
+                    />
+                    <button
+                      type="button"
+                      onClick={addCustomInterest}
+                      className="rounded-lg bg-[#234C6A] px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-[#1b3c53]"
+                    >
+                      Add
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setShowCustomInterestInput(true)}
+                    className="w-full px-4 py-2 text-left text-sm font-medium text-[#234C6A] hover:bg-slate-50"
+                  >
+                    {OTHER_MAJOR} (add your own)
+                  </button>
                 )}
               </div>
             )}

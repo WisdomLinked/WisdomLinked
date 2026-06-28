@@ -135,6 +135,73 @@ export function getViewerSlotsForDay(
   return convertExpertSlotsToViewer(expertSlots, expertTz, viewerTz, ref);
 }
 
+/** Three-letter weekday key ('Mon'…'Sun') for an instant, in the given timezone. */
+export function expertWeekdayKey(instant: Date, timeZone: string): string {
+  return new Intl.DateTimeFormat('en-US', {
+    timeZone: timeZone || 'UTC',
+    weekday: 'short',
+  }).format(instant);
+}
+
+/**
+ * Pick the expert-local slot indices that apply to a given calendar day, honoring
+ * weekday-specific availability. When the expert uses `availabilityMode === 'daily'`
+ * and has `weeklyTimeSlots`, the slots for that day's expert-local weekday are used;
+ * otherwise the flat recurring `timeSlots` apply to every day.
+ */
+export function getExpertSlotsForCalendarDay(
+  expert: any,
+  calendarDate: Date,
+  viewerTz: string,
+): HalfHourSlotIndex[] {
+  const expertTz = expert?.timeZone || 'UTC';
+  const weekly = expert?.weeklyTimeSlots;
+  if (expert?.availabilityMode === 'daily' && weekly && typeof weekly === 'object') {
+    const ymd = getViewerYmdFromCalendarDate(calendarDate);
+    // Noon of the viewer's calendar day, used to read the expert-local weekday.
+    const ref = zonedLocalToUtc(ymd, 12, 0, viewerTz);
+    const key = expertWeekdayKey(ref, expertTz);
+    const arr = weekly[key];
+    return Array.isArray(arr) ? arr : [];
+  }
+  return Array.isArray(expert?.timeSlots) ? expert.timeSlots : [];
+}
+
+/** Viewer-local slot indices for a calendar day, weekday-aware (mode 'daily') when set. */
+export function getViewerSlotsForExpertDay(
+  expert: any,
+  calendarDate: Date,
+  viewerTz: string,
+): HalfHourSlotIndex[] {
+  const expertTz = expert?.timeZone || 'UTC';
+  const expertSlots = getExpertSlotsForCalendarDay(expert, calendarDate, viewerTz);
+  return getViewerSlotsForDay(calendarDate, viewerTz, expertSlots, expertTz);
+}
+
+/**
+ * Whether a viewer-local slot on a calendar day falls inside the expert's per-date
+ * blocked slots. The blocked map keys are expert-local YMD and values are expert-local
+ * half-hour indices, so the viewer slot is mapped to its instant first, then to the
+ * expert-local day + index. Tolerates a plain object or a Map.
+ */
+export function isViewerSlotBlockedOnDate(
+  blockedSlotsMap: unknown,
+  calendarDate: Date,
+  viewerSlotIdx: number,
+  viewerTz: string,
+  expertTz: string,
+): boolean {
+  if (!blockedSlotsMap) return false;
+  const instant = viewerSlotToInstant(calendarDate, viewerSlotIdx, viewerTz);
+  const ymd = toYMDInTimeZone(instant, expertTz);
+  const blocked =
+    blockedSlotsMap instanceof Map
+      ? (blockedSlotsMap.get(ymd) as number[] | undefined)
+      : (blockedSlotsMap as Record<string, number[]>)[ymd];
+  if (!Array.isArray(blocked) || !blocked.length) return false;
+  return blocked.includes(getSlotIndexInTimeZone(instant, expertTz));
+}
+
 export function resolveViewerTimeZone(
   mode: BookingDisplayTimeZoneMode,
   studentTz: string,

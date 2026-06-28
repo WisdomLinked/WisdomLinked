@@ -29,7 +29,9 @@ const {
     deletePendingLogin,
     deletePendingUser,
     convertPendingUserToUserByAdmin,
-    registerUserByAdmin
+    registerUserByAdmin,
+    getCustomMajors,
+    consolidateMajors
 } = require("../controllers/admin.controller");
 
 const {
@@ -71,6 +73,8 @@ router.post("/deletePendingUser", adminAuth, deletePendingUser);
 router.post("/deletePendingLogin", adminAuth, deletePendingLogin);
 router.post("/convertPendingUserToUserByAdmin", adminAuth, convertPendingUserToUserByAdmin);
 router.post("/registerUserByAdmin", adminAuth, registerUserByAdmin);
+router.get("/getCustomMajors", adminAuth, getCustomMajors);
+router.post("/consolidateMajors", adminAuth, consolidateMajors);
 router.post("/createChatBotQA", adminAuth, createChatBotQA)
 router.get("/getChatBotQA", adminAuth, getChatBotQA)
 router.post("/updateChatBotQA/:id", adminAuth, updateChatBotQA)

@@ -13,11 +13,19 @@ import FilterListIcon from "@mui/icons-material/FilterList";
 import CloseIcon from "@mui/icons-material/Close";
 import SelectionWithCheckBox from "../../../../components/SelectionWithCheckBox";
 import OverlayPortal from "../../../../components/OverayPortal";
+import DatePickerField from "../../../../components/ui/DatePickerField";
+import TimePickerField from "../../../../components/ui/TimePickerField";
 import { SetLoadingStatus } from "../../../../actions/appActions";
 import { filterApiServicesToCanonical } from "../../../../constants/serviceOptions";
 import { useDispatch } from "react-redux";
 import { setChosenChatDetails, setChosenGroupChatDetails } from "../../../../actions/chatActions";
 import { useNavigate } from "react-router-dom";
+import { useAppSelector } from "../../../../store";
+import { fetchChatUserProfile } from "../../../../api/chatApi";
+import { proposeIndividualAppointment } from "../../../../api/api";
+import { normalizeExpertPrice } from "../../../../utils/schedulingSlots";
+import { updateMe } from "../../../../actions/authActions";
+import { showErrorAlert, showSuccessAlert, showWarningAlert } from "../../../../actions/alertActions";
 
 const Customers = ({
     qCustomerId,
@@ -27,6 +35,16 @@ const Customers = ({
 
     const dispatch = useDispatch()
     const navigate = useNavigate()
+    const { userDetails } = useAppSelector((state: any) => state.auth)
+    const [proposeFor, setProposeFor] = useState<any>(null)
+    const [proposeBusy, setProposeBusy] = useState(false)
+    const [proposeTitle, setProposeTitle] = useState('')
+    const [proposeDate, setProposeDate] = useState('')
+    const [proposeStart, setProposeStart] = useState('')
+    const [proposeDuration, setProposeDuration] = useState(30)
+    const [proposePrice, setProposePrice] = useState('')
+    const [proposePriceEdited, setProposePriceEdited] = useState(false)
+    const [proposeCustomerEmail, setProposeCustomerEmail] = useState<string | null>(null)
     const [keywords, set_keywords] = useState([])
     const [services, set_services] = useState([])
     const sorts = [
@@ -116,19 +134,19 @@ const Customers = ({
         SetLoadingStatus(false)
     }
 
-    const joinPrivateChatOfCustomer = async (customerId: string) => {
+    const openPrivateChatWithCustomer = async (customerId: string) => {
         SetLoadingStatus(true);
         try {
           const response = await joinPrivateChat(customerId);
-      
+
           if (response) {
             const { user, otherUser } = response as any;
-      
+
             dispatch({
               type: "updateUserDetails",
               payload: user,
             });
-      
+
             dispatch(
               setChosenChatDetails({
                 userId: customerId,
@@ -139,14 +157,86 @@ const Customers = ({
                   .trim() || undefined,
               })
             );
-      
+
             navigate(`${process.env.REACT_APP_AUTH_URL}expertdashboard/chat`);
+            window.dispatchEvent(new Event("wl-open-chat-nav"));
           }
         } catch (err) {
-          console.error("joinPrivateChatOfCustomer error:", err);
+          console.error("openPrivateChatWithCustomer error:", err);
         }
         SetLoadingStatus(false);
       };
+
+    const proposeSuggestedPrice = (durationMin: number) => {
+        const rate = normalizeExpertPrice((userDetails as any)?.price) ?? 0;
+        return Math.round(((rate * durationMin) / 60) * 100) / 100;
+    };
+
+    const openProposeModal = (customer: any) => {
+        setProposeFor(customer);
+        setProposeTitle(`${customer?.username || "Student"} & ${userDetails?.username || "Expert"}`);
+        setProposeDate("");
+        setProposeStart("");
+        setProposeDuration(30);
+        setProposePrice(String(proposeSuggestedPrice(30)));
+        setProposePriceEdited(false);
+        setProposeCustomerEmail(null);
+        void fetchChatUserProfile(String(customer._id)).then((r: any) => {
+            if (r?.success && r?.result?.email) setProposeCustomerEmail(String(r.result.email));
+        });
+    };
+
+    const submitPropose = async () => {
+        if (!proposeTitle.trim()) {
+            dispatch(showWarningAlert("Add a title for the session."));
+            return;
+        }
+        if (!proposeDate || !proposeStart) {
+            dispatch(showWarningAlert("Pick a date and start time."));
+            return;
+        }
+        if (!proposeCustomerEmail) {
+            dispatch(showErrorAlert("Still resolving the student — try again in a moment."));
+            return;
+        }
+        const start = new Date(`${proposeDate}T${proposeStart}:00`);
+        if (Number.isNaN(start.getTime())) {
+            dispatch(showErrorAlert("That date/time isn't valid."));
+            return;
+        }
+        if (start.getTime() <= Date.now()) {
+            dispatch(showWarningAlert("Pick a time in the future."));
+            return;
+        }
+        const end = new Date(start.getTime() + proposeDuration * 60000);
+        const price = Math.round(Number(proposePrice) * 100) / 100;
+        if (Number.isNaN(price) || price < 0) {
+            dispatch(showWarningAlert("Enter a valid price for the session."));
+            return;
+        }
+
+        setProposeBusy(true);
+        SetLoadingStatus(true);
+        const res: any = await proposeIndividualAppointment({
+            name: proposeTitle.trim(),
+            start,
+            end,
+            duration: proposeDuration,
+            price,
+            customer: proposeCustomerEmail,
+        });
+        SetLoadingStatus(false);
+        setProposeBusy(false);
+        if (res && res !== false) {
+            if (res.userDetails) {
+                dispatch({ type: "updateUserDetails", payload: res.userDetails });
+            } else {
+                dispatch(updateMe() as any);
+            }
+            dispatch(showSuccessAlert("Session proposed — the student will be notified to accept."));
+            setProposeFor(null);
+        }
+    };
 
     useEffect(() => {
         let timer = setTimeout(() => {
@@ -280,7 +370,7 @@ const Customers = ({
                                 </div>
                                 <div className="w-full flex gap-2 mt-4">
                                     <button
-                                    onClick={() => joinPrivateChatOfCustomer(customer._id)}
+                                    onClick={() => openPrivateChatWithCustomer(customer._id)}
                                     className="w-1/2 rounded-full border border-slate-200 text-[12px] text-slate-700 flex items-center justify-center hover:bg-slate-50"
                                     >
                                     Private Chat
@@ -288,7 +378,10 @@ const Customers = ({
                                     <button
                                         className="w-1/2 px-3 py-2 rounded-full flex items-center justify-center bg-[#234C6A] text-white text-[12px] font-semibold disabled:opacity-50"
                                         disabled={customer.status === 'review'}
-                                        onClick={() => selectCustomer(customer)}
+                                        onClick={() => {
+                                            selectCustomer(customer);
+                                            openProposeModal(customer);
+                                        }}
                                     >
                                         Select
                                     </button>
@@ -298,6 +391,109 @@ const Customers = ({
                     ))
                 }
             </div>
+
+            {
+                proposeFor ?
+                    <OverlayPortal closeModal={() => { if (!proposeBusy) setProposeFor(null); }}>
+                        <div
+                            className="fixed inset-0 z-[1100] flex items-center justify-center bg-black/30 backdrop-blur-sm p-4"
+                            onClick={() => { if (!proposeBusy) setProposeFor(null); }}
+                        >
+                            <div
+                                className="w-full max-w-sm rounded-2xl p-5 relative shadow-xl border bg-white text-slate-900 border-slate-200"
+                                onClick={(e) => e.stopPropagation()}
+                            >
+                                <button
+                                    className="absolute right-3 top-3 rounded-md hover:bg-slate-100 p-1"
+                                    onClick={() => { if (!proposeBusy) setProposeFor(null); }}
+                                >
+                                    <CloseIcon fontSize="small" />
+                                </button>
+                                <h3 className="text-lg font-semibold">Propose a session</h3>
+                                <p className="mt-1 text-xs text-slate-500">
+                                    {proposeFor?.username
+                                        ? `${proposeFor.username} will get an invitation to accept or decline.`
+                                        : "The student will get an invitation to accept or decline."}
+                                </p>
+
+                                <div className="mt-4 space-y-3">
+                                    <div>
+                                        <label className="mb-1 block text-xs font-semibold">Title</label>
+                                        <input
+                                            type="text"
+                                            value={proposeTitle}
+                                            maxLength={100}
+                                            onChange={(e) => setProposeTitle(e.target.value)}
+                                            className="w-full rounded-lg border px-3 py-2 text-sm outline-none border-slate-200 bg-white text-slate-900 focus:ring-2 focus:ring-[#234C6A]"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="mb-1 block text-xs font-semibold">Date</label>
+                                        <DatePickerField
+                                            id="propose-date"
+                                            value={proposeDate}
+                                            onChange={setProposeDate}
+                                            min={new Date().toLocaleDateString("en-CA")}
+                                            placeholder="Select a date"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="mb-1 block text-xs font-semibold">Start time</label>
+                                        <TimePickerField
+                                            id="propose-start-time"
+                                            value={proposeStart}
+                                            onChange={setProposeStart}
+                                            placeholder="Select start time"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="mb-1 block text-xs font-semibold">Duration</label>
+                                        <select
+                                            value={proposeDuration}
+                                            onChange={(e) => {
+                                                const next = Number(e.target.value);
+                                                setProposeDuration(next);
+                                                if (!proposePriceEdited) setProposePrice(String(proposeSuggestedPrice(next)));
+                                            }}
+                                            className="w-full rounded-lg border px-3 py-2 text-sm outline-none border-slate-200 bg-white text-slate-900 focus:ring-2 focus:ring-[#234C6A]"
+                                        >
+                                            <option value={30}>30 min</option>
+                                            <option value={60}>60 min</option>
+                                            <option value={90}>90 min</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className="mb-1 block text-xs font-semibold">Price (USD)</label>
+                                        <div className="relative">
+                                            <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-slate-500">$</span>
+                                            <input
+                                                type="number"
+                                                min={0}
+                                                step="0.01"
+                                                value={proposePrice}
+                                                onChange={(e) => { setProposePrice(e.target.value); setProposePriceEdited(true); }}
+                                                className="w-full rounded-lg border pl-6 pr-3 py-2 text-sm outline-none border-slate-200 bg-white text-slate-900 focus:ring-2 focus:ring-[#234C6A]"
+                                            />
+                                        </div>
+                                        <p className="mt-1 text-[11px] text-slate-500">
+                                            Prefilled from your rate for this duration — edit to set the final price the student will pay.
+                                        </p>
+                                    </div>
+                                </div>
+
+                                <button
+                                    type="button"
+                                    disabled={proposeBusy}
+                                    onClick={submitPropose}
+                                    className="mt-5 w-full rounded-lg bg-[#234C6A] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#1b3c53] disabled:opacity-60"
+                                >
+                                    {proposeBusy ? "Sending…" : "Send proposal"}
+                                </button>
+                            </div>
+                        </div>
+                    </OverlayPortal> :
+                    null
+            }
         </div>
     );
 };

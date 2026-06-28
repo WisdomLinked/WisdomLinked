@@ -4,6 +4,7 @@ const {
   getSlotIndicesForRange,
   assertSlotsInTimeSlots,
   assertNotBlockedDate,
+  assertNotBlockedSlot,
   intervalsOverlap,
   assertNoBookingOverlap,
   assertDurationAllowed,
@@ -63,6 +64,61 @@ describe("bookingValidation", () => {
     assert.throws(
       () => assertNotBlockedDate(expert, new Date("2026-05-01T14:00:00.000Z")),
       /not accepting bookings/
+    );
+  });
+
+  it("assertNotBlockedSlot throws when a needed slot is blocked on that date", () => {
+    // 09:00–10:00 UTC maps to half-hour indices 18, 19.
+    const expert = {
+      blockedBookingSlots: { "2026-05-01": [18, 19] },
+      timeZone: "UTC",
+    };
+    assert.throws(
+      () =>
+        assertNotBlockedSlot(
+          expert,
+          new Date("2026-05-01T09:00:00.000Z"),
+          new Date("2026-05-01T10:00:00.000Z")
+        ),
+      /not available at the selected time on this date/
+    );
+  });
+
+  it("assertNotBlockedSlot passes when the date has no blocked slots overlapping", () => {
+    const expert = {
+      blockedBookingSlots: { "2026-05-01": [20, 21] },
+      timeZone: "UTC",
+    };
+    assert.doesNotThrow(() =>
+      assertNotBlockedSlot(
+        expert,
+        new Date("2026-05-01T09:00:00.000Z"),
+        new Date("2026-05-01T10:00:00.000Z")
+      )
+    );
+    // Different date entirely → not blocked.
+    assert.doesNotThrow(() =>
+      assertNotBlockedSlot(
+        expert,
+        new Date("2026-05-02T09:00:00.000Z"),
+        new Date("2026-05-02T10:00:00.000Z")
+      )
+    );
+  });
+
+  it("assertNotBlockedSlot supports a Map-valued blockedBookingSlots", () => {
+    const expert = {
+      blockedBookingSlots: new Map([["2026-05-01", [18, 19]]]),
+      timeZone: "UTC",
+    };
+    assert.throws(
+      () =>
+        assertNotBlockedSlot(
+          expert,
+          new Date("2026-05-01T09:00:00.000Z"),
+          new Date("2026-05-01T10:00:00.000Z")
+        ),
+      /not available at the selected time on this date/
     );
   });
 

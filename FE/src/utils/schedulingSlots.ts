@@ -34,6 +34,42 @@ export function unionDailyAvailabilityHours(
   return [...hours].sort((a, b) => a - b);
 }
 
+export const WEEKDAY_KEYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'] as const;
+export type WeekdayKey = (typeof WEEKDAY_KEYS)[number];
+
+/**
+ * Build the per-weekday half-hour slot map from daily availability rows.
+ * Disabled days (or days with no slots) are omitted so the stored map only
+ * carries weekdays the expert is actually available.
+ */
+export function buildWeeklyTimeSlots(
+  daily: Array<{ day: WeekdayKey; enabled: boolean; selectedSlots: number[] }>,
+): Record<WeekdayKey, HalfHourSlotIndex[]> {
+  const map = {} as Record<WeekdayKey, HalfHourSlotIndex[]>;
+  for (const row of daily) {
+    const indices = row.enabled ? hoursToHalfHourIndices(row.selectedSlots) : [];
+    map[row.day] = indices;
+  }
+  return map;
+}
+
+/** Deep-equality for two weekly slot maps (order-independent within a day). */
+export function weeklyTimeSlotsEqual(
+  a: Record<string, number[]> | undefined | null,
+  b: Record<string, number[]> | undefined | null,
+): boolean {
+  const dayEqual = (x: number[] = [], y: number[] = []) => {
+    if (x.length !== y.length) return false;
+    const sx = [...x].sort((m, n) => m - n);
+    const sy = [...y].sort((m, n) => m - n);
+    return sx.every((v, i) => v === sy[i]);
+  };
+  for (const key of WEEKDAY_KEYS) {
+    if (!dayEqual(a?.[key] ?? [], b?.[key] ?? [])) return false;
+  }
+  return true;
+}
+
 export function normalizeExpertPrice(price: unknown): number | undefined {
   if (typeof price === 'number' && !Number.isNaN(price)) return price;
   if (Array.isArray(price) && price.length > 0) {

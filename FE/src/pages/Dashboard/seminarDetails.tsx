@@ -3,8 +3,14 @@ import { formatDateYYYY_MM_DD_h_m } from "../../actions/common";
 import Avatar from "../../components/Avatar";
 import GroupParticipantsDialog from "./Messenger/Messages/GroupParticipantsDialog";
 import { useAppSelector } from "../../store";
-import { Calendar, Clock3, DollarSign, Users, Sparkles, UserRound } from "lucide-react";
+import { Calendar, Clock3, DollarSign, Users, Sparkles, UserRound, Repeat } from "lucide-react";
 import { SERVICE_OPTIONS, matchesServiceOption } from "../../constants/serviceOptions";
+
+const RECURRENCE_LABEL: Record<string, string> = {
+    weekly: "Weekly",
+    biweekly: "Biweekly",
+    monthly: "Monthly",
+};
 
 interface SeminarDetailsProps {
     title: string;
@@ -18,6 +24,8 @@ interface SeminarDetailsProps {
     services?: any[];
     type?: string;
     createdAt?: string;
+    isRecurring?: boolean;
+    recurrenceFrequency?: string;
     canDeleteCommunityChat?: boolean;
     onDeleteCommunityChat?: () => void;
     theme?: "light" | "dark";
@@ -28,17 +36,21 @@ const SeminarDetails = ({
     description,
     start,
     duration,
-    price, 
+    price,
     admin,
     participants,
     keywords,
     services,
     type,
     createdAt,
+    isRecurring,
+    recurrenceFrequency,
     canDeleteCommunityChat = false,
     onDeleteCommunityChat,
     theme = "dark",
 }: SeminarDetailsProps) => {
+    const recurrenceLabel =
+        isRecurring && recurrenceFrequency ? RECURRENCE_LABEL[recurrenceFrequency] : undefined;
 
     const serviceChipLabel = (service: any): string => {
         const doc = { value: service?.value, name: service?.name, label: service?.label };
@@ -54,40 +66,54 @@ const SeminarDetails = ({
     const isLight = theme === "light";
     const participantCount = Math.max((participants?.length || 0) - 1, 0);
 
+    const sessionStats = [
+        { Icon: Calendar, label: "Date", value: start ? formatDateYYYY_MM_DD_h_m(start) : "N/A" },
+        { Icon: Clock3, label: "Duration", value: `${duration ?? 0} min` },
+        { Icon: DollarSign, label: "Price", value: `$${price ?? 0}` },
+    ];
+
     return (
         <div className={`w-full ${isLight ? "text-slate-900" : "text-white"}`}>
-            <div className="space-y-4">
-                <div className={`rounded-xl border p-4 ${isLight ? "border-slate-200 bg-slate-50/70" : "border-slate-700 bg-[#141414]"}`}>
-                    <div className="text-xl font-bold">{title}</div>
-                    <div className={`mt-1 text-sm leading-relaxed ${isLight ? "text-slate-600" : "text-lightgrey"}`}>
-                        {description || "No description provided."}
+            <div className="space-y-2.5">
+                <div className={`overflow-hidden rounded-xl border ${isLight ? "border-slate-200 bg-gradient-to-br from-[#EEF3F8] to-slate-50" : "border-slate-700 bg-[#141414]"}`}>
+                    <div className="p-3">
+                        <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0 text-base font-bold leading-snug break-words">{title}</div>
+                            {recurrenceLabel ? (
+                                <span className={`shrink-0 inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${isLight ? "bg-[#234C6A] text-white" : "bg-[#234C6A]/60 text-slate-100"}`}>
+                                    <Repeat className="h-3 w-3" aria-hidden />
+                                    {recurrenceLabel}
+                                </span>
+                            ) : null}
+                        </div>
+                        <div className={`mt-1.5 border-t pt-1.5 text-[13px] leading-relaxed ${isLight ? "border-slate-200/70 text-slate-600" : "border-slate-700 text-lightgrey"}`}>
+                            {description || "No description provided."}
+                        </div>
                     </div>
                 </div>
 
                 {!isCommunityChat ? (
-                    <div className={`rounded-xl border p-4 ${isLight ? "border-slate-200 bg-white" : "border-slate-700 bg-[#141414]"}`}>
-                        <div className={`mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.12em] ${isLight ? "text-[#234C6A]" : "text-slate-300"}`}>
+                    <div className={`rounded-xl border p-3 ${isLight ? "border-slate-200 bg-white" : "border-slate-700 bg-[#141414]"}`}>
+                        <div className={`mb-2 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.12em] ${isLight ? "text-[#234C6A]" : "text-slate-300"}`}>
                             <Calendar className="h-3.5 w-3.5" />
                             Session info
                         </div>
-                        <div className="space-y-2 text-sm">
-                            <div className="flex items-center gap-2">
-                                <Calendar className={`h-4 w-4 ${isLight ? "text-slate-500" : "text-slate-400"}`} />
-                                <span className={isLight ? "text-slate-700" : "text-slate-300"}>{start ? formatDateYYYY_MM_DD_h_m(start) : "N/A"}</span>
-                            </div>
-                            <div className="flex items-center gap-2">
-                                <Clock3 className={`h-4 w-4 ${isLight ? "text-slate-500" : "text-slate-400"}`} />
-                                <span className={isLight ? "text-slate-700" : "text-slate-300"}>{duration ?? 0} min</span>
-                            </div>
-                            <div className="flex items-center gap-2">
-                                <DollarSign className={`h-4 w-4 ${isLight ? "text-slate-500" : "text-slate-400"}`} />
-                                <span className={isLight ? "text-slate-700" : "text-slate-300"}>${price ?? 0}</span>
-                            </div>
+                        <div className="grid grid-cols-3 gap-2">
+                            {sessionStats.map(({ Icon, label, value }) => (
+                                <div
+                                    key={label}
+                                    className={`flex flex-col items-center gap-0.5 rounded-lg border px-2 py-2 text-center ${isLight ? "border-slate-200 bg-slate-50" : "border-slate-700 bg-[#1c1c1c]"}`}
+                                >
+                                    <Icon className={`h-3.5 w-3.5 ${isLight ? "text-[#234C6A]" : "text-slate-400"}`} />
+                                    <span className={`text-[9px] font-semibold uppercase tracking-[0.1em] ${isLight ? "text-slate-400" : "text-slate-500"}`}>{label}</span>
+                                    <span className={`text-[12px] font-semibold ${isLight ? "text-slate-800" : "text-slate-200"}`}>{value}</span>
+                                </div>
+                            ))}
                         </div>
                     </div>
                 ) : (
-                    <div className={`rounded-xl border p-4 ${isLight ? "border-slate-200 bg-white" : "border-slate-700 bg-[#141414]"}`}>
-                        <div className={`mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.12em] ${isLight ? "text-[#234C6A]" : "text-slate-300"}`}>
+                    <div className={`rounded-xl border p-3 ${isLight ? "border-slate-200 bg-white" : "border-slate-700 bg-[#141414]"}`}>
+                        <div className={`mb-2 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.12em] ${isLight ? "text-[#234C6A]" : "text-slate-300"}`}>
                             <Sparkles className="h-3.5 w-3.5" />
                             Community info
                         </div>
@@ -110,8 +136,8 @@ const SeminarDetails = ({
                 )}
 
                 {(keywords?.length || services?.length) ? (
-                    <div className={`rounded-xl border p-4 ${isLight ? "border-slate-200 bg-white" : "border-slate-700 bg-[#141414]"}`}>
-                        <div className={`mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.12em] ${isLight ? "text-[#234C6A]" : "text-slate-300"}`}>
+                    <div className={`rounded-xl border p-3 ${isLight ? "border-slate-200 bg-white" : "border-slate-700 bg-[#141414]"}`}>
+                        <div className={`mb-2 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.12em] ${isLight ? "text-[#234C6A]" : "text-slate-300"}`}>
                             <Sparkles className="h-3.5 w-3.5" />
                             Interests
                         </div>
@@ -144,22 +170,22 @@ const SeminarDetails = ({
                     </div>
                 ) : null}
 
-                <div className={`rounded-xl border p-4 ${isLight ? "border-slate-200 bg-white" : "border-slate-700 bg-[#141414]"}`}>
-                    <div className={`mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.12em] ${isLight ? "text-[#234C6A]" : "text-slate-300"}`}>
+                <div className={`rounded-xl border p-3 ${isLight ? "border-slate-200 bg-white" : "border-slate-700 bg-[#141414]"}`}>
+                    <div className={`mb-2 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.12em] ${isLight ? "text-[#234C6A]" : "text-slate-300"}`}>
                         <UserRound className="h-3.5 w-3.5" />
                         Admin
                     </div>
                     <div className="flex space-x-3 items-center">
                         <Avatar username={admin?.username || "Admin"} isOnline={false} image={admin?.image} />
                         <div className="min-w-0">
-                            <div className="text-base font-semibold truncate">{admin?.username || "Unknown"}</div>
-                            <div className={`text-sm truncate ${isLight ? "text-slate-500" : "text-slate-400"}`}>{admin?.email || "N/A"}</div>
+                            <div className="text-sm font-semibold truncate">{admin?.username || "Unknown"}</div>
+                            <div className={`text-[13px] truncate ${isLight ? "text-slate-500" : "text-slate-400"}`}>{admin?.email || "N/A"}</div>
                         </div>
                     </div>
                 </div>
 
-                <div className={`rounded-xl border p-4 ${isLight ? "border-slate-200 bg-white" : "border-slate-700 bg-[#141414]"}`}>
-                    <div className={`mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.12em] ${isLight ? "text-[#234C6A]" : "text-slate-300"}`}>
+                <div className={`rounded-xl border p-3 ${isLight ? "border-slate-200 bg-white" : "border-slate-700 bg-[#141414]"}`}>
+                    <div className={`mb-2 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.12em] ${isLight ? "text-[#234C6A]" : "text-slate-300"}`}>
                         <Users className="h-3.5 w-3.5" />
                         Participants ({participantCount})
                     </div>

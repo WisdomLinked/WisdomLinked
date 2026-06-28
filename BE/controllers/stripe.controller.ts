@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import { BOOKING_PAYMENT_AMOUNT_INVALID } from '../utils/bookingUserFacingCopy';
-import { HTTP_GENERIC_ERROR } from '../utils/httpUserFacingCopy';
+import { HTTP_GENERIC_ERROR, safeErrorMessage } from '../utils/httpUserFacingCopy';
 const stripeTest = require('stripe')(process.env.STRIPE_SECRET_KEY_TEST);
 const stripeLive = require('stripe')(process.env.STRIPE_SECRET_KEY_LIVE);
 const AppState = require("../models/AppState");
@@ -130,6 +130,59 @@ const refundPaymentIntent = async (payment_intent, amount, stripeMode) => {
     }
 }
 
+const enrichPaymentIntentReceipt = async ({ payment_intent, stripeMode, description, metadata, receiptEmail }) => {
+    try {
+        if (!payment_intent) return;
+        const stripe = require('stripe')(stripeMode === 'test' ? process.env.STRIPE_SECRET_KEY_TEST : process.env.STRIPE_SECRET_KEY_LIVE);
+        await stripe.paymentIntents.update(payment_intent, {
+            description,
+            metadata,
+            receipt_email: receiptEmail,
+        });
+    } catch (err) {
+        console.error('[enrichPaymentIntentReceipt]', err.message);
+    }
+};
+
+const sendBookingReceiptAndConfirmation = async ({ payment_intent, charge, sessionType, sessionName, expertName, studentName, studentEmail, start, duration, timeZone }) => {
+    try {
+        if (!charge || !studentEmail) return;
+        const { sendPaymentConfirmationEmail } = require("../services/notifications");
+        const dateStr = new Date(start).toLocaleString("en-US", { timeZone: timeZone || "UTC" });
+        const description = `WisdomLinked ${sessionType} — "${sessionName}" with ${expertName} · ${dateStr}`;
+        const metadata = {
+            sessionType: String(sessionType),
+            sessionName: String(sessionName),
+            expert: String(expertName),
+            student: String(studentName),
+            start: new Date(start).toISOString(),
+            durationMin: String(duration),
+        };
+        await enrichPaymentIntentReceipt({
+            payment_intent,
+            stripeMode: charge.paidBy,
+            description,
+            metadata,
+            receiptEmail: studentEmail,
+        });
+        await sendPaymentConfirmationEmail({
+            to: studentEmail,
+            sessionType,
+            sessionName,
+            expertName,
+            studentName,
+            start,
+            duration,
+            amount: charge.amount,
+            currency: charge.currency,
+            receiptUrl: charge.receiptUrl,
+            timeZone,
+        });
+    } catch (err) {
+        console.error('[sendBookingReceiptAndConfirmation]', err.message);
+    }
+};
+
 const sendPaymentLinkToUser = async (req, res) => {
     try {
         const { paymentHistoryId, customerEmail, customAmount, customDescription } = req.body;
@@ -146,7 +199,7 @@ const sendPaymentLinkToUser = async (req, res) => {
         const adminEmail = "noreply@wisdomlinked.com";
         sgMail.setApiKey(process.env.SENDGRID_API_KEY);
 
-        const paymentHistory = await PaymentHistory.findById(paymentHistoryId);
+        const paymentHistory = await PaymentHistory.findById(String(paymentHistoryId));
         if (!paymentHistory) {
             return res.status(404).json({
                 status: 'FAILED',
@@ -294,7 +347,7 @@ const handleStripeWebhook = async (req, res) => {
             event = stripe.webhooks.constructEvent(req.body, sig, endpointSecret);
         } catch (err) {
             console.log(`Webhook signature verification failed.`, err.message);
-            return res.status(400).send(`Webhook Error: ${err.message}`);
+            return res.status(400).send('Webhook signature verification failed');
         }
 
         console.log('Received Stripe webhook event:', event.type);
@@ -344,7 +397,7 @@ const handleStripeWebhook = async (req, res) => {
                         paymentHistoryId: paymentLink.metadata.originalPaymentHistoryId
                     });
 
-                    const originalPaymentHistory = await PaymentHistory.findById(paymentLink.metadata.originalPaymentHistoryId);
+                    const originalPaymentHistory = await PaymentHistory.findById(String(paymentLink.metadata.originalPaymentHistoryId));
 
                     if (originalPaymentHistory) {
                         // Find the pending payment record we created when the link was sent
@@ -475,7 +528,7 @@ const handleStripeWebhook = async (req, res) => {
         console.log('[handleStripeWebhook]', err);
         return res.status(500).json({
             status: 'FAILED',
-            message: 'Webhook processing failed: ' + err.message
+            message: safeErrorMessage(err)
         });
     }
 };
@@ -509,7 +562,7 @@ const processRefund = async (req, res) => {
         const AppState = require("../models/AppState");
 
         // Get the payment history record
-        const paymentHistory = await PaymentHistory.findById(paymentHistoryId).populate(['customer', 'expert']);
+        const paymentHistory = await PaymentHistory.findById(String(paymentHistoryId)).populate(['customer', 'expert']);
         if (!paymentHistory) {
             return res.status(404).json({
                 status: 'FAILED',
@@ -708,9 +761,10 @@ const sendAdHocPaymentLink = async (req, res) => {
             });
         }
 
-        // Basic email validation
+        // Basic email validation (length-capped to avoid ReDoS on the regex)
         const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-        if (!emailRegex.test(customerEmail.trim())) {
+        const trimmedEmail = customerEmail.trim();
+        if (trimmedEmail.length > 254 || !emailRegex.test(trimmedEmail)) {
             return res.status(400).json({
                 status: 'FAILED',
                 message: 'Valid customer email is required.'
@@ -880,5 +934,6 @@ module.exports = {
     sendPaymentLinkToUser,
     handleStripeWebhook,
     processRefund,
-    sendAdHocPaymentLink
+    sendAdHocPaymentLink,
+    sendBookingReceiptAndConfirmation
 }

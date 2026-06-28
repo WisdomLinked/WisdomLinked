@@ -627,7 +627,8 @@ export const sendGroupMessage = async (req: any, res: Response) => {
             }
             const adm = groupChat.admin as any;
             if (adm?.email) emails.push(String(adm.email).toLowerCase());
-            const rcChannelId = await syncRocketGroupChannelMembers(String(groupChatId), emails);
+            const channelKeyId = (groupChat as any).seriesId ? String((groupChat as any).seriesId) : String(groupChatId);
+            const rcChannelId = await syncRocketGroupChannelMembers(channelKeyId, emails);
             if (rcChannelId) {
                 const rid = await sendMessageToRC(rcChannelId, content, wlDisplayName(me), me.email);
                 if (rid) sentId = rid;
@@ -689,7 +690,8 @@ export const getGroupHistory = async (req: any, res: Response) => {
             }
             const adm = groupChat.admin as any;
             if (adm?.email) emails.push(String(adm.email).toLowerCase());
-            const rcChannelId = await syncRocketGroupChannelMembers(String(groupChatId), emails);
+            const channelKeyId = (groupChat as any).seriesId ? String((groupChat as any).seriesId) : String(groupChatId);
+            const rcChannelId = await syncRocketGroupChannelMembers(channelKeyId, emails);
             if (rcChannelId) {
                 await GroupChat.updateOne(
                     { _id: groupChat._id },

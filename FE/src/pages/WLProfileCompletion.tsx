@@ -12,15 +12,9 @@ import FormAlert from '../components/FormAlert';
 import { useFormAlert } from '../hooks/useFormAlert';
 import { refreshCsrfToken } from '../api/csrf';
 import { resetAuthSessionForLogin } from '../utils/resetAuthSession';
+import { MAJOR_OPTIONS_WITH_OTHER } from '../constants/majorOptions';
 
-// Same majors / services as WLCustomerRegister & WLExpertRegister (regular sign-up)
-const ENGINEERING_MAJORS = [
-    'Aerospace Engineering', 'Biomedical Engineering', 'Chemical Engineering',
-    'Civil Engineering', 'Computer Engineering', 'Electrical Engineering',
-    'Environmental Engineering', 'Industrial Engineering', 'Mechanical Engineering',
-    'Materials Science & Engineering', 'Nuclear Engineering', 'Petroleum Engineering',
-    'Software Engineering', 'Systems Engineering', 'Other',
-];
+const ENGINEERING_MAJORS = MAJOR_OPTIONS_WITH_OTHER;
 
 const FOCUS_RING = "focus:ring-2 focus:ring-[#234C6A]/20 focus:border-[#234C6A]";
 

@@ -20,7 +20,7 @@ import Sidebar from '../components/layout/Sidebar';
 import TopBar from '../components/layout/TopBar';
 import type { TopBarNotificationItem } from '../components/layout/TopBar';
 import StudentSettings from '../components/dashboard/StudentSettings';
-import { getAllCommunityChats, profileImageFetch, acceptIndividualAppointment, addMemberToGroup } from '../api/api';
+import { getAllCommunityChats, profileImageFetch, acceptIndividualAppointment } from '../api/api';
 import { resolveProfileImageSrc } from '../utils/profileImage';
 import { fetchDmUnreadSnapshot } from '../api/chatApi';
 import { useAppSelector } from '../store';
@@ -80,22 +80,6 @@ function mapExpertGroupToModalSession(g: any): UpcomingModalSession {
   };
 }
 
-function mapPendingSeminarToModal(pg: any): UpcomingModalSession {
-  const g = pg?.groupChatId;
-  if (!g?._id) {
-    return {
-      id: String(pg._id || 'pending'),
-      title: 'Seminar',
-      at: Date.now(),
-      when: '—',
-      location: 'Online · WisdomLinked',
-      with: 'Pending invite',
-    };
-  }
-  const base = mapExpertGroupToModalSession(g);
-  return { ...base, with: 'Awaiting confirmation' };
-}
-
 export default function ExpertDashboard() {
   useEndMeetingOnReturn();
   const dispatch = useDispatch();
@@ -112,6 +96,12 @@ export default function ExpertDashboard() {
   useEffect(() => {
     window.localStorage.setItem('expertDashboardView', activeItem);
   }, [activeItem]);
+  // Child views (e.g. the calendar) request the chat tab by firing this event.
+  useEffect(() => {
+    const onNav = () => setActiveItem('chat');
+    window.addEventListener('wl-open-chat-nav', onNav);
+    return () => window.removeEventListener('wl-open-chat-nav', onNav);
+  }, []);
   const [dmUnreadByRid, setDmUnreadByRid] = useState<Record<string, number>>({});
   const [rcRoomNameByRid, setRcRoomNameByRid] = useState<Record<string, string>>({});
   const [communityRidToName, setCommunityRidToName] = useState<Record<string, string>>({});
@@ -435,11 +425,10 @@ export default function ExpertDashboard() {
 
   const {
     acceptedSeminars,
-    pendingSeminars,
     bookedSessions,
     pendingSessions,
   } = useMemo(() => {
-    const { groupChats = [], pendingGroupChats = [] } = (userDetails || {}) as any;
+    const { groupChats = [] } = (userDetails || {}) as any;
     const nowTs = Date.now();
 
     const upcoming = (start: any, end: any) => {
@@ -447,12 +436,25 @@ export default function ExpertDashboard() {
       return endTs >= nowTs;
     };
 
-    const seminars = (groupChats || []).filter(
+    const seminarsRaw = (groupChats || []).filter(
       (g: any) =>
         g.type === 'seminar' &&
         upcoming(g.start, g.end) &&
         inSelectedRange(new Date(g.start))
     );
+
+    const seenSeminarSeries = new Set<string>();
+    const seminars: any[] = [];
+    for (const g of [...seminarsRaw].sort(
+      (a: any, b: any) => new Date(a.start).getTime() - new Date(b.start).getTime(),
+    )) {
+      const sid = g?.seriesId ? String(g.seriesId) : null;
+      if (sid) {
+        if (seenSeminarSeries.has(sid)) continue;
+        seenSeminarSeries.add(sid);
+      }
+      seminars.push(g);
+    }
 
     const sessions = (groupChats || []).filter(
       (g: any) =>
@@ -471,15 +473,8 @@ export default function ExpertDashboard() {
         upcoming(g.start, g.end)
     );
 
-    const pendingSemInvites = (pendingGroupChats || []).filter(
-      (pg: any) =>
-        pg.groupChatId?.type === 'seminar' &&
-        upcoming(pg.groupChatId.start, pg.groupChatId.end)
-    );
-
     return {
       acceptedSeminars: seminars,
-      pendingSeminars: pendingSemInvites,
       bookedSessions: sessions,
       pendingSessions: pendingSess,
     };
@@ -506,27 +501,6 @@ export default function ExpertDashboard() {
     [dispatch],
   );
 
-  const handleAcceptSeminar = useCallback(
-    async (pg: any) => {
-      setAcceptingId(String(pg._id));
-      try {
-        const res: any = await addMemberToGroup({
-          _id: pg._id,
-          friendId: pg.customerId?._id,
-          groupChatId: pg.groupChatId?._id,
-        });
-        if (res === false) return;
-        dispatch(updateMe() as any);
-        dispatch(showSuccessAlert('Seminar registration approved.'));
-      } catch {
-        dispatch(showErrorAlert('Could not approve the registration. Please try again.'));
-      } finally {
-        setAcceptingId(null);
-      }
-    },
-    [dispatch],
-  );
-
   const expertModalSessions = useMemo((): UpcomingModalSession[] => {
     if (!expertUpcomingModal) return [];
     const { kind, status } = expertUpcomingModal;
@@ -534,16 +508,12 @@ export default function ExpertDashboard() {
       const list = status === 'booked' ? bookedSessions : pendingSessions;
       return list.map(mapExpertGroupToModalSession);
     }
-    if (status === 'booked') {
-      return acceptedSeminars.map(mapExpertGroupToModalSession);
-    }
-    return pendingSeminars.map(mapPendingSeminarToModal);
+    return acceptedSeminars.map(mapExpertGroupToModalSession);
   }, [
     expertUpcomingModal,
     bookedSessions,
     pendingSessions,
     acceptedSeminars,
-    pendingSeminars,
   ]);
 
   const handleExpertJoinSession = (session: UpcomingModalSession) => {
@@ -664,16 +634,6 @@ export default function ExpertDashboard() {
                 setExpertUpcomingModal({ kind: 'oneToOne', status: 'pending' })
               }
             />
-            <StatCard
-              label="Pending seminar requests"
-              value={pendingSeminars.length}
-              icon={AlertCircle}
-              color="warning"
-              tooltip="Seminar invites awaiting your confirmation"
-              onClick={() =>
-                setExpertUpcomingModal({ kind: 'seminar', status: 'pending' })
-              }
-            />
           </div>
         </section>
 
@@ -769,7 +729,7 @@ export default function ExpertDashboard() {
                 Seminars
               </h4>
               <span className="text-[11px] text-slate-500">
-                {acceptedSeminars.length} accepted · {pendingSeminars.length} invites
+                {acceptedSeminars.length} upcoming
               </span>
             </div>
             <div className="space-y-3 max-h-[260px] overflow-y-auto">
@@ -791,37 +751,7 @@ export default function ExpertDashboard() {
                   </span>
                 </div>
               ))}
-              {pendingSeminars.map((pg: any) => (
-                <div
-                  key={pg._id}
-                  className="flex items-start justify-between gap-2 rounded-xl border border-amber-100 bg-amber-50 px-3 py-2.5"
-                >
-                  <div className="min-w-0">
-                    <div className="text-[13px] font-semibold text-slate-900">
-                      {pg.groupChatId?.name}
-                    </div>
-                    <div className="text-[11px] text-slate-600">
-                      {pg.groupChatId?.start
-                        ? new Date(pg.groupChatId.start).toLocaleString()
-                        : ''}
-                    </div>
-                    {pg.customerId?.username || pg.customerId?.email ? (
-                      <div className="text-[11px] text-slate-500">
-                        {pg.customerId?.username || pg.customerId?.email}
-                      </div>
-                    ) : null}
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => handleAcceptSeminar(pg)}
-                    disabled={acceptingId === String(pg._id)}
-                    className="shrink-0 inline-flex items-center rounded-[4px] bg-[#234C6A] px-3 py-1.5 text-[11px] font-semibold text-white hover:brightness-110 disabled:opacity-60"
-                  >
-                    {acceptingId === String(pg._id) ? 'Approving…' : 'Approve'}
-                  </button>
-                </div>
-              ))}
-              {!acceptedSeminars.length && !pendingSeminars.length && (
+              {!acceptedSeminars.length && (
                 <p className="text-[12px] text-slate-500">
                   No upcoming seminars in this range.
                 </p>

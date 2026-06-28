@@ -22,8 +22,16 @@ export type StudentOneToOnePendingDetails = {
   expert: string;
 };
 
-/** A seminar seat (addMemberToPendingGroup path), identified by groupChatId. */
+/** A seminar seat (registerForSeminar path), identified by groupChatId. */
 export type StudentSeminarPendingDetails = {
+  groupChatId: string;
+  price: number;
+  name?: string;
+};
+
+/** Accepting (paying for) an expert-proposed 1:1, identified by groupChatId. */
+export type StudentAcceptOneToOnePendingDetails = {
+  kind: 'accept-1to1';
   groupChatId: string;
   price: number;
   name?: string;
@@ -31,7 +39,8 @@ export type StudentSeminarPendingDetails = {
 
 export type StudentBookingPendingDetails =
   | StudentOneToOnePendingDetails
-  | StudentSeminarPendingDetails;
+  | StudentSeminarPendingDetails
+  | StudentAcceptOneToOnePendingDetails;
 
 type CheckoutFormProps = {
   pendingDetails: StudentBookingPendingDetails;
@@ -160,10 +169,12 @@ const CheckoutForm = ({
   }, [errorMessage]);
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
-      <PaymentElement />
-      <FormAlert variant="error" message={errorMessage} onDismiss={() => setErrorMessage('')} />
-      <div>
+    <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
+      <div className="min-h-0 flex-1 space-y-4 overflow-y-auto pr-1">
+        <PaymentElement />
+        <FormAlert variant="error" message={errorMessage} onDismiss={() => setErrorMessage('')} />
+      </div>
+      <div className="shrink-0 pt-3">
         <button
           type="submit"
           disabled={!stripe || !elements || processing}
@@ -270,15 +281,17 @@ export default function StudentBookingCheckout({
   }
 
   return (
-    <div className="rounded-2xl border border-[#E5E2DB] bg-white p-4 sm:p-6">
-      <p className="font-serif text-lg font-medium text-[#1A3A4A]">
-        Pay for your {type}
-      </p>
-      <p className="mt-1 text-[12px] text-[#7A7A72]">
-        Total: <span className="font-semibold text-[#1A3A4A]">${price}</span>
-        {stripeMode === 'test' ? ' · test mode' : ''}
-      </p>
-      <div className="mt-4">
+    <div className="flex max-h-[88vh] flex-col rounded-2xl border border-[#E5E2DB] bg-white p-4 sm:p-6">
+      <div className="shrink-0">
+        <p className="font-serif text-lg font-medium text-[#1A3A4A]">
+          Pay for your {type}
+        </p>
+        <p className="mt-1 text-[12px] text-[#7A7A72]">
+          Total: <span className="font-semibold text-[#1A3A4A]">${price}</span>
+          {stripeMode === 'test' ? ' · test mode' : ''}
+        </p>
+      </div>
+      <div className="mt-4 flex min-h-0 flex-1 flex-col">
         <Elements stripe={stripePromise} options={options}>
           <CheckoutForm
             pendingDetails={pendingDetails}
@@ -293,7 +306,7 @@ export default function StudentBookingCheckout({
         <button
           type="button"
           onClick={onCancel}
-          className="mt-4 w-full rounded-[4px] border border-[#E5E2DB] py-2.5 text-[13px] font-semibold text-[#1A3A4A] hover:bg-[#F5F3EF]"
+          className="mt-3 w-full shrink-0 rounded-[4px] border border-[#E5E2DB] py-2.5 text-[13px] font-semibold text-[#1A3A4A] hover:bg-[#F5F3EF]"
         >
           {cancelLabel}
         </button>
@@ -308,6 +321,7 @@ export async function completeStudentBookingFromStorage(
 ): Promise<
   | { ok: true; kind: '1:1'; expertId: string; userDetails: unknown }
   | { ok: true; kind: 'seminar'; userDetails: unknown }
+  | { ok: true; kind: 'accept'; userDetails: unknown }
   | { ok: false; error: string }
 > {
   const raw = window.localStorage.getItem('pendingDetails');
@@ -318,18 +332,30 @@ export async function completeStudentBookingFromStorage(
     const details = JSON.parse(raw);
     window.localStorage.removeItem('pendingDetails');
 
+    // Paying to confirm an expert-proposed 1:1 — flips the session to active, no re-approval.
+    if (details.kind === 'accept-1to1') {
+      const { acceptIndividualAppointment } = await import('../../api/api');
+      const response = await acceptIndividualAppointment({
+        groupChatId: details.groupChatId,
+        payment_intent: paymentIntent,
+      });
+      if (response === false || response?.status === 'FAIL' || response?.error) {
+        return { ok: false, error: response?.error || 'Could not confirm the session after payment.' };
+      }
+      return { ok: true, kind: 'accept', userDetails: response?.result };
+    }
+
     // Seminars carry a groupChatId; 1:1 sessions carry an expert + slot.
     if (details.groupChatId) {
-      const { addMemberToPendingGroup } = await import('../../api/api');
-      const response = await addMemberToPendingGroup({
+      const { registerForSeminar } = await import('../../api/api');
+      const response = await registerForSeminar({
         groupChatId: details.groupChatId,
-        price: details.price,
         payment_intent: paymentIntent,
       });
       if (response === false || response?.status === 'FAIL' || response?.error) {
         return { ok: false, error: response?.error || 'Seminar registration failed after payment.' };
       }
-      return { ok: true, kind: 'seminar', userDetails: response };
+      return { ok: true, kind: 'seminar', userDetails: response?.result ?? response };
     }
 
     const { createGroupChatByUser, getExpertById } = await import('../../api/api');

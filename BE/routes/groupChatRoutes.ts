@@ -7,8 +7,9 @@ const {
     joinGroupChat,
     createGroupChat,
     createGroupChatByUser,
-    addMemberToPendingGroup,
-    addMemberToGroup,
+    proposeIndividualAppointment,
+    ensureSeminarChannel,
+    registerForSeminar,
     acceptIndividualAppointment,
     cancelIndividualAppointment,
     leaveGroup,
@@ -69,6 +70,20 @@ router.post(
     createGroupChatByUser
 );
 
+// expert proposes a 1:1 session to a student (expert sets the final price)
+router.post(
+    "/propose-individual-appointment",
+    expertAuth(true),
+    proposeIndividualAppointment
+);
+
+// ensure (lazily create) a seminar's group chat channel
+router.post(
+    "/ensure-seminar-channel",
+    requireAuth(true),
+    ensureSeminarChannel
+);
+
 // accept individual appointment
 router.post(
     "/accept-individual-appointment",
@@ -83,17 +98,11 @@ router.post(
     updateGroupChat
 );
 
-// add a friend to the group
+// register a student for a seminar (direct enroll — no host approval)
 router.post(
-    "/add",
-    expertAuth(true),
-    addMemberToGroup
-);
-
-router.post(
-    "/add-to-pending",
+    "/register-seminar",
     requireAuth(true),
-    addMemberToPendingGroup
+    registerForSeminar
 );
 
 router.post(
