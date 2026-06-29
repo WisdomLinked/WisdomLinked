@@ -157,13 +157,23 @@ export const fetchGroupMemberByRcSlug = async (groupChatId: string, slug: string
 // ── RC Token ────────────────────────────────────────────────
 
 /** Get a Rocket.Chat auth token so the frontend can connect to RC's realtime. */
-export const getRCToken = async () => {
+export const getRCToken = async (): Promise<{
+    rcUrl?: string;
+    rcAuthToken?: string;
+    rcUserId?: string;
+    error?: string;
+    code?: string;
+} | null> => {
     try {
         const res = await api.get('chat/rc-token');
-        return res.data; // { rcUrl, rcAuthToken, rcUserId }
+        return res.data;
     } catch (err: any) {
-        console.error('[chatApi.getRCToken]', err.message);
-        return null;
+        const data = err?.response?.data;
+        console.error('[chatApi.getRCToken]', data?.error || err.message, data?.code || '');
+        return {
+            error: data?.error || err.message || 'Failed to get RC token',
+            code: data?.code,
+        };
     }
 };
 

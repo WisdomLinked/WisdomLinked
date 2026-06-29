@@ -18,6 +18,7 @@
  */
 import axios from 'axios';
 import { rcUsernamesWithActiveChatConnection } from '../utils/rocketChatPresence';
+import { isRcAuthError } from '../utils/rcSessionErrors';
 
 const User = require('../models/User');
 
@@ -31,39 +32,81 @@ const rcCreateTokensSecret = (): string =>
 
 let adminAuthToken = '';
 let adminUserId = '';
+let adminAuthFetchedAt = 0;
+
+/** Proactively re-login before RC invalidates the cached admin session (default 6h). */
+const adminSessionMaxAgeMs = (): number => {
+    const hours = Number(process.env.ROCKETCHAT_ADMIN_SESSION_MAX_HOURS || 6);
+    if (!Number.isFinite(hours) || hours <= 0) return 6 * 60 * 60 * 1000;
+    return hours * 60 * 60 * 1000;
+};
 
 const rcDebugEnabled = (): boolean => String(process.env.RC_DEBUG_TRACE || '').toLowerCase() === 'true';
 const rcDebug = (...args: any[]) => {
     if (rcDebugEnabled()) console.log('[RC_DEBUG_TRACE]', ...args);
 };
 
-const getAdminAuthHeaders = async () => {
+const clearAdminAuthCache = (): void => {
+    adminAuthToken = '';
+    adminUserId = '';
+    adminAuthFetchedAt = 0;
+};
+
+const isAdminSessionStale = (): boolean => {
+    if (!adminAuthToken || !adminAuthFetchedAt) return true;
+    return Date.now() - adminAuthFetchedAt >= adminSessionMaxAgeMs();
+};
+
+const getAdminAuthHeaders = async (opts?: { force?: boolean }) => {
+    if (opts?.force) clearAdminAuthCache();
+    else if (adminAuthToken && adminUserId && isAdminSessionStale()) {
+        rcDebug('getAdminAuthHeaders:proactive-refresh', {
+            ageMs: Date.now() - adminAuthFetchedAt,
+            maxMs: adminSessionMaxAgeMs(),
+        });
+        clearAdminAuthCache();
+    }
+
     if (adminAuthToken && adminUserId) {
         return {
             'X-Auth-Token': adminAuthToken,
             'X-User-Id': adminUserId,
-            'Content-Type': 'application/json'
+            'Content-Type': 'application/json',
         };
     }
 
     try {
         const res = await axios.post(`${RC_URL}/api/v1/login`, {
             user: RC_USER,
-            password: RC_PASS
+            password: RC_PASS,
         });
-        
+
         if (res.data.status === 'success') {
             adminAuthToken = res.data.data.authToken;
             adminUserId = res.data.data.userId;
+            adminAuthFetchedAt = Date.now();
             return {
                 'X-Auth-Token': adminAuthToken,
                 'X-User-Id': adminUserId,
-                'Content-Type': 'application/json'
+                'Content-Type': 'application/json',
             };
         }
         throw new Error('Failed to login to Rocket.Chat as admin');
     } catch (err) {
         console.error('Rocket.Chat Admin Login Error:', err.message);
+        throw err;
+    }
+};
+
+/** Run an RC admin REST call; refresh admin login once on expired session. */
+const withAdminAuth = async <T>(fn: (headers: Record<string, string>) => Promise<T>): Promise<T> => {
+    try {
+        return await fn(await getAdminAuthHeaders());
+    } catch (err) {
+        if (isRcAuthError(err)) {
+            rcDebug('withAdminAuth:retry-after-auth-error');
+            return await fn(await getAdminAuthHeaders({ force: true }));
+        }
         throw err;
     }
 };
@@ -112,63 +155,74 @@ export const syncUserToRocketChat = async (userData: { email: string; username: 
     rcDebug('syncUserToRocketChat:start', { email: userData.email, rcUsername });
 
     try {
-        const headers = await getAdminAuthHeaders();
-        
-        // 1. Check if user already exists
-        try {
-            const checkRes = await axios.get(
-                `${RC_URL}/api/v1/users.info?username=${encodeURIComponent(rcUsername)}`,
-                { headers }
-            );
-            if (checkRes.data.success && checkRes.data.user) {
-                rcDebug('syncUserToRocketChat:exists', {
+        return await withAdminAuth(async (headers) => {
+            // 1. Check if user already exists
+            try {
+                const checkRes = await axios.get(
+                    `${RC_URL}/api/v1/users.info?username=${encodeURIComponent(rcUsername)}`,
+                    { headers },
+                );
+                if (checkRes.data.success && checkRes.data.user) {
+                    rcDebug('syncUserToRocketChat:exists', {
+                        email: userData.email,
+                        rcUsername,
+                        rcUserId: checkRes.data.user?._id || null,
+                        rcUserName: checkRes.data.user?.username || null,
+                    });
+                    await persistRocketChatUsername(userData.email, rcUsername);
+                    return checkRes.data.user._id;
+                }
+            } catch (e: any) {
+                if (isRcAuthError(e)) throw e;
+                rcDebug('syncUserToRocketChat:users.info-miss', {
                     email: userData.email,
                     rcUsername,
-                    rcUserId: checkRes.data.user?._id || null,
-                    rcUserName: checkRes.data.user?.username || null,
+                    status: e?.response?.status || null,
+                    error: e?.response?.data?.error || e?.message || 'unknown',
+                });
+            }
+
+            // 2. Create the user
+            const createRes = await axios.post(
+                `${RC_URL}/api/v1/users.create`,
+                {
+                    email: userData.email,
+                    name: displayName,
+                    password: userData.password || Math.random().toString(36).slice(-10) + 'A1!',
+                    username: rcUsername,
+                    verified: true,
+                    joinDefaultChannels: true,
+                },
+                { headers },
+            );
+
+            if (createRes.data.success) {
+                console.log(`Successfully synced user ${rcUsername} (${userData.email}) to Rocket.Chat`);
+                rcDebug('syncUserToRocketChat:created', {
+                    email: userData.email,
+                    rcUsername,
+                    rcUserId: createRes.data.user?._id || null,
+                    rcUserName: createRes.data.user?.username || null,
                 });
                 await persistRocketChatUsername(userData.email, rcUsername);
-                return checkRes.data.user._id;
+                return createRes.data.user._id;
             }
-        } catch (e: any) {
-            // 400 error usually means user doesn't exist, which is fine
-            rcDebug('syncUserToRocketChat:users.info-miss', {
-                email: userData.email,
-                rcUsername,
-                status: e?.response?.status || null,
-                error: e?.response?.data?.error || e?.message || 'unknown',
-            });
-        }
-
-        // 2. Create the user
-        const createRes = await axios.post(`${RC_URL}/api/v1/users.create`, {
-            email: userData.email,
-            name: displayName,
-            password: userData.password || Math.random().toString(36).slice(-10) + 'A1!',
-            username: rcUsername,
-            verified: true,
-            joinDefaultChannels: true
-        }, { headers });
-
-        if (createRes.data.success) {
-            console.log(`Successfully synced user ${rcUsername} (${userData.email}) to Rocket.Chat`);
-            rcDebug('syncUserToRocketChat:created', {
-                email: userData.email,
-                rcUsername,
-                rcUserId: createRes.data.user?._id || null,
-                rcUserName: createRes.data.user?.username || null,
-            });
-            await persistRocketChatUsername(userData.email, rcUsername);
-            return createRes.data.user._id;
-        }
+            return null;
+        });
     } catch (err: any) {
         if (err.response?.data?.errorType === 'error-field-unavailable') {
-            console.log(`User ${rcUsername} or email ${userData.email} already exists in Rocket.Chat`);
+            console.log(`User ${rcUsername} or email ${userData.email} already exists in Rocket.Chat — resolving existing account`);
             rcDebug('syncUserToRocketChat:create-field-unavailable', {
                 email: userData.email,
                 rcUsername,
                 response: err.response?.data || null,
             });
+            const existingId =
+                (await getRCUserIdByEmail(userData.email)) || (await getRCUserIdByUsername(rcUsername));
+            if (existingId) {
+                await persistRocketChatUsername(userData.email, rcUsername);
+                return existingId;
+            }
         } else {
             console.error('Failed to sync user to Rocket.Chat:', err.response?.data || err.message);
             rcDebug('syncUserToRocketChat:create-failed', {
@@ -219,12 +273,13 @@ export const getRocketAuthToken = async (userId: string) => {
         return null;
     }
     try {
-        const headers = await getAdminAuthHeaders();
-        const res = await axios.post(`${RC_URL}/api/v1/users.createToken`, { userId, secret }, { headers });
-
-        if (res.data.success) {
-            return res.data.data.authToken;
-        }
+        return await withAdminAuth(async (headers) => {
+            const res = await axios.post(`${RC_URL}/api/v1/users.createToken`, { userId, secret }, { headers });
+            if (res.data.success) {
+                return res.data.data.authToken;
+            }
+            return null;
+        });
     } catch (err: any) {
         console.error('Failed to get RC token:', err.response?.data || err.message);
     }
@@ -234,13 +289,58 @@ export const getRocketAuthToken = async (userId: string) => {
 /** Look up a RC user by their WL username. Returns RC userId or null. */
 export const getRCUserIdByUsername = async (username: string): Promise<string | null> => {
     try {
-        const headers = await getAdminAuthHeaders();
-        const res = await axios.get(`${RC_URL}/api/v1/users.info?username=${encodeURIComponent(username)}`, { headers });
-        if (res.data.success && res.data.user) {
-            return res.data.user._id;
-        }
-    } catch (e: any) { /* user doesn't exist */ }
+        return await withAdminAuth(async (headers) => {
+            const res = await axios.get(
+                `${RC_URL}/api/v1/users.info?username=${encodeURIComponent(username)}`,
+                { headers },
+            );
+            if (res.data.success && res.data.user) {
+                return res.data.user._id;
+            }
+            return null;
+        });
+    } catch (e: any) {
+        if (!isRcAuthError(e)) rcDebug('getRCUserIdByUsername:miss', { username, error: e?.response?.data?.error });
+    }
     return null;
+};
+
+/** Look up a RC user by email when supported; falls back to email-derived username slug. */
+export const getRCUserIdByEmail = async (email: string): Promise<string | null> => {
+    const normalized = String(email || '').trim().toLowerCase();
+    if (!normalized) return null;
+    const slug = toRocketChatUsername(normalized);
+    const bySlug = await getRCUserIdByUsername(slug);
+    if (bySlug) return bySlug;
+    try {
+        return await withAdminAuth(async (headers) => {
+            const res = await axios.get(
+                `${RC_URL}/api/v1/users.info?email=${encodeURIComponent(normalized)}`,
+                { headers },
+            );
+            if (res.data.success && res.data.user) {
+                return res.data.user._id;
+            }
+            return null;
+        });
+    } catch (e: any) {
+        if (!isRcAuthError(e)) rcDebug('getRCUserIdByEmail:miss', { email: normalized });
+    }
+    return null;
+};
+
+/** Ensure the RC admin bot is in a group channel so admin history fallback works. */
+const ensureAdminInGroupChannel = async (roomId: string, headers: Record<string, string>): Promise<void> => {
+    if (!roomId) return;
+    try {
+        await getAdminAuthHeaders();
+        if (!adminUserId) return;
+        await axios.post(`${RC_URL}/api/v1/channels.invite`, { roomId, userId: adminUserId }, { headers });
+    } catch (e: any) {
+        const raw = JSON.stringify(e.response?.data || '') + String(e.message || '');
+        if (/already-in-room|user-already|already\s+in/i.test(raw)) return;
+        rcDebug('ensureAdminInGroupChannel:failed', { roomId, error: e?.response?.data || e?.message });
+    }
 };
 
 // ── DM Channel Management ───────────────────────────────────
@@ -248,21 +348,25 @@ export const getRCUserIdByUsername = async (username: string): Promise<string | 
 /** Create or get a DM channel between two RC usernames. Returns the RC room id. */
 export const getOrCreateDMChannel = async (usernameA: string, usernameB: string): Promise<string | null> => {
     try {
-        const headers = await getAdminAuthHeaders();
-        const [u1, u2] = [usernameA, usernameB].sort((a, b) => a.localeCompare(b));
-        rcDebug('getOrCreateDMChannel:start', { usernameA, usernameB, sorted: [u1, u2] });
-        const res = await axios.post(`${RC_URL}/api/v1/dm.create`, {
-            usernames: `${u1},${u2}`
-        }, { headers });
+        return await withAdminAuth(async (headers) => {
+            const [u1, u2] = [usernameA, usernameB].sort((a, b) => a.localeCompare(b));
+            rcDebug('getOrCreateDMChannel:start', { usernameA, usernameB, sorted: [u1, u2] });
+            const res = await axios.post(
+                `${RC_URL}/api/v1/dm.create`,
+                { usernames: `${u1},${u2}` },
+                { headers },
+            );
 
-        if (res.data.success && res.data.room) {
-            rcDebug('getOrCreateDMChannel:success', {
-                sorted: [u1, u2],
-                rid: res.data.room?._id || null,
-                userIds: Array.isArray(res.data.room?.userIds) ? res.data.room.userIds : null,
-            });
-            return res.data.room._id;
-        }
+            if (res.data.success && res.data.room) {
+                rcDebug('getOrCreateDMChannel:success', {
+                    sorted: [u1, u2],
+                    rid: res.data.room?._id || null,
+                    userIds: Array.isArray(res.data.room?.userIds) ? res.data.room.userIds : null,
+                });
+                return res.data.room._id;
+            }
+            return null;
+        });
     } catch (err: any) {
         console.error('Failed to create/get DM channel:', err.response?.data || err.message);
         rcDebug('getOrCreateDMChannel:failed', {
@@ -281,31 +385,38 @@ export const getOrCreateDMChannel = async (usernameA: string, usernameB: string)
 /** Create or get a group channel by name. Returns the RC room id. */
 export const getOrCreateGroupChannel = async (channelName: string, memberUsernames: string[]): Promise<string | null> => {
     try {
-        const headers = await getAdminAuthHeaders();
-        // Try to find existing
-        try {
-            const infoRes = await axios.get(`${RC_URL}/api/v1/channels.info?roomName=${channelName}`, { headers });
-            if (infoRes.data.success && infoRes.data.channel) {
-                return infoRes.data.channel._id;
+        return await withAdminAuth(async (headers) => {
+            try {
+                const infoRes = await axios.get(`${RC_URL}/api/v1/channels.info?roomName=${channelName}`, { headers });
+                if (infoRes.data.success && infoRes.data.channel) {
+                    return infoRes.data.channel._id;
+                }
+            } catch (e: any) {
+                if (isRcAuthError(e)) throw e;
             }
-        } catch (e: any) { /* doesn't exist, create it */ }
 
-        const createRes = await axios.post(`${RC_URL}/api/v1/channels.create`, {
-            name: channelName,
-            members: memberUsernames,
-        }, { headers });
+            const createRes = await axios.post(
+                `${RC_URL}/api/v1/channels.create`,
+                { name: channelName, members: memberUsernames },
+                { headers },
+            );
 
-        if (createRes.data.success && createRes.data.channel) {
-            return createRes.data.channel._id;
-        }
+            if (createRes.data.success && createRes.data.channel) {
+                return createRes.data.channel._id;
+            }
+            return null;
+        });
     } catch (err: any) {
-        // If channel name already exists, try to get it
         if (err.response?.data?.errorType === 'error-duplicate-channel-name') {
             try {
-                const headers = await getAdminAuthHeaders();
-                const infoRes = await axios.get(`${RC_URL}/api/v1/channels.info?roomName=${channelName}`, { headers });
-                if (infoRes.data.success) return infoRes.data.channel._id;
-            } catch (e) {}
+                return await withAdminAuth(async (headers) => {
+                    const infoRes = await axios.get(`${RC_URL}/api/v1/channels.info?roomName=${channelName}`, { headers });
+                    if (infoRes.data.success) return infoRes.data.channel._id;
+                    return null;
+                });
+            } catch (e) {
+                /* fall through */
+            }
         }
         console.error('Failed to create/get group channel:', err.response?.data || err.message);
     }
@@ -860,6 +971,7 @@ export const syncRocketGroupChannelMembers = async (
             if (/already-in-room|user-already|already\s+in/i.test(raw)) continue;
         }
     }
+    await ensureAdminInGroupChannel(roomId, headers);
     return roomId;
 };
 
@@ -1001,7 +1113,7 @@ export const generateUserToken = async (
     }
 
     if (!rcUserId) {
-        rcUserId = await getRCUserIdByUsername(rcUsername);
+        rcUserId = (await getRCUserIdByUsername(rcUsername)) || (await getRCUserIdByEmail(email));
     }
 
     if (!rcUserId) {
@@ -1020,25 +1132,27 @@ export const generateUserToken = async (
     }
 
     try {
-        const headers = await getAdminAuthHeaders();
-        const res = await axios.post(
-            `${RC_URL}/api/v1/users.createToken`,
-            { userId: rcUserId, secret },
-            { headers }
-        );
+        return await withAdminAuth(async (headers) => {
+            const res = await axios.post(
+                `${RC_URL}/api/v1/users.createToken`,
+                { userId: rcUserId, secret },
+                { headers },
+            );
 
-        if (res.data.success) {
-            rcDebug('generateUserToken:success', {
-                email,
-                rcUsername,
-                rcUserId,
-                tokenUserId: res.data.data.userId || null,
-            });
-            return {
-                authToken: res.data.data.authToken,
-                userId: res.data.data.userId
-            };
-        }
+            if (res.data.success) {
+                rcDebug('generateUserToken:success', {
+                    email,
+                    rcUsername,
+                    rcUserId,
+                    tokenUserId: res.data.data.userId || null,
+                });
+                return {
+                    authToken: res.data.data.authToken,
+                    userId: res.data.data.userId,
+                };
+            }
+            return null;
+        });
     } catch (err: any) {
         console.error('Failed to generate user token:', err.response?.data || err.message);
         rcDebug('generateUserToken:failed', {

@@ -228,12 +228,23 @@ const Messages = ({ theme = "dark", onReplyMessage }: { theme?: string; onReplyM
     useEffect(() => {
         let alive = true;
         getRCToken().then((d) => {
-            if (alive && d?.rcUserId) setMyRcUserId(String(d.rcUserId));
+            if (!alive || !d) return;
+            if (d.rcUserId) {
+                setMyRcUserId(String(d.rcUserId));
+                return;
+            }
+            if (d.error) {
+                const hint =
+                    d.code === 'rc_missing_token_secret'
+                        ? 'Chat realtime is unavailable (server config). Messages may not update live — contact support if this persists.'
+                        : 'Chat connection failed. Try refreshing the page.';
+                dispatch(showWarningAlert(hint));
+            }
         });
         return () => {
             alive = false;
         };
-    }, []);
+    }, [dispatch]);
 
     const handleDeleteCommunityChat = () => {
         if (!chosenGroupChatDetails?.groupId) return;
