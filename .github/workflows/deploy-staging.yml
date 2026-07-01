@@ -201,6 +201,8 @@ jobs:
               --network chat_custom_network \
               -p 5001:5000 \
               -e NODE_ENV="staging" \
+              -e RATE_LIMIT_DISABLED="true" \
+              -e AUTH_LOCKOUT_DISABLED="true" \
               -e FE_URL="https://staging.wisdomlinked.com" \
               -e DO_SPACES_ENDPOINT="${{ secrets.DO_SPACES_ENDPOINT }}" \
               -e DO_SPACES_KEY="${{ secrets.DO_SPACES_KEY }}" \

@@ -36,6 +36,8 @@ if (!MONGO_URI) {
 }
 
 const app = express();
+// Behind nginx/Docker — use X-Forwarded-For for req.ip (rate limits, audit).
+app.set('trust proxy', 1);
 const maxRequestBodySize = process.env.MAX_REQUEST_BODY_SIZE || '1mb';
 
 const jitHost = String(process.env.JITSI_DOMAIN || '').replace(/^https?:\/\//, '').replace(/\/$/, '');

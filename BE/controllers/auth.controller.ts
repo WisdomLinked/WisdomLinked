@@ -89,8 +89,11 @@ const buildSpacesPublicUrl = (key: string): string => {
     return host ? `https://${host}/${key}` : '';
 };
 
+const AUTH_LOCKOUT_DISABLED =
+    process.env.AUTH_LOCKOUT_DISABLED === 'true' || process.env.NODE_ENV === 'staging';
+
 const checkRateLimit = (record: any) => {
-    if (!record) return null;
+    if (AUTH_LOCKOUT_DISABLED || !record) return null;
     if (record.lockUntil && record.lockUntil > new Date()) {
         const minutes = Math.ceil((record.lockUntil.getTime() - new Date().getTime()) / 60000);
         return `Too many failed attempts. Please try again in ${minutes} minutes.`;
@@ -99,7 +102,7 @@ const checkRateLimit = (record: any) => {
 }
 
 const handleFailedAttempt = async (record: any) => {
-    if (!record) return;
+    if (AUTH_LOCKOUT_DISABLED || !record) return;
     record.failedAttempts = (record.failedAttempts || 0) + 1;
     if (record.failedAttempts >= 50) {
         record.lockUntil = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
