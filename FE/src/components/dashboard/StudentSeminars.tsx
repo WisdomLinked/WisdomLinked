@@ -1,8 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useDispatch } from 'react-redux';
-import { Search, Filter, ChevronDown, CalendarDays, Clock, MapPin, ArrowLeft, User, Repeat, Check } from 'lucide-react';
+import { Search, CalendarDays, Clock, MapPin, ArrowLeft, User, Repeat, Check } from 'lucide-react';
+import FilterDropdown, { type FilterOption } from '../ui/FilterDropdown';
 import { useAppSelector } from '../../store';
-import { registerForSeminar, doFilterSeminars, profileImageFetch } from '../../api/api';
+import { registerForSeminar, requestSeminarSeat, doFilterSeminars, profileImageFetch, doGetKeywordsAndServices } from '../../api/api';
 import { canonicalLabelsFromMixedServiceEntries } from '../../constants/serviceOptions';
 import { resolveProfileImageSrc } from '../../utils/profileImage';
 import { SetLoadingStatus } from '../../actions/appActions';
@@ -116,6 +117,8 @@ export default function StudentSeminars() {
   );
 
   const [seminars, setSeminars] = useState<Seminar[]>([]);
+  const [catalogMajors, setCatalogMajors] = useState<string[]>([]);
+  const [catalogTopics, setCatalogTopics] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [majorFilter, setMajorFilter] = useState<string>('all');
@@ -123,6 +126,7 @@ export default function StudentSeminars() {
   const [selectedSeminar, setSelectedSeminar] = useState<Seminar | null>(null);
   const [checkout, setCheckout] = useState<'review' | 'pay' | null>(null);
   const [bookingDone, setBookingDone] = useState(false);
+  const [seatRequested, setSeatRequested] = useState(false);
   const [bookingError, setBookingError] = useState<string | null>(null);
   const dispatch = useDispatch();
 
@@ -153,11 +157,29 @@ export default function StudentSeminars() {
   // Register the student for the seminar once Stripe confirms (or immediately
   // for free seminars, where the checkout calls back with '0'). Enrollment is
   // immediate — no host approval — and covers the whole recurring series.
-  const joinSeminar = async (paymentIntentId: string) => {
+  const joinSeminar = async (
+    paymentIntentId: string,
+    opts?: { requiresApproval?: boolean },
+  ) => {
     if (!selectedSeminar) return;
     SetLoadingStatus(true);
     setBookingError(null);
     try {
+      // A full seminar admits students only via host approval: the checkout has
+      // authorized (held) the fee, and we record a seat request instead of enrolling.
+      if (opts?.requiresApproval) {
+        const response: any = await requestSeminarSeat({
+          groupChatId: selectedSeminar.id,
+          payment_intent: paymentIntentId,
+        });
+        if (response === false || response?.status === 'FAIL' || response?.error) {
+          setBookingError(response?.error || 'Could not submit your seat request.');
+          return;
+        }
+        setCheckout(null);
+        setSeatRequested(true);
+        return;
+      }
       const response: any = await registerForSeminar({
         groupChatId: selectedSeminar.id,
         payment_intent: paymentIntentId,
@@ -183,6 +205,7 @@ export default function StudentSeminars() {
     setSelectedSeminar(s);
     setCheckout(null);
     setBookingDone(false);
+    setSeatRequested(false);
     setBookingError(null);
   };
 
@@ -211,21 +234,39 @@ export default function StudentSeminars() {
     };
   }, []);
 
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res: any = await doGetKeywordsAndServices();
+        const majorList = (res?.keywords || []).map((k: any) => k?.value).filter(Boolean);
+        const topicList = canonicalLabelsFromMixedServiceEntries(res?.services);
+        if (!cancelled) {
+          setCatalogMajors(Array.from(new Set<string>(majorList)).sort());
+          setCatalogTopics(Array.from(new Set<string>(topicList)));
+        }
+      } catch {
+        if (!cancelled) {
+          setCatalogMajors([]);
+          setCatalogTopics([]);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const groupedSeminars = useMemo(() => groupSeminarSeries(seminars), [seminars]);
 
-  const majors = useMemo(
-    () => Array.from(new Set(groupedSeminars.map(s => s.major))).sort(),
-    [groupedSeminars],
+  const majorOptions = useMemo<FilterOption[]>(
+    () => [{ value: 'all', label: 'All majors' }, ...catalogMajors.map(m => ({ value: m, label: m }))],
+    [catalogMajors],
   );
 
-  const tags = useMemo(
-    () =>
-      Array.from(
-        new Set(
-          groupedSeminars.flatMap(s => s.tags),
-        ),
-      ).sort(),
-    [groupedSeminars],
+  const tagOptions = useMemo<FilterOption[]>(
+    () => [{ value: 'all', label: 'All topics' }, ...catalogTopics.map(t => ({ value: t, label: t }))],
+    [catalogTopics],
   );
 
   const matchesFilters = (seminar: Seminar) => {
@@ -536,7 +577,18 @@ export default function StudentSeminars() {
               </p>
             )}
 
-            {alreadyRegistered ? (
+            {seatRequested ? (
+              <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-3 py-3">
+                <p className="text-sm font-semibold text-amber-900">
+                  Seat request submitted.
+                </p>
+                <p className="mt-1 text-xs text-amber-800">
+                  {s.price > 0
+                    ? 'Your card is authorized but not charged — the host reviews full-seminar requests and you’re only charged if approved. Otherwise the hold is released.'
+                    : 'The host reviews full-seminar requests; you’ll join only if approved.'}
+                </p>
+              </div>
+            ) : alreadyRegistered ? (
               <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-3">
                 <p className="text-sm font-semibold text-emerald-900">
                   You're enrolled in this seminar.
@@ -561,18 +613,19 @@ export default function StudentSeminars() {
                   </div>
                 </div>
                 {isFull ? (
-                  <>
-                    <span className="inline-flex items-center gap-1 rounded-full bg-rose-100 px-3 py-1 text-xs font-semibold text-rose-700">
-                      Seminar full
-                    </span>
+                  <div className="space-y-2">
+                    <p className="text-xs text-[#7A7A72]">
+                      This seminar is full. You can request a seat — the host approves requests and
+                      admits students beyond the cap.
+                    </p>
                     <button
                       type="button"
-                      disabled
-                      className="w-full cursor-not-allowed rounded-[4px] bg-slate-200 px-3 py-2 text-sm font-semibold text-slate-500"
+                      onClick={() => setCheckout('review')}
+                      className="w-full rounded-[4px] bg-[#234C6A] px-3 py-2 text-sm font-semibold text-white hover:brightness-110"
                     >
-                      Seminar is full
+                      Request a seat
                     </button>
-                  </>
+                  </div>
                 ) : (
                   <button
                     type="button"
@@ -596,7 +649,16 @@ export default function StudentSeminars() {
           >
             <div className="my-auto w-full max-w-md">
               <div className="rounded-2xl border border-[#E5E2DB] bg-white p-4 sm:p-6 space-y-4">
-                <p className="font-serif text-lg font-medium text-[#1A3A4A]">Review your booking</p>
+                <p className="font-serif text-lg font-medium text-[#1A3A4A]">
+                  {isFull ? 'Request a seat' : 'Review your booking'}
+                </p>
+                {isFull ? (
+                  <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                    This seminar is full. {s.price > 0
+                      ? 'Your card is authorized but not charged — you\'re only charged if the host approves your seat. Otherwise the hold is released.'
+                      : 'Your request goes to the host for approval; you\'ll join only if they approve.'}
+                  </p>
+                ) : null}
                 <dl className="space-y-2 text-sm text-[#1A3A4A]">
                   <div className="flex justify-between gap-2">
                     <dt className="text-[#7A7A72]">Seminar</dt>
@@ -624,7 +686,9 @@ export default function StudentSeminars() {
                   onClick={() => setCheckout('pay')}
                   className="inline-flex w-full items-center justify-center rounded-[4px] bg-[#1A3A4A] px-4 py-3 text-[13px] font-semibold text-white hover:bg-[#122635]"
                 >
-                  {s.price > 0 ? 'Continue to payment' : 'Confirm booking'}
+                  {isFull
+                    ? (s.price > 0 ? 'Continue to authorize' : 'Continue to request')
+                    : s.price > 0 ? 'Continue to payment' : 'Confirm booking'}
                 </button>
               </div>
             </div>
@@ -642,6 +706,7 @@ export default function StudentSeminars() {
               <StudentBookingCheckout
                 type="Seminar"
                 price={s.price}
+                isSeatRequest={isFull}
                 returnUrl={seminarReturnUrl}
                 pendingDetails={{ groupChatId: s.id, price: s.price, name: s.title }}
                 onPaymentSuccess={joinSeminar}
@@ -689,48 +754,20 @@ export default function StudentSeminars() {
             </div>
           </div>
           <div className="flex flex-1 flex-col gap-3 md:flex-row md:justify-end md:gap-4">
-            <div className="md:w-40">
-              <div className="mb-1 flex items-center justify-between text-[0.7rem] font-medium uppercase tracking-[0.16em] text-[#7A7A72]">
-                <span>Filter by major</span>
-              </div>
-              <div className="relative flex items-center border-b border-[#E5E2DB] pb-1">
-                <Filter className="mr-1 h-3.5 w-3.5 text-[#7A7A72]" aria-hidden />
-                <select
-                  value={majorFilter}
-                  onChange={e => setMajorFilter(e.target.value)}
-                  className="w-full bg-transparent text-xs font-sans text-[#1A3A4A] outline-none appearance-none pr-5"
-                >
-                  <option value="all">All majors</option>
-                  {majors.map(major => (
-                    <option key={major} value={major}>
-                      {major}
-                    </option>
-                  ))}
-                </select>
-                <ChevronDown className="pointer-events-none absolute right-0 h-3 w-3 text-[#7A7A72]" />
-              </div>
-            </div>
-            <div className="md:w-44">
-              <div className="mb-1 flex items-center justify-between text-[0.7rem] font-medium uppercase tracking-[0.16em] text-[#7A7A72]">
-                <span>Filter by topic</span>
-              </div>
-              <div className="relative flex items-center border-b border-[#E5E2DB] pb-1">
-                <Filter className="mr-1 h-3.5 w-3.5 text-[#7A7A72]" aria-hidden />
-                <select
-                  value={tagFilter}
-                  onChange={e => setTagFilter(e.target.value)}
-                  className="w-full bg-transparent text-xs font-sans text-[#1A3A4A] outline-none appearance-none pr-5"
-                >
-                  <option value="all">All topics</option>
-                  {tags.map(tag => (
-                    <option key={tag} value={tag}>
-                      {tag}
-                    </option>
-                  ))}
-                </select>
-                <ChevronDown className="pointer-events-none absolute right-0 h-3 w-3 text-[#7A7A72]" />
-              </div>
-            </div>
+            <FilterDropdown
+              label="Filter by major"
+              value={majorFilter}
+              options={majorOptions}
+              onChange={setMajorFilter}
+              widthClass="md:w-44"
+            />
+            <FilterDropdown
+              label="Filter by topic"
+              value={tagFilter}
+              options={tagOptions}
+              onChange={setTagFilter}
+              widthClass="md:w-44"
+            />
           </div>
         </div>
       </section>

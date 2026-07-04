@@ -8,7 +8,7 @@ import {
     profileImageFetch,
 } from "../../../api/api";
 import ShowFieldError from "../../../components/ShowFieldError";
-import MultiSelectionWithInputTag from "../../../components/MultiSelectionWithInputTag";
+import MajorSelect from "../../../components/MajorSelect";
 import SelectionWithCheckBox from "../../../components/SelectionWithCheckBox";
 import PhoneInput from "react-phone-input-2";
 import { checkTitleNameInvalid } from "../../../actions/common";
@@ -40,6 +40,23 @@ const toServiceOptions = (entries: unknown[] | undefined) =>
             return { _id: typeof entry === 'object' ? entry?._id : undefined, value: opt.label, label: opt.label };
         })
         .filter(Boolean);
+
+const toMajorStrings = (u: any): string[] => {
+    const fromKeywords = (Array.isArray(u?.keywords) ? u.keywords : []).map((k: any) =>
+        typeof k === 'string' ? k : String(k?.value ?? k?.label ?? k?.name ?? ''),
+    );
+    const fromCustom = Array.isArray(u?.customKeywords) ? u.customKeywords : [];
+    const seen = new Set<string>();
+    const out: string[] = [];
+    for (const raw of [...fromKeywords, ...fromCustom]) {
+        const v = String(raw || '').trim();
+        const key = v.toLowerCase();
+        if (!v || seen.has(key)) continue;
+        seen.add(key);
+        out.push(v);
+    }
+    return out;
+};
 import {
     dataUriToImageFile,
     saveProfilePhotoFile,
@@ -99,7 +116,6 @@ const ExpertProfile = ({
     const [name, set_name] = useState('');
     const [title, set_title] = useState('');
     const [description, set_description] = useState('');
-    const [keywords, set_keywords] = useState([]);
     const [services, set_services] = useState<Array<any>>([]);
     const [selectedKeywords, set_selectedKeywords] = useState<Array<any>>([]);
     const [selectedServices, set_selectedServices] = useState<Array<any>>([]);
@@ -129,7 +145,7 @@ const ExpertProfile = ({
         set_name(userDetails.username || '');
         set_title(userDetails.title || '');
         set_description(userDetails.description || '');
-        set_selectedKeywords(userDetails.keywords || []);
+        set_selectedKeywords(toMajorStrings(userDetails));
         set_selectedServices(toServiceOptions(userDetails.services));
         set_country(userDetails.country || null);
         set_state(userDetails.state || null);
@@ -156,7 +172,7 @@ const ExpertProfile = ({
         set_name(userDetails.username || '');
         set_title(userDetails.title || '');
         set_description(userDetails.description || '');
-        set_selectedKeywords(userDetails.keywords || []);
+        set_selectedKeywords(toMajorStrings(userDetails));
         set_selectedServices(toServiceOptions(userDetails.services));
         set_country(userDetails.country || null);
         set_state(userDetails.state || null);
@@ -314,7 +330,6 @@ const ExpertProfile = ({
     const getKeywordsAndServices = async () => {
         const response: any = await doGetKeywordsAndServices();
         if (response) {
-            set_keywords(response.keywords || []);
             set_services(SERVICE_SELECT_OPTIONS);
         }
     };
@@ -520,10 +535,10 @@ const ExpertProfile = ({
                             <div className="space-y-4">
                                 <div>
                                     <FieldLabel required>Majors / disciplines</FieldLabel>
-                                    <MultiSelectionWithInputTag
-                                        options={keywords}
-                                        selectedOptions={selectedKeywords}
-                                        set_selectedOptions={set_selectedKeywords}
+                                    <MajorSelect
+                                        label=""
+                                        value={selectedKeywords}
+                                        onChange={set_selectedKeywords}
                                         placeholder="e.g. Civil Engineering…"
                                     />
                                 </div>

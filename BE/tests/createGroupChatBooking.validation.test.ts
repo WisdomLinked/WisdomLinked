@@ -47,8 +47,8 @@ const futureUtcDate = (daysFromNow: number, hourUtc: number) => {
 const bookingStart = futureUtcDate(14, 9);
 
 const baseBody = {
-  name: "Session",
-  description: "d",
+  name: "PhD Application Advice",
+  description: "",
   services: [],
   keywords: [],
   start: bookingStart.toISOString(),
@@ -118,5 +118,45 @@ test("createGroupChatByUser rejects slot outside availability", async () => {
     User.findById = originalFindById;
     Event.find = originalEventFind;
     GroupChat.find = originalGroupFind;
+  }
+});
+
+test("createGroupChatByUser rejects a too-short title", async () => {
+  const originalFindById = User.findById;
+  try {
+    User.findById = async () => ({ ...expertDoc });
+
+    const req: any = {
+      user: { userId: "customer-1" },
+      body: { ...baseBody, name: "Short" },
+    };
+    const res = createRes();
+
+    await groupController.createGroupChatByUser(req, res);
+
+    assert.equal(res.statusCode, 500);
+    assert.match(String(res.body), /title must be between 10 and 60/i);
+  } finally {
+    User.findById = originalFindById;
+  }
+});
+
+test("createGroupChatByUser rejects a too-long note", async () => {
+  const originalFindById = User.findById;
+  try {
+    User.findById = async () => ({ ...expertDoc });
+
+    const req: any = {
+      user: { userId: "customer-1" },
+      body: { ...baseBody, description: "x".repeat(501) },
+    };
+    const res = createRes();
+
+    await groupController.createGroupChatByUser(req, res);
+
+    assert.equal(res.statusCode, 500);
+    assert.match(String(res.body), /note must be between 50 and 500/i);
+  } finally {
+    User.findById = originalFindById;
   }
 });

@@ -23,6 +23,7 @@ import { useNavigate } from "react-router-dom";
 import { useAppSelector } from "../../../../store";
 import { fetchChatUserProfile } from "../../../../api/chatApi";
 import { proposeIndividualAppointment } from "../../../../api/api";
+import { proposedTimeNeedsOverride, hasBookingConflict, presetAvailabilityRanges } from "../../../../utils/proposeAvailability";
 import { normalizeExpertPrice } from "../../../../utils/schedulingSlots";
 import { updateMe } from "../../../../actions/authActions";
 import { showErrorAlert, showSuccessAlert, showWarningAlert } from "../../../../actions/alertActions";
@@ -45,6 +46,7 @@ const Customers = ({
     const [proposePrice, setProposePrice] = useState('')
     const [proposePriceEdited, setProposePriceEdited] = useState(false)
     const [proposeCustomerEmail, setProposeCustomerEmail] = useState<string | null>(null)
+    const [outsideConfirm, setOutsideConfirm] = useState(false)
     const [keywords, set_keywords] = useState([])
     const [services, set_services] = useState([])
     const sorts = [
@@ -181,12 +183,13 @@ const Customers = ({
         setProposePrice(String(proposeSuggestedPrice(30)));
         setProposePriceEdited(false);
         setProposeCustomerEmail(null);
+        setOutsideConfirm(false);
         void fetchChatUserProfile(String(customer._id)).then((r: any) => {
             if (r?.success && r?.result?.email) setProposeCustomerEmail(String(r.result.email));
         });
     };
 
-    const submitPropose = async () => {
+    const submitPropose = async (override = false) => {
         if (!proposeTitle.trim()) {
             dispatch(showWarningAlert("Add a title for the session."));
             return;
@@ -215,6 +218,19 @@ const Customers = ({
             return;
         }
 
+        if (hasBookingConflict(userDetails, start, end)) {
+            setOutsideConfirm(false);
+            dispatch(showWarningAlert("You already have a session at this time. Pick another time."));
+            return;
+        }
+
+        const needsOverride = proposedTimeNeedsOverride(userDetails, start, end);
+        if (needsOverride && !override) {
+            setOutsideConfirm(true);
+            return;
+        }
+        setOutsideConfirm(false);
+
         setProposeBusy(true);
         SetLoadingStatus(true);
         const res: any = await proposeIndividualAppointment({
@@ -224,6 +240,7 @@ const Customers = ({
             duration: proposeDuration,
             price,
             customer: proposeCustomerEmail,
+            overrideAvailability: needsOverride,
         });
         SetLoadingStatus(false);
         setProposeBusy(false);
@@ -432,7 +449,7 @@ const Customers = ({
                                         <DatePickerField
                                             id="propose-date"
                                             value={proposeDate}
-                                            onChange={setProposeDate}
+                                            onChange={(v: string) => { setProposeDate(v); setOutsideConfirm(false); }}
                                             min={new Date().toLocaleDateString("en-CA")}
                                             placeholder="Select a date"
                                         />
@@ -442,10 +459,25 @@ const Customers = ({
                                         <TimePickerField
                                             id="propose-start-time"
                                             value={proposeStart}
-                                            onChange={setProposeStart}
+                                            onChange={(v: string) => { setProposeStart(v); setOutsideConfirm(false); }}
                                             placeholder="Select start time"
                                         />
                                     </div>
+                                    {proposeDate ? (
+                                        <div className="rounded-lg bg-slate-50 px-3 py-2 text-[11px] text-slate-600">
+                                            {(() => {
+                                                const ranges = presetAvailabilityRanges(userDetails, proposeDate);
+                                                return ranges.length ? (
+                                                    <>
+                                                        <span className="font-semibold">Your preset availability this day:</span>{" "}
+                                                        {ranges.join(", ")}
+                                                    </>
+                                                ) : (
+                                                    <span>You have no preset availability on this day.</span>
+                                                );
+                                            })()}
+                                        </div>
+                                    ) : null}
                                     <div>
                                         <label className="mb-1 block text-xs font-semibold">Duration</label>
                                         <select
@@ -453,6 +485,7 @@ const Customers = ({
                                             onChange={(e) => {
                                                 const next = Number(e.target.value);
                                                 setProposeDuration(next);
+                                                setOutsideConfirm(false);
                                                 if (!proposePriceEdited) setProposePrice(String(proposeSuggestedPrice(next)));
                                             }}
                                             className="w-full rounded-lg border px-3 py-2 text-sm outline-none border-slate-200 bg-white text-slate-900 focus:ring-2 focus:ring-[#234C6A]"
@@ -481,14 +514,40 @@ const Customers = ({
                                     </div>
                                 </div>
 
-                                <button
-                                    type="button"
-                                    disabled={proposeBusy}
-                                    onClick={submitPropose}
-                                    className="mt-5 w-full rounded-lg bg-[#234C6A] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#1b3c53] disabled:opacity-60"
-                                >
-                                    {proposeBusy ? "Sending…" : "Send proposal"}
-                                </button>
+                                {outsideConfirm ? (
+                                    <div className="mt-5 rounded-lg border border-amber-300 bg-amber-50 p-3">
+                                        <p className="text-xs text-amber-800">
+                                            Your chosen time is outside your preset availability. Click <span className="font-semibold">Yes</span> to continue, or <span className="font-semibold">No</span> to re-select your time slot.
+                                        </p>
+                                        <div className="mt-3 flex gap-2">
+                                            <button
+                                                type="button"
+                                                disabled={proposeBusy}
+                                                onClick={() => setOutsideConfirm(false)}
+                                                className="flex-1 rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-60"
+                                            >
+                                                No, re-select
+                                            </button>
+                                            <button
+                                                type="button"
+                                                disabled={proposeBusy}
+                                                onClick={() => submitPropose(true)}
+                                                className="flex-1 rounded-lg bg-[#234C6A] px-4 py-2 text-sm font-semibold text-white hover:bg-[#1b3c53] disabled:opacity-60"
+                                            >
+                                                {proposeBusy ? "Sending…" : "Yes, continue"}
+                                            </button>
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <button
+                                        type="button"
+                                        disabled={proposeBusy}
+                                        onClick={() => submitPropose()}
+                                        className="mt-5 w-full rounded-lg bg-[#234C6A] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#1b3c53] disabled:opacity-60"
+                                    >
+                                        {proposeBusy ? "Sending…" : "Send proposal"}
+                                    </button>
+                                )}
                             </div>
                         </div>
                     </OverlayPortal> :

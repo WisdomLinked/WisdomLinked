@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowLeft,
   CalendarDays,
@@ -16,7 +16,8 @@ import { useAppSelector } from '../../../store';
 import { updateMe } from '../../../actions/authActions';
 import { SetLoadingStatus } from '../../../actions/appActions';
 import { showSuccessAlert } from '../../../actions/alertActions';
-import { deleteGroup } from '../../../api/api';
+import { deleteGroup, profileImageFetch, getSeminarSeatRequests, approveSeminarSeatRequest, rejectSeminarSeatRequest } from '../../../api/api';
+import { resolveProfileImageSrc } from '../../../utils/profileImage';
 import { formatDateYYYY_MM_DD_h_m } from '../../../actions/common';
 import { canonicalLabelsFromMixedServiceEntries } from '../../../constants/serviceOptions';
 import Avatar from '../../../components/Avatar';
@@ -89,6 +90,7 @@ function mapGroupChatToExpertSeminar(g: any) {
     description: g.description || '',
     keywords: labelsFromMixed(g.keywords),
     services: canonicalLabelsFromMixedServiceEntries(g.services),
+    purposeOther: typeof g.purposeOther === 'string' ? g.purposeOther : '',
     start: g.start,
     end: g.end,
     duration: g.duration,
@@ -217,6 +219,111 @@ function SeminarCard({
   );
 }
 
+// Overflow seat requests for a full seminar: students who paid (funds held) and
+// are awaiting the host's approval. Approving captures the hold; declining releases it.
+function SeatRequestsPanel({ seminarId }: { seminarId: string }) {
+  const [requests, setRequests] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = async () => {
+    try {
+      const res: any = await getSeminarSeatRequests();
+      const all = Array.isArray(res?.result) ? res.result : [];
+      setRequests(all.filter((r: any) => getRefId(r?.groupChat) === String(seminarId)));
+    } catch {
+      setRequests([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    void load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [seminarId]);
+
+  const decide = async (requestId: string, action: 'approve' | 'reject') => {
+    setBusyId(requestId);
+    setError(null);
+    try {
+      const res: any = action === 'approve'
+        ? await approveSeminarSeatRequest(requestId)
+        : await rejectSeminarSeatRequest(requestId);
+      if (res === false || res?.status === 'FAIL' || res?.error) {
+        setError(res?.error || 'Could not update the seat request.');
+        return;
+      }
+      setRequests((prev) => prev.filter((r) => String(r._id) !== String(requestId)));
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Could not update the seat request.');
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  if (loading) return null;
+  if (requests.length === 0) return null;
+
+  return (
+    <div className="mt-5 border-t border-[#E5E2DB] pt-4">
+      <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[#7A7A72]">
+        Seat requests ({requests.length})
+      </p>
+      <p className="mt-1 text-xs text-[#7A7A72]">
+        These students requested a seat beyond capacity. Approving admits them (and charges any
+        held payment); declining releases any hold.
+      </p>
+      {error ? (
+        <p className="mt-2 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-medium text-rose-700">
+          {error}
+        </p>
+      ) : null}
+      <div className="mt-3 space-y-3">
+        {requests.map((r) => {
+          const name = r?.customer?.username || r?.customer?.email || 'Student';
+          const deadline = r?.decisionDeadline ? new Date(r.decisionDeadline) : null;
+          const busy = busyId === String(r._id);
+          return (
+            <div key={String(r._id)} className="rounded-lg border border-[#E5E2DB] bg-[#F5F3EF] px-3 py-3">
+              <p className="text-sm font-semibold text-[#1A3A4A]">{name}</p>
+              <p className="mt-0.5 text-[11px] font-medium text-[#234C6A]">
+                {typeof r?.amount === 'number' && r.amount > 0
+                  ? `$${(r.amount / 100).toFixed(2)} held`
+                  : 'Free seminar'}
+              </p>
+              {deadline ? (
+                <p className="mt-0.5 text-[11px] text-[#7A7A72]">
+                  Decide by {deadline.toLocaleString()}
+                </p>
+              ) : null}
+              <div className="mt-2 flex items-center gap-2">
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => decide(String(r._id), 'approve')}
+                  className="flex-1 rounded-lg bg-[#234C6A] px-3 py-2 text-xs font-semibold text-white hover:brightness-110 disabled:opacity-60"
+                >
+                  {busy ? '…' : 'Approve'}
+                </button>
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => decide(String(r._id), 'reject')}
+                  className="flex-1 rounded-lg border border-rose-200 bg-white px-3 py-2 text-xs font-semibold text-rose-600 hover:bg-rose-50 disabled:opacity-60"
+                >
+                  {busy ? '…' : 'Decline'}
+                </button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function SeminarDetailPane({
   seminar,
   isHost,
@@ -246,7 +353,43 @@ function SeminarDetailPane({
   const now = Date.now();
   const isPast = end ? end.getTime() < now : start ? start.getTime() < now : false;
   const keywords = labelsFromMixed(seminar?.keywords);
-  const services = canonicalLabelsFromMixedServiceEntries(seminar?.services);
+  const purposeOther = typeof seminar?.purposeOther === 'string' ? seminar.purposeOther.trim() : '';
+  const services = [
+    ...canonicalLabelsFromMixedServiceEntries(seminar?.services),
+    ...(purposeOther ? [purposeOther] : []),
+  ];
+
+  const [resolvedImages, setResolvedImages] = useState<Map<string, string>>(new Map());
+  const imageCacheRef = useRef(new Map<string, string>());
+
+  useEffect(() => {
+    let cancelled = false;
+    const people = [admin, ...participants].filter(Boolean);
+    const needed = new Map<string, string>();
+    for (const person of people) {
+      const ref = typeof person?.image === 'string' ? person.image.trim() : '';
+      if (ref && !imageCacheRef.current.has(ref)) needed.set(ref, ref);
+    }
+    if (needed.size === 0) return;
+
+    void Promise.all(
+      Array.from(needed.keys()).map(async (ref) => {
+        const resolved = await resolveProfileImageSrc(ref, 'small', profileImageFetch as any);
+        if (resolved) imageCacheRef.current.set(ref, resolved);
+      }),
+    ).then(() => {
+      if (!cancelled) setResolvedImages(new Map(imageCacheRef.current));
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [admin, participants]);
+
+  const avatarImage = (person: any): string | undefined => {
+    const ref = typeof person?.image === 'string' ? person.image.trim() : '';
+    return ref ? resolvedImages.get(ref) : undefined;
+  };
 
   return (
     <div className="min-h-full text-[#1A3A4A] px-4 py-6 md:px-8 pb-12">
@@ -388,7 +531,7 @@ function SeminarDetailPane({
               </p>
               {admin ? (
                 <div className="mt-2 flex items-center gap-3">
-                  <Avatar username={admin.username} isOnline={false} image={admin.image} />
+                  <Avatar username={admin.username} isOnline={false} image={avatarImage(admin)} />
                   <div>
                     <div className="text-sm font-semibold text-[#1A3A4A]">{admin.username}</div>
                     {admin.email ? (
@@ -420,7 +563,7 @@ function SeminarDetailPane({
                 <div className="mt-2 flex -space-x-2">
                   {participants.slice(1, 6).map((p: any, idx: number) => (
                     <div key={p._id || idx} className="ring-2 ring-white rounded-full">
-                      <Avatar username={p.username} isOnline={false} image={p.image} />
+                      <Avatar username={p.username} isOnline={false} image={avatarImage(p)} />
                     </div>
                   ))}
                 </div>
@@ -436,8 +579,10 @@ function SeminarDetailPane({
                 groupName: seminar?.name,
                 participants,
                 admin: admin || participants[0],
+                type: seminar?.type,
               }}
               currentUserId={userDetails?._id}
+              resolvedImages={resolvedImages}
             />
           </div>
         </section>
@@ -537,6 +682,7 @@ function SeminarDetailPane({
                   </div>
                 )
               ) : null}
+              {seminar?._id ? <SeatRequestsPanel seminarId={String(seminar._id)} /> : null}
             </>
           ) : (
             <>

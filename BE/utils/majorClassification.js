@@ -1,5 +1,5 @@
 const Keyword = require("../models/Keyword");
-const { isBaselineMajor } = require("../constants/majorOptions");
+const { isBaselineMajor, OTHER_MAJOR } = require("../constants/majorOptions");
 
 const escapeRegExp = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
@@ -12,6 +12,7 @@ const classifyMajors = async (keywords) => {
         const raw = typeof keywords[i] === "string" ? keywords[i] : keywords[i] && keywords[i].value;
         const value = String(raw || "").trim();
         if (!value) continue;
+        if (value.toLowerCase() === OTHER_MAJOR.toLowerCase()) continue;
 
         const existing = await Keyword.findOne({
             value: { $regex: new RegExp(`^${escapeRegExp(value)}$`, "i") },

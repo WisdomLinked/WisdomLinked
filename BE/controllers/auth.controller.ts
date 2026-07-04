@@ -887,6 +887,11 @@ const updateProfile = async (req: any, res: Response) => {
         const state = safeParse(req.body.state) || req.body.state;
         const city = safeParse(req.body.city) || req.body.city;
         const phoneNumber = safeParse(req.body.phoneNumber) || req.body.phoneNumber;
+        const degreeSought = safeParse(req.body.degreeSought) || req.body.degreeSought;
+        const intendedIntake = safeParse(req.body.intendedIntake) || req.body.intendedIntake;
+        const currentUniversity = safeParse(req.body.currentUniversity) || req.body.currentUniversity;
+        const gpa = safeParse(req.body.gpa) || req.body.gpa;
+        const researchInterests = safeParse(req.body.researchInterests) || req.body.researchInterests;
         const price = safeParse(req.body.price) || req.body.price;
         const joinPopupBlocked = safeParse(req.body.joinPopupBlocked) || req.body.joinPopupBlocked;
         const appointmentDurationsRaw =
@@ -965,6 +970,12 @@ const updateProfile = async (req: any, res: Response) => {
         }
         if (phoneNumber !== undefined && phoneNumber !== null) {
             updates.phoneNumber = phoneNumber
+        }
+        const academicFields = { degreeSought, intendedIntake, currentUniversity, gpa, researchInterests };
+        for (const [key, value] of Object.entries(academicFields)) {
+            if (value !== undefined && value !== null) {
+                updates[key] = String(value).slice(0, 300);
+            }
         }
         if (joinPopupBlocked !== undefined && joinPopupBlocked !== null) {
             updates.joinPopupBlocked = joinPopupBlocked

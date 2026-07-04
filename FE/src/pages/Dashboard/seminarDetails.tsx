@@ -1,10 +1,12 @@
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { formatDateYYYY_MM_DD_h_m } from "../../actions/common";
 import Avatar from "../../components/Avatar";
 import GroupParticipantsDialog from "./Messenger/Messages/GroupParticipantsDialog";
 import { useAppSelector } from "../../store";
 import { Calendar, Clock3, DollarSign, Users, Sparkles, UserRound, Repeat } from "lucide-react";
 import { SERVICE_OPTIONS, matchesServiceOption } from "../../constants/serviceOptions";
+import { resolveProfileImageSrc } from "../../utils/profileImage";
+import { profileImageFetch } from "../../api/api";
 
 const RECURRENCE_LABEL: Record<string, string> = {
     weekly: "Weekly",
@@ -22,6 +24,9 @@ interface SeminarDetailsProps {
     participants: any[];
     keywords?: any[];
     services?: any[];
+    purposeOther?: string;
+    /** For 1:1 sessions: the student user (populated with optional academic background). */
+    student?: any;
     type?: string;
     createdAt?: string;
     isRecurring?: boolean;
@@ -41,6 +46,8 @@ const SeminarDetails = ({
     participants,
     keywords,
     services,
+    purposeOther,
+    student,
     type,
     createdAt,
     isRecurring,
@@ -65,6 +72,56 @@ const SeminarDetails = ({
     const isCommunityChat = type === "community";
     const isLight = theme === "light";
     const participantCount = Math.max((participants?.length || 0) - 1, 0);
+
+    const coerceBg = (value: any): string => {
+        if (typeof value === "string") return value.trim();
+        if (value && typeof value === "object") return String(value.label ?? value.value ?? value.name ?? "").trim();
+        return "";
+    };
+    const studentBackgroundRows = student
+        ? ([
+            ["Degree sought", coerceBg(student.degreeSought)],
+            ["Intended intake", coerceBg(student.intendedIntake)],
+            ["Current university", coerceBg(student.currentUniversity)],
+            ["GPA", coerceBg(student.gpa)],
+            ["Country", coerceBg(student.country)],
+            ["Research interests", coerceBg(student.researchInterests)],
+            ["Major", Array.isArray(student.customKeywords) ? student.customKeywords.join(", ") : ""],
+            ["Purpose / notes", coerceBg(student.specialNote)],
+        ] as [string, string][]).filter(([, v]) => v)
+        : [];
+
+    const [resolvedImages, setResolvedImages] = useState<Map<string, string>>(new Map());
+    const imageCacheRef = useRef(new Map<string, string>());
+
+    useEffect(() => {
+        let cancelled = false;
+        const people = [admin, ...(participants || [])].filter(Boolean);
+        const needed = new Map<string, string>();
+        for (const person of people) {
+            const ref = typeof person?.image === "string" ? person.image.trim() : "";
+            if (ref && !imageCacheRef.current.has(ref)) needed.set(ref, ref);
+        }
+        if (needed.size === 0) return;
+
+        void Promise.all(
+            Array.from(needed.keys()).map(async (ref) => {
+                const resolved = await resolveProfileImageSrc(ref, "small", profileImageFetch as any);
+                if (resolved) imageCacheRef.current.set(ref, resolved);
+            }),
+        ).then(() => {
+            if (!cancelled) setResolvedImages(new Map(imageCacheRef.current));
+        });
+
+        return () => {
+            cancelled = true;
+        };
+    }, [admin, participants]);
+
+    const avatarImage = (person: any): string | undefined => {
+        const ref = typeof person?.image === "string" ? person.image.trim() : "";
+        return ref ? resolvedImages.get(ref) : undefined;
+    };
 
     const sessionStats = [
         { Icon: Calendar, label: "Date", value: start ? formatDateYYYY_MM_DD_h_m(start) : "N/A" },
@@ -135,13 +192,24 @@ const SeminarDetails = ({
                     </div>
                 )}
 
-                {(keywords?.length || services?.length) ? (
+                {(keywords?.length || services?.length || (purposeOther && purposeOther.trim())) ? (
                     <div className={`rounded-xl border p-3 ${isLight ? "border-slate-200 bg-white" : "border-slate-700 bg-[#141414]"}`}>
                         <div className={`mb-2 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.12em] ${isLight ? "text-[#234C6A]" : "text-slate-300"}`}>
                             <Sparkles className="h-3.5 w-3.5" />
-                            Interests
+                            {type === "individual" ? "Purpose & interests" : "Interests"}
                         </div>
                         <div className="flex flex-wrap gap-1.5">
+                            {purposeOther && purposeOther.trim() ? (
+                                <span
+                                    className={`rounded-full px-2.5 py-1 text-[11px] font-medium ${
+                                        isLight
+                                            ? "border border-slate-200 bg-slate-100 text-slate-700"
+                                            : "border border-slate-700 bg-slate-800 text-slate-200"
+                                    }`}
+                                >
+                                    {purposeOther.trim()}
+                                </span>
+                            ) : null}
                             {(keywords || []).map((keyword: any) => (
                                 <span
                                     key={keyword._id || keyword.value}
@@ -176,7 +244,7 @@ const SeminarDetails = ({
                         Admin
                     </div>
                     <div className="flex space-x-3 items-center">
-                        <Avatar username={admin?.username || "Admin"} isOnline={false} image={admin?.image} />
+                        <Avatar username={admin?.username || "Admin"} isOnline={false} image={avatarImage(admin)} />
                         <div className="min-w-0">
                             <div className="text-sm font-semibold truncate">{admin?.username || "Unknown"}</div>
                             <div className={`text-[13px] truncate ${isLight ? "text-slate-500" : "text-slate-400"}`}>{admin?.email || "N/A"}</div>
@@ -198,7 +266,7 @@ const SeminarDetails = ({
                                         className={`rounded-full ${isLight ? "bg-white" : "bg-black"}`}
                                         style={{ zIndex: 20 - index }}
                                     >
-                                        <Avatar username={participant.username} isOnline={false} image={participant.image} />
+                                        <Avatar username={participant.username} isOnline={false} image={avatarImage(participant)} />
                                     </div>
                                 ))}
                             </div>
@@ -213,6 +281,23 @@ const SeminarDetails = ({
                         <div className={`text-sm ${isLight ? "text-slate-500" : "text-grey"}`}>No participants</div>
                     )}
                 </div>
+
+                {studentBackgroundRows.length > 0 ? (
+                    <div className={`rounded-xl border p-3 ${isLight ? "border-slate-200 bg-white" : "border-slate-700 bg-[#141414]"}`}>
+                        <div className={`mb-2 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.12em] ${isLight ? "text-[#234C6A]" : "text-slate-300"}`}>
+                            <UserRound className="h-3.5 w-3.5" />
+                            Student background
+                        </div>
+                        <dl className="space-y-1.5">
+                            {studentBackgroundRows.map(([label, value]) => (
+                                <div key={label} className="flex justify-between gap-3">
+                                    <dt className={`shrink-0 text-[12px] ${isLight ? "text-slate-500" : "text-slate-400"}`}>{label}</dt>
+                                    <dd className={`text-right text-[12px] font-medium ${isLight ? "text-slate-800" : "text-slate-200"}`}>{value}</dd>
+                                </div>
+                            ))}
+                        </dl>
+                    </div>
+                ) : null}
             </div>
 
             <GroupParticipantsDialog
@@ -227,6 +312,7 @@ const SeminarDetails = ({
                 currentUserId={userDetails._id}
                 currentUserRole={userDetails?.role}
                 theme={theme}
+                resolvedImages={resolvedImages}
             />
         </div>
     );

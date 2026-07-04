@@ -239,4 +239,90 @@ describe("bookingValidation", () => {
       GroupChat.find = originalGroupFind;
     }
   });
+
+  it("assertBookingSlotValid rejects out-of-availability time by default", async () => {
+    const expert = {
+      _id: "expert1",
+      timeSlots: [18, 19],
+      timeZone: "UTC",
+      blockedBookingDates: [],
+    };
+    await assert.rejects(
+      () =>
+        assertBookingSlotValid(
+          expert,
+          new Date("2026-05-01T06:00:00.000Z"),
+          new Date("2026-05-01T06:30:00.000Z")
+        ),
+      /outside expert availability/
+    );
+  });
+
+  it("assertBookingSlotValid override bypasses the expert's own window/blocked-date/blocked-slot", async () => {
+    const Event = require("../models/Event");
+    const GroupChat = require("../models/GroupChat");
+    const originalEventFind = Event.find;
+    const originalGroupFind = GroupChat.find;
+
+    try {
+      Event.find = () => ({ select: async () => [] });
+      GroupChat.find = () => ({ select: async () => [] });
+
+      const expert = {
+        _id: "expert1",
+        timeSlots: [18, 19],
+        timeZone: "UTC",
+        blockedBookingDates: ["2026-05-01"],
+        blockedBookingSlots: { "2026-05-01": [12, 13] },
+      };
+      // 06:00 is outside the window, on a blocked date, and over blocked slots —
+      // override (expert proposing their own session) permits all three.
+      await assert.doesNotReject(() =>
+        assertBookingSlotValid(
+          expert,
+          new Date("2026-05-01T06:00:00.000Z"),
+          new Date("2026-05-01T06:30:00.000Z"),
+          { allowOutsideAvailability: true }
+        )
+      );
+    } finally {
+      Event.find = originalEventFind;
+      GroupChat.find = originalGroupFind;
+    }
+  });
+
+  it("assertBookingSlotValid override still rejects a real double-booking overlap", async () => {
+    const Event = require("../models/Event");
+    const GroupChat = require("../models/GroupChat");
+    const originalEventFind = Event.find;
+    const originalGroupFind = GroupChat.find;
+
+    try {
+      Event.find = () => ({
+        select: async () => [
+          {
+            start: new Date("2026-05-01T06:00:00.000Z"),
+            end: new Date("2026-05-01T06:30:00.000Z"),
+            status: "accepted",
+          },
+        ],
+      });
+      GroupChat.find = () => ({ select: async () => [] });
+
+      const expert = { _id: "expert1", timeSlots: [18, 19], timeZone: "UTC" };
+      await assert.rejects(
+        () =>
+          assertBookingSlotValid(
+            expert,
+            new Date("2026-05-01T06:00:00.000Z"),
+            new Date("2026-05-01T06:30:00.000Z"),
+            { allowOutsideAvailability: true }
+          ),
+        /conflicts with an existing booking/
+      );
+    } finally {
+      Event.find = originalEventFind;
+      GroupChat.find = originalGroupFind;
+    }
+  });
 });

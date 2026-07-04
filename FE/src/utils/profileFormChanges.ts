@@ -1,5 +1,22 @@
 import { arraysEqual } from '../actions/common';
 
+const keywordToKey = (item: unknown): string => {
+  if (typeof item === 'string') return item.trim().toLowerCase();
+  const doc = item as { value?: string; label?: string; name?: string } | null;
+  return String(doc?.value ?? doc?.label ?? doc?.name ?? '').trim().toLowerCase();
+};
+
+export function majorsChanged(
+  selected: unknown[] | undefined,
+  keywords: unknown[] | undefined,
+  customKeywords: unknown[] | undefined,
+): boolean {
+  const a = (selected || []).map(keywordToKey).filter(Boolean).sort();
+  const b = [...(keywords || []), ...(customKeywords || [])].map(keywordToKey).filter(Boolean).sort();
+  if (a.length !== b.length) return true;
+  return a.some((v, i) => v !== b[i]);
+}
+
 /** Compare country/state/city objects from CountrySelect. */
 export function profileLocationChanged(
   saved: { name?: string } | null | undefined,
@@ -25,6 +42,7 @@ export type ExpertProfileFormSnapshot = {
     title?: string;
     description?: string;
     keywords?: unknown[];
+    customKeywords?: unknown[];
     services?: unknown[];
     country?: { name?: string };
     state?: { name?: string };
@@ -48,7 +66,7 @@ export function hasExpertProfileUnsavedChanges(
     form.name !== (u.username ?? '') ||
     form.title !== (u.title ?? '') ||
     form.description !== (u.description ?? '') ||
-    !arraysEqual(form.selectedKeywords || [], u.keywords || []) ||
+    majorsChanged(form.selectedKeywords, u.keywords, u.customKeywords) ||
     !arraysEqual(form.selectedServices || [], u.services || []) ||
     profileLocationChanged(u.country, form.country) ||
     profileLocationChanged(u.state, form.state) ||
@@ -70,6 +88,7 @@ export type CustomerProfileFormSnapshot = {
   userDetails: {
     username?: string;
     keywords?: unknown[];
+    customKeywords?: unknown[];
     services?: unknown[];
     country?: { name?: string };
     state?: { name?: string };
@@ -91,7 +110,7 @@ export function hasCustomerProfileUnsavedChanges(
   const u = form.userDetails;
   return (
     form.name !== (u.username ?? '') ||
-    !arraysEqual(form.selectedKeywords || [], u.keywords || []) ||
+    majorsChanged(form.selectedKeywords, u.keywords, u.customKeywords) ||
     !arraysEqual(form.selectedServices || [], u.services || []) ||
     profileLocationChanged(u.country, form.country) ||
     profileLocationChanged(u.state, form.state) ||

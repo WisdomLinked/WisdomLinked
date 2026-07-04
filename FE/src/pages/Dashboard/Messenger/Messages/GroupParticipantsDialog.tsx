@@ -17,7 +17,9 @@ interface Props {
     closeDialogHandler: () => void;
     groupDetails: any;
     currentUserId: string;
+    currentUserRole?: string;
     theme?: "light" | "dark";
+    resolvedImages?: Map<string, string>;
 }
 
 const GroupParticipantsDialog = ({
@@ -26,6 +28,7 @@ const GroupParticipantsDialog = ({
     groupDetails,
     currentUserId,
     theme = "light",
+    resolvedImages,
 }: Props) => {
     const dispatch = useDispatch();
     const [removingId, setRemovingId] = useState<string | null>(null);
@@ -50,7 +53,6 @@ const GroupParticipantsDialog = ({
         String(adminId || "") === String(currentUserId || "")
         || coModeratorIds.has(String(currentUserId || ""))
     );
-
     const handleRemove = async (memberUserId: string, reason: string) => {
         const gid = String(groupDetails?.groupId || groupDetails?._id || "");
         if (!gid || !memberUserId) return;
@@ -147,7 +149,14 @@ const GroupParticipantsDialog = ({
                                     className={`rounded-xl border px-3 py-2.5 ${isLight ? "border-slate-200 bg-white" : "border-slate-700 bg-slate-800/70"}`}
                                 >
                                     <div className="flex items-start gap-3">
-                                        <Avatar username={participant.username} image={participant.image} />
+                                        <Avatar
+                                            username={participant.username}
+                                            image={
+                                                (typeof participant.image === "string"
+                                                    ? resolvedImages?.get(participant.image.trim())
+                                                    : undefined) ?? participant.image
+                                            }
+                                        />
                                         <div className="min-w-0 flex-1">
                                             <div className="flex flex-wrap items-center gap-1.5">
                                                 <p className={`truncate text-sm font-semibold ${isLight ? "text-slate-900" : "text-slate-100"}`}>

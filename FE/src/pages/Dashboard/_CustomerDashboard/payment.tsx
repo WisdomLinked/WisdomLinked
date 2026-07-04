@@ -110,10 +110,12 @@ const CheckoutForm = ({
 
             SetLoadingStatus(true);
 
-            // Always create a PaymentIntent, even if amount=0
+            const details = pendingDetails as any;
             const response = await createStripePaymentIntent({
                 stripeMode,
-                amount: price, // Possibly 0
+                ...(details.groupChatId
+                    ? { groupChatId: details.groupChatId }
+                    : { expertId: String(details.expert), duration: details.duration }),
             });
             const { client_secret: clientSecret } = response;
 

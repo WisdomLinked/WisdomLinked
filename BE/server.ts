@@ -35,6 +35,10 @@ if (!MONGO_URI) {
     process.exit(1);
 }
 
+process.on("unhandledRejection", (reason: any) => {
+    console.error("Unhandled promise rejection:", reason?.stack || reason?.message || reason);
+});
+
 const app = express();
 const maxRequestBodySize = process.env.MAX_REQUEST_BODY_SIZE || '1mb';
 
@@ -115,6 +119,12 @@ mongoose
         appendDefaultServices();
         appendAdminUserAndGroupChat();
         initAppStates();
+
+        // Release expired seminar seat-request holds on a timer (no cron infra;
+        // reminders elsewhere rely on SendGrid sendAt, which can't run this logic).
+        const { sweepExpiredSeatRequests } = require('./controllers/groupChat.controller');
+        sweepExpiredSeatRequests();
+        setInterval(sweepExpiredSeatRequests, 15 * 60 * 1000);
 
         const httpServer = require('http').Server(app);
         httpServer.listen(PORT, function () {

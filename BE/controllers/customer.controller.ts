@@ -120,7 +120,6 @@ const filterExperts = async (req: any, res: Response) => {
 
 const filterSeminars = async (req, res) => {
     try {
-        const { userId } = req.user
         const { name, keywords, services, sortBy } = req.body
 
         let query = GroupChat.find({
@@ -135,7 +134,8 @@ const filterSeminars = async (req, res) => {
                     end: { $gt: new Date() }
                 }
             ],
-            participants: { $nin: userId }
+            // Keep seminars the student is already enrolled in so they stay listed
+            // with a "Registered" badge rather than disappearing after registration.
         })
         if (name) {
             query.where({ name: { '$regex': escapeRegex(String(name)), '$options': 'i' } })
@@ -181,7 +181,7 @@ const filterSeminars = async (req, res) => {
         query.populate([
             {
                 path: 'admin',
-                select: 'email username image role status title description services keywords status',
+                select: 'email username image role status title description services keywords status bookingNoticeHours',
                 populate: ['keywords', 'services']
             },
             {

@@ -3,33 +3,20 @@ import { wlDisplayName } from '../utils/wlDisplayName';
 const mongoose = require("mongoose");
 const User = require("../models/User");
 const GroupChat = require("../models/GroupChat");
-const Keyword = require("../models/Keyword");
 const Service = require("../models/Service");
 const MeetingThread = require("../models/MeetingThread");
 const PaymentHistory = require("../models/PaymentHistory");
 // Socket notifications removed — Rocket.Chat handles real-time updates now
-const { checkPaymentIntentSucceeded, refundPaymentIntent, sendBookingReceiptAndConfirmation } = require("./stripe.controller");
+const { checkPaymentIntentSucceeded, checkPaymentIntentAuthorized, capturePaymentIntent, cancelPaymentIntent, refundPaymentIntent, sendBookingReceiptAndConfirmation } = require("./stripe.controller");
+const SeminarSeatRequest = require("../models/SeminarSeatRequest");
+const AppState = require("../models/AppState");
 const { appendPaymentHistory } = require("./payment.controller");
 const { getFullUserData } = require("../middlewares/requireAuth");
+const { classifyMajors } = require("../utils/majorClassification");
 
-// keywords/services arrive from the client as plain label strings (or legacy { value }
-// objects), but GroupChat stores them as ObjectId refs. Resolve each label to an existing
-// Keyword/Service (case-insensitive) or create it — mirrors the expert-profile flow and
-// prevents Mongoose CastErrors. Keywords match exactly; services match by prefix because the
-// client may send "Study abroad" while the DB stores "Study abroad consultation".
+// Services match by prefix (client may send "Study abroad" while the DB stores "Study abroad
+// consultation"); unknown services are created. Majors instead go through classifyMajors.
 const escapeRegex = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-
-const resolveKeywordIds = async (keywords: any): Promise<any[]> => {
-    const ids: any[] = [];
-    if (!Array.isArray(keywords)) return ids;
-    for (const k of keywords) {
-        const value = typeof k === 'string' ? k : k?.value;
-        if (!value) continue;
-        const existing = await Keyword.findOne({ value: { $regex: new RegExp(`^${escapeRegex(value)}$`, 'i') } });
-        ids.push(existing ? existing._id : (await Keyword.create({ value, label: value }))._id);
-    }
-    return ids;
-};
 
 const resolveServiceIds = async (services: any): Promise<any[]> => {
     const ids: any[] = [];
@@ -74,22 +61,7 @@ const groupMemberIds = (groupChat: any): string[] => [
     ...(Array.isArray(groupChat?.coModerators) ? groupChat.coModerators.map((p: any) => normalizeId(p)) : []),
 ].filter(Boolean);
 
-// Enrolled students = participants minus the host (the admin is always a
-// participant of their own seminar). Used for both the full-capacity check and
-// the "students already enrolled" delete guard.
-const enrolledStudentIds = (groupChat: any): string[] => {
-    const adminId = normalizeId(groupChat?.admin);
-    return (Array.isArray(groupChat?.participants) ? groupChat.participants : [])
-        .map((p: any) => normalizeId(p))
-        .filter((id: string) => id && id !== adminId);
-};
-
-// A seminar is full once its capacity (maxAttendees) is set and reached.
-const seminarIsFull = (groupChat: any): boolean => {
-    const cap = typeof groupChat?.maxAttendees === 'number' ? groupChat.maxAttendees : null;
-    if (cap == null || cap <= 0) return false;
-    return enrolledStudentIds(groupChat).length >= cap;
-};
+import { enrolledStudentIds, seminarIsFull, computeSeatRequestDeadline, seatRequestWindowOpen } from '../utils/seminarCapacity';
 
 const userCanAccessGroupChat = (groupChat: any, userId: string, opts: { allowOpenCommunity?: boolean } = {}): boolean => {
     if (!groupChat || !userId) return false;
@@ -149,7 +121,7 @@ async function syncGroupRocketChannel(groupChatId: string) {
     }
 }
 const { checkTitleNameInvalid } = require('../services/global')
-const { scheduleEmailReminder, sendEmailMeetingRequestToCustomer, sendEmailMeetingRequestToExpert, sendEmailMeetingAcceptance } = require('../services/notifications')
+const { scheduleEmailReminder, sendEmailMeetingRequestToCustomer, sendEmailMeetingRequestToExpert, sendEmailMeetingAcceptance, sendNotificationEmail } = require('../services/notifications')
 const { assertBookingLeadTime } = require("../utils/bookingLeadTime");
 const { assertBookingSlotValid, assertDurationAllowed } = require("../utils/bookingValidation");
 import { buildRemovedUserNotice, normalizeModerationReason } from '../utils/videoModerationNotice';
@@ -625,64 +597,106 @@ const joinPrivateChat = async (req, res) => {
 const createGroupChatByUser = async (req, res) => {
     try {
         const { userId } = req.user;
-        const { name, description, services, keywords, start, end, duration, expert, payment_intent } = req.body;
+        const { name, description, services, keywords, start, end, duration, expert, payment_intent, purposeOther } = req.body;
 
 
         if (checkTitleNameInvalid('Name', name)) {
+            await refundOrphanBookingCharge(payment_intent, userId, "Invalid session name");
             throw new Error(checkTitleNameInvalid('Name', name))
+        }
+
+        const titleLength = typeof name === 'string' ? name.trim().length : 0;
+        if (titleLength < 10 || titleLength > 60) {
+            await refundOrphanBookingCharge(payment_intent, userId, "Invalid session title");
+            throw new Error("Session title must be between 10 and 60 characters");
+        }
+
+        const noteLength = typeof description === 'string' ? description.trim().length : 0;
+        if (noteLength > 0 && (noteLength < 50 || noteLength > 500)) {
+            await refundOrphanBookingCharge(payment_intent, userId, "Invalid session note");
+            throw new Error("Session note must be between 50 and 500 characters");
         }
 
         const expertUser = await User.findById(String(expert));
         if (!expertUser) {
+            await refundOrphanBookingCharge(payment_intent, userId, "Expert not found");
             throw new Error("Expert not found");
         }
 
+        const currentUser = await User.findById(userId);
         const expectedCents = computeBookingPriceCents(Number(duration), extractHourlyRate(expertUser.price));
 
-        let paymentIntentSucceeded_test: any = false;
-        let paymentIntentSucceeded_live: any = false;
-        if (expectedCents > 0) {
-            paymentIntentSucceeded_test = await checkPaymentIntentSucceeded(payment_intent, 'test');
-            paymentIntentSucceeded_live = await checkPaymentIntentSucceeded(payment_intent, 'live');
-        }
-        const charge = assertPaymentMatchesExpected(expectedCents, payment_intent, paymentIntentSucceeded_test, paymentIntentSucceeded_live);
-
-        assertBookingLeadTime(expertUser, start);
-        assertDurationAllowed(expertUser, duration);
-        await assertBookingSlotValid(expertUser, start, end);
-
-        const _services = await resolveServiceIds(services);
-        const _keywords = await resolveKeywordIds(keywords);
-
-        // create group
-        const chat = await GroupChat.create({
-            name: name,
-            description: description,
-            services: _services,
-            keywords: _keywords,
-            start: start,
-            end: end,
-            duration: duration,
-            price: expectedCents / 100,
-            participants: [userId, expert],
-            admin: expert,
-            type: 'individual',
-            status: 'pending',
-            createdBy: userId,
+        // A captured-but-mismatched amount is refunded inside the helper before it throws.
+        const charge = await verifyBookingChargeOrRefund({
+            payment_intent,
+            expectedCents,
+            name,
+            customer: currentUser,
+            expert: expertUser,
+            groupChatId: undefined,
         });
 
-        const currentUser = await User.findById(userId);
-        currentUser.groupChats.push(chat._id);
-        await currentUser.save();
-        currentUser.populate(['events', 'keywords', 'services', 'groupChats'])
+        // Money is captured — refund + notify if we can't create the session below.
+        const refundAndFail = async (err: any) => {
+            await refundBookingCharge({
+                payment_intent,
+                charge,
+                name,
+                customer: currentUser,
+                expert: expertUser,
+                groupChatId: undefined,
+                reason: err?.message || 'Could not create the session after payment',
+            });
+            return res.status(500).send(safeHttp500Message(err));
+        };
 
-        // [REMOVED] updateUsersGroupChatList(userId.toString());
+        try {
+            assertBookingLeadTime(expertUser, start);
+            assertDurationAllowed(expertUser, duration);
+            await assertBookingSlotValid(expertUser, start, end);
+        } catch (validationErr) {
+            return refundAndFail(validationErr);
+        }
 
-        expertUser.groupChats.push(chat._id);
-        await expertUser.save();
-        expertUser.populate(['events', 'keywords', 'services', 'groupChats'])
+        let chat: any;
+        try {
+            const _services = await resolveServiceIds(services);
+            const { officialIds: _keywords, customValues: _customKeywords } = await classifyMajors(keywords);
 
-        // [REMOVED] updateUsersGroupChatList(expert.toString());
+            // create group
+            chat = await GroupChat.create({
+                name: name,
+                description: description,
+                services: _services,
+                keywords: _keywords,
+                customKeywords: _customKeywords,
+                purposeOther: typeof purposeOther === 'string' ? purposeOther.trim().slice(0, 100) : undefined,
+                start: start,
+                end: end,
+                duration: duration,
+                price: expectedCents / 100,
+                participants: [userId, expert],
+                admin: expert,
+                type: 'individual',
+                status: 'pending',
+                createdBy: userId,
+            });
+
+            currentUser.groupChats.push(chat._id);
+            await currentUser.save();
+            currentUser.populate(['events', 'keywords', 'services', 'groupChats'])
+
+            // [REMOVED] updateUsersGroupChatList(userId.toString());
+
+            expertUser.groupChats.push(chat._id);
+            await expertUser.save();
+            expertUser.populate(['events', 'keywords', 'services', 'groupChats'])
+
+            // [REMOVED] updateUsersGroupChatList(expert.toString());
+        } catch (createErr) {
+            console.log('[createGroupChatByUser] session creation failed after charge', createErr);
+            return refundAndFail(createErr);
+        }
 
         if (charge) {
             await appendPaymentHistory({
@@ -699,21 +713,31 @@ const createGroupChatByUser = async (req, res) => {
                 groupChat: chat._id.toString(),
             });
 
-            await sendBookingReceiptAndConfirmation({
-                payment_intent,
-                charge,
-                sessionType: '1:1 Session',
-                sessionName: chat.name,
-                expertName: expertUser.username,
-                studentName: currentUser.username,
-                studentEmail: currentUser.email,
-                start: chat.start,
-                duration,
-                timeZone: currentUser.timeZone,
-            });
+            // The session is already created and charged — a failing email must
+            // never surface as a failed booking (or crash the request).
+            try {
+                await sendBookingReceiptAndConfirmation({
+                    payment_intent,
+                    charge,
+                    sessionType: '1:1 Session',
+                    sessionName: chat.name,
+                    expertName: expertUser.username,
+                    studentName: currentUser.username,
+                    studentEmail: currentUser.email,
+                    start: chat.start,
+                    duration,
+                    timeZone: currentUser.timeZone,
+                });
+            } catch (emailErr) {
+                console.log('[createGroupChatByUser] booking receipt email failed', emailErr);
+            }
         }
 
-        sendEmailMeetingRequestToExpert(expertUser.email, expertUser.username, name, chat.start, duration, expectedCents / 100, true, expertUser.timeZone)
+        Promise.resolve(
+            sendEmailMeetingRequestToExpert(expertUser.email, expertUser.username, name, chat.start, duration, expectedCents / 100, true, expertUser.timeZone),
+        ).catch((emailErr) => {
+            console.log('[createGroupChatByUser] expert notification email failed', emailErr);
+        });
 
         return res.status(200).json({
             result: currentUser,
@@ -729,7 +753,7 @@ const createGroupChatByUser = async (req, res) => {
 const proposeIndividualAppointment = async (req, res) => {
     try {
         const { userId } = req.user;
-        const { name, description, start, end, duration, price, customer } = req.body;
+        const { name, description, start, end, duration, price, customer, overrideAvailability } = req.body;
 
         if (checkTitleNameInvalid('Name', name)) {
             throw new Error(checkTitleNameInvalid('Name', name))
@@ -745,7 +769,7 @@ const proposeIndividualAppointment = async (req, res) => {
             return res.status(404).send("Sorry, the student you are trying to invite doesn't exist. Please check the email address");
         }
 
-        await assertBookingSlotValid(expertUser, start, end);
+        await assertBookingSlotValid(expertUser, start, end, { allowOutsideAvailability: !!overrideAvailability });
 
         const finalPrice = Math.max(0, Math.round(Number(price) * 100) / 100);
 
@@ -816,14 +840,14 @@ const buildRecurrenceStartDates = (start, frequency) => {
 const createGroupChat = async (req, res) => {
     try {
         const { userId } = req.user;
-        const { name, description, image, services, keywords, start, end, duration, price, type, status, customerId, maxAttendees, currency, timezone, isRecurring, recurrenceFrequency } = req.body;
+        const { name, description, image, services, keywords, start, end, duration, price, type, status, customerId, maxAttendees, currency, timezone, isRecurring, recurrenceFrequency, purposeOther } = req.body;
 
         if (checkTitleNameInvalid('Name', name)) {
             throw new Error(checkTitleNameInvalid('Name', name))
         }
 
         const _services = await resolveServiceIds(services);
-        const _keywords = await resolveKeywordIds(keywords);
+        const { officialIds: _keywords, customValues: _customKeywords } = await classifyMajors(keywords);
 
         const sharedFields = {
             name: name,
@@ -831,6 +855,8 @@ const createGroupChat = async (req, res) => {
             image: image,
             services: _services,
             keywords: _keywords,
+            customKeywords: _customKeywords,
+            purposeOther: typeof purposeOther === 'string' ? purposeOther.trim().slice(0, 100) : undefined,
             duration: duration,
             price: price,
             participants: type === 'individual' ? [customerId, userId] : [userId],
@@ -1061,13 +1087,15 @@ const joinGroupChat = async (req, res) => {
 
         if (currentUser.role === 'customer') {
             const expectedCents = dollarsToCents(groupChat.price);
-            let paymentIntentSucceeded_test: any = false;
-            let paymentIntentSucceeded_live: any = false;
-            if (expectedCents > 0) {
-                paymentIntentSucceeded_test = await checkPaymentIntentSucceeded(payment_intent, 'test')
-                paymentIntentSucceeded_live = await checkPaymentIntentSucceeded(payment_intent, 'live')
-            }
-            const charge = assertPaymentMatchesExpected(expectedCents, payment_intent, paymentIntentSucceeded_test, paymentIntentSucceeded_live);
+            // Refunds the charge if the captured amount doesn't match the expected price.
+            const charge = await verifyBookingChargeOrRefund({
+                payment_intent,
+                expectedCents,
+                name: groupChat.name,
+                customer: currentUser,
+                expert: null,
+                groupChatId: groupChat._id.toString(),
+            });
 
             if (charge) {
                 await appendPaymentHistory({
@@ -1077,6 +1105,8 @@ const joinGroupChat = async (req, res) => {
                     currency: charge.currency,
                     description: groupChat.name,
                     paymentIntent: payment_intent,
+                    receiptUrl: charge.receiptUrl,
+                    receiptNumber: charge.receiptNumber,
                     customer: userId.toString(),
                     expert: groupChat.admin.toString(),
                     groupChat: groupChatId.toString(),
@@ -1118,7 +1148,7 @@ const joinGroupChat = async (req, res) => {
 const updateGroupChat = async (req, res) => {
     try {
         const { userId } = req.user;
-        const { groupId, name, description, image, services, keywords, start, end, duration, price, totalTimeSpent, type, status, maxAttendees, currency, timezone, isRecurring, recurrenceFrequency } = req.body;
+        const { groupId, name, description, image, services, keywords, start, end, duration, price, totalTimeSpent, type, status, maxAttendees, currency, timezone, isRecurring, recurrenceFrequency, purposeOther } = req.body;
 
         if (!groupId) {
             throw new Error("Group ID is required");
@@ -1148,7 +1178,12 @@ const updateGroupChat = async (req, res) => {
             updateFields.status = status;
         }
         if (services !== undefined) updateFields.services = await resolveServiceIds(services);
-        if (keywords !== undefined) updateFields.keywords = await resolveKeywordIds(keywords);
+        if (typeof purposeOther === 'string') updateFields.purposeOther = purposeOther.trim().slice(0, 100);
+        if (keywords !== undefined) {
+            const { officialIds, customValues } = await classifyMajors(keywords);
+            updateFields.keywords = officialIds;
+            updateFields.customKeywords = customValues;
+        }
         if (typeof start === 'string' || typeof start === 'number') updateFields.start = new Date(start);
         if (typeof end === 'string' || typeof end === 'number') updateFields.end = new Date(end);
         if (typeof duration === 'string' || typeof duration === 'number') updateFields.duration = Number(duration);
@@ -1197,6 +1232,7 @@ const updateGroupChat = async (req, res) => {
                     image: anchor.image,
                     services: anchor.services,
                     keywords: anchor.keywords,
+                    customKeywords: anchor.customKeywords,
                     duration: anchor.duration,
                     price: anchor.price,
                     participants: [anchor.admin],
@@ -1245,99 +1281,41 @@ const updateGroupChat = async (req, res) => {
 // Direct seminar registration — no host approval. Enrolling in one occurrence
 // enrolls the student across the whole recurring series. Full seminars are
 // rejected. (1:1 appointments keep their approval flow elsewhere.)
-const registerForSeminar = async (req, res) => {
-    try {
-        const { userId } = req.user;
-        const { groupChatId, payment_intent } = req.body;
-
-        const groupChat = await GroupChat.findOne({ _id: String(groupChatId) });
-
-        if (!groupChat) {
-            return res.status(404).send("Sorry, the group chat doesn't exist");
+// Enrolls a student into a seminar (plus every future sibling in its series),
+// syncs the chat channel, records the charge, and sends the receipt + reminder.
+// Shared by direct registration and expert-approved overflow seat requests.
+// recordPayment=false lets the seat-request approval path update its existing
+// 'pending' PaymentHistory to 'completed' instead of appending a duplicate charge.
+const enrollAndConfirmSeminar = async ({ groupChat, customer, expert, charge, payment_intent, recordPayment = true }: any) => {
+    const occurrences = [groupChat];
+    if (groupChat.seriesId) {
+        const now = Date.now();
+        const siblings = await GroupChat.find({
+            seriesId: groupChat.seriesId,
+            type: 'seminar',
+            _id: { $ne: groupChat._id },
+        });
+        for (const sib of siblings) {
+            const sibStart = sib.start ? new Date(sib.start).getTime() : 0;
+            if (sibStart && sibStart >= now) occurrences.push(sib);
         }
+    }
 
-        if (groupChat.type !== 'seminar') {
-            return res.status(400).send("This group is not a seminar");
+    for (const occ of occurrences) {
+        if (!occ.participants.map(String).includes(String(customer._id))) {
+            occ.participants = [...occ.participants, customer._id];
+            await occ.save();
+            customer.groupChats.push(occ._id);
         }
+    }
+    await customer.save();
 
-        if (groupChat.admin.toString() === userId) {
-            return res
-                .status(403)
-                .send("Forbidden. Group admin can't register for their own seminar.");
-        }
+    // Pull the newly-enrolled student into the seminar's chat channel. The
+    // channel is keyed by seriesId, so one sync covers the whole series.
+    await syncGroupRocketChannel(String(groupChat._id));
 
-        if (groupChat.status !== 'active') {
-            return res.status(400).send("Sorry, the seminar is not active");
-        }
-
-        // Series enrollment is shared, so any occurrence the student already sits
-        // in means they're registered for the whole series.
-        const alreadyParticipant = (groupChat.participants || []).some(
-            (p: any) => p.toString() === userId,
-        );
-        if (alreadyParticipant) {
-            return res.status(409).send("You are already registered for this seminar.");
-        }
-
-        // Capacity guard — a full seminar can't take more students.
-        if (seminarIsFull(groupChat)) {
-            return res.status(409).send("Sorry, this seminar is full.");
-        }
-
-        // Verify payment against the seminar price stored on the group, not the client.
-        const expectedCents = dollarsToCents(groupChat.price);
-        let paymentIntentSucceeded_test: any = false;
-        let paymentIntentSucceeded_live: any = false;
-        if (expectedCents > 0) {
-            paymentIntentSucceeded_test = await checkPaymentIntentSucceeded(payment_intent, 'test')
-            paymentIntentSucceeded_live = await checkPaymentIntentSucceeded(payment_intent, 'live')
-        }
-        const charge = assertPaymentMatchesExpected(expectedCents, payment_intent, paymentIntentSucceeded_test, paymentIntentSucceeded_live);
-
-        const expert = await User.findById(groupChat.admin.toString());
-        if (!expert) {
-            return res.status(404).send("Expert not found for this seminar");
-        }
-        assertBookingLeadTime(
-            expert,
-            groupChat.start,
-            "Seminar registrations"
-        );
-
-        const customer = await User.findById(userId);
-        if (!customer) {
-            return res.status(404).send("User not found");
-        }
-
-        // Enroll in the target occurrence plus every future sibling in the series.
-        const occurrences = [groupChat];
-        if (groupChat.seriesId) {
-            const now = Date.now();
-            const siblings = await GroupChat.find({
-                seriesId: groupChat.seriesId,
-                type: 'seminar',
-                _id: { $ne: groupChat._id },
-            });
-            for (const sib of siblings) {
-                const sibStart = sib.start ? new Date(sib.start).getTime() : 0;
-                if (sibStart && sibStart >= now) occurrences.push(sib);
-            }
-        }
-
-        for (const occ of occurrences) {
-            if (!occ.participants.map(String).includes(String(userId))) {
-                occ.participants = [...occ.participants, userId];
-                await occ.save();
-                customer.groupChats.push(occ._id);
-            }
-        }
-        await customer.save();
-
-        // Pull the newly-enrolled student into the seminar's chat channel. The
-        // channel is keyed by seriesId, so one sync covers the whole series.
-        await syncGroupRocketChannel(String(groupChat._id));
-
-        if (charge) {
+    if (charge) {
+        if (recordPayment) {
             await appendPaymentHistory({
                 stripeMode: charge.paidBy,
                 paymentType: 'charge',
@@ -1345,26 +1323,106 @@ const registerForSeminar = async (req, res) => {
                 currency: charge.currency,
                 description: groupChat.name,
                 paymentIntent: payment_intent,
+                receiptUrl: charge.receiptUrl,
+                receiptNumber: charge.receiptNumber,
                 customer: customer._id.toString(),
                 expert: expert._id.toString(),
                 groupChat: groupChat._id.toString(),
-            })
-
-            await sendBookingReceiptAndConfirmation({
-                payment_intent,
-                charge,
-                sessionType: 'Seminar',
-                sessionName: groupChat.name,
-                expertName: expert.username,
-                studentName: customer.username,
-                studentEmail: customer.email,
-                start: groupChat.start,
-                duration: groupChat.duration,
-                timeZone: customer.timeZone,
             });
         }
 
-        scheduleEmailReminder(customer.email, customer.username, groupChat.name, groupChat.start, groupChat.duration, customer.timeZone);
+        await sendBookingReceiptAndConfirmation({
+            payment_intent,
+            charge,
+            sessionType: 'Seminar',
+            sessionName: groupChat.name,
+            expertName: expert.username,
+            studentName: customer.username,
+            studentEmail: customer.email,
+            start: groupChat.start,
+            duration: groupChat.duration,
+            timeZone: customer.timeZone,
+        });
+    }
+
+    scheduleEmailReminder(customer.email, customer.username, groupChat.name, groupChat.start, groupChat.duration, customer.timeZone);
+};
+
+const registerForSeminar = async (req, res) => {
+    try {
+        const { userId } = req.user;
+        const { groupChatId, payment_intent } = req.body;
+
+        const groupChat = await GroupChat.findOne({ _id: String(groupChatId) });
+
+        // The fee is captured on the client during confirmPayment, so once we know
+        // a real charge landed, any failure to enroll from here must refund it.
+        if (!groupChat) {
+            await refundOrphanBookingCharge(payment_intent, userId, "Seminar no longer exists");
+            return res.status(404).send("Sorry, the group chat doesn't exist");
+        }
+        if (groupChat.type !== 'seminar') {
+            await refundOrphanBookingCharge(payment_intent, userId, "Target is not a seminar");
+            return res.status(400).send("This group is not a seminar");
+        }
+
+        const customer = await User.findById(userId);
+        const expert = await User.findById(groupChat.admin.toString());
+
+        // Verify payment against the seminar price stored on the group, not the client.
+        // A captured-but-mismatched amount is refunded inside the helper before it throws.
+        const expectedCents = dollarsToCents(groupChat.price);
+        const charge = await verifyBookingChargeOrRefund({
+            payment_intent,
+            expectedCents,
+            name: groupChat.name,
+            customer,
+            expert,
+            groupChatId: groupChat._id.toString(),
+        });
+
+        // Money is captured at this point — refund + notify on every failure path.
+        const refundAndFail = async (code: number, message: string, reason: string) => {
+            await refundBookingCharge({ payment_intent, charge, name: groupChat.name, customer, expert, groupChatId: groupChat._id.toString(), reason });
+            return res.status(code).send(message);
+        };
+
+        if (groupChat.admin.toString() === userId) {
+            return refundAndFail(403, "Forbidden. Group admin can't register for their own seminar.", "Host cannot register for their own seminar");
+        }
+        if (groupChat.status !== 'active') {
+            return refundAndFail(400, "Sorry, the seminar is not active", "Seminar is no longer active");
+        }
+        const alreadyParticipant = (groupChat.participants || []).some(
+            (p: any) => p.toString() === userId,
+        );
+        if (alreadyParticipant) {
+            return refundAndFail(409, "You are already registered for this seminar.", "Already registered (duplicate payment)");
+        }
+        // Capacity guard — a full seminar can't take more students. This can happen
+        // when the last seat is claimed between intent creation and confirmation.
+        if (seminarIsFull(groupChat)) {
+            return refundAndFail(409, "Sorry, this seminar is full.", "Seminar reached capacity before registration completed");
+        }
+        if (!expert) {
+            return refundAndFail(404, "Expert not found for this seminar", "Seminar host not found");
+        }
+        if (!customer) {
+            return refundAndFail(404, "User not found", "Student account not found");
+        }
+
+        try {
+            assertBookingLeadTime(expert, groupChat.start, "Seminar registrations");
+        } catch (leadErr: any) {
+            return refundAndFail(400, safeHttp500Message(leadErr), leadErr?.message || "Registration lead time not met");
+        }
+
+        try {
+            await enrollAndConfirmSeminar({ groupChat, customer, expert, charge, payment_intent });
+        } catch (enrollErr) {
+            console.log('[registerForSeminar] enrollment failed after charge', enrollErr);
+            return refundAndFail(500, "We couldn't complete your registration, so your payment has been refunded.", "Enrollment error after payment");
+        }
 
         const userDetails = await getFullUserData(customer.email);
         userDetails.token = null;
@@ -1378,7 +1436,456 @@ const registerForSeminar = async (req, res) => {
         console.log(err);
         return res
             .status(500)
-            .send(safeErrorMessage(err));
+            .send(safeHttp500Message(err));
+    }
+};
+
+const sendSeminarEmail = async (to: string, subject: string, bodyHtml: string) => {
+    if (!to) return;
+    const html = `
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+        <div style="background-color: #f8f9fa; padding: 20px; border-radius: 8px; border-left: 4px solid #007bff;">
+            ${bodyHtml}
+            <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;">
+            <p style="color: #666; font-size: 14px;">Best regards,<br><strong>WisdomLinked Team</strong></p>
+        </div>
+    </div>`;
+    try {
+        await sendNotificationEmail(to, subject, html);
+    } catch (err) {
+        console.log('[sendSeminarEmail]', err.message);
+    }
+};
+
+const buildBookingRefundEmail = (bookingName: string | null, amountCents: number, currency: string, reason: string) => `
+    <h2 style="color:#28a745;margin-top:0;">Payment refunded</h2>
+    <p>We were unable to complete your booking${bookingName ? ` for "<strong>${bookingName}</strong>"` : ''},
+       so your payment has been fully refunded. You have not been enrolled.</p>
+    <div style="background-color:#fff;padding:12px 15px;border-radius:6px;margin:12px 0;">
+        <p style="margin:4px 0;"><strong>Amount:</strong> $${(amountCents / 100).toFixed(2)} ${String(currency || 'USD').toUpperCase()}</p>
+        <p style="margin:4px 0;"><strong>Reason:</strong> ${reason}</p>
+        <p style="margin:4px 0;"><strong>Date:</strong> ${new Date().toLocaleString()}</p>
+    </div>
+    <p>The refund will appear on your original payment method within 5–10 business days.
+       Feel free to try again, or contact support if you need help.</p>`;
+
+// Fully refunds a captured booking charge (seminar or 1:1) when the booking can't be
+// completed, logs a refund PaymentHistory record, and emails the student the details.
+// Passing no amount to refundPaymentIntent issues a full refund (avoids cents/dollars ambiguity).
+const refundBookingCharge = async ({ payment_intent, charge, name, customer, expert, groupChatId, reason }: any) => {
+    if (!charge || !payment_intent) return false;
+    const refund = await refundPaymentIntent(payment_intent, null, charge.paidBy);
+    if (!refund) {
+        console.log('[refundBookingCharge] refund failed', payment_intent, reason);
+        return false;
+    }
+    await appendPaymentHistory({
+        stripeMode: charge.paidBy,
+        paymentType: 'refund',
+        amount: charge.amount,
+        currency: charge.currency,
+        description: `Refund: ${name || 'Booking'} — ${reason}`,
+        paymentIntent: refund.payment_intent,
+        customer: customer?._id?.toString(),
+        expert: expert?._id?.toString(),
+        groupChat: groupChatId,
+    });
+    if (customer?.email) {
+        await sendSeminarEmail(
+            customer.email,
+            `Refund issued — ${name || 'Booking'}`,
+            buildBookingRefundEmail(name || null, charge.amount, charge.currency, reason),
+        );
+    }
+    return true;
+};
+
+// Best-effort refund for a captured payment when the target booking is missing or
+// invalid (we don't yet know the Stripe mode, so probe both). Rare edge case.
+const refundOrphanBookingCharge = async (payment_intent: string, userId: string, reason: string) => {
+    if (!payment_intent) return;
+    let mode: 'test' | 'live' | null = null;
+    let intent: any = await checkPaymentIntentSucceeded(payment_intent, 'test');
+    if (intent) mode = 'test';
+    else {
+        intent = await checkPaymentIntentSucceeded(payment_intent, 'live');
+        if (intent) mode = 'live';
+    }
+    if (!mode || !intent) return;
+    const customer = userId ? await User.findById(String(userId)) : null;
+    await refundBookingCharge({
+        payment_intent,
+        charge: { paidBy: mode, amount: intent.amount, currency: intent.currency },
+        name: null,
+        customer,
+        expert: null,
+        groupChatId: undefined,
+        reason,
+    });
+};
+
+// Verifies a captured payment against the expected price. If the funds were captured
+// but for the wrong amount, the charge is fully refunded before we reject — then the
+// usual assertion throws so the caller still fails the request.
+const verifyBookingChargeOrRefund = async ({ payment_intent, expectedCents, name, customer, expert, groupChatId }: any) => {
+    let succeededTest: any = false;
+    let succeededLive: any = false;
+    if (expectedCents > 0) {
+        succeededTest = await checkPaymentIntentSucceeded(payment_intent, 'test');
+        succeededLive = await checkPaymentIntentSucceeded(payment_intent, 'live');
+    }
+    const captured = succeededTest || succeededLive;
+    if (captured && captured.amount !== expectedCents) {
+        await refundBookingCharge({
+            payment_intent,
+            charge: { paidBy: succeededTest ? 'test' : 'live', amount: captured.amount, currency: captured.currency },
+            name,
+            customer,
+            expert,
+            groupChatId,
+            reason: 'Payment amount did not match the expected price',
+        });
+    }
+    return assertPaymentMatchesExpected(expectedCents, payment_intent, succeededTest, succeededLive);
+};
+
+// Overflow: the seminar is at capacity but the student has authorized (held) the
+// fee. Records a pending request for the expert to approve; funds are captured on
+// approval and released on rejection/expiry. No enrollment happens here.
+const requestSeminarSeat = async (req, res) => {
+    try {
+        const { userId } = req.user;
+        const { groupChatId, payment_intent } = req.body;
+
+        const groupChat = await GroupChat.findOne({ _id: String(groupChatId) });
+        if (!groupChat) {
+            return res.status(404).send("Sorry, the group chat doesn't exist");
+        }
+        if (groupChat.type !== 'seminar') {
+            return res.status(400).send("This group is not a seminar");
+        }
+        if (groupChat.admin.toString() === userId) {
+            return res.status(403).send("Forbidden. Group admin can't register for their own seminar.");
+        }
+        if (groupChat.status !== 'active') {
+            return res.status(400).send("Sorry, the seminar is not active");
+        }
+
+        const expectedCents = dollarsToCents(groupChat.price);
+
+        // Paid seminars hold the fee (authorized, not captured) before we record the
+        // request. Free seminars have nothing to hold — the request just gates on the
+        // host's approval — so we skip payment verification entirely.
+        let charge: any = null;
+        if (expectedCents > 0) {
+            const authTest = await checkPaymentIntentAuthorized(payment_intent, 'test');
+            const authLive = await checkPaymentIntentAuthorized(payment_intent, 'live');
+            charge = assertPaymentMatchesExpected(expectedCents, payment_intent, authTest, authLive);
+            if (!charge) {
+                return res.status(400).send("Payment could not be verified.");
+            }
+        }
+
+        // Best-effort release of the hold (paid seminars only) if we reject below.
+        const releaseAndFail = async (code: number, msg: string) => {
+            if (charge) await cancelPaymentIntent(payment_intent, charge.paidBy);
+            return res.status(code).send(msg);
+        };
+
+        const alreadyParticipant = (groupChat.participants || []).some(
+            (p: any) => p.toString() === userId,
+        );
+        if (alreadyParticipant) {
+            return releaseAndFail(409, "You are already registered for this seminar.");
+        }
+        if (!seminarIsFull(groupChat)) {
+            return releaseAndFail(409, "Seats are available — please register normally.");
+        }
+        const startMs = groupChat.start ? new Date(groupChat.start).getTime() : 0;
+        if (!seatRequestWindowOpen(startMs)) {
+            return releaseAndFail(400, "Seat requests are only open within 7 days of the seminar.");
+        }
+
+        const existing = await SeminarSeatRequest.findOne({
+            customer: userId,
+            groupChat: groupChat._id,
+            status: 'pending',
+        });
+        if (existing) {
+            return releaseAndFail(409, "You already have a pending request for this seminar.");
+        }
+
+        const appState = await AppState.findOne();
+        const deadlineHours = typeof appState?.seminarApprovalDeadlineHours === 'number'
+            ? appState.seminarApprovalDeadlineHours
+            : 24;
+        const decisionDeadline = computeSeatRequestDeadline(startMs, deadlineHours);
+
+        // Record the hold as a 'pending' payment so the student sees it in their
+        // history; it flips to 'completed' on approval or 'refunded' on release.
+        let pendingPaymentId: any = undefined;
+        if (charge) {
+            const ph = new PaymentHistory({
+                stripeMode: charge.paidBy,
+                paymentType: 'charge',
+                amount: charge.amount,
+                currency: charge.currency,
+                description: `Seat request (held, awaiting host approval): ${groupChat.name}`,
+                paymentIntent: payment_intent,
+                status: 'pending',
+                customer: userId,
+                expert: groupChat.admin,
+                groupChat: groupChat._id,
+            });
+            await ph.save();
+            pendingPaymentId = ph._id;
+        }
+
+        const request = await SeminarSeatRequest.create({
+            customer: userId,
+            groupChat: groupChat._id,
+            expert: groupChat.admin,
+            paymentIntent: charge ? payment_intent : undefined,
+            paymentHistory: pendingPaymentId,
+            stripeMode: charge ? charge.paidBy : undefined,
+            amount: charge ? charge.amount : 0,
+            currency: charge ? charge.currency : (groupChat.currency || 'usd'),
+            decisionDeadline,
+        });
+
+        const expert = await User.findById(groupChat.admin.toString());
+        const customer = await User.findById(userId);
+
+        // Confirm to the student that their request (and hold, if paid) is in.
+        if (customer?.email) {
+            const holdLine = charge
+                ? `Your card has been authorized for <strong>$${(charge.amount / 100).toFixed(2)} ${String(charge.currency || 'USD').toUpperCase()}</strong> but not charged. You'll only be charged if the host approves your seat; otherwise the hold is released.`
+                : 'This is a free seminar, so no payment is involved.';
+            await sendSeminarEmail(
+                customer.email,
+                `Seat request received — ${groupChat.name}`,
+                `<h2 style="color:#007bff;margin-top:0;">Seat request received</h2>
+                 <p>Thanks! Your request for a seat in the full seminar
+                 "<strong>${groupChat.name}</strong>" has been sent to the host. ${holdLine}</p>
+                 <p>The host has until <strong>${decisionDeadline.toLocaleString()}</strong> to decide.</p>`,
+            );
+        }
+
+        if (expert?.email) {
+            const holdNote = charge
+                ? 'Their card is authorized but not charged.'
+                : 'This is a free seminar, so no payment is involved.';
+            const releaseNote = charge
+                ? 'otherwise the hold is released automatically.'
+                : 'otherwise the request expires automatically.';
+            await sendSeminarEmail(
+                expert.email,
+                `New seat request — ${groupChat.name}`,
+                `<h2 style="color:#007bff;margin-top:0;">New seat request</h2>
+                 <p>${customer?.username || 'A student'} has requested a seat for your full seminar
+                 "<strong>${groupChat.name}</strong>". ${holdNote}</p>
+                 <p>Please approve or decline from your Seminar Hub before
+                 <strong>${decisionDeadline.toLocaleString()}</strong>, ${releaseNote}</p>`,
+            );
+        }
+
+        return res.status(200).json({ success: true, status: 'pending_approval', requestId: request._id });
+    } catch (err) {
+        console.log(err);
+        return res.status(500).send(safeHttp500Message(err));
+    }
+};
+
+const approveSeminarSeatRequest = async (req, res) => {
+    try {
+        const { userId } = req.user;
+        const { requestId } = req.body;
+
+        const request = await SeminarSeatRequest.findById(String(requestId));
+        if (!request) {
+            return res.status(404).send("Seat request not found.");
+        }
+        if (request.status !== 'pending') {
+            return res.status(409).send(`This request is already ${request.status}.`);
+        }
+
+        const groupChat = await GroupChat.findById(request.groupChat.toString());
+        if (!groupChat) {
+            return res.status(404).send("Seminar not found.");
+        }
+        if (normalizeId(groupChat.admin) !== String(userId)) {
+            return res.status(403).send("Only the seminar host can approve seat requests.");
+        }
+
+        // Paid requests capture the held funds now; free requests have no hold.
+        let charge: any = null;
+        if (request.paymentIntent) {
+            const captured = await capturePaymentIntent(request.paymentIntent, request.stripeMode);
+            if (!captured) {
+                return res.status(502).send("Could not capture the authorized payment. The hold may have expired.");
+            }
+            const chargeObj = captured.latest_charge && typeof captured.latest_charge === 'object'
+                ? captured.latest_charge
+                : null;
+            charge = {
+                paidBy: request.stripeMode,
+                amount: captured.amount,
+                currency: captured.currency,
+                receiptUrl: chargeObj?.receipt_url ?? null,
+                receiptNumber: chargeObj?.receipt_number ?? null,
+            };
+        }
+
+        const customer = await User.findById(request.customer.toString());
+        const expert = await User.findById(groupChat.admin.toString());
+        if (!customer || !expert) {
+            return res.status(404).send("User not found for this request.");
+        }
+
+        // Approval intentionally admits the student beyond the capacity cap. For paid
+        // requests we flip the existing 'pending' payment record to 'completed' rather
+        // than appending a duplicate charge.
+        await enrollAndConfirmSeminar({ groupChat, customer, expert, charge, payment_intent: request.paymentIntent, recordPayment: false });
+
+        if (charge && request.paymentHistory) {
+            await PaymentHistory.findByIdAndUpdate(request.paymentHistory, {
+                status: 'completed',
+                description: groupChat.name,
+                receiptUrl: charge.receiptUrl,
+                receiptNumber: charge.receiptNumber,
+            });
+        }
+
+        request.status = 'approved';
+        await request.save();
+
+        await sendSeminarEmail(
+            customer.email,
+            `You're in — ${groupChat.name}`,
+            `<h2 style="color:#28a745;margin-top:0;">Seat approved</h2>
+             <p>${expert.username || 'The host'} approved your seat for
+             "<strong>${groupChat.name}</strong>". ${charge ? 'Your card has now been charged and you\'re registered.' : 'You\'re now registered.'}</p>`,
+        );
+
+        return res.status(200).json({ success: true, status: 'approved' });
+    } catch (err) {
+        console.log(err);
+        return res.status(500).send(safeHttp500Message(err));
+    }
+};
+
+const rejectSeminarSeatRequest = async (req, res) => {
+    try {
+        const { userId } = req.user;
+        const { requestId } = req.body;
+
+        const request = await SeminarSeatRequest.findById(String(requestId));
+        if (!request) {
+            return res.status(404).send("Seat request not found.");
+        }
+        if (request.status !== 'pending') {
+            return res.status(409).send(`This request is already ${request.status}.`);
+        }
+
+        const groupChat = await GroupChat.findById(request.groupChat.toString());
+        if (!groupChat) {
+            return res.status(404).send("Seminar not found.");
+        }
+        if (normalizeId(groupChat.admin) !== String(userId)) {
+            return res.status(403).send("Only the seminar host can decline seat requests.");
+        }
+
+        if (request.paymentIntent) await cancelPaymentIntent(request.paymentIntent, request.stripeMode);
+        if (request.paymentHistory) {
+            await PaymentHistory.findByIdAndUpdate(request.paymentHistory, {
+                status: 'refunded',
+                description: `Hold released — seat request declined: ${groupChat.name}`,
+            });
+        }
+        request.status = 'rejected';
+        await request.save();
+
+        const customer = await User.findById(request.customer.toString());
+        if (customer?.email) {
+            await sendSeminarEmail(
+                customer.email,
+                `Seat request update — ${groupChat.name}`,
+                `<h2 style="color:#333;margin-top:0;">Seat request declined</h2>
+                 <p>Unfortunately the host could not offer you a seat for
+                 "<strong>${groupChat.name}</strong>".${request.paymentIntent ? ' Your payment hold has been released and you were not charged.' : ''}</p>`,
+            );
+        }
+
+        return res.status(200).json({ success: true, status: 'rejected' });
+    } catch (err) {
+        console.log(err);
+        return res.status(500).send(safeHttp500Message(err));
+    }
+};
+
+const getSeminarSeatRequests = async (req, res) => {
+    try {
+        await sweepExpiredSeatRequests();
+        const { userId } = req.user;
+        const requests = await SeminarSeatRequest.find({ expert: userId, status: 'pending' })
+            .populate('customer', 'username email image')
+            .populate('groupChat', 'name start')
+            .sort({ createdAt: 1 });
+        return res.status(200).json({ success: true, result: requests });
+    } catch (err) {
+        console.log(err);
+        return res.status(500).send(safeHttp500Message(err));
+    }
+};
+
+const getMySeatRequests = async (req, res) => {
+    try {
+        await sweepExpiredSeatRequests();
+        const { userId } = req.user;
+        const requests = await SeminarSeatRequest.find({ customer: userId })
+            .select('groupChat status decisionDeadline amount currency')
+            .populate('groupChat', 'name start')
+            .sort({ createdAt: -1 });
+        return res.status(200).json({ success: true, result: requests });
+    } catch (err) {
+        console.log(err);
+        return res.status(500).send(safeHttp500Message(err));
+    }
+};
+
+// Releases holds for pending requests whose decision deadline has passed. Invoked
+// on a timer from server.ts and opportunistically when requests are listed.
+const sweepExpiredSeatRequests = async () => {
+    try {
+        const due = await SeminarSeatRequest.find({
+            status: 'pending',
+            decisionDeadline: { $lte: new Date() },
+        }).populate('groupChat', 'name');
+        for (const request of due) {
+            if (request.paymentIntent) await cancelPaymentIntent(request.paymentIntent, request.stripeMode);
+            if (request.paymentHistory) {
+                await PaymentHistory.findByIdAndUpdate(request.paymentHistory, {
+                    status: 'refunded',
+                    description: `Hold released — seat request expired: ${request.groupChat?.name || 'Seminar'}`,
+                });
+            }
+            request.status = 'expired';
+            await request.save();
+            const customer = await User.findById(request.customer.toString());
+            if (customer?.email) {
+                await sendSeminarEmail(
+                    customer.email,
+                    `Seat request expired — ${request.groupChat?.name || 'Seminar'}`,
+                    `<h2 style="color:#333;margin-top:0;">Seat request expired</h2>
+                     <p>The host didn't respond in time to your seat request for
+                     "<strong>${request.groupChat?.name || 'the seminar'}</strong>".${request.paymentIntent ? ' Your payment hold has been released and you were not charged.' : ''}</p>`,
+                );
+            }
+        }
+        return due.length;
+    } catch (err) {
+        console.log('[sweepExpiredSeatRequests]', err.message);
+        return 0;
     }
 };
 
@@ -1390,51 +1897,77 @@ const acceptIndividualAppointment = async (req, res) => {
         const groupChat = await GroupChat.findOne({ _id: String(groupChatId) });
 
         if (!groupChat) {
+            await refundOrphanBookingCharge(payment_intent, userId, "Session no longer exists");
             return res.status(404).send("Sorry, the group chat doesn't exist");
         }
 
+        let charge: any = null;
+        let payer: any = null;
+        let expertUser: any = null;
         if (role === 'customer') {
+            payer = await User.findById(userId);
+            expertUser = await User.findById(groupChat.admin.toString());
+
+            // A captured-but-mismatched amount is refunded inside the helper before it throws.
             const expectedCents = dollarsToCents(groupChat.price);
-            let paymentIntentSucceeded_test: any = false;
-            let paymentIntentSucceeded_live: any = false;
-            if (expectedCents > 0) {
-                paymentIntentSucceeded_test = await checkPaymentIntentSucceeded(payment_intent, 'test')
-                paymentIntentSucceeded_live = await checkPaymentIntentSucceeded(payment_intent, 'live')
-            }
-            const charge = assertPaymentMatchesExpected(expectedCents, payment_intent, paymentIntentSucceeded_test, paymentIntentSucceeded_live);
-
-            if (charge) {
-                await appendPaymentHistory({
-                    stripeMode: charge.paidBy,
-                    paymentType: 'charge',
-                    amount: charge.amount,
-                    currency: charge.currency,
-                    description: groupChat.name,
-                    paymentIntent: payment_intent,
-                    customer: String(userId),
-                    expert: groupChat.admin.toString(),
-                    groupChat: groupChatId,
-                })
-
-                const payer = await User.findById(userId);
-                const expertUser = await User.findById(groupChat.admin.toString());
-                await sendBookingReceiptAndConfirmation({
-                    payment_intent,
-                    charge,
-                    sessionType: '1:1 Session',
-                    sessionName: groupChat.name,
-                    expertName: expertUser?.username,
-                    studentName: payer?.username,
-                    studentEmail: payer?.email,
-                    start: groupChat.start,
-                    duration: groupChat.duration,
-                    timeZone: payer?.timeZone,
-                });
-            }
+            charge = await verifyBookingChargeOrRefund({
+                payment_intent,
+                expectedCents,
+                name: groupChat.name,
+                customer: payer,
+                expert: expertUser,
+                groupChatId,
+            });
         }
 
-        groupChat.status = 'active';
-        await groupChat.save();
+        // Activate the session; if this fails after a captured charge, refund it.
+        try {
+            groupChat.status = 'active';
+            await groupChat.save();
+        } catch (activateErr) {
+            if (charge) {
+                await refundBookingCharge({
+                    payment_intent,
+                    charge,
+                    name: groupChat.name,
+                    customer: payer,
+                    expert: expertUser,
+                    groupChatId,
+                    reason: 'Could not activate the session after payment',
+                });
+            }
+            throw activateErr;
+        }
+
+        // Record the charge + receipt only once the session is actually active.
+        if (charge) {
+            await appendPaymentHistory({
+                stripeMode: charge.paidBy,
+                paymentType: 'charge',
+                amount: charge.amount,
+                currency: charge.currency,
+                description: groupChat.name,
+                paymentIntent: payment_intent,
+                receiptUrl: charge.receiptUrl,
+                receiptNumber: charge.receiptNumber,
+                customer: String(userId),
+                expert: groupChat.admin.toString(),
+                groupChat: groupChatId,
+            })
+
+            await sendBookingReceiptAndConfirmation({
+                payment_intent,
+                charge,
+                sessionType: '1:1 Session',
+                sessionName: groupChat.name,
+                expertName: expertUser?.username,
+                studentName: payer?.username,
+                studentEmail: payer?.email,
+                start: groupChat.start,
+                duration: groupChat.duration,
+                timeZone: payer?.timeZone,
+            });
+        }
 
         res.status(200).send("Group chat accepted successfully!");
 
@@ -2003,6 +2536,12 @@ module.exports = {
     joinGroupChat,
     updateGroupChat,
     registerForSeminar,
+    requestSeminarSeat,
+    approveSeminarSeatRequest,
+    rejectSeminarSeatRequest,
+    getSeminarSeatRequests,
+    getMySeatRequests,
+    sweepExpiredSeatRequests,
     acceptIndividualAppointment,
     leaveGroup,
     deleteGroup,

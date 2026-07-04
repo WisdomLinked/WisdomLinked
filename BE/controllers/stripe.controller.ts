@@ -1,9 +1,16 @@
 import { Request, Response } from 'express';
 import { BOOKING_PAYMENT_AMOUNT_INVALID } from '../utils/bookingUserFacingCopy';
 import { HTTP_GENERIC_ERROR, safeErrorMessage } from '../utils/httpUserFacingCopy';
+import { expectedBookingIntentCents, extractHourlyRate } from '../utils/bookingPrice';
+import { seminarIsFull } from '../utils/seminarCapacity';
+
+const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
+const SEMINAR_FULL_NOT_REQUESTABLE = 'This seminar is full. Seat requests open closer to the start date.';
 const stripeTest = require('stripe')(process.env.STRIPE_SECRET_KEY_TEST);
 const stripeLive = require('stripe')(process.env.STRIPE_SECRET_KEY_LIVE);
 const AppState = require("../models/AppState");
+const User = require("../models/User");
+const GroupChat = require("../models/GroupChat");
 
 const stripePay = async (req, res) => {
     try {
@@ -30,18 +37,58 @@ const stripePay = async (req, res) => {
 
 const createStripePaymentIntent = async (req, res) => {
     try {
-        const { stripeMode, amount } = req.body
+        const { stripeMode, groupChatId, expertId, duration } = req.body
+
+        let expectedCents: number;
+        let metadata: Record<string, string>;
+        let manualCapture = false;
+        if (groupChatId) {
+            const groupChat = await GroupChat.findById(String(groupChatId));
+            if (!groupChat) {
+                return res.status(404).send(BOOKING_PAYMENT_AMOUNT_INVALID);
+            }
+            expectedCents = expectedBookingIntentCents({ kind: 'groupChat', priceDollars: groupChat.price });
+            metadata = { bookingType: 'groupChat', groupChatId: String(groupChatId) };
+
+            // Full seminar → overflow "request a seat" flow: authorize (hold) the
+            // funds instead of capturing, pending expert approval. Only offered when
+            // the seminar starts within the 7-day Stripe authorization window.
+            if (groupChat.type === 'seminar' && seminarIsFull(groupChat)) {
+                const startMs = groupChat.start ? new Date(groupChat.start).getTime() : 0;
+                const withinHoldWindow = startMs > Date.now() && startMs <= Date.now() + SEVEN_DAYS_MS;
+                if (!withinHoldWindow) {
+                    return res.status(400).send({ error: SEMINAR_FULL_NOT_REQUESTABLE });
+                }
+                manualCapture = true;
+                metadata.seatRequest = 'true';
+            }
+        } else {
+            const expertUser = await User.findById(String(expertId));
+            if (!expertUser) {
+                return res.status(404).send(BOOKING_PAYMENT_AMOUNT_INVALID);
+            }
+            expectedCents = expectedBookingIntentCents({ kind: 'oneToOne', durationMinutes: Number(duration), hourlyRateDollars: extractHourlyRate(expertUser.price) });
+            metadata = { bookingType: 'oneToOne', expertId: String(expertId), duration: String(duration) };
+        }
+
+        if (!(expectedCents > 0)) {
+            return res.status(400).send(BOOKING_PAYMENT_AMOUNT_INVALID);
+        }
+
         const stripe = require('stripe')(stripeMode === 'test' ? process.env.STRIPE_SECRET_KEY_TEST : process.env.STRIPE_SECRET_KEY_LIVE);
         const paymentIntent = await stripe.paymentIntents.create({
-            amount: Math.round(amount * 100), // dollars -> integer cents (Stripe rejects fractional)
+            amount: expectedCents,
             currency: 'usd',
             // Required for the deferred PaymentElement flow: the client renders the
             // Element from dashboard settings, so the intent must enable the same
             // automatic methods or confirmPayment throws a mismatch error.
             automatic_payment_methods: { enabled: true },
+            ...(manualCapture ? { capture_method: 'manual' } : {}),
+            metadata,
         });
         res.send({
             client_secret: paymentIntent.client_secret,
+            requiresApproval: manualCapture,
         });
     } catch (err) {
         console.log(err);
@@ -73,17 +120,36 @@ const setStripeMode = async (req, res) => {
 
 const getStripeMode = async (req, res) => {
     try {
-        const appState = await AppState.findOne()
-        let stripeMode = appState.stripeMode
+        let appState = await AppState.findOne()
         if (!appState) {
-            await AppState.create({
+            appState = await AppState.create({
                 stripeMode: "test"
             })
-            stripeMode = "test"
         }
         res.send({
-            stripeMode: stripeMode,
+            stripeMode: appState.stripeMode,
+            seminarApprovalDeadlineHours: appState.seminarApprovalDeadlineHours ?? 24,
         });
+    } catch (err) {
+        console.log(err);
+        return res.status(500).send(HTTP_GENERIC_ERROR);
+    }
+};
+
+const setSeminarApprovalDeadline = async (req, res) => {
+    try {
+        const hours = Number(req.body.seminarApprovalDeadlineHours);
+        if (!Number.isFinite(hours) || hours < 0 || hours > 168) {
+            return res.status(400).send({ error: 'Deadline must be between 0 and 168 hours.' });
+        }
+        let appState = await AppState.findOne();
+        if (!appState) {
+            appState = await AppState.create({ seminarApprovalDeadlineHours: hours });
+        } else {
+            appState.seminarApprovalDeadlineHours = hours;
+            await appState.save();
+        }
+        res.send({ result: 'SUCCESS', seminarApprovalDeadlineHours: appState.seminarApprovalDeadlineHours });
     } catch (err) {
         console.log(err);
         return res.status(500).send(HTTP_GENERIC_ERROR);
@@ -107,6 +173,42 @@ const checkPaymentIntentSucceeded = async (payment_intent, stripeMode) => {
         return false
     }
 }
+
+const checkPaymentIntentAuthorized = async (payment_intent, stripeMode) => {
+    try {
+        const stripe = require('stripe')(stripeMode === 'test' ? process.env.STRIPE_SECRET_KEY_TEST : process.env.STRIPE_SECRET_KEY_LIVE);
+        const paymentIntent = await stripe.paymentIntents.retrieve(payment_intent, { expand: ['latest_charge'] });
+        if (paymentIntent?.status === 'requires_capture') {
+            return paymentIntent;
+        }
+        return false;
+    } catch (err) {
+        console.log('[checkPaymentIntentAuthorized]', err.message);
+        return false;
+    }
+};
+
+const capturePaymentIntent = async (payment_intent, stripeMode) => {
+    try {
+        const stripe = require('stripe')(stripeMode === 'test' ? process.env.STRIPE_SECRET_KEY_TEST : process.env.STRIPE_SECRET_KEY_LIVE);
+        const captured = await stripe.paymentIntents.capture(payment_intent, { expand: ['latest_charge'] });
+        return captured?.status === 'succeeded' ? captured : false;
+    } catch (err) {
+        console.log('[capturePaymentIntent]', err.message);
+        return false;
+    }
+};
+
+const cancelPaymentIntent = async (payment_intent, stripeMode) => {
+    try {
+        const stripe = require('stripe')(stripeMode === 'test' ? process.env.STRIPE_SECRET_KEY_TEST : process.env.STRIPE_SECRET_KEY_LIVE);
+        const cancelled = await stripe.paymentIntents.cancel(payment_intent);
+        return cancelled?.status === 'canceled' ? cancelled : false;
+    } catch (err) {
+        console.log('[cancelPaymentIntent]', err.message);
+        return false;
+    }
+};
 
 const refundPaymentIntent = async (payment_intent, amount, stripeMode) => {
     try {
@@ -929,7 +1031,11 @@ module.exports = {
     createStripePaymentIntent,
     getStripeMode,
     checkPaymentIntentSucceeded,
+    checkPaymentIntentAuthorized,
+    capturePaymentIntent,
+    cancelPaymentIntent,
     setStripeMode,
+    setSeminarApprovalDeadline,
     refundPaymentIntent,
     sendPaymentLinkToUser,
     handleStripeWebhook,

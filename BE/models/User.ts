@@ -84,6 +84,13 @@ const userSchema = new mongoose.Schema(
         price: [{ type: Number, default: 5 }],
         rating: { type: Number, default: 0 },
         specialNote: { type: String },
+
+        // STUDENT ACADEMIC BACKGROUND (optional, recommended) ---------------
+        degreeSought: { type: String },
+        intendedIntake: { type: String },
+        currentUniversity: { type: String },
+        gpa: { type: String },
+        researchInterests: { type: String },
     },
     { timestamps: true }
 );

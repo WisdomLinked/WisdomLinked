@@ -54,7 +54,12 @@ scheduleEmailReminder = async (targetEmail, userName, title,start, duration, tim
             <a href="${website_url}">Visit Website</a>
         </p>
     `;
-    return sendNotificationEmail(targetEmail, subject, html, scheduledTime);
+    try {
+        return await sendNotificationEmail(targetEmail, subject, html, scheduledTime);
+    } catch (error) {
+        console.error("Failed to schedule reminder email:", error?.message || error);
+        return null;
+    }
 }
 
 sendEmailMeetingAcceptance = async (targetEmail, userName, title,start, duration, timeZone) => {
@@ -246,5 +251,6 @@ module.exports = {
     sendEmailUserAccountApproved,
     sendExpertResumeFormatReminderEmail,
     shareMeetingId,
-    sendPaymentConfirmationEmail
+    sendPaymentConfirmationEmail,
+    sendNotificationEmail
 };

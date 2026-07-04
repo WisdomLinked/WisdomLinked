@@ -15,9 +15,11 @@ const MAJOR_OPTIONS = [
     'Systems Engineering',
 ];
 
+const OTHER_MAJOR = 'Other';
+
 const isBaselineMajor = (value) => {
     const v = String(value || '').trim().toLowerCase();
     return MAJOR_OPTIONS.some((m) => m.toLowerCase() === v);
 };
 
-module.exports = { MAJOR_OPTIONS, isBaselineMajor };
+module.exports = { MAJOR_OPTIONS, OTHER_MAJOR, isBaselineMajor };

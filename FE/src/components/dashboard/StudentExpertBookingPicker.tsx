@@ -124,7 +124,7 @@ function isSameViewerCalendarDay(a: Date, b: Date): boolean {
  * Student-dashboard styled availability picker (light theme).
  * Replaces legacy dark SelectDateTime in Find Experts / ExpertProfile.
  */
-export default function StudentExpertBookingPicker({
+function StudentExpertBookingPicker({
   expert,
   onSlotSelected,
   hidePriceInDurationSelection = false,
@@ -798,3 +798,5 @@ export default function StudentExpertBookingPicker({
     </div>
   );
 }
+
+export default React.memo(StudentExpertBookingPicker);

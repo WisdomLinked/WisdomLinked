@@ -479,6 +479,55 @@ export const registerForSeminar = async (data: any) => {
     }
 };
 
+export const requestSeminarSeat = async (data: any) => {
+    try {
+        const res = await api.post("group-chat/request-seminar-seat", {
+            groupChatId: data.groupChatId,
+            payment_intent: data.payment_intent,
+        });
+
+        return res.data;
+    } catch (err: any) {
+        return checkForAuthorization(err);
+    }
+};
+
+export const getSeminarSeatRequests = async () => {
+    try {
+        const res = await api.get("group-chat/seat-requests");
+        return res.data;
+    } catch (err: any) {
+        return checkForAuthorization(err);
+    }
+};
+
+export const getMySeatRequests = async () => {
+    try {
+        const res = await api.get("group-chat/my-seat-requests");
+        return res.data;
+    } catch (err: any) {
+        return checkForAuthorization(err);
+    }
+};
+
+export const approveSeminarSeatRequest = async (requestId: string) => {
+    try {
+        const res = await api.post("group-chat/approve-seat-request", { requestId });
+        return res.data;
+    } catch (err: any) {
+        return checkForAuthorization(err);
+    }
+};
+
+export const rejectSeminarSeatRequest = async (requestId: string) => {
+    try {
+        const res = await api.post("group-chat/reject-seat-request", { requestId });
+        return res.data;
+    } catch (err: any) {
+        return checkForAuthorization(err);
+    }
+};
+
 export const leaveGroup = async (data: LeaveGroupArgs) => {
     try {
         const res = await api.post("group-chat/leave", {
@@ -581,6 +630,15 @@ export const doConsolidateMajors = async (data: { sources: string[]; target: str
     try {
         const res = await api.post("admin/consolidateMajors", data);
         return res.data?.result;
+    } catch (err: any) {
+        return checkForAuthorization(err);
+    }
+}
+
+export const doGetMajorConsolidations = async () => {
+    try {
+        const res = await api.get("admin/getMajorConsolidations");
+        return res.data?.result || [];
     } catch (err: any) {
         return checkForAuthorization(err);
     }
@@ -706,6 +764,15 @@ export const getStripeMode = async () => {
 export const setStripeMode = async ({ stripeMode }: any) => {
     try {
         const res = await api.post("admin/setStripeMode", { stripeMode });
+        return res.data;
+    } catch (err: any) {
+        return checkForAuthorization(err);
+    }
+}
+
+export const setSeminarApprovalDeadline = async (seminarApprovalDeadlineHours: number) => {
+    try {
+        const res = await api.post("admin/setSeminarApprovalDeadline", { seminarApprovalDeadlineHours });
         return res.data;
     } catch (err: any) {
         return checkForAuthorization(err);

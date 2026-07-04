@@ -23,7 +23,7 @@ import UpcomingCountdownCard, { type UpcomingSession } from '../components/dashb
 import UpcomingSessionModal, { type UpcomingModalSession } from '../components/dashboard/UpcomingSessionModal';
 import ExpertProfile from '../components/dashboard/ExpertProfile';
 import StudentBookingCheckout, { completeStudentBookingFromStorage } from '../components/dashboard/StudentBookingCheckout';
-import { getExpertById, doFollowExpert, doUnfollowExpert, acceptIndividualAppointment } from '../api/api';
+import { getExpertById, doFollowExpert, doUnfollowExpert, acceptIndividualAppointment, getMySeatRequests } from '../api/api';
 import { updateMe } from '../actions/authActions';
 import type { MentorCardProps } from '../components/MentorCard';
 import { mapExpertToMentorWithImage } from '../utils/mapExpertToMentor';
@@ -36,6 +36,7 @@ import {
   subscribeToRoom,
 } from '../services/rcRealtime';
 import { patchDmUnreadRid, setDmUnreadByRidBulk } from '../actions/chatActions';
+import { canonicalLabelsFromMixedServiceEntries } from '../constants/serviceOptions';
 import { useEndMeetingOnReturn } from '../hooks/useEndMeetingOnReturn';
 function deriveSessionCounts(u: any) {
   if (!u) {
@@ -93,6 +94,18 @@ function timeHHMMInTimeZone(d: Date, timeZone: string): string {
  *    accepted/confirmed/approved (declined/cancelled dropped).
  * Past/upcoming split is handled inside StudentCalendar.
  */
+/** "45 min · Study Abroad" line for a session/seminar card. */
+function meetingDetailsLine(g: any): string {
+  const parts: string[] = [];
+  if (g?.duration) parts.push(`${g.duration} min`);
+  const purpose =
+    (typeof g?.purposeOther === 'string' && g.purposeOther.trim()) ||
+    canonicalLabelsFromMixedServiceEntries(g?.services)[0] ||
+    '';
+  if (purpose) parts.push(purpose);
+  return parts.join(' · ');
+}
+
 function deriveCalendarMeetings(u: any): CalendarMeeting[] {
   if (!u) return [];
   const tz = u?.timeZone || detectUserTimeZone();
@@ -106,7 +119,7 @@ function deriveCalendarMeetings(u: any): CalendarMeeting[] {
     type: 'seminar' | 'session',
     status: 'pending' | 'confirmed',
     withLabel: string,
-    routing: Partial<Pick<CalendarMeeting, 'groupId' | 'peerUserId' | 'peerName' | 'peerImage' | 'recurrence' | 'seriesId'>> = {},
+    routing: Partial<Pick<CalendarMeeting, 'groupId' | 'peerUserId' | 'peerName' | 'peerImage' | 'recurrence' | 'seriesId' | 'details'>> = {},
   ) => {
     // start may be an ISO string (Date field) or epoch ms — new Date handles both.
     const d = new Date(start);
@@ -140,6 +153,7 @@ function deriveCalendarMeetings(u: any): CalendarMeeting[] {
           groupId: g?._id != null ? String(g._id) : undefined,
           recurrence: g?.isRecurring ? g?.recurrenceFrequency ?? null : null,
           seriesId: g?.seriesId ? String(g.seriesId) : null,
+          details: meetingDetailsLine(g),
         },
       );
     } else if (g?.type === 'individual' && gStatus !== 'cancelled') {
@@ -156,6 +170,7 @@ function deriveCalendarMeetings(u: any): CalendarMeeting[] {
           peerUserId: g?.admin?._id != null ? String(g.admin._id) : undefined,
           peerName: host,
           peerImage: g?.admin?.image ?? null,
+          details: meetingDetailsLine(g),
         },
       );
     }
@@ -253,6 +268,7 @@ function deriveModalSessions(
         when: Number.isNaN(at) ? 'TBD' : modalWhen(at),
         location: 'Online · WisdomLinked Room',
         with: g?.admin?.username || g?.admin?.email || 'Your mentor',
+        peerUserId: String(g?.admin?._id ?? g?.admin ?? ''),
         payable,
         price: typeof g?.price === 'number' ? g.price : undefined,
       };
@@ -273,6 +289,7 @@ function deriveModalSessions(
         when: Number.isNaN(at) ? 'TBD' : modalWhen(at),
         location: 'Online · WisdomLinked Room',
         with: e?.expert?.username || e?.expert?.email || 'Your mentor',
+        peerUserId: String(e?.expert?._id ?? e?.expert ?? ''),
       };
     });
 
@@ -295,9 +312,9 @@ function deriveUpcomingSessions(u: any): {
   let nextSeminar: UpcomingSession | null = null;
   let nextOneToOne: UpcomingSession | null = null;
 
-  const considerOneToOne = (title: string, startAt: number) => {
-    if (!nextOneToOne || startAt < nextOneToOne.startAt) {
-      nextOneToOne = { title, startAt };
+  const considerOneToOne = (session: UpcomingSession) => {
+    if (!nextOneToOne || session.startAt < nextOneToOne.startAt) {
+      nextOneToOne = session;
     }
   };
 
@@ -305,14 +322,20 @@ function deriveUpcomingSessions(u: any): {
     const startAt = new Date(g?.start).getTime();
     if (Number.isNaN(startAt) || startAt <= now) continue;
 
+    const status = (g?.status || '').toLowerCase();
     const isSeminar = g?.type === 'seminar';
     const isSession =
-      g?.type === 'individual' && (g?.status || '').toLowerCase() === 'active';
+      g?.type === 'individual' && (status === 'active' || status === 'pending');
 
     if (isSeminar && (!nextSeminar || startAt < nextSeminar.startAt)) {
-      nextSeminar = { title: g?.name || 'Seminar', startAt };
+      nextSeminar = { title: g?.name || 'Seminar', startAt, id: String(g?._id ?? '') };
     } else if (isSession) {
-      considerOneToOne(g?.name || '1:1 session', startAt);
+      considerOneToOne({
+        title: g?.name || '1:1 session',
+        startAt,
+        peerUserId: String(g?.admin?._id ?? g?.admin ?? ''),
+        pending: status === 'pending',
+      });
     }
   }
 
@@ -320,8 +343,15 @@ function deriveUpcomingSessions(u: any): {
   for (const e of u?.events || []) {
     const startAt = new Date(e?.start).getTime();
     if (Number.isNaN(startAt) || startAt <= now) continue;
-    if (!CONFIRMED_EVENT.includes((e?.status || '').toLowerCase())) continue;
-    considerOneToOne(e?.title || '1:1 session', startAt);
+    const status = (e?.status || '').toLowerCase();
+    const isPending = status === 'pending';
+    if (!CONFIRMED_EVENT.includes(status) && !isPending) continue;
+    considerOneToOne({
+      title: e?.title || '1:1 session',
+      startAt,
+      peerUserId: String(e?.expert?._id ?? e?.expert ?? ''),
+      pending: isPending,
+    });
   }
 
   return { nextSeminar, nextOneToOne };
@@ -348,6 +378,13 @@ export default function StudentDashboard() {
   const [paymentReturnSuccess, setPaymentReturnSuccess] = useState(false);
   const [bookingReturnError, setBookingReturnError] = useState<string | null>(null);
   const [paySuccessToast, setPaySuccessToast] = useState(false);
+  const [seatRequestToast, setSeatRequestToast] = useState(false);
+  useEffect(() => {
+    if (!seatRequestToast) return;
+    const t = window.setTimeout(() => setSeatRequestToast(false), 6000);
+    return () => window.clearTimeout(t);
+  }, [seatRequestToast]);
+
   useEffect(() => {
     if (!paySuccessToast) return;
     const t = window.setTimeout(() => setPaySuccessToast(false), 4000);
@@ -439,10 +476,14 @@ export default function StudentDashboard() {
         if (cancelled) return;
         clearBookingQuery();
         if (result.ok) {
-          if (result.userDetails) {
+          if ('userDetails' in result && result.userDetails) {
             dispatch({ type: 'updateUserDetails', payload: result.userDetails });
           }
-          if (result.kind === 'accept') {
+          if (result.kind === 'seminar-request') {
+            // Full seminar — held payment recorded, awaiting host approval.
+            setActiveItem('seminars');
+            setSeatRequestToast(true);
+          } else if (result.kind === 'accept') {
             // Paid an expert-proposed 1:1 — refresh bookings and land on the calendar.
             dispatch(updateMe());
             setActiveItem('calendar');
@@ -534,6 +575,56 @@ export default function StudentDashboard() {
     kind: 'seminar' | 'oneToOne';
     status: 'booked' | 'pending';
   } | null>(null);
+
+  // Overflow seminar seat requests the student has submitted that await the host's
+  // decision — surfaced as the "Pending seminars" card + modal.
+  const [mySeatRequests, setMySeatRequests] = useState<any[]>([]);
+
+  const loadMySeatRequests = useCallback(async () => {
+    const res: any = await getMySeatRequests();
+    setMySeatRequests(Array.isArray(res?.result) ? res.result : []);
+  }, []);
+
+  useEffect(() => {
+    if (String(userDetails?.role).toLowerCase() !== 'customer') return;
+    void loadMySeatRequests();
+  }, [userDetails?.role, userDetails?._id, loadMySeatRequests]);
+
+  const pendingSeatRequests = useMemo(
+    () => mySeatRequests.filter((r: any) => (r?.status || '').toLowerCase() === 'pending'),
+    [mySeatRequests],
+  );
+
+  const pendingSeatSessions = useMemo<UpcomingModalSession[]>(
+    () =>
+      pendingSeatRequests.map((r: any) => {
+        const seminar = r?.groupChat || {};
+        const start = seminar?.start ? new Date(seminar.start).getTime() : Date.now();
+        const when = seminar?.start
+          ? new Date(seminar.start).toLocaleString(undefined, {
+              dateStyle: 'medium',
+              timeStyle: 'short',
+            })
+          : '—';
+        const metaLines: string[] = ['Awaiting host approval'];
+        if (typeof r?.amount === 'number' && r.amount > 0) {
+          metaLines.push(`$${(r.amount / 100).toFixed(2)} on hold`);
+        }
+        if (r?.decisionDeadline) {
+          metaLines.push(`Decision by ${new Date(r.decisionDeadline).toLocaleString()}`);
+        }
+        return {
+          id: String(r._id),
+          title: seminar?.name || 'Seminar',
+          at: start,
+          when,
+          location: 'Online · WisdomLinked',
+          with: 'Seminar seat request',
+          metaLines,
+        };
+      }),
+    [pendingSeatRequests],
+  );
   const [payTarget, setPayTarget] = useState<{
     groupChatId: string;
     price: number;
@@ -574,8 +665,20 @@ export default function StudentDashboard() {
           onClick: () =>
             setUpcomingModal({ kind: 'oneToOne', status: 'pending' }),
         },
+        {
+          id: 'pending-seminars',
+          label: 'Pending seminars',
+          value: pendingSeatRequests.length,
+          icon: AlertCircle,
+          color: 'neutral' as const,
+          tooltip: 'Seminar seat requests awaiting host approval',
+          onClick: () => {
+            void loadMySeatRequests();
+            setUpcomingModal({ kind: 'seminar', status: 'pending' });
+          },
+        },
       ] as const,
-    [sessionStats],
+    [sessionStats, pendingSeatRequests.length, loadMySeatRequests],
   );
 
   const calendarMeetings = useMemo(
@@ -974,6 +1077,31 @@ export default function StudentDashboard() {
     setActiveItem('chat');
   };
 
+  const openSeminarChat = (seminarId?: string) => {
+    if (seminarId) {
+      localStorage.setItem('wl_open_seminar_id', seminarId);
+      window.dispatchEvent(new Event('wl-open-chat-nav'));
+    }
+    setActiveItem('chat');
+  };
+
+  const openMentorDm = (peerUserId?: string, title?: string) => {
+    if (peerUserId) {
+      localStorage.setItem(
+        'wl_open_dm_userid',
+        JSON.stringify({ id: peerUserId, title: title || 'Your mentor', image: null }),
+      );
+      window.dispatchEvent(new Event('wl-open-chat-nav'));
+    }
+    setActiveItem('chat');
+  };
+
+  const handleUpcomingJoinSession = (session: UpcomingModalSession) => {
+    setUpcomingModal(null);
+    if (upcomingModal?.kind === 'seminar') openSeminarChat(session.id);
+    else openMentorDm(session.peerUserId, session.with);
+  };
+
   return (
     <div className="min-h-screen bg-[#f8f7f4] text-[14px]">
       <div className="flex min-h-screen">
@@ -1107,8 +1235,10 @@ export default function StudentDashboard() {
                     <UpcomingCountdownCard
                       nextSeminar={nextSeminar}
                       nextOneToOne={nextOneToOne}
-                      onJoinSeminar={() => setActiveItem('join-meeting')}
-                      onJoinOneToOne={() => setActiveItem('join-meeting')}
+                      onJoinSeminar={() => openSeminarChat(nextSeminar?.id)}
+                      onJoinOneToOne={() =>
+                        openMentorDm(nextOneToOne?.peerUserId, nextOneToOne?.title)
+                      }
                     />
                   </div>
                 </div>
@@ -1118,8 +1248,10 @@ export default function StudentDashboard() {
                 <UpcomingCountdownCard
                   nextSeminar={nextSeminar}
                   nextOneToOne={nextOneToOne}
-                  onJoinSeminar={() => setActiveItem('join-meeting')}
-                  onJoinOneToOne={() => setActiveItem('join-meeting')}
+                  onJoinSeminar={() => openSeminarChat(nextSeminar?.id)}
+                  onJoinOneToOne={() =>
+                    openMentorDm(nextOneToOne?.peerUserId, nextOneToOne?.title)
+                  }
                 />
               </div>
 
@@ -1145,20 +1277,37 @@ export default function StudentDashboard() {
             </button>
           </div>
         )}
+        {seatRequestToast && (
+          <div className="fixed right-4 top-4 z-[70] flex items-start gap-2 rounded-xl border border-amber-200 bg-white px-4 py-3 shadow-lg">
+            <span className="mt-0.5 flex h-6 w-6 items-center justify-center rounded-full bg-amber-100 text-amber-700">⏳</span>
+            <span className="max-w-xs text-sm font-semibold text-[#1A3A4A]">
+              Seat requested — your card is authorized but not charged. You'll only be charged if the host approves.
+            </span>
+            <button
+              type="button"
+              onClick={() => setSeatRequestToast(false)}
+              className="ml-1 text-slate-400 hover:text-slate-600"
+              aria-label="Dismiss"
+            >
+              ✕
+            </button>
+          </div>
+        )}
         {upcomingModal && (
           <UpcomingSessionModal
             kind={upcomingModal.kind}
             status={upcomingModal.status}
-            sessions={deriveModalSessions(
-              userDetails,
-              upcomingModal.kind,
-              upcomingModal.status,
-            )}
+            sessions={
+              upcomingModal.kind === 'seminar' && upcomingModal.status === 'pending'
+                ? pendingSeatSessions
+                : deriveModalSessions(
+                    userDetails,
+                    upcomingModal.kind,
+                    upcomingModal.status,
+                  )
+            }
             onClose={() => setUpcomingModal(null)}
-            onJoin={() => {
-              setUpcomingModal(null);
-              setActiveItem('join-meeting');
-            }}
+            onJoinSession={handleUpcomingJoinSession}
             onPay={(session) => {
               setUpcomingModal(null);
               setPayTarget({

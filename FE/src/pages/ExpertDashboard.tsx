@@ -20,7 +20,14 @@ import Sidebar from '../components/layout/Sidebar';
 import TopBar from '../components/layout/TopBar';
 import type { TopBarNotificationItem } from '../components/layout/TopBar';
 import StudentSettings from '../components/dashboard/StudentSettings';
-import { getAllCommunityChats, profileImageFetch, acceptIndividualAppointment } from '../api/api';
+import {
+  getAllCommunityChats,
+  profileImageFetch,
+  acceptIndividualAppointment,
+  getSeminarSeatRequests,
+  approveSeminarSeatRequest,
+  rejectSeminarSeatRequest,
+} from '../api/api';
 import { resolveProfileImageSrc } from '../utils/profileImage';
 import { fetchDmUnreadSnapshot } from '../api/chatApi';
 import { useAppSelector } from '../store';
@@ -29,6 +36,7 @@ import { showErrorAlert, showSuccessAlert, showWarningAlert } from '../actions/a
 import { patchDmUnreadRid, setChosenGroupChatDetails, setDmUnreadByRidBulk } from '../actions/chatActions';
 import { connectToRC, onSubscriptionChanged, subscribeToRoom } from '../services/rcRealtime';
 import { useEndMeetingOnReturn } from '../hooks/useEndMeetingOnReturn';
+import { canonicalLabelsFromMixedServiceEntries } from '../constants/serviceOptions';
 
 
 // Reuse existing expert dashboard feature pages (legacy MUI pages)
@@ -46,6 +54,74 @@ import Chatbot from '../components/chatbot';
 import UpcomingSessionModal, {
   type UpcomingModalSession,
 } from '../components/dashboard/UpcomingSessionModal';
+
+function coerceBriefValue(value: any): string {
+  if (Array.isArray(value)) return value.filter(Boolean).join(', ').trim();
+  if (value == null) return '';
+  return String(value).trim();
+}
+
+/** The student on a 1:1 booking may be the creator or the sole participant. */
+function pickStudent(g: any): any {
+  const candidates = [g?.createdBy, ...(Array.isArray(g?.participants) ? g.participants : [])];
+  const withBackground = candidates.find(
+    (p: any) =>
+      p &&
+      typeof p === 'object' &&
+      (p.degreeSought || p.intendedIntake || p.currentUniversity || p.gpa || p.researchInterests || p.country),
+  );
+  return withBackground || (typeof g?.createdBy === 'object' ? g.createdBy : null);
+}
+
+function buildStudentBrief(g: any): Array<{ label: string; value: string }> {
+  const student = pickStudent(g) || {};
+  const purpose =
+    coerceBriefValue(g?.purposeOther) ||
+    canonicalLabelsFromMixedServiceEntries(g?.services).join(', ');
+  return ([
+    ['Degree sought', coerceBriefValue(student.degreeSought)],
+    ['Intended intake', coerceBriefValue(student.intendedIntake)],
+    ['Current university', coerceBriefValue(student.currentUniversity)],
+    ['GPA', coerceBriefValue(student.gpa)],
+    ['Country', coerceBriefValue(student.country)],
+    ['Major', coerceBriefValue(student.customKeywords)],
+    ['Research interests', coerceBriefValue(student.researchInterests)],
+    ['Purpose', purpose],
+    ['Note', coerceBriefValue(g?.description)],
+  ] as Array<[string, string]>)
+    .filter(([, value]) => value.length > 0)
+    .map(([label, value]) => ({ label, value }));
+}
+
+function mapSeatRequestToModalSession(r: any): UpcomingModalSession {
+  const seminar = r?.groupChat || {};
+  const start = seminar?.start ? new Date(seminar.start).getTime() : Date.now();
+  const when = seminar?.start
+    ? new Date(seminar.start).toLocaleString(undefined, {
+        dateStyle: 'medium',
+        timeStyle: 'short',
+      })
+    : '—';
+  const metaLines: string[] = [];
+  if (typeof r?.amount === 'number' && r.amount > 0) {
+    metaLines.push(`$${(r.amount / 100).toFixed(2)} held`);
+  } else {
+    metaLines.push('Free seminar');
+  }
+  if (r?.decisionDeadline) {
+    metaLines.push(`Decide by ${new Date(r.decisionDeadline).toLocaleString()}`);
+  }
+  return {
+    id: String(r._id),
+    title: seminar?.name || 'Seminar',
+    at: start,
+    when,
+    location: 'Online · WisdomLinked',
+    with: r?.customer?.username || r?.customer?.email || 'Student',
+    seatRequestId: String(r._id),
+    metaLines,
+  };
+}
 
 function mapExpertGroupToModalSession(g: any): UpcomingModalSession {
   const start = g?.start ? new Date(g.start).getTime() : Date.now();
@@ -77,6 +153,7 @@ function mapExpertGroupToModalSession(g: any): UpcomingModalSession {
     when,
     location: 'Online · WisdomLinked',
     with: withLabel,
+    studentBrief: g?.type === 'individual' ? buildStudentBrief(g) : undefined,
   };
 }
 
@@ -111,6 +188,20 @@ export default function ExpertDashboard() {
     kind: 'seminar' | 'oneToOne';
     status: 'booked' | 'pending';
   } | null>(null);
+
+  // Overflow seminar seat requests (students who registered past the cap) awaiting
+  // the host's approval — surfaced as the "Pending seminars" card + modal.
+  const [seatRequests, setSeatRequests] = useState<any[]>([]);
+
+  const loadSeatRequests = useCallback(async () => {
+    const res: any = await getSeminarSeatRequests();
+    setSeatRequests(Array.isArray(res?.result) ? res.result : []);
+  }, []);
+
+  useEffect(() => {
+    if (String(userDetails?.role).toLowerCase() !== 'expert') return;
+    void loadSeatRequests();
+  }, [userDetails?.role, userDetails?._id, loadSeatRequests]);
 
   const userDetailsRef = useRef(userDetails);
   userDetailsRef.current = userDetails;
@@ -508,13 +599,41 @@ export default function ExpertDashboard() {
       const list = status === 'booked' ? bookedSessions : pendingSessions;
       return list.map(mapExpertGroupToModalSession);
     }
+    if (status === 'pending') {
+      return seatRequests.map(mapSeatRequestToModalSession);
+    }
     return acceptedSeminars.map(mapExpertGroupToModalSession);
   }, [
     expertUpcomingModal,
     bookedSessions,
     pendingSessions,
     acceptedSeminars,
+    seatRequests,
   ]);
+
+  const handleSeatDecision = useCallback(
+    async (session: UpcomingModalSession, action: 'accept' | 'decline') => {
+      const requestId = session.seatRequestId;
+      if (!requestId) return;
+      try {
+        const res: any = action === 'accept'
+          ? await approveSeminarSeatRequest(requestId)
+          : await rejectSeminarSeatRequest(requestId);
+        if (res === false || res?.status === 'FAIL' || res?.error) {
+          dispatch(showErrorAlert(res?.error || 'Could not update the seat request.'));
+          return;
+        }
+        setSeatRequests(prev => prev.filter(r => String(r._id) !== String(requestId)));
+        dispatch(
+          showSuccessAlert(action === 'accept' ? 'Seat request accepted.' : 'Seat request declined.'),
+        );
+        dispatch(updateMe() as any);
+      } catch {
+        dispatch(showErrorAlert('Could not update the seat request. Please try again.'));
+      }
+    },
+    [dispatch],
+  );
 
   const handleExpertJoinSession = (session: UpcomingModalSession) => {
     const id = session.id;
@@ -633,6 +752,17 @@ export default function ExpertDashboard() {
               onClick={() =>
                 setExpertUpcomingModal({ kind: 'oneToOne', status: 'pending' })
               }
+            />
+            <StatCard
+              label="Pending seminars"
+              value={seatRequests.length}
+              icon={AlertCircle}
+              color="warning"
+              tooltip="Seat requests past capacity awaiting your approval"
+              onClick={() => {
+                void loadSeatRequests();
+                setExpertUpcomingModal({ kind: 'seminar', status: 'pending' });
+              }}
             />
           </div>
         </section>
@@ -807,6 +937,16 @@ export default function ExpertDashboard() {
             onJoinSession={
               expertUpcomingModal.status === 'booked'
                 ? handleExpertJoinSession
+                : undefined
+            }
+            onAcceptSeatRequest={
+              expertUpcomingModal.kind === 'seminar' && expertUpcomingModal.status === 'pending'
+                ? (s) => handleSeatDecision(s, 'accept')
+                : undefined
+            }
+            onDeclineSeatRequest={
+              expertUpcomingModal.kind === 'seminar' && expertUpcomingModal.status === 'pending'
+                ? (s) => handleSeatDecision(s, 'decline')
                 : undefined
             }
           />

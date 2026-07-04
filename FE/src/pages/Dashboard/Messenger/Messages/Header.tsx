@@ -28,6 +28,7 @@ import EditIcon from '@mui/icons-material/Edit';
 import { fetchDirectCallHistory, startMeeting } from "../../../../api/chatApi";
 import { fetchChatUserProfile } from "../../../../api/chatApi";
 import {doLeftSeminar, doUpdateProfile, proposeIndividualAppointment, shareMeetingViaEmail} from "../../../../api/api";
+import { proposedTimeNeedsOverride, hasBookingConflict, presetAvailabilityRanges } from "../../../../utils/proposeAvailability";
 import { normalizeExpertPrice } from "../../../../utils/schedulingSlots";
 import {SetLoadingStatus, SetTotalTimeSpent} from "../../../../actions/appActions";
 import { updateMe } from "../../../../actions/authActions";
@@ -101,6 +102,7 @@ const MessagesHeader = ({ events, openCalendarModal, openSeminarModal, openEditS
     const [proposePrice, setProposePrice] = useState('');
     const [proposePriceEdited, setProposePriceEdited] = useState(false);
     const [proposeCustomerEmail, setProposeCustomerEmail] = useState<string | null>(null);
+    const [outsideConfirm, setOutsideConfirm] = useState(false);
 
     const proposeSuggestedPrice = (durationMin: number) => {
         const rate = normalizeExpertPrice((userDetails as any)?.price) ?? 0;
@@ -392,13 +394,14 @@ const MessagesHeader = ({ events, openCalendarModal, openSeminarModal, openEditS
         setProposePrice(String(proposeSuggestedPrice(30)));
         setProposePriceEdited(false);
         setProposeCustomerEmail(null);
+        setOutsideConfirm(false);
         setProposeOpen(true);
         void fetchChatUserProfile(String(chosenChatDetails.userId)).then((r: any) => {
             if (r?.success && r?.result?.email) setProposeCustomerEmail(String(r.result.email));
         });
     };
 
-    const submitPropose = async () => {
+    const submitPropose = async (override = false) => {
         if (!proposeTitle.trim()) {
             dispatch(showWarningAlert("Add a title for the session."));
             return;
@@ -427,6 +430,19 @@ const MessagesHeader = ({ events, openCalendarModal, openSeminarModal, openEditS
             return;
         }
 
+        if (hasBookingConflict(userDetails, start, end)) {
+            setOutsideConfirm(false);
+            dispatch(showWarningAlert("You already have a session at this time. Pick another time."));
+            return;
+        }
+
+        const needsOverride = proposedTimeNeedsOverride(userDetails, start, end);
+        if (needsOverride && !override) {
+            setOutsideConfirm(true);
+            return;
+        }
+        setOutsideConfirm(false);
+
         setProposeBusy(true);
         SetLoadingStatus(true);
         const res: any = await proposeIndividualAppointment({
@@ -436,6 +452,7 @@ const MessagesHeader = ({ events, openCalendarModal, openSeminarModal, openEditS
             duration: proposeDuration,
             price,
             customer: proposeCustomerEmail,
+            overrideAvailability: needsOverride,
         });
         SetLoadingStatus(false);
         setProposeBusy(false);
@@ -1111,7 +1128,7 @@ const MessagesHeader = ({ events, openCalendarModal, openSeminarModal, openEditS
                                                 type="date"
                                                 value={proposeDate}
                                                 min={new Date().toLocaleDateString("en-CA")}
-                                                onChange={(e) => setProposeDate(e.target.value)}
+                                                onChange={(e) => { setProposeDate(e.target.value); setOutsideConfirm(false); }}
                                                 className={`w-full rounded-lg border px-3 py-2 text-sm outline-none ${theme === "light" ? "border-slate-200 bg-white text-slate-900 focus:ring-2 focus:ring-[#234C6A]" : "border-slate-700 bg-[#1c1c1c] text-white"}`}
                                             />
                                         </div>
@@ -1120,11 +1137,26 @@ const MessagesHeader = ({ events, openCalendarModal, openSeminarModal, openEditS
                                             <input
                                                 type="time"
                                                 value={proposeStart}
-                                                onChange={(e) => setProposeStart(e.target.value)}
+                                                onChange={(e) => { setProposeStart(e.target.value); setOutsideConfirm(false); }}
                                                 className={`w-full rounded-lg border px-3 py-2 text-sm outline-none ${theme === "light" ? "border-slate-200 bg-white text-slate-900 focus:ring-2 focus:ring-[#234C6A]" : "border-slate-700 bg-[#1c1c1c] text-white"}`}
                                             />
                                         </div>
                                     </div>
+                                    {proposeDate ? (
+                                        <div className={`rounded-lg px-3 py-2 text-[11px] ${theme === "light" ? "bg-slate-50 text-slate-600" : "bg-[#1c1c1c] text-slate-300"}`}>
+                                            {(() => {
+                                                const ranges = presetAvailabilityRanges(userDetails, proposeDate);
+                                                return ranges.length ? (
+                                                    <>
+                                                        <span className="font-semibold">Your preset availability this day:</span>{" "}
+                                                        {ranges.join(", ")}
+                                                    </>
+                                                ) : (
+                                                    <span>You have no preset availability on this day.</span>
+                                                );
+                                            })()}
+                                        </div>
+                                    ) : null}
                                     <div>
                                         <label className="mb-1 block text-xs font-semibold">Duration</label>
                                         <select
@@ -1132,6 +1164,7 @@ const MessagesHeader = ({ events, openCalendarModal, openSeminarModal, openEditS
                                             onChange={(e) => {
                                                 const next = Number(e.target.value);
                                                 setProposeDuration(next);
+                                                setOutsideConfirm(false);
                                                 if (!proposePriceEdited) setProposePrice(String(proposeSuggestedPrice(next)));
                                             }}
                                             className={`w-full rounded-lg border px-3 py-2 text-sm outline-none ${theme === "light" ? "border-slate-200 bg-white text-slate-900 focus:ring-2 focus:ring-[#234C6A]" : "border-slate-700 bg-[#1c1c1c] text-white"}`}
@@ -1160,14 +1193,40 @@ const MessagesHeader = ({ events, openCalendarModal, openSeminarModal, openEditS
                                     </div>
                                 </div>
 
-                                <button
-                                    type="button"
-                                    disabled={proposeBusy}
-                                    onClick={submitPropose}
-                                    className="mt-5 w-full rounded-lg bg-[#234C6A] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#1b3c53] disabled:opacity-60"
-                                >
-                                    {proposeBusy ? "Sending…" : "Send proposal"}
-                                </button>
+                                {outsideConfirm ? (
+                                    <div className={`mt-5 rounded-lg border p-3 ${theme === "light" ? "border-amber-300 bg-amber-50" : "border-amber-500/40 bg-amber-500/10"}`}>
+                                        <p className={`text-xs ${theme === "light" ? "text-amber-800" : "text-amber-200"}`}>
+                                            Your chosen time is outside your preset availability. Click <span className="font-semibold">Yes</span> to continue, or <span className="font-semibold">No</span> to re-select your time slot.
+                                        </p>
+                                        <div className="mt-3 flex gap-2">
+                                            <button
+                                                type="button"
+                                                disabled={proposeBusy}
+                                                onClick={() => setOutsideConfirm(false)}
+                                                className={`flex-1 rounded-lg border px-4 py-2 text-sm font-semibold disabled:opacity-60 ${theme === "light" ? "border-slate-300 text-slate-700 hover:bg-slate-100" : "border-slate-600 text-slate-200 hover:bg-slate-700/40"}`}
+                                            >
+                                                No, re-select
+                                            </button>
+                                            <button
+                                                type="button"
+                                                disabled={proposeBusy}
+                                                onClick={() => submitPropose(true)}
+                                                className="flex-1 rounded-lg bg-[#234C6A] px-4 py-2 text-sm font-semibold text-white hover:bg-[#1b3c53] disabled:opacity-60"
+                                            >
+                                                {proposeBusy ? "Sending…" : "Yes, continue"}
+                                            </button>
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <button
+                                        type="button"
+                                        disabled={proposeBusy}
+                                        onClick={() => submitPropose()}
+                                        className="mt-5 w-full rounded-lg bg-[#234C6A] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#1b3c53] disabled:opacity-60"
+                                    >
+                                        {proposeBusy ? "Sending…" : "Send proposal"}
+                                    </button>
+                                )}
                             </div>
                         </div>
                     </OverlayPortal> :

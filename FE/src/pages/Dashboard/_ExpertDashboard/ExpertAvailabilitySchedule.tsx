@@ -7,9 +7,6 @@ import { useDispatch } from 'react-redux';
 
 import { isSlotUnavailable, localizer } from '../../../actions/common';
 import {
-  cancelIndividualAppointment,
-  doCancelInvitation,
-  doDeclineEvent,
   doGetMyEvents,
   doSetExpertBlockedBookingDates,
   doSetExpertBlockedBookingSlots,
@@ -317,34 +314,6 @@ const ExpertAvailabilitySchedule: React.FC = () => {
     setCalView('week');
   };
 
-  const isFuture = (end: Date) => end > new Date();
-
-  const cancelItem = async (item: any) => {
-    if (!isFuture(new Date(item.end))) return;
-
-    const canCancel =
-      item.type === 'event' ||
-      (item.type === 'individual' && item.status === 'pending');
-    if (!canCancel) return;
-
-    setScheduleBusy(true);
-    try {
-      if (item.type === 'event') {
-        if (item.paidBy === 'none') {
-          await doCancelInvitation(item._id);
-        } else {
-          await doDeclineEvent(item._id);
-        }
-      } else if (item.type === 'individual' && item.status === 'pending') {
-        await cancelIndividualAppointment(item._id);
-      }
-      await (dispatch as any)(updateMe());
-      await loadEvents({ manageBusy: false });
-      if (selectedDay) openDay(selectedDay);
-    } finally {
-      setScheduleBusy(false);
-    }
-  };
 
   const toggleBlockSelectedDay = async () => {
     if (!selectedDay) return;
@@ -360,7 +329,6 @@ const ExpertAvailabilitySchedule: React.FC = () => {
       ? blockedDates.filter((x) => x !== ymd)
       : [...blockedDates, ymd].sort();
     await persistBlockedDates(next);
-    setDayModalOpen(false);
   };
 
   const describeSession = (ev: any): string => {
@@ -375,8 +343,11 @@ const ExpertAvailabilitySchedule: React.FC = () => {
     return ev?.title || ev?.name || 'Session';
   };
 
+  const blockedForSelectedDay =
+    selectedDay != null && blockedDates.includes(ymdInExpertTz(selectedDay));
+
   // Hour tiles for the open day: the expert's recurring availability for that date,
-  // each tagged as blocked (per-date override) and/or booked (overlaps a session).
+  // each tagged as blocked (whole-day or per-slot override) and/or booked (overlaps a session).
   const dayTiles = useMemo(() => {
     if (!selectedDay) return [] as Array<{
       hour: number;
@@ -393,7 +364,7 @@ const ExpertAvailabilitySchedule: React.FC = () => {
     const durMs = 60 * 60 * 1000;
     return hours.map((hour) => {
       const idxA = hour * 2;
-      const blocked = pendingBlockedHours.includes(hour);
+      const blocked = blockedForSelectedDay || pendingBlockedHours.includes(hour);
       const startMs = viewerSlotToInstant(selectedDay, idxA, expertTimeZone).getTime();
       let sessionLabel: string | null = null;
       for (const ev of dayEvents) {
@@ -412,7 +383,12 @@ const ExpertAvailabilitySchedule: React.FC = () => {
       }
       return { hour, blocked, booked: !!sessionLabel, sessionLabel };
     });
-  }, [selectedDay, pendingBlockedHours, userDetails, expertTimeZone, dayEvents]);
+  }, [selectedDay, pendingBlockedHours, userDetails, expertTimeZone, dayEvents, blockedForSelectedDay]);
+
+  const allAvailableBlocked = useMemo(() => {
+    const nonBooked = dayTiles.filter((t) => !t.booked);
+    return nonBooked.length > 0 && nonBooked.every((t) => pendingBlockedHours.includes(t.hour));
+  }, [dayTiles, pendingBlockedHours]);
 
   const toggleSlotSelected = (hour: number) => {
     setPendingBlockedHours((prev) =>
@@ -448,17 +424,6 @@ const ExpertAvailabilitySchedule: React.FC = () => {
     await persistBlockedSlots(nextMap);
     setDayModalOpen(false);
   };
-
-  const selectedDayHasSessions = useMemo(
-    () =>
-      dayEvents.some(
-        (ev: any) => ev?.status !== 'declined' && isFuture(new Date(ev.end)),
-      ),
-    [dayEvents],
-  );
-
-  const blockedForSelectedDay =
-    selectedDay != null && blockedDates.includes(ymdInExpertTz(selectedDay));
 
   return (
     <div id="expert-availability-schedule" className="mt-8 space-y-4 scroll-mt-24">
@@ -591,7 +556,7 @@ const ExpertAvailabilitySchedule: React.FC = () => {
               })}
             </h3>
             <p className="mt-1 text-xs text-slate-500">
-              Cancel future sessions or block the entire day for new bookings.
+              Block the entire day or specific time slots so students cannot book.
             </p>
 
             <div className="mt-4 max-h-56 space-y-2 overflow-y-auto">
@@ -621,17 +586,6 @@ const ExpertAvailabilitySchedule: React.FC = () => {
                         <span className="capitalize">{ev.type}</span>
                       </div>
                     </div>
-                    {isFuture(new Date(ev.end)) &&
-                    (ev.type === 'event' ||
-                      (ev.type === 'individual' && ev.status === 'pending')) ? (
-                      <button
-                        type="button"
-                        onClick={() => cancelItem(ev)}
-                        className="shrink-0 rounded-lg border border-rose-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-rose-700 hover:bg-rose-50"
-                      >
-                        Cancel
-                      </button>
-                    ) : null}
                   </div>
                 ))
               )}
@@ -653,7 +607,9 @@ const ExpertAvailabilitySchedule: React.FC = () => {
                           Available times
                         </h4>
                         <span className="text-[11px] text-slate-500">
-                          Select times to mark unavailable
+                          {blockedForSelectedDay
+                            ? 'Whole day marked unavailable'
+                            : 'Select times to mark unavailable'}
                         </span>
                       </div>
                       <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
@@ -677,30 +633,38 @@ const ExpertAvailabilitySchedule: React.FC = () => {
                               key={tile.hour}
                               type="button"
                               aria-pressed={tile.blocked}
-                              disabled={isPastDay || scheduleBusy}
+                              disabled={isPastDay || scheduleBusy || blockedForSelectedDay}
                               onClick={() => toggleSlotSelected(tile.hour)}
                               title={
-                                tile.blocked
+                                blockedForSelectedDay
+                                  ? 'The whole day is marked unavailable'
+                                  : tile.blocked
                                   ? 'Selected as unavailable — tap to keep it available'
                                   : 'Available — tap to mark unavailable'
                               }
                               className={[
                                 'rounded-lg border px-2 py-1.5 text-center text-[11px] font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50',
                                 tile.blocked
-                                  ? 'border-[#234C6A] bg-[#234C6A] text-white'
+                                  ? 'border-rose-300 bg-rose-50 text-rose-700'
                                   : 'border-slate-200 bg-white text-slate-700 hover:border-[#234C6A] hover:text-[#234C6A]',
                               ].join(' ')}
                             >
-                              {formatHourRange(tile.hour)}
+                              <span className={tile.blocked ? 'line-through decoration-rose-500/70' : ''}>
+                                {formatHourRange(tile.hour)}
+                              </span>
+                              {tile.blocked ? (
+                                <span className="mt-0.5 block text-[9px] font-semibold uppercase tracking-wide text-rose-500">
+                                  Unavailable
+                                </span>
+                              ) : null}
                             </button>
                           );
                         })}
                       </div>
                       <p className="mt-2 text-[11px] text-slate-500">
                         Times with a booking (amber) can't be blocked — cancel the
-                        session first. Selected times (highlighted) are saved as
-                        unavailable and won't be offered to students on this date when
-                        you tap Save.
+                        session first. Struck-through times are saved as unavailable and
+                        won't be offered to students on this date when you tap Save.
                       </p>
                     </div>
                   ) : null}
@@ -709,9 +673,7 @@ const ExpertAvailabilitySchedule: React.FC = () => {
                     <button
                       type="button"
                       onClick={toggleBlockSelectedDay}
-                      disabled={
-                        isPastDay || (!blockedForSelectedDay && selectedDayHasSessions)
-                      }
+                      disabled={isPastDay || scheduleBusy || (!blockedForSelectedDay && allAvailableBlocked)}
                       className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm font-semibold text-slate-800 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
                     >
                       <Ban className="h-4 w-4" aria-hidden />
@@ -720,9 +682,9 @@ const ExpertAvailabilitySchedule: React.FC = () => {
                         : 'Mark whole day unavailable for bookings'}
                     </button>
                     <p className="mt-2 text-[11px] text-slate-500">
-                      {!blockedForSelectedDay && selectedDayHasSessions
-                        ? 'Cancel the sessions above before blocking the whole day.'
-                        : 'Blocked days apply to new student bookings. Existing appointments stay listed above until cancelled.'}
+                      {!blockedForSelectedDay && allAvailableBlocked
+                        ? 'Every available time is already marked unavailable — save to apply, or unblock a slot first.'
+                        : 'Blocked days apply to new student bookings only. Any sessions already booked on this day stay scheduled.'}
                     </p>
                   </div>
                 </>

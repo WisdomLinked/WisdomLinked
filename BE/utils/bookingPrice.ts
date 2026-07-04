@@ -64,3 +64,14 @@ export function assertPaymentMatchesExpected(
         receiptNumber: charge?.receipt_number ?? null,
     };
 }
+
+export type BookingIntentInput =
+    | { kind: 'oneToOne'; durationMinutes: number; hourlyRateDollars: number }
+    | { kind: 'groupChat'; priceDollars: unknown };
+
+export function expectedBookingIntentCents(input: BookingIntentInput): number {
+    if (input.kind === 'oneToOne') {
+        return computeBookingPriceCents(input.durationMinutes, input.hourlyRateDollars);
+    }
+    return dollarsToCents(input.priceDollars);
+}

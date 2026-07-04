@@ -5,6 +5,7 @@ import {
   dollarsToCents,
   extractHourlyRate,
   assertPaymentMatchesExpected,
+  expectedBookingIntentCents,
 } from "../utils/bookingPrice";
 
 describe("computeBookingPriceCents", () => {
@@ -56,6 +57,40 @@ describe("dollarsToCents", () => {
     assert.equal(dollarsToCents(9.99), 999);
     assert.equal(dollarsToCents(0), 0);
     assert.equal(dollarsToCents(undefined), 0);
+  });
+});
+
+describe("expectedBookingIntentCents", () => {
+  // The PaymentIntent amount is derived server-side from booking identity, never
+  // from a client-supplied dollar figure. These two branches must match the price
+  // math run at booking completion so the intent and the final check always agree.
+  it("1:1 path: computes rate x duration from the expert's hourly rate", () => {
+    assert.equal(
+      expectedBookingIntentCents({ kind: "oneToOne", durationMinutes: 60, hourlyRateDollars: 75 }),
+      computeBookingPriceCents(60, 75),
+    );
+    assert.equal(
+      expectedBookingIntentCents({ kind: "oneToOne", durationMinutes: 30, hourlyRateDollars: 75 }),
+      3750,
+    );
+  });
+
+  it("groupChat path: uses the stored price and does NOT recompute from an hourly rate", () => {
+    // Seminars and expert propose-and-pay both carry an approved custom price on
+    // the GroupChat; recomputing from a rate would reject the expert's own price.
+    assert.equal(
+      expectedBookingIntentCents({ kind: "groupChat", priceDollars: 40 }),
+      dollarsToCents(40),
+    );
+    assert.equal(expectedBookingIntentCents({ kind: "groupChat", priceDollars: 9.99 }), 999);
+  });
+
+  it("treats missing/zero prices as the free path (0 cents)", () => {
+    assert.equal(expectedBookingIntentCents({ kind: "groupChat", priceDollars: undefined }), 0);
+    assert.equal(
+      expectedBookingIntentCents({ kind: "oneToOne", durationMinutes: 60, hourlyRateDollars: 0 }),
+      0,
+    );
   });
 });
 

@@ -14,7 +14,7 @@ import React, {
   import { showErrorAlert, showSuccessAlert, showWarningAlert } from '../../../actions/alertActions';
   import { updateMe } from '../../../actions/authActions';
   import { SERVICE_LABELS } from '../../../constants/serviceOptions';
-  import { MAJOR_OPTIONS_WITH_OTHER, OTHER_MAJOR } from '../../../constants/majorOptions';
+  import MajorSelect from '../../../components/MajorSelect';
   import DatePickerField from '../../../components/ui/DatePickerField';
   import TimePickerField from '../../../components/ui/TimePickerField';
   import SelectField from '../../../components/ui/SelectField';
@@ -45,6 +45,7 @@ import React, {
     description: string;
     majors: string[];
     services: string[];
+    purposeOther: string;
     coverImage: File | null;
     tags: string[];
     date: string;
@@ -66,6 +67,7 @@ import React, {
       description?: string;
       keywords?: string[];
       services?: string[];
+      purposeOther?: string;
       start?: string | Date;
       end?: string | Date;
       duration?: number;
@@ -102,6 +104,7 @@ import React, {
     description: '',
     majors: [],
     services: [],
+    purposeOther: '',
     coverImage: null,
     tags: [],
     date: '',
@@ -121,8 +124,6 @@ import React, {
     { id: 2, label: 'Date & Time', description: 'Schedule when this seminar will run.' },
     { id: 3, label: 'Set Price', description: 'Configure pricing and capacity.' },
   ];
-  
-  const MAJORS_OPTIONS: string[] = MAJOR_OPTIONS_WITH_OTHER;
   
   const CURRENCY_OPTIONS: string[] = ['USD', 'EUR', 'GBP', 'INR'];
   
@@ -163,8 +164,6 @@ import React, {
       timezone: detectUserTimeZone(),
     }));
     const [openDropdown, setOpenDropdown] = useState<DropdownId>(null);
-    const [showCustomMajorInput, setShowCustomMajorInput] = useState<boolean>(false);
-    const [customMajor, setCustomMajor] = useState<string>('');
     const [tagInput, setTagInput] = useState<string>('');
     const [errors, setErrors] = useState<SeminarErrors>({});
     const [coverPreview, setCoverPreview] = useState<string | null>(null);
@@ -271,6 +270,7 @@ import React, {
         description: selectedSeminar.description || '',
         majors: keywordServiceToStrings(selectedSeminar.keywords as unknown[] | undefined),
         services: keywordServiceToStrings(selectedSeminar.services as unknown[] | undefined),
+        purposeOther: selectedSeminar.purposeOther || '',
         price: selectedSeminar.price ?? '',
         isRecurring: !!selectedSeminar.isRecurring,
         recurrenceFrequency: selectedSeminar.recurrenceFrequency || 'weekly',
@@ -335,16 +335,6 @@ import React, {
       updateFormField(field, nextValues as SeminarFormData[MultiSelectField]);
     };
 
-    const addCustomMajor = () => {
-      const v = customMajor.trim();
-      if (!v) return;
-      if (!formData.majors.some((m) => m.toLowerCase() === v.toLowerCase())) {
-        handleMultiSelect('majors', v);
-      }
-      setCustomMajor('');
-      setShowCustomMajorInput(false);
-    };
-  
     const handleTagAdd = (e: KeyboardEvent<HTMLInputElement>) => {
       if (e.key !== 'Enter' && e.key !== ',') return;
       e.preventDefault();
@@ -497,6 +487,7 @@ import React, {
           description: formData.description.trim(),
           image: imageUrl || undefined,
           services: formData.services,
+          purposeOther: formData.purposeOther.trim(),
           keywords: formData.majors,
           start: timeInfo?.start,
           end: timeInfo?.end,
@@ -679,91 +670,12 @@ import React, {
             className="space-y-1.5"
             onClick={(e) => e.stopPropagation()}
           >
-              <label className="block text-sm font-medium text-gray-700">
-                Relevant Majors <span className="text-red-400">*</span>
-              </label>
-              <div className="relative">
-                <button
-                  type="button"
-                  onClick={() =>
-                    setOpenDropdown((prev) => (prev === 'majors' ? null : 'majors'))
-                  }
-                className="flex w-full items-center justify-between rounded-lg border border-gray-200 px-3 py-2.5 text-left text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#234C6A] focus:border-transparent"
-                >
-                  <span className={formData.majors.length ? 'text-gray-800' : 'text-gray-400'}>
-                    {formData.majors.length ? 'Selected majors' : 'Select majors…'}
-                  </span>
-                  <span className="text-xs text-gray-400">
-                    {formData.majors.length ? `${formData.majors.length} selected` : ''}
-                  </span>
-                </button>
-                {openDropdown === 'majors' && (
-                  <div className="absolute z-20 mt-1 max-h-48 w-full overflow-auto rounded-lg border border-gray-200 bg-white py-1 text-sm shadow-lg">
-                    {MAJORS_OPTIONS.filter((option) => option !== OTHER_MAJOR).map((option) => {
-                      const checked = formData.majors.includes(option);
-                      return (
-                        <label
-                          key={option}
-                          className="flex cursor-pointer items-center gap-2 px-3 py-1.5 hover:bg-gray-50"
-                        >
-                        <input
-                          type="checkbox"
-                          checked={checked}
-                          onChange={() => handleMultiSelect('majors', option)}
-                          className="h-3.5 w-3.5 rounded border-gray-300 text-[#234C6A] focus:ring-[#234C6A]"
-                        />
-                          <span className="text-xs text-gray-700">{option}</span>
-                        </label>
-                      );
-                    })}
-                    {showCustomMajorInput ? (
-                      <div className="flex items-center gap-1 px-3 py-2">
-                        <input
-                          type="text"
-                          autoFocus
-                          value={customMajor}
-                          onChange={(e) => setCustomMajor(e.target.value)}
-                          onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addCustomMajor(); } }}
-                          placeholder="Type your branch"
-                          className="min-w-0 flex-1 rounded-md border border-gray-200 px-2 py-1 text-xs text-gray-800 outline-none focus:ring-2 focus:ring-[#234C6A]/40"
-                        />
-                        <button
-                          type="button"
-                          onClick={addCustomMajor}
-                          className="rounded-md bg-[#234C6A] px-2 py-1 text-[11px] font-semibold text-white hover:bg-[#1b3c53]"
-                        >
-                          Add
-                        </button>
-                      </div>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => setShowCustomMajorInput(true)}
-                        className="w-full px-3 py-1.5 text-left text-xs font-medium text-[#234C6A] hover:bg-gray-50"
-                      >
-                        {OTHER_MAJOR} (add your own)
-                      </button>
-                    )}
-                  </div>
-                )}
-              </div>
-              <div className="mt-2 flex flex-wrap gap-1.5">
-              {formData.majors.map((major) => (
-                <span
-                  key={major}
-                  className="inline-flex items-center gap-1 rounded-full bg-[#e8f0f8] px-2.5 py-1 text-xs text-[#234C6A]"
-                >
-                  {major}
-                  <button
-                    type="button"
-                    onClick={() => handleMultiSelect('majors', major)}
-                    className="text-[11px] text-[#234C6A]/70 hover:text-[#1b3c53]"
-                  >
-                    ×
-                  </button>
-                </span>
-              ))}
-              </div>
+              <MajorSelect
+                label="Relevant Majors"
+                required
+                value={formData.majors}
+                onChange={(next) => updateFormField('majors', next)}
+              />
             </div>
   
             {/* Services */}
@@ -828,9 +740,22 @@ import React, {
                 </span>
               ))}
               </div>
+              <div className="mt-2 space-y-1.5">
+                <label className="block text-sm font-medium text-gray-700">
+                  Other purpose <span className="font-normal text-gray-400">(optional)</span>
+                </label>
+                <input
+                  type="text"
+                  value={formData.purposeOther}
+                  maxLength={100}
+                  onChange={(e) => updateFormField('purposeOther', e.target.value)}
+                  placeholder="Add a purpose not listed above"
+                  className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-800 outline-none focus:border-[#234C6A]"
+                />
+              </div>
             </div>
           </div>
-  
+
           {/* Tags */}
           <div>
             <div className="mb-1.5 flex items-center justify-between">

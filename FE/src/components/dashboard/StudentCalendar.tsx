@@ -15,6 +15,8 @@ export type Meeting = {
   time: string; // HH:MM
   with: string;
   location: string;
+  /** Short "duration · purpose" line shown on the meeting card. */
+  details?: string;
   type: 'seminar' | 'session';
   recurrence?: 'weekly' | 'biweekly' | 'monthly' | null;
   seriesId?: string | null;
@@ -440,6 +442,9 @@ export default function StudentCalendar({
                       <span className="truncate">{m.location}</span>
                     </div>
                     <p className="mt-0.5 text-[11px] text-slate-500">{m.with}</p>
+                    {m.details ? (
+                      <p className="mt-0.5 text-[11px] font-medium text-[#234C6A]">{m.details}</p>
+                    ) : null}
                     {isExpert ? (
                       <div className="mt-2 flex justify-end">
                         <span className="text-[11px] font-semibold text-[#234C6A]">

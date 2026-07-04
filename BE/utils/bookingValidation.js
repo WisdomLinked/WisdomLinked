@@ -143,9 +143,11 @@ function assertDurationAllowed(expertDoc, duration) {
 }
 
 async function assertBookingSlotValid(expertDoc, start, end, options = {}) {
-  assertNotBlockedDate(expertDoc, start);
-  assertNotBlockedSlot(expertDoc, start, end);
-  assertSlotsInTimeSlots(expertDoc, start, end);
+  if (!options.allowOutsideAvailability) {
+    assertNotBlockedDate(expertDoc, start);
+    assertNotBlockedSlot(expertDoc, start, end);
+    assertSlotsInTimeSlots(expertDoc, start, end);
+  }
   const expertId = expertDoc._id || expertDoc.id;
   if (!expertId) {
     throw new Error("Expert not found");

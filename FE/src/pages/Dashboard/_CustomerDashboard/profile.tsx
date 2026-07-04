@@ -11,7 +11,7 @@ import {
     saveProfilePhotoFile,
 } from "../../../utils/profileImageUpload";
 import ShowFieldError from "../../../components/ShowFieldError";
-import MultiSelectionWithInputTag from "../../../components/MultiSelectionWithInputTag";
+import MajorSelect from "../../../components/MajorSelect";
 import SelectionWithCheckBox from "../../../components/SelectionWithCheckBox";
 import { checkTitleNameInvalid } from "../../../actions/common";
 import { useNavigate } from "react-router-dom";
@@ -27,6 +27,23 @@ import {
     hasCustomerProfilePhotoChanges,
     hasCustomerProfileUnsavedChanges,
 } from "../../../utils/profileFormChanges";
+
+const toMajorStrings = (u: any): string[] => {
+    const fromKeywords = (Array.isArray(u?.keywords) ? u.keywords : []).map((k: any) =>
+        typeof k === 'string' ? k : String(k?.value ?? k?.label ?? k?.name ?? ''),
+    );
+    const fromCustom = Array.isArray(u?.customKeywords) ? u.customKeywords : [];
+    const seen = new Set<string>();
+    const out: string[] = [];
+    for (const raw of [...fromKeywords, ...fromCustom]) {
+        const v = String(raw || '').trim();
+        const key = v.toLowerCase();
+        if (!v || seen.has(key)) continue;
+        seen.add(key);
+        out.push(v);
+    }
+    return out;
+};
 
 const CustomerProfile = ({
     userDetails,
@@ -49,7 +66,6 @@ const CustomerProfile = ({
 
 
     const [name, set_name] = useState(userDetails.username)
-    const [keywords, set_keywords] = useState([])
     const [services, set_services] = useState([])
     const [selectedKeywords, set_selectedKeywords] = useState<Array<any>>([])
     const [selectedServices, set_selectedServices] = useState<Array<any>>([])
@@ -70,7 +86,7 @@ const CustomerProfile = ({
             set_imageSrc(originalImageSrc)
         }
         set_name(userDetails.username)
-        set_selectedKeywords(userDetails.keywords)
+        set_selectedKeywords(toMajorStrings(userDetails))
         set_selectedServices(userDetails.services)
         set_country(userDetails.country)
         set_state(userDetails.state)
@@ -92,7 +108,7 @@ const CustomerProfile = ({
             set_image(null);
         }
         set_name(userDetails.username)
-        set_selectedKeywords(userDetails.keywords)
+        set_selectedKeywords(toMajorStrings(userDetails))
         set_selectedServices(userDetails.services)
         set_country(userDetails.country)
         set_state(userDetails.state)
@@ -187,7 +203,6 @@ const CustomerProfile = ({
     const getKeywordsAndServices = async () => {
         const response: any = await doGetKeywordsAndServices();
         if (response) {
-            set_keywords(response.keywords || [])
             set_services(filterApiServicesToCanonical(response.services || []))
         }
     }
@@ -324,10 +339,10 @@ const CustomerProfile = ({
                         />
 
                         <div className="mt-6 text-grey text-[12px] leading-[19px]">Majors</div>
-                        <MultiSelectionWithInputTag
-                            options={keywords}
-                            selectedOptions={selectedKeywords}
-                            set_selectedOptions={set_selectedKeywords}
+                        <MajorSelect
+                            label=""
+                            value={selectedKeywords}
+                            onChange={set_selectedKeywords}
                             placeholder="Select majors"
                         />
 

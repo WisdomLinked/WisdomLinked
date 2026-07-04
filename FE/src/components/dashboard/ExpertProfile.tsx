@@ -18,6 +18,7 @@ import FilePreviewModal from '../../pages/Dashboard/FilePreviewModal';
 import { hasResumeForPreview, resolveResumePublicUrl } from '../../utils/resumeUrl';
 import StudentExpertBookingPicker from './StudentExpertBookingPicker';
 import StudentBookingCheckout from './StudentBookingCheckout';
+import { purposeOptionsFromServices, PURPOSE_OTHER } from '../../constants/serviceOptions';
 import { createGroupChatByUser, getExpertById, profileImageFetch, registerForSeminar } from '../../api/api';
 import { resolveProfileImageSrc } from '../../utils/profileImage';
 import { normalizeExpertPrice } from '../../utils/schedulingSlots';
@@ -120,6 +121,42 @@ export default function ExpertProfile({
 
   const [bookingStep, setBookingStep] = useState<BookingStep>('pick');
   const [bookingError, setBookingError] = useState<string | null>(null);
+
+  const BOOKING_TITLE_MIN = 10;
+  const BOOKING_TITLE_MAX = 60;
+  const BOOKING_NOTE_MIN = 50;
+  const BOOKING_NOTE_MAX = 500;
+  const [bookingTitle, setBookingTitle] = useState('');
+  const [bookingNote, setBookingNote] = useState('');
+  const [bookingPurpose, setBookingPurpose] = useState('');
+  const [bookingPurposeOther, setBookingPurposeOther] = useState('');
+
+  const purposeOptions = useMemo(
+    () => purposeOptionsFromServices(expertDetails?.services),
+    [expertDetails?.services],
+  );
+
+  // The purpose stored on the booking: the free-text value when "Other" is picked,
+  // otherwise the chosen service label.
+  const resolvedPurpose = useMemo(
+    () => (bookingPurpose === PURPOSE_OTHER ? bookingPurposeOther.trim() : bookingPurpose),
+    [bookingPurpose, bookingPurposeOther],
+  );
+
+  const bookingFormError = useMemo(() => {
+    const titleLen = bookingTitle.trim().length;
+    if (titleLen < BOOKING_TITLE_MIN || titleLen > BOOKING_TITLE_MAX) {
+      return `Title must be between ${BOOKING_TITLE_MIN} and ${BOOKING_TITLE_MAX} characters.`;
+    }
+    const noteLen = bookingNote.trim().length;
+    if (noteLen > 0 && (noteLen < BOOKING_NOTE_MIN || noteLen > BOOKING_NOTE_MAX)) {
+      return `Note must be between ${BOOKING_NOTE_MIN} and ${BOOKING_NOTE_MAX} characters.`;
+    }
+    if (bookingPurpose === PURPOSE_OTHER && !bookingPurposeOther.trim()) {
+      return 'Please describe your purpose.';
+    }
+    return null;
+  }, [bookingTitle, bookingNote, bookingPurpose, bookingPurposeOther]);
   const [bookingViewerTz, setBookingViewerTz] = useState(
     () => userDetails?.timeZone || detectUserTimeZone(),
   );
@@ -158,6 +195,11 @@ export default function ExpertProfile({
     },
     [],
   );
+
+  const handleFilterSlotConfirmed = useCallback(() => {
+    setBookingError(null);
+    setBookingStep('review');
+  }, []);
 
   const clearPickedSlot = useCallback(() => {
     setPickedStart(null);
@@ -211,7 +253,10 @@ export default function ExpertProfile({
       setBookingError(null);
       try {
         const response = await createGroupChatByUser({
-          name: bookingEventTitle,
+          name: bookingTitle.trim() || bookingEventTitle,
+          description: bookingNote.trim(),
+          services: resolvedPurpose ? [resolvedPurpose] : [],
+          purposeOther: bookingPurpose === PURPOSE_OTHER ? bookingPurposeOther.trim() : '',
           start: pickedStart.toISOString(),
           end: pickedEnd.toISOString(),
           duration: pickedDuration,
@@ -219,9 +264,16 @@ export default function ExpertProfile({
           expert: expertDetails?._id ?? mentor.id,
           payment_intent: paymentIntentId,
         });
-        if (response?.result) {
-          dispatch({ type: 'updateUserDetails', payload: response.result });
+        // createGroupChatByUser resolves to `false`/`{status:'FAIL'}` on failure
+        // (it never throws) — only advance to success when the session persisted.
+        if (!response || response === true || (response as any)?.status === 'FAIL' || !(response as any)?.result) {
+          setBookingError(
+            (response as any)?.error ||
+              'Your payment went through, but we could not confirm the session. Please check your bookings or contact support before rebooking.',
+          );
+          return;
         }
+        dispatch({ type: 'updateUserDetails', payload: (response as any).result });
         setBookingStep('success');
       } catch (err: unknown) {
         const message = err instanceof Error ? err.message : 'Booking failed. Please try again.';
@@ -235,6 +287,11 @@ export default function ExpertProfile({
       pickedEnd,
       pickedDuration,
       bookingEventTitle,
+      bookingTitle,
+      bookingNote,
+      bookingPurpose,
+      bookingPurposeOther,
+      resolvedPurpose,
       oneToOneSessionPrice,
       expertDetails?._id,
       mentor.id,
@@ -540,6 +597,11 @@ export default function ExpertProfile({
                           {item.recurrenceLabel}
                         </span>
                       ) : null}
+                      {item.isFull && seminarBookingSuccessId !== item.id ? (
+                        <span className="ml-auto inline-flex items-center rounded-full bg-rose-100 px-2 py-0.5 text-[10px] font-semibold text-rose-700">
+                          Full
+                        </span>
+                      ) : null}
                     </div>
                     <p className="mt-1 text-[11px] text-[#7A7A72]">
                       {item.recurrenceLabel ? 'Next: ' : ''}{item.date}{item.time ? ` · ${item.time}` : ''}
@@ -547,25 +609,12 @@ export default function ExpertProfile({
                     <p className="mt-2 text-[12px] font-semibold text-[#1A3A4A]">
                       {item.price > 0 ? `$${item.price.toFixed(2)}` : 'Free'}
                     </p>
-                    <div className="mt-2">
-                      {seminarBookingSuccessId === item.id ? (
-                        <div className="rounded-[4px] bg-emerald-50 px-3 py-2 text-[11px] font-semibold text-emerald-800">
-                          You're enrolled in this seminar.
-                        </div>
-                      ) : item.isFull ? (
-                        <div className="flex items-center justify-between rounded-[4px] bg-rose-50 px-3 py-2">
-                          <span className="text-[11px] font-semibold text-rose-700">
-                            Seminar full
-                          </span>
-                          <button
-                            type="button"
-                            disabled
-                            className="cursor-not-allowed rounded-[4px] bg-slate-200 px-3 py-1.5 text-[11px] font-semibold text-slate-500"
-                          >
-                            Full
-                          </button>
-                        </div>
-                      ) : (
+                    {seminarBookingSuccessId === item.id ? (
+                      <div className="mt-2 rounded-[4px] bg-emerald-50 px-3 py-2 text-[11px] font-semibold text-emerald-800">
+                        You're enrolled in this seminar.
+                      </div>
+                    ) : item.isFull ? null : (
+                      <div className="mt-2">
                         <button
                           type="button"
                           onClick={() => {
@@ -584,8 +633,8 @@ export default function ExpertProfile({
                         >
                           Book the session
                         </button>
-                      )}
-                    </div>
+                      </div>
+                    )}
                   </div>
                   ))
                 )}
@@ -797,10 +846,7 @@ export default function ExpertProfile({
                         allowedDurationMinutes={offeredDurations}
                         confirmedSlotStart={pickedStart}
                         onViewerTimeZoneChange={setBookingViewerTz}
-                        onFilterSlotConfirmed={() => {
-                          setBookingError(null);
-                          setBookingStep('review');
-                        }}
+                        onFilterSlotConfirmed={handleFilterSlotConfirmed}
                       />
                     )}
                   </div>
@@ -905,10 +951,80 @@ export default function ExpertProfile({
                 </dd>
               </div>
             </dl>
+
+            <div className="space-y-3 border-t border-[#E5E2DB] pt-3">
+              <div>
+                <div className="flex items-center justify-between">
+                  <label className="text-[13px] font-semibold text-[#1A3A4A]">
+                    Title <span className="font-normal text-[#7A7A72]">(subject of the meeting)</span>
+                  </label>
+                  <span className="text-[11px] text-[#7A7A72]">
+                    {bookingTitle.trim().length}/{BOOKING_TITLE_MAX}
+                  </span>
+                </div>
+                <input
+                  type="text"
+                  value={bookingTitle}
+                  maxLength={BOOKING_TITLE_MAX}
+                  onChange={(e) => setBookingTitle(e.target.value)}
+                  placeholder="e.g. PhD Application Advice"
+                  className="mt-1 w-full rounded-[4px] border border-[#E5E2DB] px-3 py-2 text-[13px] text-[#1A3A4A] outline-none focus:border-[#1A3A4A]"
+                />
+              </div>
+
+              <div>
+                <label className="text-[13px] font-semibold text-[#1A3A4A]">Purpose</label>
+                <select
+                  value={bookingPurpose}
+                  onChange={(e) => setBookingPurpose(e.target.value)}
+                  className="mt-1 w-full rounded-[4px] border border-[#E5E2DB] bg-white px-3 py-2 text-[13px] text-[#1A3A4A] outline-none focus:border-[#1A3A4A]"
+                >
+                  <option value="">Select a purpose…</option>
+                  {purposeOptions.map((opt) => (
+                    <option key={opt} value={opt}>{opt}</option>
+                  ))}
+                </select>
+                {bookingPurpose === PURPOSE_OTHER ? (
+                  <input
+                    type="text"
+                    value={bookingPurposeOther}
+                    maxLength={100}
+                    onChange={(e) => setBookingPurposeOther(e.target.value)}
+                    placeholder="Describe your purpose"
+                    className="mt-2 w-full rounded-[4px] border border-[#E5E2DB] px-3 py-2 text-[13px] text-[#1A3A4A] outline-none focus:border-[#1A3A4A]"
+                  />
+                ) : null}
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between">
+                  <label className="text-[13px] font-semibold text-[#1A3A4A]">
+                    Note <span className="font-normal text-[#7A7A72]">(optional)</span>
+                  </label>
+                  <span className="text-[11px] text-[#7A7A72]">
+                    {bookingNote.trim().length}/{BOOKING_NOTE_MAX}
+                  </span>
+                </div>
+                <textarea
+                  value={bookingNote}
+                  maxLength={BOOKING_NOTE_MAX}
+                  onChange={(e) => setBookingNote(e.target.value)}
+                  rows={3}
+                  placeholder="Add a brief note so the expert can prepare (e.g. goals, background, questions)."
+                  className="mt-1 w-full resize-y rounded-[4px] border border-[#E5E2DB] px-3 py-2 text-[13px] text-[#1A3A4A] outline-none focus:border-[#1A3A4A]"
+                />
+              </div>
+
+              {bookingFormError ? (
+                <p className="text-[12px] text-red-600">{bookingFormError}</p>
+              ) : null}
+            </div>
+
             <button
               type="button"
+              disabled={!!bookingFormError}
               onClick={() => setBookingStep('pay')}
-              className="inline-flex w-full items-center justify-center rounded-[4px] bg-[#1A3A4A] px-4 py-3 text-[13px] font-semibold text-white hover:bg-[#122635]"
+              className="inline-flex w-full items-center justify-center rounded-[4px] bg-[#1A3A4A] px-4 py-3 text-[13px] font-semibold text-white hover:bg-[#122635] disabled:opacity-50"
             >
               Continue to payment
             </button>
@@ -936,7 +1052,10 @@ export default function ExpertProfile({
             price={oneToOneSessionPrice}
             returnUrl={studentBookingReturnUrl}
             pendingDetails={{
-              name: bookingEventTitle,
+              name: bookingTitle.trim() || bookingEventTitle,
+              description: bookingNote.trim(),
+              services: resolvedPurpose ? [resolvedPurpose] : [],
+              purposeOther: bookingPurpose === PURPOSE_OTHER ? bookingPurposeOther.trim() : '',
               start: pickedStart!.toISOString(),
               end: pickedEnd!.toISOString(),
               duration: pickedDuration,

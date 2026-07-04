@@ -67,7 +67,7 @@ export function PaymentHistoryTable({ payments, loading, error, stickyHeader = f
       <table className="w-full text-left">
         <thead className={`bg-slate-50 border-b border-[#e8e6e1]${stickyHeader ? ' sticky top-0' : ''}`}>
           <tr>
-            <th className={TH}>Receipt #</th>
+            <th className={TH}>Receipt</th>
             <th className={TH}>Date</th>
             <th className={TH}>Amount</th>
             <th className={TH}>Purpose</th>
@@ -98,9 +98,7 @@ export function PaymentHistoryTable({ payments, loading, error, stickyHeader = f
               return (
                 <tr key={p._id} className="hover:bg-slate-50/50">
                   <td className="px-4 py-3 text-sm font-medium text-slate-700">
-                    {p.receiptNumber ? (
-                      p.receiptNumber
-                    ) : p.receiptUrl ? (
+                    {p.receiptUrl ? (
                       <a
                         href={p.receiptUrl}
                         target="_blank"

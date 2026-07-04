@@ -19,8 +19,21 @@ import { updateMe } from "../../../actions/authActions";
 import { useNavigate } from "react-router-dom";
 import { openExpertChatWithUser } from "../../../utils/expertOpenChatWithUser";
 import { toYMDLocal } from "../../../utils/schedulingTimezone";
+import { canonicalLabelsFromMixedServiceEntries } from "../../../constants/serviceOptions";
 
 const pad2 = (n: number) => String(n).padStart(2, "0");
+
+/** "45 min · Study Abroad" line for a session/seminar card. */
+const meetingDetailsLine = (e: any): string => {
+  const parts: string[] = [];
+  if (e?.duration) parts.push(`${e.duration} min`);
+  const purpose =
+    (typeof e?.purposeOther === "string" && e.purposeOther.trim()) ||
+    canonicalLabelsFromMixedServiceEntries(e?.services)[0] ||
+    "";
+  if (purpose) parts.push(purpose);
+  return parts.join(" · ");
+};
 
 const ExpertCalendar: React.FC = () => {
   const {
@@ -63,6 +76,7 @@ const ExpertCalendar: React.FC = () => {
           time: `${pad2(start.getHours())}:${pad2(start.getMinutes())}`,
           with: withLabel,
           location: "Online · WisdomLinked",
+          details: meetingDetailsLine(e),
           type: isSeminar ? "seminar" : "session",
           status,
           recurrence: isSeminar && e.isRecurring ? e.recurrenceFrequency ?? null : null,
@@ -377,6 +391,17 @@ const ExpertCalendar: React.FC = () => {
               participants={selectedEvent?.participants}
               keywords={selectedEvent?.keywords}
               services={selectedEvent?.services}
+              purposeOther={selectedEvent?.purposeOther}
+              type={selectedEvent?.type}
+              student={
+                selectedEvent?.type === "individual"
+                  ? (Array.isArray(selectedEvent?.participants)
+                      ? selectedEvent.participants.find(
+                          (p: any) => String(p?._id ?? p) !== String(selectedEvent?.admin?._id ?? selectedEvent?.admin),
+                        )
+                      : undefined)
+                  : undefined
+              }
               isRecurring={selectedEvent?.isRecurring}
               recurrenceFrequency={selectedEvent?.recurrenceFrequency}
               theme="light"

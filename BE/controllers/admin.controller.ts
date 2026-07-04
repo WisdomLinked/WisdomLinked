@@ -8,6 +8,8 @@ const PaymentHistory = require("../models/PaymentHistory");
 const Conversation = require("../models/Conversation");
 const GroupChat = require("../models/GroupChat");
 const Keyword = require("../models/Keyword");
+const MajorConsolidation = require("../models/MajorConsolidation");
+const { classifyMajors } = require("../utils/majorClassification");
 const ContactedUs = require("../models/ContactedUs");
 const PendingUser = require("../models/PendingUser");
 const PendingLogin = require("../models/PendingLogin");
@@ -209,23 +211,9 @@ const updateProfileOfUser = async (req, res) => {
             updates.status = status
         }
         if (keywords) {
-            let _keywords = []
-            for (let i = 0; i < keywords.length; i++) {
-                if (keywords[i].new) {
-                    const sameKeywordExist = await Keyword.find({ value: String(keywords[i].value) })
-                    if (sameKeywordExist.length) {
-                        _keywords.push(sameKeywordExist[0]._id)
-                    } else {
-                        const temp = new Keyword(keywords[i])
-                        const newKeyword = await temp.save()
-                        _keywords.push(newKeyword._id)
-                    }
-                } else {
-                    _keywords.push(keywords[i]._id)
-                }
-            }
-            console.log('[filterUsers keywords]', keywords, _keywords)
-            updates.keywords = keywords
+            const { officialIds, customValues } = await classifyMajors(keywords)
+            updates.keywords = officialIds
+            updates.customKeywords = customValues
         }
         if (country) {
             updates.country = country
@@ -838,21 +826,11 @@ const registerUserByAdmin = async (req, res) => {
         let resumeUrl = file ? await uploadFileToS3(file, 'resumes') : '';
 
         let _keywords = []
+        let _customKeywords = []
         if (keywords?.length) {
-            for (let i = 0; i < keywords.length; i++) {
-                if (keywords[i].new) {
-                    const sameKeywordExist = await Keyword.find({ value: String(keywords[i].value) })
-                    if (sameKeywordExist.length) {
-                        _keywords.push(sameKeywordExist[0]._id)
-                    } else {
-                        const temp = new Keyword(keywords[i])
-                        const newKeyword = await temp.save()
-                        _keywords.push(newKeyword._id)
-                    }
-                } else {
-                    _keywords.push(keywords[i]._id)
-                }
-            }
+            const classified = await classifyMajors(keywords)
+            _keywords = classified.officialIds
+            _customKeywords = classified.customValues
         }
 
         // encrypt password
@@ -865,6 +843,7 @@ const registerUserByAdmin = async (req, res) => {
             description,
             services,
             keywords: _keywords,
+            customKeywords: _customKeywords,
             country,
             state,
             city,
@@ -893,21 +872,45 @@ const registerUserByAdmin = async (req, res) => {
 
 const getCustomMajors = async (req: Request, res: Response) => {
     try {
-        const rows = await User.aggregate([
+        const pipeline = (idField: string) => [
             { $unwind: "$customKeywords" },
             { $match: { customKeywords: { $type: "string", $ne: "" } } },
             {
                 $group: {
                     _id: { $toLower: { $trim: { input: "$customKeywords" } } },
                     value: { $first: "$customKeywords" },
-                    count: { $sum: 1 },
-                    userIds: { $addToSet: "$_id" },
+                    owners: { $addToSet: `$${idField}` },
                 },
             },
-            { $project: { _id: 0, value: 1, count: { $size: "$userIds" } } },
-            { $sort: { count: -1, value: 1 } },
+        ];
+
+        const [userRows, seminarRows] = await Promise.all([
+            User.aggregate(pipeline("_id")),
+            GroupChat.aggregate(pipeline("_id")),
         ]);
-        return res.status(200).json({ result: rows });
+
+        const merged = new Map<string, { value: string; userCount: number; seminarCount: number }>();
+        const absorb = (rows: any[], field: "userCount" | "seminarCount") => {
+            for (const row of rows) {
+                const key = String(row._id);
+                const entry = merged.get(key) || { value: row.value, userCount: 0, seminarCount: 0 };
+                entry[field] += Array.isArray(row.owners) ? row.owners.length : 0;
+                merged.set(key, entry);
+            }
+        };
+        absorb(userRows, "userCount");
+        absorb(seminarRows, "seminarCount");
+
+        const result = Array.from(merged.values())
+            .map((e) => ({
+                value: e.value,
+                count: e.userCount + e.seminarCount,
+                userCount: e.userCount,
+                seminarCount: e.seminarCount,
+            }))
+            .sort((a, b) => b.count - a.count || a.value.localeCompare(b.value));
+
+        return res.status(200).json({ result });
     } catch (err) {
         console.log(err);
         return res.status(500).send(safeErrorMessage(err));
@@ -925,32 +928,80 @@ const consolidateMajors = async (req: Request, res: Response) => {
         if (!target) {
             return res.status(400).json({ status: "FAIL", error: "A target official major is required." });
         }
-        if (!sources.length) {
-            return res.status(400).json({ status: "FAIL", error: "Select at least one custom major to consolidate." });
-        }
+
+        const performedBy = (req as any).user?.email || (req as any).user?.username || "";
 
         let keyword = await Keyword.findOne({
             value: { $regex: new RegExp(`^${escapeRegExp(target)}$`, "i") },
         });
+        const targetCreated = !keyword;
         if (!keyword) {
             keyword = await Keyword.create({ value: target, label: target });
         }
 
-        const sourceRegexes = sources.map((s: string) => new RegExp(`^${escapeRegExp(s)}$`, "i"));
-        const affected = await User.find({ customKeywords: { $in: sourceRegexes } }).select("_id keywords customKeywords");
+        if (!sources.length) {
+            await MajorConsolidation.create({
+                target: keyword.value,
+                targetCreated,
+                sources: [],
+                usersUpdated: 0,
+                seminarsUpdated: 0,
+                performedBy,
+            });
+            return res.status(200).json({
+                result: { major: keyword.value, usersUpdated: 0, seminarsUpdated: 0 },
+            });
+        }
 
-        for (const user of affected) {
+        const matchesSource = (c: string) =>
+            sources.some((s: string) => s.toLowerCase() === String(c).trim().toLowerCase());
+        const sourceRegexes = sources.map((s: string) => new RegExp(`^${escapeRegExp(s)}$`, "i"));
+
+        const affectedUsers = await User.find({ customKeywords: { $in: sourceRegexes } }).select("_id keywords customKeywords");
+        for (const user of affectedUsers) {
             const hasKeyword = (user.keywords || []).some((k: any) => String(k) === String(keyword._id));
             if (!hasKeyword) user.keywords.push(keyword._id);
-            user.customKeywords = (user.customKeywords || []).filter(
-                (c: string) => !sources.some((s: string) => s.toLowerCase() === String(c).trim().toLowerCase()),
-            );
+            user.customKeywords = (user.customKeywords || []).filter((c: string) => !matchesSource(c));
             await user.save();
         }
 
-        return res.status(200).json({
-            result: { major: keyword.value, usersUpdated: affected.length },
+        const affectedSeminars = await GroupChat.find({ customKeywords: { $in: sourceRegexes } }).select("_id keywords customKeywords");
+        for (const seminar of affectedSeminars) {
+            const hasKeyword = (seminar.keywords || []).some((k: any) => String(k) === String(keyword._id));
+            if (!hasKeyword) seminar.keywords.push(keyword._id);
+            seminar.customKeywords = (seminar.customKeywords || []).filter((c: string) => !matchesSource(c));
+            await seminar.save();
+        }
+
+        await MajorConsolidation.create({
+            target: keyword.value,
+            targetCreated,
+            sources,
+            usersUpdated: affectedUsers.length,
+            seminarsUpdated: affectedSeminars.length,
+            performedBy,
         });
+
+        return res.status(200).json({
+            result: {
+                major: keyword.value,
+                usersUpdated: affectedUsers.length,
+                seminarsUpdated: affectedSeminars.length,
+            },
+        });
+    } catch (err) {
+        console.log(err);
+        return res.status(500).send(safeErrorMessage(err));
+    }
+};
+
+const getMajorConsolidations = async (req: Request, res: Response) => {
+    try {
+        const rows = await MajorConsolidation.find()
+            .sort({ createdAt: -1 })
+            .limit(200)
+            .lean();
+        return res.status(200).json({ result: rows });
     } catch (err) {
         console.log(err);
         return res.status(500).send(safeErrorMessage(err));
@@ -961,6 +1012,7 @@ module.exports = {
     filterUsers,
     getCustomMajors,
     consolidateMajors,
+    getMajorConsolidations,
     getFullUserDataByEmail,
     updateProfileOfUser,
     filterPaymentHistories,

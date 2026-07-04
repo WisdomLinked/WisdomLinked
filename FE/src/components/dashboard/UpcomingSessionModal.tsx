@@ -15,6 +15,13 @@ export type UpcomingModalSession = {
   /** Pending 1:1 the student must pay to confirm (expert-proposed). */
   payable?: boolean;
   price?: number;
+  peerUserId?: string;
+  /** Optional student context (academic background + purpose/note) shown to experts. */
+  studentBrief?: Array<{ label: string; value: string }>;
+  /** Set for overflow seminar seat requests the expert can approve/decline. */
+  seatRequestId?: string;
+  /** Extra small lines under the date (e.g. "$20.00 held", "Decide by …"). */
+  metaLines?: string[];
 };
 
 const pad2 = (n: number) => String(n).padStart(2, '0');
@@ -39,7 +46,9 @@ export default function UpcomingSessionModal({
   onJoin,
   onJoinSession,
   onPay,
-  sessions: sessionsProp,
+  onAcceptSeatRequest,
+  onDeclineSeatRequest,
+  sessions,
   role = 'student',
 }: {
   kind: SessionKind;
@@ -51,27 +60,45 @@ export default function UpcomingSessionModal({
   onJoinSession?: (session: UpcomingModalSession) => void;
   /** Student pays to confirm an expert-proposed pending 1:1. */
   onPay?: (session: UpcomingModalSession) => void;
-  /** When set (including `[]`), replaces demo data */
-  sessions?: UpcomingModalSession[];
+  /** Expert approves an overflow seminar seat request. */
+  onAcceptSeatRequest?: (session: UpcomingModalSession) => void | Promise<void>;
+  /** Expert declines an overflow seminar seat request. */
+  onDeclineSeatRequest?: (session: UpcomingModalSession) => void | Promise<void>;
+  sessions: UpcomingModalSession[];
   role?: 'student' | 'expert';
 }) {
-  const baseNow = useMemo(() => Date.now(), []);
-
   const [tick, setTick] = useState(() => Date.now());
   useEffect(() => {
     const t = window.setInterval(() => setTick(Date.now()), 1000);
     return () => window.clearInterval(t);
   }, []);
 
+  const [briefSession, setBriefSession] = useState<UpcomingModalSession | null>(null);
+  const [seatBusyId, setSeatBusyId] = useState<string | null>(null);
+
+  const decideSeatRequest = async (
+    session: UpcomingModalSession,
+    action: 'accept' | 'decline',
+  ) => {
+    const handler = action === 'accept' ? onAcceptSeatRequest : onDeclineSeatRequest;
+    if (!handler) return;
+    setSeatBusyId(session.id);
+    try {
+      await handler(session);
+    } finally {
+      setSeatBusyId(null);
+    }
+  };
+
   const content = useMemo(() => {
     const expert = role === 'expert';
     if (kind === 'seminar') {
       return {
-        title: status === 'pending' ? 'Pending seminar sessions' : 'Upcoming seminars',
+        title: status === 'pending' ? 'Pending seminar seat requests' : 'Upcoming seminars',
         typeLabel: 'Seminar',
         description: expert
           ? status === 'pending'
-            ? 'Seminar invites or drafts that are not confirmed yet.'
+            ? 'Students who registered past the seminar capacity. Accept to admit them (charging any held payment); decline to release the hold.'
             : 'Seminars you are hosting — join to open the meeting room in chat.'
           : status === 'pending'
             ? 'These seminar requests are waiting for mentor approval.'
@@ -94,67 +121,6 @@ export default function UpcomingSessionModal({
   }, [kind, status, role]);
 
   const showJoin = status === 'booked';
-
-  const sessions = useMemo(() => {
-    if (sessionsProp !== undefined) {
-      return sessionsProp;
-    }
-    if (kind === 'seminar') {
-      return [
-        {
-          id: 's1',
-          title: 'AI for Healthcare seminar',
-          at: baseNow + 2 * 24 * 60 * 60 * 1000 + 60 * 60 * 1000,
-          when: 'Tue · 6:00 PM',
-          location: 'Online · WisdomLinked Room A',
-          with: 'Prof. Emily Chen',
-        },
-        {
-          id: 's2',
-          title: 'Research Methods seminar',
-          at: baseNow + 3 * 24 * 60 * 60 * 1000 + 2 * 60 * 60 * 1000,
-          when: 'Wed · 7:00 PM',
-          location: 'Online · WisdomLinked Room B',
-          with: 'Dr. Yuki Tanaka',
-        },
-        {
-          id: 's3',
-          title: 'Grad School Strategy seminar',
-          at: baseNow + 5 * 24 * 60 * 60 * 1000 + 30 * 60 * 1000,
-          when: 'Fri · 5:30 PM',
-          location: 'Online · WisdomLinked Room C',
-          with: 'Prof. Daniel Ortiz',
-        },
-      ];
-    }
-
-    return [
-      {
-        id: 'o1',
-        title: '1:1 appointment',
-        at: baseNow + 4 * 60 * 60 * 1000,
-        when: 'Today · 9:00 PM',
-        location: 'Online · WisdomLinked Room 1',
-        with: 'Dr. Emily Chen',
-      },
-      {
-        id: 'o2',
-        title: '1:1 appointment',
-        at: baseNow + 26 * 60 * 60 * 1000,
-        when: 'Tomorrow · 7:00 PM',
-        location: 'Online · WisdomLinked Room 2',
-        with: 'Prof. Daniel Ortiz',
-      },
-      {
-        id: 'o3',
-        title: '1:1 appointment',
-        at: baseNow + 52 * 60 * 60 * 1000,
-        when: 'Thu · 6:00 PM',
-        location: 'Online · WisdomLinked Room 4',
-        with: 'Dr. Yuki Tanaka',
-      },
-    ];
-  }, [kind, baseNow, sessionsProp]);
 
   return (
     <div
@@ -225,7 +191,20 @@ export default function UpcomingSessionModal({
                         <MapPin className="h-3.5 w-3.5" aria-hidden />
                         <span>{session.location}</span>
                       </p>
+                      {(session.metaLines || []).map(line => (
+                        <p key={line} className="text-slate-500">{line}</p>
+                      ))}
                     </div>
+                    {session.studentBrief && session.studentBrief.length > 0 ? (
+                      <button
+                        type="button"
+                        onClick={() => setBriefSession(session)}
+                        className="mt-2 inline-flex items-center gap-1.5 rounded-lg border border-[#234C6A]/30 bg-white px-2.5 py-1 text-[11px] font-semibold text-[#234C6A] hover:bg-[#234C6A]/5"
+                      >
+                        <UserCheck className="h-3.5 w-3.5" aria-hidden />
+                        Student background
+                      </button>
+                    ) : null}
                   </div>
 
                   <div className="shrink-0 text-right">
@@ -244,7 +223,7 @@ export default function UpcomingSessionModal({
                         }}
                         className="mt-2 rounded-lg bg-[#234C6A] px-3 py-1.5 text-[11px] font-semibold text-white hover:brightness-110"
                       >
-                        Join meeting
+                        {kind === 'seminar' ? 'Join seminar chat' : 'Join chat'}
                       </button>
                     ) : session.payable && onPay ? (
                       <button
@@ -254,6 +233,25 @@ export default function UpcomingSessionModal({
                       >
                         {typeof session.price === 'number' ? `Pay $${session.price}` : 'Pay'}
                       </button>
+                    ) : session.seatRequestId && (onAcceptSeatRequest || onDeclineSeatRequest) ? (
+                      <div className="mt-2 flex flex-col items-stretch gap-1.5">
+                        <button
+                          type="button"
+                          disabled={seatBusyId === session.id}
+                          onClick={() => decideSeatRequest(session, 'accept')}
+                          className="rounded-lg bg-[#234C6A] px-3 py-1.5 text-[11px] font-semibold text-white hover:brightness-110 disabled:opacity-60"
+                        >
+                          {seatBusyId === session.id ? '…' : 'Accept'}
+                        </button>
+                        <button
+                          type="button"
+                          disabled={seatBusyId === session.id}
+                          onClick={() => decideSeatRequest(session, 'decline')}
+                          className="rounded-lg border border-rose-200 bg-white px-3 py-1.5 text-[11px] font-semibold text-rose-600 hover:bg-rose-50 disabled:opacity-60"
+                        >
+                          {seatBusyId === session.id ? '…' : 'Decline'}
+                        </button>
+                      </div>
                     ) : (
                       <span className="mt-2 inline-flex rounded-lg border border-[#234C6A]/30 px-2 py-1 text-[10px] font-semibold text-[#234C6A]">
                         Pending
@@ -278,6 +276,47 @@ export default function UpcomingSessionModal({
           </div>
         </div>
       </div>
+
+      {briefSession ? (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/50 p-4"
+          onClick={e => {
+            if (e.target === e.currentTarget) setBriefSession(null);
+          }}
+        >
+          <div
+            className="w-full max-w-sm rounded-2xl border border-slate-200 bg-white shadow-xl"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-3 border-b border-slate-200 px-5 py-4">
+              <div className="min-w-0">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
+                  Student background
+                </p>
+                <h3 className="mt-1 text-base font-semibold text-slate-900 truncate">
+                  {briefSession.with || briefSession.title}
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setBriefSession(null)}
+                className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+                aria-label="Close"
+              >
+                ✕
+              </button>
+            </div>
+            <dl className="space-y-2 px-5 py-4">
+              {(briefSession.studentBrief || []).map(row => (
+                <div key={row.label} className="flex justify-between gap-4 text-sm">
+                  <dt className="shrink-0 text-slate-500">{row.label}</dt>
+                  <dd className="text-right font-medium text-slate-800">{row.value}</dd>
+                </div>
+              ))}
+            </dl>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

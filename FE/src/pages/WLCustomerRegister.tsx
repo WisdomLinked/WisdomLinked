@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { User, Mail, Lock, Phone, AlertCircle, CheckCircle, ChevronDown, ArrowRight, GraduationCap, BookOpen, Eye, EyeOff, Search, Plus, Check } from 'lucide-react';
+import { User, Mail, Lock, Phone, AlertCircle, CheckCircle, ChevronDown, ArrowRight, GraduationCap, BookOpen, Eye, EyeOff, Plus, Check } from 'lucide-react';
 import { callApi } from '../api/api';
 import { refreshCsrfToken } from '../api/csrf';
 import FormAlert from '../components/FormAlert';
@@ -9,7 +9,7 @@ import SocialAuthBlock from '../components/SocialAuthBlock';
 import ConfirmEmail from '../components/ConfirmEmail';
 import logo from '../assets/images/logo.png';
 import { SERVICE_LABELS } from '../constants/serviceOptions';
-import { MAJOR_OPTIONS_WITH_OTHER } from '../constants/majorOptions';
+import MajorSelect from '../components/MajorSelect';
 
 const BTN_PRIMARY_STYLE = { background: 'linear-gradient(135deg, #234C6A 0%, #456882 100%)' };
 const FOCUS_RING = 'focus:ring-2 focus:ring-[#234C6A]/60 focus:border-[#234C6A]';
@@ -26,7 +26,6 @@ const COUNTRY_CODES = [
     { code: '+92', country: 'Pakistan', flag: '🇵🇰' }, { code: '+234', country: 'Nigeria', flag: '🇳🇬' },
 ];
 
-const ENGINEERING_MAJORS = MAJOR_OPTIONS_WITH_OTHER;
 
 const COUNTRIES = [
     'United States', 'United Kingdom', 'Canada', 'Australia', 'Germany', 'France',
@@ -43,8 +42,6 @@ export default function WLCustomerRegister() {
     });
     const [errors, setErrors] = useState<Record<string, string>>({});
     const [touched, setTouched] = useState<Record<string, boolean>>({});
-    const [majorSearch, setMajorSearch] = useState('');
-    const [customMajors, setCustomMajors] = useState<string[]>([]);
     
     const [submitting, setSubmitting] = useState(false);
     const [confirmEmailSent, setConfirmEmailSent] = useState(false);
@@ -52,12 +49,10 @@ export default function WLCustomerRegister() {
     const [showConfirmPassword, setShowConfirmPassword] = useState(false);
     const [showTermsModal, setShowTermsModal] = useState(false);
     
-    const [showMajorDrop, setShowMajorDrop] = useState(false);
     const [showServiceDrop, setShowServiceDrop] = useState(false);
     const [showCountryDrop, setShowCountryDrop] = useState(false);
     const [showCodeDrop, setShowCodeDrop] = useState(false);
     
-    const majorRef = useRef<HTMLDivElement>(null);
     const serviceRef = useRef<HTMLDivElement>(null);
     const countryRef = useRef<HTMLDivElement>(null);
     const codeRef = useRef<HTMLDivElement>(null);
@@ -123,14 +118,8 @@ export default function WLCustomerRegister() {
         }
     };
 
-    const toTitleCase = (str: string) => str.toLowerCase().split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
-
     useEffect(() => {
         const handler = (e: MouseEvent) => {
-            if (majorRef.current && !majorRef.current.contains(e.target as Node)) {
-                if (showMajorDrop) handleBlur('majors');
-                setShowMajorDrop(false);
-            }
             if (serviceRef.current && !serviceRef.current.contains(e.target as Node)) {
                 if (showServiceDrop) handleBlur('services');
                 setShowServiceDrop(false);
@@ -143,22 +132,7 @@ export default function WLCustomerRegister() {
         };
         document.addEventListener('mousedown', handler);
         return () => document.removeEventListener('mousedown', handler);
-    }, [showMajorDrop, showServiceDrop, showCountryDrop, form]);
-
-    const toggleMajor = (m: string) => {
-        const newMajors = form.majors.includes(m) ? form.majors.filter(x => x !== m) : [...form.majors, m];
-        handleChange('majors', newMajors);
-    };
-
-    const handleAddCustomMajor = () => {
-        if (!majorSearch.trim()) return;
-        const formatted = toTitleCase(majorSearch.trim());
-        if (!customMajors.includes(formatted) && !ENGINEERING_MAJORS.includes(formatted)) {
-            setCustomMajors(prev => [...prev, formatted]);
-        }
-        toggleMajor(formatted);
-        setMajorSearch('');
-    };
+    }, [showServiceDrop, showCountryDrop, form]);
 
     const validate = () => {
         const e: Record<string, string> = {};
@@ -303,42 +277,13 @@ export default function WLCustomerRegister() {
                                 {(touched.fullName && errors.fullName) && <p className="mt-1.5 text-xs text-red-500 flex items-center gap-1"><AlertCircle size={11} />{errors.fullName}</p>}
                             </div>
 
-                            <div ref={majorRef} className="relative">
-                                <label className="block text-xs font-semibold text-slate-600 mb-1.5">Majors (select one or more)</label>
-                                <button type="button" onClick={() => setShowMajorDrop(v => !v)}
-                                    className={`w-full flex items-center justify-between rounded-xl border px-4 py-3 text-sm text-left ${(touched.majors && errors.majors) ? 'border-red-300 bg-red-50/30' : 'border-slate-200 bg-white'} ${FOCUS_RING} outline-none`}>
-                                    <span className={form.majors.length ? 'text-slate-800' : 'text-slate-400'}>{form.majors.length ? form.majors.join(', ') : 'Select majors'}</span>
-                                    <ChevronDown size={16} className={`text-slate-400 transition-transform ${showMajorDrop ? 'rotate-180' : ''}`} />
-                                </button>
-                                {showMajorDrop && (
-                                    <div className="absolute z-50 mt-1 w-full max-w-xl rounded-2xl border border-slate-200 bg-white shadow-xl overflow-hidden flex flex-col">
-                                        <div className="p-2 border-b border-slate-100 bg-slate-50/50">
-                                            <div className="relative">
-                                                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                                                <input type="text" placeholder="Search or add custom major" value={majorSearch} autoComplete="new-password"
-                                                    onChange={(e) => setMajorSearch(e.target.value)}
-                                                    onKeyDown={(e) => { if(e.key === 'Enter') { e.preventDefault(); handleAddCustomMajor(); } }}
-                                                    className="w-full pl-9 pr-4 py-2 text-sm bg-white border border-slate-200 rounded-lg outline-none focus:border-[#234C6A] focus:ring-1 focus:ring-[#234C6A]" />
-                                            </div>
-                                        </div>
-                                        <div className="max-h-56 overflow-y-auto">
-                                            {[...ENGINEERING_MAJORS, ...customMajors].filter(m => m.toLowerCase().includes(majorSearch.toLowerCase())).map(m => (
-                                                <button key={m} type="button" onClick={() => toggleMajor(m)}
-                                                    className={`w-full flex items-center gap-2 px-4 py-2.5 text-sm text-left transition-colors ${form.majors.includes(m) ? `${ACCENT_SELECTED} font-semibold` : `text-slate-700 ${ACCENT_BG}`}`}>
-                                                    {form.majors.includes(m) && <CheckCircle size={14} style={{ color: '#234C6A' }} />}{m}
-                                                </button>
-                                            ))}
-                                            {majorSearch.trim() && ![...ENGINEERING_MAJORS, ...customMajors].some(m => m.toLowerCase() === majorSearch.trim().toLowerCase()) && (
-                                                <button type="button" onClick={handleAddCustomMajor}
-                                                    className="w-full flex items-center gap-2 px-4 py-3 text-sm text-left text-[#234C6A] font-medium hover:bg-[#D9EAFD]/40 transition-colors border-t border-slate-100">
-                                                    <Plus size={14} /> Add "{toTitleCase(majorSearch.trim())}"
-                                                </button>
-                                            )}
-                                        </div>
-                                    </div>
-                                )}
-                                {(touched.majors && errors.majors) && <p className="mt-1.5 text-xs text-red-500 flex items-center gap-1"><AlertCircle size={11} />{errors.majors}</p>}
-                            </div>
+                            <MajorSelect
+                                label="Majors (select one or more)"
+                                value={form.majors}
+                                onChange={(next) => handleChange('majors', next)}
+                                onBlur={() => handleBlur('majors')}
+                                error={touched.majors ? errors.majors : undefined}
+                            />
 
                             <div ref={serviceRef} className="relative">
                                 <label className="block text-xs font-semibold text-slate-600 mb-1.5">Services</label>

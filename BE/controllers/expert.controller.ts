@@ -165,14 +165,8 @@ const filterCustomers = async (req, res) => {
                 let _keywords = []
                 for (let i = 0; i < keywords.length; i++) {
                     if (keywords[i].new) {
-                        const sameKeywordExist = await Keyword.find({ value: keywords[i].value })
-                        if (sameKeywordExist.length) {
-                            _keywords.push(sameKeywordExist[0]._id)
-                        } else {
-                            const temp = new Keyword(keywords[i])
-                            const newKeyword = await temp.save()
-                            _keywords.push(newKeyword._id)
-                        }
+                        const existing = await Keyword.findOne({ value: keywords[i].value })
+                        if (existing) _keywords.push(existing._id)
                     } else {
                         _keywords.push(keywords[i]._id)
                     }

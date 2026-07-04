@@ -10,6 +10,11 @@ const {
     proposeIndividualAppointment,
     ensureSeminarChannel,
     registerForSeminar,
+    requestSeminarSeat,
+    approveSeminarSeatRequest,
+    rejectSeminarSeatRequest,
+    getSeminarSeatRequests,
+    getMySeatRequests,
     acceptIndividualAppointment,
     cancelIndividualAppointment,
     leaveGroup,
@@ -36,6 +41,20 @@ router.get(
     "/get-all-community-chats",
     requireAuth(false),
     getAllCommunityChats
+);
+
+// expert lists pending overflow seat requests for their seminars
+router.get(
+    "/seat-requests",
+    expertAuth(true),
+    getSeminarSeatRequests
+);
+
+// student lists their own seat requests (for pending-status badges)
+router.get(
+    "/my-seat-requests",
+    requireAuth(true),
+    getMySeatRequests
 );
 
 router.get(
@@ -103,6 +122,27 @@ router.post(
     "/register-seminar",
     requireAuth(true),
     registerForSeminar
+);
+
+// overflow: request a seat in a full seminar (funds authorized, pending host approval)
+router.post(
+    "/request-seminar-seat",
+    requireAuth(true),
+    requestSeminarSeat
+);
+
+// host approves an overflow seat request (captures the held funds)
+router.post(
+    "/approve-seat-request",
+    expertAuth(true),
+    approveSeminarSeatRequest
+);
+
+// host declines an overflow seat request (releases the hold)
+router.post(
+    "/reject-seat-request",
+    expertAuth(true),
+    rejectSeminarSeatRequest
 );
 
 router.post(

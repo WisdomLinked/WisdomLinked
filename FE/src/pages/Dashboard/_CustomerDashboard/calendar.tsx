@@ -386,7 +386,7 @@ const CustomerCalendar = () => {
                             }}
                         />
                         <div className="w-max max-w-[460px] bg-black rounded-lg text-white p-6 relative">
-                            <div className="text-center text-white text-2xl mb-2"> {selectedEvent?.type === "seminar" ? "Seminar Details" : "Session Details"}</div>
+                            <div className="text-center text-white text-2xl mb-2"> {selectedEvent?.type === "seminar" ? "Seminar Details" : "1:1 Session Details"}</div>
                             <button
                                 className="absolute right-2 top-2 rounded-md hover:bg-grey"
                                 onClick={() => {
