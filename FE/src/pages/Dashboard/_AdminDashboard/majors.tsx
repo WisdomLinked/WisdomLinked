@@ -10,6 +10,7 @@ type CustomMajorRow = {
   count: number;
   userCount?: number;
   seminarCount?: number;
+  official?: boolean;
 };
 
 type ConsolidationRow = {
@@ -156,7 +157,14 @@ export default function AdminMajors() {
                           className="h-4 w-4 rounded border-gray-300 text-[#234C6A] focus:ring-[#234C6A]"
                         />
                       </td>
-                      <td className="px-4 py-2.5 text-gray-800">{r.value}</td>
+                      <td className="px-4 py-2.5 text-gray-800">
+                        {r.value}
+                        {r.official && (
+                          <span className="ml-2 rounded bg-[#EBF2F7] px-1.5 py-0.5 text-[11px] font-medium text-[#234C6A]">
+                            in dropdown
+                          </span>
+                        )}
+                      </td>
                       <td className="px-4 py-2.5 text-right text-gray-500">{r.userCount ?? r.count}</td>
                       <td className="px-4 py-2.5 text-right text-gray-500">{r.seminarCount ?? 0}</td>
                     </tr>

@@ -1901,6 +1901,10 @@ const acceptIndividualAppointment = async (req, res) => {
             return res.status(404).send("Sorry, the group chat doesn't exist");
         }
 
+        if (role !== 'customer' && String(groupChat.createdBy) === String(userId)) {
+            return res.status(403).send("The student must accept and pay for a session you proposed.");
+        }
+
         let charge: any = null;
         let payer: any = null;
         let expertUser: any = null;

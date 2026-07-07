@@ -10,6 +10,7 @@ const GroupChat = require("../models/GroupChat");
 const Keyword = require("../models/Keyword");
 const MajorConsolidation = require("../models/MajorConsolidation");
 const { classifyMajors } = require("../utils/majorClassification");
+const { isBaselineMajor } = require("../constants/majorOptions");
 const ContactedUs = require("../models/ContactedUs");
 const PendingUser = require("../models/PendingUser");
 const PendingLogin = require("../models/PendingLogin");
@@ -889,11 +890,11 @@ const getCustomMajors = async (req: Request, res: Response) => {
             GroupChat.aggregate(pipeline("_id")),
         ]);
 
-        const merged = new Map<string, { value: string; userCount: number; seminarCount: number }>();
+        const merged = new Map<string, { value: string; userCount: number; seminarCount: number; official: boolean }>();
         const absorb = (rows: any[], field: "userCount" | "seminarCount") => {
             for (const row of rows) {
                 const key = String(row._id);
-                const entry = merged.get(key) || { value: row.value, userCount: 0, seminarCount: 0 };
+                const entry = merged.get(key) || { value: row.value, userCount: 0, seminarCount: 0, official: false };
                 entry[field] += Array.isArray(row.owners) ? row.owners.length : 0;
                 merged.set(key, entry);
             }
@@ -901,12 +902,30 @@ const getCustomMajors = async (req: Request, res: Response) => {
         absorb(userRows, "userCount");
         absorb(seminarRows, "seminarCount");
 
+        const nonBaselineKeywords = (await Keyword.find({ approved: { $ne: true } }).select("_id value")).filter(
+            (k: any) => !isBaselineMajor(k.value),
+        );
+        for (const kw of nonBaselineKeywords) {
+            const [userCount, seminarCount] = await Promise.all([
+                User.countDocuments({ keywords: kw._id }),
+                GroupChat.countDocuments({ keywords: kw._id }),
+            ]);
+            const key = String(kw.value || "").trim().toLowerCase();
+            if (!key) continue;
+            const entry = merged.get(key) || { value: kw.value, userCount: 0, seminarCount: 0, official: false };
+            entry.userCount += userCount;
+            entry.seminarCount += seminarCount;
+            entry.official = true;
+            merged.set(key, entry);
+        }
+
         const result = Array.from(merged.values())
             .map((e) => ({
                 value: e.value,
                 count: e.userCount + e.seminarCount,
                 userCount: e.userCount,
                 seminarCount: e.seminarCount,
+                official: e.official,
             }))
             .sort((a, b) => b.count - a.count || a.value.localeCompare(b.value));
 
@@ -936,7 +955,10 @@ const consolidateMajors = async (req: Request, res: Response) => {
         });
         const targetCreated = !keyword;
         if (!keyword) {
-            keyword = await Keyword.create({ value: target, label: target });
+            keyword = await Keyword.create({ value: target, label: target, approved: true });
+        } else if (!keyword.approved) {
+            keyword.approved = true;
+            await keyword.save();
         }
 
         if (!sources.length) {
@@ -956,37 +978,71 @@ const consolidateMajors = async (req: Request, res: Response) => {
         const matchesSource = (c: string) =>
             sources.some((s: string) => s.toLowerCase() === String(c).trim().toLowerCase());
         const sourceRegexes = sources.map((s: string) => new RegExp(`^${escapeRegExp(s)}$`, "i"));
+        const idEq = (a: any, b: any) => String(a) === String(b);
+
+        const touchedUserIds = new Set<string>();
+        const touchedSeminarIds = new Set<string>();
 
         const affectedUsers = await User.find({ customKeywords: { $in: sourceRegexes } }).select("_id keywords customKeywords");
         for (const user of affectedUsers) {
-            const hasKeyword = (user.keywords || []).some((k: any) => String(k) === String(keyword._id));
+            const hasKeyword = (user.keywords || []).some((k: any) => idEq(k, keyword._id));
             if (!hasKeyword) user.keywords.push(keyword._id);
             user.customKeywords = (user.customKeywords || []).filter((c: string) => !matchesSource(c));
             await user.save();
+            touchedUserIds.add(String(user._id));
         }
 
         const affectedSeminars = await GroupChat.find({ customKeywords: { $in: sourceRegexes } }).select("_id keywords customKeywords");
         for (const seminar of affectedSeminars) {
-            const hasKeyword = (seminar.keywords || []).some((k: any) => String(k) === String(keyword._id));
+            const hasKeyword = (seminar.keywords || []).some((k: any) => idEq(k, keyword._id));
             if (!hasKeyword) seminar.keywords.push(keyword._id);
             seminar.customKeywords = (seminar.customKeywords || []).filter((c: string) => !matchesSource(c));
             await seminar.save();
+            touchedSeminarIds.add(String(seminar._id));
         }
+
+        const sourceKeywords = await Keyword.find({
+            value: { $in: sourceRegexes },
+            _id: { $ne: keyword._id },
+        }).select("_id");
+        const sourceKeywordIds = sourceKeywords.map((k: any) => k._id);
+        if (sourceKeywordIds.length) {
+            const usersWithSourceKeyword = await User.find({ keywords: { $in: sourceKeywordIds } }).select("_id keywords");
+            for (const user of usersWithSourceKeyword) {
+                user.keywords = (user.keywords || []).filter((k: any) => !sourceKeywordIds.some((id: any) => idEq(id, k)));
+                if (!user.keywords.some((k: any) => idEq(k, keyword._id))) user.keywords.push(keyword._id);
+                await user.save();
+                touchedUserIds.add(String(user._id));
+            }
+
+            const seminarsWithSourceKeyword = await GroupChat.find({ keywords: { $in: sourceKeywordIds } }).select("_id keywords");
+            for (const seminar of seminarsWithSourceKeyword) {
+                seminar.keywords = (seminar.keywords || []).filter((k: any) => !sourceKeywordIds.some((id: any) => idEq(id, k)));
+                if (!seminar.keywords.some((k: any) => idEq(k, keyword._id))) seminar.keywords.push(keyword._id);
+                await seminar.save();
+                touchedSeminarIds.add(String(seminar._id));
+            }
+
+            await Keyword.deleteMany({ _id: { $in: sourceKeywordIds } });
+        }
+
+        const usersUpdated = touchedUserIds.size;
+        const seminarsUpdated = touchedSeminarIds.size;
 
         await MajorConsolidation.create({
             target: keyword.value,
             targetCreated,
             sources,
-            usersUpdated: affectedUsers.length,
-            seminarsUpdated: affectedSeminars.length,
+            usersUpdated,
+            seminarsUpdated,
             performedBy,
         });
 
         return res.status(200).json({
             result: {
                 major: keyword.value,
-                usersUpdated: affectedUsers.length,
-                seminarsUpdated: affectedSeminars.length,
+                usersUpdated,
+                seminarsUpdated,
             },
         });
     } catch (err) {

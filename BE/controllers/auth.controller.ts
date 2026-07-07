@@ -8,7 +8,7 @@ const PendingEmailChange = require("../models/PendingEmailChange");
 const { authCookieOptions, clearAuthCookieOptions } = require("../config/authCookie");
 const Keyword = require("../models/Keyword")
 const Service = require("../models/Service")
-const { MAJOR_OPTIONS } = require("../constants/majorOptions")
+const { MAJOR_OPTIONS, isBaselineMajor } = require("../constants/majorOptions")
 const { classifyMajors } = require("../utils/majorClassification")
 const bcrypt = require("bcryptjs");
 const fs = require('fs')
@@ -163,7 +163,8 @@ export const getArrayField = (req: Request, key: string) => {
 
 const getKeywordsAndServices = async (req: Request, res: Response) => {
     try {
-        const dbKeywords = await Keyword.find()
+        const dbKeywords = (await Keyword.find())
+            .filter((k: any) => k.approved === true || isBaselineMajor(k.value))
         const seen = new Set(dbKeywords.map((k: any) => String(k.value || '').trim().toLowerCase()))
         const baselineExtras = MAJOR_OPTIONS
             .filter((m: string) => !seen.has(m.toLowerCase()))

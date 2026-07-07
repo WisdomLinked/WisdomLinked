@@ -821,29 +821,41 @@ export default function ExpertDashboard() {
                   </span>
                 </div>
               ))}
-              {pendingSessions.map((s: any) => (
-                <div
-                  key={s._id}
-                  className="flex items-start justify-between gap-2 rounded-xl border border-amber-100 bg-amber-50 px-3 py-2.5"
-                >
-                  <div className="min-w-0">
-                    <div className="text-[13px] font-semibold text-slate-900">
-                      {s.name}
-                    </div>
-                    <div className="text-[11px] text-slate-600">
-                      {new Date(s.start).toLocaleString()}
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => handleAcceptSession(s)}
-                    disabled={acceptingId === String(s._id)}
-                    className="shrink-0 inline-flex items-center rounded-[4px] bg-[#234C6A] px-3 py-1.5 text-[11px] font-semibold text-white hover:brightness-110 disabled:opacity-60"
+              {pendingSessions.map((s: any) => {
+                const createdById =
+                  typeof s.createdBy === 'object' ? s.createdBy?._id : s.createdBy;
+                const expertProposed =
+                  String(createdById) === String(userDetails?._id);
+                return (
+                  <div
+                    key={s._id}
+                    className="flex items-start justify-between gap-2 rounded-xl border border-amber-100 bg-amber-50 px-3 py-2.5"
                   >
-                    {acceptingId === String(s._id) ? 'Accepting…' : 'Accept'}
-                  </button>
-                </div>
-              ))}
+                    <div className="min-w-0">
+                      <div className="text-[13px] font-semibold text-slate-900">
+                        {s.name}
+                      </div>
+                      <div className="text-[11px] text-slate-600">
+                        {new Date(s.start).toLocaleString()}
+                      </div>
+                    </div>
+                    {expertProposed ? (
+                      <span className="shrink-0 inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-700">
+                        Awaiting payment
+                      </span>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => handleAcceptSession(s)}
+                        disabled={acceptingId === String(s._id)}
+                        className="shrink-0 inline-flex items-center rounded-[4px] bg-[#234C6A] px-3 py-1.5 text-[11px] font-semibold text-white hover:brightness-110 disabled:opacity-60"
+                      >
+                        {acceptingId === String(s._id) ? 'Accepting…' : 'Accept'}
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
               {!bookedSessions.length && !pendingSessions.length && (
                 <p className="text-[12px] text-slate-500">
                   No upcoming 1:1 sessions in this range.

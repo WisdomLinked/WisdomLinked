@@ -53,13 +53,11 @@ const filterExperts = async (req: any, res: Response) => {
                 let _keywords = []
                 for (let i = 0; i < keywords.length; i++) {
                     if (keywords[i].new) {
-                        const sameKeywordExist = await Keyword.find({ value: keywords[i].value })
-                        if (sameKeywordExist.length) {
-                            _keywords.push(sameKeywordExist[0]._id)
-                        } else {
-                            const temp = new Keyword(keywords[i])
-                            const newKeyword = await temp.save()
-                            _keywords.push(newKeyword._id)
+                        const sameKeywordExist = await Keyword.findOne({
+                            value: { $regex: new RegExp(`^${escapeRegex(keywords[i].value)}$`, 'i') },
+                        })
+                        if (sameKeywordExist) {
+                            _keywords.push(sameKeywordExist._id)
                         }
                     } else {
                         _keywords.push(keywords[i]._id)
