@@ -22,6 +22,7 @@ import { setChosenChatDetails, setChosenGroupChatDetails } from "../../../../act
 import { useNavigate } from "react-router-dom";
 import { useAppSelector } from "../../../../store";
 import { fetchChatUserProfile } from "../../../../api/chatApi";
+import ProfileModal from "../../Messenger/Messages/ProfileModal";
 import { proposeIndividualAppointment } from "../../../../api/api";
 import { proposedTimeNeedsOverride, hasBookingConflict, presetAvailabilityRanges } from "../../../../utils/proposeAvailability";
 import { normalizeExpertPrice } from "../../../../utils/schedulingSlots";
@@ -47,6 +48,8 @@ const Customers = ({
     const [proposePriceEdited, setProposePriceEdited] = useState(false)
     const [proposeCustomerEmail, setProposeCustomerEmail] = useState<string | null>(null)
     const [outsideConfirm, setOutsideConfirm] = useState(false)
+    const [profileFor, setProfileFor] = useState<any>(null)
+    const [profilePreview, setProfilePreview] = useState<string | null>(null)
     const [keywords, set_keywords] = useState([])
     const [services, set_services] = useState([])
     const sorts = [
@@ -172,6 +175,18 @@ const Customers = ({
     const proposeSuggestedPrice = (durationMin: number) => {
         const rate = normalizeExpertPrice((userDetails as any)?.price) ?? 0;
         return Math.round(((rate * durationMin) / 60) * 100) / 100;
+    };
+
+    const openClientProfile = (customer: any, index: number) => {
+        setProfilePreview(customersImage[index] || null);
+        setProfileFor(customer);
+        void fetchChatUserProfile(String(customer._id)).then((r: any) => {
+            if (r?.success && r?.result) {
+                setProfileFor((prev: any) =>
+                    prev && prev._id === customer._id ? { ...customer, ...r.result } : prev
+                );
+            }
+        });
     };
 
     const openProposeModal = (customer: any) => {
@@ -352,7 +367,16 @@ const Customers = ({
                     customers.map((customer,i) => (
                         <div
                             key={`customer_${customer._id}`}
-                            className={`w-full max-w-[260px] rounded-2xl border bg-white overflow-hidden shadow-sm hover:shadow-md transition-shadow relative ${
+                            role="button"
+                            tabIndex={0}
+                            onClick={() => openClientProfile(customer, i)}
+                            onKeyDown={(e) => {
+                                if (e.key === 'Enter' || e.key === ' ') {
+                                    e.preventDefault();
+                                    openClientProfile(customer, i);
+                                }
+                            }}
+                            className={`w-full max-w-[260px] rounded-2xl border bg-white overflow-hidden shadow-sm hover:shadow-md transition-shadow relative cursor-pointer ${
                                 selectedCustomer?._id === customer._id ? 'ring-2 ring-[#234C6A]' : ''
                             }`}
                         >
@@ -387,7 +411,7 @@ const Customers = ({
                                 </div>
                                 <div className="w-full flex gap-2 mt-4">
                                     <button
-                                    onClick={() => openPrivateChatWithCustomer(customer._id)}
+                                    onClick={(e) => { e.stopPropagation(); openPrivateChatWithCustomer(customer._id); }}
                                     className="w-1/2 rounded-full border border-slate-200 text-[12px] text-slate-700 flex items-center justify-center hover:bg-slate-50"
                                     >
                                     Private Chat
@@ -395,12 +419,13 @@ const Customers = ({
                                     <button
                                         className="w-1/2 px-3 py-2 rounded-full flex items-center justify-center bg-[#234C6A] text-white text-[12px] font-semibold disabled:opacity-50"
                                         disabled={customer.status === 'review'}
-                                        onClick={() => {
+                                        onClick={(e) => {
+                                            e.stopPropagation();
                                             selectCustomer(customer);
                                             openProposeModal(customer);
                                         }}
                                     >
-                                        Select
+                                        Propose a session
                                     </button>
                                 </div>
                             </div>
@@ -553,6 +578,14 @@ const Customers = ({
                     </OverlayPortal> :
                     null
             }
+
+            <ProfileModal
+                isOpen={!!profileFor}
+                onClose={() => setProfileFor(null)}
+                userDetails={profileFor || {}}
+                viewerRole={(userDetails as any)?.role}
+                previewImage={profilePreview}
+            />
         </div>
     );
 };

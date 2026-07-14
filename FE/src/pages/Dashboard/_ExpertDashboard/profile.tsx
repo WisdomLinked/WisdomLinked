@@ -420,7 +420,7 @@ const ExpertProfile = ({
                         <div className="flex flex-col items-center gap-6 md:flex-row md:items-start">
                             {/* Avatar */}
                             <div className="flex flex-col items-center gap-2 shrink-0">
-                                <div className="rounded-2xl overflow-hidden ring-2 ring-slate-100 shadow-md">
+                                <div className="wl-photo-picker rounded-2xl overflow-hidden ring-2 ring-slate-100 shadow-md">
                                     <ReactImagePickerEditor
                                         config={{
                                             borderRadius: '16px',
@@ -430,6 +430,10 @@ const ExpertProfile = ({
                                             objectFit: 'cover',
                                             compressInitial: 50,
                                             aspectRatio: 1,
+                                            hideAddBtn: true,
+                                            hideEditBtn: true,
+                                            hideDownloadBtn: true,
+                                            hideDeleteBtn: true,
                                         }}
                                         imageSrcProp={imageSrc}
                                         imageChanged={(newDataUri: any) => set_imageSrc(newDataUri)}

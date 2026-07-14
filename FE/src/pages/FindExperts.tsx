@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Search } from 'lucide-react';
-import MentorCard, { MentorCardProps } from '../components/MentorCard';
+import ExpertCard, { ExpertCardProps } from '../components/ExpertCard';
 import FilterDropdown, { type FilterOption } from '../components/ui/FilterDropdown';
 import { doFilterExperts, doGetKeywordsAndServices } from '../api/api';
 import { serviceDropdownRowsFromApi } from '../constants/serviceOptions';
@@ -13,7 +13,7 @@ export default function FindExpertsPage({
   followerCounts,
   onToggleFollow,
 }: {
-  onViewExpert?: (mentor: MentorCardProps) => void;
+  onViewExpert?: (mentor: ExpertCardProps) => void;
   followedMentorIds: Array<string | number>;
   followerCounts: Record<string, number>;
   onToggleFollow: (mentorId: string | number) => void;
@@ -21,7 +21,7 @@ export default function FindExpertsPage({
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedMajor, setSelectedMajor] = useState<string>('all');
   const [selectedService, setSelectedService] = useState<string>('all');
-  const [mentors, setMentors] = useState<MentorCardProps[]>([]);
+  const [mentors, setMentors] = useState<ExpertCardProps[]>([]);
   const [keywordOptions, setKeywordOptions] = useState<Array<{ _id: string; value: string }>>([]);
   const [serviceOptions, setServiceOptions] = useState<Array<{ _id: string; value: string }>>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -182,7 +182,7 @@ export default function FindExpertsPage({
                   key={String(mentor.id)}
                   className="snap-start min-w-[260px] md:min-w-0 md:w-auto"
                 >
-                  <MentorCard
+                  <ExpertCard
                     {...mentor}
                     followerCount={
                       followerCounts[String(mentor.id)] ?? mentor.followerCount ?? 0
@@ -215,7 +215,7 @@ export default function FindExpertsPage({
 
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 lg:gap-6">
               {others.map(mentor => (
-                <MentorCard
+                <ExpertCard
                   key={String(mentor.id)}
                   {...mentor}
                   compact

@@ -20,6 +20,7 @@ import { useNavigate } from "react-router-dom";
 import { openExpertChatWithUser } from "../../../utils/expertOpenChatWithUser";
 import { toYMDLocal } from "../../../utils/schedulingTimezone";
 import { canonicalLabelsFromMixedServiceEntries } from "../../../constants/serviceOptions";
+import { usePeerProfileModal } from "../../../hooks/usePeerProfileModal";
 
 const pad2 = (n: number) => String(n).padStart(2, "0");
 
@@ -42,6 +43,7 @@ const ExpertCalendar: React.FC = () => {
 
   const dispatch = useDispatch();
   const navigate = useNavigate();
+  const { openPeerProfile, peerProfileModal } = usePeerProfileModal(userDetails?.role);
 
   const [events, setEvents] = useState<any[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
@@ -69,6 +71,23 @@ const ExpertCalendar: React.FC = () => {
             ? `With ${e.customer.username}`
             : "1:1 session";
 
+        // A 1:1 session has a single peer (the student), used for the profile card.
+        // Seminars have many participants and are excluded here (roster is elsewhere).
+        let peerUserId: string | undefined;
+        let peerName: string | undefined;
+        let peerImage: string | null = null;
+        if (!isSeminar) {
+          const meId = String(userDetails?._id ?? "");
+          const parts: any[] = Array.isArray(e.participants) ? e.participants : [];
+          const peer =
+            e.customer || parts.find((p: any) => String(p?._id ?? p) !== meId);
+          if (peer && typeof peer === "object") {
+            peerUserId = peer._id != null ? String(peer._id) : undefined;
+            peerName = peer.username;
+            peerImage = peer.image ?? null;
+          }
+        }
+
         return {
           id: String(e.id ?? e._id),
           title: e.title || e.name || (isSeminar ? "Seminar" : "1:1 session"),
@@ -81,11 +100,14 @@ const ExpertCalendar: React.FC = () => {
           status,
           recurrence: isSeminar && e.isRecurring ? e.recurrenceFrequency ?? null : null,
           seriesId: isSeminar && e.seriesId ? String(e.seriesId) : null,
+          peerUserId,
+          peerName,
+          peerImage,
           raw: e,
         } as Meeting;
       })
       .filter(Boolean) as Meeting[];
-  }, [events]);
+  }, [events, userDetails?._id]);
 
   const handleSelectEvent = (event: any) => {
     if (!event) return;
@@ -254,10 +276,18 @@ const ExpertCalendar: React.FC = () => {
         meetings={meetings}
         loading={loading}
         onSelectMeeting={(m) => handleSelectEvent(m.raw)}
+        onViewProfile={(m) =>
+          openPeerProfile({
+            userId: String(m.peerUserId || ""),
+            username: m.peerName,
+            image: m.peerImage,
+          })
+        }
         title="Calendar"
         subtitle="See your upcoming seminars and 1:1 sessions, and jump into details."
         loadingLabel="Loading your sessions…"
       />
+      {peerProfileModal}
 
       {eventModalShow ? (
         <div className="fixed inset-0 bg-black/30 backdrop-blur-sm z-50 flex items-center justify-center p-6">
@@ -393,15 +423,6 @@ const ExpertCalendar: React.FC = () => {
               services={selectedEvent?.services}
               purposeOther={selectedEvent?.purposeOther}
               type={selectedEvent?.type}
-              student={
-                selectedEvent?.type === "individual"
-                  ? (Array.isArray(selectedEvent?.participants)
-                      ? selectedEvent.participants.find(
-                          (p: any) => String(p?._id ?? p) !== String(selectedEvent?.admin?._id ?? selectedEvent?.admin),
-                        )
-                      : undefined)
-                  : undefined
-              }
               isRecurring={selectedEvent?.isRecurring}
               recurrenceFrequency={selectedEvent?.recurrenceFrequency}
               theme="light"

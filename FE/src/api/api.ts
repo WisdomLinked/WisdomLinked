@@ -501,6 +501,15 @@ export const getSeminarSeatRequests = async () => {
     }
 };
 
+export const getMyFollowers = async () => {
+    try {
+        const res = await api.get("expert/followers");
+        return res.data;
+    } catch (err: any) {
+        return checkForAuthorization(err);
+    }
+};
+
 export const getMySeatRequests = async () => {
     try {
         const res = await api.get("group-chat/my-seat-requests");

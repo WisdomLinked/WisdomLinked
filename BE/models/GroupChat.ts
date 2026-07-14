@@ -14,6 +14,7 @@ const groupChatSchema = new mongoose.Schema(
         keywords: [{ type: mongoose.Schema.Types.ObjectId, ref: "Keyword" }],
         customKeywords: [{ type: String }],
         services: [{ type: mongoose.Schema.Types.ObjectId, ref: "Service" }],
+        tags: [{ type: String }],
         purposeOther: { type: String },
         start: { type: Date },
         end: { type: Date },

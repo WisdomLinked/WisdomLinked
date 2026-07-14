@@ -67,6 +67,7 @@ import React, {
       description?: string;
       keywords?: string[];
       services?: string[];
+      tags?: string[];
       purposeOther?: string;
       start?: string | Date;
       end?: string | Date;
@@ -77,8 +78,12 @@ import React, {
       isRecurring?: boolean;
       recurrenceFrequency?: RecurrenceFrequency;
     };
-    /** New expert shell: refresh user + switch tab without full page navigation */
-    onAfterSeminarSave?: () => void;
+    /**
+     * New expert shell: refresh user + switch tab without full page navigation.
+     * Receives the status just saved so the host stays on the editor after a
+     * draft save but returns to the list after publishing.
+     */
+    onAfterSeminarSave?: (status: 'active' | 'draft') => void;
     /** Return to seminar list without saving */
     onCancel?: () => void;
   }
@@ -169,13 +174,17 @@ import React, {
     const [coverPreview, setCoverPreview] = useState<string | null>(null);
     // URL of an already-uploaded cover (when editing/resuming); reused if no new file is picked.
     const [existingImageUrl, setExistingImageUrl] = useState<string | null>(null);
+    // The seminar's id once it exists. Seeded from the prop when editing/resuming;
+    // set after the first create so repeated draft saves update the same record
+    // instead of creating duplicates while the host stays on the editor.
+    const [savedGroupId, setSavedGroupId] = useState<string | undefined>(selectedSeminar?.groupId);
 
     // The expert's existing 1:1 sessions and seminars, used to flag time clashes
     // when scheduling a new seminar. Declined/cancelled/draft items are ignored,
     // and the seminar being edited is excluded so it never conflicts with itself.
     const existingBookings = useMemo(() => {
       const out: { name: string; start: Date; end: Date }[] = [];
-      const editingId = selectedSeminar?.groupId ? String(selectedSeminar.groupId) : null;
+      const editingId = savedGroupId ? String(savedGroupId) : null;
       const push = (rec: any, name: string) => {
         if (!rec?.start) return;
         const start = new Date(rec.start);
@@ -206,7 +215,7 @@ import React, {
         push(g, g?.name || (type === 'seminar' ? 'another seminar' : 'a 1:1 session'));
       }
       return out;
-    }, [userDetails, selectedSeminar]);
+    }, [userDetails, savedGroupId]);
 
     // For the chosen date/time: a hard conflict with an existing booking (blocks
     // creation) and a soft check against the expert's saved availability hours
@@ -270,6 +279,7 @@ import React, {
         description: selectedSeminar.description || '',
         majors: keywordServiceToStrings(selectedSeminar.keywords as unknown[] | undefined),
         services: keywordServiceToStrings(selectedSeminar.services as unknown[] | undefined),
+        tags: Array.isArray(selectedSeminar.tags) ? selectedSeminar.tags.filter((t): t is string => typeof t === 'string') : [],
         purposeOther: selectedSeminar.purposeOther || '',
         price: selectedSeminar.price ?? '',
         isRecurring: !!selectedSeminar.isRecurring,
@@ -487,6 +497,7 @@ import React, {
           description: formData.description.trim(),
           image: imageUrl || undefined,
           services: formData.services,
+          tags: formData.tags,
           purposeOther: formData.purposeOther.trim(),
           keywords: formData.majors,
           start: timeInfo?.start,
@@ -496,28 +507,39 @@ import React, {
           type: 'seminar' as const,
           status,
           createdBy: userDetails?._id,
-          maxAttendees: formData.maxAttendees === '' ? undefined : Number(formData.maxAttendees),
+          maxAttendees: formData.maxAttendees === '' ? null : Number(formData.maxAttendees),
           currency: formData.currency,
           isRecurring: formData.isRecurring,
           recurrenceFrequency: formData.isRecurring ? formData.recurrenceFrequency : undefined,
           timezone: formData.timezone,
         };
 
-        const res = selectedSeminar?.groupId
-          ? await updateGroupChat({ groupId: selectedSeminar.groupId, ...payload })
+        const res = savedGroupId
+          ? await updateGroupChat({ groupId: savedGroupId, ...payload })
           : await createGroupChat(payload);
 
         if (res) {
           const msg =
             status === 'draft'
               ? 'Draft saved'
-              : selectedSeminar?.groupId
+              : savedGroupId
                 ? 'Seminar updated successfully'
                 : 'Seminar created successfully';
           dispatch(showSuccessAlert(msg));
+
+          // After a create, remember the new id (and keep the uploaded cover) so
+          // further edits on this editor update the same seminar.
+          if (!savedGroupId && res.createdGroupChatId) {
+            setSavedGroupId(String(res.createdGroupChatId));
+          }
+          if (formData.coverImage && imageUrl) {
+            setExistingImageUrl(imageUrl);
+            setFormData((prev) => ({ ...prev, coverImage: null }));
+          }
+
           await (dispatch as any)(updateMe());
           if (onAfterSeminarSave) {
-            onAfterSeminarSave();
+            onAfterSeminarSave(status);
           } else {
             navigate(`${process.env.REACT_APP_AUTH_URL}expertdashboard/calendar`);
           }

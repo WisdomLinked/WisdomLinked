@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Calendar, MapPin, BookOpen, UserCheck } from 'lucide-react';
+import { Calendar, MapPin, BookOpen, UserCheck, UserCircle } from 'lucide-react';
 
 type SessionKind = 'seminar' | 'oneToOne';
 type SessionStatus = 'booked' | 'pending';
@@ -16,8 +16,11 @@ export type UpcomingModalSession = {
   payable?: boolean;
   price?: number;
   peerUserId?: string;
-  /** Optional student context (academic background + purpose/note) shown to experts. */
+  /** Optional per-session detail rows shown behind a button (expert: student
+   * background; student: their own booking details). */
   studentBrief?: Array<{ label: string; value: string }>;
+  /** Button + popup heading for studentBrief. Defaults to "Student background". */
+  briefLabel?: string;
   /** Set for overflow seminar seat requests the expert can approve/decline. */
   seatRequestId?: string;
   /** Extra small lines under the date (e.g. "$20.00 held", "Decide by …"). */
@@ -48,6 +51,7 @@ export default function UpcomingSessionModal({
   onPay,
   onAcceptSeatRequest,
   onDeclineSeatRequest,
+  onViewProfile,
   sessions,
   role = 'student',
 }: {
@@ -60,6 +64,8 @@ export default function UpcomingSessionModal({
   onJoinSession?: (session: UpcomingModalSession) => void;
   /** Student pays to confirm an expert-proposed pending 1:1. */
   onPay?: (session: UpcomingModalSession) => void;
+  /** Open the peer's full profile card (needs session.peerUserId). */
+  onViewProfile?: (session: UpcomingModalSession) => void;
   /** Expert approves an overflow seminar seat request. */
   onAcceptSeatRequest?: (session: UpcomingModalSession) => void | Promise<void>;
   /** Expert declines an overflow seminar seat request. */
@@ -195,16 +201,28 @@ export default function UpcomingSessionModal({
                         <p key={line} className="text-slate-500">{line}</p>
                       ))}
                     </div>
-                    {session.studentBrief && session.studentBrief.length > 0 ? (
-                      <button
-                        type="button"
-                        onClick={() => setBriefSession(session)}
-                        className="mt-2 inline-flex items-center gap-1.5 rounded-lg border border-[#234C6A]/30 bg-white px-2.5 py-1 text-[11px] font-semibold text-[#234C6A] hover:bg-[#234C6A]/5"
-                      >
-                        <UserCheck className="h-3.5 w-3.5" aria-hidden />
-                        Student background
-                      </button>
-                    ) : null}
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {session.studentBrief && session.studentBrief.length > 0 ? (
+                        <button
+                          type="button"
+                          onClick={() => setBriefSession(session)}
+                          className="inline-flex items-center gap-1.5 rounded-lg border border-[#234C6A]/30 bg-white px-2.5 py-1 text-[11px] font-semibold text-[#234C6A] hover:bg-[#234C6A]/5"
+                        >
+                          <UserCheck className="h-3.5 w-3.5" aria-hidden />
+                          {session.briefLabel || 'Student background'}
+                        </button>
+                      ) : null}
+                      {onViewProfile && session.peerUserId ? (
+                        <button
+                          type="button"
+                          onClick={() => onViewProfile(session)}
+                          className="inline-flex items-center gap-1.5 rounded-lg border border-[#234C6A]/30 bg-white px-2.5 py-1 text-[11px] font-semibold text-[#234C6A] hover:bg-[#234C6A]/5"
+                        >
+                          <UserCircle className="h-3.5 w-3.5" aria-hidden />
+                          {role === 'expert' ? 'Student background' : 'View profile'}
+                        </button>
+                      ) : null}
+                    </div>
                   </div>
 
                   <div className="shrink-0 text-right">
@@ -291,7 +309,7 @@ export default function UpcomingSessionModal({
             <div className="flex items-start justify-between gap-3 border-b border-slate-200 px-5 py-4">
               <div className="min-w-0">
                 <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
-                  Student background
+                  {briefSession.briefLabel || 'Student background'}
                 </p>
                 <h3 className="mt-1 text-base font-semibold text-slate-900 truncate">
                   {briefSession.with || briefSession.title}
@@ -310,7 +328,9 @@ export default function UpcomingSessionModal({
               {(briefSession.studentBrief || []).map(row => (
                 <div key={row.label} className="flex justify-between gap-4 text-sm">
                   <dt className="shrink-0 text-slate-500">{row.label}</dt>
-                  <dd className="text-right font-medium text-slate-800">{row.value}</dd>
+                  <dd className="min-w-0 break-words text-right font-medium text-slate-800">
+                    {row.value}
+                  </dd>
                 </div>
               ))}
             </dl>

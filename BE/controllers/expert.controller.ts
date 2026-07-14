@@ -380,6 +380,27 @@ const getMyPaymentHistory = async (req: any, res: Response) => {
     }
 };
 
+// The logged-in expert's followers, as lightweight student cards for the dashboard list.
+const getMyFollowers = async (req: any, res: Response) => {
+    try {
+        const expertId = req.user.userId;
+        const expert = await User.findById(expertId)
+            .select('followers')
+            .populate({
+                path: 'followers',
+                select:
+                    'email username image role status degreeSought intendedIntake ' +
+                    'currentUniversity gpa country specialNote createdAt',
+            })
+            .lean();
+        const followers = Array.isArray(expert?.followers) ? expert.followers : [];
+        return res.status(200).json({ result: followers });
+    } catch (err: any) {
+        console.log(err);
+        return res.status(500).send(safeErrorMessage(err));
+    }
+};
+
 module.exports = {
     updateTimeSlots,
     getDailyTimeSlots,
@@ -391,4 +412,5 @@ module.exports = {
     getCustomerById,
     shareMeetingViaEmail,
     getMyPaymentHistory,
+    getMyFollowers,
 }

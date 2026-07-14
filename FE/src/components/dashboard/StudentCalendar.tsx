@@ -37,6 +37,7 @@ const containerClass = 'h-[calc(100vh-56px)] overflow-y-auto px-6 py-7 bg-[#F5F3
 export default function StudentCalendar({
   onJoinMeeting,
   onSelectMeeting,
+  onViewProfile,
   meetings = [],
   loading = false,
   error = null,
@@ -49,6 +50,8 @@ export default function StudentCalendar({
   onJoinMeeting?: (meeting: Meeting) => void;
   /** When provided (expert mode), clicking a meeting opens a caller-controlled detail view. */
   onSelectMeeting?: (meeting: Meeting) => void;
+  /** Opens the shared profile card for the meeting's peer (host / mentor / student). */
+  onViewProfile?: (meeting: Meeting) => void;
   meetings?: Meeting[];
   loading?: boolean;
   error?: string | null;
@@ -224,10 +227,9 @@ export default function StudentCalendar({
     [meetings],
   );
 
-  const selectedPast =
-    (selectedPastId
-      ? pastMeetings.find(m => m.id === selectedPastId)
-      : null) ?? pastMeetings[0] ?? null;
+  const selectedPast = selectedPastId
+    ? pastMeetings.find(m => m.id === selectedPastId) ?? null
+    : null;
 
   const selectedDayMeetings = selectedDayDate
     ? meetingsByDate[selectedDayDate] ?? []
@@ -445,6 +447,18 @@ export default function StudentCalendar({
                     {m.details ? (
                       <p className="mt-0.5 text-[11px] font-medium text-[#234C6A]">{m.details}</p>
                     ) : null}
+                    {onViewProfile && m.peerUserId ? (
+                      <button
+                        type="button"
+                        onClick={e => {
+                          e.stopPropagation();
+                          onViewProfile(m);
+                        }}
+                        className="mt-1 text-[11px] font-semibold text-[#234C6A] hover:underline"
+                      >
+                        View {isExpert ? 'student' : 'expert'} card
+                      </button>
+                    ) : null}
                     {isExpert ? (
                       <div className="mt-2 flex justify-end">
                         <span className="text-[11px] font-semibold text-[#234C6A]">
@@ -655,6 +669,18 @@ export default function StudentCalendar({
                             <p className="mt-1 text-[11px] text-slate-500">
                               {m.with}
                             </p>
+                            {onViewProfile && m.peerUserId ? (
+                              <button
+                                type="button"
+                                onClick={e => {
+                                  e.stopPropagation();
+                                  onViewProfile(m);
+                                }}
+                                className="mt-1 block text-[11px] font-semibold text-[#234C6A] hover:underline"
+                              >
+                                View {isExpert ? 'student' : 'expert'} card
+                              </button>
+                            ) : null}
                             {isExpert ? (
                               <p className="mt-2 text-[11px] font-semibold text-[#234C6A]">
                                 View details →

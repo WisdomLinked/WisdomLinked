@@ -25,8 +25,6 @@ interface SeminarDetailsProps {
     keywords?: any[];
     services?: any[];
     purposeOther?: string;
-    /** For 1:1 sessions: the student user (populated with optional academic background). */
-    student?: any;
     type?: string;
     createdAt?: string;
     isRecurring?: boolean;
@@ -47,7 +45,6 @@ const SeminarDetails = ({
     keywords,
     services,
     purposeOther,
-    student,
     type,
     createdAt,
     isRecurring,
@@ -72,24 +69,6 @@ const SeminarDetails = ({
     const isCommunityChat = type === "community";
     const isLight = theme === "light";
     const participantCount = Math.max((participants?.length || 0) - 1, 0);
-
-    const coerceBg = (value: any): string => {
-        if (typeof value === "string") return value.trim();
-        if (value && typeof value === "object") return String(value.label ?? value.value ?? value.name ?? "").trim();
-        return "";
-    };
-    const studentBackgroundRows = student
-        ? ([
-            ["Degree sought", coerceBg(student.degreeSought)],
-            ["Intended intake", coerceBg(student.intendedIntake)],
-            ["Current university", coerceBg(student.currentUniversity)],
-            ["GPA", coerceBg(student.gpa)],
-            ["Country", coerceBg(student.country)],
-            ["Research interests", coerceBg(student.researchInterests)],
-            ["Major", Array.isArray(student.customKeywords) ? student.customKeywords.join(", ") : ""],
-            ["Purpose / notes", coerceBg(student.specialNote)],
-        ] as [string, string][]).filter(([, v]) => v)
-        : [];
 
     const [resolvedImages, setResolvedImages] = useState<Map<string, string>>(new Map());
     const imageCacheRef = useRef(new Map<string, string>());
@@ -282,22 +261,6 @@ const SeminarDetails = ({
                     )}
                 </div>
 
-                {studentBackgroundRows.length > 0 ? (
-                    <div className={`rounded-xl border p-3 ${isLight ? "border-slate-200 bg-white" : "border-slate-700 bg-[#141414]"}`}>
-                        <div className={`mb-2 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.12em] ${isLight ? "text-[#234C6A]" : "text-slate-300"}`}>
-                            <UserRound className="h-3.5 w-3.5" />
-                            Student background
-                        </div>
-                        <dl className="space-y-1.5">
-                            {studentBackgroundRows.map(([label, value]) => (
-                                <div key={label} className="flex justify-between gap-3">
-                                    <dt className={`shrink-0 text-[12px] ${isLight ? "text-slate-500" : "text-slate-400"}`}>{label}</dt>
-                                    <dd className={`text-right text-[12px] font-medium ${isLight ? "text-slate-800" : "text-slate-200"}`}>{value}</dd>
-                                </div>
-                            ))}
-                        </dl>
-                    </div>
-                ) : null}
             </div>
 
             <GroupParticipantsDialog

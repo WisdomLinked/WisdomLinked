@@ -27,16 +27,18 @@ import {
   getSeminarSeatRequests,
   approveSeminarSeatRequest,
   rejectSeminarSeatRequest,
+  getMyFollowers,
 } from '../api/api';
 import { resolveProfileImageSrc } from '../utils/profileImage';
-import { fetchDmUnreadSnapshot } from '../api/chatApi';
+import { fetchDmUnreadSnapshot, fetchChatUserProfile } from '../api/chatApi';
+import ProfileModal from './Dashboard/Messenger/Messages/ProfileModal';
+import { buildFallbackChatProfile, mergeChatProfile } from '../utils/chatProfileModal';
 import { useAppSelector } from '../store';
 import { logoutUser, updateMe } from '../actions/authActions';
 import { showErrorAlert, showSuccessAlert, showWarningAlert } from '../actions/alertActions';
 import { patchDmUnreadRid, setChosenGroupChatDetails, setDmUnreadByRidBulk } from '../actions/chatActions';
 import { connectToRC, onSubscriptionChanged, subscribeToRoom } from '../services/rcRealtime';
 import { useEndMeetingOnReturn } from '../hooks/useEndMeetingOnReturn';
-import { canonicalLabelsFromMixedServiceEntries } from '../constants/serviceOptions';
 
 
 // Reuse existing expert dashboard feature pages (legacy MUI pages)
@@ -54,12 +56,9 @@ import Chatbot from '../components/chatbot';
 import UpcomingSessionModal, {
   type UpcomingModalSession,
 } from '../components/dashboard/UpcomingSessionModal';
-
-function coerceBriefValue(value: any): string {
-  if (Array.isArray(value)) return value.filter(Boolean).join(', ').trim();
-  if (value == null) return '';
-  return String(value).trim();
-}
+import FollowersModal, {
+  type FollowerEntry,
+} from '../components/dashboard/FollowersModal';
 
 /** The student on a 1:1 booking may be the creator or the sole participant. */
 function pickStudent(g: any): any {
@@ -68,29 +67,9 @@ function pickStudent(g: any): any {
     (p: any) =>
       p &&
       typeof p === 'object' &&
-      (p.degreeSought || p.intendedIntake || p.currentUniversity || p.gpa || p.researchInterests || p.country),
+      (p.degreeSought || p.intendedIntake || p.currentUniversity || p.gpa || p.country),
   );
   return withBackground || (typeof g?.createdBy === 'object' ? g.createdBy : null);
-}
-
-function buildStudentBrief(g: any): Array<{ label: string; value: string }> {
-  const student = pickStudent(g) || {};
-  const purpose =
-    coerceBriefValue(g?.purposeOther) ||
-    canonicalLabelsFromMixedServiceEntries(g?.services).join(', ');
-  return ([
-    ['Degree sought', coerceBriefValue(student.degreeSought)],
-    ['Intended intake', coerceBriefValue(student.intendedIntake)],
-    ['Current university', coerceBriefValue(student.currentUniversity)],
-    ['GPA', coerceBriefValue(student.gpa)],
-    ['Country', coerceBriefValue(student.country)],
-    ['Major', coerceBriefValue(student.customKeywords)],
-    ['Research interests', coerceBriefValue(student.researchInterests)],
-    ['Purpose', purpose],
-    ['Note', coerceBriefValue(g?.description)],
-  ] as Array<[string, string]>)
-    .filter(([, value]) => value.length > 0)
-    .map(([label, value]) => ({ label, value }));
 }
 
 function mapSeatRequestToModalSession(r: any): UpcomingModalSession {
@@ -153,7 +132,8 @@ function mapExpertGroupToModalSession(g: any): UpcomingModalSession {
     when,
     location: 'Online · WisdomLinked',
     with: withLabel,
-    studentBrief: g?.type === 'individual' ? buildStudentBrief(g) : undefined,
+    peerUserId:
+      g?.type === 'individual' ? String(pickStudent(g)?._id ?? '') : undefined,
   };
 }
 
@@ -188,6 +168,71 @@ export default function ExpertDashboard() {
     kind: 'seminar' | 'oneToOne';
     status: 'booked' | 'pending';
   } | null>(null);
+
+  // Student profile card opened from a row in the upcoming-sessions modal or followers list.
+  const [peerProfile, setPeerProfile] = useState<any | null>(null);
+  const [peerProfileOpen, setPeerProfileOpen] = useState(false);
+
+  const openPeerProfileById = useCallback(
+    async (peerId: string, username?: string, image?: string | null) => {
+      if (!peerId) return;
+      const fallback = buildFallbackChatProfile(
+        { userId: peerId, username: username || 'Student', image: image ?? null },
+        String(userDetails?.role || ''),
+      );
+      setPeerProfile(fallback);
+      setPeerProfileOpen(true);
+      const response = await fetchChatUserProfile(peerId);
+      if (response?.success && 'result' in response && response.result) {
+        setPeerProfile(mergeChatProfile(fallback, response.result));
+      }
+    },
+    [userDetails?.role],
+  );
+
+  const handleViewPeerProfile = useCallback(
+    (session: UpcomingModalSession) =>
+      openPeerProfileById(String(session.peerUserId || ''), session.with),
+    [openPeerProfileById],
+  );
+
+  const handleClosePeerProfile = useCallback(() => {
+    setPeerProfileOpen(false);
+    setPeerProfile(null);
+  }, []);
+
+  // Followers list opened from the top-right button; clicking a row opens the student card.
+  const [followers, setFollowers] = useState<FollowerEntry[]>([]);
+  const [followersOpen, setFollowersOpen] = useState(false);
+  const [followersLoading, setFollowersLoading] = useState(false);
+
+  const loadFollowers = useCallback(async () => {
+    setFollowersLoading(true);
+    try {
+      const res: any = await getMyFollowers();
+      setFollowers(Array.isArray(res?.result) ? res.result : []);
+    } finally {
+      setFollowersLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (String(userDetails?.role).toLowerCase() !== 'expert') return;
+    void loadFollowers();
+  }, [userDetails?.role, userDetails?._id, loadFollowers]);
+
+  const handleOpenFollowers = useCallback(() => {
+    setFollowersOpen(true);
+    void loadFollowers();
+  }, [loadFollowers]);
+
+  const handleSelectFollower = useCallback(
+    (follower: FollowerEntry) => {
+      setFollowersOpen(false);
+      void openPeerProfileById(String(follower._id), follower.username, follower.image ?? null);
+    },
+    [openPeerProfileById],
+  );
 
   // Overflow seminar seat requests (students who registered past the cap) awaiting
   // the host's approval — surfaced as the "Pending seminars" card + modal.
@@ -719,9 +764,23 @@ export default function ExpertDashboard() {
       <div className="px-6 py-7 space-y-6">
         {/* Stats row */}
         <section>
-          <h2 className="text-2xl font-semibold text-slate-900 mb-3">
-            Overview
-          </h2>
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <h2 className="text-2xl font-semibold text-slate-900">
+              Overview
+            </h2>
+            <button
+              type="button"
+              onClick={handleOpenFollowers}
+              className="inline-flex items-center gap-2 rounded-lg border border-[#234C6A] bg-[#234C6A] px-3.5 py-2.5 text-[14px] font-semibold text-white shadow-[0_12px_30px_rgba(26,58,74,0.16)] transition-shadow hover:shadow-[0_18px_45px_rgba(26,58,74,0.22)]"
+              aria-label="Followers"
+            >
+              <Users className="h-4 w-4 text-white" aria-hidden />
+              <span>Followers</span>
+              <span className="inline-flex min-w-[20px] items-center justify-center rounded-md bg-white/15 px-1.5 text-[12px] font-semibold text-white">
+                {followers.length}
+              </span>
+            </button>
+          </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-4 gap-5">
             <StatCard
               label="Upcoming 1:1 sessions"
@@ -946,6 +1005,7 @@ export default function ExpertDashboard() {
             role="expert"
             sessions={expertModalSessions}
             onClose={() => setExpertUpcomingModal(null)}
+            onViewProfile={handleViewPeerProfile}
             onJoinSession={
               expertUpcomingModal.status === 'booked'
                 ? handleExpertJoinSession
@@ -961,6 +1021,22 @@ export default function ExpertDashboard() {
                 ? (s) => handleSeatDecision(s, 'decline')
                 : undefined
             }
+          />
+        ) : null}
+        <FollowersModal
+          isOpen={followersOpen}
+          followers={followers}
+          loading={followersLoading}
+          onClose={() => setFollowersOpen(false)}
+          onSelect={handleSelectFollower}
+        />
+        {peerProfile ? (
+          <ProfileModal
+            isOpen={peerProfileOpen}
+            onClose={handleClosePeerProfile}
+            userDetails={peerProfile}
+            viewerRole={userDetails?.role}
+            previewImage={peerProfile?.image}
           />
         ) : null}
       </div>

@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useDispatch } from 'react-redux';
-import { Search, CalendarDays, Clock, MapPin, ArrowLeft, User, Repeat, Check } from 'lucide-react';
+import { Search, CalendarDays, Clock, MapPin, ArrowLeft, User, Users, Repeat, Check } from 'lucide-react';
 import FilterDropdown, { type FilterOption } from '../ui/FilterDropdown';
 import { useAppSelector } from '../../store';
 import { registerForSeminar, requestSeminarSeat, doFilterSeminars, profileImageFetch, doGetKeywordsAndServices } from '../../api/api';
@@ -9,7 +9,15 @@ import { resolveProfileImageSrc } from '../../utils/profileImage';
 import { SetLoadingStatus } from '../../actions/appActions';
 import { updateMe } from '../../actions/authActions';
 import StudentBookingCheckout from './StudentBookingCheckout';
+import { usePeerProfileModal } from '../../hooks/usePeerProfileModal';
 import seminarFallbackImg from '../../assets/images/dashboard_img1.png';
+
+/** "3/10 enrolled" (or "3 enrolled" when the seminar has no cap set). */
+function capacityLabel(attendees: number, maxAttendees: number | null): string {
+  return maxAttendees != null && maxAttendees > 0
+    ? `${attendees}/${maxAttendees} enrolled`
+    : `${attendees} enrolled`;
+}
 
 type RecurrenceFrequency = 'weekly' | 'biweekly' | 'monthly';
 
@@ -21,10 +29,15 @@ type Seminar = {
   time: string;
   startMs: number;
   major: string;
+  majors: string[];
+  services: string[];
   tags: string[];
+  searchTags: string[];
   level?: 'Beginner' | 'Intermediate' | 'Advanced';
   imageUrl: string;
   expertName: string;
+  expertId: string;
+  expertImage: string | null;
   location: string;
   attendees: number;
   maxAttendees: number | null;
@@ -71,6 +84,15 @@ async function mapSeminar(g: any): Promise<Seminar> {
   const hasStart = start && !Number.isNaN(start.getTime());
   const keywords = (g?.keywords || []).map((k: any) => k?.value).filter(Boolean);
   const serviceLabels = canonicalLabelsFromMixedServiceEntries(g?.services);
+  // The host's free-text "Other purpose" — a service/topic not in the preset list.
+  // Surfaced alongside the picked services in the Topics row.
+  const purposeOther = typeof g?.purposeOther === 'string' ? g.purposeOther.trim() : '';
+  const topicLabels = purposeOther ? [...serviceLabels, purposeOther] : serviceLabels;
+  // The host's own freeform tags (persisted on the seminar). Kept separate from the
+  // service-derived "Topics" row: they only widen search, they don't replace Topics.
+  const freeformTags = Array.isArray(g?.tags)
+    ? g.tags.filter((t: any) => typeof t === 'string' && t.trim())
+    : [];
   // Prefer the seminar's own cover image; only fall back to the host's photo when absent.
   const image = g?.image
     ? String(g.image)
@@ -90,9 +112,14 @@ async function mapSeminar(g: any): Promise<Seminar> {
     time: hasStart ? `${pad2(start!.getHours())}:${pad2(start!.getMinutes())}` : '',
     startMs: hasStart ? start!.getTime() : Number.MAX_SAFE_INTEGER,
     major: keywords[0] || 'General',
-    tags: serviceLabels.length ? serviceLabels : keywords.length ? keywords : ['Seminar'],
+    majors: keywords,
+    services: topicLabels,
+    tags: topicLabels.length ? topicLabels : keywords.length ? keywords : ['Seminar'],
+    searchTags: freeformTags,
     imageUrl: image || seminarFallbackImg,
     expertName: g?.admin?.username || g?.admin?.email || 'WisdomLinked expert',
+    expertId: g?.admin?._id != null ? String(g.admin._id) : '',
+    expertImage: g?.admin?.image ?? null,
     location: 'Online · WisdomLinked',
     attendees: enrolled,
     maxAttendees,
@@ -129,6 +156,7 @@ export default function StudentSeminars() {
   const [seatRequested, setSeatRequested] = useState(false);
   const [bookingError, setBookingError] = useState<string | null>(null);
   const dispatch = useDispatch();
+  const { openPeerProfile, peerProfileModal } = usePeerProfileModal(userDetails?.role);
 
   // Seminars the student is already enrolled in (confirmed participants live in
   // groupChats). Used to stop re-booking the same seminar.
@@ -275,7 +303,9 @@ export default function StudentSeminars() {
       !q ||
       seminar.title.toLowerCase().includes(q) ||
       seminar.description.toLowerCase().includes(q) ||
-      seminar.major.toLowerCase().includes(q);
+      seminar.major.toLowerCase().includes(q) ||
+      seminar.tags.some(t => t.toLowerCase().includes(q)) ||
+      seminar.searchTags.some(t => t.toLowerCase().includes(q));
 
     const matchesMajor =
       majorFilter === 'all' ||
@@ -426,6 +456,10 @@ export default function StudentSeminars() {
           <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
           <span>{s.major}</span>
         </span>
+        <span className="inline-flex items-center gap-1 rounded-full bg-slate-50 px-2 py-1">
+          <Users className="h-3 w-3 text-[#234C6A]" aria-hidden />
+          <span>{capacityLabel(s.attendees, s.maxAttendees)}</span>
+        </span>
         {s.level && (
           <span className="inline-flex items-center gap-1 rounded-full bg-slate-50 px-2 py-1">
             <span className="h-1.5 w-1.5 rounded-full bg-[#234C6A]" />
@@ -514,10 +548,24 @@ export default function StudentSeminars() {
               </div>
 
               <div className="mt-5 grid gap-2 sm:grid-cols-2 text-[12px] text-slate-700">
-                <div className="inline-flex items-center gap-1.5 rounded-lg border border-[#E5E2DB] bg-[#F5F3EF] px-3 py-2">
-                  <User className="h-4 w-4 text-[#234C6A]" aria-hidden />
-                  <span>{s.expertName}</span>
-                </div>
+                {s.expertId ? (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      openPeerProfile({ userId: s.expertId, username: s.expertName, image: s.expertImage })
+                    }
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-[#E5E2DB] bg-[#F5F3EF] px-3 py-2 text-left transition-colors hover:border-[#234C6A] hover:bg-[#E8EEF4]"
+                    title={`View ${s.expertName}'s profile`}
+                  >
+                    <User className="h-4 w-4 text-[#234C6A]" aria-hidden />
+                    <span className="font-medium text-[#234C6A] underline underline-offset-2">{s.expertName}</span>
+                  </button>
+                ) : (
+                  <div className="inline-flex items-center gap-1.5 rounded-lg border border-[#E5E2DB] bg-[#F5F3EF] px-3 py-2">
+                    <User className="h-4 w-4 text-[#234C6A]" aria-hidden />
+                    <span>{s.expertName}</span>
+                  </div>
+                )}
                 <div className="inline-flex items-center gap-1.5 rounded-lg border border-[#E5E2DB] bg-[#F5F3EF] px-3 py-2">
                   <CalendarDays className="h-4 w-4 text-[#234C6A]" aria-hidden />
                   <span>{s.date}</span>
@@ -531,10 +579,49 @@ export default function StudentSeminars() {
                   <span>{s.location}</span>
                 </div>
                 <div className="inline-flex items-center gap-1.5 rounded-lg border border-[#E5E2DB] bg-[#F5F3EF] px-3 py-2">
-                  <span className="inline-block h-2 w-2 rounded-full bg-emerald-500" />
-                  <span>{s.attendees} attendees</span>
+                  <Users className="h-4 w-4 text-[#234C6A]" aria-hidden />
+                  <span>{capacityLabel(s.attendees, s.maxAttendees)}</span>
                 </div>
               </div>
+
+              {(s.majors.length > 0 || s.services.length > 0) && (
+                <div className="mt-5 space-y-3">
+                  {s.majors.length > 0 && (
+                    <div>
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[#7A7A72]">
+                        Majors / keywords
+                      </p>
+                      <div className="mt-1 flex flex-wrap gap-1.5">
+                        {s.majors.map(k => (
+                          <span
+                            key={k}
+                            className="rounded-full bg-[#E8EEF4] px-2.5 py-1 text-[11px] font-medium text-[#234C6A]"
+                          >
+                            {k}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {s.services.length > 0 && (
+                    <div>
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[#7A7A72]">
+                        Services
+                      </p>
+                      <div className="mt-1 flex flex-wrap gap-1.5">
+                        {s.services.map(k => (
+                          <span
+                            key={k}
+                            className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-medium text-slate-700"
+                          >
+                            {k}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
 
               <div className="mt-5">
                 <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[#7A7A72]">
@@ -721,6 +808,7 @@ export default function StudentSeminars() {
             </div>
           </div>
         ) : null}
+        {peerProfileModal}
       </div>
     );
   }
@@ -748,7 +836,7 @@ export default function StudentSeminars() {
                 type="text"
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
-                placeholder="Search by seminar title, description, or field…"
+                placeholder="Search by seminar title, description, field, or topic…"
                 className="w-full bg-transparent text-sm font-sans text-[#1A3A4A] placeholder:text-[#B2AEA2] outline-none"
               />
             </div>

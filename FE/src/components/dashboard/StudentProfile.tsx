@@ -62,6 +62,7 @@ const inputBase =
 const inputNormal = `${inputBase} border-slate-200`;
 
 const DEGREE_OPTIONS = ["Bachelor's", "Master's", "PhD", 'Other'];
+const RANKING_OPTIONS = ['Top 10%', 'Top 25%', 'Top 50%', 'Other'];
 
 /** Academic-background fields are optional and free-form; coerce any stored shape to a string. */
 function coerceProfileString(value: unknown): string {
@@ -79,7 +80,8 @@ function academicFromUser(userDetails: any) {
     intendedIntake: coerceProfileString(userDetails?.intendedIntake),
     currentUniversity: coerceProfileString(userDetails?.currentUniversity),
     gpa: coerceProfileString(userDetails?.gpa),
-    researchInterests: coerceProfileString(userDetails?.researchInterests),
+    rankingPercentile: coerceProfileString(userDetails?.rankingPercentile),
+    targetUniversities: coerceProfileString(userDetails?.targetUniversities),
     country: coerceProfileString(userDetails?.country),
   };
 }
@@ -167,7 +169,8 @@ export default function StudentProfile() {
     (userDetails as any)?.intendedIntake,
     (userDetails as any)?.currentUniversity,
     (userDetails as any)?.gpa,
-    (userDetails as any)?.researchInterests,
+    (userDetails as any)?.rankingPercentile,
+    (userDetails as any)?.targetUniversities,
     (userDetails as any)?.country,
   ]);
 
@@ -298,7 +301,8 @@ export default function StudentProfile() {
         intendedIntake: academic.intendedIntake.trim(),
         currentUniversity: academic.currentUniversity.trim(),
         gpa: academic.gpa.trim(),
-        researchInterests: academic.researchInterests.trim(),
+        rankingPercentile: academic.rankingPercentile.trim(),
+        targetUniversities: academic.targetUniversities.trim(),
         country: academic.country.trim(),
       });
       if (ok) {
@@ -609,6 +613,29 @@ export default function StudentProfile() {
             />
           </div>
           <div>
+            <label className="block text-xs font-semibold text-slate-600 mb-1">Ranking percentile</label>
+            <select
+              value={academic.rankingPercentile}
+              onChange={e => setAcademicField('rankingPercentile', e.target.value)}
+              className={inputNormal}
+            >
+              <option value="">Select…</option>
+              {RANKING_OPTIONS.map(opt => (
+                <option key={opt} value={opt}>{opt}</option>
+              ))}
+            </select>
+          </div>
+          <div className="sm:col-span-2">
+            <label className="block text-xs font-semibold text-slate-600 mb-1">Target universities</label>
+            <input
+              type="text"
+              value={academic.targetUniversities}
+              onChange={e => setAcademicField('targetUniversities', e.target.value)}
+              placeholder="Comma-separated, e.g. MIT, Stanford, CMU"
+              className={inputNormal}
+            />
+          </div>
+          <div>
             <label className="block text-xs font-semibold text-slate-600 mb-1">Country</label>
             <input
               type="text"
@@ -616,16 +643,6 @@ export default function StudentProfile() {
               onChange={e => setAcademicField('country', e.target.value)}
               placeholder="e.g. China"
               className={inputNormal}
-            />
-          </div>
-          <div className="sm:col-span-2">
-            <label className="block text-xs font-semibold text-slate-600 mb-1">Research interests</label>
-            <textarea
-              value={academic.researchInterests}
-              onChange={e => setAcademicField('researchInterests', e.target.value)}
-              placeholder="e.g. Traffic Flow, Autonomous Driving"
-              rows={2}
-              className={`${inputNormal} resize-y min-h-[64px] py-2.5`}
             />
           </div>
         </div>

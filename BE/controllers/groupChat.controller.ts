@@ -29,6 +29,24 @@ const resolveServiceIds = async (services: any): Promise<any[]> => {
     }
     return ids;
 };
+
+
+const sanitizeTags = (tags: any): string[] => {
+    if (!Array.isArray(tags)) return [];
+    const seen = new Set<string>();
+    const out: string[] = [];
+    for (const t of tags) {
+        if (typeof t !== 'string') continue;
+        const value = t.trim().slice(0, 40);
+        if (!value) continue;
+        const key = value.toLowerCase();
+        if (seen.has(key)) continue;
+        seen.add(key);
+        out.push(value);
+        if (out.length >= 5) break;
+    }
+    return out;
+};
 const Conversation = require("../models/Conversation");
 const {
     getOrCreateDMChannel,
@@ -840,7 +858,7 @@ const buildRecurrenceStartDates = (start, frequency) => {
 const createGroupChat = async (req, res) => {
     try {
         const { userId } = req.user;
-        const { name, description, image, services, keywords, start, end, duration, price, type, status, customerId, maxAttendees, currency, timezone, isRecurring, recurrenceFrequency, purposeOther } = req.body;
+        const { name, description, image, services, keywords, tags, start, end, duration, price, type, status, customerId, maxAttendees, currency, timezone, isRecurring, recurrenceFrequency, purposeOther } = req.body;
 
         if (checkTitleNameInvalid('Name', name)) {
             throw new Error(checkTitleNameInvalid('Name', name))
@@ -848,6 +866,7 @@ const createGroupChat = async (req, res) => {
 
         const _services = await resolveServiceIds(services);
         const { officialIds: _keywords, customValues: _customKeywords } = await classifyMajors(keywords);
+        const _tags = sanitizeTags(tags);
 
         const sharedFields = {
             name: name,
@@ -856,6 +875,7 @@ const createGroupChat = async (req, res) => {
             services: _services,
             keywords: _keywords,
             customKeywords: _customKeywords,
+            tags: _tags,
             purposeOther: typeof purposeOther === 'string' ? purposeOther.trim().slice(0, 100) : undefined,
             duration: duration,
             price: price,
@@ -955,6 +975,7 @@ const createGroupChat = async (req, res) => {
 
         return res.status(200).json({
             result: userDetails,
+            createdGroupChatId: String(chat._id),
         });
     } catch (err) {
         return res
@@ -1148,7 +1169,7 @@ const joinGroupChat = async (req, res) => {
 const updateGroupChat = async (req, res) => {
     try {
         const { userId } = req.user;
-        const { groupId, name, description, image, services, keywords, start, end, duration, price, totalTimeSpent, type, status, maxAttendees, currency, timezone, isRecurring, recurrenceFrequency, purposeOther } = req.body;
+        const { groupId, name, description, image, services, keywords, tags, start, end, duration, price, totalTimeSpent, type, status, maxAttendees, currency, timezone, isRecurring, recurrenceFrequency, purposeOther } = req.body;
 
         if (!groupId) {
             throw new Error("Group ID is required");
@@ -1178,6 +1199,7 @@ const updateGroupChat = async (req, res) => {
             updateFields.status = status;
         }
         if (services !== undefined) updateFields.services = await resolveServiceIds(services);
+        if (tags !== undefined) updateFields.tags = sanitizeTags(tags);
         if (typeof purposeOther === 'string') updateFields.purposeOther = purposeOther.trim().slice(0, 100);
         if (keywords !== undefined) {
             const { officialIds, customValues } = await classifyMajors(keywords);
@@ -1189,6 +1211,7 @@ const updateGroupChat = async (req, res) => {
         if (typeof duration === 'string' || typeof duration === 'number') updateFields.duration = Number(duration);
         if (typeof price === 'string' || typeof price === 'number') updateFields.price = Number(price);
         if (typeof maxAttendees === 'number') updateFields.maxAttendees = maxAttendees;
+        else if (maxAttendees === null) updateFields.maxAttendees = null;
         if (typeof currency === 'string') updateFields.currency = currency;
         if (typeof timezone === 'string') updateFields.timezone = timezone;
         if (typeof isRecurring === 'boolean') updateFields.isRecurring = isRecurring;
@@ -1233,6 +1256,7 @@ const updateGroupChat = async (req, res) => {
                     services: anchor.services,
                     keywords: anchor.keywords,
                     customKeywords: anchor.customKeywords,
+                    tags: anchor.tags,
                     duration: anchor.duration,
                     price: anchor.price,
                     participants: [anchor.admin],

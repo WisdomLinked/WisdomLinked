@@ -6,7 +6,9 @@ import { BookOpen, UserCheck, AlertCircle, MessageSquare, Users } from 'lucide-r
 import { useAppSelector } from '../store';
 import { doGetMyEvents, getAllCommunityChats, profileImageFetch, doFilterExperts, doFilterSeminars } from '../api/api';
 import { resolveProfileImageSrc } from '../utils/profileImage';
-import { fetchDmUnreadSnapshot } from '../api/chatApi';
+import { fetchDmUnreadSnapshot, fetchChatUserProfile } from '../api/chatApi';
+import ProfileModal from './Dashboard/Messenger/Messages/ProfileModal';
+import { buildFallbackChatProfile, mergeChatProfile } from '../utils/chatProfileModal';
 import Sidebar from '../components/layout/Sidebar';
 import TopBar, { TopBarNotificationItem } from '../components/layout/TopBar';
 import StatsGrid from '../components/dashboard/StatsGrid';
@@ -25,7 +27,7 @@ import ExpertProfile from '../components/dashboard/ExpertProfile';
 import StudentBookingCheckout, { completeStudentBookingFromStorage } from '../components/dashboard/StudentBookingCheckout';
 import { getExpertById, doFollowExpert, doUnfollowExpert, acceptIndividualAppointment, getMySeatRequests } from '../api/api';
 import { updateMe } from '../actions/authActions';
-import type { MentorCardProps } from '../components/MentorCard';
+import type { ExpertCardProps } from '../components/ExpertCard';
 import { mapExpertToMentorWithImage } from '../utils/mapExpertToMentor';
 import StudentChat from '../components/dashboard/StudentChat';
 import StudentPaymentHistory from '../components/dashboard/StudentPaymentHistory';
@@ -151,6 +153,9 @@ function deriveCalendarMeetings(u: any): CalendarMeeting[] {
         `Seminar host: ${host}`,
         {
           groupId: g?._id != null ? String(g._id) : undefined,
+          peerUserId: g?.admin?._id != null ? String(g.admin._id) : undefined,
+          peerName: host,
+          peerImage: g?.admin?.image ?? null,
           recurrence: g?.isRecurring ? g?.recurrenceFrequency ?? null : null,
           seriesId: g?.seriesId ? String(g.seriesId) : null,
           details: meetingDetailsLine(g),
@@ -201,6 +206,34 @@ function deriveCalendarMeetings(u: any): CalendarMeeting[] {
   return out;
 }
 
+/**
+ * Booking details the student entered when requesting a 1:1, surfaced behind the
+ * "Booking details" button in the upcoming-sessions modal: their mentor, the
+ * purpose/service, their note, and the price (paid once booked, else due).
+ */
+function buildBookingBrief(
+  g: any,
+  mentor: string,
+  price: number | undefined,
+  pending: boolean,
+): Array<{ label: string; value: string }> {
+  const purpose =
+    (typeof g?.purposeOther === 'string' && g.purposeOther.trim()) ||
+    canonicalLabelsFromMixedServiceEntries(g?.services).join(', ');
+  const note = typeof g?.description === 'string' ? g.description.trim() : '';
+  const rows: Array<[string, string]> = [
+    ['Mentor', mentor],
+    ['Purpose', purpose],
+    ['Note', note],
+  ];
+  if (typeof price === 'number') {
+    rows.push([pending ? 'Price' : 'Amount paid', `$${price}`]);
+  }
+  return rows
+    .filter(([, value]) => value.length > 0)
+    .map(([label, value]) => ({ label, value }));
+}
+
 function modalWhen(ms: number): string {
   const d = new Date(ms);
   if (Number.isNaN(d.getTime())) return '';
@@ -232,6 +265,7 @@ function deriveModalSessions(
       when: Number.isNaN(at) ? 'TBD' : modalWhen(at),
       location: 'Online · WisdomLinked Room',
       with: g?.admin?.username || g?.admin?.email || 'WisdomLinked',
+      peerUserId: String(g?.admin?._id ?? g?.admin ?? ''),
     };
   };
 
@@ -261,16 +295,20 @@ function deriveModalSessions(
       // payment; student-booked ones (createdBy = me) await the mentor's approval.
       const createdById = String(g?.createdBy?._id ?? g?.createdBy ?? '');
       const payable = status === 'pending' && createdById !== '' && createdById !== myId;
+      const mentor = g?.admin?.username || g?.admin?.email || 'Your mentor';
+      const price = typeof g?.price === 'number' ? g.price : undefined;
       return {
         id: String(g?._id ?? `session-${at}`),
         title: g?.name || '1:1 session',
         at: Number.isNaN(at) ? 0 : at,
         when: Number.isNaN(at) ? 'TBD' : modalWhen(at),
         location: 'Online · WisdomLinked Room',
-        with: g?.admin?.username || g?.admin?.email || 'Your mentor',
+        with: mentor,
         peerUserId: String(g?.admin?._id ?? g?.admin ?? ''),
         payable,
-        price: typeof g?.price === 'number' ? g.price : undefined,
+        price,
+        studentBrief: buildBookingBrief(g, mentor, price, status === 'pending'),
+        briefLabel: 'Booking details',
       };
     });
 
@@ -394,7 +432,7 @@ export default function StudentDashboard() {
   const [rcRoomNameByRid, setRcRoomNameByRid] = useState<Record<string, string>>({});
   /** Same source as chat sidebar — RC room id → community name (DMs use directConversations only). */
   const [communityRidToName, setCommunityRidToName] = useState<Record<string, string>>({});
-  const [selectedExpert, setSelectedExpert] = useState<MentorCardProps | null>(null);
+  const [selectedExpert, setSelectedExpert] = useState<ExpertCardProps | null>(null);
   const [followedMentorIds, setFollowedMentorIds] = useState<string[]>([]);
   const [followerCounts, setFollowerCounts] = useState<Record<string, number>>({});
   const { auth: { userDetails } } = useAppSelector((state: any) => state);
@@ -575,6 +613,10 @@ export default function StudentDashboard() {
     kind: 'seminar' | 'oneToOne';
     status: 'booked' | 'pending';
   } | null>(null);
+
+  // Mentor profile card opened from a row in the upcoming-sessions modal.
+  const [peerProfile, setPeerProfile] = useState<any | null>(null);
+  const [peerProfileOpen, setPeerProfileOpen] = useState(false);
 
   // Overflow seminar seat requests the student has submitted that await the host's
   // decision — surfaced as the "Pending seminars" card + modal.
@@ -1102,6 +1144,31 @@ export default function StudentDashboard() {
     else openMentorDm(session.peerUserId, session.with);
   };
 
+  // Open the peer's (mentor / seminar host) profile card, showing a fallback
+  // immediately and enriching it once the full profile loads.
+  const handleViewPeerProfile = useCallback(
+    async (session: UpcomingModalSession) => {
+      const peerId = String(session.peerUserId || '');
+      if (!peerId) return;
+      const fallback = buildFallbackChatProfile(
+        { userId: peerId, username: session.with, image: null },
+        String(userDetails?.role || ''),
+      );
+      setPeerProfile(fallback);
+      setPeerProfileOpen(true);
+      const response = await fetchChatUserProfile(peerId);
+      if (response?.success && response?.result) {
+        setPeerProfile(mergeChatProfile(fallback, response.result));
+      }
+    },
+    [userDetails?.role],
+  );
+
+  const handleClosePeerProfile = useCallback(() => {
+    setPeerProfileOpen(false);
+    setPeerProfile(null);
+  }, []);
+
   return (
     <div className="min-h-screen bg-[#f8f7f4] text-[14px]">
       <div className="flex min-h-screen">
@@ -1208,6 +1275,12 @@ export default function StudentDashboard() {
               error={calendarError}
               onRetry={() => setEventsReloadKey((k) => k + 1)}
               onJoinMeeting={handleJoinMeeting}
+              onViewProfile={(m) =>
+                handleViewPeerProfile({
+                  peerUserId: m.peerUserId,
+                  with: m.peerName || m.with,
+                } as any)
+              }
             />
           ) : activeItem === 'join-meeting' ? (
             <JoinMeeting />
@@ -1308,6 +1381,7 @@ export default function StudentDashboard() {
             }
             onClose={() => setUpcomingModal(null)}
             onJoinSession={handleUpcomingJoinSession}
+            onViewProfile={handleViewPeerProfile}
             onPay={(session) => {
               setUpcomingModal(null);
               setPayTarget({
@@ -1316,6 +1390,15 @@ export default function StudentDashboard() {
                 name: session.title,
               });
             }}
+          />
+        )}
+        {peerProfile && (
+          <ProfileModal
+            isOpen={peerProfileOpen}
+            onClose={handleClosePeerProfile}
+            userDetails={peerProfile}
+            viewerRole={userDetails?.role}
+            previewImage={peerProfile?.image}
           />
         )}
         {payTarget && (

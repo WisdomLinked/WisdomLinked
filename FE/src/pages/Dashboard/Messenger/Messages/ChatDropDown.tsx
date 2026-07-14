@@ -147,6 +147,7 @@ export default function ChatDropDown({events, openCalendarModal}: any) {
                         closeDialogHandler={handleParticipantsCloseDialog}
                         groupDetails={chosenGroupChatDetails}
                         currentUserId={userDetails._id}
+                        currentUserRole={userDetails?.role}
                     />
                 </>
             )}

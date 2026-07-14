@@ -12,7 +12,7 @@ import {
   Target,
   Users,
 } from 'lucide-react';
-import type { MentorCardProps } from '../MentorCard';
+import type { ExpertCardProps } from '../ExpertCard';
 import { useAppSelector } from '../../store';
 import FilePreviewModal from '../../pages/Dashboard/FilePreviewModal';
 import { hasResumeForPreview, resolveResumePublicUrl } from '../../utils/resumeUrl';
@@ -47,7 +47,7 @@ export default function ExpertProfile({
   onPaymentReturnHandled,
   onGoToCalendar,
 }: {
-  mentor: MentorCardProps;
+  mentor: ExpertCardProps;
   onBack: () => void;
   /** Live count from parent (list + profile stay in sync). */
   followerCount?: number;
@@ -358,7 +358,7 @@ export default function ExpertProfile({
     };
 
     const all = (expertDetails?.groupChats || [])
-      .filter((g: any) => g?.type === 'seminar')
+      .filter((g: any) => g?.type === 'seminar' && g?.status !== 'draft' && g?.status !== 'cancelled')
       .map(mapSeminar);
 
     const past = collapseSeries(
@@ -474,10 +474,23 @@ export default function ExpertProfile({
                 </p>
 
                 <div className="mt-4 flex flex-wrap items-center gap-2">
-                  <span className="inline-flex items-center gap-2 rounded-[3px] border border-[#E5E2DB] bg-[#F5F3EF] px-3 py-1.5 text-[12px] font-semibold text-[#1A3A4A]">
-                    <MapPin className="h-3.5 w-3.5" aria-hidden />
-                    {mentor.field}
-                  </span>
+                  {(mentor.majors && mentor.majors.length > 0
+                    ? mentor.majors
+                    : [{ label: mentor.field, custom: false }]
+                  ).map((major, idx) => (
+                    <span
+                      key={`${major.label}-${idx}`}
+                      title={major.custom ? 'Self-declared major, pending review' : undefined}
+                      className={
+                        major.custom
+                          ? 'inline-flex items-center gap-2 rounded-[3px] border border-dashed border-[#CFC9BC] bg-transparent px-3 py-1.5 text-[12px] font-semibold text-[#7A7A72]'
+                          : 'inline-flex items-center gap-2 rounded-[3px] border border-[#E5E2DB] bg-[#F5F3EF] px-3 py-1.5 text-[12px] font-semibold text-[#1A3A4A]'
+                      }
+                    >
+                      <MapPin className="h-3.5 w-3.5" aria-hidden />
+                      {major.label}
+                    </span>
+                  ))}
                   {mentor.services.slice(0, 3).map((s, idx) => (
                     <span
                       key={`${s}-${idx}`}

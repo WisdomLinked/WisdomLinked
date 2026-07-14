@@ -136,7 +136,12 @@ const filterSeminars = async (req, res) => {
             // with a "Registered" badge rather than disappearing after registration.
         })
         if (name) {
-            query.where({ name: { '$regex': escapeRegex(String(name)), '$options': 'i' } })
+            // Match the query against the seminar title or any of its freeform tags,
+            // so a search like "tag1" surfaces seminars carrying that tag. Uses $and so
+            // it composes with the date-window $or already on the query (a second $or
+            // would overwrite it).
+            const rx = { '$regex': escapeRegex(String(name)), '$options': 'i' };
+            query.and([{ $or: [{ name: rx }, { tags: rx }] }])
         }
         if (keywords?.length) {
             let _keywords = []

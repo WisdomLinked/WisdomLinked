@@ -892,7 +892,8 @@ const updateProfile = async (req: any, res: Response) => {
         const intendedIntake = safeParse(req.body.intendedIntake) || req.body.intendedIntake;
         const currentUniversity = safeParse(req.body.currentUniversity) || req.body.currentUniversity;
         const gpa = safeParse(req.body.gpa) || req.body.gpa;
-        const researchInterests = safeParse(req.body.researchInterests) || req.body.researchInterests;
+        const rankingPercentile = safeParse(req.body.rankingPercentile) || req.body.rankingPercentile;
+        const targetUniversities = safeParse(req.body.targetUniversities) || req.body.targetUniversities;
         const price = safeParse(req.body.price) || req.body.price;
         const joinPopupBlocked = safeParse(req.body.joinPopupBlocked) || req.body.joinPopupBlocked;
         const appointmentDurationsRaw =
@@ -972,7 +973,7 @@ const updateProfile = async (req: any, res: Response) => {
         if (phoneNumber !== undefined && phoneNumber !== null) {
             updates.phoneNumber = phoneNumber
         }
-        const academicFields = { degreeSought, intendedIntake, currentUniversity, gpa, researchInterests };
+        const academicFields = { degreeSought, intendedIntake, currentUniversity, gpa, rankingPercentile, targetUniversities };
         for (const [key, value] of Object.entries(academicFields)) {
             if (value !== undefined && value !== null) {
                 updates[key] = String(value).slice(0, 300);
@@ -1300,12 +1301,14 @@ const leaveFeedback = async (req: any, res: Response) => {
             date: new Date()
         })
 
-        let userRating = 0
+        let ratingSum = 0
         for (let i = 0; i < otherUser.feedbacks.length; i++) {
 
-            userRating += otherUser.feedbacks[i].rating
+            ratingSum += otherUser.feedbacks[i].rating
         }
-        userRating = parseFloat((rating / otherUser.feedbacks.length).toFixed(2))
+        const userRating = otherUser.feedbacks.length
+            ? parseFloat((ratingSum / otherUser.feedbacks.length).toFixed(2))
+            : 0
 
         otherUser.rating = userRating
 

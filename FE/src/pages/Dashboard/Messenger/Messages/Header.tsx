@@ -947,6 +947,7 @@ const MessagesHeader = ({ events, openCalendarModal, openSeminarModal, openEditS
                         closeDialogHandler={handleParticipantsCloseDialog}
                         groupDetails={chosenGroupChatDetails}
                         currentUserId={userDetails?._id}
+                        currentUserRole={userDetails?.role}
                         theme={theme === "light" ? "light" : "dark"}
                     />
                     {chosenGroupChatDetails?.type === "community" ? (

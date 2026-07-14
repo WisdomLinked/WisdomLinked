@@ -90,6 +90,7 @@ function mapGroupChatToExpertSeminar(g: any) {
     description: g.description || '',
     keywords: labelsFromMixed(g.keywords),
     services: canonicalLabelsFromMixedServiceEntries(g.services),
+    tags: Array.isArray(g.tags) ? g.tags.filter((t: unknown): t is string => typeof t === 'string') : [],
     purposeOther: typeof g.purposeOther === 'string' ? g.purposeOther : '',
     start: g.start,
     end: g.end,
@@ -124,7 +125,13 @@ function SeminarCard({
     ? start.toLocaleTimeString(undefined, { timeStyle: 'short' })
     : '';
   const majors = labelsFromMixed(seminar?.keywords).slice(0, 3);
-  const n = Array.isArray(seminar?.participants) ? seminar.participants.length : 0;
+  // The host is stored as a participant for chat membership, so exclude them
+  // from the enrolled count — mirrors SeminarDetailPane's enrolledCount.
+  const adminId = getRefId(admin);
+  const n = Array.isArray(seminar?.participants)
+    ? seminar.participants.filter((p: unknown) => getRefId(p) !== adminId).length
+    : 0;
+  const maxAttendees = typeof seminar?.maxAttendees === 'number' ? seminar.maxAttendees : null;
 
   return (
     <article
@@ -188,7 +195,7 @@ function SeminarCard({
           ) : null}
           <span className="inline-flex items-center gap-1 rounded-full bg-slate-50 px-2 py-1">
             <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-            {n} enrolled
+            {maxAttendees != null && maxAttendees > 0 ? `${n}/${maxAttendees}` : n} enrolled
           </span>
           {recurrenceLabel && occurrenceCount && occurrenceCount > 1 ? (
             <span className="inline-flex items-center gap-1 rounded-full bg-[#E8EEF4] px-2 py-1 text-[#234C6A]">
@@ -348,6 +355,7 @@ function SeminarDetailPane({
   const adminId = getRefId(admin);
   const enrolledCount = participants.filter((p) => getRefId(p) !== adminId).length;
   const hasEnrolledStudents = enrolledCount > 0;
+  const maxAttendees = typeof seminar?.maxAttendees === 'number' ? seminar.maxAttendees : null;
   const start = seminar?.start ? new Date(seminar.start) : null;
   const end = seminar?.end ? new Date(seminar.end) : null;
   const now = Date.now();
@@ -547,7 +555,11 @@ function SeminarDetailPane({
             <div className="mt-6">
               <div className="flex items-center justify-between">
                 <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[#7A7A72]">
-                  Participants ({Math.max(0, participants.length - 1)})
+                  Participants (
+                  {maxAttendees != null && maxAttendees > 0
+                    ? `${enrolledCount}/${maxAttendees}`
+                    : enrolledCount}
+                  )
                 </p>
                 {participants.length > 1 ? (
                   <button
@@ -582,6 +594,7 @@ function SeminarDetailPane({
                 type: seminar?.type,
               }}
               currentUserId={userDetails?._id}
+              currentUserRole={userDetails?.role}
               resolvedImages={resolvedImages}
             />
           </div>
@@ -753,8 +766,11 @@ export default function ExpertSeminarHub() {
     setScreen('edit');
   };
 
-  const handleAfterSave = async () => {
+  const handleAfterSave = async (status: 'active' | 'draft') => {
     await (dispatch as any)(updateMe());
+    // Saving a draft keeps the host on the editor to continue working; only a
+    // publish returns them to the seminar list.
+    if (status === 'draft') return;
     setScreen('list');
     setEditPayload(null);
   };

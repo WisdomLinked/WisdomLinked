@@ -90,7 +90,9 @@ const userSchema = new mongoose.Schema(
         intendedIntake: { type: String },
         currentUniversity: { type: String },
         gpa: { type: String },
-        researchInterests: { type: String },
+        rankingPercentile: { type: String },
+        /** Comma-separated list of target universities the student is aiming for. */
+        targetUniversities: { type: String },
     },
     { timestamps: true }
 );

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useDispatch } from 'react-redux';
 import IconButton from '@mui/material/IconButton';
 import Dialog from '@mui/material/Dialog';
@@ -17,6 +17,7 @@ import {
   profileImageFetch,
   createCommunityChat,
   joinCommunityChat,
+  getMyFollowers,
   doFilterCustomers,
   doFilterExperts,
   searchPrivateChatUsers,
@@ -123,10 +124,15 @@ const StudentChat: React.FC = () => {
   const [newName, setNewName] = useState('');
   const [newDescription, setNewDescription] = useState('');
   const [newOpenToAll, setNewOpenToAll] = useState(true);
+  const [newOpenToFollowers, setNewOpenToFollowers] = useState(false);
+  const [loadingFollowers, setLoadingFollowers] = useState(false);
   const [creating, setCreating] = useState(false);
   const [communityInviteQuery, setCommunityInviteQuery] = useState('');
   const [communityInviteRows, setCommunityInviteRows] = useState<PrivateRow[]>([]);
   const [communityInviteSelected, setCommunityInviteSelected] = useState<Array<{ id: string; title: string }>>([]);
+  // Ids of invitees that were pulled in by "Open to all followers", so unchecking
+  // the box can remove exactly those without touching manually-added members.
+  const communityFollowerIdsRef = useRef<Set<string>>(new Set());
   const [expertCustomerSearchRows, setExpertCustomerSearchRows] = useState<PrivateRow[]>([]);
   const [studentExpertSearchRows, setStudentExpertSearchRows] = useState<PrivateRow[]>([]);
 
@@ -568,8 +574,46 @@ const StudentChat: React.FC = () => {
       setCommunityInviteSelected([]);
       setCommunityInviteQuery('');
       setCommunityInviteRows([]);
+      setNewOpenToFollowers(false);
+      communityFollowerIdsRef.current = new Set();
     }
   }, [newOpenToAll]);
+
+  // "Open to all followers": a convenience that turns off open-to-everyone and
+  // bulk-adds every follower into the invite list, still leaving the panel open
+  // so the expert can search and add others on top.
+  const toggleOpenToFollowers = async (checked: boolean) => {
+    if (!checked) {
+      setNewOpenToFollowers(false);
+      const followerSet = communityFollowerIdsRef.current;
+      setCommunityInviteSelected(prev => prev.filter(x => !followerSet.has(x.id)));
+      communityFollowerIdsRef.current = new Set();
+      return;
+    }
+    setNewOpenToAll(false);
+    setNewOpenToFollowers(true);
+    setLoadingFollowers(true);
+    try {
+      const res: any = await getMyFollowers();
+      const list = Array.isArray(res?.result) ? res.result : [];
+      const followers = list
+        .map((f: any) => ({ id: String(f?._id || ''), title: String(f?.username || f?.email || 'Follower') }))
+        .filter((f: { id: string }) => f.id);
+      communityFollowerIdsRef.current = new Set(followers.map((f: { id: string }) => f.id));
+      setCommunityInviteSelected(prev => {
+        const seen = new Set(prev.map(x => x.id));
+        return [...prev, ...followers.filter((f: { id: string }) => !seen.has(f.id))];
+      });
+      if (followers.length === 0) {
+        dispatch(showWarningAlert('You have no followers yet. Add members manually below.'));
+      }
+    } catch {
+      setNewOpenToFollowers(false);
+      dispatch(showErrorAlert('Failed to load your followers. Please try again.'));
+    } finally {
+      setLoadingFollowers(false);
+    }
+  };
 
   useEffect(() => {
     if (!isCustomer) {
@@ -838,6 +882,8 @@ const StudentChat: React.FC = () => {
         setNewName('');
         setNewDescription('');
         setNewOpenToAll(true);
+        setNewOpenToFollowers(false);
+        communityFollowerIdsRef.current = new Set();
         setCommunityInviteSelected([]);
         setCommunityInviteQuery('');
         setCommunityInviteRows([]);
@@ -1739,6 +1785,8 @@ const StudentChat: React.FC = () => {
                 type="button"
                 onClick={() => {
                   setCreateOpen(false);
+                  setNewOpenToFollowers(false);
+                  communityFollowerIdsRef.current = new Set();
                   setCommunityInviteSelected([]);
                   setCommunityInviteQuery('');
                   setCommunityInviteRows([]);
@@ -1768,21 +1816,37 @@ const StudentChat: React.FC = () => {
                   placeholder="What is this community for?"
                 />
               </div>
-              <label className="flex items-center gap-2 text-sm text-slate-700">
-                <input
-                  type="checkbox"
-                  checked={newOpenToAll}
-                  onChange={e => setNewOpenToAll(e.target.checked)}
-                  className="h-4 w-4 rounded border-slate-300 text-[#234C6A] focus:ring-[#234C6A]"
-                />
-                Open to all users
-              </label>
+              <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
+                <label className="flex items-center gap-2 text-sm text-slate-700">
+                  <input
+                    type="checkbox"
+                    checked={newOpenToAll}
+                    onChange={e => setNewOpenToAll(e.target.checked)}
+                    className="h-4 w-4 rounded border-slate-300 text-[#234C6A] focus:ring-[#234C6A]"
+                  />
+                  Open to all users
+                </label>
+                <label className="flex items-center gap-2 text-sm text-slate-700">
+                  <input
+                    type="checkbox"
+                    checked={newOpenToFollowers}
+                    disabled={loadingFollowers}
+                    onChange={e => void toggleOpenToFollowers(e.target.checked)}
+                    className="h-4 w-4 rounded border-slate-300 text-[#234C6A] focus:ring-[#234C6A]"
+                  />
+                  Open to all followers
+                  {loadingFollowers ? (
+                    <span className="text-[11px] text-slate-400">loading…</span>
+                  ) : null}
+                </label>
+              </div>
               {!newOpenToAll ? (
                 <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-3">
                   <div className="mb-1 text-xs font-semibold text-slate-600">Invite members</div>
                   <p className="mb-2 text-[11px] text-slate-500">
-                    Search your customers and add them to this community. At least one invite is required when the room is
-                    not open to everyone.
+                    {newOpenToFollowers
+                      ? 'All your followers have been added. Search your customers below to add others too.'
+                      : 'Search your customers and add them to this community. At least one invite is required when the room is not open to everyone.'}
                   </p>
                   <input
                     className="mb-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 outline-none focus:border-[#234C6A] focus:ring-2 focus:ring-[#234C6A]/60"
@@ -1851,6 +1915,8 @@ const StudentChat: React.FC = () => {
                 type="button"
                 onClick={() => {
                   setCreateOpen(false);
+                  setNewOpenToFollowers(false);
+                  communityFollowerIdsRef.current = new Set();
                   setCommunityInviteSelected([]);
                   setCommunityInviteQuery('');
                   setCommunityInviteRows([]);
