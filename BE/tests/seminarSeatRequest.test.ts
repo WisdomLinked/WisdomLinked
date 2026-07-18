@@ -29,6 +29,17 @@ test('computeSeatRequestDeadline uses the admin hours when it lands before the h
     assert.equal(deadline.getTime(), start - 24 * HOUR);
 });
 
+test('computeSeatRequestDeadline never returns a past deadline for an imminent seminar', () => {
+    const now = 1_000_000_000_000;
+    // Seminar starts in 5 hours but the admin buffer is 24h — the buffer-based
+    // deadline would be in the past, which would let the sweep expire a freshly
+    // created request. It must fall back to the seminar start instead.
+    const start = now + 5 * HOUR;
+    const deadline = computeSeatRequestDeadline(start, 24, now);
+    assert.equal(deadline.getTime(), start);
+    assert.ok(deadline.getTime() > now, 'deadline must be in the future');
+});
+
 test('computeSeatRequestDeadline is capped by the 7-day hold expiry', () => {
     const now = 1_000_000_000_000;
     // Start is ~10 days out; hours-before would exceed the hold window, so the

@@ -32,6 +32,7 @@ interface SeminarDetailsProps {
     canDeleteCommunityChat?: boolean;
     onDeleteCommunityChat?: () => void;
     theme?: "light" | "dark";
+    hideParticipants?: boolean;
 }
 
 const SeminarDetails = ({
@@ -52,6 +53,7 @@ const SeminarDetails = ({
     canDeleteCommunityChat = false,
     onDeleteCommunityChat,
     theme = "dark",
+    hideParticipants = false,
 }: SeminarDetailsProps) => {
     const recurrenceLabel =
         isRecurring && recurrenceFrequency ? RECURRENCE_LABEL[recurrenceFrequency] : undefined;
@@ -102,11 +104,31 @@ const SeminarDetails = ({
         return ref ? resolvedImages.get(ref) : undefined;
     };
 
+    const formatDate12h = (dateString?: string) => {
+        if (!dateString) return "N/A";
+        const d = new Date(dateString);
+        if (Number.isNaN(d.getTime())) return "N/A";
+        const year = d.getFullYear();
+        const month = String(d.getMonth() + 1).padStart(2, "0");
+        const day = String(d.getDate()).padStart(2, "0");
+        const time = d.toLocaleTimeString(undefined, {
+            hour: "numeric",
+            minute: "2-digit",
+            hour12: true,
+        });
+        return `${year}/${month}/${day} ${time}`;
+    };
+
     const sessionStats = [
-        { Icon: Calendar, label: "Date", value: start ? formatDateYYYY_MM_DD_h_m(start) : "N/A" },
+        { Icon: Calendar, label: "Date", value: formatDate12h(start) },
         { Icon: Clock3, label: "Duration", value: `${duration ?? 0} min` },
         { Icon: DollarSign, label: "Price", value: `$${price ?? 0}` },
     ];
+
+    const purposeText = typeof purposeOther === "string" ? purposeOther.trim() : "";
+    const dedupedServices = (services || []).filter(
+        (service: any) => serviceChipLabel(service).trim() !== purposeText,
+    );
 
     return (
         <div className={`w-full ${isLight ? "text-slate-900" : "text-white"}`}>
@@ -175,45 +197,51 @@ const SeminarDetails = ({
                     <div className={`rounded-xl border p-3 ${isLight ? "border-slate-200 bg-white" : "border-slate-700 bg-[#141414]"}`}>
                         <div className={`mb-2 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.12em] ${isLight ? "text-[#234C6A]" : "text-slate-300"}`}>
                             <Sparkles className="h-3.5 w-3.5" />
-                            {type === "individual" ? "Purpose & interests" : "Interests"}
+                            Purpose & interests
                         </div>
-                        <div className="flex flex-wrap gap-1.5">
-                            {purposeOther && purposeOther.trim() ? (
-                                <span
-                                    className={`rounded-full px-2.5 py-1 text-[11px] font-medium ${
-                                        isLight
-                                            ? "border border-slate-200 bg-slate-100 text-slate-700"
-                                            : "border border-slate-700 bg-slate-800 text-slate-200"
-                                    }`}
-                                >
-                                    {purposeOther.trim()}
-                                </span>
-                            ) : null}
-                            {(keywords || []).map((keyword: any) => (
-                                <span
-                                    key={keyword._id || keyword.value}
-                                    className={`rounded-full px-2.5 py-1 text-[11px] font-medium ${
-                                        isLight
-                                            ? "border border-slate-200 bg-[#E8EEF4] text-[#234C6A]"
-                                            : "border border-slate-700 bg-slate-800 text-slate-200"
-                                    }`}
-                                >
-                                    {keyword.value}
-                                </span>
-                            ))}
-                            {(services || []).map((service: any) => (
-                                <span
-                                    key={service._id || service.value}
-                                    className={`rounded-full px-2.5 py-1 text-[11px] font-medium ${
-                                        isLight
-                                            ? "border border-slate-200 bg-slate-100 text-slate-700"
-                                            : "border border-slate-700 bg-slate-800 text-slate-200"
-                                    }`}
-                                >
-                                    {serviceChipLabel(service)}
-                                </span>
-                            ))}
-                        </div>
+                        {(dedupedServices.length || purposeText) ? (
+                            <div className="flex flex-wrap gap-1.5">
+                                {purposeText ? (
+                                    <span
+                                        className={`rounded-full px-2.5 py-1 text-[11px] font-medium ${
+                                            isLight
+                                                ? "border border-slate-200 bg-slate-100 text-slate-700"
+                                                : "border border-slate-700 bg-slate-800 text-slate-200"
+                                        }`}
+                                    >
+                                        {purposeText}
+                                    </span>
+                                ) : null}
+                                {dedupedServices.map((service: any) => (
+                                    <span
+                                        key={service._id || service.value}
+                                        className={`rounded-full px-2.5 py-1 text-[11px] font-medium ${
+                                            isLight
+                                                ? "border border-slate-200 bg-slate-100 text-slate-700"
+                                                : "border border-slate-700 bg-slate-800 text-slate-200"
+                                        }`}
+                                    >
+                                        {serviceChipLabel(service)}
+                                    </span>
+                                ))}
+                            </div>
+                        ) : null}
+                        {keywords?.length ? (
+                            <div className="mt-1.5 flex flex-wrap gap-1.5">
+                                {(keywords || []).map((keyword: any) => (
+                                    <span
+                                        key={keyword._id || keyword.value}
+                                        className={`rounded-full px-2.5 py-1 text-[11px] font-medium ${
+                                            isLight
+                                                ? "border border-slate-200 bg-[#E8EEF4] text-[#234C6A]"
+                                                : "border border-slate-700 bg-slate-800 text-slate-200"
+                                        }`}
+                                    >
+                                        {keyword.value}
+                                    </span>
+                                ))}
+                            </div>
+                        ) : null}
                     </div>
                 ) : null}
 
@@ -231,6 +259,7 @@ const SeminarDetails = ({
                     </div>
                 </div>
 
+                {!hideParticipants ? (
                 <div className={`rounded-xl border p-3 ${isLight ? "border-slate-200 bg-white" : "border-slate-700 bg-[#141414]"}`}>
                     <div className={`mb-2 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.12em] ${isLight ? "text-[#234C6A]" : "text-slate-300"}`}>
                         <Users className="h-3.5 w-3.5" />
@@ -260,9 +289,11 @@ const SeminarDetails = ({
                         <div className={`text-sm ${isLight ? "text-slate-500" : "text-grey"}`}>No participants</div>
                     )}
                 </div>
+                ) : null}
 
             </div>
 
+            {!hideParticipants ? (
             <GroupParticipantsDialog
                 isDialogOpen={showParticipants}
                 closeDialogHandler={() => set_showParticipants(false)}
@@ -277,6 +308,7 @@ const SeminarDetails = ({
                 theme={theme}
                 resolvedImages={resolvedImages}
             />
+            ) : null}
         </div>
     );
 };

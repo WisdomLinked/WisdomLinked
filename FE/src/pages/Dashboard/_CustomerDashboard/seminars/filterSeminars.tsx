@@ -177,6 +177,7 @@ const FilterSeminars = ({
                                 services={seminar?.services}
                                 isRecurring={seminar?.isRecurring}
                                 recurrenceFrequency={seminar?.recurrenceFrequency}
+                                hideParticipants
                             />
                             <div className="w-full flex space-x-4 mt-4">
                                 <button

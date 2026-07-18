@@ -35,7 +35,7 @@ import ProfileModal from './Dashboard/Messenger/Messages/ProfileModal';
 import { buildFallbackChatProfile, mergeChatProfile } from '../utils/chatProfileModal';
 import { useAppSelector } from '../store';
 import { logoutUser, updateMe } from '../actions/authActions';
-import { showErrorAlert, showSuccessAlert, showWarningAlert } from '../actions/alertActions';
+import { showErrorAlert, showWarningAlert } from '../actions/alertActions';
 import { patchDmUnreadRid, setChosenGroupChatDetails, setDmUnreadByRidBulk } from '../actions/chatActions';
 import { connectToRC, onSubscriptionChanged, subscribeToRoom } from '../services/rcRealtime';
 import { useEndMeetingOnReturn } from '../hooks/useEndMeetingOnReturn';
@@ -97,6 +97,7 @@ function mapSeatRequestToModalSession(r: any): UpcomingModalSession {
     when,
     location: 'Online · WisdomLinked',
     with: r?.customer?.username || r?.customer?.email || 'Student',
+    peerUserId: r?.customer?._id ? String(r.customer._id) : undefined,
     seatRequestId: String(r._id),
     metaLines,
   };
@@ -112,8 +113,7 @@ function mapExpertGroupToModalSession(g: any): UpcomingModalSession {
     : '—';
   let withLabel = 'Session';
   if (g?.type === 'seminar') {
-    const n = Array.isArray(g.participants) ? g.participants.length : 0;
-    withLabel = n ? `${n} enrolled` : 'Seminar';
+    withLabel = '';
   } else {
     const parts = g.participants || [];
     const first = parts[0];
@@ -134,6 +134,22 @@ function mapExpertGroupToModalSession(g: any): UpcomingModalSession {
     with: withLabel,
     peerUserId:
       g?.type === 'individual' ? String(pickStudent(g)?._id ?? '') : undefined,
+    detail: {
+      title: g?.name || 'Session',
+      description: g?.description,
+      start: g?.start,
+      duration: g?.duration,
+      price: typeof g?.price === 'number' ? g.price : undefined,
+      admin: g?.admin,
+      participants: g?.participants || [],
+      keywords: g?.keywords,
+      services: g?.services,
+      purposeOther: g?.purposeOther,
+      type: g?.type,
+      isRecurring: g?.isRecurring,
+      recurrenceFrequency: g?.recurrenceFrequency,
+    },
+    briefLabel: g?.type === 'seminar' ? 'Seminar details' : 'Session details',
   };
 }
 
@@ -526,7 +542,7 @@ export default function ExpertDashboard() {
       { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
       { id: 'chat', label: 'Chat', icon: MessageSquare },
       { id: 'clients', label: 'Clients', icon: Users },
-      { id: 'seminar', label: 'Seminar', icon: BookOpen },
+      { id: 'seminar', label: 'Seminars', icon: BookOpen },
       { id: 'calendar', label: 'Calendar', icon: Calendar },
       { id: 'join-meeting', label: 'Join Meeting', icon: Video },
       { id: 'availability', label: 'Availability', icon: Clock },
@@ -602,12 +618,18 @@ export default function ExpertDashboard() {
 
     // Pending requests are NOT scoped to the today/week range — the expert must
     // see every booking awaiting action regardless of which date window is shown.
-    const pendingSess = (groupChats || []).filter(
-      (g: any) =>
-        g.type === 'individual' &&
-        g.status === 'pending' &&
-        upcoming(g.start, g.end)
-    );
+    const pendingSess = (groupChats || [])
+      .filter(
+        (g: any) =>
+          g.type === 'individual' &&
+          g.status === 'pending' &&
+          upcoming(g.start, g.end)
+      )
+      .sort(
+        (a: any, b: any) =>
+          new Date(b.createdAt || b.start).getTime() -
+          new Date(a.createdAt || a.start).getTime()
+      );
 
     return {
       acceptedSeminars: seminars,
@@ -619,17 +641,31 @@ export default function ExpertDashboard() {
   // Accept flows. The api wrappers return `false` on error (alert/logout already
   // handled), or the payload on success — refresh via updateMe() either way.
   const [acceptingId, setAcceptingId] = useState<string | null>(null);
+  // Just-accepted 1:1 rows on the dashboard show a confirmation in place of the
+  // card for a few seconds instead of a toast banner.
+  const [acceptedInline, setAcceptedInline] = useState<
+    Record<string, { message: string; session: any }>
+  >({});
+  const inlineNoticeTimers = useRef<number[]>([]);
+  useEffect(
+    () => () => {
+      inlineNoticeTimers.current.forEach(id => window.clearTimeout(id));
+    },
+    [],
+  );
 
+  // Accepting a 1:1 no longer pops a banner — callers surface an in-card message.
   const handleAcceptSession = useCallback(
-    async (session: any) => {
+    async (session: any): Promise<boolean> => {
       setAcceptingId(String(session._id));
       try {
         const res: any = await acceptIndividualAppointment({ groupChatId: session._id });
-        if (res === false) return;
+        if (res === false) return false;
         dispatch(updateMe() as any);
-        dispatch(showSuccessAlert('1:1 session accepted.'));
+        return true;
       } catch {
         dispatch(showErrorAlert('Could not accept the session. Please try again.'));
+        return false;
       } finally {
         setAcceptingId(null);
       }
@@ -637,12 +673,59 @@ export default function ExpertDashboard() {
     [dispatch],
   );
 
+  // Dashboard "1:1 Sessions" list: accept, then replace the row with a
+  // transient confirmation that clears after 7 seconds.
+  const acceptInlineSession = useCallback(
+    async (s: any) => {
+      const ok = await handleAcceptSession(s);
+      if (!ok) return;
+      const studentName =
+        pickStudent(s)?.username ||
+        (Array.isArray(s.participants) ? s.participants : []).find(
+          (p: any) => p && typeof p === 'object' && p.username,
+        )?.username ||
+        'The student';
+      const title = s.name || '';
+      const message = `${studentName} has been accepted for the 1:1 session${
+        title ? ` “${title}”` : ''
+      }.`;
+      const id = String(s._id);
+      setAcceptedInline(prev => ({ ...prev, [id]: { message, session: s } }));
+      const timer = window.setTimeout(() => {
+        setAcceptedInline(prev => {
+          const next = { ...prev };
+          delete next[id];
+          return next;
+        });
+      }, 7000);
+      inlineNoticeTimers.current.push(timer);
+    },
+    [handleAcceptSession],
+  );
+
+  // Keep just-accepted rows on screen for the notice window even after
+  // pendingSessions refreshes them out of the list.
+  const inlinePendingSessions = useMemo(() => {
+    const present = new Set(pendingSessions.map((s: any) => String(s._id)));
+    const lingering = Object.values(acceptedInline)
+      .filter(n => !present.has(String(n.session._id)))
+      .map(n => n.session);
+    return [...pendingSessions, ...lingering];
+  }, [pendingSessions, acceptedInline]);
+
   const expertModalSessions = useMemo((): UpcomingModalSession[] => {
     if (!expertUpcomingModal) return [];
     const { kind, status } = expertUpcomingModal;
     if (kind === 'oneToOne') {
       const list = status === 'booked' ? bookedSessions : pendingSessions;
-      return list.map(mapExpertGroupToModalSession);
+      return list.map((g: any) => {
+        const base = mapExpertGroupToModalSession(g);
+        if (status !== 'pending') return base;
+        const createdById =
+          typeof g.createdBy === 'object' ? g.createdBy?._id : g.createdBy;
+        const expertProposed = String(createdById) === String(userDetails?._id);
+        return { ...base, canAccept: !expertProposed };
+      });
     }
     if (status === 'pending') {
       return seatRequests.map(mapSeatRequestToModalSession);
@@ -654,12 +737,19 @@ export default function ExpertDashboard() {
     pendingSessions,
     acceptedSeminars,
     seatRequests,
+    userDetails,
   ]);
 
+  // Returns the confirmation message so the modal can show it in-card (no banner).
   const handleSeatDecision = useCallback(
-    async (session: UpcomingModalSession, action: 'accept' | 'decline') => {
+    async (session: UpcomingModalSession, action: 'accept' | 'decline'): Promise<string | void> => {
       const requestId = session.seatRequestId;
       if (!requestId) return;
+      const raw = seatRequests.find(r => String(r._id) === String(requestId));
+      const studentName = session.with || raw?.customer?.username || raw?.customer?.email || 'The student';
+      const seminarTitle = session.title || raw?.groupChat?.name || 'the seminar';
+      const cents = typeof raw?.amount === 'number' ? raw.amount : 0;
+      const amountLabel = cents > 0 ? `$${(cents / 100).toFixed(2)}` : '';
       try {
         const res: any = action === 'accept'
           ? await approveSeminarSeatRequest(requestId)
@@ -669,15 +759,15 @@ export default function ExpertDashboard() {
           return;
         }
         setSeatRequests(prev => prev.filter(r => String(r._id) !== String(requestId)));
-        dispatch(
-          showSuccessAlert(action === 'accept' ? 'Seat request accepted.' : 'Seat request declined.'),
-        );
         dispatch(updateMe() as any);
+        return action === 'accept'
+          ? `${studentName} has been admitted to the seminar “${seminarTitle}”.${amountLabel ? ` A payment of ${amountLabel} has been successfully charged.` : ''}`
+          : `${studentName} was not admitted to “${seminarTitle}”.${amountLabel ? ` The payment authorization of ${amountLabel} has been released.` : ''}`;
       } catch {
         dispatch(showErrorAlert('Could not update the seat request. Please try again.'));
       }
     },
-    [dispatch],
+    [dispatch, seatRequests],
   );
 
   const handleExpertJoinSession = (session: UpcomingModalSession) => {
@@ -862,25 +952,18 @@ export default function ExpertDashboard() {
               </span>
             </div>
             <div className="space-y-3 max-h-[260px] overflow-y-auto">
-              {bookedSessions.map((s: any) => (
-                <div
-                  key={s._id}
-                  className="flex items-start justify-between rounded-xl border border-slate-100 bg-slate-50/60 px-3 py-2.5"
-                >
-                  <div>
-                    <div className="text-[13px] font-semibold text-slate-900">
-                      {s.name}
+              {inlinePendingSessions.map((s: any) => {
+                const notice = acceptedInline[String(s._id)];
+                if (notice) {
+                  return (
+                    <div
+                      key={s._id}
+                      className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2.5 text-[13px] font-medium text-emerald-800"
+                    >
+                      {notice.message}
                     </div>
-                    <div className="text-[11px] text-slate-500">
-                      {new Date(s.start).toLocaleString()}
-                    </div>
-                  </div>
-                  <span className="inline-flex items-center rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">
-                    Confirmed
-                  </span>
-                </div>
-              ))}
-              {pendingSessions.map((s: any) => {
+                  );
+                }
                 const createdById =
                   typeof s.createdBy === 'object' ? s.createdBy?._id : s.createdBy;
                 const expertProposed =
@@ -905,7 +988,7 @@ export default function ExpertDashboard() {
                     ) : (
                       <button
                         type="button"
-                        onClick={() => handleAcceptSession(s)}
+                        onClick={() => acceptInlineSession(s)}
                         disabled={acceptingId === String(s._id)}
                         className="shrink-0 inline-flex items-center rounded-[4px] bg-[#234C6A] px-3 py-1.5 text-[11px] font-semibold text-white hover:brightness-110 disabled:opacity-60"
                       >
@@ -915,6 +998,24 @@ export default function ExpertDashboard() {
                   </div>
                 );
               })}
+              {bookedSessions.map((s: any) => (
+                <div
+                  key={s._id}
+                  className="flex items-start justify-between rounded-xl border border-slate-100 bg-slate-50/60 px-3 py-2.5"
+                >
+                  <div>
+                    <div className="text-[13px] font-semibold text-slate-900">
+                      {s.name}
+                    </div>
+                    <div className="text-[11px] text-slate-500">
+                      {new Date(s.start).toLocaleString()}
+                    </div>
+                  </div>
+                  <span className="inline-flex items-center rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">
+                    Confirmed
+                  </span>
+                </div>
+              ))}
               {!bookedSessions.length && !pendingSessions.length && (
                 <p className="text-[12px] text-slate-500">
                   No upcoming 1:1 sessions in this range.
@@ -1019,6 +1120,11 @@ export default function ExpertDashboard() {
             onDeclineSeatRequest={
               expertUpcomingModal.kind === 'seminar' && expertUpcomingModal.status === 'pending'
                 ? (s) => handleSeatDecision(s, 'decline')
+                : undefined
+            }
+            onAcceptSession={
+              expertUpcomingModal.kind === 'oneToOne' && expertUpcomingModal.status === 'pending'
+                ? (s) => handleAcceptSession({ _id: s.id, name: s.title, with: s.with })
                 : undefined
             }
           />

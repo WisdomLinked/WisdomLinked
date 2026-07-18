@@ -18,12 +18,6 @@ interface ProfileModalProps {
 
 const ACCENT = "#234C6A";
 
-/**
- * ProfileModal — one host "frame" around the shared <ProfileCard>: a centered
- * modal with a close control and Done button. The card holds the person's fixed
- * background; the modal adds only the chrome. Other surfaces reuse ProfileCard
- * directly with their own frame.
- */
 const ProfileModal: React.FC<ProfileModalProps> = ({
     isOpen,
     onClose,

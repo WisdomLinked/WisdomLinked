@@ -1,23 +1,18 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useDispatch } from 'react-redux';
-import { Search, CalendarDays, Clock, MapPin, ArrowLeft, User, Users, Repeat, Check } from 'lucide-react';
+import { Search, CalendarDays, Clock, MapPin, ArrowLeft, User, Users, Repeat, Check, MessageSquare } from 'lucide-react';
 import FilterDropdown, { type FilterOption } from '../ui/FilterDropdown';
 import { useAppSelector } from '../../store';
 import { registerForSeminar, requestSeminarSeat, doFilterSeminars, profileImageFetch, doGetKeywordsAndServices } from '../../api/api';
 import { canonicalLabelsFromMixedServiceEntries } from '../../constants/serviceOptions';
 import { resolveProfileImageSrc } from '../../utils/profileImage';
+import { seminarCapacityLabel } from '../../utils/seminarCapacityLabel';
 import { SetLoadingStatus } from '../../actions/appActions';
 import { updateMe } from '../../actions/authActions';
 import StudentBookingCheckout from './StudentBookingCheckout';
 import { usePeerProfileModal } from '../../hooks/usePeerProfileModal';
 import seminarFallbackImg from '../../assets/images/dashboard_img1.png';
 
-/** "3/10 enrolled" (or "3 enrolled" when the seminar has no cap set). */
-function capacityLabel(attendees: number, maxAttendees: number | null): string {
-  return maxAttendees != null && maxAttendees > 0
-    ? `${attendees}/${maxAttendees} enrolled`
-    : `${attendees} enrolled`;
-}
 
 type RecurrenceFrequency = 'weekly' | 'biweekly' | 'monthly';
 
@@ -55,6 +50,14 @@ const RECURRENCE_LABEL: Record<RecurrenceFrequency, string> = {
 };
 
 const pad2 = (n: number) => String(n).padStart(2, '0');
+
+// 12-hour clock with an AM/PM suffix, e.g. "12:00AM", "1:30PM".
+const to12h = (d: Date) => {
+  const h = d.getHours();
+  const period = h < 12 ? 'AM' : 'PM';
+  const h12 = h % 12 === 0 ? 12 : h % 12;
+  return `${h12}:${pad2(d.getMinutes())}${period}`;
+};
 
 function groupSeminarSeries(list: Seminar[]): Seminar[] {
   const now = Date.now();
@@ -109,7 +112,7 @@ async function mapSeminar(g: any): Promise<Seminar> {
     date: hasStart
       ? `${start!.getFullYear()}-${pad2(start!.getMonth() + 1)}-${pad2(start!.getDate())}`
       : 'TBD',
-    time: hasStart ? `${pad2(start!.getHours())}:${pad2(start!.getMinutes())}` : '',
+    time: hasStart ? to12h(start!) : '',
     startMs: hasStart ? start!.getTime() : Number.MAX_SAFE_INTEGER,
     major: keywords[0] || 'General',
     majors: keywords,
@@ -136,7 +139,11 @@ async function mapSeminar(g: any): Promise<Seminar> {
 
 const containerClass = 'min-h-screen bg-[#F5F3EF] px-6 py-8 text-[#1A3A4A]';
 
-export default function StudentSeminars() {
+export default function StudentSeminars({
+  onEnterSeminarChat,
+}: {
+  onEnterSeminarChat?: (seminarId: string) => void;
+} = {}) {
   const { auth: { userDetails } } = useAppSelector((state: any) => state);
   const userInterests = useMemo(
     () => (userDetails?.keywords || []).map((k: any) => k?.value).filter(Boolean),
@@ -342,26 +349,6 @@ export default function StudentSeminars() {
     [groupedSeminars, searchQuery, majorFilter, tagFilter, recommended],
   );
 
-  const tagClass = (tag: string) => {
-    const t = tag.toLowerCase();
-    if (t.includes('research')) {
-      return 'bg-emerald-50 text-emerald-700';
-    }
-    if (t.includes('grad')) {
-      return 'bg-indigo-50 text-indigo-700';
-    }
-    if (t.includes('career')) {
-      return 'bg-amber-50 text-amber-700';
-    }
-    if (t.includes('work abroad')) {
-      return 'bg-sky-50 text-sky-700';
-    }
-    if (t.includes('industry')) {
-      return 'bg-rose-50 text-rose-700';
-    }
-    return 'bg-[#F3F4F6] text-slate-700';
-  };
-
   // True when the student is enrolled in this seminar — for a
   // recurring series, any booked occurrence counts so the card reflects it.
   const seminarRegistered = (s: Seminar): boolean => {
@@ -435,56 +422,62 @@ export default function StudentSeminars() {
         </div>
       </div>
 
-      <div className="px-5 pb-4 flex flex-wrap items-center gap-3 text-[11px] text-slate-600">
-        <span className="inline-flex items-center gap-1 rounded-full bg-slate-50 px-2 py-1">
-          <Clock className="h-3 w-3 text-[#234C6A]" aria-hidden />
-          <span>
-            {s.recurrenceFrequency ? 'Next: ' : ''}{s.date} · {s.time}
-          </span>
-        </span>
-        {s.recurrenceFrequency && s.occurrenceCount > 1 && (
-          <span className="inline-flex items-center gap-1 rounded-full bg-[#E8EEF4] px-2 py-1 text-[#234C6A]">
-            <Repeat className="h-3 w-3" aria-hidden />
-            <span>{RECURRENCE_LABEL[s.recurrenceFrequency]} · {s.occurrenceCount} sessions</span>
-          </span>
-        )}
-        <span className="inline-flex items-center gap-1 rounded-full bg-slate-50 px-2 py-1">
-          <MapPin className="h-3 w-3 text-[#234C6A]" aria-hidden />
-          <span>Online · WisdomLinked</span>
-        </span>
-        <span className="inline-flex items-center gap-1 rounded-full bg-slate-50 px-2 py-1">
-          <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-          <span>{s.major}</span>
-        </span>
-        <span className="inline-flex items-center gap-1 rounded-full bg-slate-50 px-2 py-1">
-          <Users className="h-3 w-3 text-[#234C6A]" aria-hidden />
-          <span>{capacityLabel(s.attendees, s.maxAttendees)}</span>
-        </span>
-        {s.level && (
+      <div className="px-5 pb-4 flex flex-col gap-2 text-[11px] text-slate-600">
+        <div className="flex flex-wrap items-center gap-3">
           <span className="inline-flex items-center gap-1 rounded-full bg-slate-50 px-2 py-1">
-            <span className="h-1.5 w-1.5 rounded-full bg-[#234C6A]" />
-            <span>{s.level}</span>
+            <Clock className="h-3 w-3 text-[#234C6A]" aria-hidden />
+            <span>
+              {s.recurrenceFrequency ? 'Next: ' : ''}{s.date} · {s.time}
+            </span>
           </span>
-        )}
-      </div>
-      <div className="px-5 pb-4">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500 mb-1">
-          Topics
-        </p>
-        <div className="flex flex-wrap gap-1.5">
-          {s.tags.map(tag => (
+          <span className="inline-flex items-center gap-1 rounded-full bg-slate-50 px-2 py-1">
+            <User className="h-3 w-3 text-[#234C6A]" aria-hidden />
+            <span>{s.expertName}</span>
+          </span>
+          {s.recurrenceFrequency && s.occurrenceCount > 1 && (
+            <span className="inline-flex items-center gap-1 rounded-full bg-[#E8EEF4] px-2 py-1 text-[#234C6A]">
+              <Repeat className="h-3 w-3" aria-hidden />
+              <span>{RECURRENCE_LABEL[s.recurrenceFrequency]} · {s.occurrenceCount} sessions</span>
+            </span>
+          )}
+        </div>
+        <div className="flex flex-wrap items-center gap-3">
+          <span className="inline-flex items-center gap-1 rounded-full bg-slate-50 px-2 py-1">
+            <Users className="h-3 w-3 text-[#234C6A]" aria-hidden />
+            <span>{seminarCapacityLabel(s.attendees, s.maxAttendees)}</span>
+          </span>
+          {s.level && (
+            <span className="inline-flex items-center gap-1 rounded-full bg-slate-50 px-2 py-1">
+              <span className="h-1.5 w-1.5 rounded-full bg-[#234C6A]" />
+              <span>{s.level}</span>
+            </span>
+          )}
+        </div>
+        <div className="flex flex-wrap gap-x-1 gap-y-0.5">
+          {(s.majors.length ? s.majors : [s.major]).map((m) => (
             <span
-              key={tag}
-              className={`inline-flex items-center rounded-full px-2 py-1 text-[11px] font-medium ${tagClass(
-                tag,
-              )}`}
+              key={m}
+              className="rounded-full bg-[#E8EEF4] px-2 py-0.5 text-[10px] font-medium text-[#234C6A]"
             >
-              {tag}
+              {m}
             </span>
           ))}
         </div>
       </div>
-      <div className="mt-auto px-5 pb-4 flex justify-end">
+      <div className="mt-auto px-5 pb-4 flex justify-end gap-2">
+        {onEnterSeminarChat && seminarRegistered(s) ? (
+          <button
+            type="button"
+            onClick={e => {
+              e.stopPropagation();
+              onEnterSeminarChat(s.id);
+            }}
+            className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-[#234C6A] bg-white px-3 py-1.5 text-xs font-semibold text-[#234C6A] hover:bg-[#F5F3EF]"
+          >
+            <MessageSquare className="h-3.5 w-3.5" aria-hidden />
+            Enter chat
+          </button>
+        ) : null}
         <button
           type="button"
           onClick={e => {
@@ -580,7 +573,7 @@ export default function StudentSeminars() {
                 </div>
                 <div className="inline-flex items-center gap-1.5 rounded-lg border border-[#E5E2DB] bg-[#F5F3EF] px-3 py-2">
                   <Users className="h-4 w-4 text-[#234C6A]" aria-hidden />
-                  <span>{capacityLabel(s.attendees, s.maxAttendees)}</span>
+                  <span>{seminarCapacityLabel(s.attendees, s.maxAttendees)}</span>
                 </div>
               </div>
 
@@ -683,6 +676,16 @@ export default function StudentSeminars() {
                 <p className="mt-1 text-xs text-emerald-800">
                   It’s on your calendar — join from your seminars or calendar.
                 </p>
+                {onEnterSeminarChat ? (
+                  <button
+                    type="button"
+                    onClick={() => onEnterSeminarChat(s.id)}
+                    className="mt-3 w-full inline-flex items-center justify-center gap-2 rounded-lg bg-[#234C6A] px-4 py-2.5 text-sm font-semibold text-white hover:brightness-110"
+                  >
+                    <MessageSquare className="h-4 w-4" aria-hidden />
+                    Enter seminar chat
+                  </button>
+                ) : null}
               </div>
             ) : (
               <div className="mt-4 space-y-4">

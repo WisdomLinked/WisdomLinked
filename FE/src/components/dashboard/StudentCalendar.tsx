@@ -443,10 +443,6 @@ export default function StudentCalendar({
                       <MapPin className="h-3 w-3" aria-hidden />
                       <span className="truncate">{m.location}</span>
                     </div>
-                    <p className="mt-0.5 text-[11px] text-slate-500">{m.with}</p>
-                    {m.details ? (
-                      <p className="mt-0.5 text-[11px] font-medium text-[#234C6A]">{m.details}</p>
-                    ) : null}
                     {onViewProfile && m.peerUserId ? (
                       <button
                         type="button"
@@ -454,10 +450,16 @@ export default function StudentCalendar({
                           e.stopPropagation();
                           onViewProfile(m);
                         }}
-                        className="mt-1 text-[11px] font-semibold text-[#234C6A] hover:underline"
+                        className="mt-0.5 block max-w-full truncate text-left text-[11px] font-medium text-[#234C6A] hover:underline"
+                        title={`View ${isExpert ? 'student' : 'expert'} card`}
                       >
-                        View {isExpert ? 'student' : 'expert'} card
+                        {m.with}
                       </button>
+                    ) : (
+                      <p className="mt-0.5 text-[11px] text-slate-500">{m.with}</p>
+                    )}
+                    {m.details ? (
+                      <p className="mt-0.5 text-[11px] font-medium text-[#234C6A]">{m.details}</p>
                     ) : null}
                     {isExpert ? (
                       <div className="mt-2 flex justify-end">
@@ -666,9 +668,6 @@ export default function StudentCalendar({
                                 </span>
                               </span>
                             </p>
-                            <p className="mt-1 text-[11px] text-slate-500">
-                              {m.with}
-                            </p>
                             {onViewProfile && m.peerUserId ? (
                               <button
                                 type="button"
@@ -676,11 +675,16 @@ export default function StudentCalendar({
                                   e.stopPropagation();
                                   onViewProfile(m);
                                 }}
-                                className="mt-1 block text-[11px] font-semibold text-[#234C6A] hover:underline"
+                                className="mt-1 block max-w-full truncate text-left text-[11px] font-medium text-[#234C6A] hover:underline"
+                                title={`View ${isExpert ? 'student' : 'expert'} card`}
                               >
-                                View {isExpert ? 'student' : 'expert'} card
+                                {m.with}
                               </button>
-                            ) : null}
+                            ) : (
+                              <p className="mt-1 text-[11px] text-slate-500">
+                                {m.with}
+                              </p>
+                            )}
                             {isExpert ? (
                               <p className="mt-2 text-[11px] font-semibold text-[#234C6A]">
                                 View details →

@@ -210,7 +210,9 @@ export const fetchOnlineUsers = async () => {
 };
 
 /** Chat-target profile for header modal (role-agnostic endpoint). */
-export const fetchChatUserProfile = async (userId: string) => {
+export const fetchChatUserProfile = async (
+    userId: string,
+): Promise<{ success?: boolean; result?: any; error?: string }> => {
     try {
         const res = await api.get(`chat/user-profile/${encodeURIComponent(String(userId || '').trim())}`);
         return res.data as { success?: boolean; result?: any; error?: string };

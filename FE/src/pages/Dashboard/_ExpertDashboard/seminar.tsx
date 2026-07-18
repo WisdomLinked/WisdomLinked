@@ -73,6 +73,7 @@ import React, {
       end?: string | Date;
       duration?: number;
       price?: number;
+      maxAttendees?: number | null;
       image?: string | null;
       status?: string;
       isRecurring?: boolean;
@@ -282,6 +283,7 @@ import React, {
         tags: Array.isArray(selectedSeminar.tags) ? selectedSeminar.tags.filter((t): t is string => typeof t === 'string') : [],
         purposeOther: selectedSeminar.purposeOther || '',
         price: selectedSeminar.price ?? '',
+        maxAttendees: typeof selectedSeminar.maxAttendees === 'number' ? selectedSeminar.maxAttendees : '',
         isRecurring: !!selectedSeminar.isRecurring,
         recurrenceFrequency: selectedSeminar.recurrenceFrequency || 'weekly',
       };

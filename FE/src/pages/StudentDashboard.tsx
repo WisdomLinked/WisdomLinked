@@ -206,34 +206,6 @@ function deriveCalendarMeetings(u: any): CalendarMeeting[] {
   return out;
 }
 
-/**
- * Booking details the student entered when requesting a 1:1, surfaced behind the
- * "Booking details" button in the upcoming-sessions modal: their mentor, the
- * purpose/service, their note, and the price (paid once booked, else due).
- */
-function buildBookingBrief(
-  g: any,
-  mentor: string,
-  price: number | undefined,
-  pending: boolean,
-): Array<{ label: string; value: string }> {
-  const purpose =
-    (typeof g?.purposeOther === 'string' && g.purposeOther.trim()) ||
-    canonicalLabelsFromMixedServiceEntries(g?.services).join(', ');
-  const note = typeof g?.description === 'string' ? g.description.trim() : '';
-  const rows: Array<[string, string]> = [
-    ['Mentor', mentor],
-    ['Purpose', purpose],
-    ['Note', note],
-  ];
-  if (typeof price === 'number') {
-    rows.push([pending ? 'Price' : 'Amount paid', `$${price}`]);
-  }
-  return rows
-    .filter(([, value]) => value.length > 0)
-    .map(([label, value]) => ({ label, value }));
-}
-
 function modalWhen(ms: number): string {
   const d = new Date(ms);
   if (Number.isNaN(d.getTime())) return '';
@@ -266,6 +238,22 @@ function deriveModalSessions(
       location: 'Online · WisdomLinked Room',
       with: g?.admin?.username || g?.admin?.email || 'WisdomLinked',
       peerUserId: String(g?.admin?._id ?? g?.admin ?? ''),
+      detail: {
+        title: g?.name || 'Seminar',
+        description: g?.description,
+        start: g?.start,
+        duration: g?.duration,
+        price: typeof g?.price === 'number' ? g.price : undefined,
+        admin: g?.admin,
+        participants: g?.participants || [],
+        keywords: g?.keywords,
+        services: g?.services,
+        purposeOther: g?.purposeOther,
+        type: g?.type,
+        isRecurring: g?.isRecurring,
+        recurrenceFrequency: g?.recurrenceFrequency,
+      },
+      briefLabel: 'Seminar details',
     };
   };
 
@@ -307,8 +295,22 @@ function deriveModalSessions(
         peerUserId: String(g?.admin?._id ?? g?.admin ?? ''),
         payable,
         price,
-        studentBrief: buildBookingBrief(g, mentor, price, status === 'pending'),
-        briefLabel: 'Booking details',
+        detail: {
+          title: g?.name || '1:1 session',
+          description: g?.description,
+          start: g?.start,
+          duration: g?.duration,
+          price,
+          admin: g?.admin,
+          participants: g?.participants || [],
+          keywords: g?.keywords,
+          services: g?.services,
+          purposeOther: g?.purposeOther,
+          type: g?.type,
+          isRecurring: g?.isRecurring,
+          recurrenceFrequency: g?.recurrenceFrequency,
+        },
+        briefLabel: 'Session details',
       };
     });
 
@@ -1287,7 +1289,7 @@ export default function StudentDashboard() {
           ) : activeItem === 'contact-admin' ? (
             <ContactAdmin />
           ) : activeItem === 'seminars' ? (
-            <StudentSeminars />
+            <StudentSeminars onEnterSeminarChat={openSeminarChat} />
           ) : activeItem === 'history' ? (
             <StudentPaymentHistory />
           ) : (

@@ -5,20 +5,24 @@ import {
   Clock,
   MapPin,
   User,
+  Users,
   Plus,
   Pencil,
   Repeat,
   Trash2,
+  MessageSquare,
 } from 'lucide-react';
 import { useDispatch } from 'react-redux';
 
 import { useAppSelector } from '../../../store';
 import { updateMe } from '../../../actions/authActions';
+import { setChosenGroupChatDetails } from '../../../actions/chatActions';
 import { SetLoadingStatus } from '../../../actions/appActions';
 import { showSuccessAlert } from '../../../actions/alertActions';
 import { deleteGroup, profileImageFetch, getSeminarSeatRequests, approveSeminarSeatRequest, rejectSeminarSeatRequest } from '../../../api/api';
 import { resolveProfileImageSrc } from '../../../utils/profileImage';
-import { formatDateYYYY_MM_DD_h_m } from '../../../actions/common';
+import { seminarCapacityLabel } from '../../../utils/seminarCapacityLabel';
+import { usePeerProfileModal } from '../../../hooks/usePeerProfileModal';
 import { canonicalLabelsFromMixedServiceEntries } from '../../../constants/serviceOptions';
 import Avatar from '../../../components/Avatar';
 import GroupParticipantsDialog from '../Messenger/Messages/GroupParticipantsDialog';
@@ -96,6 +100,7 @@ function mapGroupChatToExpertSeminar(g: any) {
     end: g.end,
     duration: g.duration,
     price: g.price,
+    maxAttendees: typeof g.maxAttendees === 'number' ? g.maxAttendees : null,
     image: g.image ?? null,
     status: g.status,
     isRecurring: !!g.isRecurring,
@@ -106,12 +111,14 @@ function mapGroupChatToExpertSeminar(g: any) {
 function SeminarCard({
   seminar,
   onClick,
+  onEnterChat,
   badge,
   recurrenceLabel,
   occurrenceCount,
 }: {
   seminar: any;
   onClick: () => void;
+  onEnterChat?: () => void;
   badge?: string;
   recurrenceLabel?: string;
   occurrenceCount?: number;
@@ -132,6 +139,7 @@ function SeminarCard({
     ? seminar.participants.filter((p: unknown) => getRefId(p) !== adminId).length
     : 0;
   const maxAttendees = typeof seminar?.maxAttendees === 'number' ? seminar.maxAttendees : null;
+  const isFull = maxAttendees != null && maxAttendees > 0 && n >= maxAttendees;
 
   return (
     <article
@@ -175,6 +183,11 @@ function SeminarCard({
             {recurrenceLabel}
           </div>
         ) : null}
+        {isFull ? (
+          <div className="absolute bottom-3 right-3 inline-flex items-center gap-1 rounded-full bg-rose-600/95 px-2.5 py-0.5 text-[10px] font-semibold text-white backdrop-blur">
+            Full
+          </div>
+        ) : null}
       </div>
       <div className="p-4 flex-1 flex flex-col">
         <h3 className="text-[15px] font-semibold text-slate-900 leading-snug line-clamp-2">
@@ -194,8 +207,8 @@ function SeminarCard({
             </span>
           ) : null}
           <span className="inline-flex items-center gap-1 rounded-full bg-slate-50 px-2 py-1">
-            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-            {maxAttendees != null && maxAttendees > 0 ? `${n}/${maxAttendees}` : n} enrolled
+            <Users className="h-3 w-3 text-[#234C6A]" aria-hidden />
+            {seminarCapacityLabel(n, maxAttendees)}
           </span>
           {recurrenceLabel && occurrenceCount && occurrenceCount > 1 ? (
             <span className="inline-flex items-center gap-1 rounded-full bg-[#E8EEF4] px-2 py-1 text-[#234C6A]">
@@ -216,10 +229,30 @@ function SeminarCard({
             ))}
           </div>
         ) : null}
-        <div className="mt-auto pt-3 flex justify-end">
-          <span className="text-xs font-semibold text-[#234C6A] group-hover:underline">
+        <div className="mt-auto pt-3 flex justify-end gap-2">
+          {onEnterChat ? (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onEnterChat();
+              }}
+              className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-[#234C6A] bg-white px-3 py-1.5 text-xs font-semibold text-[#234C6A] hover:bg-[#F5F3EF]"
+            >
+              <MessageSquare className="h-3.5 w-3.5" aria-hidden />
+              Enter chat
+            </button>
+          ) : null}
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onClick();
+            }}
+            className="inline-flex items-center justify-center rounded-lg bg-[#234C6A] px-3 py-1.5 text-xs font-semibold text-white hover:brightness-110"
+          >
             View details
-          </span>
+          </button>
         </div>
       </div>
     </article>
@@ -229,10 +262,21 @@ function SeminarCard({
 // Overflow seat requests for a full seminar: students who paid (funds held) and
 // are awaiting the host's approval. Approving captures the hold; declining releases it.
 function SeatRequestsPanel({ seminarId }: { seminarId: string }) {
+  const { auth: { userDetails } } = useAppSelector((s) => s);
+  const { openPeerProfile, peerProfileModal } = usePeerProfileModal(userDetails?.role);
   const [requests, setRequests] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Decided rows show a confirmation in place for a few seconds, then drop out.
+  const [notices, setNotices] = useState<Record<string, string>>({});
+  const noticeTimers = useRef<number[]>([]);
+  useEffect(
+    () => () => {
+      noticeTimers.current.forEach((id) => window.clearTimeout(id));
+    },
+    [],
+  );
 
   const load = async () => {
     try {
@@ -254,6 +298,11 @@ function SeatRequestsPanel({ seminarId }: { seminarId: string }) {
   const decide = async (requestId: string, action: 'approve' | 'reject') => {
     setBusyId(requestId);
     setError(null);
+    const raw = requests.find((r) => String(r._id) === String(requestId));
+    const studentName = raw?.customer?.username || raw?.customer?.email || 'The student';
+    const seminarTitle = raw?.groupChat?.name || 'the seminar';
+    const cents = typeof raw?.amount === 'number' ? raw.amount : 0;
+    const amountLabel = cents > 0 ? `$${(cents / 100).toFixed(2)}` : '';
     try {
       const res: any = action === 'approve'
         ? await approveSeminarSeatRequest(requestId)
@@ -262,7 +311,19 @@ function SeatRequestsPanel({ seminarId }: { seminarId: string }) {
         setError(res?.error || 'Could not update the seat request.');
         return;
       }
-      setRequests((prev) => prev.filter((r) => String(r._id) !== String(requestId)));
+      const message = action === 'approve'
+        ? `${studentName} has been admitted to the seminar “${seminarTitle}”.${amountLabel ? ` A payment of ${amountLabel} has been successfully charged.` : ''}`
+        : `${studentName} was not admitted to “${seminarTitle}”.${amountLabel ? ` The payment authorization of ${amountLabel} has been released.` : ''}`;
+      setNotices((prev) => ({ ...prev, [String(requestId)]: message }));
+      const timer = window.setTimeout(() => {
+        setRequests((prev) => prev.filter((r) => String(r._id) !== String(requestId)));
+        setNotices((prev) => {
+          const next = { ...prev };
+          delete next[String(requestId)];
+          return next;
+        });
+      }, 7000);
+      noticeTimers.current.push(timer);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Could not update the seat request.');
     } finally {
@@ -274,6 +335,7 @@ function SeatRequestsPanel({ seminarId }: { seminarId: string }) {
   if (requests.length === 0) return null;
 
   return (
+    <>
     <div className="mt-5 border-t border-[#E5E2DB] pt-4">
       <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[#7A7A72]">
         Seat requests ({requests.length})
@@ -289,12 +351,37 @@ function SeatRequestsPanel({ seminarId }: { seminarId: string }) {
       ) : null}
       <div className="mt-3 space-y-3">
         {requests.map((r) => {
+          const notice = notices[String(r._id)];
+          if (notice) {
+            return (
+              <div
+                key={String(r._id)}
+                className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-3 text-xs font-medium text-emerald-800"
+              >
+                {notice}
+              </div>
+            );
+          }
           const name = r?.customer?.username || r?.customer?.email || 'Student';
+          const customerId = r?.customer?._id ? String(r.customer._id) : '';
           const deadline = r?.decisionDeadline ? new Date(r.decisionDeadline) : null;
           const busy = busyId === String(r._id);
           return (
             <div key={String(r._id)} className="rounded-lg border border-[#E5E2DB] bg-[#F5F3EF] px-3 py-3">
-              <p className="text-sm font-semibold text-[#1A3A4A]">{name}</p>
+              {customerId ? (
+                <button
+                  type="button"
+                  onClick={() =>
+                    openPeerProfile({ userId: customerId, username: name, image: r?.customer?.image ?? null })
+                  }
+                  className="text-left text-sm font-semibold text-[#234C6A] hover:underline"
+                  title="View student card"
+                >
+                  {name}
+                </button>
+              ) : (
+                <p className="text-sm font-semibold text-[#1A3A4A]">{name}</p>
+              )}
               <p className="mt-0.5 text-[11px] font-medium text-[#234C6A]">
                 {typeof r?.amount === 'number' && r.amount > 0
                   ? `$${(r.amount / 100).toFixed(2)} held`
@@ -328,6 +415,8 @@ function SeatRequestsPanel({ seminarId }: { seminarId: string }) {
         })}
       </div>
     </div>
+    {peerProfileModal}
+    </>
   );
 }
 
@@ -344,9 +433,21 @@ function SeminarDetailPane({
   onEdit: () => void;
   onDelete: (scope: 'occurrence' | 'series') => void;
 }) {
+  const dispatch = useDispatch();
   const { auth: { userDetails } } = useAppSelector((s) => s);
   const [showParticipants, setShowParticipants] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const enterSeminarChat = () => {
+    if (!seminar?._id) return;
+    dispatch(
+      setChosenGroupChatDetails({
+        ...seminar,
+        groupId: seminar._id,
+        groupName: seminar.name,
+      } as any),
+    );
+    window.dispatchEvent(new Event('wl-open-chat-nav'));
+  };
   const isRecurring = !!seminar?.isRecurring;
   const admin = seminar?.admin;
   const participants: any[] = Array.isArray(seminar?.participants) ? seminar.participants : [];
@@ -358,6 +459,20 @@ function SeminarDetailPane({
   const maxAttendees = typeof seminar?.maxAttendees === 'number' ? seminar.maxAttendees : null;
   const start = seminar?.start ? new Date(seminar.start) : null;
   const end = seminar?.end ? new Date(seminar.end) : null;
+  const fmtDate12h = (value: any) => {
+    if (!value) return '—';
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return '—';
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    const time = d.toLocaleTimeString(undefined, {
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true,
+    });
+    return `${y}/${m}/${day} ${time}`;
+  };
   const now = Date.now();
   const isPast = end ? end.getTime() < now : start ? start.getTime() < now : false;
   const keywords = labelsFromMixed(seminar?.keywords);
@@ -454,7 +569,7 @@ function SeminarDetailPane({
               <div className="inline-flex items-center gap-1.5 rounded-lg border border-[#E5E2DB] bg-[#F5F3EF] px-3 py-2">
                 <CalendarDays className="h-4 w-4 text-[#234C6A]" aria-hidden />
                 <span>
-                  {seminar?.start ? formatDateYYYY_MM_DD_h_m(seminar.start) : '—'}
+                  {fmtDate12h(seminar?.start)}
                 </span>
               </div>
               <div className="inline-flex items-center gap-1.5 rounded-lg border border-[#E5E2DB] bg-[#F5F3EF] px-3 py-2">
@@ -468,6 +583,10 @@ function SeminarDetailPane({
               <div className="inline-flex items-center gap-1.5 rounded-lg border border-[#E5E2DB] bg-[#F5F3EF] px-3 py-2">
                 <span className="text-[#234C6A] font-semibold">$</span>
                 <span>{seminar?.price != null ? seminar.price : '—'}</span>
+              </div>
+              <div className="inline-flex items-center gap-1.5 rounded-lg border border-[#E5E2DB] bg-[#F5F3EF] px-3 py-2">
+                <Users className="h-4 w-4 text-[#234C6A]" aria-hidden />
+                <span>{seminarCapacityLabel(enrolledCount, maxAttendees)}</span>
               </div>
               {isHost ? (
                 <>
@@ -487,7 +606,7 @@ function SeminarDetailPane({
                   {seminar?.end ? (
                     <div className="inline-flex items-center gap-1.5 rounded-lg border border-[#E5E2DB] bg-[#F5F3EF] px-3 py-2 sm:col-span-2">
                       <span className="font-semibold text-[#1A3A4A]">Ends:</span>
-                      <span>{formatDateYYYY_MM_DD_h_m(seminar.end)}</span>
+                      <span>{fmtDate12h(seminar.end)}</span>
                     </div>
                   ) : null}
                 </>
@@ -627,6 +746,16 @@ function SeminarDetailPane({
                   Delete
                 </button>
               </div>
+              {seminar?._id ? (
+                <button
+                  type="button"
+                  onClick={enterSeminarChat}
+                  className="mt-2 w-full inline-flex items-center justify-center gap-2 rounded-lg border border-[#234C6A] bg-white px-4 py-2.5 text-sm font-semibold text-[#234C6A] hover:bg-[#F5F3EF]"
+                >
+                  <MessageSquare className="h-4 w-4" aria-hidden />
+                  Enter seminar chat
+                </button>
+              ) : null}
               {confirmDelete ? (
                 hasEnrolledStudents ? (
                   <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-3">
@@ -720,6 +849,16 @@ function SeminarDetailPane({
                   </span>
                 </div>
               </div>
+              {seminar?._id ? (
+                <button
+                  type="button"
+                  onClick={enterSeminarChat}
+                  className="mt-4 w-full inline-flex items-center justify-center gap-2 rounded-lg border border-[#234C6A] bg-white px-4 py-2.5 text-sm font-semibold text-[#234C6A] hover:bg-[#F5F3EF]"
+                >
+                  <MessageSquare className="h-4 w-4" aria-hidden />
+                  Enter seminar chat
+                </button>
+              ) : null}
             </>
           )}
         </aside>
@@ -764,6 +903,14 @@ export default function ExpertSeminarHub() {
   const resumeDraft = (s: any) => {
     setEditPayload(mapGroupChatToExpertSeminar(s));
     setScreen('edit');
+  };
+
+  const enterSeminarChat = (s: any) => {
+    if (!s?._id) return;
+    dispatch(
+      setChosenGroupChatDetails({ ...s, groupId: s._id, groupName: s.name } as any),
+    );
+    window.dispatchEvent(new Event('wl-open-chat-nav'));
   };
 
   const handleAfterSave = async (status: 'active' | 'draft') => {
@@ -903,6 +1050,7 @@ export default function ExpertSeminarHub() {
                     key={s._id || getRefId(s)}
                     seminar={s}
                     onClick={() => openDetail(s)}
+                    onEnterChat={() => enterSeminarChat(s)}
                     badge={host ? 'Hosted' : 'Joined'}
                     recurrenceLabel={recurrenceLabelOf(s)}
                     occurrenceCount={occurrenceCount}

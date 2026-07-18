@@ -19,8 +19,11 @@ export const seminarIsFull = (groupChat: any): boolean => {
 export const SEAT_REQUEST_HOLD_MS = 7 * 24 * 60 * 60 * 1000;
 
 // Overflow seat requests hold funds via Stripe (auth expires after ~7 days), and
-// the host must decide by an admin-set number of hours before the seminar starts.
-// The effective release deadline is whichever of the two comes first.
+// the host should ideally decide an admin-set number of hours before the seminar
+// starts. When the seminar is too close for that full buffer, the deadline falls
+// back to the seminar start (the host can decide right up until it begins) so a
+// freshly-created request is never already past its deadline. Capped by the hold
+// expiry, and never returned in the past.
 export const computeSeatRequestDeadline = (
     startMs: number,
     deadlineHours: number,
@@ -28,7 +31,8 @@ export const computeSeatRequestDeadline = (
 ): Date => {
     const deadlineByStart = startMs - deadlineHours * 60 * 60 * 1000;
     const holdExpiry = nowMs + SEAT_REQUEST_HOLD_MS;
-    return new Date(Math.min(deadlineByStart, holdExpiry));
+    const effective = deadlineByStart > nowMs ? deadlineByStart : startMs;
+    return new Date(Math.min(effective, holdExpiry));
 };
 
 // A full seminar only accepts seat requests while it's inside the hold window

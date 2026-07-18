@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import Dialog from '@mui/material/Dialog';
+import { Search, Users } from 'lucide-react';
 import { useDispatch, useSelector } from 'react-redux';
-import { addParticipantsToCommunityChat, doFilterCustomers } from '../../../../api/api';
+import { addParticipantsToCommunityChat, doFilterCustomers, getMyFollowers } from '../../../../api/api';
 import { fetchGroupHistory } from '../../../../api/chatApi';
 import { showErrorAlert, showSuccessAlert, showWarningAlert } from '../../../../actions/alertActions';
 import { replaceChatMessages, setChatChannelInfo, setChosenGroupChatDetails } from '../../../../actions/chatActions';
@@ -20,10 +21,18 @@ interface Props {
 export default function AddCommunityMembersDialog({ open, onClose, groupDetails, theme = 'light' }: Props) {
     const dispatch = useDispatch();
     const friendsList = useSelector((state: any) => state.friends?.friends) as any[] | undefined;
+    const myRole = useSelector((state: any) => state.auth?.userDetails?.role);
+    const isExpert = String(myRole || '').toLowerCase() === 'expert';
     const [loading, setLoading] = useState(false);
     const [submitting, setSubmitting] = useState(false);
     const [rows, setRows] = useState<Row[]>([]);
     const [selected, setSelected] = useState<Set<string>>(new Set());
+    const [search, setSearch] = useState('');
+    const [followerIds, setFollowerIds] = useState<Set<string> | null>(null);
+    const [followerSkipped, setFollowerSkipped] = useState(0);
+    const [followersSelected, setFollowersSelected] = useState(false);
+    const [loadingFollowers, setLoadingFollowers] = useState(false);
+    const [followerNote, setFollowerNote] = useState<{ tone: 'ok' | 'warn'; text: string } | null>(null);
 
     const gid = groupDetails?.groupId || groupDetails?._id;
     const existingIds = useMemo(() => {
@@ -42,6 +51,11 @@ export default function AddCommunityMembersDialog({ open, onClose, groupDetails,
         let cancelled = false;
         setLoading(true);
         setSelected(new Set());
+        setSearch('');
+        setFollowerIds(null);
+        setFollowerSkipped(0);
+        setFollowersSelected(false);
+        setFollowerNote(null);
         (async () => {
             try {
                 const response: any = await doFilterCustomers({
@@ -86,6 +100,87 @@ export default function AddCommunityMembersDialog({ open, onClose, groupDetails,
             else next.add(id);
             return next;
         });
+    };
+
+    const filteredRows = useMemo(() => {
+        const q = search.trim().toLowerCase();
+        if (!q) return rows;
+        return rows.filter(
+            (r) =>
+                r.username.toLowerCase().includes(q) || r.email.toLowerCase().includes(q),
+        );
+    }, [rows, search]);
+
+    const toggleFollowers = async () => {
+        if (followersSelected) {
+            setFollowersSelected(false);
+            setFollowerNote(null);
+            if (followerIds) {
+                setSelected((prev) => {
+                    const next = new Set(prev);
+                    followerIds.forEach((id) => next.delete(id));
+                    return next;
+                });
+            }
+            return;
+        }
+        let ids = followerIds;
+        let skipped = followerSkipped;
+        if (!ids) {
+            setLoadingFollowers(true);
+            try {
+                const res: any = await getMyFollowers();
+                const followers: any[] = Array.isArray(res?.result) ? res.result : [];
+                const withId = followers
+                    .map((f) => ({
+                        id: String(f?._id ?? f?.id ?? ''),
+                        username: f?.username || f?.email || '',
+                        email: f?.email || '',
+                        image: f?.image,
+                    }))
+                    .filter((f) => f.id);
+                const addable = withId.filter((f) => !existingIds.has(f.id));
+                skipped = withId.length - addable.length;
+                setRows((prev) => {
+                    const have = new Set(prev.map((r) => r.id));
+                    const missing = addable.filter((f) => !have.has(f.id));
+                    return missing.length ? [...prev, ...missing] : prev;
+                });
+                ids = new Set(addable.map((f) => f.id));
+                setFollowerIds(ids);
+                setFollowerSkipped(skipped);
+            } catch (e: any) {
+                dispatch(showErrorAlert('Could not load your followers.'));
+                setLoadingFollowers(false);
+                return;
+            } finally {
+                setLoadingFollowers(false);
+            }
+        }
+        const skippedNote = skipped > 0
+            ? ` ${skipped} already in this community ${skipped === 1 ? 'was' : 'were'} skipped.`
+            : '';
+        if (ids.size === 0) {
+            setFollowerNote({
+                tone: 'warn',
+                text:
+                    skipped > 0
+                        ? 'All your followers are already in this community — nothing new to add.'
+                        : 'No new followers to add.',
+            });
+        } else {
+            setFollowerNote({
+                tone: 'ok',
+                text: `Selected ${ids.size} new follower${ids.size === 1 ? '' : 's'} to add.${skippedNote}`,
+            });
+        }
+        const followerSet = ids;
+        setSelected((prev) => {
+            const next = new Set(prev);
+            followerSet.forEach((id) => next.add(id));
+            return next;
+        });
+        setFollowersSelected(true);
     };
 
     const handleAdd = async () => {
@@ -159,14 +254,59 @@ export default function AddCommunityMembersDialog({ open, onClose, groupDetails,
                     They’ll get access to this community chat in Rocket.Chat.
                 </p>
             </div>
+            <div className="px-5 pt-3 pb-1">
+                <div className="relative">
+                    <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                    <input
+                        type="text"
+                        value={search}
+                        onChange={(e) => setSearch(e.target.value)}
+                        placeholder="Search members by name or email…"
+                        className="w-full rounded-xl border border-slate-200 py-2 pl-9 pr-3 text-sm text-slate-900 outline-none transition focus:border-[#234C6A] focus:ring-2 focus:ring-[#BCD6EA]"
+                    />
+                </div>
+                {isExpert ? (
+                    <label className="mt-2 flex cursor-pointer items-center gap-2.5 rounded-xl px-1 py-1.5 text-sm text-slate-700">
+                        <input
+                            type="checkbox"
+                            checked={followersSelected}
+                            disabled={loadingFollowers}
+                            onChange={() => void toggleFollowers()}
+                            className="h-4 w-4 rounded border-slate-300 text-[#234C6A]"
+                        />
+                        <Users className="h-4 w-4 text-[#234C6A]" />
+                        <span className="font-medium">
+                            {loadingFollowers ? 'Loading followers…' : 'Add followers'}
+                        </span>
+                    </label>
+                ) : null}
+                {isExpert ? (
+                    <p className="mt-0.5 pl-1 text-xs text-slate-500">
+                        Followers already in this community won’t be added again.
+                    </p>
+                ) : null}
+                {followerNote ? (
+                    <p
+                        className={`mt-1.5 rounded-lg px-3 py-2 text-xs font-medium ${
+                            followerNote.tone === 'ok'
+                                ? 'bg-[#E8EEF4] text-[#234C6A]'
+                                : 'bg-amber-50 text-amber-700'
+                        }`}
+                    >
+                        {followerNote.text}
+                    </p>
+                ) : null}
+            </div>
             <div className="max-h-[min(60vh,420px)] overflow-y-auto px-3 py-2">
                 {loading ? (
                     <p className="px-2 py-6 text-center text-sm text-slate-500">Loading…</p>
                 ) : rows.length === 0 ? (
                     <p className="px-2 py-6 text-center text-sm text-slate-500">No one to add.</p>
+                ) : filteredRows.length === 0 ? (
+                    <p className="px-2 py-6 text-center text-sm text-slate-500">No matches for “{search.trim()}”.</p>
                 ) : (
                     <ul className="space-y-1">
-                        {rows.map((r) => {
+                        {filteredRows.map((r) => {
                             const on = selected.has(r.id);
                             return (
                                 <li key={r.id}>

@@ -406,6 +406,7 @@ const CustomerCalendar = () => {
                                 participants={selectedEvent?.participants}
                                 isRecurring={selectedEvent?.isRecurring}
                                 recurrenceFrequency={selectedEvent?.recurrenceFrequency}
+                                hideParticipants
                             />
                             <div className="w-full h-10 flex justify-center mt-6 space-x-4">
                                 <button

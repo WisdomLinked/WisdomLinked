@@ -21,6 +21,7 @@ import StudentBookingCheckout from './StudentBookingCheckout';
 import { purposeOptionsFromServices, PURPOSE_OTHER } from '../../constants/serviceOptions';
 import { createGroupChatByUser, getExpertById, profileImageFetch, registerForSeminar } from '../../api/api';
 import { resolveProfileImageSrc } from '../../utils/profileImage';
+import { seminarCapacityLabel } from '../../utils/seminarCapacityLabel';
 import { normalizeExpertPrice } from '../../utils/schedulingSlots';
 import { computeBookingPriceDollars } from '../../utils/bookingPrice';
 import {
@@ -255,7 +256,12 @@ export default function ExpertProfile({
         const response = await createGroupChatByUser({
           name: bookingTitle.trim() || bookingEventTitle,
           description: bookingNote.trim(),
-          services: resolvedPurpose ? [resolvedPurpose] : [],
+          services:
+            bookingPurpose === PURPOSE_OTHER
+              ? []
+              : resolvedPurpose
+                ? [resolvedPurpose]
+                : [],
           purposeOther: bookingPurpose === PURPOSE_OTHER ? bookingPurposeOther.trim() : '',
           start: pickedStart.toISOString(),
           end: pickedEnd.toISOString(),
@@ -338,6 +344,7 @@ export default function ExpertProfile({
         startTs: valid ? d.getTime() : 0,
         price: typeof g?.price === 'number' ? g.price : 0,
         attendees: enrolled,
+        maxAttendees,
         isFull: maxAttendees != null && maxAttendees > 0 && enrolled >= maxAttendees,
         seriesId: g?.seriesId ? String(g.seriesId) : null,
         recurrenceLabel: g?.isRecurring ? freqLabel[g?.recurrenceFrequency] ?? null : null,
@@ -577,7 +584,7 @@ export default function ExpertProfile({
                     >
                       <p className="text-[13px] font-semibold text-[#1A3A4A]">{item.title}</p>
                       <p className="mt-1 text-[11px] text-[#7A7A72]">
-                        {item.date} · {item.attendees} attendees
+                        {item.date} · {seminarCapacityLabel(item.attendees, item.maxAttendees)}
                       </p>
                     </div>
                   ))
