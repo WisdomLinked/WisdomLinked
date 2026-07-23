@@ -3,7 +3,7 @@ import { useDispatch } from 'react-redux';
 import { Search, CalendarDays, Clock, MapPin, ArrowLeft, User, Users, Repeat, Check, MessageSquare } from 'lucide-react';
 import FilterDropdown, { type FilterOption } from '../ui/FilterDropdown';
 import { useAppSelector } from '../../store';
-import { registerForSeminar, requestSeminarSeat, doFilterSeminars, profileImageFetch, doGetKeywordsAndServices } from '../../api/api';
+import { registerForSeminar, requestSeminarSeat, doFilterSeminars, profileImageFetch, doGetKeywordsAndServices, getExpertById } from '../../api/api';
 import { canonicalLabelsFromMixedServiceEntries } from '../../constants/serviceOptions';
 import { resolveProfileImageSrc } from '../../utils/profileImage';
 import { seminarCapacityLabel } from '../../utils/seminarCapacityLabel';
@@ -158,6 +158,9 @@ export default function StudentSeminars({
   const [majorFilter, setMajorFilter] = useState<string>('all');
   const [tagFilter, setTagFilter] = useState<string>('all');
   const [selectedSeminar, setSelectedSeminar] = useState<Seminar | null>(null);
+  const [pastSeminars, setPastSeminars] = useState<
+    Array<{ id: string; title: string; date: string; attendees: number }>
+  >([]);
   const [checkout, setCheckout] = useState<'review' | 'pay' | null>(null);
   const [bookingDone, setBookingDone] = useState(false);
   const [seatRequested, setSeatRequested] = useState(false);
@@ -268,6 +271,59 @@ export default function StudentSeminars({
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    const expertId = selectedSeminar?.expertId;
+    const viewingId = selectedSeminar?.id;
+    if (!expertId) {
+      setPastSeminars([]);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const res: any = await getExpertById(expertId);
+        const chats = Array.isArray(res?.result?.groupChats) ? res.result.groupChats : [];
+        const now = Date.now();
+        const past = chats
+          .filter(
+            (g: any) =>
+              g?.type === 'seminar' && g?.status !== 'draft' && g?.status !== 'cancelled',
+          )
+          .map((g: any) => {
+            const start = g?.start ? new Date(g.start).getTime() : NaN;
+            const enrolled = Math.max(
+              0,
+              (Array.isArray(g?.participants) ? g.participants.length : 0) - 1,
+            );
+            return { g, start, enrolled };
+          })
+          .filter(
+            (x: any) =>
+              !Number.isNaN(x.start) &&
+              x.start < now &&
+              String(x.g?._id) !== String(viewingId),
+          )
+          .sort((a: any, b: any) => b.start - a.start)
+          .slice(0, 6)
+          .map((x: any) => {
+            const d = new Date(x.start);
+            return {
+              id: String(x.g?._id),
+              title: x.g?.name || 'Seminar',
+              date: `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`,
+              attendees: x.enrolled,
+            };
+          });
+        if (!cancelled) setPastSeminars(past);
+      } catch {
+        if (!cancelled) setPastSeminars([]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedSeminar?.expertId, selectedSeminar?.id]);
 
   useEffect(() => {
     let cancelled = false;
@@ -444,7 +500,7 @@ export default function StudentSeminars({
         <div className="flex flex-wrap items-center gap-3">
           <span className="inline-flex items-center gap-1 rounded-full bg-slate-50 px-2 py-1">
             <Users className="h-3 w-3 text-[#234C6A]" aria-hidden />
-            <span>{seminarCapacityLabel(s.attendees, s.maxAttendees)}</span>
+            <span>{seminarCapacityLabel(s.attendees, s.maxAttendees, { omitFullWord: true })}</span>
           </span>
           {s.level && (
             <span className="inline-flex items-center gap-1 rounded-full bg-slate-50 px-2 py-1">
@@ -495,9 +551,7 @@ export default function StudentSeminars({
   if (selectedSeminar) {
     const s = selectedSeminar;
     const viewerTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
-    const pastBySameExpert = seminars
-      .filter(item => item.expertName === s.expertName && item.id !== s.id)
-      .slice(0, 3);
+    const pastBySameExpert = pastSeminars;
 
     const alreadyRegistered = mySeminarStatus.booked.has(s.id) || bookingDone;
     const isFull = s.isFull && !alreadyRegistered;

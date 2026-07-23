@@ -7,14 +7,29 @@
 export function seminarCapacityLabel(
   enrolled: number,
   maxAttendees: number | null | undefined,
+  options?: { omitFullWord?: boolean },
 ): string {
   const filled = Math.max(0, Math.trunc(enrolled) || 0);
   if (typeof maxAttendees === 'number' && maxAttendees > 0) {
     const left = maxAttendees - filled;
     if (left <= 0) {
-      return `${filled} of ${maxAttendees} seats filled · Full`;
+      return options?.omitFullWord
+        ? `${filled} of ${maxAttendees} seats filled`
+        : `${filled} of ${maxAttendees} seats filled · Full`;
     }
     return `${filled} of ${maxAttendees} seats filled · ${left} left`;
   }
   return `${filled} enrolled · no limit`;
+}
+
+export function seminarEnrollmentLabel(
+  enrolled: number,
+  waiting: number,
+  maxAttendees: number | null | undefined,
+): string {
+  const e = Math.max(0, Math.trunc(enrolled) || 0);
+  const w = Math.max(0, Math.trunc(waiting) || 0);
+  const cap =
+    typeof maxAttendees === 'number' && maxAttendees > 0 ? String(maxAttendees) : '∞';
+  return `Enrollments/waiting/Cap (${e}/${w}/${cap})`;
 }

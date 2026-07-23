@@ -30,6 +30,7 @@ import {
   getMyFollowers,
 } from '../api/api';
 import { resolveProfileImageSrc } from '../utils/profileImage';
+import { seminarEnrollmentLabel } from '../utils/seminarCapacityLabel';
 import { fetchDmUnreadSnapshot, fetchChatUserProfile } from '../api/chatApi';
 import ProfileModal from './Dashboard/Messenger/Messages/ProfileModal';
 import { buildFallbackChatProfile, mergeChatProfile } from '../utils/chatProfileModal';
@@ -59,6 +60,16 @@ import UpcomingSessionModal, {
 import FollowersModal, {
   type FollowerEntry,
 } from '../components/dashboard/FollowersModal';
+
+function refIdOf(ref: unknown): string {
+  if (!ref) return '';
+  if (typeof ref === 'string') return ref;
+  if (typeof ref === 'object') {
+    const o = ref as { _id?: unknown; id?: unknown };
+    return String(o._id ?? o.id ?? '');
+  }
+  return String(ref);
+}
 
 /** The student on a 1:1 booking may be the creator or the sole participant. */
 function pickStudent(g: any): any {
@@ -103,7 +114,7 @@ function mapSeatRequestToModalSession(r: any): UpcomingModalSession {
   };
 }
 
-function mapExpertGroupToModalSession(g: any): UpcomingModalSession {
+function mapExpertGroupToModalSession(g: any, waitingCount = 0): UpcomingModalSession {
   const start = g?.start ? new Date(g.start).getTime() : Date.now();
   const when = g?.start
     ? new Date(g.start).toLocaleString(undefined, {
@@ -125,6 +136,16 @@ function mapExpertGroupToModalSession(g: any): UpcomingModalSession {
       withLabel = '1:1 session';
     }
   }
+  const metaLines: string[] = [];
+  if (g?.type === 'seminar') {
+    const adminId = refIdOf(g?.admin);
+    const enrolled = (Array.isArray(g?.participants) ? g.participants : []).filter(
+      (p: unknown) => refIdOf(p) !== adminId,
+    ).length;
+    const maxAttendees =
+      typeof g?.maxAttendees === 'number' ? g.maxAttendees : null;
+    metaLines.push(seminarEnrollmentLabel(enrolled, waitingCount, maxAttendees));
+  }
   return {
     id: String(g._id),
     title: g.name || 'Session',
@@ -132,6 +153,7 @@ function mapExpertGroupToModalSession(g: any): UpcomingModalSession {
     when,
     location: 'Online · WisdomLinked',
     with: withLabel,
+    metaLines: metaLines.length ? metaLines : undefined,
     peerUserId:
       g?.type === 'individual' ? String(pickStudent(g)?._id ?? '') : undefined,
     detail: {
@@ -730,7 +752,14 @@ export default function ExpertDashboard() {
     if (status === 'pending') {
       return seatRequests.map(mapSeatRequestToModalSession);
     }
-    return acceptedSeminars.map(mapExpertGroupToModalSession);
+    const waitingBySeminar: Record<string, number> = {};
+    for (const r of seatRequests) {
+      const sid = refIdOf(r?.groupChat);
+      if (sid) waitingBySeminar[sid] = (waitingBySeminar[sid] || 0) + 1;
+    }
+    return acceptedSeminars.map((g: any) =>
+      mapExpertGroupToModalSession(g, waitingBySeminar[String(g?._id)] || 0),
+    );
   }, [
     expertUpcomingModal,
     bookedSessions,

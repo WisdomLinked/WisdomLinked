@@ -584,7 +584,7 @@ export default function ExpertProfile({
                     >
                       <p className="text-[13px] font-semibold text-[#1A3A4A]">{item.title}</p>
                       <p className="mt-1 text-[11px] text-[#7A7A72]">
-                        {item.date} · {seminarCapacityLabel(item.attendees, item.maxAttendees)}
+                        {item.date} · {seminarCapacityLabel(item.attendees, item.maxAttendees, { omitFullWord: true })}
                       </p>
                     </div>
                   ))

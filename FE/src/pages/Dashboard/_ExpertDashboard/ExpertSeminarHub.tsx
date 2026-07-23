@@ -21,7 +21,7 @@ import { SetLoadingStatus } from '../../../actions/appActions';
 import { showSuccessAlert } from '../../../actions/alertActions';
 import { deleteGroup, profileImageFetch, getSeminarSeatRequests, approveSeminarSeatRequest, rejectSeminarSeatRequest } from '../../../api/api';
 import { resolveProfileImageSrc } from '../../../utils/profileImage';
-import { seminarCapacityLabel } from '../../../utils/seminarCapacityLabel';
+import { seminarCapacityLabel, seminarEnrollmentLabel } from '../../../utils/seminarCapacityLabel';
 import { usePeerProfileModal } from '../../../hooks/usePeerProfileModal';
 import { canonicalLabelsFromMixedServiceEntries } from '../../../constants/serviceOptions';
 import Avatar from '../../../components/Avatar';
@@ -115,6 +115,8 @@ function SeminarCard({
   badge,
   recurrenceLabel,
   occurrenceCount,
+  waitingCount = 0,
+  showEnrollment = false,
 }: {
   seminar: any;
   onClick: () => void;
@@ -122,6 +124,8 @@ function SeminarCard({
   badge?: string;
   recurrenceLabel?: string;
   occurrenceCount?: number;
+  waitingCount?: number;
+  showEnrollment?: boolean;
 }) {
   const start = seminar?.start ? new Date(seminar.start) : null;
   const admin = seminar?.admin;
@@ -208,7 +212,9 @@ function SeminarCard({
           ) : null}
           <span className="inline-flex items-center gap-1 rounded-full bg-slate-50 px-2 py-1">
             <Users className="h-3 w-3 text-[#234C6A]" aria-hidden />
-            {seminarCapacityLabel(n, maxAttendees)}
+            {showEnrollment
+              ? seminarEnrollmentLabel(n, waitingCount, maxAttendees)
+              : seminarCapacityLabel(n, maxAttendees)}
           </span>
           {recurrenceLabel && occurrenceCount && occurrenceCount > 1 ? (
             <span className="inline-flex items-center gap-1 rounded-full bg-[#E8EEF4] px-2 py-1 text-[#234C6A]">
@@ -423,12 +429,14 @@ function SeatRequestsPanel({ seminarId }: { seminarId: string }) {
 function SeminarDetailPane({
   seminar,
   isHost,
+  waitingCount = 0,
   onBack,
   onEdit,
   onDelete,
 }: {
   seminar: any;
   isHost: boolean;
+  waitingCount?: number;
   onBack: () => void;
   onEdit: () => void;
   onDelete: (scope: 'occurrence' | 'series') => void;
@@ -586,7 +594,11 @@ function SeminarDetailPane({
               </div>
               <div className="inline-flex items-center gap-1.5 rounded-lg border border-[#E5E2DB] bg-[#F5F3EF] px-3 py-2">
                 <Users className="h-4 w-4 text-[#234C6A]" aria-hidden />
-                <span>{seminarCapacityLabel(enrolledCount, maxAttendees)}</span>
+                <span>
+                  {isHost
+                    ? seminarEnrollmentLabel(enrolledCount, waitingCount, maxAttendees)
+                    : seminarCapacityLabel(enrolledCount, maxAttendees)}
+                </span>
               </div>
               {isHost ? (
                 <>
@@ -878,6 +890,26 @@ export default function ExpertSeminarHub() {
     null,
   );
 
+  const [waitingBySeminar, setWaitingBySeminar] = useState<Record<string, number>>({});
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      const res: any = await getSeminarSeatRequests();
+      if (!active) return;
+      const list: any[] = Array.isArray(res?.result) ? res.result : [];
+      const counts: Record<string, number> = {};
+      for (const r of list) {
+        const sid = getRefId(r?.groupChat);
+        if (sid) counts[sid] = (counts[sid] || 0) + 1;
+      }
+      setWaitingBySeminar(counts);
+    })();
+    return () => {
+      active = false;
+    };
+  }, [userDetails?.groupChats]);
+  const waitingFor = (s: any) => waitingBySeminar[String(s?._id) || getRefId(s)] || 0;
+
   const allSeminars = useMemo(() => {
     const chats = (userDetails?.groupChats || []).filter(
       (g: any) => g && g.type === 'seminar',
@@ -977,6 +1009,7 @@ export default function ExpertSeminarHub() {
       <SeminarDetailPane
         seminar={detailSeminar}
         isHost={isHost}
+        waitingCount={waitingFor(detailSeminar)}
         onBack={() => {
           setDetailSeminar(null);
           setScreen('list');
@@ -1054,6 +1087,8 @@ export default function ExpertSeminarHub() {
                     badge={host ? 'Hosted' : 'Joined'}
                     recurrenceLabel={recurrenceLabelOf(s)}
                     occurrenceCount={occurrenceCount}
+                    waitingCount={waitingFor(s)}
+                    showEnrollment={host}
                   />
                 );
               })}
