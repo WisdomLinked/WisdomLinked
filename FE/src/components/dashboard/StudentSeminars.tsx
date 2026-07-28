@@ -7,6 +7,12 @@ import { registerForSeminar, requestSeminarSeat, doFilterSeminars, profileImageF
 import { canonicalLabelsFromMixedServiceEntries } from '../../constants/serviceOptions';
 import { resolveProfileImageSrc } from '../../utils/profileImage';
 import { seminarCapacityLabel } from '../../utils/seminarCapacityLabel';
+import {
+  seatRequestActionLabel,
+  seatRequestWindow,
+  seatRequestWindowMessage,
+  seatRequestWindowShortLabel,
+} from '../../utils/seatRequestWindow';
 import { SetLoadingStatus } from '../../actions/appActions';
 import { updateMe } from '../../actions/authActions';
 import StudentBookingCheckout from './StudentBookingCheckout';
@@ -126,7 +132,7 @@ async function mapSeminar(g: any): Promise<Seminar> {
     location: 'Online · WisdomLinked',
     attendees: enrolled,
     maxAttendees,
-    isFull: maxAttendees != null && maxAttendees > 0 && enrolled >= maxAttendees,
+    isFull: maxAttendees != null && (maxAttendees <= 0 || enrolled >= maxAttendees),
     price: typeof g?.price === 'number' ? g.price : 0,
     seriesId: g?.seriesId ? String(g.seriesId) : null,
     recurrenceFrequency:
@@ -214,6 +220,7 @@ export default function StudentSeminars({
           setBookingError(response?.error || 'Could not submit your seat request.');
           return;
         }
+        window.localStorage.removeItem('pendingDetails');
         setCheckout(null);
         setSeatRequested(true);
         return;
@@ -226,6 +233,7 @@ export default function StudentSeminars({
         setBookingError(response?.error || 'Could not complete seminar registration.');
         return;
       }
+      window.localStorage.removeItem('pendingDetails');
       dispatch(updateMe() as any);
       setCheckout(null);
       setBookingDone(true);
@@ -416,7 +424,9 @@ export default function StudentSeminars({
     return mySeminarStatus.booked.has(s.id);
   };
 
-  const renderSeminarCard = (s: Seminar) => (
+  const renderSeminarCard = (s: Seminar) => {
+    const cardWaitingList = seatRequestWindow(s.startMs);
+    return (
     <article
       key={s.id}
       role="button"
@@ -456,7 +466,10 @@ export default function StudentSeminars({
           </div>
         )}
         {!seminarRegistered(s) && s.isFull && (
-          <div className="absolute bottom-3 right-3 inline-flex items-center gap-1 rounded-full bg-rose-600/95 px-2.5 py-0.5 text-[10px] font-semibold text-white backdrop-blur">
+          <div
+            className="absolute bottom-3 right-3 inline-flex items-center gap-1 rounded-full bg-rose-600/95 px-2.5 py-0.5 text-[10px] font-semibold text-white backdrop-blur"
+            title={seatRequestWindowMessage(cardWaitingList, { price: s.price })}
+          >
             <span>Full</span>
           </div>
         )}
@@ -502,6 +515,14 @@ export default function StudentSeminars({
             <Users className="h-3 w-3 text-[#234C6A]" aria-hidden />
             <span>{seminarCapacityLabel(s.attendees, s.maxAttendees, { omitFullWord: true })}</span>
           </span>
+          {!seminarRegistered(s) && s.isFull && (
+            <span
+              className="inline-flex items-center gap-1 rounded-full bg-rose-50 px-2 py-1 text-rose-700"
+              title={seatRequestWindowMessage(cardWaitingList, { price: s.price })}
+            >
+              <span>{seatRequestWindowShortLabel(cardWaitingList)}</span>
+            </span>
+          )}
           {s.level && (
             <span className="inline-flex items-center gap-1 rounded-full bg-slate-50 px-2 py-1">
               <span className="h-1.5 w-1.5 rounded-full bg-[#234C6A]" />
@@ -546,7 +567,8 @@ export default function StudentSeminars({
         </button>
       </div>
     </article>
-  );
+    );
+  };
 
   if (selectedSeminar) {
     const s = selectedSeminar;
@@ -555,6 +577,9 @@ export default function StudentSeminars({
 
     const alreadyRegistered = mySeminarStatus.booked.has(s.id) || bookingDone;
     const isFull = s.isFull && !alreadyRegistered;
+    const waitingList = seatRequestWindow(s.startMs);
+    const waitingListOpen = waitingList.state === 'open';
+    const canRequestSeat = isFull && waitingListOpen;
 
     return (
       <div className={containerClass}>
@@ -714,12 +739,12 @@ export default function StudentSeminars({
             {seatRequested ? (
               <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-3 py-3">
                 <p className="text-sm font-semibold text-amber-900">
-                  Seat request submitted.
+                  You’re on the waiting list.
                 </p>
                 <p className="mt-1 text-xs text-amber-800">
                   {s.price > 0
-                    ? 'Your card is authorized but not charged — the host reviews full-seminar requests and you’re only charged if approved. Otherwise the hold is released.'
-                    : 'The host reviews full-seminar requests; you’ll join only if approved.'}
+                    ? 'Your card is authorized but not charged — the host reviews the waiting list and you’re only charged if approved. Otherwise the hold is released.'
+                    : 'The host reviews the waiting list; you’ll join only if approved.'}
                 </p>
               </div>
             ) : alreadyRegistered ? (
@@ -758,17 +783,25 @@ export default function StudentSeminars({
                 </div>
                 {isFull ? (
                   <div className="space-y-2">
-                    <p className="text-xs text-[#7A7A72]">
-                      This seminar is full. You can request a seat — the host approves requests and
-                      admits students beyond the cap.
-                    </p>
-                    <button
-                      type="button"
-                      onClick={() => setCheckout('review')}
-                      className="w-full rounded-[4px] bg-[#234C6A] px-3 py-2 text-sm font-semibold text-white hover:brightness-110"
+                    <p className="text-xs font-semibold text-[#1A3A4A]">This seminar is full.</p>
+                    <p
+                      className={`rounded-lg border px-3 py-2 text-xs ${
+                        waitingListOpen
+                          ? 'border-amber-200 bg-amber-50 text-amber-800'
+                          : 'border-[#E5E2DB] bg-[#F5F3EF] text-[#7A7A72]'
+                      }`}
                     >
-                      Request a seat
-                    </button>
+                      {seatRequestWindowMessage(waitingList, { price: s.price })}
+                    </p>
+                    {canRequestSeat ? (
+                      <button
+                        type="button"
+                        onClick={() => setCheckout('review')}
+                        className="w-full rounded-[4px] bg-[#234C6A] px-3 py-2 text-sm font-semibold text-white hover:brightness-110"
+                      >
+                        {seatRequestActionLabel(s.price)}
+                      </button>
+                    ) : null}
                   </div>
                 ) : (
                   <button
@@ -794,13 +827,11 @@ export default function StudentSeminars({
             <div className="my-auto w-full max-w-md">
               <div className="rounded-2xl border border-[#E5E2DB] bg-white p-4 sm:p-6 space-y-4">
                 <p className="font-serif text-lg font-medium text-[#1A3A4A]">
-                  {isFull ? 'Request a seat' : 'Review your booking'}
+                  {isFull ? 'Join the waiting list' : 'Review your booking'}
                 </p>
                 {isFull ? (
                   <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-                    This seminar is full. {s.price > 0
-                      ? 'Your card is authorized but not charged — you\'re only charged if the host approves your seat. Otherwise the hold is released.'
-                      : 'Your request goes to the host for approval; you\'ll join only if they approve.'}
+                    This seminar is full. {seatRequestWindowMessage(waitingList, { price: s.price })}
                   </p>
                 ) : null}
                 <dl className="space-y-2 text-sm text-[#1A3A4A]">
@@ -831,7 +862,7 @@ export default function StudentSeminars({
                   className="inline-flex w-full items-center justify-center rounded-[4px] bg-[#1A3A4A] px-4 py-3 text-[13px] font-semibold text-white hover:bg-[#122635]"
                 >
                   {isFull
-                    ? (s.price > 0 ? 'Continue to authorize' : 'Continue to request')
+                    ? (s.price > 0 ? 'Continue to authorize' : 'Continue to join the waiting list')
                     : s.price > 0 ? 'Continue to payment' : 'Confirm booking'}
                 </button>
               </div>
@@ -851,6 +882,7 @@ export default function StudentSeminars({
                 type="Seminar"
                 price={s.price}
                 isSeatRequest={isFull}
+                holdsFunds
                 returnUrl={seminarReturnUrl}
                 pendingDetails={{ groupChatId: s.id, price: s.price, name: s.title }}
                 onPaymentSuccess={joinSeminar}

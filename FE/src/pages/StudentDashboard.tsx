@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useDispatch } from 'react-redux';
 import { useLocation, useNavigate } from 'react-router-dom';
 import queryString from 'query-string';
@@ -6,6 +6,7 @@ import { BookOpen, UserCheck, AlertCircle, MessageSquare, Users } from 'lucide-r
 import { useAppSelector } from '../store';
 import { doGetMyEvents, getAllCommunityChats, profileImageFetch, doFilterExperts, doFilterSeminars } from '../api/api';
 import { resolveProfileImageSrc } from '../utils/profileImage';
+import { displayRoomLabel, shouldNotifyRoom } from '../utils/chatRoomLabel';
 import { fetchDmUnreadSnapshot, fetchChatUserProfile } from '../api/chatApi';
 import ProfileModal from './Dashboard/Messenger/Messages/ProfileModal';
 import { buildFallbackChatProfile, mergeChatProfile } from '../utils/chatProfileModal';
@@ -432,6 +433,9 @@ export default function StudentDashboard() {
   }, [paySuccessToast]);
   const [dmUnreadByRid, setDmUnreadByRid] = useState<Record<string, number>>({});
   const [rcRoomNameByRid, setRcRoomNameByRid] = useState<Record<string, string>>({});
+  const [rcDisplayNameByRid, setRcDisplayNameByRid] = useState<Record<string, string>>({});
+  const [roomNamesUnresolved, setRoomNamesUnresolved] = useState(false);
+  const [knownRids, setKnownRids] = useState<string[]>([]);
   /** Same source as chat sidebar — RC room id → community name (DMs use directConversations only). */
   const [communityRidToName, setCommunityRidToName] = useState<Record<string, string>>({});
   const [selectedExpert, setSelectedExpert] = useState<ExpertCardProps | null>(null);
@@ -512,8 +516,24 @@ export default function StudentDashboard() {
     if (redirect_status === 'succeeded' && payment_intent) {
       let cancelled = false;
       (async () => {
+        const attemptsKey = `wl_booking_attempts_${payment_intent}`;
+        const attempts = Number(window.sessionStorage.getItem(attemptsKey) || '0');
         const result = await completeStudentBookingFromStorage(String(payment_intent));
         if (cancelled) return;
+
+        // On a retryable failure, keep the return URL + pendingDetails so a refresh
+        // reruns completion (the server ignores an already-processed payment_intent).
+        // Bounded so a persistent failure can't loop — after the cap we give up and let
+        // the server-side reconciliation sweep release the hold.
+        if (!result.ok && result.retryable && attempts < 2) {
+          window.sessionStorage.setItem(attemptsKey, String(attempts + 1));
+          setBookingReturnError(
+            `${result.error} We're still finishing your booking — please refresh in a moment if it doesn't complete.`,
+          );
+          return;
+        }
+
+        window.sessionStorage.removeItem(attemptsKey);
         clearBookingQuery();
         if (result.ok) {
           if ('userDetails' in result && result.userDetails) {
@@ -547,6 +567,7 @@ export default function StudentDashboard() {
             }
           }
         } else {
+          window.localStorage.removeItem('pendingDetails');
           setBookingReturnError(result.error);
         }
       })();
@@ -562,8 +583,6 @@ export default function StudentDashboard() {
     }
   }, [location.search, location.pathname, navigate, dispatch]);
 
-  // Seed which experts the user already follows from their profile so the
-  // Follow buttons render in the correct state on load and after a refresh.
   useEffect(() => {
     const following = userDetails?.following;
     if (!Array.isArray(following)) return;
@@ -657,13 +676,31 @@ export default function StudentDashboard() {
         if (r?.decisionDeadline) {
           metaLines.push(`Decision by ${new Date(r.decisionDeadline).toLocaleString()}`);
         }
+        const host = seminar?.admin;
         return {
           id: String(r._id),
           title: seminar?.name || 'Seminar',
           at: start,
           when,
           location: 'Online · WisdomLinked',
-          with: 'Seminar seat request',
+          with: host?.username || host?.email || 'WisdomLinked',
+          peerUserId: host?._id ? String(host._id) : undefined,
+          detail: {
+            title: seminar?.name || 'Seminar',
+            description: seminar?.description,
+            start: seminar?.start,
+            duration: seminar?.duration,
+            price: typeof seminar?.price === 'number' ? seminar.price : undefined,
+            admin: host,
+            participants: [],
+            keywords: seminar?.keywords,
+            services: seminar?.services,
+            purposeOther: seminar?.purposeOther,
+            type: seminar?.type,
+            isRecurring: seminar?.isRecurring,
+            recurrenceFrequency: seminar?.recurrenceFrequency,
+          },
+          briefLabel: 'Seminar details',
           metaLines,
         };
       }),
@@ -900,6 +937,13 @@ export default function StudentDashboard() {
     } else {
       setRcRoomNameByRid({});
     }
+    setRcDisplayNameByRid(
+      snapshot?.success && snapshot.displayNameByRid && typeof snapshot.displayNameByRid === 'object'
+        ? snapshot.displayNameByRid
+        : {},
+    );
+    setRoomNamesUnresolved(Boolean(snapshot?.nameResolutionFailed));
+    setKnownRids(Array.isArray(snapshot?.knownRids) ? snapshot.knownRids : []);
   }, [dispatch]);
 
   useEffect(() => {
@@ -920,6 +964,13 @@ export default function StudentDashboard() {
       } else {
         setRcRoomNameByRid({});
       }
+      setRcDisplayNameByRid(
+        snapshot?.success && snapshot.displayNameByRid && typeof snapshot.displayNameByRid === 'object'
+          ? snapshot.displayNameByRid
+          : {},
+      );
+      setRoomNamesUnresolved(Boolean(snapshot?.nameResolutionFailed));
+    setKnownRids(Array.isArray(snapshot?.knownRids) ? snapshot.knownRids : []);
       await loadCommunityNotificationRooms();
     };
     void boot();
@@ -990,18 +1041,15 @@ export default function StudentDashboard() {
     return s;
   }, [userDetails?.directConversations]);
 
+  const knownRidSet = useMemo(() => new Set(knownRids.map(String)), [knownRids]);
+
   /** Same idea as DM rids from directConversations — include community rids from getAllCommunityChats (often missing on user payload). */
   const allowedChatRidSet = useMemo(() => {
     const s = new Set<string>();
     dmRidSet.forEach(rid => s.add(rid));
-    /** Include unread snapshot rooms only for WL-style channel names (exclude default rooms like "general"). */
+    /** Include unread snapshot rooms only when the backend matched them to a WL chat (an unidentified room is one we cannot open). */
     Object.entries(dmUnreadByRid || {}).forEach(([rid]) => {
-      const roomName = String(rcRoomNameByRid?.[rid] || '').trim().toLowerCase();
-      const looksLikeWlChannel =
-        roomName.startsWith('wl-group-') ||
-        roomName.startsWith('wl_') ||
-        roomName.includes('community');
-      if (looksLikeWlChannel) s.add(String(rid));
+      if (shouldNotifyRoom(rid, knownRidSet, rcRoomNameByRid?.[rid], roomNamesUnresolved)) s.add(String(rid));
     });
     (userDetails?.generalChats ?? []).forEach((g: any) => {
       if (g?.rcChannelId) s.add(String(g.rcChannelId));
@@ -1011,7 +1059,7 @@ export default function StudentDashboard() {
     });
     Object.keys(communityRidToName).forEach(rid => s.add(rid));
     return s;
-  }, [dmRidSet, dmUnreadByRid, rcRoomNameByRid, userDetails?.generalChats, userDetails?.groupChats, communityRidToName]);
+  }, [dmRidSet, dmUnreadByRid, rcRoomNameByRid, knownRidSet, roomNamesUnresolved, userDetails?.generalChats, userDetails?.groupChats, communityRidToName]);
 
   const filteredUnreadByRid = useMemo(() => {
     const out: Record<string, number> = {};
@@ -1036,12 +1084,19 @@ export default function StudentDashboard() {
   }, [userDetails?.generalChats, userDetails?.groupChats]);
 
   const roomLabelByRid = useMemo(
-    () => ({ ...rcRoomNameByRid, ...dmNameByRid, ...groupNameByRid, ...communityRidToName }),
-    [rcRoomNameByRid, dmNameByRid, groupNameByRid, communityRidToName],
+    () => ({ ...rcDisplayNameByRid, ...dmNameByRid, ...groupNameByRid, ...communityRidToName }),
+    [rcDisplayNameByRid, dmNameByRid, groupNameByRid, communityRidToName],
   );
+
+  const namedRidsRef = useRef<Set<string>>(new Set());
+  const nameLookupTriedRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    namedRidsRef.current = new Set(Object.keys(roomLabelByRid));
+  }, [roomLabelByRid]);
 
   useEffect(() => {
     let debounce: ReturnType<typeof setTimeout> | undefined;
+    let resolveNames: ReturnType<typeof setTimeout> | undefined;
     const unsubSub = onSubscriptionChanged(({ roomId, type, unread }) => {
       if (type && !['d', 'c', 'p'].includes(type)) return;
       const rid = String(roomId || '');
@@ -1054,6 +1109,13 @@ export default function StudentDashboard() {
         return next;
       });
       dispatch(patchDmUnreadRid(rid, nextUnread));
+      if (nextUnread > 0 && !namedRidsRef.current.has(rid) && !nameLookupTriedRef.current.has(rid)) {
+        nameLookupTriedRef.current.add(rid);
+        if (resolveNames) window.clearTimeout(resolveNames);
+        resolveNames = window.setTimeout(() => {
+          void hydrateUnreadSnapshot();
+        }, 600);
+      }
       if (type === 'c' || type === 'p') {
         if (debounce) window.clearTimeout(debounce);
         debounce = window.setTimeout(() => {
@@ -1064,8 +1126,9 @@ export default function StudentDashboard() {
     return () => {
       unsubSub();
       if (debounce) window.clearTimeout(debounce);
+      if (resolveNames) window.clearTimeout(resolveNames);
     };
-  }, [userDetails?.email, loadCommunityNotificationRooms, dispatch]);
+  }, [userDetails?.email, loadCommunityNotificationRooms, hydrateUnreadSnapshot, dispatch]);
 
   const totalUnreadDm = useMemo(
     () => Object.values(filteredUnreadByRid).reduce((sum, n) => sum + (Number(n) || 0), 0),
@@ -1078,10 +1141,10 @@ export default function StudentDashboard() {
         .map(([rid, count]) => {
           const n = Number(count) || 0;
           const isDm = dmRidSet.has(rid);
-          const label = roomLabelByRid[rid] || (isDm ? 'Someone' : 'Chat');
+          const label = displayRoomLabel(roomLabelByRid[rid], isDm ? 'Someone' : 'a group chat');
           return {
             id: `chat-${rid}`,
-            title: `${label} messaged you`,
+            title: isDm ? `${label} messaged you` : `New message${n !== 1 ? 's' : ''} in ${label}`,
             meta: `${n > 99 ? '99+' : n} unread message${n !== 1 ? 's' : ''}`,
             unreadCount: n,
             icon: <MessageSquare className="h-3.5 w-3.5 text-[#1A3A4A]" aria-hidden />,
@@ -1414,6 +1477,7 @@ export default function StudentDashboard() {
               <StudentBookingCheckout
                 type="1:1 session"
                 price={payTarget.price}
+                holdsFunds
                 pendingDetails={{
                   kind: 'accept-1to1',
                   groupChatId: payTarget.groupChatId,
@@ -1442,6 +1506,7 @@ export default function StudentDashboard() {
                     );
                     return;
                   }
+                  window.localStorage.removeItem('pendingDetails');
                   dispatch(updateMe());
                   setPaySuccessToast(true);
                 }}

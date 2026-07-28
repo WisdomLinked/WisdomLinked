@@ -24,4 +24,15 @@ const PaymentHistorySchema = new mongoose.Schema(
     { timestamps: true }
 );
 
+PaymentHistorySchema.index(
+    { paymentIntent: 1 },
+    {
+        unique: true,
+        partialFilterExpression: {
+            paymentType: 'charge',
+            paymentIntent: { $type: 'string' },
+        },
+    }
+);
+
 module.exports = mongoose.model("PaymentHistory", PaymentHistorySchema);

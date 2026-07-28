@@ -65,8 +65,6 @@ const CheckoutForm = ({
   const stripe = useStripe();
   const elements = useElements();
   const [errorMessage, setErrorMessage] = useState('');
-  // Animated progress shown under the Pay button while the charge is processing,
-  // so the student sees that the payment is working through to completion.
   const [processing, setProcessing] = useState(false);
   const [progress, setProgress] = useState(0);
   const progressTimer = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -107,8 +105,7 @@ const CheckoutForm = ({
 
     try {
       if (price === 0) {
-        // A free but full seminar still routes through host approval (no funds to hold).
-        window.localStorage.setItem('pendingDetails', JSON.stringify({ ...pendingDetails, requiresApproval: isSeatRequest }));
+        window.localStorage.removeItem('pendingDetails');
         onPaymentSuccess('0', { requiresApproval: isSeatRequest });
         return;
       }
@@ -132,14 +129,21 @@ const CheckoutForm = ({
       });
       const clientSecret = response && response.client_secret;
       if (!clientSecret) {
-        setErrorMessage('Could not start payment. Please try again in a moment.');
+        const reason = (response && (response.error || response.message)) || '';
+        setErrorMessage(
+          reason
+            ? `${reason} You have not been charged.`
+            : 'Could not start payment. Please try again in a moment.',
+        );
         SetLoadingStatus(false);
         endProgress(false);
         return;
       }
 
-      // Full seminar → funds are authorized (held), not captured, pending host approval.
-      const requiresApproval = isSeatRequest || Boolean(response?.requiresApproval);
+      const requiresApproval =
+        typeof response?.requiresApproval === 'boolean'
+          ? response.requiresApproval
+          : isSeatRequest;
 
       window.localStorage.setItem('pendingDetails', JSON.stringify({ ...pendingDetails, requiresApproval }));
 
@@ -154,10 +158,8 @@ const CheckoutForm = ({
 
       SetLoadingStatus(false);
 
-      // A held payment resolves to 'requires_capture' rather than 'succeeded'.
       if (paymentIntent?.status === 'succeeded' || paymentIntent?.status === 'requires_capture') {
         endProgress(true);
-        window.localStorage.removeItem('pendingDetails');
         onPaymentSuccess(paymentIntent.id, { requiresApproval });
       } else if (confirmError) {
         // Integration/validation errors resolve (not throw) with an error object.
@@ -199,9 +201,9 @@ const CheckoutForm = ({
           className="inline-flex w-full items-center justify-center rounded-[4px] bg-[#1A3A4A] px-4 py-3 text-[13px] font-semibold text-white hover:bg-[#122635] disabled:opacity-60"
         >
           {processing
-            ? (isSeatRequest ? 'Submitting request…' : 'Processing payment…')
+            ? (isSeatRequest ? 'Joining the waiting list…' : 'Processing payment…')
             : isSeatRequest
-              ? (price > 0 ? `Authorize $${price} & request seat` : 'Request seat')
+              ? (price > 0 ? `Authorize $${price} & join waiting list` : 'Join waiting list')
               : price > 0 ? `Pay $${price}` : 'Confirm booking'}
         </button>
         {/* Animated progress line under the button while the charge is processing. */}
@@ -230,6 +232,9 @@ type Props = {
   pendingDetails: StudentBookingPendingDetails;
   returnUrl?: string;
   isSeatRequest?: boolean;
+  /** Server authorizes (holds) rather than charges — must match the intent's
+   *  capture_method or confirmPayment throws a mismatch. True for all seminars. */
+  holdsFunds?: boolean;
   onPaymentSuccess: (paymentIntentId: string, opts?: { requiresApproval?: boolean }) => void;
   onCancel?: () => void;
   cancelLabel?: string;
@@ -241,6 +246,7 @@ export default function StudentBookingCheckout({
   pendingDetails,
   returnUrl,
   isSeatRequest = false,
+  holdsFunds = false,
   onPaymentSuccess,
   onCancel,
   cancelLabel = 'Back',
@@ -252,11 +258,11 @@ export default function StudentBookingCheckout({
     () => ({
       mode: 'payment' as const,
       amount: price > 0 ? Math.round(price * 100) : 1,
-      currency: 'usd',
-      // A full-seminar seat request authorizes (holds) the funds — the deferred
-      // Element must declare the same manual capture or confirmPayment throws a
-      // capture_method mismatch and the submit silently fails.
-      ...(isSeatRequest && price > 0 ? { captureMethod: 'manual' as const } : {}),
+      currency: 'usd' as const,
+      // Seminar bookings authorize (hold) the funds — the deferred Element must
+      // declare the same manual capture or confirmPayment throws a capture_method
+      // mismatch and the submit silently fails.
+      ...((isSeatRequest || holdsFunds) && price > 0 ? { captureMethod: 'manual' as const } : {}),
       appearance: {
         theme: 'stripe' as const,
         variables: {
@@ -269,7 +275,7 @@ export default function StudentBookingCheckout({
         },
       },
     }),
-    [price, isSeatRequest],
+    [price, isSeatRequest, holdsFunds],
   );
 
   const [stripeMode, setStripeMode] = useState('');
@@ -312,7 +318,7 @@ export default function StudentBookingCheckout({
     <div className="flex max-h-[88vh] flex-col rounded-2xl border border-[#E5E2DB] bg-white p-4 sm:p-6">
       <div className="shrink-0">
         <p className="font-serif text-lg font-medium text-[#1A3A4A]">
-          {isSeatRequest ? `Request a seat — ${type}` : `Pay for your ${type}`}
+          {isSeatRequest ? `Join the waiting list — ${type}` : `Pay for your ${type}`}
         </p>
         <p className="mt-1 text-[12px] text-[#7A7A72]">
           Total: <span className="font-semibold text-[#1A3A4A]">${price}</span>
@@ -321,8 +327,8 @@ export default function StudentBookingCheckout({
         {isSeatRequest ? (
           <p className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[12px] text-amber-800">
             This seminar is full. {price > 0
-              ? 'Your card will be authorized but not charged — you\'re only charged if the host approves your seat. Otherwise the hold is released.'
-              : 'Your request goes to the host for approval; you\'ll join only if they approve.'}
+              ? 'Pay to get on the waiting list for the host to approve — your card is authorized but not charged, and you\'re only charged if the host approves. Otherwise the hold is released.'
+              : 'You\'re joining the waiting list; the host approves it and you\'ll join only if they do.'}
           </p>
         ) : null}
       </div>
@@ -359,15 +365,19 @@ export async function completeStudentBookingFromStorage(
   | { ok: true; kind: 'seminar'; userDetails: unknown }
   | { ok: true; kind: 'seminar-request' }
   | { ok: true; kind: 'accept'; userDetails: unknown }
-  | { ok: false; error: string }
+  | { ok: false; error: string; retryable: boolean }
 > {
   const raw = window.localStorage.getItem('pendingDetails');
   if (!raw) {
-    return { ok: false, error: 'No pending booking found.' };
+    // Nothing to complete or retry — the booking was already finished or never started.
+    return { ok: false, error: 'No pending booking found.', retryable: false };
   }
   try {
     const details = JSON.parse(raw);
-    window.localStorage.removeItem('pendingDetails');
+    // Only drop the recovery state once the booking API has confirmed success. Any
+    // failure (transient or business) keeps pendingDetails so a refresh can retry — the
+    // server guards against double-processing the same payment_intent.
+    const clearPending = () => window.localStorage.removeItem('pendingDetails');
 
     // Paying to confirm an expert-proposed 1:1 — flips the session to active, no re-approval.
     if (details.kind === 'accept-1to1') {
@@ -377,8 +387,9 @@ export async function completeStudentBookingFromStorage(
         payment_intent: paymentIntent,
       });
       if (response === false || response?.status === 'FAIL' || response?.error) {
-        return { ok: false, error: response?.error || 'Could not confirm the session after payment.' };
+        return { ok: false, error: response?.error || 'Could not confirm the session after payment.', retryable: true };
       }
+      clearPending();
       return { ok: true, kind: 'accept', userDetails: response?.result };
     }
 
@@ -392,8 +403,9 @@ export async function completeStudentBookingFromStorage(
           payment_intent: paymentIntent,
         });
         if (response === false || response?.status === 'FAIL' || response?.error) {
-          return { ok: false, error: response?.error || 'Could not submit your seat request after payment.' };
+          return { ok: false, error: response?.error || 'Could not submit your seat request after payment.', retryable: true };
         }
+        clearPending();
         return { ok: true, kind: 'seminar-request' };
       }
 
@@ -403,9 +415,14 @@ export async function completeStudentBookingFromStorage(
         payment_intent: paymentIntent,
       });
       if (response === false || response?.status === 'FAIL' || response?.error) {
-        return { ok: false, error: response?.error || 'Seminar registration failed after payment.' };
+        return { ok: false, error: response?.error || 'Seminar registration failed after payment.', retryable: true };
       }
-      return { ok: true, kind: 'seminar', userDetails: response?.result ?? response };
+      clearPending();
+      // The seminar filled up while paying: the held fee became a seat request instead.
+      if (response?.status === 'pending_approval') {
+        return { ok: true, kind: 'seminar-request' };
+      }
+      return { ok: true, kind: 'seminar', userDetails: response?.result ?? null };
     }
 
     const { createGroupChatByUser, getExpertById } = await import('../../api/api');
@@ -428,12 +445,13 @@ export async function completeStudentBookingFromStorage(
 
     // createGroupChatByUser resolves to false / { status:'FAIL' } on failure.
     if (response === false || response?.status === 'FAIL' || response?.error || !response?.result) {
-      return { ok: false, error: response?.error || 'Payment succeeded, but the session could not be created.' };
+      return { ok: false, error: response?.error || 'Payment succeeded, but the session could not be created.', retryable: true };
     }
+    clearPending();
 
     return { ok: true, kind: '1:1', expertId, userDetails: response.result };
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Booking failed after payment.';
-    return { ok: false, error: message };
+    return { ok: false, error: message, retryable: true };
   }
 }

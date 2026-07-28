@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { HTTP_GENERIC_ERROR, safeHttp500Message } from '../utils/httpUserFacingCopy';
-import { computeBookingPriceCents, extractHourlyRate, assertPaymentMatchesExpected } from '../utils/bookingPrice';
+import { computeBookingPriceCents, extractHourlyRate, assertPaymentMatchesExpected, assertIntentMatchesBooking } from '../utils/bookingPrice';
+const AppState = require("../models/AppState");
 const Event = require("../models/Event");
 const User = require("../models/User");
 const FriendInvitation = require("../models/FriendInvitation");
@@ -131,8 +132,30 @@ const appendEvent = async (req, res) => {
         let paymentIntentSucceeded_test: any = false;
         let paymentIntentSucceeded_live: any = false;
         if (expectedCents > 0) {
-            paymentIntentSucceeded_test = await checkPaymentIntentSucceeded(payment_intent, 'test');
-            paymentIntentSucceeded_live = await checkPaymentIntentSucceeded(payment_intent, 'live');
+            // One intent, one booking — without this the same payment could be replayed
+            // to accept any number of events.
+            const alreadyUsed = await PaymentHistory.exists({
+                paymentIntent: String(payment_intent),
+                paymentType: 'charge',
+            });
+            if (alreadyUsed) {
+                return res.status(409).send("This payment has already been used for a booking.");
+            }
+            // Pinned to the configured mode, so a test-mode intent can never satisfy a
+            // live booking (or the reverse).
+            const appState = await AppState.findOne();
+            const serverMode = appState?.stripeMode === 'live' ? 'live' : 'test';
+            const succeeded = await checkPaymentIntentSucceeded(payment_intent, serverMode);
+            paymentIntentSucceeded_test = serverMode === 'test' ? succeeded : false;
+            paymentIntentSucceeded_live = serverMode === 'live' ? succeeded : false;
+
+            if (succeeded) {
+                // The intent must name this payer and this expert.
+                assertIntentMatchesBooking(succeeded, {
+                    userId: String(req.user?.userId ?? customerUser._id),
+                    expertId: String(expertUser._id),
+                });
+            }
         }
         const charge = assertPaymentMatchesExpected(expectedCents, payment_intent, paymentIntentSucceeded_test, paymentIntentSucceeded_live);
 

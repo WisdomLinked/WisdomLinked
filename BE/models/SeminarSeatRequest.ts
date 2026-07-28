@@ -24,7 +24,7 @@ const seminarSeatRequestSchema = new mongoose.Schema(
         currency: { type: String, default: 'usd' },
         status: {
             type: String,
-            enum: ['pending', 'approved', 'rejected', 'expired'],
+            enum: ['pending', 'approved', 'rejected', 'expired', 'failed'],
             default: 'pending',
         },
         decisionDeadline: { type: Date },
@@ -34,5 +34,14 @@ const seminarSeatRequestSchema = new mongoose.Schema(
 
 seminarSeatRequestSchema.index({ groupChat: 1, status: 1 });
 seminarSeatRequestSchema.index({ customer: 1, groupChat: 1 });
+
+seminarSeatRequestSchema.index(
+    { customer: 1, groupChat: 1 },
+    {
+        unique: true,
+        partialFilterExpression: { status: 'pending' },
+        name: 'uniq_pending_seat_request_per_student',
+    },
+);
 
 module.exports = mongoose.model("SeminarSeatRequest", seminarSeatRequestSchema);

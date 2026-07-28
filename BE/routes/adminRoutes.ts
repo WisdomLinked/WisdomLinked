@@ -33,7 +33,8 @@ const {
     registerUserByAdmin,
     getCustomMajors,
     consolidateMajors,
-    getMajorConsolidations
+    getMajorConsolidations,
+    getPaymentIntegrityReport
 } = require("../controllers/admin.controller");
 
 const {
@@ -79,6 +80,7 @@ router.post("/registerUserByAdmin", adminAuth, registerUserByAdmin);
 router.get("/getCustomMajors", adminAuth, getCustomMajors);
 router.post("/consolidateMajors", adminAuth, consolidateMajors);
 router.get("/getMajorConsolidations", adminAuth, getMajorConsolidations);
+router.get("/paymentIntegrityReport", adminAuth, getPaymentIntegrityReport);
 router.post("/createChatBotQA", adminAuth, createChatBotQA)
 router.get("/getChatBotQA", adminAuth, getChatBotQA)
 router.post("/updateChatBotQA/:id", adminAuth, updateChatBotQA)

@@ -22,6 +22,11 @@ import { purposeOptionsFromServices, PURPOSE_OTHER } from '../../constants/servi
 import { createGroupChatByUser, getExpertById, profileImageFetch, registerForSeminar } from '../../api/api';
 import { resolveProfileImageSrc } from '../../utils/profileImage';
 import { seminarCapacityLabel } from '../../utils/seminarCapacityLabel';
+import {
+  seatRequestActionLabel,
+  seatRequestWindow,
+  seatRequestWindowMessage,
+} from '../../utils/seatRequestWindow';
 import { normalizeExpertPrice } from '../../utils/schedulingSlots';
 import { computeBookingPriceDollars } from '../../utils/bookingPrice';
 import {
@@ -163,10 +168,11 @@ export default function ExpertProfile({
   );
 
   const [seminarBookingSuccessId, setSeminarBookingSuccessId] = useState<string | null>(null);
+  const [seminarSeatRequestedId, setSeminarSeatRequestedId] = useState<string | null>(null);
   const [seminarBookingError, setSeminarBookingError] = useState<string | null>(null);
   /** Open seminar checkout (real groupChat id + price) when a student books from the profile. */
   const [seminarCheckout, setSeminarCheckout] = useState<
-    { id: string; price: number; name: string } | null
+    { id: string; price: number; name: string; isSeatRequest?: boolean } | null
   >(null);
   const [resumePreviewOpen, setResumePreviewOpen] = useState(false);
 
@@ -279,6 +285,7 @@ export default function ExpertProfile({
           );
           return;
         }
+        window.localStorage.removeItem('pendingDetails');
         dispatch({ type: 'updateUserDetails', payload: (response as any).result });
         setBookingStep('success');
       } catch (err: unknown) {
@@ -345,7 +352,7 @@ export default function ExpertProfile({
         price: typeof g?.price === 'number' ? g.price : 0,
         attendees: enrolled,
         maxAttendees,
-        isFull: maxAttendees != null && maxAttendees > 0 && enrolled >= maxAttendees,
+        isFull: maxAttendees != null && (maxAttendees <= 0 || enrolled >= maxAttendees),
         seriesId: g?.seriesId ? String(g.seriesId) : null,
         recurrenceLabel: g?.isRecurring ? freqLabel[g?.recurrenceFrequency] ?? null : null,
       };
@@ -396,6 +403,12 @@ export default function ExpertProfile({
           setSeminarBookingError(
             res?.error || 'Could not complete seminar registration.',
           );
+          return;
+        }
+        window.localStorage.removeItem('pendingDetails');
+        if (res?.status === 'pending_approval') {
+          setSeminarSeatRequestedId(seminarCheckout.id);
+          setSeminarCheckout(null);
           return;
         }
         setSeminarBookingSuccessId(seminarCheckout.id);
@@ -633,27 +646,52 @@ export default function ExpertProfile({
                       <div className="mt-2 rounded-[4px] bg-emerald-50 px-3 py-2 text-[11px] font-semibold text-emerald-800">
                         You're enrolled in this seminar.
                       </div>
-                    ) : item.isFull ? null : (
-                      <div className="mt-2">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setSeminarBookingError(null);
-                            if (!userDetails?._id) {
-                              setSeminarBookingError('Please log in again to book this session.');
-                              return;
-                            }
-                            setSeminarCheckout({
-                              id: item.id,
-                              price: item.price,
-                              name: item.title,
-                            });
-                          }}
-                          className="inline-flex w-full items-center justify-center rounded-[4px] bg-[#1A3A4A] px-3 py-1.5 text-[11px] font-semibold text-white hover:bg-[#122635]"
-                        >
-                          Book the session
-                        </button>
+                    ) : seminarSeatRequestedId === item.id ? (
+                      <div className="mt-2 rounded-[4px] bg-amber-50 px-3 py-2 text-[11px] font-semibold text-amber-800">
+                        You’re on the waiting list — awaiting host approval. Your card is authorized, not charged.
                       </div>
+                    ) : (
+                      (() => {
+                        const waitingList = seatRequestWindow(item.startTs);
+                        const canJoinWaitingList =
+                          item.isFull && waitingList.state === 'open';
+                        return (
+                          <div className="mt-2 space-y-2">
+                            {item.isFull ? (
+                              <p
+                                className={`rounded-[4px] px-3 py-2 text-[11px] ${
+                                  canJoinWaitingList
+                                    ? 'bg-amber-50 text-amber-800'
+                                    : 'bg-[#F5F3EF] text-[#7A7A72]'
+                                }`}
+                              >
+                                {seatRequestWindowMessage(waitingList, { price: item.price })}
+                              </p>
+                            ) : null}
+                            {!item.isFull || canJoinWaitingList ? (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setSeminarBookingError(null);
+                                  if (!userDetails?._id) {
+                                    setSeminarBookingError('Please log in again to book this session.');
+                                    return;
+                                  }
+                                  setSeminarCheckout({
+                                    id: item.id,
+                                    price: item.price,
+                                    name: item.title,
+                                    isSeatRequest: item.isFull,
+                                  });
+                                }}
+                                className="inline-flex w-full items-center justify-center rounded-[4px] bg-[#1A3A4A] px-3 py-1.5 text-[11px] font-semibold text-white hover:bg-[#122635]"
+                              >
+                                {item.isFull ? seatRequestActionLabel(item.price) : 'Book the session'}
+                              </button>
+                            ) : null}
+                          </div>
+                        );
+                      })()
                     )}
                   </div>
                   ))
@@ -1070,6 +1108,7 @@ export default function ExpertProfile({
           <StudentBookingCheckout
             type="1:1 session"
             price={oneToOneSessionPrice}
+            holdsFunds
             returnUrl={studentBookingReturnUrl}
             pendingDetails={{
               name: bookingTitle.trim() || bookingEventTitle,
@@ -1100,6 +1139,8 @@ export default function ExpertProfile({
           <StudentBookingCheckout
             type="Seminar"
             price={seminarCheckout.price}
+            isSeatRequest={!!seminarCheckout.isSeatRequest}
+            holdsFunds
             returnUrl={studentBookingReturnUrl}
             pendingDetails={{
               groupChatId: seminarCheckout.id,

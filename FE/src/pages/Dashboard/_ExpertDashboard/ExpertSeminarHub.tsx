@@ -143,7 +143,7 @@ function SeminarCard({
     ? seminar.participants.filter((p: unknown) => getRefId(p) !== adminId).length
     : 0;
   const maxAttendees = typeof seminar?.maxAttendees === 'number' ? seminar.maxAttendees : null;
-  const isFull = maxAttendees != null && maxAttendees > 0 && n >= maxAttendees;
+  const isFull = maxAttendees != null && (maxAttendees <= 0 || n >= maxAttendees);
 
   return (
     <article
@@ -687,8 +687,8 @@ function SeminarDetailPane({
               <div className="flex items-center justify-between">
                 <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[#7A7A72]">
                   Participants (
-                  {maxAttendees != null && maxAttendees > 0
-                    ? `${enrolledCount}/${maxAttendees}`
+                  {maxAttendees != null
+                    ? `${enrolledCount}/${Math.max(0, Math.trunc(maxAttendees))}`
                     : enrolledCount}
                   )
                 </p>

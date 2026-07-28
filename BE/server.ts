@@ -120,11 +120,16 @@ mongoose
         appendAdminUserAndGroupChat();
         initAppStates();
 
-        // Release expired seminar seat-request holds on a timer (no cron infra;
-        // reminders elsewhere rely on SendGrid sendAt, which can't run this logic).
-        const { sweepExpiredSeatRequests } = require('./controllers/groupChat.controller');
+
+        const { sweepExpiredSeatRequests, sweepPendingSeminarPayments, sweepOrphanedBookingIntents } = require('./controllers/groupChat.controller');
         sweepExpiredSeatRequests();
         setInterval(sweepExpiredSeatRequests, 15 * 60 * 1000);
+
+        sweepPendingSeminarPayments();
+        setInterval(sweepPendingSeminarPayments, 15 * 60 * 1000);
+
+        sweepOrphanedBookingIntents();
+        setInterval(sweepOrphanedBookingIntents, 15 * 60 * 1000);
 
         const httpServer = require('http').Server(app);
         httpServer.listen(PORT, function () {

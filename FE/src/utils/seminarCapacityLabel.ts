@@ -10,14 +10,15 @@ export function seminarCapacityLabel(
   options?: { omitFullWord?: boolean },
 ): string {
   const filled = Math.max(0, Math.trunc(enrolled) || 0);
-  if (typeof maxAttendees === 'number' && maxAttendees > 0) {
-    const left = maxAttendees - filled;
+  if (typeof maxAttendees === 'number') {
+    const cap = Math.max(0, Math.trunc(maxAttendees));
+    const left = cap - filled;
     if (left <= 0) {
       return options?.omitFullWord
-        ? `${filled} of ${maxAttendees} seats filled`
-        : `${filled} of ${maxAttendees} seats filled · Full`;
+        ? `${filled} of ${cap} seats filled`
+        : `${filled} of ${cap} seats filled · Full`;
     }
-    return `${filled} of ${maxAttendees} seats filled · ${left} left`;
+    return `${filled} of ${cap} seats filled · ${left} left`;
   }
   return `${filled} enrolled · no limit`;
 }
@@ -30,6 +31,6 @@ export function seminarEnrollmentLabel(
   const e = Math.max(0, Math.trunc(enrolled) || 0);
   const w = Math.max(0, Math.trunc(waiting) || 0);
   const cap =
-    typeof maxAttendees === 'number' && maxAttendees > 0 ? String(maxAttendees) : '∞';
+    typeof maxAttendees === 'number' ? String(Math.max(0, Math.trunc(maxAttendees))) : '∞';
   return `Enrollments/waiting/Cap (${e}/${w}/${cap})`;
 }

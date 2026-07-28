@@ -1,5 +1,12 @@
 import { Request, Response } from 'express';
 import { safeErrorMessage } from '../utils/httpUserFacingCopy';
+import {
+    classifyBookingPayment,
+    foldChargeRows,
+    isActionable,
+    summarizeVerdicts,
+    BookingPaymentVerdict,
+} from '../utils/paymentIntegrity';
 const escapeRegExp = (value: unknown) => String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const { uploadFileToS3 } = require("./auth.controller")
 const User = require("../models/User");
@@ -1064,7 +1071,118 @@ const getMajorConsolidations = async (req: Request, res: Response) => {
     }
 };
 
+const INTEGRITY_LOOKBACK_MS = 120 * 24 * 60 * 60 * 1000;
+const INTEGRITY_STUCK_PENDING_MS = 60 * 60 * 1000;
+const INTEGRITY_MAX_BOOKINGS = 500;
+
+const getPaymentIntegrityReport = async (req, res) => {
+    try {
+        const onlyActionable = String(req.query?.onlyActionable ?? 'true') !== 'false';
+        const since = new Date(Date.now() - INTEGRITY_LOOKBACK_MS);
+
+        const bookings = await GroupChat.find({
+            type: { $in: ['seminar', 'individual'] },
+            price: { $gt: 0 },
+            status: { $in: ['active', 'pending'] },
+            createdAt: { $gte: since },
+        })
+            .select('_id name type price status start admin participants')
+            .limit(INTEGRITY_MAX_BOOKINGS)
+            .lean();
+
+        const bookingIds = bookings.map((b: any) => b._id);
+        const chargeRows = bookingIds.length
+            ? await PaymentHistory.find({
+                groupChat: { $in: bookingIds },
+                paymentType: 'charge',
+            }).select('groupChat customer status amount paymentIntent').lean()
+            : [];
+
+        // (bookingId|studentId) -> charge rows
+        const rowsByPair = new Map<string, any[]>();
+        for (const row of chargeRows) {
+            const key = `${String(row.groupChat)}|${String(row.customer)}`;
+            const list = rowsByPair.get(key) || [];
+            list.push(row);
+            rowsByPair.set(key, list);
+        }
+
+        const verdicts: BookingPaymentVerdict[] = [];
+        const rows: any[] = [];
+
+        for (const booking of bookings) {
+            const adminId = String(booking.admin ?? '');
+            const students = (booking.participants || [])
+                .map((p: any) => String(p))
+                .filter((p: string) => p && p !== adminId);
+
+            for (const studentId of students) {
+                const state = {
+                    priceCents: Math.round(Number(booking.price ?? 0) * 100),
+                    ...foldChargeRows(rowsByPair.get(`${String(booking._id)}|${studentId}`) || []),
+                };
+                const verdict = classifyBookingPayment(state);
+                verdicts.push(verdict);
+                if (onlyActionable && !isActionable(verdict)) continue;
+                rows.push({
+                    verdict,
+                    groupChatId: String(booking._id),
+                    name: booking.name,
+                    type: booking.type,
+                    status: booking.status,
+                    start: booking.start,
+                    priceCents: state.priceCents,
+                    customer: studentId,
+                    expert: adminId,
+                    paymentIntents: (rowsByPair.get(`${String(booking._id)}|${studentId}`) || [])
+                        .map((r: any) => r.paymentIntent)
+                        .filter(Boolean),
+                });
+            }
+        }
+
+        const stuckPending = await PaymentHistory.find({
+            paymentType: 'charge',
+            status: 'pending',
+            updatedAt: { $lte: new Date(Date.now() - INTEGRITY_STUCK_PENDING_MS) },
+        })
+            .select('paymentIntent amount currency customer expert groupChat stripeMode updatedAt description')
+            .limit(200)
+            .lean();
+
+        const userIds = new Set<string>();
+        for (const row of rows) {
+            if (row.customer) userIds.add(String(row.customer));
+            if (row.expert) userIds.add(String(row.expert));
+        }
+        const users = userIds.size
+            ? await User.find({ _id: { $in: Array.from(userIds) } }).select('email username role').lean()
+            : [];
+        const userById = new Map<string, any>(users.map((u: any) => [String(u._id), u]));
+        for (const row of rows) {
+            row.customerEmail = userById.get(String(row.customer))?.email ?? null;
+            row.expertEmail = userById.get(String(row.expert))?.email ?? null;
+        }
+
+        const order: Record<string, number> = { unpaid: 0, refunded: 1, in_flight: 2, paid: 3, free: 4 };
+        rows.sort((a, b) => (order[a.verdict] ?? 9) - (order[b.verdict] ?? 9));
+
+        return res.status(200).json({
+            summary: summarizeVerdicts(verdicts),
+            bookingsScanned: bookings.length,
+            truncated: bookings.length >= INTEGRITY_MAX_BOOKINGS,
+            lookbackDays: Math.round(INTEGRITY_LOOKBACK_MS / (24 * 60 * 60 * 1000)),
+            rows,
+            stuckPendingPayments: stuckPending,
+        });
+    } catch (err) {
+        console.log('[getPaymentIntegrityReport]', err);
+        return res.status(500).send(safeErrorMessage(err));
+    }
+};
+
 module.exports = {
+    getPaymentIntegrityReport,
     filterUsers,
     getCustomMajors,
     consolidateMajors,
