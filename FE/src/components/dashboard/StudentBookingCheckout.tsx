@@ -7,6 +7,7 @@ import {
   useElements,
 } from '@stripe/react-stripe-js';
 import { createStripePaymentIntent, getStripeMode } from '../../api/api';
+import { persistPendingDetails } from '../../utils/safeLocalStorage';
 import FormAlert from '../FormAlert';
 import { SetLoadingStatus } from '../../actions/appActions';
 
@@ -145,7 +146,7 @@ const CheckoutForm = ({
           ? response.requiresApproval
           : isSeatRequest;
 
-      window.localStorage.setItem('pendingDetails', JSON.stringify({ ...pendingDetails, requiresApproval }));
+      persistPendingDetails(window.localStorage, { ...pendingDetails, requiresApproval });
 
       const { paymentIntent, error: confirmError } = await stripe.confirmPayment({
         elements,

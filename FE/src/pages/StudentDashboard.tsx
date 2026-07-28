@@ -1186,7 +1186,7 @@ export default function StudentDashboard() {
 
   const openSeminarChat = (seminarId?: string) => {
     if (seminarId) {
-      localStorage.setItem('wl_open_seminar_id', seminarId);
+      localStorage.setItem('wl_open_seminar_id', String(seminarId));
       window.dispatchEvent(new Event('wl-open-chat-nav'));
     }
     setActiveItem('chat');
@@ -1196,7 +1196,11 @@ export default function StudentDashboard() {
     if (peerUserId) {
       localStorage.setItem(
         'wl_open_dm_userid',
-        JSON.stringify({ id: peerUserId, title: title || 'Your mentor', image: null }),
+        JSON.stringify({
+          id: String(peerUserId),
+          title: title == null ? 'Your mentor' : String(title),
+          image: null,
+        }),
       );
       window.dispatchEvent(new Event('wl-open-chat-nav'));
     }
