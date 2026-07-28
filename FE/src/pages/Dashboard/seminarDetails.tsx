@@ -300,7 +300,7 @@ const SeminarDetails = ({
                 groupDetails={{
                     groupName: title,
                     participants: participants,
-                    admin: participants[0],
+                    admin: admin ?? participants[0],
                     type,
                 }}
                 currentUserId={userDetails._id}

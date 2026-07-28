@@ -6,6 +6,7 @@ const User = require("../models/User");
 const Keyword = require("../models/Keyword");
 const PaymentHistory = require("../models/PaymentHistory");
 const { shareMeetingId } = require("../services/notifications")
+const { classifyPayment, summarizePaymentHistory } = require("../utils/paymentSummary");
 
 function expertUserUpdateFilter(req: any) {
     if (req.user?.userId) {
@@ -151,13 +152,24 @@ const filterCustomers = async (req, res) => {
         if (_id) {
             query.where({ _id: String(_id) })
         } else {
-            const nameOrEmail = username && String(username).trim();
-            if (nameOrEmail) {
-                const term = escapeRegex(nameOrEmail);
+            const searchTerm = username && String(username).trim();
+            if (searchTerm) {
+                const rx = { $regex: escapeRegex(searchTerm), $options: 'i' };
+                // Mirrors the student-side expert search: name/email plus the student's
+                // institution, degree, bio and major (keyword) names.
+                const matchingKeywords = await Keyword.find({ value: rx }).select('_id')
+                const keywordIds = matchingKeywords.map((k: any) => k._id)
                 query.where({
                     $or: [
-                        { username: { $regex: term, $options: 'i' } },
-                        { email: { $regex: term, $options: 'i' } },
+                        { username: rx },
+                        { email: rx },
+                        { title: rx },
+                        { description: rx },
+                        { currentUniversity: rx },
+                        { targetUniversities: rx },
+                        { degreeSought: rx },
+                        { customKeywords: rx },
+                        ...(keywordIds.length ? [{ keywords: { $in: keywordIds } }] : []),
                     ],
                 });
             }
@@ -232,14 +244,6 @@ const shareMeetingViaEmail = async (req, res) => {
         return res.status(500).send(safeErrorMessage(err));
     }
 }
-
-/** Stripe amounts are minor units (e.g. cents). Classify by linked group chat / event. */
-const classifyPayment = (h: any) => {
-    if (h.groupChat?.type === "seminar") return "seminar";
-    if (h.groupChat) return "individual";
-    if (h.event) return "individual";
-    return "other";
-};
 
 /** Set minimum advance booking notice (24 / 48 / 72 hours). */
 const setBookingNoticeHours = async (req: any, res: Response) => {
@@ -347,19 +351,6 @@ const getMyPaymentHistory = async (req: any, res: Response) => {
             .limit(500)
             .lean();
 
-        let individualSessionsCents = 0;
-        let seminarsCents = 0;
-        let otherCents = 0;
-
-        for (const h of histories) {
-            if (h.status !== "completed") continue;
-            const amt = typeof h.amount === "number" ? h.amount : 0;
-            const cat = classifyPayment(h);
-            if (cat === "seminar") seminarsCents += amt;
-            else if (cat === "individual") individualSessionsCents += amt;
-            else otherCents += amt;
-        }
-
         const enriched = histories.map((h: any) => ({
             ...h,
             paymentKind: classifyPayment(h),
@@ -367,12 +358,7 @@ const getMyPaymentHistory = async (req: any, res: Response) => {
 
         return res.status(200).json({
             result: enriched,
-            summary: {
-                totalReceivedCents: individualSessionsCents + seminarsCents + otherCents,
-                individualSessionsCents,
-                seminarsCents,
-                otherCents,
-            },
+            summary: summarizePaymentHistory(histories),
         });
     } catch (err: any) {
         console.log(err);

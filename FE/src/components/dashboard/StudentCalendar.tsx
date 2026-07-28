@@ -305,10 +305,11 @@ export default function StudentCalendar({
             <button
               type="button"
               onClick={handlePrevMonth}
-              className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-[#BCD6EA] bg-[#E8EEF4] text-base font-bold leading-none text-[#234C6A] shadow-sm transition hover:bg-[#234C6A] hover:text-white"
+              className="inline-flex h-8 items-center justify-center gap-1 rounded-full border border-[#BCD6EA] bg-[#E8EEF4] px-2.5 text-[12px] font-semibold leading-none text-[#234C6A] shadow-sm transition hover:bg-[#234C6A] hover:text-white"
               aria-label="Previous month"
             >
-              ‹
+              <span className="text-base font-bold leading-none">‹</span>
+              <span>Prev</span>
             </button>
             <div className="flex items-center gap-2 text-sm font-semibold text-slate-900">
               <CalendarDays className="h-4 w-4 text-[#234C6A]" aria-hidden />
@@ -317,10 +318,11 @@ export default function StudentCalendar({
             <button
               type="button"
               onClick={handleNextMonth}
-              className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-[#BCD6EA] bg-[#E8EEF4] text-base font-bold leading-none text-[#234C6A] shadow-sm transition hover:bg-[#234C6A] hover:text-white"
+              className="inline-flex h-8 items-center justify-center gap-1 rounded-full border border-[#BCD6EA] bg-[#E8EEF4] px-2.5 text-[12px] font-semibold leading-none text-[#234C6A] shadow-sm transition hover:bg-[#234C6A] hover:text-white"
               aria-label="Next month"
             >
-              ›
+              <span>Next</span>
+              <span className="text-base font-bold leading-none">›</span>
             </button>
           </header>
           <div className="grid grid-cols-7 gap-1 text-[11px] text-slate-500 mb-1">

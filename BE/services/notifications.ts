@@ -4,8 +4,11 @@ const sgClient = require("@sendgrid/client");
 sgMail.setApiKey(process.env.SENDGRID_API_KEY);
 sgClient.setApiKey(process.env.SENDGRID_API_KEY);
 
+const { resolveAppBaseUrl, appAssetUrl } = require("../utils/appBaseUrl");
+
 const noReplyEmail = "noreply@wisdomlinked.com";
-const website_url = "https://wisdomlinked.com";
+const website_url = resolveAppBaseUrl();
+const logo_url = appAssetUrl("wisdomlinked-logo.png");
 const adminEmail = "admin@wisdomlinked.com";
 const adminEmail2 = "xbwang@tamu.edu";
 
@@ -188,7 +191,7 @@ sendPaymentConfirmationEmail = async ({ to, sessionType, sessionName, expertName
         : "";
     const html = `<div style="font-family: Arial, sans-serif; max-width: 560px; margin: 0 auto; background: #ffffff; border-radius: 16px; overflow: hidden; border: 1px solid #e2e8f0;">
             <div style="background: linear-gradient(135deg, #234C6A 0%, #456882 100%); padding: 28px 24px; text-align: center;">
-                <img src="https://wisdomlinked.com/wisdomlinked-logo.png" alt="WisdomLinked" width="180" style="max-width: 180px; height: auto; margin: 0 auto;" />
+                <img src="${logo_url}" alt="WisdomLinked" width="180" style="max-width: 180px; height: auto; margin: 0 auto;" />
             </div>
             <div style="padding: 32px 24px;">
                 <h2 style="color: #1e293b; font-size: 22px; margin: 0 0 8px 0;">Payment confirmed</h2>

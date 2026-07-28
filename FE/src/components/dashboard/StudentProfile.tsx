@@ -23,6 +23,7 @@ import { resolveProfileImageSrc } from '../../utils/profileImage';
 import { saveProfilePhotoFile } from '../../utils/profileImageUpload';
 import { SERVICE_OPTIONS, canonicalLabelsFromMixedServiceEntries } from '../../constants/serviceOptions';
 import MajorSelect from '../MajorSelect';
+import OptionSelect from '../ui/OptionSelect';
 
 const PREFERENCE_OPTIONS = SERVICE_OPTIONS.map((o) => ({ id: o.value, label: o.label }));
 
@@ -570,17 +571,16 @@ export default function StudentProfile() {
         </p>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
-            <label className="block text-xs font-semibold text-slate-600 mb-1">Degree sought</label>
-            <select
+            <label className="block text-xs font-semibold text-slate-600 mb-1" htmlFor="degree-sought">
+              Degree sought
+            </label>
+            <OptionSelect
+              id="degree-sought"
+              ariaLabel="Degree sought"
               value={academic.degreeSought}
-              onChange={e => setAcademicField('degreeSought', e.target.value)}
-              className={inputNormal}
-            >
-              <option value="">Select…</option>
-              {DEGREE_OPTIONS.map(opt => (
-                <option key={opt} value={opt}>{opt}</option>
-              ))}
-            </select>
+              onChange={next => setAcademicField('degreeSought', next)}
+              options={DEGREE_OPTIONS}
+            />
           </div>
           <div>
             <label className="block text-xs font-semibold text-slate-600 mb-1">Intended intake</label>
@@ -613,17 +613,16 @@ export default function StudentProfile() {
             />
           </div>
           <div>
-            <label className="block text-xs font-semibold text-slate-600 mb-1">Ranking percentile</label>
-            <select
+            <label className="block text-xs font-semibold text-slate-600 mb-1" htmlFor="ranking-percentile">
+              Ranking percentile
+            </label>
+            <OptionSelect
+              id="ranking-percentile"
+              ariaLabel="Ranking percentile"
               value={academic.rankingPercentile}
-              onChange={e => setAcademicField('rankingPercentile', e.target.value)}
-              className={inputNormal}
-            >
-              <option value="">Select…</option>
-              {RANKING_OPTIONS.map(opt => (
-                <option key={opt} value={opt}>{opt}</option>
-              ))}
-            </select>
+              onChange={next => setAcademicField('rankingPercentile', next)}
+              options={RANKING_OPTIONS}
+            />
           </div>
           <div className="sm:col-span-2">
             <label className="block text-xs font-semibold text-slate-600 mb-1">Target universities</label>

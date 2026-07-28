@@ -419,7 +419,9 @@ export default function UpcomingSessionModal({
                     (briefSession.detail ? 'Session details' : 'Student background')}
                 </p>
                 <h3 className="mt-1 text-base font-semibold text-slate-900 truncate">
-                  {briefSession.with || briefSession.title}
+                  {briefSession.detail
+                    ? briefSession.title
+                    : briefSession.with || briefSession.title}
                 </h3>
               </div>
               <button

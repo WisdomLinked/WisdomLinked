@@ -30,6 +30,7 @@ import {
   getMyFollowers,
 } from '../api/api';
 import { resolveProfileImageSrc } from '../utils/profileImage';
+import { displayRoomLabel, shouldNotifyRoom } from '../utils/chatRoomLabel';
 import { seminarEnrollmentLabel } from '../utils/seminarCapacityLabel';
 import { fetchDmUnreadSnapshot, fetchChatUserProfile } from '../api/chatApi';
 import ProfileModal from './Dashboard/Messenger/Messages/ProfileModal';
@@ -110,6 +111,22 @@ function mapSeatRequestToModalSession(r: any): UpcomingModalSession {
     with: r?.customer?.username || r?.customer?.email || 'Student',
     peerUserId: r?.customer?._id ? String(r.customer._id) : undefined,
     seatRequestId: String(r._id),
+    detail: {
+      title: seminar?.name || 'Seminar',
+      description: seminar?.description,
+      start: seminar?.start,
+      duration: seminar?.duration,
+      price: typeof seminar?.price === 'number' ? seminar.price : undefined,
+      admin: seminar?.admin,
+      participants: seminar?.participants || [],
+      keywords: seminar?.keywords,
+      services: seminar?.services,
+      purposeOther: seminar?.purposeOther,
+      type: seminar?.type,
+      isRecurring: seminar?.isRecurring,
+      recurrenceFrequency: seminar?.recurrenceFrequency,
+    },
+    briefLabel: 'Seminar details',
     metaLines,
   };
 }
@@ -199,6 +216,9 @@ export default function ExpertDashboard() {
   }, []);
   const [dmUnreadByRid, setDmUnreadByRid] = useState<Record<string, number>>({});
   const [rcRoomNameByRid, setRcRoomNameByRid] = useState<Record<string, string>>({});
+  const [rcDisplayNameByRid, setRcDisplayNameByRid] = useState<Record<string, string>>({});
+  const [roomNamesUnresolved, setRoomNamesUnresolved] = useState(false);
+  const [knownRids, setKnownRids] = useState<string[]>([]);
   const [communityRidToName, setCommunityRidToName] = useState<Record<string, string>>({});
   const [range, setRange] = useState<'today' | 'week' | 'all'>('all');
   const [avatarUrl, setAvatarUrl] = useState<string | undefined>(undefined);
@@ -370,6 +390,13 @@ export default function ExpertDashboard() {
     } else {
       setRcRoomNameByRid({});
     }
+    setRcDisplayNameByRid(
+      snapshot?.success && snapshot.displayNameByRid && typeof snapshot.displayNameByRid === 'object'
+        ? snapshot.displayNameByRid
+        : {},
+    );
+    setRoomNamesUnresolved(Boolean(snapshot?.nameResolutionFailed));
+    setKnownRids(Array.isArray(snapshot?.knownRids) ? snapshot.knownRids : []);
   }, [dispatch]);
 
   useEffect(() => {
@@ -385,6 +412,13 @@ export default function ExpertDashboard() {
       } else {
         setRcRoomNameByRid({});
       }
+      setRcDisplayNameByRid(
+        snapshot?.success && snapshot.displayNameByRid && typeof snapshot.displayNameByRid === 'object'
+          ? snapshot.displayNameByRid
+          : {},
+      );
+      setRoomNamesUnresolved(Boolean(snapshot?.nameResolutionFailed));
+    setKnownRids(Array.isArray(snapshot?.knownRids) ? snapshot.knownRids : []);
       await loadCommunityNotificationRooms();
     };
     void boot();
@@ -455,17 +489,14 @@ export default function ExpertDashboard() {
     return s;
   }, [userDetails?.directConversations]);
 
+  const knownRidSet = useMemo(() => new Set(knownRids.map(String)), [knownRids]);
+
   const allowedChatRidSet = useMemo(() => {
     const s = new Set<string>();
     dmRidSet.forEach(rid => s.add(rid));
-    /** Include unread snapshot rooms only for WL-style channel names (exclude default rooms like "general"). */
+    /** Include unread snapshot rooms only when the backend matched them to a WL chat (an unidentified room is one we cannot open). */
     Object.entries(dmUnreadByRid || {}).forEach(([rid]) => {
-      const roomName = String(rcRoomNameByRid?.[rid] || '').trim().toLowerCase();
-      const looksLikeWlChannel =
-        roomName.startsWith('wl-group-') ||
-        roomName.startsWith('wl_') ||
-        roomName.includes('community');
-      if (looksLikeWlChannel) s.add(String(rid));
+      if (shouldNotifyRoom(rid, knownRidSet, rcRoomNameByRid?.[rid], roomNamesUnresolved)) s.add(String(rid));
     });
     (userDetails?.generalChats ?? []).forEach((g: any) => {
       if (g?.rcChannelId) s.add(String(g.rcChannelId));
@@ -475,7 +506,7 @@ export default function ExpertDashboard() {
     });
     Object.keys(communityRidToName).forEach(rid => s.add(rid));
     return s;
-  }, [dmRidSet, dmUnreadByRid, rcRoomNameByRid, userDetails?.generalChats, userDetails?.groupChats, communityRidToName]);
+  }, [dmRidSet, dmUnreadByRid, rcRoomNameByRid, knownRidSet, roomNamesUnresolved, userDetails?.generalChats, userDetails?.groupChats, communityRidToName]);
 
   const filteredUnreadByRid = useMemo(() => {
     const out: Record<string, number> = {};
@@ -499,12 +530,19 @@ export default function ExpertDashboard() {
   }, [userDetails?.generalChats, userDetails?.groupChats]);
 
   const roomLabelByRid = useMemo(
-    () => ({ ...rcRoomNameByRid, ...dmNameByRid, ...groupNameByRid, ...communityRidToName }),
-    [rcRoomNameByRid, dmNameByRid, groupNameByRid, communityRidToName],
+    () => ({ ...rcDisplayNameByRid, ...dmNameByRid, ...groupNameByRid, ...communityRidToName }),
+    [rcDisplayNameByRid, dmNameByRid, groupNameByRid, communityRidToName],
   );
+
+  const namedRidsRef = useRef<Set<string>>(new Set());
+  const nameLookupTriedRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    namedRidsRef.current = new Set(Object.keys(roomLabelByRid));
+  }, [roomLabelByRid]);
 
   useEffect(() => {
     let debounce: ReturnType<typeof setTimeout> | undefined;
+    let resolveNames: ReturnType<typeof setTimeout> | undefined;
     const unsubSub = onSubscriptionChanged(({ roomId, type, unread }) => {
       if (type && !['d', 'c', 'p'].includes(type)) return;
       const rid = String(roomId || '');
@@ -517,6 +555,13 @@ export default function ExpertDashboard() {
         return next;
       });
       dispatch(patchDmUnreadRid(rid, nextUnread));
+      if (nextUnread > 0 && !namedRidsRef.current.has(rid) && !nameLookupTriedRef.current.has(rid)) {
+        nameLookupTriedRef.current.add(rid);
+        if (resolveNames) window.clearTimeout(resolveNames);
+        resolveNames = window.setTimeout(() => {
+          void hydrateUnreadSnapshot();
+        }, 600);
+      }
       if (type === 'c' || type === 'p') {
         if (debounce) window.clearTimeout(debounce);
         debounce = window.setTimeout(() => {
@@ -527,8 +572,9 @@ export default function ExpertDashboard() {
     return () => {
       unsubSub();
       if (debounce) window.clearTimeout(debounce);
+      if (resolveNames) window.clearTimeout(resolveNames);
     };
-  }, [userDetails?.email, loadCommunityNotificationRooms, dispatch]);
+  }, [userDetails?.email, loadCommunityNotificationRooms, hydrateUnreadSnapshot, dispatch]);
 
   const totalUnreadDm = useMemo(
     () => Object.values(filteredUnreadByRid).reduce((sum, n) => sum + (Number(n) || 0), 0),
@@ -541,10 +587,10 @@ export default function ExpertDashboard() {
         .map(([rid, count]) => {
           const n = Number(count) || 0;
           const isDm = dmRidSet.has(rid);
-          const label = roomLabelByRid[rid] || (isDm ? 'Someone' : 'Chat');
+          const label = displayRoomLabel(roomLabelByRid[rid], isDm ? 'Someone' : 'a group chat');
           return {
             id: `chat-${rid}`,
-            title: `${label} messaged you`,
+            title: isDm ? `${label} messaged you` : `New message${n !== 1 ? 's' : ''} in ${label}`,
             meta: `${n > 99 ? '99+' : n} unread message${n !== 1 ? 's' : ''}`,
             unreadCount: n,
             icon: <MessageSquare className="h-3.5 w-3.5 text-[#1A3A4A]" aria-hidden />,
