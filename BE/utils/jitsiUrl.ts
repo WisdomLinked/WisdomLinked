@@ -54,8 +54,9 @@ export const appendJitsiMobileWebOverrides = (
     }
     const normalizedReturnUrl = String(returnUrl || "").trim();
     if (normalizedReturnUrl) {
-        // Let server-side close-page config handle post-hangup redirect.
-        overrides.push(`config.welcomePage.customUrl=${encodeURIComponent(normalizedReturnUrl)}`);
+        // `config.welcomePage.*` is dropped by Jitsi's config whitelist, so the hangup
+        // script reads this key straight off the hash instead.
+        overrides.push(`config.wisdomlinkedReturnUrl=${encodeURIComponent(normalizedReturnUrl)}`);
     }
     const hash = overrides.join("&");
     if (!base.includes("#")) return `${base}#${hash}`;

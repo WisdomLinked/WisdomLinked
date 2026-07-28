@@ -3,13 +3,17 @@
    * POST /api/meeting/end-call when the last participant hangs up.
    * Uses event-based remoteJoinCount (works when Jitsi live count APIs return -1).
    * Notifies window.opener via postMessage using config.wisdomlinkedMessengerOrigin.
+   * On hangup, closes the Meet tab (or returns to config.wisdomlinkedReturnUrl) so
+   * Jitsi never falls through to its own welcome/landing page.
    * Optional: config.wisdomlinkedMeetingEndDebug=true
    */
   var STORAGE_MEETING = "wlMeetingChatMeetingId";
   var STORAGE_TOKEN = "wlMeetingChatSyncToken";
   var STORAGE_API = "wlMeetingChatSyncApiBase";
   var STORAGE_MESSENGER = "wlMeetingMessengerOrigin";
+  var STORAGE_RETURN = "wlMeetingReturnUrl";
   var STORAGE_ALONE = "wlAloneInRoom";
+  var leaveHandled = false;
   var endedMeetings = Object.create(null);
   var remoteJoinCount = 0;
   var conferenceJoined = false;
@@ -55,6 +59,46 @@
     } catch (e) {
       return "";
     }
+  }
+
+  function returnUrl() {
+    var fromHash = hashValue("config.wisdomlinkedReturnUrl") || "";
+    if (fromHash) {
+      try {
+        window.sessionStorage.setItem(STORAGE_RETURN, fromHash);
+      } catch (e) {}
+      return fromHash;
+    }
+    try {
+      var cached = window.sessionStorage.getItem(STORAGE_RETURN) || "";
+      if (cached) return cached;
+    } catch (e) {}
+    return messengerOrigin();
+  }
+
+  function leaveMeetTab() {
+    if (leaveHandled) return;
+    leaveHandled = true;
+    var url = returnUrl();
+    wlDebug("leaving meet tab", { returnUrl: url });
+    window.setTimeout(function () {
+      try {
+        window.close();
+      } catch (e) {}
+      window.setTimeout(function () {
+        if (window.closed || !url) return;
+        window.location.replace(url);
+      }, 400);
+    }, 400);
+  }
+
+  function redirectAwayFromWelcomePage() {
+    var path = String(window.location.pathname || "");
+    if (path !== "/" && path !== "/index.html") return;
+    var url = returnUrl();
+    if (!url) return;
+    wlDebug("welcome page reached, returning to app", url);
+    window.location.replace(url);
   }
 
   function notifyOpener(payload) {
@@ -269,6 +313,8 @@
       app.conference.addListener("participantLeft", onParticipantLeft);
       app.conference.addListener("readyToClose", endCallOnce);
       app.conference.addListener("videoConferenceLeft", endCallOnce);
+      app.conference.addListener("readyToClose", leaveMeetTab);
+      app.conference.addListener("videoConferenceLeft", leaveMeetTab);
 
       if (app.conference.isJoined && app.conference.isJoined()) {
         onConferenceJoined();
@@ -282,6 +328,9 @@
   }
 
   if (typeof window !== "undefined" && window.addEventListener) {
+    readConfig();
+    returnUrl();
+    redirectAwayFromWelcomePage();
     window.addEventListener("pagehide", onPageHideIfAlone);
     window.addEventListener("beforeunload", onPageHideIfAlone);
     window.setInterval(function () {
