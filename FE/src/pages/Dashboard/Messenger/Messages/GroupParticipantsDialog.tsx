@@ -97,6 +97,7 @@ const GroupParticipantsDialog = ({
             ? groupDetails.admin
             : groupDetails?.admin?._id || groupDetails?.admin?.id;
     const isCommunity = groupDetails?.type === "community";
+    const isIndividual = groupDetails?.type === "individual";
     const coModeratorIds = new Set(
         (groupDetails?.coModerators || []).map((c: any) => String(c?._id ?? c?.id ?? c)).filter(Boolean),
     );
@@ -228,7 +229,7 @@ const GroupParticipantsDialog = ({
                                                         You
                                                     </span>
                                                 ) : null}
-                                                {isAdmin ? (
+                                                {isAdmin && !isIndividual ? (
                                                     <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${isLight ? "bg-amber-50 text-amber-700 border border-amber-200" : "bg-amber-900/40 text-amber-200 border border-amber-700"}`}>
                                                         <Crown className="h-3 w-3" />
                                                         Admin

@@ -186,6 +186,9 @@ export const fetchDmUnreadSnapshot = async () => {
             success?: boolean;
             unreadByRid?: Record<string, number>;
             nameByRid?: Record<string, string>;
+            displayNameByRid?: Record<string, string>;
+            knownRids?: string[];
+            nameResolutionFailed?: boolean;
             error?: string;
         };
     } catch (err: any) {

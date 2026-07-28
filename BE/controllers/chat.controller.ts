@@ -1007,12 +1007,15 @@ export const getDmUnreadSnapshot = async (req: any, res: Response) => {
         const { userId } = req.user;
         const me = await User.findById(userId);
         if (!me?.email) return res.status(400).json({ error: 'User not found' });
-        const { unreadByRid, nameByRid } = await getChatUnreadSnapshotAsUser({
-            email: me.email,
-            username: me.username,
-            name: me.username,
-        });
-        return res.status(200).json({ success: true, unreadByRid, nameByRid });
+        const { unreadByRid, nameByRid, displayNameByRid, knownRids, nameResolutionFailed } =
+            await getChatUnreadSnapshotAsUser({
+                email: me.email,
+                username: me.username,
+                name: me.username,
+            });
+        return res
+            .status(200)
+            .json({ success: true, unreadByRid, nameByRid, displayNameByRid, knownRids, nameResolutionFailed });
     } catch (err: any) {
         console.error('[chat.getDmUnreadSnapshot]', err.message);
         return res.status(500).json({ error: safeErrorMessage(err) });

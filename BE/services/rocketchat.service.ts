@@ -18,8 +18,11 @@
  */
 import axios from 'axios';
 import { rcUsernamesWithActiveChatConnection } from '../utils/rocketChatPresence';
+import { isMachineRoomLabel, parseGroupChatIdFromRoomName } from '../utils/chatRoomLabels';
 
 const User = require('../models/User');
+const GroupChat = require('../models/GroupChat');
+const Conversation = require('../models/Conversation');
 
 const RC_URL = process.env.ROCKETCHAT_URL || 'https://chat.wisdomlinked.com';
 const RC_USER = process.env.ROCKETCHAT_ADMIN_USER || '';
@@ -595,7 +598,6 @@ export const getRCMessageByIdAsUser = async (
     return null;
 };
 
-/** Peer room read cursor (`ls`) for a user in a room. */
 export const getRoomLastSeenAsUser = async (
     roomId: string,
     reader: RCParticipantSession
@@ -660,30 +662,158 @@ function extractSubscriptionRowsFromRocketGet(body: any): any[] {
     return [];
 }
 
-/** Snapshot current user's unread counters and room labels by RC room id (DMs + channels/groups). */
+const resolveRoomDisplayNames = async (
+    rooms: { rid: string; rawName: string; type: string }[],
+    selfEmail: string,
+): Promise<{ displayNameByRid: Record<string, string>; failed: boolean }> => {
+    const displayNameByRid: Record<string, string> = {};
+    let failed = false;
+    if (!rooms.length) return { displayNameByRid, failed };
+
+    const groupRooms = rooms.filter((r) => r.type !== 'd');
+    const dmRooms = rooms.filter((r) => r.type === 'd');
+
+    if (groupRooms.length) {
+        const rids = groupRooms.map((r) => r.rid);
+        const slugIds = groupRooms
+            .map((r) => parseGroupChatIdFromRoomName(r.rawName))
+            .filter((id): id is string => Boolean(id));
+        try {
+            const chats = await GroupChat.find({
+                $or: [{ rcChannelId: { $in: rids } }, { _id: { $in: slugIds } }],
+            })
+                .select('_id name rcChannelId')
+                .lean();
+            const nameByChannelId: Record<string, string> = {};
+            const nameByChatId: Record<string, string> = {};
+            chats.forEach((chat: any) => {
+                const name = String(chat?.name || '').trim();
+                if (!name) return;
+                if (chat?.rcChannelId) nameByChannelId[String(chat.rcChannelId)] = name;
+                nameByChatId[String(chat._id).toLowerCase()] = name;
+            });
+            groupRooms.forEach((room) => {
+                const slugId = parseGroupChatIdFromRoomName(room.rawName);
+                const name = nameByChannelId[room.rid] || (slugId ? nameByChatId[slugId] : '');
+                if (name) displayNameByRid[room.rid] = name;
+            });
+        } catch (e: any) {
+            failed = true;
+            console.warn('[resolveRoomDisplayNames] group lookup', e?.message || e);
+        }
+    }
+
+    if (dmRooms.length) {
+        const usernames = dmRooms.map((r) => r.rawName).filter(Boolean);
+        try {
+            const users = await User.find({ rocketChatUsername: { $in: usernames } })
+                .select('username email rocketChatUsername')
+                .lean();
+            const nameByRcUsername: Record<string, string> = {};
+            users.forEach((u: any) => {
+                const key = String(u?.rocketChatUsername || '');
+                const name = String(u?.username || u?.email || '').trim();
+                if (key && name) nameByRcUsername[key] = name;
+            });
+            dmRooms.forEach((room) => {
+                const name = nameByRcUsername[room.rawName];
+                if (name) displayNameByRid[room.rid] = name;
+            });
+        } catch (e: any) {
+            failed = true;
+            console.warn('[resolveRoomDisplayNames] dm lookup', e?.message || e);
+        }
+
+        const stillUnnamed = dmRooms.filter((r) => !displayNameByRid[r.rid]).map((r) => r.rid);
+        if (stillUnnamed.length) {
+            try {
+                const convos = await Conversation.find({ rcChannelId: { $in: stillUnnamed } })
+                    .select('rcChannelId participants')
+                    .populate('participants', '_id username email')
+                    .lean();
+                const me = String(selfEmail || '').toLowerCase();
+                convos.forEach((c: any) => {
+                    const other = (c?.participants || []).find(
+                        (p: any) => String(p?.email || '').toLowerCase() !== me,
+                    );
+                    const name = String(other?.username || other?.email || '').trim();
+                    if (c?.rcChannelId && name) displayNameByRid[String(c.rcChannelId)] = name;
+                });
+            } catch (e: any) {
+                failed = true;
+                console.warn('[resolveRoomDisplayNames] conversation lookup', e?.message || e);
+            }
+        }
+    }
+
+    return { displayNameByRid, failed };
+};
+
+const ALERT_ONLY_UNREAD_PROBE_LIMIT = 5;
+
+const applyAlertOnlyUnreadCounts = async (
+    alerted: { rid: string; type: string }[],
+    headers: Record<string, string>,
+    unreadByRid: Record<string, number>,
+): Promise<void> => {
+    if (!alerted.length) return;
+    const probed = await Promise.all(
+        alerted.slice(0, ALERT_ONLY_UNREAD_PROBE_LIMIT).map(async ({ rid, type }) => {
+            const endpoint = type === 'p' ? 'groups.counters' : 'channels.counters';
+            try {
+                const res = await axios.get(`${RC_URL}/api/v1/${endpoint}`, {
+                    headers,
+                    params: { roomId: rid },
+                });
+                return { rid, unreads: Number(res.data?.unreads || 0) };
+            } catch (e: any) {
+                console.warn('[applyAlertOnlyUnreadCounts]', endpoint, e.response?.status || e.message);
+                return { rid, unreads: 1 };
+            }
+        }),
+    );
+    probed.forEach(({ rid, unreads }) => {
+        if (unreads > 0) unreadByRid[rid] = unreads;
+    });
+    alerted.slice(ALERT_ONLY_UNREAD_PROBE_LIMIT).forEach(({ rid }) => {
+        unreadByRid[rid] = 1;
+    });
+};
+
 export const getChatUnreadSnapshotAsUser = async (
     reader: RCParticipantSession
-): Promise<{ unreadByRid: Record<string, number>; nameByRid: Record<string, string> }> => {
+): Promise<{
+    unreadByRid: Record<string, number>;
+    nameByRid: Record<string, string>;
+    displayNameByRid: Record<string, string>;
+    knownRids: string[];
+    nameResolutionFailed: boolean;
+}> => {
     const unreadByRid: Record<string, number> = {};
     const nameByRid: Record<string, string> = {};
     const tok = await generateUserToken(reader);
-    if (!tok) return { unreadByRid, nameByRid };
+    if (!tok) return { unreadByRid, nameByRid, displayNameByRid: {}, knownRids: [], nameResolutionFailed: false };
     const headers = {
         'X-Auth-Token': tok.authToken,
         'X-User-Id': tok.userId,
         'Content-Type': 'application/json',
     };
+    const rooms: { rid: string; rawName: string; type: string }[] = [];
+    const alertedWithoutCount: { rid: string; type: string }[] = [];
     try {
         const res = await axios.get(`${RC_URL}/api/v1/subscriptions.get`, { headers });
         const list = extractSubscriptionRowsFromRocketGet(res.data);
         list.forEach((s: any) => {
-            if (!ROOM_TYPES_WITH_UNREAD.has(String(s?.t || ''))) return;
+            const type = String(s?.t || '');
+            if (!ROOM_TYPES_WITH_UNREAD.has(type)) return;
             const rid = String(s?.rid || '');
             if (!rid) return;
             const unread = Number(s?.unread || 0);
             if (unread > 0) unreadByRid[rid] = unread;
+            else if (type !== 'd' && s?.alert === true) alertedWithoutCount.push({ rid, type });
             const label = String(s?.name || s?.fname || '').trim();
             if (label) nameByRid[rid] = label;
+            rooms.push({ rid, rawName: label, type });
         });
     } catch (e: any) {
         const st = e.response?.status;
@@ -691,7 +821,24 @@ export const getChatUnreadSnapshotAsUser = async (
             console.warn('[getChatUnreadSnapshotAsUser]', st, e.response?.data || e.message);
         }
     }
-    return { unreadByRid, nameByRid };
+
+    await applyAlertOnlyUnreadCounts(alertedWithoutCount, headers, unreadByRid);
+
+    const resolved = await resolveRoomDisplayNames(rooms, String(reader?.email || ''));
+    const displayNameByRid: Record<string, string> = {};
+    rooms.forEach((room) => {
+        const human = resolved.displayNameByRid[room.rid];
+        if (human) displayNameByRid[room.rid] = human;
+        else if (room.rawName && !isMachineRoomLabel(room.rawName)) displayNameByRid[room.rid] = room.rawName;
+    });
+
+    return {
+        unreadByRid,
+        nameByRid,
+        displayNameByRid,
+        knownRids: Object.keys(resolved.displayNameByRid),
+        nameResolutionFailed: resolved.failed,
+    };
 };
 
 /** @deprecated Prefer getChatUnreadSnapshotAsUser — kept for callers that only need counts. */
@@ -901,10 +1048,7 @@ export const kickUserFromGroupChannel = async (roomId: string, memberEmail: stri
     }
 };
 
-/**
- * Fetch channel history as a **member** of the room (preferred).
- * Admin is often not a member of `wl-group-*` channels; history would be empty.
- */
+
 export const getRCGroupHistory = async (
     roomId: string,
     count: number = 20,
@@ -957,11 +1101,8 @@ export const getRCGroupHistory = async (
 
 /** Notify RC that a user is typing in a room. */
 export const notifyTypingRC = async (roomId: string, username: string, isTyping: boolean): Promise<void> => {
-    // RC doesn't have a REST endpoint for typing; this is handled client-side through DDP.
-    // This is a no-op placeholder — the frontend handles typing via the RC realtime client.
-};
 
-// ── Token for Frontend ──────────────────────────────────────
+};
 
 export type GenerateRcTokenUser = {
     email: string;
@@ -969,10 +1110,7 @@ export type GenerateRcTokenUser = {
     name?: string;
 };
 
-/**
- * Login token for the RC realtime client. Many RC versions require `userId` in
- * users.createToken (not `username`), so we resolve the Rocket.Chat user id first.
- */
+
 export const generateUserToken = async (
     wlUser: string | GenerateRcTokenUser
 ): Promise<{ authToken: string; userId: string } | null> => {

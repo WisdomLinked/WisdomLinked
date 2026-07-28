@@ -123,16 +123,23 @@ export function rewriteStaleCommunitySlugMessage(
     if (!looksLikeRcEmailSlug(c)) return message;
 
     const plist = collectPools(groupDetails, extraUsers, null);
-    if (!plist.length) return message;
-
     const lower = c.toLowerCase();
     const match =
         plist.find(
             (x: any) => x?.email && toRocketChatUsername(String(x.email)).toLowerCase() === lower,
         ) || null;
-    if (!match) return message;
 
     const sub = String(message?.wlRcSubtype ?? '').trim().toLowerCase();
+
+    if (!match) {
+        if (sub === 'ul') {
+            return { ...message, content: 'A member has left the community.', type: 'wl-community-sys' };
+        }
+        if (sub === 'uj') {
+            return { ...message, content: 'A member has joined the community.', type: 'wl-community-sys' };
+        }
+        return message;
+    }
     if (sub === 'ul') {
         return {
             ...message,

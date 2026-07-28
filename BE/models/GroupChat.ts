@@ -116,4 +116,6 @@ const groupChatSchema = new mongoose.Schema(
     { timestamps: true }
 );
 
+groupChatSchema.index({ rcChannelId: 1 }, { sparse: true });
+
 module.exports = mongoose.model("GroupChat", groupChatSchema);
