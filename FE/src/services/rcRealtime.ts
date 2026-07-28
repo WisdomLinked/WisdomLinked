@@ -212,7 +212,7 @@ export const connectToRC = async (): Promise<boolean> => {
 
     const tokenData = await getRCToken();
     if (!tokenData?.rcAuthToken) {
-        console.error('[rcRealtime] Failed to get RC token');
+        console.error('[rcRealtime] Failed to get RC token', tokenData?.code || tokenData?.error || '');
         return false;
     }
 

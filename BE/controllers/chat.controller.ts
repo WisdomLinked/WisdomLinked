@@ -1164,13 +1164,29 @@ export const getRCToken = async (req: any, res: Response) => {
         const user = await User.findById(userId);
         if (!user) return res.status(404).json({ error: 'User not found' });
 
+        const secret = (
+            process.env.ROCKETCHAT_CREATE_TOKENS_SECRET ||
+            process.env.CREATE_TOKENS_FOR_USERS_SECRET ||
+            ''
+        ).trim();
+        if (!secret) {
+            console.error('[chat.getRCToken] ROCKETCHAT_CREATE_TOKENS_SECRET is not configured');
+            return res.status(503).json({
+                error: 'Chat service is not fully configured',
+                code: 'rc_missing_token_secret',
+            });
+        }
+
         const tokenData = await generateUserToken({
             email: user.email,
             username: user.username,
             name: user.username,
         });
         if (!tokenData) {
-            return res.status(500).json({ error: 'Failed to generate RC token' });
+            return res.status(503).json({
+                error: 'Failed to generate RC token',
+                code: 'rc_token_failed',
+            });
         }
 
         return res.status(200).json({
@@ -1180,6 +1196,10 @@ export const getRCToken = async (req: any, res: Response) => {
         });
     } catch (err: any) {
         console.error('[chat.getRCToken]', err.message);
-        return res.status(500).json({ error: safeErrorMessage(err) });
+        const code =
+            /login to Rocket\.Chat as admin/i.test(String(err?.message || ''))
+                ? 'rc_admin_login_failed'
+                : 'rc_token_error';
+        return res.status(503).json({ error: safeErrorMessage(err), code });
     }
 };

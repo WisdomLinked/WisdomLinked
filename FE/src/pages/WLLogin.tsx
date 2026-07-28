@@ -22,6 +22,7 @@ export default function WLLogin() {
     const redirectPath = String(searchParams.get("redirect") || "").trim();
     const dispatch = useDispatch();
     const [oauthError, setOauthError] = useState<string | null>(null);
+    const [oauthExistingRole, setOauthExistingRole] = useState<string | null>(null);
     const {
         message: authBannerMessage,
         variant: authBannerVariant,
@@ -122,17 +123,37 @@ export default function WLLogin() {
 
     useEffect(() => {
         const err = searchParams.get('error');
-        if (err) {
-            setOauthError(err);
+        const existingRole = searchParams.get('existingRole');
+        const normalizedErr = err === 'google_failed' ? 'auth_failed' : err;
+
+        if (normalizedErr) {
+            setOauthError(normalizedErr);
+        }
+        if (existingRole) {
+            setOauthExistingRole(existingRole);
+        }
+
+        // Strip OAuth error params from URL so refresh does not re-show stale banners.
+        if (err || existingRole) {
+            const next = new URLSearchParams();
+            const redirect = searchParams.get('redirect');
+            if (redirect) next.set('redirect', redirect);
+            const qs = next.toString();
+            navigate({ pathname: '/login', search: qs ? `?${qs}` : '' }, { replace: true });
         }
 
         const init = async () => {
-            if (err === 'auth_failed' || err === 'wechat_failed') {
+            if (
+                err === 'auth_failed' ||
+                err === 'wechat_failed' ||
+                err === 'google_failed'
+            ) {
                 await resetAuthSessionForLogin({ skipLogoutPost: true });
             }
             await bootstrapCsrf();
         };
         init();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     const validate = () => {
@@ -189,13 +210,6 @@ export default function WLLogin() {
         return () => { if (timerRef.current) clearInterval(timerRef.current); };
     }, []);
 
-    // Parse OAuth errors from URL
-    useEffect(() => {
-        const err = searchParams.get('error');
-        if (err) {
-            setOauthError(err);
-        }
-    }, [searchParams]);
 
     // OTP input handling
     const handleOtpChange = (index: number, value: string) => {
@@ -372,8 +386,8 @@ export default function WLLogin() {
                                     <div className="mb-4 p-3 rounded-xl bg-red-50 border border-red-200 text-red-800 text-sm flex items-start gap-2">
                                         <AlertCircle size={16} className="mt-0.5 shrink-0" />
                                         <span>
-                                            {searchParams.get('existingRole') 
-                                                ? `This email is already registered as a ${searchParams.get('existingRole')} account. Please log in to your existing account, or use a different email to register a new role.`
+                                            {oauthExistingRole
+                                                ? `This email is already registered as a ${oauthExistingRole} account. Please log in to your existing account, or use a different email to register a new role.`
                                                 : "An account already exists with a different role. Please log in with your existing role."}
                                         </span>
                                     </div>

@@ -7,7 +7,10 @@ const keyByUserOrIp = (req: any): string => {
     return userId ? `u:${userId}` : `ip:${ipKeyGenerator(req.ip)}`;
 };
 
-const RATE_LIMIT_DISABLED = process.env.RATE_LIMIT_DISABLED === 'true';
+const RATE_LIMIT_DISABLED =
+    process.env.RATE_LIMIT_DISABLED === 'true' || process.env.NODE_ENV === 'staging';
+
+const shouldSkipRateLimit = () => RATE_LIMIT_DISABLED;
 
 const message = { success: false, message: 'Too many requests, please try again later.' };
 
@@ -37,7 +40,7 @@ export const apiLimiter = rateLimit({
     legacyHeaders: false,
     keyGenerator: keyByUserOrIp,
     skip: (req) =>
-        RATE_LIMIT_DISABLED ||
+        shouldSkipRateLimit() ||
         isOAuthAuthRoute(req) ||
         isCsrfTokenRoute(req) ||
         isLogoutRoute(req),
@@ -51,7 +54,7 @@ export const authLoginLimiter = rateLimit({
     standardHeaders: true,
     legacyHeaders: false,
     keyGenerator: keyByUserOrIp,
-    skip: () => RATE_LIMIT_DISABLED,
+    skip: () => shouldSkipRateLimit(),
     skipFailedRequests: true,
     message,
 });
@@ -62,7 +65,7 @@ export const sensitiveLimiter = rateLimit({
     standardHeaders: true,
     legacyHeaders: false,
     keyGenerator: keyByUserOrIp,
-    skip: () => RATE_LIMIT_DISABLED,
+    skip: () => shouldSkipRateLimit(),
     message,
 });
 
