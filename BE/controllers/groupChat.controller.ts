@@ -757,7 +757,7 @@ const createGroupChatByUser = async (req, res) => {
                 description: chat.name,
             });
             if (!captured.ok) {
-                await rollbackIndividualSession(chat, userId, expert);
+                await rollbackIndividualSession(chat, userId, expertUser._id);
                 return res.status(captured.duplicate ? 409 : 502).send(captured.message);
             }
             charge = captured.charge;

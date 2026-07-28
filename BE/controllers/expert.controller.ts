@@ -65,7 +65,7 @@ const updateTimeSlots = async (req: any, res: Response) => {
         if (weeklyTimeSlots && typeof weeklyTimeSlots === 'object') {
             update.weeklyTimeSlots = weeklyTimeSlots
         }
-        const newUser = await User.findOneAndUpdate({ email: email }, update, { new: true })
+        const newUser = await User.findOneAndUpdate({ email: String(email) }, update, { new: true })
         newUser.token = null
         newUser.password = null
         return res.status(200).json({
@@ -177,7 +177,7 @@ const filterCustomers = async (req, res) => {
                 let _keywords = []
                 for (let i = 0; i < keywords.length; i++) {
                     if (keywords[i].new) {
-                        const existing = await Keyword.findOne({ value: keywords[i].value })
+                        const existing = await Keyword.findOne({ value: String(keywords[i].value) })
                         if (existing) _keywords.push(existing._id)
                     } else {
                         _keywords.push(keywords[i]._id)
