@@ -166,6 +166,12 @@ const store = configureStore({
 
 
 
+const fillBookingTitle = () => {
+  fireEvent.change(screen.getByPlaceholderText(/PhD Application Advice/i), {
+    target: { value: 'PhD application advice session' },
+  });
+};
+
 describe('ExpertProfile booking', () => {
 
   beforeEach(() => {
@@ -274,6 +280,7 @@ describe('ExpertProfile booking', () => {
     // Review step first, with Change time, before continuing to payment.
     expect(await screen.findByText('Review your booking')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /change time/i })).toBeInTheDocument();
+    fillBookingTitle();
     fireEvent.click(screen.getByRole('button', { name: /continue to payment/i }));
 
     expect(await screen.findByTestId('student-checkout')).toBeInTheDocument();
@@ -292,6 +299,8 @@ describe('ExpertProfile booking', () => {
 
     await screen.findByTestId('slot-picker');
     fireEvent.click(screen.getByTestId('pick-slot'));
+    await screen.findByText('Review your booking');
+    fillBookingTitle();
     fireEvent.click(await screen.findByRole('button', { name: /continue to payment/i }));
 
     expect(await screen.findByTestId('student-checkout')).toBeInTheDocument();
@@ -319,9 +328,13 @@ describe('ExpertProfile booking', () => {
 
     fireEvent.click(screen.getByTestId('pick-slot'));
 
+    await screen.findByText('Review your booking');
+
+    fillBookingTitle();
+
     fireEvent.click(await screen.findByRole('button', { name: /continue to payment/i }));
 
-    fireEvent.click(screen.getByRole('button', { name: /pay mock/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /pay mock/i }));
 
 
 
