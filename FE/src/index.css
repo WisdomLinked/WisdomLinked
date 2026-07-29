@@ -632,6 +632,12 @@ code {
   max-height: none !important;
 }
 
+
+.wl-photo-picker .ReactImagePickerEditor .place-image .caption,
+.wl-photo-picker .ReactImagePickerEditor .place-image .editing-bar-btn {
+  display: none !important;
+}
+
 .MultiSelection > div {
   background: transparent !important;
   border: 0px;

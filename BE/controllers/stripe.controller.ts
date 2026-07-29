@@ -1,9 +1,15 @@
 import { Request, Response } from 'express';
 import { BOOKING_PAYMENT_AMOUNT_INVALID } from '../utils/bookingUserFacingCopy';
-import { HTTP_GENERIC_ERROR } from '../utils/httpUserFacingCopy';
+import { HTTP_GENERIC_ERROR, safeErrorMessage } from '../utils/httpUserFacingCopy';
+import { expectedBookingIntentCents, extractHourlyRate } from '../utils/bookingPrice';
+import { seminarIsFull, firstFullFutureOccurrence, seatRequestUnavailableMessage } from '../utils/seminarCapacity';
+
 const stripeTest = require('stripe')(process.env.STRIPE_SECRET_KEY_TEST);
 const stripeLive = require('stripe')(process.env.STRIPE_SECRET_KEY_LIVE);
 const AppState = require("../models/AppState");
+const User = require("../models/User");
+const GroupChat = require("../models/GroupChat");
+const { assertBookingLeadTime } = require("../utils/bookingLeadTime");
 
 const stripePay = async (req, res) => {
     try {
@@ -30,18 +36,108 @@ const stripePay = async (req, res) => {
 
 const createStripePaymentIntent = async (req, res) => {
     try {
-        const { stripeMode, amount } = req.body
+        const { groupChatId, expertId, duration } = req.body
+        const payerId = req.user?.userId ? String(req.user.userId) : '';
+        const appState = await AppState.findOne();
+        const stripeMode = appState?.stripeMode === 'live' ? 'live' : 'test';
+
+        let expectedCents: number;
+        let metadata: Record<string, string>;
+        let manualCapture = false;
+        let requiresApproval = false;
+        if (groupChatId) {
+            const groupChat = await GroupChat.findById(String(groupChatId));
+            if (!groupChat) {
+                return res.status(404).send(BOOKING_PAYMENT_AMOUNT_INVALID);
+            }
+            expectedCents = expectedBookingIntentCents({ kind: 'groupChat', priceDollars: groupChat.price });
+            metadata = { bookingType: 'groupChat', groupChatId: String(groupChat._id), userId: payerId };
+
+            if (groupChat.type !== 'seminar') {
+                const onSession = (groupChat.participants || []).some(
+                    (p) => p.toString() === String(payerId),
+                );
+                if (!onSession) {
+                    return res.status(403).send({ error: 'This session is not yours to pay for.' });
+                }
+                if (groupChat.status === 'cancelled') {
+                    return res.status(400).send({ error: 'This session is no longer available.' });
+                }
+                // Hold the funds; they are captured only once the session is active.
+                manualCapture = true;
+            }
+
+            if (groupChat.type === 'seminar') {
+                const userId = req.user?.userId;
+
+                if (userId && groupChat.admin && groupChat.admin.toString() === String(userId)) {
+                    return res.status(403).send({ error: "Hosts can't register for their own seminar." });
+                }
+                if (groupChat.status !== 'active') {
+                    return res.status(400).send({ error: 'This seminar is not open for registration.' });
+                }
+                const alreadyParticipant = (groupChat.participants || []).some(
+                    (p) => p.toString() === String(userId),
+                );
+                if (alreadyParticipant) {
+                    return res.status(409).send({ error: "You're already registered for this seminar." });
+                }
+
+                if (seminarIsFull(groupChat)) {
+                    const startMs = groupChat.start ? new Date(groupChat.start).getTime() : 0;
+                    const unavailable = seatRequestUnavailableMessage(startMs);
+                    if (unavailable) {
+                        return res.status(400).send({ error: unavailable });
+                    }
+                    manualCapture = true;
+                    requiresApproval = true;
+                    metadata.seatRequest = 'true';
+                } else {
+                    if (groupChat.seriesId) {
+                        const siblings = await GroupChat.find({
+                            seriesId: groupChat.seriesId,
+                            type: 'seminar',
+                            _id: { $ne: groupChat._id },
+                        });
+                        if (firstFullFutureOccurrence(siblings)) {
+                            return res.status(400).send({ error: 'A later session in this seminar series is full, so registration is closed.' });
+                        }
+                    }
+                    const expert = await User.findById(groupChat.admin.toString());
+                    try {
+                        assertBookingLeadTime(expert, groupChat.start, 'Seminar registrations');
+                    } catch (leadErr) {
+                        return res.status(400).send({ error: leadErr.message || 'This seminar can no longer be booked.' });
+                    }
+                    manualCapture = true;
+                }
+            }
+        } else {
+            const expertUser = await User.findById(String(expertId));
+            if (!expertUser) {
+                return res.status(404).send(BOOKING_PAYMENT_AMOUNT_INVALID);
+            }
+            expectedCents = expectedBookingIntentCents({ kind: 'oneToOne', durationMinutes: Number(duration), hourlyRateDollars: extractHourlyRate(expertUser.price) });
+            metadata = { bookingType: 'oneToOne', expertId: String(expertUser._id), duration: String(duration), userId: payerId };
+            manualCapture = true;
+        }
+
+        if (!(expectedCents > 0)) {
+            return res.status(400).send(BOOKING_PAYMENT_AMOUNT_INVALID);
+        }
+
         const stripe = require('stripe')(stripeMode === 'test' ? process.env.STRIPE_SECRET_KEY_TEST : process.env.STRIPE_SECRET_KEY_LIVE);
         const paymentIntent = await stripe.paymentIntents.create({
-            amount: Math.round(amount * 100), // dollars -> integer cents (Stripe rejects fractional)
+            amount: expectedCents,
             currency: 'usd',
-            // Required for the deferred PaymentElement flow: the client renders the
-            // Element from dashboard settings, so the intent must enable the same
-            // automatic methods or confirmPayment throws a mismatch error.
             automatic_payment_methods: { enabled: true },
+            ...(manualCapture ? { capture_method: 'manual' } : {}),
+            metadata,
         });
         res.send({
             client_secret: paymentIntent.client_secret,
+            requiresApproval,
+            holdsFunds: manualCapture,
         });
     } catch (err) {
         console.log(err);
@@ -73,17 +169,36 @@ const setStripeMode = async (req, res) => {
 
 const getStripeMode = async (req, res) => {
     try {
-        const appState = await AppState.findOne()
-        let stripeMode = appState.stripeMode
+        let appState = await AppState.findOne()
         if (!appState) {
-            await AppState.create({
+            appState = await AppState.create({
                 stripeMode: "test"
             })
-            stripeMode = "test"
         }
         res.send({
-            stripeMode: stripeMode,
+            stripeMode: appState.stripeMode,
+            seminarApprovalDeadlineHours: appState.seminarApprovalDeadlineHours ?? 24,
         });
+    } catch (err) {
+        console.log(err);
+        return res.status(500).send(HTTP_GENERIC_ERROR);
+    }
+};
+
+const setSeminarApprovalDeadline = async (req, res) => {
+    try {
+        const hours = Number(req.body.seminarApprovalDeadlineHours);
+        if (!Number.isFinite(hours) || hours < 0 || hours > 168) {
+            return res.status(400).send({ error: 'Deadline must be between 0 and 168 hours.' });
+        }
+        let appState = await AppState.findOne();
+        if (!appState) {
+            appState = await AppState.create({ seminarApprovalDeadlineHours: hours });
+        } else {
+            appState.seminarApprovalDeadlineHours = hours;
+            await appState.save();
+        }
+        res.send({ result: 'SUCCESS', seminarApprovalDeadlineHours: appState.seminarApprovalDeadlineHours });
     } catch (err) {
         console.log(err);
         return res.status(500).send(HTTP_GENERIC_ERROR);
@@ -108,7 +223,47 @@ const checkPaymentIntentSucceeded = async (payment_intent, stripeMode) => {
     }
 }
 
-const refundPaymentIntent = async (payment_intent, amount, stripeMode) => {
+const checkPaymentIntentAuthorized = async (payment_intent, stripeMode) => {
+    try {
+        const stripe = require('stripe')(stripeMode === 'test' ? process.env.STRIPE_SECRET_KEY_TEST : process.env.STRIPE_SECRET_KEY_LIVE);
+        const paymentIntent = await stripe.paymentIntents.retrieve(payment_intent, { expand: ['latest_charge'] });
+        if (paymentIntent?.status === 'requires_capture') {
+            return paymentIntent;
+        }
+        return false;
+    } catch (err) {
+        console.log('[checkPaymentIntentAuthorized]', err.message);
+        return false;
+    }
+};
+
+const capturePaymentIntent = async (payment_intent, stripeMode, amountToCaptureCents?: number) => {
+    try {
+        const stripe = require('stripe')(stripeMode === 'test' ? process.env.STRIPE_SECRET_KEY_TEST : process.env.STRIPE_SECRET_KEY_LIVE);
+        const options: Record<string, any> = { expand: ['latest_charge'] };
+        if (typeof amountToCaptureCents === 'number' && amountToCaptureCents > 0) {
+            options.amount_to_capture = Math.round(amountToCaptureCents);
+        }
+        const captured = await stripe.paymentIntents.capture(payment_intent, options);
+        return captured?.status === 'succeeded' ? captured : false;
+    } catch (err) {
+        console.log('[capturePaymentIntent]', err.message);
+        return false;
+    }
+};
+
+const cancelPaymentIntent = async (payment_intent, stripeMode) => {
+    try {
+        const stripe = require('stripe')(stripeMode === 'test' ? process.env.STRIPE_SECRET_KEY_TEST : process.env.STRIPE_SECRET_KEY_LIVE);
+        const cancelled = await stripe.paymentIntents.cancel(payment_intent);
+        return cancelled?.status === 'canceled' ? cancelled : false;
+    } catch (err) {
+        console.log('[cancelPaymentIntent]', err.message);
+        return false;
+    }
+};
+
+const refundPaymentIntent = async (payment_intent, amountCents, stripeMode) => {
     try {
         const stripe = require('stripe')(stripeMode === 'test' ? process.env.STRIPE_SECRET_KEY_TEST : process.env.STRIPE_SECRET_KEY_LIVE);
 
@@ -117,8 +272,8 @@ const refundPaymentIntent = async (payment_intent, amount, stripeMode) => {
         };
 
         // Add amount if specified (for partial refunds)
-        if (amount) {
-            refundData.amount = Math.round(amount * 100); // Convert to cents
+        if (amountCents) {
+            refundData.amount = Math.round(Math.abs(Number(amountCents)));
         }
 
         const refund = await stripe.refunds.create(refundData);
@@ -129,6 +284,91 @@ const refundPaymentIntent = async (payment_intent, amount, stripeMode) => {
         return false
     }
 }
+
+const listReconcilableBookingIntents = async (
+    stripeMode: string,
+    { sinceMs, untilMs, maxPages = 20 }: { sinceMs: number; untilMs: number; maxPages?: number },
+): Promise<Array<{ id: string; status: string; amount: number; currency: string; createdMs: number; metadata: Record<string, any> }>> => {
+    try {
+        const stripe = require('stripe')(stripeMode === 'test' ? process.env.STRIPE_SECRET_KEY_TEST : process.env.STRIPE_SECRET_KEY_LIVE);
+        const created = { gte: Math.floor(sinceMs / 1000), lte: Math.floor(untilMs / 1000) };
+        const out: Array<{ id: string; status: string; amount: number; currency: string; createdMs: number; metadata: Record<string, any> }> = [];
+        let startingAfter: string | undefined;
+        for (let page = 0; page < maxPages; page += 1) {
+            const batch = await stripe.paymentIntents.list({
+                limit: 100,
+                created,
+                ...(startingAfter ? { starting_after: startingAfter } : {}),
+            });
+            const data = batch?.data || [];
+            for (const pi of data) {
+                const bt = pi.metadata?.bookingType;
+                if (bt !== 'groupChat' && bt !== 'oneToOne') continue;
+                if (pi.status !== 'requires_capture' && pi.status !== 'succeeded') continue;
+                out.push({ id: pi.id, status: pi.status, amount: pi.amount, currency: pi.currency, createdMs: Number(pi.created || 0) * 1000, metadata: pi.metadata || {} });
+            }
+            if (!batch?.has_more || !data.length) break;
+            startingAfter = data[data.length - 1].id;
+        }
+        return out;
+    } catch (err: any) {
+        console.log('[listReconcilableBookingIntents]', err.message);
+        return [];
+    }
+};
+
+const enrichPaymentIntentReceipt = async ({ payment_intent, stripeMode, description, metadata, receiptEmail }) => {
+    try {
+        if (!payment_intent) return;
+        const stripe = require('stripe')(stripeMode === 'test' ? process.env.STRIPE_SECRET_KEY_TEST : process.env.STRIPE_SECRET_KEY_LIVE);
+        await stripe.paymentIntents.update(payment_intent, {
+            description,
+            metadata,
+            receipt_email: receiptEmail,
+        });
+    } catch (err) {
+        console.error('[enrichPaymentIntentReceipt]', err.message);
+    }
+};
+
+const sendBookingReceiptAndConfirmation = async ({ payment_intent, charge, sessionType, sessionName, expertName, studentName, studentEmail, start, duration, timeZone }) => {
+    try {
+        if (!charge || !studentEmail) return;
+        const { sendPaymentConfirmationEmail } = require("../services/notifications");
+        const dateStr = new Date(start).toLocaleString("en-US", { timeZone: timeZone || "UTC" });
+        const description = `WisdomLinked ${sessionType} — "${sessionName}" with ${expertName} · ${dateStr}`;
+        const metadata = {
+            sessionType: String(sessionType),
+            sessionName: String(sessionName),
+            expert: String(expertName),
+            student: String(studentName),
+            start: new Date(start).toISOString(),
+            durationMin: String(duration),
+        };
+        await enrichPaymentIntentReceipt({
+            payment_intent,
+            stripeMode: charge.paidBy,
+            description,
+            metadata,
+            receiptEmail: studentEmail,
+        });
+        await sendPaymentConfirmationEmail({
+            to: studentEmail,
+            sessionType,
+            sessionName,
+            expertName,
+            studentName,
+            start,
+            duration,
+            amount: charge.amount,
+            currency: charge.currency,
+            receiptUrl: charge.receiptUrl,
+            timeZone,
+        });
+    } catch (err) {
+        console.error('[sendBookingReceiptAndConfirmation]', err.message);
+    }
+};
 
 const sendPaymentLinkToUser = async (req, res) => {
     try {
@@ -146,7 +386,7 @@ const sendPaymentLinkToUser = async (req, res) => {
         const adminEmail = "noreply@wisdomlinked.com";
         sgMail.setApiKey(process.env.SENDGRID_API_KEY);
 
-        const paymentHistory = await PaymentHistory.findById(paymentHistoryId);
+        const paymentHistory = await PaymentHistory.findById(String(paymentHistoryId));
         if (!paymentHistory) {
             return res.status(404).json({
                 status: 'FAILED',
@@ -283,6 +523,9 @@ const sendPaymentLinkToUser = async (req, res) => {
 const handleStripeWebhook = async (req, res) => {
     const stripe = require('stripe');
     const PaymentHistory = require("../models/PaymentHistory");
+    const StripeWebhookEvent = require("../models/StripeWebhookEvent");
+    // Released whenever processing fails, so Stripe's retry is not swallowed as a duplicate.
+    let claimId: any = null;
 
     try {
         const sig = req.headers['stripe-signature'];
@@ -294,10 +537,39 @@ const handleStripeWebhook = async (req, res) => {
             event = stripe.webhooks.constructEvent(req.body, sig, endpointSecret);
         } catch (err) {
             console.log(`Webhook signature verification failed.`, err.message);
-            return res.status(400).send(`Webhook Error: ${err.message}`);
+            return res.status(400).send('Webhook signature verification failed');
         }
 
         console.log('Received Stripe webhook event:', event.type);
+
+        try {
+            const claim = await StripeWebhookEvent.create({ eventId: String(event.id), type: String(event.type) });
+            claimId = claim._id;
+        } catch (claimErr: any) {
+            if (claimErr?.code === 11000) {
+                console.log('[handleStripeWebhook] duplicate event ignored', event.id);
+                return res.json({ received: true, duplicate: true });
+            }
+            console.log('[handleStripeWebhook] could not claim event', claimErr?.message);
+        }
+
+        try {
+            if (
+                event.type === 'payment_intent.succeeded' ||
+                event.type === 'payment_intent.payment_failed' ||
+                event.type === 'payment_intent.canceled'
+            ) {
+                // Deferred require: groupChat.controller depends on this module.
+                const { handleBookingPaymentIntentEvent } = require("./groupChat.controller");
+                const outcome = await handleBookingPaymentIntentEvent(event);
+                console.log('[handleStripeWebhook]', event.type, event.id, outcome);
+                return res.json({ received: true, outcome });
+            }
+        } catch (bookingErr: any) {
+            console.error('[handleStripeWebhook] booking event failed', event.id, bookingErr?.message);
+            if (claimId) await StripeWebhookEvent.deleteOne({ _id: claimId }).catch(() => null);
+            return res.status(500).json({ status: 'FAILED', message: safeErrorMessage(bookingErr) });
+        }
 
         if (event.type === 'checkout.session.completed') {
             const session = event.data.object;
@@ -344,7 +616,7 @@ const handleStripeWebhook = async (req, res) => {
                         paymentHistoryId: paymentLink.metadata.originalPaymentHistoryId
                     });
 
-                    const originalPaymentHistory = await PaymentHistory.findById(paymentLink.metadata.originalPaymentHistoryId);
+                    const originalPaymentHistory = await PaymentHistory.findById(String(paymentLink.metadata.originalPaymentHistoryId));
 
                     if (originalPaymentHistory) {
                         // Find the pending payment record we created when the link was sent
@@ -473,16 +745,18 @@ const handleStripeWebhook = async (req, res) => {
 
     } catch (err) {
         console.log('[handleStripeWebhook]', err);
+        if (claimId) await StripeWebhookEvent.deleteOne({ _id: claimId }).catch(() => null);
         return res.status(500).json({
             status: 'FAILED',
-            message: 'Webhook processing failed: ' + err.message
+            message: safeErrorMessage(err)
         });
     }
 };
 
 const processRefund = async (req, res) => {
     try {
-        const { paymentHistoryId, refundAmount, refundReason } = req.body;
+        const { paymentHistoryId, refundReason } = req.body;
+        const refundAmount = Number(req.body.refundAmount);
 
         if (!paymentHistoryId) {
             return res.status(400).json({
@@ -491,7 +765,7 @@ const processRefund = async (req, res) => {
             });
         }
 
-        if (!refundAmount || refundAmount <= 0) {
+        if (!Number.isFinite(refundAmount) || refundAmount <= 0) {
             return res.status(400).json({
                 status: 'FAILED',
                 message: 'Valid refund amount is required.'
@@ -509,7 +783,7 @@ const processRefund = async (req, res) => {
         const AppState = require("../models/AppState");
 
         // Get the payment history record
-        const paymentHistory = await PaymentHistory.findById(paymentHistoryId).populate(['customer', 'expert']);
+        const paymentHistory = await PaymentHistory.findById(String(paymentHistoryId)).populate(['customer', 'expert']);
         if (!paymentHistory) {
             return res.status(404).json({
                 status: 'FAILED',
@@ -555,7 +829,7 @@ const processRefund = async (req, res) => {
         // Process the refund with Stripe
         const refundResult = await refundPaymentIntent(
             paymentHistory.paymentIntent,
-            refundAmount,
+            Math.round(refundAmount * 100),
             currentStripeMode
         );
 
@@ -566,15 +840,17 @@ const processRefund = async (req, res) => {
             });
         }
 
+        const isFullRefund = refundAmount === maxRefundAmount;
+
         // Create a refund record
         const refundHistory = new PaymentHistory({
             stripeMode: currentStripeMode,
             paymentType: 'refund',
-            amount: -Math.round(refundAmount * 100), // Negative amount for refunds
+            amount: Math.round(refundAmount * 100),
             currency: paymentHistory.currency,
             description: `Refund: ${refundReason}`,
             paymentIntent: refundResult.payment_intent,
-            status: 'completed',
+            status: isFullRefund ? 'refunded' : 'completed',
             customer: paymentHistory.customer,
             expert: paymentHistory.expert,
             pendingAppointmentToGroup: paymentHistory.pendingAppointmentToGroup,
@@ -585,7 +861,7 @@ const processRefund = async (req, res) => {
         await refundHistory.save();
 
         // Update the original payment status if it's a full refund
-        if (refundAmount === maxRefundAmount) {
+        if (isFullRefund) {
             paymentHistory.status = 'refunded';
             await paymentHistory.save();
         }
@@ -596,7 +872,6 @@ const processRefund = async (req, res) => {
             const adminEmail = "noreply@wisdomlinked.com";
             sgMail.setApiKey(process.env.SENDGRID_API_KEY);
 
-            const isFullRefund = refundAmount === maxRefundAmount;
             const refundType = isFullRefund ? 'Full Refund' : 'Partial Refund';
 
             const refundEmailHtml = `
@@ -708,9 +983,10 @@ const sendAdHocPaymentLink = async (req, res) => {
             });
         }
 
-        // Basic email validation
+        // Basic email validation (length-capped to avoid ReDoS on the regex)
         const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-        if (!emailRegex.test(customerEmail.trim())) {
+        const trimmedEmail = customerEmail.trim();
+        if (trimmedEmail.length > 254 || !emailRegex.test(trimmedEmail)) {
             return res.status(400).json({
                 status: 'FAILED',
                 message: 'Valid customer email is required.'
@@ -875,10 +1151,16 @@ module.exports = {
     createStripePaymentIntent,
     getStripeMode,
     checkPaymentIntentSucceeded,
+    checkPaymentIntentAuthorized,
+    capturePaymentIntent,
+    cancelPaymentIntent,
     setStripeMode,
+    setSeminarApprovalDeadline,
     refundPaymentIntent,
+    listReconcilableBookingIntents,
     sendPaymentLinkToUser,
     handleStripeWebhook,
     processRefund,
-    sendAdHocPaymentLink
+    sendAdHocPaymentLink,
+    sendBookingReceiptAndConfirmation
 }

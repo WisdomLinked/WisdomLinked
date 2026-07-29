@@ -11,8 +11,9 @@ import {
     detectUserTimeZone,
     formatSlotLabel,
     getViewerDayStartMs,
-    getViewerSlotsForDay,
+    getViewerSlotsForExpertDay,
     getViewerYmdFromCalendarDate,
+    isViewerSlotBlockedOnDate,
     resolveViewerTimeZone,
     toYMDInTimeZone,
     viewerSlotToInstant,
@@ -108,11 +109,12 @@ const SelectDateTime = ({
         const dayStartTime = getViewerDayStartMs(selectedDate, viewerTz);
         const dayEndTime = dayStartTime + (24 * 60 * 60 * 1000) - 1;
 
-        let _availableSlots: Array<any> = getViewerSlotsForDay(
+        const availabilitySource =
+            userDetails.role === 'customer' ? selectedUser : userDetails;
+        let _availableSlots: Array<any> = getViewerSlotsForExpertDay(
+            availabilitySource,
             selectedDate,
             viewerTz,
-            rawExpertSlots,
-            expertTz,
         );
 
         if (duration > 30) {
@@ -125,6 +127,20 @@ const SelectDateTime = ({
                 const instant = viewerSlotToInstant(selectedDate, slotIdx, viewerTz);
                 return !blocked.includes(toYMDInTimeZone(instant, expertTz));
             });
+        }
+
+        const blockedSlots = (availabilitySource as any)?.blockedBookingSlots;
+        if (blockedSlots) {
+            _availableSlots = _availableSlots.filter(
+                (slotIdx: number) =>
+                    !isViewerSlotBlockedOnDate(
+                        blockedSlots,
+                        selectedDate,
+                        slotIdx,
+                        viewerTz,
+                        expertTz,
+                    ),
+            );
         }
 
         if (viewerYmd === viewerTodayYmd) {
@@ -157,7 +173,7 @@ const SelectDateTime = ({
         });
 
         return updatedAvailableSlots;
-    }, [events, rawExpertSlots, selectedUser, expertTz, viewerTz]);
+    }, [events, rawExpertSlots, selectedUser, userDetails, expertTz, viewerTz]);
 
     const isDateAvailable = (date: number) => {
         const dayDate = new Date(date);

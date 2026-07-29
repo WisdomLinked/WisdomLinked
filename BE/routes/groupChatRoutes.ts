@@ -7,8 +7,14 @@ const {
     joinGroupChat,
     createGroupChat,
     createGroupChatByUser,
-    addMemberToPendingGroup,
-    addMemberToGroup,
+    proposeIndividualAppointment,
+    ensureSeminarChannel,
+    registerForSeminar,
+    requestSeminarSeat,
+    approveSeminarSeatRequest,
+    rejectSeminarSeatRequest,
+    getSeminarSeatRequests,
+    getMySeatRequests,
     acceptIndividualAppointment,
     cancelIndividualAppointment,
     leaveGroup,
@@ -35,6 +41,20 @@ router.get(
     "/get-all-community-chats",
     requireAuth(false),
     getAllCommunityChats
+);
+
+// expert lists pending overflow seat requests for their seminars
+router.get(
+    "/seat-requests",
+    expertAuth(true),
+    getSeminarSeatRequests
+);
+
+// student lists their own seat requests (for pending-status badges)
+router.get(
+    "/my-seat-requests",
+    requireAuth(true),
+    getMySeatRequests
 );
 
 router.get(
@@ -69,6 +89,20 @@ router.post(
     createGroupChatByUser
 );
 
+// expert proposes a 1:1 session to a student (expert sets the final price)
+router.post(
+    "/propose-individual-appointment",
+    expertAuth(true),
+    proposeIndividualAppointment
+);
+
+// ensure (lazily create) a seminar's group chat channel
+router.post(
+    "/ensure-seminar-channel",
+    requireAuth(true),
+    ensureSeminarChannel
+);
+
 // accept individual appointment
 router.post(
     "/accept-individual-appointment",
@@ -83,17 +117,32 @@ router.post(
     updateGroupChat
 );
 
-// add a friend to the group
+// register a student for a seminar (direct enroll — no host approval)
 router.post(
-    "/add",
-    expertAuth(true),
-    addMemberToGroup
+    "/register-seminar",
+    requireAuth(true),
+    registerForSeminar
 );
 
+// overflow: request a seat in a full seminar (funds authorized, pending host approval)
 router.post(
-    "/add-to-pending",
+    "/request-seminar-seat",
     requireAuth(true),
-    addMemberToPendingGroup
+    requestSeminarSeat
+);
+
+// host approves an overflow seat request (captures the held funds)
+router.post(
+    "/approve-seat-request",
+    expertAuth(true),
+    approveSeminarSeatRequest
+);
+
+// host declines an overflow seat request (releases the hold)
+router.post(
+    "/reject-seat-request",
+    expertAuth(true),
+    rejectSeminarSeatRequest
 );
 
 router.post(

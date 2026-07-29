@@ -36,4 +36,6 @@ const conversationSchema = new mongoose.Schema(
     { timestamps: true }
 );
 
+conversationSchema.index({ rcChannelId: 1 }, { sparse: true });
+
 module.exports = mongoose.model("Conversation", conversationSchema);

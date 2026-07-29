@@ -1,13 +1,26 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useDispatch } from 'react-redux';
-import { Search, Filter, ChevronDown, CalendarDays, Clock, MapPin, ArrowLeft, User } from 'lucide-react';
+import { Search, CalendarDays, Clock, MapPin, ArrowLeft, User, Users, Repeat, Check, MessageSquare } from 'lucide-react';
+import FilterDropdown, { type FilterOption } from '../ui/FilterDropdown';
 import { useAppSelector } from '../../store';
-import { addMemberToPendingGroup, doFilterSeminars, profileImageFetch } from '../../api/api';
+import { registerForSeminar, requestSeminarSeat, doFilterSeminars, profileImageFetch, doGetKeywordsAndServices, getExpertById } from '../../api/api';
 import { canonicalLabelsFromMixedServiceEntries } from '../../constants/serviceOptions';
 import { resolveProfileImageSrc } from '../../utils/profileImage';
+import { seminarCapacityLabel } from '../../utils/seminarCapacityLabel';
+import {
+  seatRequestActionLabel,
+  seatRequestWindow,
+  seatRequestWindowMessage,
+  seatRequestWindowShortLabel,
+} from '../../utils/seatRequestWindow';
 import { SetLoadingStatus } from '../../actions/appActions';
+import { updateMe } from '../../actions/authActions';
 import StudentBookingCheckout from './StudentBookingCheckout';
+import { usePeerProfileModal } from '../../hooks/usePeerProfileModal';
 import seminarFallbackImg from '../../assets/images/dashboard_img1.png';
+
+
+type RecurrenceFrequency = 'weekly' | 'biweekly' | 'monthly';
 
 type Seminar = {
   id: string;
@@ -15,17 +28,64 @@ type Seminar = {
   description: string;
   date: string;
   time: string;
+  startMs: number;
   major: string;
+  majors: string[];
+  services: string[];
   tags: string[];
+  searchTags: string[];
   level?: 'Beginner' | 'Intermediate' | 'Advanced';
   imageUrl: string;
   expertName: string;
+  expertId: string;
+  expertImage: string | null;
   location: string;
   attendees: number;
+  maxAttendees: number | null;
+  isFull: boolean;
   price: number;
+  seriesId: string | null;
+  recurrenceFrequency: RecurrenceFrequency | null;
+  occurrenceCount: number;
+};
+
+const RECURRENCE_LABEL: Record<RecurrenceFrequency, string> = {
+  weekly: 'Weekly',
+  biweekly: 'Biweekly',
+  monthly: 'Monthly',
 };
 
 const pad2 = (n: number) => String(n).padStart(2, '0');
+
+// 12-hour clock with an AM/PM suffix, e.g. "12:00AM", "1:30PM".
+const to12h = (d: Date) => {
+  const h = d.getHours();
+  const period = h < 12 ? 'AM' : 'PM';
+  const h12 = h % 12 === 0 ? 12 : h % 12;
+  return `${h12}:${pad2(d.getMinutes())}${period}`;
+};
+
+function groupSeminarSeries(list: Seminar[]): Seminar[] {
+  const now = Date.now();
+  const bySeries = new Map<string, Seminar[]>();
+  const singles: Seminar[] = [];
+  for (const s of list) {
+    if (s.seriesId) {
+      const arr = bySeries.get(s.seriesId) || [];
+      arr.push(s);
+      bySeries.set(s.seriesId, arr);
+    } else {
+      singles.push(s);
+    }
+  }
+  const reps: Seminar[] = [];
+  bySeries.forEach((arr) => {
+    const sorted = [...arr].sort((a, b) => a.startMs - b.startMs);
+    const rep = sorted.find((x) => x.startMs >= now) || sorted[0];
+    reps.push({ ...rep, occurrenceCount: arr.length });
+  });
+  return [...reps, ...singles];
+}
 
 /** Map a BE seminar (GroupChat of type 'seminar') to the card's Seminar shape. */
 async function mapSeminar(g: any): Promise<Seminar> {
@@ -33,10 +93,24 @@ async function mapSeminar(g: any): Promise<Seminar> {
   const hasStart = start && !Number.isNaN(start.getTime());
   const keywords = (g?.keywords || []).map((k: any) => k?.value).filter(Boolean);
   const serviceLabels = canonicalLabelsFromMixedServiceEntries(g?.services);
+  // The host's free-text "Other purpose" — a service/topic not in the preset list.
+  // Surfaced alongside the picked services in the Topics row.
+  const purposeOther = typeof g?.purposeOther === 'string' ? g.purposeOther.trim() : '';
+  const topicLabels = purposeOther ? [...serviceLabels, purposeOther] : serviceLabels;
+  // The host's own freeform tags (persisted on the seminar). Kept separate from the
+  // service-derived "Topics" row: they only widen search, they don't replace Topics.
+  const freeformTags = Array.isArray(g?.tags)
+    ? g.tags.filter((t: any) => typeof t === 'string' && t.trim())
+    : [];
   // Prefer the seminar's own cover image; only fall back to the host's photo when absent.
   const image = g?.image
     ? String(g.image)
     : await resolveProfileImageSrc(g?.admin?.image, 'small', profileImageFetch);
+  const freq = g?.recurrenceFrequency;
+  // Enrolled students exclude the host (the admin is always a participant).
+  const participantCount = Array.isArray(g?.participants) ? g.participants.length : 0;
+  const enrolled = Math.max(0, participantCount - 1);
+  const maxAttendees = typeof g?.maxAttendees === 'number' ? g.maxAttendees : null;
   return {
     id: String(g?._id),
     title: g?.name || 'Seminar',
@@ -44,20 +118,38 @@ async function mapSeminar(g: any): Promise<Seminar> {
     date: hasStart
       ? `${start!.getFullYear()}-${pad2(start!.getMonth() + 1)}-${pad2(start!.getDate())}`
       : 'TBD',
-    time: hasStart ? `${pad2(start!.getHours())}:${pad2(start!.getMinutes())}` : '',
+    time: hasStart ? to12h(start!) : '',
+    startMs: hasStart ? start!.getTime() : Number.MAX_SAFE_INTEGER,
     major: keywords[0] || 'General',
-    tags: serviceLabels.length ? serviceLabels : keywords.length ? keywords : ['Seminar'],
+    majors: keywords,
+    services: topicLabels,
+    tags: topicLabels.length ? topicLabels : keywords.length ? keywords : ['Seminar'],
+    searchTags: freeformTags,
     imageUrl: image || seminarFallbackImg,
     expertName: g?.admin?.username || g?.admin?.email || 'WisdomLinked expert',
+    expertId: g?.admin?._id != null ? String(g.admin._id) : '',
+    expertImage: g?.admin?.image ?? null,
     location: 'Online · WisdomLinked',
-    attendees: Array.isArray(g?.participants) ? g.participants.length : 0,
+    attendees: enrolled,
+    maxAttendees,
+    isFull: maxAttendees != null && (maxAttendees <= 0 || enrolled >= maxAttendees),
     price: typeof g?.price === 'number' ? g.price : 0,
+    seriesId: g?.seriesId ? String(g.seriesId) : null,
+    recurrenceFrequency:
+      g?.isRecurring && (freq === 'weekly' || freq === 'biweekly' || freq === 'monthly')
+        ? freq
+        : null,
+    occurrenceCount: 1,
   };
 }
 
 const containerClass = 'min-h-screen bg-[#F5F3EF] px-6 py-8 text-[#1A3A4A]';
 
-export default function StudentSeminars() {
+export default function StudentSeminars({
+  onEnterSeminarChat,
+}: {
+  onEnterSeminarChat?: (seminarId: string) => void;
+} = {}) {
   const { auth: { userDetails } } = useAppSelector((state: any) => state);
   const userInterests = useMemo(
     () => (userDetails?.keywords || []).map((k: any) => k?.value).filter(Boolean),
@@ -65,17 +157,32 @@ export default function StudentSeminars() {
   );
 
   const [seminars, setSeminars] = useState<Seminar[]>([]);
+  const [catalogMajors, setCatalogMajors] = useState<string[]>([]);
+  const [catalogTopics, setCatalogTopics] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [majorFilter, setMajorFilter] = useState<string>('all');
   const [tagFilter, setTagFilter] = useState<string>('all');
   const [selectedSeminar, setSelectedSeminar] = useState<Seminar | null>(null);
-  const [bookingStep, setBookingStep] = useState<1 | 2>(1);
-  const [selectedTime, setSelectedTime] = useState<string>('');
-  const [paying, setPaying] = useState(false);
+  const [pastSeminars, setPastSeminars] = useState<
+    Array<{ id: string; title: string; date: string; attendees: number }>
+  >([]);
+  const [checkout, setCheckout] = useState<'review' | 'pay' | null>(null);
   const [bookingDone, setBookingDone] = useState(false);
+  const [seatRequested, setSeatRequested] = useState(false);
   const [bookingError, setBookingError] = useState<string | null>(null);
   const dispatch = useDispatch();
+  const { openPeerProfile, peerProfileModal } = usePeerProfileModal(userDetails?.role);
+
+  // Seminars the student is already enrolled in (confirmed participants live in
+  // groupChats). Used to stop re-booking the same seminar.
+  const mySeminarStatus = useMemo(() => {
+    const booked = new Set<string>();
+    (userDetails?.groupChats || []).forEach((g: any) => {
+      if (g?.type === 'seminar' && g?._id) booked.add(String(g._id));
+    });
+    return { booked };
+  }, [userDetails?.groupChats]);
 
   // Stripe (3DS) redirects back here; the dashboard finalizes the booking via
   // the shared pendingDetails contract. Mirror ExpertProfile's return URL so we
@@ -92,28 +199,43 @@ export default function StudentSeminars() {
   }, []);
 
   // Register the student for the seminar once Stripe confirms (or immediately
-  // for free seminars, where the checkout calls back with '0').
-  const joinSeminar = async (paymentIntentId: string) => {
+  // for free seminars, where the checkout calls back with '0'). Enrollment is
+  // immediate — no host approval — and covers the whole recurring series.
+  const joinSeminar = async (
+    paymentIntentId: string,
+    opts?: { requiresApproval?: boolean },
+  ) => {
     if (!selectedSeminar) return;
     SetLoadingStatus(true);
     setBookingError(null);
     try {
-      const response: any = await addMemberToPendingGroup({
+      // A full seminar admits students only via host approval: the checkout has
+      // authorized (held) the fee, and we record a seat request instead of enrolling.
+      if (opts?.requiresApproval) {
+        const response: any = await requestSeminarSeat({
+          groupChatId: selectedSeminar.id,
+          payment_intent: paymentIntentId,
+        });
+        if (response === false || response?.status === 'FAIL' || response?.error) {
+          setBookingError(response?.error || 'Could not submit your seat request.');
+          return;
+        }
+        window.localStorage.removeItem('pendingDetails');
+        setCheckout(null);
+        setSeatRequested(true);
+        return;
+      }
+      const response: any = await registerForSeminar({
         groupChatId: selectedSeminar.id,
-        price: selectedSeminar.price,
         payment_intent: paymentIntentId,
       });
       if (response === false || response?.status === 'FAIL' || response?.error) {
         setBookingError(response?.error || 'Could not complete seminar registration.');
         return;
       }
-      if (response?.pendingGroupChats) {
-        dispatch({
-          type: 'updateUserDetails',
-          payload: { pendingGroupChats: response.pendingGroupChats },
-        });
-      }
-      setPaying(false);
+      window.localStorage.removeItem('pendingDetails');
+      dispatch(updateMe() as any);
+      setCheckout(null);
       setBookingDone(true);
     } catch (err: unknown) {
       setBookingError(
@@ -127,10 +249,9 @@ export default function StudentSeminars() {
   // Open a seminar's detail/booking view from a fresh state.
   const openSeminar = (s: Seminar) => {
     setSelectedSeminar(s);
-    setBookingStep(1);
-    setSelectedTime(s.time);
-    setPaying(false);
+    setCheckout(null);
     setBookingDone(false);
+    setSeatRequested(false);
     setBookingError(null);
   };
 
@@ -159,19 +280,92 @@ export default function StudentSeminars() {
     };
   }, []);
 
-  const majors = useMemo(
-    () => Array.from(new Set(seminars.map(s => s.major))).sort(),
-    [seminars],
+  useEffect(() => {
+    const expertId = selectedSeminar?.expertId;
+    const viewingId = selectedSeminar?.id;
+    if (!expertId) {
+      setPastSeminars([]);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const res: any = await getExpertById(expertId);
+        const chats = Array.isArray(res?.result?.groupChats) ? res.result.groupChats : [];
+        const now = Date.now();
+        const past = chats
+          .filter(
+            (g: any) =>
+              g?.type === 'seminar' && g?.status !== 'draft' && g?.status !== 'cancelled',
+          )
+          .map((g: any) => {
+            const start = g?.start ? new Date(g.start).getTime() : NaN;
+            const enrolled = Math.max(
+              0,
+              (Array.isArray(g?.participants) ? g.participants.length : 0) - 1,
+            );
+            return { g, start, enrolled };
+          })
+          .filter(
+            (x: any) =>
+              !Number.isNaN(x.start) &&
+              x.start < now &&
+              String(x.g?._id) !== String(viewingId),
+          )
+          .sort((a: any, b: any) => b.start - a.start)
+          .slice(0, 6)
+          .map((x: any) => {
+            const d = new Date(x.start);
+            return {
+              id: String(x.g?._id),
+              title: x.g?.name || 'Seminar',
+              date: `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`,
+              attendees: x.enrolled,
+            };
+          });
+        if (!cancelled) setPastSeminars(past);
+      } catch {
+        if (!cancelled) setPastSeminars([]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedSeminar?.expertId, selectedSeminar?.id]);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res: any = await doGetKeywordsAndServices();
+        const majorList = (res?.keywords || []).map((k: any) => k?.value).filter(Boolean);
+        const topicList = canonicalLabelsFromMixedServiceEntries(res?.services);
+        if (!cancelled) {
+          setCatalogMajors(Array.from(new Set<string>(majorList)).sort());
+          setCatalogTopics(Array.from(new Set<string>(topicList)));
+        }
+      } catch {
+        if (!cancelled) {
+          setCatalogMajors([]);
+          setCatalogTopics([]);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const groupedSeminars = useMemo(() => groupSeminarSeries(seminars), [seminars]);
+
+  const majorOptions = useMemo<FilterOption[]>(
+    () => [{ value: 'all', label: 'All majors' }, ...catalogMajors.map(m => ({ value: m, label: m }))],
+    [catalogMajors],
   );
 
-  const tags = useMemo(
-    () =>
-      Array.from(
-        new Set(
-          seminars.flatMap(s => s.tags),
-        ),
-      ).sort(),
-    [seminars],
+  const tagOptions = useMemo<FilterOption[]>(
+    () => [{ value: 'all', label: 'All topics' }, ...catalogTopics.map(t => ({ value: t, label: t }))],
+    [catalogTopics],
   );
 
   const matchesFilters = (seminar: Seminar) => {
@@ -180,7 +374,9 @@ export default function StudentSeminars() {
       !q ||
       seminar.title.toLowerCase().includes(q) ||
       seminar.description.toLowerCase().includes(q) ||
-      seminar.major.toLowerCase().includes(q);
+      seminar.major.toLowerCase().includes(q) ||
+      seminar.tags.some(t => t.toLowerCase().includes(q)) ||
+      seminar.searchTags.some(t => t.toLowerCase().includes(q));
 
     const matchesMajor =
       majorFilter === 'all' ||
@@ -197,7 +393,7 @@ export default function StudentSeminars() {
     () =>
       userInterests.length === 0
         ? []
-        : seminars
+        : groupedSeminars
             .filter(
               s =>
                 userInterests.includes(s.major) ||
@@ -208,36 +404,29 @@ export default function StudentSeminars() {
                 ),
             )
             .filter(matchesFilters),
-    [seminars, userInterests, searchQuery, majorFilter, tagFilter],
+    [groupedSeminars, userInterests, searchQuery, majorFilter, tagFilter],
   );
 
   const others = useMemo(
     () =>
-      seminars.filter(s => !recommended.includes(s)).filter(matchesFilters),
-    [seminars, searchQuery, majorFilter, tagFilter, recommended],
+      groupedSeminars.filter(s => !recommended.includes(s)).filter(matchesFilters),
+    [groupedSeminars, searchQuery, majorFilter, tagFilter, recommended],
   );
 
-  const tagClass = (tag: string) => {
-    const t = tag.toLowerCase();
-    if (t.includes('research')) {
-      return 'bg-emerald-50 text-emerald-700';
+  // True when the student is enrolled in this seminar — for a
+  // recurring series, any booked occurrence counts so the card reflects it.
+  const seminarRegistered = (s: Seminar): boolean => {
+    if (s.seriesId) {
+      return seminars.some(
+        x => x.seriesId === s.seriesId && mySeminarStatus.booked.has(x.id),
+      );
     }
-    if (t.includes('grad')) {
-      return 'bg-indigo-50 text-indigo-700';
-    }
-    if (t.includes('career')) {
-      return 'bg-amber-50 text-amber-700';
-    }
-    if (t.includes('work abroad')) {
-      return 'bg-sky-50 text-sky-700';
-    }
-    if (t.includes('industry')) {
-      return 'bg-rose-50 text-rose-700';
-    }
-    return 'bg-[#F3F4F6] text-slate-700';
+    return mySeminarStatus.booked.has(s.id);
   };
 
-  const renderSeminarCard = (s: Seminar) => (
+  const renderSeminarCard = (s: Seminar) => {
+    const cardWaitingList = seatRequestWindow(s.startMs);
+    return (
     <article
       key={s.id}
       role="button"
@@ -264,6 +453,26 @@ export default function StudentSeminars() {
             <span>{s.level}</span>
           </div>
         )}
+        {s.recurrenceFrequency && (
+          <div className="absolute right-3 top-3 inline-flex items-center gap-1 rounded-full bg-[#234C6A]/90 px-2.5 py-0.5 text-[10px] font-medium text-white backdrop-blur">
+            <Repeat className="h-3 w-3" aria-hidden />
+            <span>{RECURRENCE_LABEL[s.recurrenceFrequency]}</span>
+          </div>
+        )}
+        {seminarRegistered(s) && (
+          <div className="absolute bottom-3 left-3 inline-flex items-center gap-1 rounded-full bg-emerald-600/95 px-2.5 py-0.5 text-[10px] font-semibold text-white backdrop-blur">
+            <Check className="h-3 w-3" aria-hidden />
+            <span>Registered</span>
+          </div>
+        )}
+        {!seminarRegistered(s) && s.isFull && (
+          <div
+            className="absolute bottom-3 right-3 inline-flex items-center gap-1 rounded-full bg-rose-600/95 px-2.5 py-0.5 text-[10px] font-semibold text-white backdrop-blur"
+            title={seatRequestWindowMessage(cardWaitingList, { price: s.price })}
+          >
+            <span>Full</span>
+          </div>
+        )}
       </div>
 
       <div className="p-5">
@@ -282,46 +491,70 @@ export default function StudentSeminars() {
         </div>
       </div>
 
-      <div className="px-5 pb-4 flex flex-wrap items-center gap-3 text-[11px] text-slate-600">
-        <span className="inline-flex items-center gap-1 rounded-full bg-slate-50 px-2 py-1">
-          <Clock className="h-3 w-3 text-[#234C6A]" aria-hidden />
-          <span>
-            {s.date} · {s.time}
-          </span>
-        </span>
-        <span className="inline-flex items-center gap-1 rounded-full bg-slate-50 px-2 py-1">
-          <MapPin className="h-3 w-3 text-[#234C6A]" aria-hidden />
-          <span>Online · WisdomLinked</span>
-        </span>
-        <span className="inline-flex items-center gap-1 rounded-full bg-slate-50 px-2 py-1">
-          <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-          <span>{s.major}</span>
-        </span>
-        {s.level && (
+      <div className="px-5 pb-4 flex flex-col gap-2 text-[11px] text-slate-600">
+        <div className="flex flex-wrap items-center gap-3">
           <span className="inline-flex items-center gap-1 rounded-full bg-slate-50 px-2 py-1">
-            <span className="h-1.5 w-1.5 rounded-full bg-[#234C6A]" />
-            <span>{s.level}</span>
+            <Clock className="h-3 w-3 text-[#234C6A]" aria-hidden />
+            <span>
+              {s.recurrenceFrequency ? 'Next: ' : ''}{s.date} · {s.time}
+            </span>
           </span>
-        )}
-      </div>
-      <div className="px-5 pb-4">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500 mb-1">
-          Topics
-        </p>
-        <div className="flex flex-wrap gap-1.5">
-          {s.tags.map(tag => (
+          <span className="inline-flex items-center gap-1 rounded-full bg-slate-50 px-2 py-1">
+            <User className="h-3 w-3 text-[#234C6A]" aria-hidden />
+            <span>{s.expertName}</span>
+          </span>
+          {s.recurrenceFrequency && s.occurrenceCount > 1 && (
+            <span className="inline-flex items-center gap-1 rounded-full bg-[#E8EEF4] px-2 py-1 text-[#234C6A]">
+              <Repeat className="h-3 w-3" aria-hidden />
+              <span>{RECURRENCE_LABEL[s.recurrenceFrequency]} · {s.occurrenceCount} sessions</span>
+            </span>
+          )}
+        </div>
+        <div className="flex flex-wrap items-center gap-3">
+          <span className="inline-flex items-center gap-1 rounded-full bg-slate-50 px-2 py-1">
+            <Users className="h-3 w-3 text-[#234C6A]" aria-hidden />
+            <span>{seminarCapacityLabel(s.attendees, s.maxAttendees, { omitFullWord: true })}</span>
+          </span>
+          {!seminarRegistered(s) && s.isFull && (
             <span
-              key={tag}
-              className={`inline-flex items-center rounded-full px-2 py-1 text-[11px] font-medium ${tagClass(
-                tag,
-              )}`}
+              className="inline-flex items-center gap-1 rounded-full bg-rose-50 px-2 py-1 text-rose-700"
+              title={seatRequestWindowMessage(cardWaitingList, { price: s.price })}
             >
-              {tag}
+              <span>{seatRequestWindowShortLabel(cardWaitingList)}</span>
+            </span>
+          )}
+          {s.level && (
+            <span className="inline-flex items-center gap-1 rounded-full bg-slate-50 px-2 py-1">
+              <span className="h-1.5 w-1.5 rounded-full bg-[#234C6A]" />
+              <span>{s.level}</span>
+            </span>
+          )}
+        </div>
+        <div className="flex flex-wrap gap-x-1 gap-y-0.5">
+          {(s.majors.length ? s.majors : [s.major]).map((m) => (
+            <span
+              key={m}
+              className="rounded-full bg-[#E8EEF4] px-2 py-0.5 text-[10px] font-medium text-[#234C6A]"
+            >
+              {m}
             </span>
           ))}
         </div>
       </div>
-      <div className="mt-auto px-5 pb-4 flex justify-end">
+      <div className="mt-auto px-5 pb-4 flex justify-end gap-2">
+        {onEnterSeminarChat && seminarRegistered(s) ? (
+          <button
+            type="button"
+            onClick={e => {
+              e.stopPropagation();
+              onEnterSeminarChat(s.id);
+            }}
+            className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-[#234C6A] bg-white px-3 py-1.5 text-xs font-semibold text-[#234C6A] hover:bg-[#F5F3EF]"
+          >
+            <MessageSquare className="h-3.5 w-3.5" aria-hidden />
+            Enter chat
+          </button>
+        ) : null}
         <button
           type="button"
           onClick={e => {
@@ -334,14 +567,19 @@ export default function StudentSeminars() {
         </button>
       </div>
     </article>
-  );
+    );
+  };
 
   if (selectedSeminar) {
     const s = selectedSeminar;
-    const timeOptions = s.time ? [s.time] : [];
-    const pastBySameExpert = seminars
-      .filter(item => item.expertName === s.expertName && item.id !== s.id)
-      .slice(0, 3);
+    const viewerTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    const pastBySameExpert = pastSeminars;
+
+    const alreadyRegistered = mySeminarStatus.booked.has(s.id) || bookingDone;
+    const isFull = s.isFull && !alreadyRegistered;
+    const waitingList = seatRequestWindow(s.startMs);
+    const waitingListOpen = waitingList.state === 'open';
+    const canRequestSeat = isFull && waitingListOpen;
 
     return (
       <div className={containerClass}>
@@ -368,6 +606,12 @@ export default function StudentSeminars() {
               <h1 className="mt-2 font-serif text-[1.8rem] leading-tight text-[#1A3A4A]">
                 {s.title}
               </h1>
+              {s.recurrenceFrequency && (
+                <span className="mt-2 inline-flex items-center gap-1 rounded-full bg-[#E8EEF4] px-3 py-1 text-[12px] font-medium text-[#234C6A]">
+                  <Repeat className="h-3.5 w-3.5" aria-hidden />
+                  Repeats {RECURRENCE_LABEL[s.recurrenceFrequency].toLowerCase()}
+                </span>
+              )}
               <div className="mt-3 rounded-xl border border-[#E5E2DB] bg-[#F5F3EF] px-4 py-3">
                 <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[#7A7A72]">
                   Seminar description
@@ -376,27 +620,80 @@ export default function StudentSeminars() {
               </div>
 
               <div className="mt-5 grid gap-2 sm:grid-cols-2 text-[12px] text-slate-700">
-                <div className="inline-flex items-center gap-1.5 rounded-lg border border-[#E5E2DB] bg-[#F5F3EF] px-3 py-2">
-                  <User className="h-4 w-4 text-[#234C6A]" aria-hidden />
-                  <span>{s.expertName}</span>
-                </div>
+                {s.expertId ? (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      openPeerProfile({ userId: s.expertId, username: s.expertName, image: s.expertImage })
+                    }
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-[#E5E2DB] bg-[#F5F3EF] px-3 py-2 text-left transition-colors hover:border-[#234C6A] hover:bg-[#E8EEF4]"
+                    title={`View ${s.expertName}'s profile`}
+                  >
+                    <User className="h-4 w-4 text-[#234C6A]" aria-hidden />
+                    <span className="font-medium text-[#234C6A] underline underline-offset-2">{s.expertName}</span>
+                  </button>
+                ) : (
+                  <div className="inline-flex items-center gap-1.5 rounded-lg border border-[#E5E2DB] bg-[#F5F3EF] px-3 py-2">
+                    <User className="h-4 w-4 text-[#234C6A]" aria-hidden />
+                    <span>{s.expertName}</span>
+                  </div>
+                )}
                 <div className="inline-flex items-center gap-1.5 rounded-lg border border-[#E5E2DB] bg-[#F5F3EF] px-3 py-2">
                   <CalendarDays className="h-4 w-4 text-[#234C6A]" aria-hidden />
                   <span>{s.date}</span>
                 </div>
                 <div className="inline-flex items-center gap-1.5 rounded-lg border border-[#E5E2DB] bg-[#F5F3EF] px-3 py-2">
                   <Clock className="h-4 w-4 text-[#234C6A]" aria-hidden />
-                  <span>{selectedTime}</span>
+                  <span className="text-[#7A7A72]">{s.time} · {viewerTz}</span>
                 </div>
                 <div className="inline-flex items-center gap-1.5 rounded-lg border border-[#E5E2DB] bg-[#F5F3EF] px-3 py-2">
                   <MapPin className="h-4 w-4 text-[#234C6A]" aria-hidden />
                   <span>{s.location}</span>
                 </div>
                 <div className="inline-flex items-center gap-1.5 rounded-lg border border-[#E5E2DB] bg-[#F5F3EF] px-3 py-2">
-                  <span className="inline-block h-2 w-2 rounded-full bg-emerald-500" />
-                  <span>{s.attendees} attendees</span>
+                  <Users className="h-4 w-4 text-[#234C6A]" aria-hidden />
+                  <span>{seminarCapacityLabel(s.attendees, s.maxAttendees)}</span>
                 </div>
               </div>
+
+              {(s.majors.length > 0 || s.services.length > 0) && (
+                <div className="mt-5 space-y-3">
+                  {s.majors.length > 0 && (
+                    <div>
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[#7A7A72]">
+                        Majors / keywords
+                      </p>
+                      <div className="mt-1 flex flex-wrap gap-1.5">
+                        {s.majors.map(k => (
+                          <span
+                            key={k}
+                            className="rounded-full bg-[#E8EEF4] px-2.5 py-1 text-[11px] font-medium text-[#234C6A]"
+                          >
+                            {k}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {s.services.length > 0 && (
+                    <div>
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[#7A7A72]">
+                        Services
+                      </p>
+                      <div className="mt-1 flex flex-wrap gap-1.5">
+                        {s.services.map(k => (
+                          <span
+                            key={k}
+                            className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-medium text-slate-700"
+                          >
+                            {k}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
 
               <div className="mt-5">
                 <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[#7A7A72]">
@@ -433,97 +730,174 @@ export default function StudentSeminars() {
             </p>
             <h2 className="mt-2 font-serif text-xl text-[#1A3A4A]">Booking flow</h2>
 
-            {bookingDone ? (
-              <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-3">
-                <p className="text-sm font-semibold text-emerald-900">
-                  You&apos;re registered for this seminar.
+            {s.recurrenceFrequency && (
+              <p className="mt-2 text-xs text-[#7A7A72]">
+                Registering enrolls you in every session of this recurring series.
+              </p>
+            )}
+
+            {seatRequested ? (
+              <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-3 py-3">
+                <p className="text-sm font-semibold text-amber-900">
+                  You’re on the waiting list.
                 </p>
-                <p className="mt-1 text-xs text-emerald-800">
-                  It will appear on your calendar once the host confirms.
+                <p className="mt-1 text-xs text-amber-800">
+                  {s.price > 0
+                    ? 'Your card is authorized but not charged — the host reviews the waiting list and you’re only charged if approved. Otherwise the hold is released.'
+                    : 'The host reviews the waiting list; you’ll join only if approved.'}
                 </p>
               </div>
-            ) : paying ? (
-              <div className="mt-4 space-y-3">
-                <StudentBookingCheckout
-                  type="Seminar"
-                  price={s.price}
-                  returnUrl={seminarReturnUrl}
-                  pendingDetails={{ groupChatId: s.id, price: s.price, name: s.title }}
-                  onPaymentSuccess={joinSeminar}
-                  onCancel={() => {
-                    setPaying(false);
-                    setBookingStep(2);
-                  }}
-                  cancelLabel="Change time"
-                />
-                {bookingError ? (
-                  <p className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-medium text-rose-700">
-                    {bookingError}
-                  </p>
+            ) : alreadyRegistered ? (
+              <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-3">
+                <p className="text-sm font-semibold text-emerald-900">
+                  You're enrolled in this seminar.
+                </p>
+                <p className="mt-1 text-xs text-emerald-800">
+                  It’s on your calendar — join from your seminars or calendar.
+                </p>
+                {onEnterSeminarChat ? (
+                  <button
+                    type="button"
+                    onClick={() => onEnterSeminarChat(s.id)}
+                    className="mt-3 w-full inline-flex items-center justify-center gap-2 rounded-lg bg-[#234C6A] px-4 py-2.5 text-sm font-semibold text-white hover:brightness-110"
+                  >
+                    <MessageSquare className="h-4 w-4" aria-hidden />
+                    Enter seminar chat
+                  </button>
                 ) : null}
               </div>
             ) : (
               <div className="mt-4 space-y-4">
-                <div className="rounded-lg border border-[#E5E2DB] bg-[#F5F3EF] px-3 py-2 text-[12px] text-[#1A3A4A]">
-                  Step {bookingStep} of 2
+                <div className="space-y-2">
+                  <p className="text-sm text-[#7A7A72]">Seminar schedule</p>
+                  <div className="rounded-[4px] border border-[#E5E2DB] bg-white px-3 py-2 space-y-1.5">
+                    <div className="flex items-center gap-2 text-sm font-semibold text-[#1A3A4A]">
+                      <CalendarDays className="h-4 w-4 text-[#234C6A]" aria-hidden />
+                      <span>{s.date}</span>
+                    </div>
+                    <div className="flex items-center gap-2 text-sm text-[#7A7A72]">
+                      <Clock className="h-4 w-4 text-[#234C6A]" aria-hidden />
+                      <span>{s.time} · {viewerTz}</span>
+                    </div>
+                  </div>
                 </div>
-
-                {bookingStep === 1 && (
-                  <div className="space-y-3">
-                    <p className="text-sm text-[#7A7A72]">
-                      Review seminar and continue to slot selection.
-                    </p>
-                    <button
-                      type="button"
-                      onClick={() => setBookingStep(2)}
-                      className="w-full rounded-[4px] bg-[#234C6A] px-3 py-2 text-sm font-semibold text-white hover:brightness-110"
+                {isFull ? (
+                  <div className="space-y-2">
+                    <p className="text-xs font-semibold text-[#1A3A4A]">This seminar is full.</p>
+                    <p
+                      className={`rounded-lg border px-3 py-2 text-xs ${
+                        waitingListOpen
+                          ? 'border-amber-200 bg-amber-50 text-amber-800'
+                          : 'border-[#E5E2DB] bg-[#F5F3EF] text-[#7A7A72]'
+                      }`}
                     >
-                      Continue
-                    </button>
-                  </div>
-                )}
-
-                {bookingStep === 2 && (
-                  <div className="space-y-3">
-                    <p className="text-sm text-[#7A7A72]">Select preferred time</p>
-                    <div className="grid grid-cols-1 gap-2">
-                      {timeOptions.map(option => (
-                        <button
-                          key={option}
-                          type="button"
-                          onClick={() => setSelectedTime(option)}
-                          className={`rounded-[4px] border px-3 py-2 text-left text-sm font-semibold ${
-                            selectedTime === option
-                              ? 'border-[#234C6A] bg-[#E8EEF4] text-[#234C6A]'
-                              : 'border-[#E5E2DB] bg-white text-slate-700'
-                          }`}
-                        >
-                          {option}
-                        </button>
-                      ))}
-                    </div>
-                    <div className="flex gap-2">
+                      {seatRequestWindowMessage(waitingList, { price: s.price })}
+                    </p>
+                    {canRequestSeat ? (
                       <button
                         type="button"
-                        onClick={() => setBookingStep(1)}
-                        className="flex-1 rounded-[4px] border border-[#E5E2DB] bg-white px-3 py-2 text-sm font-semibold text-slate-700"
+                        onClick={() => setCheckout('review')}
+                        className="w-full rounded-[4px] bg-[#234C6A] px-3 py-2 text-sm font-semibold text-white hover:brightness-110"
                       >
-                        Back
+                        {seatRequestActionLabel(s.price)}
                       </button>
-                      <button
-                        type="button"
-                        onClick={() => setPaying(true)}
-                        className="flex-1 rounded-[4px] bg-[#234C6A] px-3 py-2 text-sm font-semibold text-white hover:brightness-110"
-                      >
-                        {s.price > 0 ? 'Continue to payment' : 'Confirm booking'}
-                      </button>
-                    </div>
+                    ) : null}
                   </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setCheckout('review')}
+                    className="w-full rounded-[4px] bg-[#234C6A] px-3 py-2 text-sm font-semibold text-white hover:brightness-110"
+                  >
+                    {s.price > 0 ? 'Continue to payment' : 'Confirm booking'}
+                  </button>
                 )}
               </div>
             )}
           </aside>
         </div>
+
+        {checkout === 'review' ? (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-[#1A3A4A]/40 p-4 backdrop-blur-sm"
+            onClick={e => {
+              if (e.target === e.currentTarget) setCheckout(null);
+            }}
+          >
+            <div className="my-auto w-full max-w-md">
+              <div className="rounded-2xl border border-[#E5E2DB] bg-white p-4 sm:p-6 space-y-4">
+                <p className="font-serif text-lg font-medium text-[#1A3A4A]">
+                  {isFull ? 'Join the waiting list' : 'Review your booking'}
+                </p>
+                {isFull ? (
+                  <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                    This seminar is full. {seatRequestWindowMessage(waitingList, { price: s.price })}
+                  </p>
+                ) : null}
+                <dl className="space-y-2 text-sm text-[#1A3A4A]">
+                  <div className="flex justify-between gap-2">
+                    <dt className="text-[#7A7A72]">Seminar</dt>
+                    <dd className="font-semibold text-right">{s.title}</dd>
+                  </div>
+                  <div className="flex justify-between gap-2">
+                    <dt className="text-[#7A7A72]">Host</dt>
+                    <dd className="font-semibold text-right">{s.expertName}</dd>
+                  </div>
+                  <div className="flex justify-between gap-2">
+                    <dt className="text-[#7A7A72]">Date</dt>
+                    <dd className="font-semibold text-right">{s.date}</dd>
+                  </div>
+                  <div className="flex justify-between gap-2">
+                    <dt className="text-[#7A7A72]">Time</dt>
+                    <dd className="text-right text-[#7A7A72]">{s.time} · {viewerTz}</dd>
+                  </div>
+                  <div className="flex justify-between gap-2 border-t border-[#E5E2DB] pt-2">
+                    <dt className="text-[#7A7A72]">Total</dt>
+                    <dd className="font-serif text-lg font-semibold">${s.price.toFixed(2)}</dd>
+                  </div>
+                </dl>
+                <button
+                  type="button"
+                  onClick={() => setCheckout('pay')}
+                  className="inline-flex w-full items-center justify-center rounded-[4px] bg-[#1A3A4A] px-4 py-3 text-[13px] font-semibold text-white hover:bg-[#122635]"
+                >
+                  {isFull
+                    ? (s.price > 0 ? 'Continue to authorize' : 'Continue to join the waiting list')
+                    : s.price > 0 ? 'Continue to payment' : 'Confirm booking'}
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : null}
+
+        {checkout === 'pay' ? (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-[#1A3A4A]/40 p-4 backdrop-blur-sm"
+            onClick={e => {
+              if (e.target === e.currentTarget) setCheckout('review');
+            }}
+          >
+            <div className="my-auto w-full max-w-2xl space-y-3">
+              <StudentBookingCheckout
+                type="Seminar"
+                price={s.price}
+                isSeatRequest={isFull}
+                holdsFunds
+                returnUrl={seminarReturnUrl}
+                pendingDetails={{ groupChatId: s.id, price: s.price, name: s.title }}
+                onPaymentSuccess={joinSeminar}
+                onCancel={() => setCheckout('review')}
+                cancelLabel="Back"
+              />
+              {bookingError ? (
+                <p className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-medium text-rose-700">
+                  {bookingError}
+                </p>
+              ) : null}
+            </div>
+          </div>
+        ) : null}
+        {peerProfileModal}
       </div>
     );
   }
@@ -551,54 +925,26 @@ export default function StudentSeminars() {
                 type="text"
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
-                placeholder="Search by seminar title, description, or field…"
+                placeholder="Search by seminar title, description, field, or topic…"
                 className="w-full bg-transparent text-sm font-sans text-[#1A3A4A] placeholder:text-[#B2AEA2] outline-none"
               />
             </div>
           </div>
           <div className="flex flex-1 flex-col gap-3 md:flex-row md:justify-end md:gap-4">
-            <div className="md:w-40">
-              <div className="mb-1 flex items-center justify-between text-[0.7rem] font-medium uppercase tracking-[0.16em] text-[#7A7A72]">
-                <span>Filter by major</span>
-              </div>
-              <div className="relative flex items-center border-b border-[#E5E2DB] pb-1">
-                <Filter className="mr-1 h-3.5 w-3.5 text-[#7A7A72]" aria-hidden />
-                <select
-                  value={majorFilter}
-                  onChange={e => setMajorFilter(e.target.value)}
-                  className="w-full bg-transparent text-xs font-sans text-[#1A3A4A] outline-none appearance-none pr-5"
-                >
-                  <option value="all">All majors</option>
-                  {majors.map(major => (
-                    <option key={major} value={major}>
-                      {major}
-                    </option>
-                  ))}
-                </select>
-                <ChevronDown className="pointer-events-none absolute right-0 h-3 w-3 text-[#7A7A72]" />
-              </div>
-            </div>
-            <div className="md:w-44">
-              <div className="mb-1 flex items-center justify-between text-[0.7rem] font-medium uppercase tracking-[0.16em] text-[#7A7A72]">
-                <span>Filter by topic</span>
-              </div>
-              <div className="relative flex items-center border-b border-[#E5E2DB] pb-1">
-                <Filter className="mr-1 h-3.5 w-3.5 text-[#7A7A72]" aria-hidden />
-                <select
-                  value={tagFilter}
-                  onChange={e => setTagFilter(e.target.value)}
-                  className="w-full bg-transparent text-xs font-sans text-[#1A3A4A] outline-none appearance-none pr-5"
-                >
-                  <option value="all">All topics</option>
-                  {tags.map(tag => (
-                    <option key={tag} value={tag}>
-                      {tag}
-                    </option>
-                  ))}
-                </select>
-                <ChevronDown className="pointer-events-none absolute right-0 h-3 w-3 text-[#7A7A72]" />
-              </div>
-            </div>
+            <FilterDropdown
+              label="Filter by major"
+              value={majorFilter}
+              options={majorOptions}
+              onChange={setMajorFilter}
+              widthClass="md:w-44"
+            />
+            <FilterDropdown
+              label="Filter by topic"
+              value={tagFilter}
+              options={tagOptions}
+              onChange={setTagFilter}
+              widthClass="md:w-44"
+            />
           </div>
         </div>
       </section>

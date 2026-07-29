@@ -11,12 +11,15 @@ const BOOKING_VALIDATION_MESSAGES = new Set([
     'Expert has no availability configured',
     'Selected time is outside expert availability',
     'Expert is not accepting bookings on this date',
+    'Expert is not available at the selected time on this date',
     'Selected time conflicts with an existing booking',
     'Selected time conflicts with an existing session',
     'Expert not found',
     'Payment intent is required',
     'Payment intent not succeeded',
     'Payment amount does not match expected price',
+    'Session title must be between 10 and 60 characters',
+    'Session note must be between 50 and 500 characters',
 ]);
 
 const BOOKING_LEAD_TIME_MESSAGE = /must be at least \d+ hours in advance\.$/;

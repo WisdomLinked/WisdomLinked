@@ -35,6 +35,10 @@ if (!MONGO_URI) {
     process.exit(1);
 }
 
+process.on("unhandledRejection", (reason: any) => {
+    console.error("Unhandled promise rejection:", reason?.stack || reason?.message || reason);
+});
+
 const app = express();
 // Behind nginx/Docker — use X-Forwarded-For for req.ip (rate limits, audit).
 app.set('trust proxy', 1);
@@ -117,6 +121,17 @@ mongoose
         appendDefaultServices();
         appendAdminUserAndGroupChat();
         initAppStates();
+
+
+        const { sweepExpiredSeatRequests, sweepPendingSeminarPayments, sweepOrphanedBookingIntents } = require('./controllers/groupChat.controller');
+        sweepExpiredSeatRequests();
+        setInterval(sweepExpiredSeatRequests, 15 * 60 * 1000);
+
+        sweepPendingSeminarPayments();
+        setInterval(sweepPendingSeminarPayments, 15 * 60 * 1000);
+
+        sweepOrphanedBookingIntents();
+        setInterval(sweepOrphanedBookingIntents, 15 * 60 * 1000);
 
         const httpServer = require('http').Server(app);
         httpServer.listen(PORT, function () {

@@ -1,5 +1,6 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Calendar, MapPin, BookOpen, UserCheck } from 'lucide-react';
+import SeminarDetails from '../../pages/Dashboard/seminarDetails';
 
 type SessionKind = 'seminar' | 'oneToOne';
 type SessionStatus = 'booked' | 'pending';
@@ -12,6 +13,38 @@ export type UpcomingModalSession = {
   when: string;
   location?: string;
   with?: string;
+  /** Pending 1:1 the student must pay to confirm (expert-proposed). */
+  payable?: boolean;
+  price?: number;
+  peerUserId?: string;
+  /** Optional per-session detail rows shown behind a button (expert: student
+   * background; student: their own booking details). */
+  studentBrief?: Array<{ label: string; value: string }>;
+  /** Button + popup heading for studentBrief. Defaults to "Student background". */
+  briefLabel?: string;
+  /** Full session detail (calendar-style) rendered behind the details button.
+   * Takes precedence over studentBrief when present. */
+  detail?: {
+    title: string;
+    description?: string;
+    start?: string;
+    duration?: number;
+    price?: number;
+    admin: any;
+    participants: any[];
+    keywords?: any[];
+    services?: any[];
+    purposeOther?: string;
+    type?: string;
+    isRecurring?: boolean;
+    recurrenceFrequency?: string;
+  };
+  /** Set for overflow seminar seat requests the expert can approve/decline. */
+  seatRequestId?: string;
+  /** Pending student-initiated 1:1 the expert can accept directly. */
+  canAccept?: boolean;
+  /** Extra small lines under the date (e.g. "$20.00 held", "Decide by …"). */
+  metaLines?: string[];
 };
 
 const pad2 = (n: number) => String(n).padStart(2, '0');
@@ -35,7 +68,12 @@ export default function UpcomingSessionModal({
   onClose,
   onJoin,
   onJoinSession,
-  sessions: sessionsProp,
+  onPay,
+  onAcceptSeatRequest,
+  onDeclineSeatRequest,
+  onAcceptSession,
+  onViewProfile,
+  sessions,
   role = 'student',
 }: {
   kind: SessionKind;
@@ -45,27 +83,98 @@ export default function UpcomingSessionModal({
   onJoin?: () => void;
   /** Expert (or future): open a specific session (e.g. group chat) */
   onJoinSession?: (session: UpcomingModalSession) => void;
-  /** When set (including `[]`), replaces demo data */
-  sessions?: UpcomingModalSession[];
+  /** Student pays to confirm an expert-proposed pending 1:1. */
+  onPay?: (session: UpcomingModalSession) => void;
+  /** Open the peer's full profile card (needs session.peerUserId). */
+  onViewProfile?: (session: UpcomingModalSession) => void;
+  /** Expert approves an overflow seminar seat request. Resolving a string shows
+   * it as a transient in-card confirmation. */
+  onAcceptSeatRequest?: (session: UpcomingModalSession) => void | Promise<void | string>;
+  /** Expert declines an overflow seminar seat request. Resolving a string shows
+   * it as a transient in-card confirmation. */
+  onDeclineSeatRequest?: (session: UpcomingModalSession) => void | Promise<void | string>;
+  /** Expert accepts a pending student-initiated 1:1 request. Resolving `true`
+   * shows a transient in-card confirmation before the row clears. */
+  onAcceptSession?: (session: UpcomingModalSession) => void | Promise<void | boolean>;
+  sessions: UpcomingModalSession[];
   role?: 'student' | 'expert';
 }) {
-  const baseNow = useMemo(() => Date.now(), []);
-
   const [tick, setTick] = useState(() => Date.now());
   useEffect(() => {
     const t = window.setInterval(() => setTick(Date.now()), 1000);
     return () => window.clearInterval(t);
   }, []);
 
+  const [briefSession, setBriefSession] = useState<UpcomingModalSession | null>(null);
+  const [seatBusyId, setSeatBusyId] = useState<string | null>(null);
+  const [acceptBusyId, setAcceptBusyId] = useState<string | null>(null);
+  // Accepted 1:1 rows keep their card for a few seconds, showing a confirmation
+  // in place of the session details before quietly clearing.
+  const [acceptedNotices, setAcceptedNotices] = useState<
+    Record<string, { message: string; session: UpcomingModalSession }>
+  >({});
+  const noticeTimers = useRef<number[]>([]);
+  useEffect(
+    () => () => {
+      noticeTimers.current.forEach(id => window.clearTimeout(id));
+    },
+    [],
+  );
+
+  // Show a confirmation in place of the row for a few seconds, then clear it.
+  const flashNotice = (session: UpcomingModalSession, message: string) => {
+    setAcceptedNotices(prev => ({ ...prev, [session.id]: { message, session } }));
+    const timer = window.setTimeout(() => {
+      setAcceptedNotices(prev => {
+        const next = { ...prev };
+        delete next[session.id];
+        return next;
+      });
+    }, 7000);
+    noticeTimers.current.push(timer);
+  };
+
+  const acceptSession = async (session: UpcomingModalSession) => {
+    if (!onAcceptSession) return;
+    setAcceptBusyId(session.id);
+    try {
+      const ok = await onAcceptSession(session);
+      if (ok === false) return;
+      flashNotice(
+        session,
+        `${session.with || 'The student'} has been accepted for the 1:1 session${
+          session.title ? ` “${session.title}”` : ''
+        }.`,
+      );
+    } finally {
+      setAcceptBusyId(null);
+    }
+  };
+
+  const decideSeatRequest = async (
+    session: UpcomingModalSession,
+    action: 'accept' | 'decline',
+  ) => {
+    const handler = action === 'accept' ? onAcceptSeatRequest : onDeclineSeatRequest;
+    if (!handler) return;
+    setSeatBusyId(session.id);
+    try {
+      const result = await handler(session);
+      if (typeof result === 'string' && result) flashNotice(session, result);
+    } finally {
+      setSeatBusyId(null);
+    }
+  };
+
   const content = useMemo(() => {
     const expert = role === 'expert';
     if (kind === 'seminar') {
       return {
-        title: status === 'pending' ? 'Pending seminar sessions' : 'Upcoming seminars',
+        title: status === 'pending' ? 'Pending seminar seat requests' : 'Upcoming seminars',
         typeLabel: 'Seminar',
         description: expert
           ? status === 'pending'
-            ? 'Seminar invites or drafts that are not confirmed yet.'
+            ? 'Students who registered past the seminar capacity. Accept to admit them (charging any held payment); decline to release the hold.'
             : 'Seminars you are hosting — join to open the meeting room in chat.'
           : status === 'pending'
             ? 'These seminar requests are waiting for mentor approval.'
@@ -89,66 +198,15 @@ export default function UpcomingSessionModal({
 
   const showJoin = status === 'booked';
 
-  const sessions = useMemo(() => {
-    if (sessionsProp !== undefined) {
-      return sessionsProp;
-    }
-    if (kind === 'seminar') {
-      return [
-        {
-          id: 's1',
-          title: 'AI for Healthcare seminar',
-          at: baseNow + 2 * 24 * 60 * 60 * 1000 + 60 * 60 * 1000,
-          when: 'Tue · 6:00 PM',
-          location: 'Online · WisdomLinked Room A',
-          with: 'Prof. Emily Chen',
-        },
-        {
-          id: 's2',
-          title: 'Research Methods seminar',
-          at: baseNow + 3 * 24 * 60 * 60 * 1000 + 2 * 60 * 60 * 1000,
-          when: 'Wed · 7:00 PM',
-          location: 'Online · WisdomLinked Room B',
-          with: 'Dr. Yuki Tanaka',
-        },
-        {
-          id: 's3',
-          title: 'Grad School Strategy seminar',
-          at: baseNow + 5 * 24 * 60 * 60 * 1000 + 30 * 60 * 1000,
-          when: 'Fri · 5:30 PM',
-          location: 'Online · WisdomLinked Room C',
-          with: 'Prof. Daniel Ortiz',
-        },
-      ];
-    }
-
-    return [
-      {
-        id: 'o1',
-        title: '1:1 appointment',
-        at: baseNow + 4 * 60 * 60 * 1000,
-        when: 'Today · 9:00 PM',
-        location: 'Online · WisdomLinked Room 1',
-        with: 'Dr. Emily Chen',
-      },
-      {
-        id: 'o2',
-        title: '1:1 appointment',
-        at: baseNow + 26 * 60 * 60 * 1000,
-        when: 'Tomorrow · 7:00 PM',
-        location: 'Online · WisdomLinked Room 2',
-        with: 'Prof. Daniel Ortiz',
-      },
-      {
-        id: 'o3',
-        title: '1:1 appointment',
-        at: baseNow + 52 * 60 * 60 * 1000,
-        when: 'Thu · 6:00 PM',
-        location: 'Online · WisdomLinked Room 4',
-        with: 'Dr. Yuki Tanaka',
-      },
-    ];
-  }, [kind, baseNow, sessionsProp]);
+  // Keep just-accepted rows on screen for the notice window even after the
+  // parent drops them from `sessions` (its list refreshes on accept).
+  const displaySessions = useMemo(() => {
+    const present = new Set(sessions.map(s => s.id));
+    const lingering = Object.values(acceptedNotices)
+      .filter(n => !present.has(n.session.id))
+      .map(n => n.session);
+    return [...sessions, ...lingering];
+  }, [sessions, acceptedNotices]);
 
   return (
     <div
@@ -184,12 +242,25 @@ export default function UpcomingSessionModal({
           <p className="text-sm text-slate-600">{content.description}</p>
 
           <div className="max-h-[52vh] overflow-y-auto space-y-3 pr-1">
-            {sessions.length === 0 ? (
+            {displaySessions.length === 0 ? (
               <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 py-10 text-center text-sm text-slate-500">
                 No sessions in this view for the selected time range.
               </div>
             ) : null}
-            {sessions.map(session => (
+            {displaySessions.map(session => {
+              const notice = acceptedNotices[session.id];
+              if (notice) {
+                return (
+                  <div
+                    key={session.id}
+                    className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm font-medium text-emerald-800"
+                  >
+                    <UserCheck className="h-4 w-4 shrink-0" aria-hidden />
+                    <span>{notice.message}</span>
+                  </div>
+                );
+              }
+              return (
               <div key={session.id} className="rounded-xl border border-slate-200 bg-[#F8FAFC] p-3">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
@@ -204,10 +275,33 @@ export default function UpcomingSessionModal({
                         {content.icon}
                       </span>
                       <div className="min-w-0">
-                        <p className="text-sm font-semibold text-slate-900 truncate">
-                          {session.title}
-                        </p>
-                        <p className="text-[11px] text-slate-500 truncate">{session.with}</p>
+                        {session.detail ||
+                        (session.studentBrief && session.studentBrief.length > 0) ? (
+                          <button
+                            type="button"
+                            onClick={() => setBriefSession(session)}
+                            className="block max-w-full truncate text-left text-sm font-semibold text-slate-900 hover:underline"
+                            title={session.detail ? 'View session details' : 'View details'}
+                          >
+                            {session.title}
+                          </button>
+                        ) : (
+                          <p className="text-sm font-semibold text-slate-900 truncate">
+                            {session.title}
+                          </p>
+                        )}
+                        {session.with && onViewProfile && session.peerUserId ? (
+                          <button
+                            type="button"
+                            onClick={() => onViewProfile(session)}
+                            className="max-w-full truncate text-left text-[11px] font-medium text-[#234C6A] hover:underline"
+                            title={role === 'expert' ? 'View student card' : 'View profile'}
+                          >
+                            {session.with}
+                          </button>
+                        ) : (
+                          <p className="text-[11px] text-slate-500 truncate">{session.with}</p>
+                        )}
                       </div>
                     </div>
                     <div className="mt-2 space-y-1 text-[11px] text-slate-600">
@@ -219,6 +313,9 @@ export default function UpcomingSessionModal({
                         <MapPin className="h-3.5 w-3.5" aria-hidden />
                         <span>{session.location}</span>
                       </p>
+                      {(session.metaLines || []).map(line => (
+                        <p key={line} className="text-slate-500">{line}</p>
+                      ))}
                     </div>
                   </div>
 
@@ -238,7 +335,43 @@ export default function UpcomingSessionModal({
                         }}
                         className="mt-2 rounded-lg bg-[#234C6A] px-3 py-1.5 text-[11px] font-semibold text-white hover:brightness-110"
                       >
-                        Join meeting
+                        {kind === 'seminar' ? 'Join seminar chat' : 'Join chat'}
+                      </button>
+                    ) : session.payable && onPay ? (
+                      <button
+                        type="button"
+                        onClick={() => onPay(session)}
+                        className="mt-2 rounded-lg bg-[#234C6A] px-3 py-1.5 text-[11px] font-semibold text-white hover:brightness-110"
+                      >
+                        {typeof session.price === 'number' ? `Pay $${session.price}` : 'Pay'}
+                      </button>
+                    ) : session.seatRequestId && (onAcceptSeatRequest || onDeclineSeatRequest) ? (
+                      <div className="mt-2 flex flex-col items-stretch gap-1.5">
+                        <button
+                          type="button"
+                          disabled={seatBusyId === session.id}
+                          onClick={() => decideSeatRequest(session, 'accept')}
+                          className="rounded-lg bg-[#234C6A] px-3 py-1.5 text-[11px] font-semibold text-white hover:brightness-110 disabled:opacity-60"
+                        >
+                          {seatBusyId === session.id ? '…' : 'Accept'}
+                        </button>
+                        <button
+                          type="button"
+                          disabled={seatBusyId === session.id}
+                          onClick={() => decideSeatRequest(session, 'decline')}
+                          className="rounded-lg border border-rose-200 bg-white px-3 py-1.5 text-[11px] font-semibold text-rose-600 hover:bg-rose-50 disabled:opacity-60"
+                        >
+                          {seatBusyId === session.id ? '…' : 'Decline'}
+                        </button>
+                      </div>
+                    ) : session.canAccept && onAcceptSession ? (
+                      <button
+                        type="button"
+                        disabled={acceptBusyId === session.id}
+                        onClick={() => acceptSession(session)}
+                        className="mt-2 rounded-lg bg-[#234C6A] px-3 py-1.5 text-[11px] font-semibold text-white hover:brightness-110 disabled:opacity-60"
+                      >
+                        {acceptBusyId === session.id ? 'Accepting…' : 'Accept'}
                       </button>
                     ) : (
                       <span className="mt-2 inline-flex rounded-lg border border-[#234C6A]/30 px-2 py-1 text-[10px] font-semibold text-[#234C6A]">
@@ -248,7 +381,8 @@ export default function UpcomingSessionModal({
                   </div>
                 </div>
               </div>
-            ))}
+              );
+            })}
           </div>
 
           <div className="flex gap-2 pt-2">
@@ -264,6 +398,64 @@ export default function UpcomingSessionModal({
           </div>
         </div>
       </div>
+
+      {briefSession ? (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/50 p-4"
+          onClick={e => {
+            if (e.target === e.currentTarget) setBriefSession(null);
+          }}
+        >
+          <div
+            className={`w-full ${
+              briefSession.detail ? 'max-w-[460px]' : 'max-w-sm'
+            } max-h-[88vh] overflow-y-auto rounded-2xl border border-slate-200 bg-white shadow-xl`}
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-3 border-b border-slate-200 px-5 py-4">
+              <div className="min-w-0">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
+                  {briefSession.briefLabel ||
+                    (briefSession.detail ? 'Session details' : 'Student background')}
+                </p>
+                <h3 className="mt-1 text-base font-semibold text-slate-900 truncate">
+                  {briefSession.detail
+                    ? briefSession.title
+                    : briefSession.with || briefSession.title}
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setBriefSession(null)}
+                className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+                aria-label="Close"
+              >
+                ✕
+              </button>
+            </div>
+            {briefSession.detail ? (
+              <div className="px-5 py-4">
+                <SeminarDetails
+                  {...briefSession.detail}
+                  theme="light"
+                  hideParticipants={role === 'student'}
+                />
+              </div>
+            ) : (
+              <dl className="space-y-2 px-5 py-4">
+                {(briefSession.studentBrief || []).map(row => (
+                  <div key={row.label} className="flex justify-between gap-4 text-sm">
+                    <dt className="shrink-0 text-slate-500">{row.label}</dt>
+                    <dd className="min-w-0 break-words text-right font-medium text-slate-800">
+                      {row.value}
+                    </dd>
+                  </div>
+                ))}
+              </dl>
+            )}
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

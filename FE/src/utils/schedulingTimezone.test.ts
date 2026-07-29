@@ -5,8 +5,10 @@ import {
   formatBookingConfirmation,
   formatPickedSlotWhenDisplay,
   formatSlotLabel,
+  getExpertSlotsForCalendarDay,
   getViewerDayStartMs,
   getViewerSlotsForDay,
+  getViewerSlotsForExpertDay,
   getViewerYmdFromCalendarDate,
   resolveViewerTimeZone,
   toYMDInTimeZone,
@@ -59,6 +61,56 @@ describe('schedulingTimezone', () => {
         'America/Chicago',
       ),
     ).toEqual([40, 41]);
+  });
+
+  it('getExpertSlotsForCalendarDay (daily mode) returns the weekday-specific slots', () => {
+    const expert = {
+      timeZone: 'UTC',
+      availabilityMode: 'daily',
+      timeSlots: [18, 19, 20, 40], // flat union; must NOT be used in daily mode
+      weeklyTimeSlots: { Mon: [18, 19], Tue: [40] },
+    };
+    // 2026-06-15 = Mon, 06-16 = Tue, 06-17 = Wed (UTC)
+    expect(
+      getExpertSlotsForCalendarDay(expert, new Date(2026, 5, 15), 'UTC'),
+    ).toEqual([18, 19]);
+    expect(
+      getExpertSlotsForCalendarDay(expert, new Date(2026, 5, 16), 'UTC'),
+    ).toEqual([40]);
+    // Wednesday is absent from the map -> no availability that day.
+    expect(
+      getExpertSlotsForCalendarDay(expert, new Date(2026, 5, 17), 'UTC'),
+    ).toEqual([]);
+  });
+
+  it('getExpertSlotsForCalendarDay (common mode) returns flat slots every day', () => {
+    const expert = {
+      timeZone: 'UTC',
+      availabilityMode: 'common',
+      timeSlots: [18, 19, 20],
+      weeklyTimeSlots: { Mon: [10] },
+    };
+    expect(
+      getExpertSlotsForCalendarDay(expert, new Date(2026, 5, 15), 'UTC'),
+    ).toEqual([18, 19, 20]);
+    expect(
+      getExpertSlotsForCalendarDay(expert, new Date(2026, 5, 16), 'UTC'),
+    ).toEqual([18, 19, 20]);
+  });
+
+  it('getViewerSlotsForExpertDay converts the weekday slots into viewer time', () => {
+    const expert = {
+      timeZone: 'UTC',
+      availabilityMode: 'daily',
+      weeklyTimeSlots: { Mon: [18, 19] },
+    };
+    // Same zone -> identity; Monday returns its slots, Tuesday returns none.
+    expect(
+      getViewerSlotsForExpertDay(expert, new Date(2026, 5, 15), 'UTC'),
+    ).toEqual([18, 19]);
+    expect(
+      getViewerSlotsForExpertDay(expert, new Date(2026, 5, 16), 'UTC'),
+    ).toEqual([]);
   });
 
   it('getViewerDayStartMs returns midnight in viewer timezone', () => {

@@ -33,8 +33,16 @@ test("adds application return URL overrides when provided", () => {
     );
     assert.equal(
         url,
-        "https://meet.wisdomlinked.com/room-123?jwt=abc#config.disableDeepLinking=true&config.deeplinking.disabled=true&config.disableInviteFunctions=true&config.securityUi.enabled=false&interfaceConfig.HIDE_INVITE_MORE_HEADER=true&interfaceConfig.MOBILE_APP_PROMO=true&config.whiteboard.enabled=true&config.welcomePage.customUrl=https%3A%2F%2Fwisdomlinked.com%2Fuser",
+        "https://meet.wisdomlinked.com/room-123?jwt=abc#config.disableDeepLinking=true&config.deeplinking.disabled=true&config.disableInviteFunctions=true&config.securityUi.enabled=false&interfaceConfig.HIDE_INVITE_MORE_HEADER=true&interfaceConfig.MOBILE_APP_PROMO=true&config.whiteboard.enabled=true&config.wisdomlinkedReturnUrl=https%3A%2F%2Fwisdomlinked.com%2Fuser",
     );
+});
+
+test("does not use whitelist-stripped welcomePage config for the return URL", () => {
+    const url = appendJitsiMobileWebOverrides(
+        "https://meet.wisdomlinked.com/room-123?jwt=abc",
+        "https://wisdomlinked.com/user",
+    );
+    assert.ok(!url.includes("welcomePage"));
 });
 
 test("adds WisdomLinked meeting id for Jitsi UI customization", () => {

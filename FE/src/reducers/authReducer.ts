@@ -1,6 +1,7 @@
 import { Reducer } from "redux";
 import { AuthActions, actionTypes } from "../actions/types";
 import { doUpdateMissedChats } from "../api/api";
+import { persistUserDetails } from "../utils/safeLocalStorage";
 
 interface AuthState {
     userDetails: any;
@@ -49,7 +50,7 @@ const authReducer = (
                 ...state.userDetails,
                 ...action.payload
             }
-            localStorage.setItem("currentUser", JSON.stringify(userDetails));
+            persistUserDetails(localStorage, "currentUser", userDetails);
             return {
                 ...state,
                 userDetails: userDetails

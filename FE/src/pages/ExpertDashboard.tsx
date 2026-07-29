@@ -20,12 +20,24 @@ import Sidebar from '../components/layout/Sidebar';
 import TopBar from '../components/layout/TopBar';
 import type { TopBarNotificationItem } from '../components/layout/TopBar';
 import StudentSettings from '../components/dashboard/StudentSettings';
-import { getAllCommunityChats, profileImageFetch, acceptIndividualAppointment, addMemberToGroup } from '../api/api';
+import {
+  getAllCommunityChats,
+  profileImageFetch,
+  acceptIndividualAppointment,
+  getSeminarSeatRequests,
+  approveSeminarSeatRequest,
+  rejectSeminarSeatRequest,
+  getMyFollowers,
+} from '../api/api';
 import { resolveProfileImageSrc } from '../utils/profileImage';
-import { fetchDmUnreadSnapshot } from '../api/chatApi';
+import { displayRoomLabel, shouldNotifyRoom } from '../utils/chatRoomLabel';
+import { seminarEnrollmentLabel } from '../utils/seminarCapacityLabel';
+import { fetchDmUnreadSnapshot, fetchChatUserProfile } from '../api/chatApi';
+import ProfileModal from './Dashboard/Messenger/Messages/ProfileModal';
+import { buildFallbackChatProfile, mergeChatProfile } from '../utils/chatProfileModal';
 import { useAppSelector } from '../store';
 import { logoutUser, updateMe } from '../actions/authActions';
-import { showErrorAlert, showSuccessAlert, showWarningAlert } from '../actions/alertActions';
+import { showErrorAlert, showWarningAlert } from '../actions/alertActions';
 import { patchDmUnreadRid, setChosenGroupChatDetails, setDmUnreadByRidBulk } from '../actions/chatActions';
 import { connectToRC, onSubscriptionChanged, subscribeToRoom } from '../services/rcRealtime';
 import { useEndMeetingOnReturn } from '../hooks/useEndMeetingOnReturn';
@@ -46,8 +58,80 @@ import Chatbot from '../components/chatbot';
 import UpcomingSessionModal, {
   type UpcomingModalSession,
 } from '../components/dashboard/UpcomingSessionModal';
+import FollowersModal, {
+  type FollowerEntry,
+} from '../components/dashboard/FollowersModal';
 
-function mapExpertGroupToModalSession(g: any): UpcomingModalSession {
+function refIdOf(ref: unknown): string {
+  if (!ref) return '';
+  if (typeof ref === 'string') return ref;
+  if (typeof ref === 'object') {
+    const o = ref as { _id?: unknown; id?: unknown };
+    return String(o._id ?? o.id ?? '');
+  }
+  return String(ref);
+}
+
+/** The student on a 1:1 booking may be the creator or the sole participant. */
+function pickStudent(g: any): any {
+  const candidates = [g?.createdBy, ...(Array.isArray(g?.participants) ? g.participants : [])];
+  const withBackground = candidates.find(
+    (p: any) =>
+      p &&
+      typeof p === 'object' &&
+      (p.degreeSought || p.intendedIntake || p.currentUniversity || p.gpa || p.country),
+  );
+  return withBackground || (typeof g?.createdBy === 'object' ? g.createdBy : null);
+}
+
+function mapSeatRequestToModalSession(r: any): UpcomingModalSession {
+  const seminar = r?.groupChat || {};
+  const start = seminar?.start ? new Date(seminar.start).getTime() : Date.now();
+  const when = seminar?.start
+    ? new Date(seminar.start).toLocaleString(undefined, {
+        dateStyle: 'medium',
+        timeStyle: 'short',
+      })
+    : '—';
+  const metaLines: string[] = [];
+  if (typeof r?.amount === 'number' && r.amount > 0) {
+    metaLines.push(`$${(r.amount / 100).toFixed(2)} held`);
+  } else {
+    metaLines.push('Free seminar');
+  }
+  if (r?.decisionDeadline) {
+    metaLines.push(`Decide by ${new Date(r.decisionDeadline).toLocaleString()}`);
+  }
+  return {
+    id: String(r._id),
+    title: seminar?.name || 'Seminar',
+    at: start,
+    when,
+    location: 'Online · WisdomLinked',
+    with: r?.customer?.username || r?.customer?.email || 'Student',
+    peerUserId: r?.customer?._id ? String(r.customer._id) : undefined,
+    seatRequestId: String(r._id),
+    detail: {
+      title: seminar?.name || 'Seminar',
+      description: seminar?.description,
+      start: seminar?.start,
+      duration: seminar?.duration,
+      price: typeof seminar?.price === 'number' ? seminar.price : undefined,
+      admin: seminar?.admin,
+      participants: seminar?.participants || [],
+      keywords: seminar?.keywords,
+      services: seminar?.services,
+      purposeOther: seminar?.purposeOther,
+      type: seminar?.type,
+      isRecurring: seminar?.isRecurring,
+      recurrenceFrequency: seminar?.recurrenceFrequency,
+    },
+    briefLabel: 'Seminar details',
+    metaLines,
+  };
+}
+
+function mapExpertGroupToModalSession(g: any, waitingCount = 0): UpcomingModalSession {
   const start = g?.start ? new Date(g.start).getTime() : Date.now();
   const when = g?.start
     ? new Date(g.start).toLocaleString(undefined, {
@@ -57,8 +141,7 @@ function mapExpertGroupToModalSession(g: any): UpcomingModalSession {
     : '—';
   let withLabel = 'Session';
   if (g?.type === 'seminar') {
-    const n = Array.isArray(g.participants) ? g.participants.length : 0;
-    withLabel = n ? `${n} enrolled` : 'Seminar';
+    withLabel = '';
   } else {
     const parts = g.participants || [];
     const first = parts[0];
@@ -70,6 +153,16 @@ function mapExpertGroupToModalSession(g: any): UpcomingModalSession {
       withLabel = '1:1 session';
     }
   }
+  const metaLines: string[] = [];
+  if (g?.type === 'seminar') {
+    const adminId = refIdOf(g?.admin);
+    const enrolled = (Array.isArray(g?.participants) ? g.participants : []).filter(
+      (p: unknown) => refIdOf(p) !== adminId,
+    ).length;
+    const maxAttendees =
+      typeof g?.maxAttendees === 'number' ? g.maxAttendees : null;
+    metaLines.push(seminarEnrollmentLabel(enrolled, waitingCount, maxAttendees));
+  }
   return {
     id: String(g._id),
     title: g.name || 'Session',
@@ -77,23 +170,26 @@ function mapExpertGroupToModalSession(g: any): UpcomingModalSession {
     when,
     location: 'Online · WisdomLinked',
     with: withLabel,
+    metaLines: metaLines.length ? metaLines : undefined,
+    peerUserId:
+      g?.type === 'individual' ? String(pickStudent(g)?._id ?? '') : undefined,
+    detail: {
+      title: g?.name || 'Session',
+      description: g?.description,
+      start: g?.start,
+      duration: g?.duration,
+      price: typeof g?.price === 'number' ? g.price : undefined,
+      admin: g?.admin,
+      participants: g?.participants || [],
+      keywords: g?.keywords,
+      services: g?.services,
+      purposeOther: g?.purposeOther,
+      type: g?.type,
+      isRecurring: g?.isRecurring,
+      recurrenceFrequency: g?.recurrenceFrequency,
+    },
+    briefLabel: g?.type === 'seminar' ? 'Seminar details' : 'Session details',
   };
-}
-
-function mapPendingSeminarToModal(pg: any): UpcomingModalSession {
-  const g = pg?.groupChatId;
-  if (!g?._id) {
-    return {
-      id: String(pg._id || 'pending'),
-      title: 'Seminar',
-      at: Date.now(),
-      when: '—',
-      location: 'Online · WisdomLinked',
-      with: 'Pending invite',
-    };
-  }
-  const base = mapExpertGroupToModalSession(g);
-  return { ...base, with: 'Awaiting confirmation' };
 }
 
 export default function ExpertDashboard() {
@@ -112,8 +208,17 @@ export default function ExpertDashboard() {
   useEffect(() => {
     window.localStorage.setItem('expertDashboardView', activeItem);
   }, [activeItem]);
+  // Child views (e.g. the calendar) request the chat tab by firing this event.
+  useEffect(() => {
+    const onNav = () => setActiveItem('chat');
+    window.addEventListener('wl-open-chat-nav', onNav);
+    return () => window.removeEventListener('wl-open-chat-nav', onNav);
+  }, []);
   const [dmUnreadByRid, setDmUnreadByRid] = useState<Record<string, number>>({});
   const [rcRoomNameByRid, setRcRoomNameByRid] = useState<Record<string, string>>({});
+  const [rcDisplayNameByRid, setRcDisplayNameByRid] = useState<Record<string, string>>({});
+  const [roomNamesUnresolved, setRoomNamesUnresolved] = useState(false);
+  const [knownRids, setKnownRids] = useState<string[]>([]);
   const [communityRidToName, setCommunityRidToName] = useState<Record<string, string>>({});
   const [range, setRange] = useState<'today' | 'week' | 'all'>('all');
   const [avatarUrl, setAvatarUrl] = useState<string | undefined>(undefined);
@@ -121,6 +226,85 @@ export default function ExpertDashboard() {
     kind: 'seminar' | 'oneToOne';
     status: 'booked' | 'pending';
   } | null>(null);
+
+  // Student profile card opened from a row in the upcoming-sessions modal or followers list.
+  const [peerProfile, setPeerProfile] = useState<any | null>(null);
+  const [peerProfileOpen, setPeerProfileOpen] = useState(false);
+
+  const openPeerProfileById = useCallback(
+    async (peerId: string, username?: string, image?: string | null) => {
+      if (!peerId) return;
+      const fallback = buildFallbackChatProfile(
+        { userId: peerId, username: username || 'Student', image: image ?? null },
+        String(userDetails?.role || ''),
+      );
+      setPeerProfile(fallback);
+      setPeerProfileOpen(true);
+      const response = await fetchChatUserProfile(peerId);
+      if (response?.success && 'result' in response && response.result) {
+        setPeerProfile(mergeChatProfile(fallback, response.result));
+      }
+    },
+    [userDetails?.role],
+  );
+
+  const handleViewPeerProfile = useCallback(
+    (session: UpcomingModalSession) =>
+      openPeerProfileById(String(session.peerUserId || ''), session.with),
+    [openPeerProfileById],
+  );
+
+  const handleClosePeerProfile = useCallback(() => {
+    setPeerProfileOpen(false);
+    setPeerProfile(null);
+  }, []);
+
+  // Followers list opened from the top-right button; clicking a row opens the student card.
+  const [followers, setFollowers] = useState<FollowerEntry[]>([]);
+  const [followersOpen, setFollowersOpen] = useState(false);
+  const [followersLoading, setFollowersLoading] = useState(false);
+
+  const loadFollowers = useCallback(async () => {
+    setFollowersLoading(true);
+    try {
+      const res: any = await getMyFollowers();
+      setFollowers(Array.isArray(res?.result) ? res.result : []);
+    } finally {
+      setFollowersLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (String(userDetails?.role).toLowerCase() !== 'expert') return;
+    void loadFollowers();
+  }, [userDetails?.role, userDetails?._id, loadFollowers]);
+
+  const handleOpenFollowers = useCallback(() => {
+    setFollowersOpen(true);
+    void loadFollowers();
+  }, [loadFollowers]);
+
+  const handleSelectFollower = useCallback(
+    (follower: FollowerEntry) => {
+      setFollowersOpen(false);
+      void openPeerProfileById(String(follower._id), follower.username, follower.image ?? null);
+    },
+    [openPeerProfileById],
+  );
+
+  // Overflow seminar seat requests (students who registered past the cap) awaiting
+  // the host's approval — surfaced as the "Pending seminars" card + modal.
+  const [seatRequests, setSeatRequests] = useState<any[]>([]);
+
+  const loadSeatRequests = useCallback(async () => {
+    const res: any = await getSeminarSeatRequests();
+    setSeatRequests(Array.isArray(res?.result) ? res.result : []);
+  }, []);
+
+  useEffect(() => {
+    if (String(userDetails?.role).toLowerCase() !== 'expert') return;
+    void loadSeatRequests();
+  }, [userDetails?.role, userDetails?._id, loadSeatRequests]);
 
   const userDetailsRef = useRef(userDetails);
   userDetailsRef.current = userDetails;
@@ -206,6 +390,13 @@ export default function ExpertDashboard() {
     } else {
       setRcRoomNameByRid({});
     }
+    setRcDisplayNameByRid(
+      snapshot?.success && snapshot.displayNameByRid && typeof snapshot.displayNameByRid === 'object'
+        ? snapshot.displayNameByRid
+        : {},
+    );
+    setRoomNamesUnresolved(Boolean(snapshot?.nameResolutionFailed));
+    setKnownRids(Array.isArray(snapshot?.knownRids) ? snapshot.knownRids : []);
   }, [dispatch]);
 
   useEffect(() => {
@@ -221,6 +412,13 @@ export default function ExpertDashboard() {
       } else {
         setRcRoomNameByRid({});
       }
+      setRcDisplayNameByRid(
+        snapshot?.success && snapshot.displayNameByRid && typeof snapshot.displayNameByRid === 'object'
+          ? snapshot.displayNameByRid
+          : {},
+      );
+      setRoomNamesUnresolved(Boolean(snapshot?.nameResolutionFailed));
+    setKnownRids(Array.isArray(snapshot?.knownRids) ? snapshot.knownRids : []);
       await loadCommunityNotificationRooms();
     };
     void boot();
@@ -291,17 +489,14 @@ export default function ExpertDashboard() {
     return s;
   }, [userDetails?.directConversations]);
 
+  const knownRidSet = useMemo(() => new Set(knownRids.map(String)), [knownRids]);
+
   const allowedChatRidSet = useMemo(() => {
     const s = new Set<string>();
     dmRidSet.forEach(rid => s.add(rid));
-    /** Include unread snapshot rooms only for WL-style channel names (exclude default rooms like "general"). */
+    /** Include unread snapshot rooms only when the backend matched them to a WL chat (an unidentified room is one we cannot open). */
     Object.entries(dmUnreadByRid || {}).forEach(([rid]) => {
-      const roomName = String(rcRoomNameByRid?.[rid] || '').trim().toLowerCase();
-      const looksLikeWlChannel =
-        roomName.startsWith('wl-group-') ||
-        roomName.startsWith('wl_') ||
-        roomName.includes('community');
-      if (looksLikeWlChannel) s.add(String(rid));
+      if (shouldNotifyRoom(rid, knownRidSet, rcRoomNameByRid?.[rid], roomNamesUnresolved)) s.add(String(rid));
     });
     (userDetails?.generalChats ?? []).forEach((g: any) => {
       if (g?.rcChannelId) s.add(String(g.rcChannelId));
@@ -311,7 +506,7 @@ export default function ExpertDashboard() {
     });
     Object.keys(communityRidToName).forEach(rid => s.add(rid));
     return s;
-  }, [dmRidSet, dmUnreadByRid, rcRoomNameByRid, userDetails?.generalChats, userDetails?.groupChats, communityRidToName]);
+  }, [dmRidSet, dmUnreadByRid, rcRoomNameByRid, knownRidSet, roomNamesUnresolved, userDetails?.generalChats, userDetails?.groupChats, communityRidToName]);
 
   const filteredUnreadByRid = useMemo(() => {
     const out: Record<string, number> = {};
@@ -335,12 +530,19 @@ export default function ExpertDashboard() {
   }, [userDetails?.generalChats, userDetails?.groupChats]);
 
   const roomLabelByRid = useMemo(
-    () => ({ ...rcRoomNameByRid, ...dmNameByRid, ...groupNameByRid, ...communityRidToName }),
-    [rcRoomNameByRid, dmNameByRid, groupNameByRid, communityRidToName],
+    () => ({ ...rcDisplayNameByRid, ...dmNameByRid, ...groupNameByRid, ...communityRidToName }),
+    [rcDisplayNameByRid, dmNameByRid, groupNameByRid, communityRidToName],
   );
+
+  const namedRidsRef = useRef<Set<string>>(new Set());
+  const nameLookupTriedRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    namedRidsRef.current = new Set(Object.keys(roomLabelByRid));
+  }, [roomLabelByRid]);
 
   useEffect(() => {
     let debounce: ReturnType<typeof setTimeout> | undefined;
+    let resolveNames: ReturnType<typeof setTimeout> | undefined;
     const unsubSub = onSubscriptionChanged(({ roomId, type, unread }) => {
       if (type && !['d', 'c', 'p'].includes(type)) return;
       const rid = String(roomId || '');
@@ -353,6 +555,13 @@ export default function ExpertDashboard() {
         return next;
       });
       dispatch(patchDmUnreadRid(rid, nextUnread));
+      if (nextUnread > 0 && !namedRidsRef.current.has(rid) && !nameLookupTriedRef.current.has(rid)) {
+        nameLookupTriedRef.current.add(rid);
+        if (resolveNames) window.clearTimeout(resolveNames);
+        resolveNames = window.setTimeout(() => {
+          void hydrateUnreadSnapshot();
+        }, 600);
+      }
       if (type === 'c' || type === 'p') {
         if (debounce) window.clearTimeout(debounce);
         debounce = window.setTimeout(() => {
@@ -363,8 +572,9 @@ export default function ExpertDashboard() {
     return () => {
       unsubSub();
       if (debounce) window.clearTimeout(debounce);
+      if (resolveNames) window.clearTimeout(resolveNames);
     };
-  }, [userDetails?.email, loadCommunityNotificationRooms, dispatch]);
+  }, [userDetails?.email, loadCommunityNotificationRooms, hydrateUnreadSnapshot, dispatch]);
 
   const totalUnreadDm = useMemo(
     () => Object.values(filteredUnreadByRid).reduce((sum, n) => sum + (Number(n) || 0), 0),
@@ -377,10 +587,10 @@ export default function ExpertDashboard() {
         .map(([rid, count]) => {
           const n = Number(count) || 0;
           const isDm = dmRidSet.has(rid);
-          const label = roomLabelByRid[rid] || (isDm ? 'Someone' : 'Chat');
+          const label = displayRoomLabel(roomLabelByRid[rid], isDm ? 'Someone' : 'a group chat');
           return {
             id: `chat-${rid}`,
-            title: `${label} messaged you`,
+            title: isDm ? `${label} messaged you` : `New message${n !== 1 ? 's' : ''} in ${label}`,
             meta: `${n > 99 ? '99+' : n} unread message${n !== 1 ? 's' : ''}`,
             unreadCount: n,
             icon: <MessageSquare className="h-3.5 w-3.5 text-[#1A3A4A]" aria-hidden />,
@@ -400,7 +610,7 @@ export default function ExpertDashboard() {
       { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
       { id: 'chat', label: 'Chat', icon: MessageSquare },
       { id: 'clients', label: 'Clients', icon: Users },
-      { id: 'seminar', label: 'Seminar', icon: BookOpen },
+      { id: 'seminar', label: 'Seminars', icon: BookOpen },
       { id: 'calendar', label: 'Calendar', icon: Calendar },
       { id: 'join-meeting', label: 'Join Meeting', icon: Video },
       { id: 'availability', label: 'Availability', icon: Clock },
@@ -435,11 +645,10 @@ export default function ExpertDashboard() {
 
   const {
     acceptedSeminars,
-    pendingSeminars,
     bookedSessions,
     pendingSessions,
   } = useMemo(() => {
-    const { groupChats = [], pendingGroupChats = [] } = (userDetails || {}) as any;
+    const { groupChats = [] } = (userDetails || {}) as any;
     const nowTs = Date.now();
 
     const upcoming = (start: any, end: any) => {
@@ -447,12 +656,25 @@ export default function ExpertDashboard() {
       return endTs >= nowTs;
     };
 
-    const seminars = (groupChats || []).filter(
+    const seminarsRaw = (groupChats || []).filter(
       (g: any) =>
         g.type === 'seminar' &&
         upcoming(g.start, g.end) &&
         inSelectedRange(new Date(g.start))
     );
+
+    const seenSeminarSeries = new Set<string>();
+    const seminars: any[] = [];
+    for (const g of [...seminarsRaw].sort(
+      (a: any, b: any) => new Date(a.start).getTime() - new Date(b.start).getTime(),
+    )) {
+      const sid = g?.seriesId ? String(g.seriesId) : null;
+      if (sid) {
+        if (seenSeminarSeries.has(sid)) continue;
+        seenSeminarSeries.add(sid);
+      }
+      seminars.push(g);
+    }
 
     const sessions = (groupChats || []).filter(
       (g: any) =>
@@ -464,22 +686,21 @@ export default function ExpertDashboard() {
 
     // Pending requests are NOT scoped to the today/week range — the expert must
     // see every booking awaiting action regardless of which date window is shown.
-    const pendingSess = (groupChats || []).filter(
-      (g: any) =>
-        g.type === 'individual' &&
-        g.status === 'pending' &&
-        upcoming(g.start, g.end)
-    );
-
-    const pendingSemInvites = (pendingGroupChats || []).filter(
-      (pg: any) =>
-        pg.groupChatId?.type === 'seminar' &&
-        upcoming(pg.groupChatId.start, pg.groupChatId.end)
-    );
+    const pendingSess = (groupChats || [])
+      .filter(
+        (g: any) =>
+          g.type === 'individual' &&
+          g.status === 'pending' &&
+          upcoming(g.start, g.end)
+      )
+      .sort(
+        (a: any, b: any) =>
+          new Date(b.createdAt || b.start).getTime() -
+          new Date(a.createdAt || a.start).getTime()
+      );
 
     return {
       acceptedSeminars: seminars,
-      pendingSeminars: pendingSemInvites,
       bookedSessions: sessions,
       pendingSessions: pendingSess,
     };
@@ -488,17 +709,31 @@ export default function ExpertDashboard() {
   // Accept flows. The api wrappers return `false` on error (alert/logout already
   // handled), or the payload on success — refresh via updateMe() either way.
   const [acceptingId, setAcceptingId] = useState<string | null>(null);
+  // Just-accepted 1:1 rows on the dashboard show a confirmation in place of the
+  // card for a few seconds instead of a toast banner.
+  const [acceptedInline, setAcceptedInline] = useState<
+    Record<string, { message: string; session: any }>
+  >({});
+  const inlineNoticeTimers = useRef<number[]>([]);
+  useEffect(
+    () => () => {
+      inlineNoticeTimers.current.forEach(id => window.clearTimeout(id));
+    },
+    [],
+  );
 
+  // Accepting a 1:1 no longer pops a banner — callers surface an in-card message.
   const handleAcceptSession = useCallback(
-    async (session: any) => {
+    async (session: any): Promise<boolean> => {
       setAcceptingId(String(session._id));
       try {
         const res: any = await acceptIndividualAppointment({ groupChatId: session._id });
-        if (res === false) return;
+        if (res === false) return false;
         dispatch(updateMe() as any);
-        dispatch(showSuccessAlert('1:1 session accepted.'));
+        return true;
       } catch {
         dispatch(showErrorAlert('Could not accept the session. Please try again.'));
+        return false;
       } finally {
         setAcceptingId(null);
       }
@@ -506,45 +741,109 @@ export default function ExpertDashboard() {
     [dispatch],
   );
 
-  const handleAcceptSeminar = useCallback(
-    async (pg: any) => {
-      setAcceptingId(String(pg._id));
-      try {
-        const res: any = await addMemberToGroup({
-          _id: pg._id,
-          friendId: pg.customerId?._id,
-          groupChatId: pg.groupChatId?._id,
+  // Dashboard "1:1 Sessions" list: accept, then replace the row with a
+  // transient confirmation that clears after 7 seconds.
+  const acceptInlineSession = useCallback(
+    async (s: any) => {
+      const ok = await handleAcceptSession(s);
+      if (!ok) return;
+      const studentName =
+        pickStudent(s)?.username ||
+        (Array.isArray(s.participants) ? s.participants : []).find(
+          (p: any) => p && typeof p === 'object' && p.username,
+        )?.username ||
+        'The student';
+      const title = s.name || '';
+      const message = `${studentName} has been accepted for the 1:1 session${
+        title ? ` “${title}”` : ''
+      }.`;
+      const id = String(s._id);
+      setAcceptedInline(prev => ({ ...prev, [id]: { message, session: s } }));
+      const timer = window.setTimeout(() => {
+        setAcceptedInline(prev => {
+          const next = { ...prev };
+          delete next[id];
+          return next;
         });
-        if (res === false) return;
-        dispatch(updateMe() as any);
-        dispatch(showSuccessAlert('Seminar registration approved.'));
-      } catch {
-        dispatch(showErrorAlert('Could not approve the registration. Please try again.'));
-      } finally {
-        setAcceptingId(null);
-      }
+      }, 7000);
+      inlineNoticeTimers.current.push(timer);
     },
-    [dispatch],
+    [handleAcceptSession],
   );
+
+  // Keep just-accepted rows on screen for the notice window even after
+  // pendingSessions refreshes them out of the list.
+  const inlinePendingSessions = useMemo(() => {
+    const present = new Set(pendingSessions.map((s: any) => String(s._id)));
+    const lingering = Object.values(acceptedInline)
+      .filter(n => !present.has(String(n.session._id)))
+      .map(n => n.session);
+    return [...pendingSessions, ...lingering];
+  }, [pendingSessions, acceptedInline]);
 
   const expertModalSessions = useMemo((): UpcomingModalSession[] => {
     if (!expertUpcomingModal) return [];
     const { kind, status } = expertUpcomingModal;
     if (kind === 'oneToOne') {
       const list = status === 'booked' ? bookedSessions : pendingSessions;
-      return list.map(mapExpertGroupToModalSession);
+      return list.map((g: any) => {
+        const base = mapExpertGroupToModalSession(g);
+        if (status !== 'pending') return base;
+        const createdById =
+          typeof g.createdBy === 'object' ? g.createdBy?._id : g.createdBy;
+        const expertProposed = String(createdById) === String(userDetails?._id);
+        return { ...base, canAccept: !expertProposed };
+      });
     }
-    if (status === 'booked') {
-      return acceptedSeminars.map(mapExpertGroupToModalSession);
+    if (status === 'pending') {
+      return seatRequests.map(mapSeatRequestToModalSession);
     }
-    return pendingSeminars.map(mapPendingSeminarToModal);
+    const waitingBySeminar: Record<string, number> = {};
+    for (const r of seatRequests) {
+      const sid = refIdOf(r?.groupChat);
+      if (sid) waitingBySeminar[sid] = (waitingBySeminar[sid] || 0) + 1;
+    }
+    return acceptedSeminars.map((g: any) =>
+      mapExpertGroupToModalSession(g, waitingBySeminar[String(g?._id)] || 0),
+    );
   }, [
     expertUpcomingModal,
     bookedSessions,
     pendingSessions,
     acceptedSeminars,
-    pendingSeminars,
+    seatRequests,
+    userDetails,
   ]);
+
+  // Returns the confirmation message so the modal can show it in-card (no banner).
+  const handleSeatDecision = useCallback(
+    async (session: UpcomingModalSession, action: 'accept' | 'decline'): Promise<string | void> => {
+      const requestId = session.seatRequestId;
+      if (!requestId) return;
+      const raw = seatRequests.find(r => String(r._id) === String(requestId));
+      const studentName = session.with || raw?.customer?.username || raw?.customer?.email || 'The student';
+      const seminarTitle = session.title || raw?.groupChat?.name || 'the seminar';
+      const cents = typeof raw?.amount === 'number' ? raw.amount : 0;
+      const amountLabel = cents > 0 ? `$${(cents / 100).toFixed(2)}` : '';
+      try {
+        const res: any = action === 'accept'
+          ? await approveSeminarSeatRequest(requestId)
+          : await rejectSeminarSeatRequest(requestId);
+        if (res === false || res?.status === 'FAIL' || res?.error) {
+          dispatch(showErrorAlert(res?.error || 'Could not update the seat request.'));
+          return;
+        }
+        setSeatRequests(prev => prev.filter(r => String(r._id) !== String(requestId)));
+        dispatch(updateMe() as any);
+        return action === 'accept'
+          ? `${studentName} has been admitted to the seminar “${seminarTitle}”.${amountLabel ? ` A payment of ${amountLabel} has been successfully charged.` : ''}`
+          : `${studentName} was not admitted to “${seminarTitle}”.${amountLabel ? ` The payment authorization of ${amountLabel} has been released.` : ''}`;
+      } catch {
+        dispatch(showErrorAlert('Could not update the seat request. Please try again.'));
+      }
+    },
+    [dispatch, seatRequests],
+  );
 
   const handleExpertJoinSession = (session: UpcomingModalSession) => {
     const id = session.id;
@@ -630,9 +929,23 @@ export default function ExpertDashboard() {
       <div className="px-6 py-7 space-y-6">
         {/* Stats row */}
         <section>
-          <h2 className="text-2xl font-semibold text-slate-900 mb-3">
-            Overview
-          </h2>
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <h2 className="text-2xl font-semibold text-slate-900">
+              Overview
+            </h2>
+            <button
+              type="button"
+              onClick={handleOpenFollowers}
+              className="inline-flex items-center gap-2 rounded-lg border border-[#234C6A] bg-[#234C6A] px-3.5 py-2.5 text-[14px] font-semibold text-white shadow-[0_12px_30px_rgba(26,58,74,0.16)] transition-shadow hover:shadow-[0_18px_45px_rgba(26,58,74,0.22)]"
+              aria-label="Followers"
+            >
+              <Users className="h-4 w-4 text-white" aria-hidden />
+              <span>Followers</span>
+              <span className="inline-flex min-w-[20px] items-center justify-center rounded-md bg-white/15 px-1.5 text-[12px] font-semibold text-white">
+                {followers.length}
+              </span>
+            </button>
+          </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-4 gap-5">
             <StatCard
               label="Upcoming 1:1 sessions"
@@ -665,14 +978,15 @@ export default function ExpertDashboard() {
               }
             />
             <StatCard
-              label="Pending seminar requests"
-              value={pendingSeminars.length}
+              label="Pending seminars"
+              value={seatRequests.length}
               icon={AlertCircle}
               color="warning"
-              tooltip="Seminar invites awaiting your confirmation"
-              onClick={() =>
-                setExpertUpcomingModal({ kind: 'seminar', status: 'pending' })
-              }
+              tooltip="Seat requests past capacity awaiting your approval"
+              onClick={() => {
+                void loadSeatRequests();
+                setExpertUpcomingModal({ kind: 'seminar', status: 'pending' });
+              }}
             />
           </div>
         </section>
@@ -713,6 +1027,52 @@ export default function ExpertDashboard() {
               </span>
             </div>
             <div className="space-y-3 max-h-[260px] overflow-y-auto">
+              {inlinePendingSessions.map((s: any) => {
+                const notice = acceptedInline[String(s._id)];
+                if (notice) {
+                  return (
+                    <div
+                      key={s._id}
+                      className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2.5 text-[13px] font-medium text-emerald-800"
+                    >
+                      {notice.message}
+                    </div>
+                  );
+                }
+                const createdById =
+                  typeof s.createdBy === 'object' ? s.createdBy?._id : s.createdBy;
+                const expertProposed =
+                  String(createdById) === String(userDetails?._id);
+                return (
+                  <div
+                    key={s._id}
+                    className="flex items-start justify-between gap-2 rounded-xl border border-amber-100 bg-amber-50 px-3 py-2.5"
+                  >
+                    <div className="min-w-0">
+                      <div className="text-[13px] font-semibold text-slate-900">
+                        {s.name}
+                      </div>
+                      <div className="text-[11px] text-slate-600">
+                        {new Date(s.start).toLocaleString()}
+                      </div>
+                    </div>
+                    {expertProposed ? (
+                      <span className="shrink-0 inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-700">
+                        Awaiting payment
+                      </span>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => acceptInlineSession(s)}
+                        disabled={acceptingId === String(s._id)}
+                        className="shrink-0 inline-flex items-center rounded-[4px] bg-[#234C6A] px-3 py-1.5 text-[11px] font-semibold text-white hover:brightness-110 disabled:opacity-60"
+                      >
+                        {acceptingId === String(s._id) ? 'Accepting…' : 'Accept'}
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
               {bookedSessions.map((s: any) => (
                 <div
                   key={s._id}
@@ -731,29 +1091,6 @@ export default function ExpertDashboard() {
                   </span>
                 </div>
               ))}
-              {pendingSessions.map((s: any) => (
-                <div
-                  key={s._id}
-                  className="flex items-start justify-between gap-2 rounded-xl border border-amber-100 bg-amber-50 px-3 py-2.5"
-                >
-                  <div className="min-w-0">
-                    <div className="text-[13px] font-semibold text-slate-900">
-                      {s.name}
-                    </div>
-                    <div className="text-[11px] text-slate-600">
-                      {new Date(s.start).toLocaleString()}
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => handleAcceptSession(s)}
-                    disabled={acceptingId === String(s._id)}
-                    className="shrink-0 inline-flex items-center rounded-[4px] bg-[#234C6A] px-3 py-1.5 text-[11px] font-semibold text-white hover:brightness-110 disabled:opacity-60"
-                  >
-                    {acceptingId === String(s._id) ? 'Accepting…' : 'Accept'}
-                  </button>
-                </div>
-              ))}
               {!bookedSessions.length && !pendingSessions.length && (
                 <p className="text-[12px] text-slate-500">
                   No upcoming 1:1 sessions in this range.
@@ -769,7 +1106,7 @@ export default function ExpertDashboard() {
                 Seminars
               </h4>
               <span className="text-[11px] text-slate-500">
-                {acceptedSeminars.length} accepted · {pendingSeminars.length} invites
+                {acceptedSeminars.length} upcoming
               </span>
             </div>
             <div className="space-y-3 max-h-[260px] overflow-y-auto">
@@ -791,37 +1128,7 @@ export default function ExpertDashboard() {
                   </span>
                 </div>
               ))}
-              {pendingSeminars.map((pg: any) => (
-                <div
-                  key={pg._id}
-                  className="flex items-start justify-between gap-2 rounded-xl border border-amber-100 bg-amber-50 px-3 py-2.5"
-                >
-                  <div className="min-w-0">
-                    <div className="text-[13px] font-semibold text-slate-900">
-                      {pg.groupChatId?.name}
-                    </div>
-                    <div className="text-[11px] text-slate-600">
-                      {pg.groupChatId?.start
-                        ? new Date(pg.groupChatId.start).toLocaleString()
-                        : ''}
-                    </div>
-                    {pg.customerId?.username || pg.customerId?.email ? (
-                      <div className="text-[11px] text-slate-500">
-                        {pg.customerId?.username || pg.customerId?.email}
-                      </div>
-                    ) : null}
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => handleAcceptSeminar(pg)}
-                    disabled={acceptingId === String(pg._id)}
-                    className="shrink-0 inline-flex items-center rounded-[4px] bg-[#234C6A] px-3 py-1.5 text-[11px] font-semibold text-white hover:brightness-110 disabled:opacity-60"
-                  >
-                    {acceptingId === String(pg._id) ? 'Approving…' : 'Approve'}
-                  </button>
-                </div>
-              ))}
-              {!acceptedSeminars.length && !pendingSeminars.length && (
+              {!acceptedSeminars.length && (
                 <p className="text-[12px] text-slate-500">
                   No upcoming seminars in this range.
                 </p>
@@ -874,11 +1181,43 @@ export default function ExpertDashboard() {
             role="expert"
             sessions={expertModalSessions}
             onClose={() => setExpertUpcomingModal(null)}
+            onViewProfile={handleViewPeerProfile}
             onJoinSession={
               expertUpcomingModal.status === 'booked'
                 ? handleExpertJoinSession
                 : undefined
             }
+            onAcceptSeatRequest={
+              expertUpcomingModal.kind === 'seminar' && expertUpcomingModal.status === 'pending'
+                ? (s) => handleSeatDecision(s, 'accept')
+                : undefined
+            }
+            onDeclineSeatRequest={
+              expertUpcomingModal.kind === 'seminar' && expertUpcomingModal.status === 'pending'
+                ? (s) => handleSeatDecision(s, 'decline')
+                : undefined
+            }
+            onAcceptSession={
+              expertUpcomingModal.kind === 'oneToOne' && expertUpcomingModal.status === 'pending'
+                ? (s) => handleAcceptSession({ _id: s.id, name: s.title, with: s.with })
+                : undefined
+            }
+          />
+        ) : null}
+        <FollowersModal
+          isOpen={followersOpen}
+          followers={followers}
+          loading={followersLoading}
+          onClose={() => setFollowersOpen(false)}
+          onSelect={handleSelectFollower}
+        />
+        {peerProfile ? (
+          <ProfileModal
+            isOpen={peerProfileOpen}
+            onClose={handleClosePeerProfile}
+            userDetails={peerProfile}
+            viewerRole={userDetails?.role}
+            previewImage={peerProfile?.image}
           />
         ) : null}
       </div>

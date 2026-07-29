@@ -8,7 +8,7 @@ import {
     profileImageFetch,
 } from "../../../api/api";
 import ShowFieldError from "../../../components/ShowFieldError";
-import MultiSelectionWithInputTag from "../../../components/MultiSelectionWithInputTag";
+import MajorSelect from "../../../components/MajorSelect";
 import SelectionWithCheckBox from "../../../components/SelectionWithCheckBox";
 import PhoneInput from "react-phone-input-2";
 import { checkTitleNameInvalid } from "../../../actions/common";
@@ -19,7 +19,44 @@ import FileBrowser from "../../../components/fileBrowser";
 import { useDispatch } from "react-redux";
 import { showErrorAlert, showSuccessAlert, showWarningAlert } from '../../../actions/alertActions';
 import { updateMe } from "../../../actions/authActions";
-import { filterApiServicesToCanonical } from "../../../constants/serviceOptions";
+import { SERVICE_OPTIONS, matchesServiceOption } from "../../../constants/serviceOptions";
+
+/** react-select options for the three canonical services (value === label for clean round-trips). */
+const SERVICE_SELECT_OPTIONS = SERVICE_OPTIONS.map((o) => ({ value: o.label, label: o.label }));
+
+/**
+ * Stored services are populated Service docs (or strings) whose value/label may be legacy or
+ * corrupted (e.g. an ObjectId saved as the label). Map each entry to its canonical option so the
+ * UI shows real labels instead of ids; keep `_id` so the unsaved-changes check (compares by _id)
+ * still matches userDetails.services. Entries that match no canonical service are dropped.
+ */
+const toServiceOptions = (entries: unknown[] | undefined) =>
+    (Array.isArray(entries) ? entries : [])
+        .map((entry: any) => {
+            const doc =
+                typeof entry === 'string' ? { value: entry, name: entry, label: entry } : entry;
+            const opt = SERVICE_OPTIONS.find((o) => matchesServiceOption(doc, o));
+            if (!opt) return null;
+            return { _id: typeof entry === 'object' ? entry?._id : undefined, value: opt.label, label: opt.label };
+        })
+        .filter(Boolean);
+
+const toMajorStrings = (u: any): string[] => {
+    const fromKeywords = (Array.isArray(u?.keywords) ? u.keywords : []).map((k: any) =>
+        typeof k === 'string' ? k : String(k?.value ?? k?.label ?? k?.name ?? ''),
+    );
+    const fromCustom = Array.isArray(u?.customKeywords) ? u.customKeywords : [];
+    const seen = new Set<string>();
+    const out: string[] = [];
+    for (const raw of [...fromKeywords, ...fromCustom]) {
+        const v = String(raw || '').trim();
+        const key = v.toLowerCase();
+        if (!v || seen.has(key)) continue;
+        seen.add(key);
+        out.push(v);
+    }
+    return out;
+};
 import {
     dataUriToImageFile,
     saveProfilePhotoFile,
@@ -79,8 +116,7 @@ const ExpertProfile = ({
     const [name, set_name] = useState('');
     const [title, set_title] = useState('');
     const [description, set_description] = useState('');
-    const [keywords, set_keywords] = useState([]);
-    const [services, set_services] = useState([]);
+    const [services, set_services] = useState<Array<any>>([]);
     const [selectedKeywords, set_selectedKeywords] = useState<Array<any>>([]);
     const [selectedServices, set_selectedServices] = useState<Array<any>>([]);
     const [country, set_country] = useState<any>();
@@ -109,8 +145,8 @@ const ExpertProfile = ({
         set_name(userDetails.username || '');
         set_title(userDetails.title || '');
         set_description(userDetails.description || '');
-        set_selectedKeywords(userDetails.keywords || []);
-        set_selectedServices(userDetails.services || []);
+        set_selectedKeywords(toMajorStrings(userDetails));
+        set_selectedServices(toServiceOptions(userDetails.services));
         set_country(userDetails.country || null);
         set_state(userDetails.state || null);
         set_city(userDetails.city || null);
@@ -136,8 +172,8 @@ const ExpertProfile = ({
         set_name(userDetails.username || '');
         set_title(userDetails.title || '');
         set_description(userDetails.description || '');
-        set_selectedKeywords(userDetails.keywords || []);
-        set_selectedServices(userDetails.services || []);
+        set_selectedKeywords(toMajorStrings(userDetails));
+        set_selectedServices(toServiceOptions(userDetails.services));
         set_country(userDetails.country || null);
         set_state(userDetails.state || null);
         set_city(userDetails.city || null);
@@ -294,8 +330,7 @@ const ExpertProfile = ({
     const getKeywordsAndServices = async () => {
         const response: any = await doGetKeywordsAndServices();
         if (response) {
-            set_keywords(response.keywords || []);
-            set_services(filterApiServicesToCanonical(response.services || []));
+            set_services(SERVICE_SELECT_OPTIONS);
         }
     };
 
@@ -385,7 +420,7 @@ const ExpertProfile = ({
                         <div className="flex flex-col items-center gap-6 md:flex-row md:items-start">
                             {/* Avatar */}
                             <div className="flex flex-col items-center gap-2 shrink-0">
-                                <div className="rounded-2xl overflow-hidden ring-2 ring-slate-100 shadow-md">
+                                <div className="wl-photo-picker rounded-2xl overflow-hidden ring-2 ring-slate-100 shadow-md">
                                     <ReactImagePickerEditor
                                         config={{
                                             borderRadius: '16px',
@@ -395,6 +430,10 @@ const ExpertProfile = ({
                                             objectFit: 'cover',
                                             compressInitial: 50,
                                             aspectRatio: 1,
+                                            hideAddBtn: true,
+                                            hideEditBtn: true,
+                                            hideDownloadBtn: true,
+                                            hideDeleteBtn: true,
                                         }}
                                         imageSrcProp={imageSrc}
                                         imageChanged={(newDataUri: any) => set_imageSrc(newDataUri)}
@@ -500,10 +539,10 @@ const ExpertProfile = ({
                             <div className="space-y-4">
                                 <div>
                                     <FieldLabel required>Majors / disciplines</FieldLabel>
-                                    <MultiSelectionWithInputTag
-                                        options={keywords}
-                                        selectedOptions={selectedKeywords}
-                                        set_selectedOptions={set_selectedKeywords}
+                                    <MajorSelect
+                                        label=""
+                                        value={selectedKeywords}
+                                        onChange={set_selectedKeywords}
                                         placeholder="e.g. Civil Engineering…"
                                     />
                                 </div>

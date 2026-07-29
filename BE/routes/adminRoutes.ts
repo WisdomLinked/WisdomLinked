@@ -7,6 +7,7 @@ const {
 } = require("../middlewares/requireAuth");
 const {
     setStripeMode,
+    setSeminarApprovalDeadline,
     sendPaymentLinkToUser,
     processRefund,
     sendAdHocPaymentLink
@@ -29,7 +30,11 @@ const {
     deletePendingLogin,
     deletePendingUser,
     convertPendingUserToUserByAdmin,
-    registerUserByAdmin
+    registerUserByAdmin,
+    getCustomMajors,
+    consolidateMajors,
+    getMajorConsolidations,
+    getPaymentIntegrityReport
 } = require("../controllers/admin.controller");
 
 const {
@@ -48,6 +53,7 @@ const {
 } = require("../controllers/chatBotQA.controller")
 
 router.post("/setStripeMode", adminAuth, setStripeMode)
+router.post("/setSeminarApprovalDeadline", adminAuth, setSeminarApprovalDeadline)
 router.post("/sendPaymentLinkToUser", adminAuth, sendPaymentLinkToUser)
 router.post("/processRefund", adminAuth, processRefund)
 router.post("/sendAdHocPaymentLink", adminAuth, sendAdHocPaymentLink)
@@ -71,6 +77,10 @@ router.post("/deletePendingUser", adminAuth, deletePendingUser);
 router.post("/deletePendingLogin", adminAuth, deletePendingLogin);
 router.post("/convertPendingUserToUserByAdmin", adminAuth, convertPendingUserToUserByAdmin);
 router.post("/registerUserByAdmin", adminAuth, registerUserByAdmin);
+router.get("/getCustomMajors", adminAuth, getCustomMajors);
+router.post("/consolidateMajors", adminAuth, consolidateMajors);
+router.get("/getMajorConsolidations", adminAuth, getMajorConsolidations);
+router.get("/paymentIntegrityReport", adminAuth, getPaymentIntegrityReport);
 router.post("/createChatBotQA", adminAuth, createChatBotQA)
 router.get("/getChatBotQA", adminAuth, getChatBotQA)
 router.post("/updateChatBotQA/:id", adminAuth, updateChatBotQA)

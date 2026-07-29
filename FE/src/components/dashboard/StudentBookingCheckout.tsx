@@ -7,6 +7,7 @@ import {
   useElements,
 } from '@stripe/react-stripe-js';
 import { createStripePaymentIntent, getStripeMode } from '../../api/api';
+import { persistPendingDetails } from '../../utils/safeLocalStorage';
 import FormAlert from '../FormAlert';
 import { SetLoadingStatus } from '../../actions/appActions';
 
@@ -14,16 +15,27 @@ import { SetLoadingStatus } from '../../actions/appActions';
 /** A 1:1 session booking (createGroupChatByUser path). */
 export type StudentOneToOnePendingDetails = {
   name: string;
+  description?: string;
+  services?: string[];
+  purposeOther?: string;
   start: string | Date;
   end: string | Date;
-  
+
   duration: number;
   price: number;
   expert: string;
 };
 
-/** A seminar seat (addMemberToPendingGroup path), identified by groupChatId. */
+/** A seminar seat (registerForSeminar path), identified by groupChatId. */
 export type StudentSeminarPendingDetails = {
+  groupChatId: string;
+  price: number;
+  name?: string;
+};
+
+/** Accepting (paying for) an expert-proposed 1:1, identified by groupChatId. */
+export type StudentAcceptOneToOnePendingDetails = {
+  kind: 'accept-1to1';
   groupChatId: string;
   price: number;
   name?: string;
@@ -31,14 +43,16 @@ export type StudentSeminarPendingDetails = {
 
 export type StudentBookingPendingDetails =
   | StudentOneToOnePendingDetails
-  | StudentSeminarPendingDetails;
+  | StudentSeminarPendingDetails
+  | StudentAcceptOneToOnePendingDetails;
 
 type CheckoutFormProps = {
   pendingDetails: StudentBookingPendingDetails;
   stripeMode: string;
   price: number;
   returnUrl: string;
-  onPaymentSuccess: (paymentIntentId: string) => void;
+  isSeatRequest?: boolean;
+  onPaymentSuccess: (paymentIntentId: string, opts?: { requiresApproval?: boolean }) => void;
 };
 
 const CheckoutForm = ({
@@ -46,13 +60,12 @@ const CheckoutForm = ({
   stripeMode,
   price,
   returnUrl,
+  isSeatRequest = false,
   onPaymentSuccess,
 }: CheckoutFormProps) => {
   const stripe = useStripe();
   const elements = useElements();
   const [errorMessage, setErrorMessage] = useState('');
-  // Animated progress shown under the Pay button while the charge is processing,
-  // so the student sees that the payment is working through to completion.
   const [processing, setProcessing] = useState(false);
   const [progress, setProgress] = useState(0);
   const progressTimer = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -93,8 +106,8 @@ const CheckoutForm = ({
 
     try {
       if (price === 0) {
-        window.localStorage.setItem('pendingDetails', JSON.stringify(pendingDetails));
-        onPaymentSuccess('0');
+        window.localStorage.removeItem('pendingDetails');
+        onPaymentSuccess('0', { requiresApproval: isSeatRequest });
         return;
       }
 
@@ -108,21 +121,34 @@ const CheckoutForm = ({
       SetLoadingStatus(true);
       beginProgress();
 
+      const details = pendingDetails as any;
       const response = await createStripePaymentIntent({
         stripeMode,
-        amount: price,
+        ...(details.groupChatId
+          ? { groupChatId: details.groupChatId }
+          : { expertId: String(details.expert), duration: details.duration }),
       });
       const clientSecret = response && response.client_secret;
       if (!clientSecret) {
-        setErrorMessage('Could not start payment. Please try again in a moment.');
+        const reason = (response && (response.error || response.message)) || '';
+        setErrorMessage(
+          reason
+            ? `${reason} You have not been charged.`
+            : 'Could not start payment. Please try again in a moment.',
+        );
         SetLoadingStatus(false);
         endProgress(false);
         return;
       }
 
-      window.localStorage.setItem('pendingDetails', JSON.stringify(pendingDetails));
+      const requiresApproval =
+        typeof response?.requiresApproval === 'boolean'
+          ? response.requiresApproval
+          : isSeatRequest;
 
-      const { paymentIntent } = await stripe.confirmPayment({
+      persistPendingDetails(window.localStorage, { ...pendingDetails, requiresApproval });
+
+      const { paymentIntent, error: confirmError } = await stripe.confirmPayment({
         elements,
         clientSecret,
         confirmParams: {
@@ -133,10 +159,14 @@ const CheckoutForm = ({
 
       SetLoadingStatus(false);
 
-      if (paymentIntent?.status === 'succeeded') {
+      if (paymentIntent?.status === 'succeeded' || paymentIntent?.status === 'requires_capture') {
         endProgress(true);
+        onPaymentSuccess(paymentIntent.id, { requiresApproval });
+      } else if (confirmError) {
+        // Integration/validation errors resolve (not throw) with an error object.
+        endProgress(false);
         window.localStorage.removeItem('pendingDetails');
-        onPaymentSuccess(paymentIntent.id);
+        setErrorMessage(confirmError.message ?? 'Payment could not be completed. Please try again.');
       } else if (paymentIntent) {
         endProgress(false);
         window.localStorage.removeItem('pendingDetails');
@@ -160,16 +190,22 @@ const CheckoutForm = ({
   }, [errorMessage]);
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
-      <PaymentElement />
-      <FormAlert variant="error" message={errorMessage} onDismiss={() => setErrorMessage('')} />
-      <div>
+    <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
+      <div className="min-h-0 flex-1 space-y-4 overflow-y-auto pr-1">
+        <PaymentElement />
+        <FormAlert variant="error" message={errorMessage} onDismiss={() => setErrorMessage('')} />
+      </div>
+      <div className="shrink-0 pt-3">
         <button
           type="submit"
           disabled={!stripe || !elements || processing}
           className="inline-flex w-full items-center justify-center rounded-[4px] bg-[#1A3A4A] px-4 py-3 text-[13px] font-semibold text-white hover:bg-[#122635] disabled:opacity-60"
         >
-          {processing ? 'Processing payment…' : price > 0 ? `Pay $${price}` : 'Confirm booking'}
+          {processing
+            ? (isSeatRequest ? 'Joining the waiting list…' : 'Processing payment…')
+            : isSeatRequest
+              ? (price > 0 ? `Authorize $${price} & join waiting list` : 'Join waiting list')
+              : price > 0 ? `Pay $${price}` : 'Confirm booking'}
         </button>
         {/* Animated progress line under the button while the charge is processing. */}
         <div
@@ -196,7 +232,11 @@ type Props = {
   price: number;
   pendingDetails: StudentBookingPendingDetails;
   returnUrl?: string;
-  onPaymentSuccess: (paymentIntentId: string) => void;
+  isSeatRequest?: boolean;
+  /** Server authorizes (holds) rather than charges — must match the intent's
+   *  capture_method or confirmPayment throws a mismatch. True for all seminars. */
+  holdsFunds?: boolean;
+  onPaymentSuccess: (paymentIntentId: string, opts?: { requiresApproval?: boolean }) => void;
   onCancel?: () => void;
   cancelLabel?: string;
 };
@@ -206,6 +246,8 @@ export default function StudentBookingCheckout({
   price,
   pendingDetails,
   returnUrl,
+  isSeatRequest = false,
+  holdsFunds = false,
   onPaymentSuccess,
   onCancel,
   cancelLabel = 'Back',
@@ -217,7 +259,11 @@ export default function StudentBookingCheckout({
     () => ({
       mode: 'payment' as const,
       amount: price > 0 ? Math.round(price * 100) : 1,
-      currency: 'usd',
+      currency: 'usd' as const,
+      // Seminar bookings authorize (hold) the funds — the deferred Element must
+      // declare the same manual capture or confirmPayment throws a capture_method
+      // mismatch and the submit silently fails.
+      ...((isSeatRequest || holdsFunds) && price > 0 ? { captureMethod: 'manual' as const } : {}),
       appearance: {
         theme: 'stripe' as const,
         variables: {
@@ -230,7 +276,7 @@ export default function StudentBookingCheckout({
         },
       },
     }),
-    [price],
+    [price, isSeatRequest, holdsFunds],
   );
 
   const [stripeMode, setStripeMode] = useState('');
@@ -270,21 +316,31 @@ export default function StudentBookingCheckout({
   }
 
   return (
-    <div className="rounded-2xl border border-[#E5E2DB] bg-white p-4 sm:p-6">
-      <p className="font-serif text-lg font-medium text-[#1A3A4A]">
-        Pay for your {type}
-      </p>
-      <p className="mt-1 text-[12px] text-[#7A7A72]">
-        Total: <span className="font-semibold text-[#1A3A4A]">${price}</span>
-        {stripeMode === 'test' ? ' · test mode' : ''}
-      </p>
-      <div className="mt-4">
+    <div className="flex max-h-[88vh] flex-col rounded-2xl border border-[#E5E2DB] bg-white p-4 sm:p-6">
+      <div className="shrink-0">
+        <p className="font-serif text-lg font-medium text-[#1A3A4A]">
+          {isSeatRequest ? `Join the waiting list — ${type}` : `Pay for your ${type}`}
+        </p>
+        <p className="mt-1 text-[12px] text-[#7A7A72]">
+          Total: <span className="font-semibold text-[#1A3A4A]">${price}</span>
+          {stripeMode === 'test' ? ' · test mode' : ''}
+        </p>
+        {isSeatRequest ? (
+          <p className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[12px] text-amber-800">
+            This seminar is full. {price > 0
+              ? 'Pay to get on the waiting list for the host to approve — your card is authorized but not charged, and you\'re only charged if the host approves. Otherwise the hold is released.'
+              : 'You\'re joining the waiting list; the host approves it and you\'ll join only if they do.'}
+          </p>
+        ) : null}
+      </div>
+      <div className="mt-4 flex min-h-0 flex-1 flex-col">
         <Elements stripe={stripePromise} options={options}>
           <CheckoutForm
             pendingDetails={pendingDetails}
             stripeMode={stripeMode}
             price={price}
             returnUrl={stripeReturnBase}
+            isSeatRequest={isSeatRequest}
             onPaymentSuccess={onPaymentSuccess}
           />
         </Elements>
@@ -293,7 +349,7 @@ export default function StudentBookingCheckout({
         <button
           type="button"
           onClick={onCancel}
-          className="mt-4 w-full rounded-[4px] border border-[#E5E2DB] py-2.5 text-[13px] font-semibold text-[#1A3A4A] hover:bg-[#F5F3EF]"
+          className="mt-3 w-full shrink-0 rounded-[4px] border border-[#E5E2DB] py-2.5 text-[13px] font-semibold text-[#1A3A4A] hover:bg-[#F5F3EF]"
         >
           {cancelLabel}
         </button>
@@ -308,28 +364,66 @@ export async function completeStudentBookingFromStorage(
 ): Promise<
   | { ok: true; kind: '1:1'; expertId: string; userDetails: unknown }
   | { ok: true; kind: 'seminar'; userDetails: unknown }
-  | { ok: false; error: string }
+  | { ok: true; kind: 'seminar-request' }
+  | { ok: true; kind: 'accept'; userDetails: unknown }
+  | { ok: false; error: string; retryable: boolean }
 > {
   const raw = window.localStorage.getItem('pendingDetails');
   if (!raw) {
-    return { ok: false, error: 'No pending booking found.' };
+    // Nothing to complete or retry — the booking was already finished or never started.
+    return { ok: false, error: 'No pending booking found.', retryable: false };
   }
   try {
     const details = JSON.parse(raw);
-    window.localStorage.removeItem('pendingDetails');
+    // Only drop the recovery state once the booking API has confirmed success. Any
+    // failure (transient or business) keeps pendingDetails so a refresh can retry — the
+    // server guards against double-processing the same payment_intent.
+    const clearPending = () => window.localStorage.removeItem('pendingDetails');
 
-    // Seminars carry a groupChatId; 1:1 sessions carry an expert + slot.
-    if (details.groupChatId) {
-      const { addMemberToPendingGroup } = await import('../../api/api');
-      const response = await addMemberToPendingGroup({
+    // Paying to confirm an expert-proposed 1:1 — flips the session to active, no re-approval.
+    if (details.kind === 'accept-1to1') {
+      const { acceptIndividualAppointment } = await import('../../api/api');
+      const response = await acceptIndividualAppointment({
         groupChatId: details.groupChatId,
-        price: details.price,
         payment_intent: paymentIntent,
       });
       if (response === false || response?.status === 'FAIL' || response?.error) {
-        return { ok: false, error: response?.error || 'Seminar registration failed after payment.' };
+        return { ok: false, error: response?.error || 'Could not confirm the session after payment.', retryable: true };
       }
-      return { ok: true, kind: 'seminar', userDetails: response };
+      clearPending();
+      return { ok: true, kind: 'accept', userDetails: response?.result };
+    }
+
+    // Seminars carry a groupChatId; 1:1 sessions carry an expert + slot.
+    if (details.groupChatId) {
+      // Full seminar → held payment recorded as a seat request pending host approval.
+      if (details.requiresApproval) {
+        const { requestSeminarSeat } = await import('../../api/api');
+        const response = await requestSeminarSeat({
+          groupChatId: details.groupChatId,
+          payment_intent: paymentIntent,
+        });
+        if (response === false || response?.status === 'FAIL' || response?.error) {
+          return { ok: false, error: response?.error || 'Could not submit your seat request after payment.', retryable: true };
+        }
+        clearPending();
+        return { ok: true, kind: 'seminar-request' };
+      }
+
+      const { registerForSeminar } = await import('../../api/api');
+      const response = await registerForSeminar({
+        groupChatId: details.groupChatId,
+        payment_intent: paymentIntent,
+      });
+      if (response === false || response?.status === 'FAIL' || response?.error) {
+        return { ok: false, error: response?.error || 'Seminar registration failed after payment.', retryable: true };
+      }
+      clearPending();
+      // The seminar filled up while paying: the held fee became a seat request instead.
+      if (response?.status === 'pending_approval') {
+        return { ok: true, kind: 'seminar-request' };
+      }
+      return { ok: true, kind: 'seminar', userDetails: response?.result ?? null };
     }
 
     const { createGroupChatByUser, getExpertById } = await import('../../api/api');
@@ -339,6 +433,9 @@ export async function completeStudentBookingFromStorage(
 
     const response = await createGroupChatByUser({
       name: details.name,
+      description: details.description ?? '',
+      services: Array.isArray(details.services) ? details.services : [],
+      purposeOther: details.purposeOther ?? '',
       start: details.start,
       end: details.end,
       duration: details.duration,
@@ -347,9 +444,15 @@ export async function completeStudentBookingFromStorage(
       payment_intent: paymentIntent,
     });
 
-    return { ok: true, kind: '1:1', expertId, userDetails: response?.result };
+    // createGroupChatByUser resolves to false / { status:'FAIL' } on failure.
+    if (response === false || response?.status === 'FAIL' || response?.error || !response?.result) {
+      return { ok: false, error: response?.error || 'Payment succeeded, but the session could not be created.', retryable: true };
+    }
+    clearPending();
+
+    return { ok: true, kind: '1:1', expertId, userDetails: response.result };
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Booking failed after payment.';
-    return { ok: false, error: message };
+    return { ok: false, error: message, retryable: true };
   }
 }

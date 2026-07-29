@@ -5,6 +5,10 @@ import {
   dollarsToCents,
   extractHourlyRate,
   assertPaymentMatchesExpected,
+  expectedBookingIntentCents,
+  assertIntentMatchesBooking,
+  voluntaryCancellationRefundCents,
+  capturedAmountCents,
 } from "../utils/bookingPrice";
 
 describe("computeBookingPriceCents", () => {
@@ -33,6 +37,42 @@ describe("computeBookingPriceCents", () => {
   });
 });
 
+describe("voluntaryCancellationRefundCents", () => {
+  it("refunds the charge minus the 2.9% + 30c processing fee", () => {
+    // $200.00 charge: fee = round(20000 * 0.029) + 30 = 580 + 30 = 610 -> refund 19390.
+    assert.equal(voluntaryCancellationRefundCents(20000), 19390);
+    // $50.00: fee = round(5000 * 0.029) + 30 = 145 + 30 = 175 -> refund 4825.
+    assert.equal(voluntaryCancellationRefundCents(5000), 4825);
+  });
+
+  it("never returns a negative refund for tiny charges", () => {
+    assert.equal(voluntaryCancellationRefundCents(20), 0);
+    assert.equal(voluntaryCancellationRefundCents(0), 0);
+    assert.equal(voluntaryCancellationRefundCents(-100), 0);
+    assert.equal(voluntaryCancellationRefundCents(null), 0);
+  });
+
+  it("retains a fee on every cycle, so refund is always strictly less than the charge", () => {
+    assert.ok(voluntaryCancellationRefundCents(10000) < 10000);
+  });
+});
+
+describe("capturedAmountCents", () => {
+  it("uses amount_received after a partial capture, not the original authorization", () => {
+    // Authorized $100, host captured $80 after a price drop: record $80, not $100.
+    assert.equal(capturedAmountCents({ amount: 10000, amount_received: 8000 }), 8000);
+  });
+
+  it("equals amount on a full capture", () => {
+    assert.equal(capturedAmountCents({ amount: 5000, amount_received: 5000 }), 5000);
+  });
+
+  it("falls back to amount when amount_received is missing or zero", () => {
+    assert.equal(capturedAmountCents({ amount: 5000 }), 5000);
+    assert.equal(capturedAmountCents({ amount: 5000, amount_received: 0 }), 5000);
+  });
+});
+
 describe("extractHourlyRate", () => {
   it("reads a plain number rate", () => {
     assert.equal(extractHourlyRate(75), 75);
@@ -56,6 +96,40 @@ describe("dollarsToCents", () => {
     assert.equal(dollarsToCents(9.99), 999);
     assert.equal(dollarsToCents(0), 0);
     assert.equal(dollarsToCents(undefined), 0);
+  });
+});
+
+describe("expectedBookingIntentCents", () => {
+  // The PaymentIntent amount is derived server-side from booking identity, never
+  // from a client-supplied dollar figure. These two branches must match the price
+  // math run at booking completion so the intent and the final check always agree.
+  it("1:1 path: computes rate x duration from the expert's hourly rate", () => {
+    assert.equal(
+      expectedBookingIntentCents({ kind: "oneToOne", durationMinutes: 60, hourlyRateDollars: 75 }),
+      computeBookingPriceCents(60, 75),
+    );
+    assert.equal(
+      expectedBookingIntentCents({ kind: "oneToOne", durationMinutes: 30, hourlyRateDollars: 75 }),
+      3750,
+    );
+  });
+
+  it("groupChat path: uses the stored price and does NOT recompute from an hourly rate", () => {
+    // Seminars and expert propose-and-pay both carry an approved custom price on
+    // the GroupChat; recomputing from a rate would reject the expert's own price.
+    assert.equal(
+      expectedBookingIntentCents({ kind: "groupChat", priceDollars: 40 }),
+      dollarsToCents(40),
+    );
+    assert.equal(expectedBookingIntentCents({ kind: "groupChat", priceDollars: 9.99 }), 999);
+  });
+
+  it("treats missing/zero prices as the free path (0 cents)", () => {
+    assert.equal(expectedBookingIntentCents({ kind: "groupChat", priceDollars: undefined }), 0);
+    assert.equal(
+      expectedBookingIntentCents({ kind: "oneToOne", durationMinutes: 60, hourlyRateDollars: 0 }),
+      0,
+    );
   });
 });
 
@@ -153,6 +227,72 @@ describe("assertPaymentMatchesExpected", () => {
         receiptUrl: "https://pay.stripe.com/receipts/only-url",
         receiptNumber: null,
       },
+    );
+  });
+});
+
+describe("assertIntentMatchesBooking", () => {
+  const seminarIntent = {
+    amount: 5000,
+    currency: "usd",
+    metadata: { bookingType: "groupChat", groupChatId: "sem_A", userId: "stu_1" },
+  };
+
+  it("accepts an intent raised for this seminar by this student", () => {
+    assert.doesNotThrow(() =>
+      assertIntentMatchesBooking(seminarIntent, { userId: "stu_1", groupChatId: "sem_A" }),
+    );
+  });
+
+  it("rejects an intent paid for a different seminar of the same price", () => {
+    assert.throws(
+      () => assertIntentMatchesBooking(seminarIntent, { userId: "stu_1", groupChatId: "sem_B" }),
+      /not created for this booking/,
+    );
+  });
+
+  it("rejects an intent paid by a different account", () => {
+    assert.throws(
+      () => assertIntentMatchesBooking(seminarIntent, { userId: "stu_2", groupChatId: "sem_A" }),
+      /different account/,
+    );
+  });
+
+  it("rejects a 1:1 intent reused for a seminar booking", () => {
+    const oneToOne = {
+      amount: 5000,
+      currency: "usd",
+      metadata: { bookingType: "oneToOne", expertId: "exp_1", userId: "stu_1" },
+    };
+    assert.throws(
+      () => assertIntentMatchesBooking(oneToOne, { userId: "stu_1", groupChatId: "sem_A" }),
+      /not created for this booking/,
+    );
+  });
+
+  it("rejects an intent with no payer identity, so it can't be redeemed by anyone", () => {
+    // An intent lacking userId metadata must not be usable by an arbitrary account for
+    // the same booking — the payer binding has to be present and match.
+    const noPayer = {
+      amount: 5000,
+      currency: "usd",
+      metadata: { bookingType: "groupChat", groupChatId: "sem_A" },
+    };
+    assert.throws(
+      () => assertIntentMatchesBooking(noPayer, { userId: "stu_9", groupChatId: "sem_A" }),
+      /different account/,
+    );
+    // The booking binding is still checked first for a genuinely wrong booking.
+    assert.throws(
+      () => assertIntentMatchesBooking(noPayer, { userId: "stu_9", groupChatId: "sem_B" }),
+      /not created for this booking/,
+    );
+  });
+
+  it("rejects an intent carrying no metadata at all", () => {
+    assert.throws(
+      () => assertIntentMatchesBooking({ amount: 5000, currency: "usd" }, { userId: "stu_1", groupChatId: "sem_A" }),
+      /not created for this booking/,
     );
   });
 });

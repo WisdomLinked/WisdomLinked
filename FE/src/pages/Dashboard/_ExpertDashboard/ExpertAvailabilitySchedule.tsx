@@ -5,17 +5,23 @@ import 'react-big-calendar/lib/css/react-big-calendar.css';
 import { CalendarDays, Ban, CalendarClock } from 'lucide-react';
 import { useDispatch } from 'react-redux';
 
-import { localizer } from '../../../actions/common';
+import { isSlotUnavailable, localizer } from '../../../actions/common';
 import {
-  cancelIndividualAppointment,
-  doCancelInvitation,
-  doDeclineEvent,
   doGetMyEvents,
   doSetExpertBlockedBookingDates,
+  doSetExpertBlockedBookingSlots,
 } from '../../../api/api';
 import { useAppSelector } from '../../../store';
 import { updateMe } from '../../../actions/authActions';
-import { toYMDInTimeZone } from '../../../utils/schedulingTimezone';
+import {
+  getExpertSlotsForCalendarDay,
+  toYMDInTimeZone,
+  viewerSlotToInstant,
+} from '../../../utils/schedulingTimezone';
+import {
+  formatHourRange,
+  halfHourIndicesToHours,
+} from '../../../utils/schedulingSlots';
 
 /** Stable string id for hooks — raw `_id` may be a new object reference every Redux merge. */
 function normalizeUserId(details: any): string | undefined {
@@ -60,6 +66,9 @@ const ExpertAvailabilitySchedule: React.FC = () => {
   const [dayModalOpen, setDayModalOpen] = useState(false);
   const [selectedDay, setSelectedDay] = useState<Date | null>(null);
   const [dayEvents, setDayEvents] = useState<any[]>([]);
+  // Hours (0–23) the expert has marked unavailable for the open day, edited locally
+  // and committed on Save so the student calendar only updates once confirmed.
+  const [pendingBlockedHours, setPendingBlockedHours] = useState<number[]>([]);
   const [scheduleBanner, setScheduleBanner] = useState<{
     type: 'success' | 'error' | null;
     message: string;
@@ -82,6 +91,13 @@ const ExpertAvailabilitySchedule: React.FC = () => {
         : [],
     [userDetails?.blockedBookingDates],
   );
+
+  const blockedSlotsMap: Record<string, number[]> = useMemo(() => {
+    const m = userDetails?.blockedBookingSlots;
+    return m && typeof m === 'object' && !Array.isArray(m)
+      ? (m as Record<string, number[]>)
+      : {};
+  }, [userDetails?.blockedBookingSlots]);
 
   const loadEvents = useCallback(
     async (opts?: { manageBusy?: boolean }) => {
@@ -177,6 +193,40 @@ const ExpertAvailabilitySchedule: React.FC = () => {
     }
   };
 
+  const persistBlockedSlots = async (next: Record<string, number[]>) => {
+    setScheduleBusy(true);
+    setScheduleBanner({ type: null, message: '' });
+    try {
+      const res = await doSetExpertBlockedBookingSlots(next);
+      if (res && res !== false && res.blockedBookingSlots) {
+        dispatch({
+          type: 'updateUserDetails',
+          payload: {
+            ...userDetails,
+            blockedBookingSlots: res.blockedBookingSlots,
+          },
+        });
+        setScheduleBanner({
+          type: 'success',
+          message: 'Unavailable times updated for student bookings.',
+        });
+        void (dispatch as any)(updateMe());
+      } else {
+        setScheduleBanner({
+          type: 'error',
+          message: 'Could not save unavailable times. Please try again.',
+        });
+      }
+    } catch {
+      setScheduleBanner({
+        type: 'error',
+        message: 'Could not save unavailable times. Please try again.',
+      });
+    } finally {
+      setScheduleBusy(false);
+    }
+  };
+
   const eventStyleGetter = (event: any, _start: Date, end: Date) => {
     const now = new Date();
     const isPast = end < now;
@@ -235,8 +285,14 @@ const ExpertAvailabilitySchedule: React.FC = () => {
     const filtered = events.filter(
       (ev: any) => ev.start >= dayStart && ev.start <= dayEnd,
     );
+    const ymd = ymdInExpertTz(date);
+    const blockedForDay = blockedSlotsMap[ymd] || [];
+    const initialHours = halfHourIndicesToHours(blockedForDay).filter(
+      (h) => blockedForDay.includes(h * 2) && blockedForDay.includes(h * 2 + 1),
+    );
     setSelectedDay(date);
     setDayEvents(filtered);
+    setPendingBlockedHours(initialHours);
     setDayModalOpen(true);
   };
 
@@ -258,34 +314,6 @@ const ExpertAvailabilitySchedule: React.FC = () => {
     setCalView('week');
   };
 
-  const isFuture = (end: Date) => end > new Date();
-
-  const cancelItem = async (item: any) => {
-    if (!isFuture(new Date(item.end))) return;
-
-    const canCancel =
-      item.type === 'event' ||
-      (item.type === 'individual' && item.status === 'pending');
-    if (!canCancel) return;
-
-    setScheduleBusy(true);
-    try {
-      if (item.type === 'event') {
-        if (item.paidBy === 'none') {
-          await doCancelInvitation(item._id);
-        } else {
-          await doDeclineEvent(item._id);
-        }
-      } else if (item.type === 'individual' && item.status === 'pending') {
-        await cancelIndividualAppointment(item._id);
-      }
-      await (dispatch as any)(updateMe());
-      await loadEvents({ manageBusy: false });
-      if (selectedDay) openDay(selectedDay);
-    } finally {
-      setScheduleBusy(false);
-    }
-  };
 
   const toggleBlockSelectedDay = async () => {
     if (!selectedDay) return;
@@ -301,11 +329,101 @@ const ExpertAvailabilitySchedule: React.FC = () => {
       ? blockedDates.filter((x) => x !== ymd)
       : [...blockedDates, ymd].sort();
     await persistBlockedDates(next);
-    setDayModalOpen(false);
+  };
+
+  const describeSession = (ev: any): string => {
+    if (ev?.type === 'seminar') return `Seminar: ${ev.name || ev.title || 'Seminar'}`;
+    if (ev?.type === 'individual') {
+      const parts = Array.isArray(ev.participants) ? ev.participants : [];
+      const other = parts
+        .map((p: any) => (p && typeof p === 'object' ? p.username || p.name : null))
+        .find(Boolean);
+      return other ? `1:1 with ${other}` : '1:1 session';
+    }
+    return ev?.title || ev?.name || 'Session';
   };
 
   const blockedForSelectedDay =
     selectedDay != null && blockedDates.includes(ymdInExpertTz(selectedDay));
+
+  // Hour tiles for the open day: the expert's recurring availability for that date,
+  // each tagged as blocked (whole-day or per-slot override) and/or booked (overlaps a session).
+  const dayTiles = useMemo(() => {
+    if (!selectedDay) return [] as Array<{
+      hour: number;
+      blocked: boolean;
+      booked: boolean;
+      sessionLabel: string | null;
+    }>;
+    const expertSlots = getExpertSlotsForCalendarDay(
+      userDetails,
+      selectedDay,
+      expertTimeZone,
+    );
+    const hours = halfHourIndicesToHours(expertSlots);
+    const durMs = 60 * 60 * 1000;
+    return hours.map((hour) => {
+      const idxA = hour * 2;
+      const blocked = blockedForSelectedDay || pendingBlockedHours.includes(hour);
+      const startMs = viewerSlotToInstant(selectedDay, idxA, expertTimeZone).getTime();
+      let sessionLabel: string | null = null;
+      for (const ev of dayEvents) {
+        if (ev?.status === 'declined') continue;
+        if (
+          isSlotUnavailable(
+            startMs,
+            durMs,
+            new Date(ev.start).getTime(),
+            new Date(ev.end).getTime(),
+          )
+        ) {
+          sessionLabel = describeSession(ev);
+          break;
+        }
+      }
+      return { hour, blocked, booked: !!sessionLabel, sessionLabel };
+    });
+  }, [selectedDay, pendingBlockedHours, userDetails, expertTimeZone, dayEvents, blockedForSelectedDay]);
+
+  const allAvailableBlocked = useMemo(() => {
+    const nonBooked = dayTiles.filter((t) => !t.booked);
+    return nonBooked.length > 0 && nonBooked.every((t) => pendingBlockedHours.includes(t.hour));
+  }, [dayTiles, pendingBlockedHours]);
+
+  const toggleSlotSelected = (hour: number) => {
+    setPendingBlockedHours((prev) =>
+      prev.includes(hour) ? prev.filter((h) => h !== hour) : [...prev, hour],
+    );
+  };
+
+  // Compare the open day's pending selection against what's already saved.
+  const slotsDirty = useMemo(() => {
+    if (!selectedDay) return false;
+    const ymd = ymdInExpertTz(selectedDay);
+    const savedHours = halfHourIndicesToHours(blockedSlotsMap[ymd] || []).filter(
+      (h) =>
+        (blockedSlotsMap[ymd] || []).includes(h * 2) &&
+        (blockedSlotsMap[ymd] || []).includes(h * 2 + 1),
+    );
+    if (savedHours.length !== pendingBlockedHours.length) return true;
+    const pendingSet = new Set(pendingBlockedHours);
+    return savedHours.some((h) => !pendingSet.has(h));
+  }, [selectedDay, pendingBlockedHours, blockedSlotsMap, ymdInExpertTz]);
+
+  const handleSaveDaySlots = async () => {
+    if (!selectedDay) return;
+    const ymd = ymdInExpertTz(selectedDay);
+    const indices: number[] = [];
+    pendingBlockedHours.forEach((h) => {
+      indices.push(h * 2, h * 2 + 1);
+    });
+    indices.sort((a, b) => a - b);
+    const nextMap: Record<string, number[]> = { ...blockedSlotsMap };
+    if (indices.length) nextMap[ymd] = indices;
+    else delete nextMap[ymd];
+    await persistBlockedSlots(nextMap);
+    setDayModalOpen(false);
+  };
 
   return (
     <div id="expert-availability-schedule" className="mt-8 space-y-4 scroll-mt-24">
@@ -349,8 +467,8 @@ const ExpertAvailabilitySchedule: React.FC = () => {
         <div>
           <h2 className="text-base font-semibold text-gray-900">Schedule & bookings</h2>
           <p className="mt-1 text-sm text-gray-500">
-            View upcoming sessions on the calendar, cancel future appointments, or block
-            full days so students cannot book.
+            View upcoming sessions on the calendar, cancel future appointments, or click a
+            day to block full days or individual time slots so students cannot book.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -438,7 +556,7 @@ const ExpertAvailabilitySchedule: React.FC = () => {
               })}
             </h3>
             <p className="mt-1 text-xs text-slate-500">
-              Cancel future sessions or block the entire day for new bookings.
+              Block the entire day or specific time slots so students cannot book.
             </p>
 
             <div className="mt-4 max-h-56 space-y-2 overflow-y-auto">
@@ -468,55 +586,129 @@ const ExpertAvailabilitySchedule: React.FC = () => {
                         <span className="capitalize">{ev.type}</span>
                       </div>
                     </div>
-                    {isFuture(new Date(ev.end)) &&
-                    (ev.type === 'event' ||
-                      (ev.type === 'individual' && ev.status === 'pending')) ? (
-                      <button
-                        type="button"
-                        onClick={() => cancelItem(ev)}
-                        className="shrink-0 rounded-lg border border-rose-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-rose-700 hover:bg-rose-50"
-                      >
-                        Cancel
-                      </button>
-                    ) : null}
                   </div>
                 ))
               )}
             </div>
 
-            <div className="mt-5 border-t border-slate-100 pt-4">
+            {(() => {
+              const t0 = new Date();
+              t0.setHours(0, 0, 0, 0);
+              const s0 = new Date(selectedDay);
+              s0.setHours(0, 0, 0, 0);
+              const isPastDay = s0 < t0;
+
+              return (
+                <>
+                  {dayTiles.length > 0 ? (
+                    <div className="mt-5 border-t border-slate-100 pt-4">
+                      <div className="flex items-center justify-between">
+                        <h4 className="text-sm font-semibold text-slate-800">
+                          Available times
+                        </h4>
+                        <span className="text-[11px] text-slate-500">
+                          {blockedForSelectedDay
+                            ? 'Whole day marked unavailable'
+                            : 'Select times to mark unavailable'}
+                        </span>
+                      </div>
+                      <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
+                        {dayTiles.map((tile) => {
+                          if (tile.booked) {
+                            return (
+                              <div
+                                key={tile.hour}
+                                title={tile.sessionLabel || 'Booked'}
+                                className="cursor-default rounded-lg border border-amber-200 bg-amber-50 px-2 py-1.5 text-center text-[11px] font-medium text-amber-800"
+                              >
+                                <div>{formatHourRange(tile.hour)}</div>
+                                <div className="mt-0.5 truncate text-[10px] font-normal opacity-80">
+                                  {tile.sessionLabel}
+                                </div>
+                              </div>
+                            );
+                          }
+                          return (
+                            <button
+                              key={tile.hour}
+                              type="button"
+                              aria-pressed={tile.blocked}
+                              disabled={isPastDay || scheduleBusy || blockedForSelectedDay}
+                              onClick={() => toggleSlotSelected(tile.hour)}
+                              title={
+                                blockedForSelectedDay
+                                  ? 'The whole day is marked unavailable'
+                                  : tile.blocked
+                                  ? 'Selected as unavailable — tap to keep it available'
+                                  : 'Available — tap to mark unavailable'
+                              }
+                              className={[
+                                'rounded-lg border px-2 py-1.5 text-center text-[11px] font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50',
+                                tile.blocked
+                                  ? 'border-rose-300 bg-rose-50 text-rose-700'
+                                  : 'border-slate-200 bg-white text-slate-700 hover:border-[#234C6A] hover:text-[#234C6A]',
+                              ].join(' ')}
+                            >
+                              <span className={tile.blocked ? 'line-through decoration-rose-500/70' : ''}>
+                                {formatHourRange(tile.hour)}
+                              </span>
+                              {tile.blocked ? (
+                                <span className="mt-0.5 block text-[9px] font-semibold uppercase tracking-wide text-rose-500">
+                                  Unavailable
+                                </span>
+                              ) : null}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      <p className="mt-2 text-[11px] text-slate-500">
+                        Times with a booking (amber) can't be blocked — cancel the
+                        session first. Struck-through times are saved as unavailable and
+                        won't be offered to students on this date when you tap Save.
+                      </p>
+                    </div>
+                  ) : null}
+
+                  <div className="mt-5 border-t border-slate-100 pt-4">
+                    <button
+                      type="button"
+                      onClick={toggleBlockSelectedDay}
+                      disabled={isPastDay || scheduleBusy || (!blockedForSelectedDay && allAvailableBlocked)}
+                      className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm font-semibold text-slate-800 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      <Ban className="h-4 w-4" aria-hidden />
+                      {blockedForSelectedDay
+                        ? 'Remove block — allow bookings this day'
+                        : 'Mark whole day unavailable for bookings'}
+                    </button>
+                    <p className="mt-2 text-[11px] text-slate-500">
+                      {!blockedForSelectedDay && allAvailableBlocked
+                        ? 'Every available time is already marked unavailable — save to apply, or unblock a slot first.'
+                        : 'Blocked days apply to new student bookings only. Any sessions already booked on this day stay scheduled.'}
+                    </p>
+                  </div>
+                </>
+              );
+            })()}
+
+            <div className="mt-4 flex gap-3">
               <button
                 type="button"
-                onClick={toggleBlockSelectedDay}
-                disabled={
-                  (() => {
-                    const t0 = new Date();
-                    t0.setHours(0, 0, 0, 0);
-                    const s0 = new Date(selectedDay);
-                    s0.setHours(0, 0, 0, 0);
-                    return s0 < t0;
-                  })()
-                }
-                className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm font-semibold text-slate-800 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+                onClick={() => setDayModalOpen(false)}
+                disabled={scheduleBusy}
+                className="flex-1 rounded-xl border border-slate-200 bg-white py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
               >
-                <Ban className="h-4 w-4" aria-hidden />
-                {blockedForSelectedDay
-                  ? 'Remove block — allow bookings this day'
-                  : 'Mark whole day unavailable for bookings'}
+                Cancel
               </button>
-              <p className="mt-2 text-[11px] text-slate-500">
-                Blocked days apply to new student bookings. Existing appointments stay
-                listed above until cancelled.
-              </p>
+              <button
+                type="button"
+                onClick={() => void handleSaveDaySlots()}
+                disabled={scheduleBusy || !slotsDirty}
+                className="flex-1 rounded-xl bg-[#234C6A] py-2.5 text-sm font-semibold text-white hover:brightness-110 disabled:opacity-50"
+              >
+                {scheduleBusy ? 'Saving…' : 'Save'}
+              </button>
             </div>
-
-            <button
-              type="button"
-              onClick={() => setDayModalOpen(false)}
-              className="mt-4 w-full rounded-xl bg-[#234C6A] py-2.5 text-sm font-semibold text-white hover:brightness-110"
-            >
-              Close
-            </button>
           </div>
         </div>
       ) : null}

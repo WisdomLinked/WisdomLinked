@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { useDispatch } from "react-redux";
 import { showErrorAlert, showSuccessAlert } from "../../../actions/alertActions";
-import { doFilterPaymentHistories, getStripeMode, setStripeMode, sendPaymentLinkToUser, processRefund, sendAdHocPaymentLink } from "../../../api/api";
+import { doFilterPaymentHistories, getStripeMode, setStripeMode, setSeminarApprovalDeadline, sendPaymentLinkToUser, processRefund, sendAdHocPaymentLink } from "../../../api/api";
 import { SetLoadingStatus } from "../../../actions/appActions";
 import SelectionWithCheckBox from "../../../components/SelectionWithCheckBox";
 import { DateRangePicker, createStaticRanges } from 'react-date-range';
@@ -76,6 +76,8 @@ const Payment = () => {
         { value: 50, label: "50" },
     ]
     const [stripeMode, set_stripeMode] = useState('test');
+    const [approvalDeadlineHours, set_approvalDeadlineHours] = useState<number>(24);
+    const [deadlineInput, set_deadlineInput] = useState<string>('24');
     const [email, set_email] = useState('');
     const [selectedMode, set_selectedMode] = useState(modes[0]);
     const [selectedType, set_selectedType] = useState(types[0]);
@@ -181,8 +183,31 @@ const Payment = () => {
     const getCurrentStripeMode = async () => {
         const response = await getStripeMode();
         console.log(response, '///////');
-        if (response)
+        if (response) {
             set_stripeMode(response.stripeMode || 'test');
+            const hours = typeof response.seminarApprovalDeadlineHours === 'number'
+                ? response.seminarApprovalDeadlineHours
+                : 24;
+            set_approvalDeadlineHours(hours);
+            set_deadlineInput(String(hours));
+        }
+    }
+
+    const saveApprovalDeadline = async () => {
+        const hours = Number(deadlineInput);
+        if (!Number.isFinite(hours) || hours < 0 || hours > 168) {
+            dispatch(showErrorAlert('Enter a value between 0 and 168 hours.'));
+            return;
+        }
+        SetLoadingStatus(true);
+        const response = await setSeminarApprovalDeadline(hours);
+        SetLoadingStatus(false);
+        if (response === false || response?.error) {
+            dispatch(showErrorAlert(response?.error || 'Could not save the approval deadline.'));
+            return;
+        }
+        set_approvalDeadlineHours(hours);
+        dispatch(showSuccessAlert('Seminar approval deadline updated.'));
     }
 
     useEffect(() => {
@@ -403,6 +428,24 @@ const Payment = () => {
                             Live
                         </button>
                     </div>
+                </div>
+                <div className="flex flex-wrap items-center justify-center gap-3 mt-4">
+                    <div className="text-wl-muted">Seminar seat-request approval deadline (hours before start)</div>
+                    <input
+                        type="number"
+                        min={0}
+                        max={168}
+                        value={deadlineInput}
+                        onChange={(e) => set_deadlineInput(e.target.value)}
+                        className="w-24 rounded-[10px] h-9 bg-white border border-lightgrey text-[14px] px-3 text-wl-ink"
+                    />
+                    <button
+                        onClick={saveApprovalDeadline}
+                        disabled={String(approvalDeadlineHours) === deadlineInput.trim()}
+                        className="h-9 rounded-full bg-wl-brand px-4 text-sm font-medium text-white disabled:opacity-50"
+                    >
+                        Save
+                    </button>
                 </div>
                 <div className="max-w-[800px] mx-auto w-full py-1">
                     <div className="flex justify-between mt-4">

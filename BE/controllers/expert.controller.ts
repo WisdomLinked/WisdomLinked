@@ -6,6 +6,7 @@ const User = require("../models/User");
 const Keyword = require("../models/Keyword");
 const PaymentHistory = require("../models/PaymentHistory");
 const { shareMeetingId } = require("../services/notifications")
+const { classifyPayment, summarizePaymentHistory } = require("../utils/paymentSummary");
 
 function expertUserUpdateFilter(req: any) {
     if (req.user?.userId) {
@@ -32,11 +33,39 @@ function normalizeBlockedDates(dates: unknown): string[] | null {
     return unique;
 }
 
+function normalizeBlockedSlots(
+    slots: unknown,
+): Record<string, number[]> | null {
+    if (!slots || typeof slots !== "object" || Array.isArray(slots)) return null;
+    const out: Record<string, number[]> = {};
+    for (const [rawKey, rawVal] of Object.entries(slots as Record<string, unknown>)) {
+        const key = String(rawKey || "").trim().slice(0, 10);
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(key)) continue;
+        if (!Array.isArray(rawVal)) continue;
+        const indices = [
+            ...new Set(
+                rawVal
+                    .map((v: unknown) => Math.trunc(Number(v)))
+                    .filter((n: number) => Number.isInteger(n) && n >= 0 && n <= 47),
+            ),
+        ].sort((a, b) => a - b);
+        if (indices.length) out[key] = indices;
+    }
+    return out;
+}
+
 const updateTimeSlots = async (req: any, res: Response) => {
     try {
         const { email } = req.user
-        const { timeSlots } = req.body
-        const newUser = await User.findOneAndUpdate({ email: email }, { timeSlots: timeSlots }, { new: true })
+        const { timeSlots, availabilityMode, weeklyTimeSlots } = req.body
+        const update: any = { timeSlots: timeSlots }
+        if (availabilityMode === 'common' || availabilityMode === 'daily') {
+            update.availabilityMode = availabilityMode
+        }
+        if (weeklyTimeSlots && typeof weeklyTimeSlots === 'object') {
+            update.weeklyTimeSlots = weeklyTimeSlots
+        }
+        const newUser = await User.findOneAndUpdate({ email: String(email) }, update, { new: true })
         newUser.token = null
         newUser.password = null
         return res.status(200).json({
@@ -44,7 +73,7 @@ const updateTimeSlots = async (req: any, res: Response) => {
         })
     } catch (err) {
         console.log(err)
-        return res.status(500).send(err.message);
+        return res.status(500).send(safeErrorMessage(err));
     }
 }
 
@@ -52,7 +81,7 @@ const getDailyTimeSlots = async (req, res) => {
     try {
         const { email } = req.user
         const { startTime, endTime, userId } = req.body
-        const user = await User.findOne(userId ? { _id: userId } : { email: email }).select('dailyTimeSlots')
+        const user = await User.findOne(userId ? { _id: String(userId) } : { email: email }).select('dailyTimeSlots')
         if (!user) {
             throw new Error("User not found")
         }
@@ -67,7 +96,7 @@ const getDailyTimeSlots = async (req, res) => {
         })
     } catch (err) {
         console.log(err)
-        return res.status(500).send(err.message);
+        return res.status(500).send(safeErrorMessage(err));
     }
 }
 
@@ -94,7 +123,7 @@ const updateDailyTimeSlots = async (req, res) => {
         })
     } catch (err) {
         console.log(err)
-        return res.status(500).send(err.message);
+        return res.status(500).send(safeErrorMessage(err));
     }
 }
 
@@ -102,7 +131,7 @@ const getCustomerById = async (req, res) => {
     try {
         console.log("inside getCustomerByid")
         const { id } = req.params
-        const query = await User.findById(id).populate(["keywords", "services"])
+        const query = await User.findById(String(id)).populate(["keywords", "services"])
         console.log("inside getCustomerByid", query)
         return res.status(200).json({
             result: query
@@ -110,7 +139,7 @@ const getCustomerById = async (req, res) => {
     }
     catch (err) {
         console.log(err)
-        return res.status(500).send(err.message);
+        return res.status(500).send(safeErrorMessage(err));
     }
 }
 const escapeRegex = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -121,15 +150,26 @@ const filterCustomers = async (req, res) => {
         const { _id, username, keywords, services, sortBy } = req.body
         let query = User.find({ role: 'customer', status: { $ne: 'blocked' } })
         if (_id) {
-            query.where({ _id: _id })
+            query.where({ _id: String(_id) })
         } else {
-            const nameOrEmail = username && String(username).trim();
-            if (nameOrEmail) {
-                const term = escapeRegex(nameOrEmail);
+            const searchTerm = username && String(username).trim();
+            if (searchTerm) {
+                const rx = { $regex: escapeRegex(searchTerm), $options: 'i' };
+                // Mirrors the student-side expert search: name/email plus the student's
+                // institution, degree, bio and major (keyword) names.
+                const matchingKeywords = await Keyword.find({ value: rx }).select('_id')
+                const keywordIds = matchingKeywords.map((k: any) => k._id)
                 query.where({
                     $or: [
-                        { username: { $regex: term, $options: 'i' } },
-                        { email: { $regex: term, $options: 'i' } },
+                        { username: rx },
+                        { email: rx },
+                        { title: rx },
+                        { description: rx },
+                        { currentUniversity: rx },
+                        { targetUniversities: rx },
+                        { degreeSought: rx },
+                        { customKeywords: rx },
+                        ...(keywordIds.length ? [{ keywords: { $in: keywordIds } }] : []),
                     ],
                 });
             }
@@ -137,14 +177,8 @@ const filterCustomers = async (req, res) => {
                 let _keywords = []
                 for (let i = 0; i < keywords.length; i++) {
                     if (keywords[i].new) {
-                        const sameKeywordExist = await Keyword.find({ value: keywords[i].value })
-                        if (sameKeywordExist.length) {
-                            _keywords.push(sameKeywordExist[0]._id)
-                        } else {
-                            const temp = new Keyword(keywords[i])
-                            const newKeyword = await temp.save()
-                            _keywords.push(newKeyword._id)
-                        }
+                        const existing = await Keyword.findOne({ value: String(keywords[i].value) })
+                        if (existing) _keywords.push(existing._id)
                     } else {
                         _keywords.push(keywords[i]._id)
                     }
@@ -189,14 +223,14 @@ const filterCustomers = async (req, res) => {
         })
     } catch (err) {
         console.log(err)
-        return res.status(500).send(err.message);
+        return res.status(500).send(safeErrorMessage(err));
     }
 }
 
 const shareMeetingViaEmail = async (req, res) => {
     try {
         const { email, groupchatId } = req.body;
-        const groupChat = await GroupChat.findById(groupchatId);
+        const groupChat = await GroupChat.findById(String(groupchatId));
 
         const user = await User.findOne({ email: email.toLowerCase() })
         const name = user?.username ?? "Guest"
@@ -207,17 +241,9 @@ const shareMeetingViaEmail = async (req, res) => {
 
     } catch (err) {
         console.log(err)
-        return res.status(500).send(err.message);
+        return res.status(500).send(safeErrorMessage(err));
     }
 }
-
-/** Stripe amounts are minor units (e.g. cents). Classify by linked group chat / event. */
-const classifyPayment = (h: any) => {
-    if (h.groupChat?.type === "seminar") return "seminar";
-    if (h.groupChat) return "individual";
-    if (h.event) return "individual";
-    return "other";
-};
 
 /** Set minimum advance booking notice (24 / 48 / 72 hours). */
 const setBookingNoticeHours = async (req: any, res: Response) => {
@@ -283,6 +309,37 @@ const setBlockedBookingDates = async (req: any, res: Response) => {
     }
 };
 
+/** Replace expert per-date blocked time slots ({ "YYYY-MM-DD": [halfHourIndex, ...] }). */
+const setBlockedBookingSlots = async (req: any, res: Response) => {
+    try {
+        const filter = expertUserUpdateFilter(req);
+        if (!filter) {
+            return res.status(401).json({ error: "Unauthorized" });
+        }
+        const normalized = normalizeBlockedSlots(req.body?.slots);
+        if (normalized === null) {
+            return res.status(400).json({
+                error: "slots must be an object of YYYY-MM-DD to half-hour index arrays",
+            });
+        }
+        const user = await User.findByIdAndUpdate(
+            filter,
+            { blockedBookingSlots: normalized },
+            { new: true },
+        ).select("blockedBookingSlots timeZone email");
+        if (!user) {
+            return res.status(404).json({ error: "User not found" });
+        }
+        return res.status(200).json({
+            blockedBookingSlots: user.blockedBookingSlots || {},
+            timeZone: user.timeZone || "UTC",
+        });
+    } catch (err: any) {
+        console.log(err);
+        return res.status(500).json({ error: safeErrorMessage(err) });
+    }
+};
+
 const getMyPaymentHistory = async (req: any, res: Response) => {
     try {
         const expertId = req.user.userId;
@@ -294,19 +351,6 @@ const getMyPaymentHistory = async (req: any, res: Response) => {
             .limit(500)
             .lean();
 
-        let individualSessionsCents = 0;
-        let seminarsCents = 0;
-        let otherCents = 0;
-
-        for (const h of histories) {
-            if (h.status !== "completed") continue;
-            const amt = typeof h.amount === "number" ? h.amount : 0;
-            const cat = classifyPayment(h);
-            if (cat === "seminar") seminarsCents += amt;
-            else if (cat === "individual") individualSessionsCents += amt;
-            else otherCents += amt;
-        }
-
         const enriched = histories.map((h: any) => ({
             ...h,
             paymentKind: classifyPayment(h),
@@ -314,16 +358,32 @@ const getMyPaymentHistory = async (req: any, res: Response) => {
 
         return res.status(200).json({
             result: enriched,
-            summary: {
-                totalReceivedCents: individualSessionsCents + seminarsCents + otherCents,
-                individualSessionsCents,
-                seminarsCents,
-                otherCents,
-            },
+            summary: summarizePaymentHistory(histories),
         });
     } catch (err: any) {
         console.log(err);
-        return res.status(500).send(err.message);
+        return res.status(500).send(safeErrorMessage(err));
+    }
+};
+
+// The logged-in expert's followers, as lightweight student cards for the dashboard list.
+const getMyFollowers = async (req: any, res: Response) => {
+    try {
+        const expertId = req.user.userId;
+        const expert = await User.findById(expertId)
+            .select('followers')
+            .populate({
+                path: 'followers',
+                select:
+                    'email username image role status degreeSought intendedIntake ' +
+                    'currentUniversity gpa country specialNote createdAt',
+            })
+            .lean();
+        const followers = Array.isArray(expert?.followers) ? expert.followers : [];
+        return res.status(200).json({ result: followers });
+    } catch (err: any) {
+        console.log(err);
+        return res.status(500).send(safeErrorMessage(err));
     }
 };
 
@@ -333,8 +393,10 @@ module.exports = {
     updateDailyTimeSlots,
     setBookingNoticeHours,
     setBlockedBookingDates,
+    setBlockedBookingSlots,
     filterCustomers,
     getCustomerById,
     shareMeetingViaEmail,
     getMyPaymentHistory,
+    getMyFollowers,
 }

@@ -19,6 +19,9 @@ function formatDuration(ms: number) {
 export type UpcomingSession = {
   title: string;
   startAt: number; // epoch ms
+  id?: string;
+  peerUserId?: string;
+  pending?: boolean;
 };
 
 function CountdownRow({
@@ -26,6 +29,7 @@ function CountdownRow({
   iconClass,
   label,
   emptyLabel,
+  joinLabel,
   session,
   now,
   onJoin,
@@ -34,12 +38,19 @@ function CountdownRow({
   iconClass: string;
   label: string;
   emptyLabel: string;
+  joinLabel: string;
   session: UpcomingSession | null;
   now: number;
   onJoin?: () => void;
 }) {
   return (
-    <div className="rounded-xl border-2 border-[#234C6A]/60 bg-[#F8FAFC] p-4">
+    <div className="relative rounded-xl border-2 border-[#234C6A]/60 bg-[#F8FAFC] p-4">
+      {session?.pending && (
+        <span className="absolute right-2 top-2 inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-700">
+          <Clock className="h-3 w-3" aria-hidden />
+          Pending
+        </span>
+      )}
       <div className="flex items-start justify-between gap-3">
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
@@ -69,7 +80,7 @@ function CountdownRow({
           )}
         </div>
 
-        {session && (
+        {session && !session.pending && (
           <div className="mt-3 flex justify-end">
             <button
               type="button"
@@ -77,7 +88,7 @@ function CountdownRow({
               className="inline-flex items-center justify-center rounded-[4px] bg-[#234C6A] px-3 py-1.5 text-[11px] font-semibold text-white hover:brightness-110 disabled:opacity-60"
               disabled={!onJoin}
             >
-              Join meeting
+              {joinLabel}
             </button>
           </div>
         )}
@@ -123,6 +134,7 @@ export default function UpcomingCountdownCard({
           iconClass="bg-emerald-50 text-emerald-700"
           label="Next seminar"
           emptyLabel="No upcoming seminar"
+          joinLabel="Join seminar chat"
           session={nextSeminar}
           now={now}
           onJoin={onJoinSeminar}
@@ -132,6 +144,7 @@ export default function UpcomingCountdownCard({
           iconClass="bg-blue-50 text-[#234C6A]"
           label="Next 1:1"
           emptyLabel="No upcoming 1:1 session"
+          joinLabel="Join chat"
           session={nextOneToOne}
           now={now}
           onJoin={onJoinOneToOne}

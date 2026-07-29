@@ -1,12 +1,13 @@
 import { Request, Response } from 'express';
 import { HTTP_GENERIC_ERROR, safeHttp500Message } from '../utils/httpUserFacingCopy';
-import { computeBookingPriceCents, extractHourlyRate, assertPaymentMatchesExpected } from '../utils/bookingPrice';
+import { computeBookingPriceCents, extractHourlyRate, assertPaymentMatchesExpected, assertIntentMatchesBooking } from '../utils/bookingPrice';
+const AppState = require("../models/AppState");
 const Event = require("../models/Event");
 const User = require("../models/User");
 const FriendInvitation = require("../models/FriendInvitation");
 const PaymentHistory = require("../models/PaymentHistory");
 const { getFullUserData } = require("../middlewares/requireAuth");
-const { checkPaymentIntentSucceeded, refundPaymentIntent } = require("./stripe.controller");
+const { checkPaymentIntentSucceeded, refundPaymentIntent, sendBookingReceiptAndConfirmation } = require("./stripe.controller");
 const { appendPaymentHistory } = require("./payment.controller");
 const { checkTitleNameInvalid } = require('../services/global')
 const { sendEmailMeetingRequestToExpert, sendEmailMeetingRequestToCustomer, scheduleEmailReminder, sendEmailMeetingAcceptance } = require('../services/notifications')
@@ -22,8 +23,8 @@ const createEventByExpert = async (req, res) => {
         }
 
         // check if the invited user exists in the database
-        const expertUser = await User.findOne({ email: expert });
-        const customerUser = await User.findOne({ email: customer })
+        const expertUser = await User.findOne({ email: String(expert) });
+        const customerUser = await User.findOne({ email: String(customer) })
         if (!expertUser || !customerUser) {
             return res
                 .status(404)
@@ -118,8 +119,8 @@ const appendEvent = async (req, res) => {
             return res.status(400).send('Invalid expert/customer email');
         }
 
-        const expertUser = await User.findOne({ email: expert });
-        const customerUser = await User.findOne({ email: customer });
+        const expertUser = await User.findOne({ email: String(expert) });
+        const customerUser = await User.findOne({ email: String(customer) });
         if (!expertUser || !customerUser) {
             return res
                 .status(404)
@@ -131,8 +132,30 @@ const appendEvent = async (req, res) => {
         let paymentIntentSucceeded_test: any = false;
         let paymentIntentSucceeded_live: any = false;
         if (expectedCents > 0) {
-            paymentIntentSucceeded_test = await checkPaymentIntentSucceeded(payment_intent, 'test');
-            paymentIntentSucceeded_live = await checkPaymentIntentSucceeded(payment_intent, 'live');
+            // One intent, one booking — without this the same payment could be replayed
+            // to accept any number of events.
+            const alreadyUsed = await PaymentHistory.exists({
+                paymentIntent: String(payment_intent),
+                paymentType: 'charge',
+            });
+            if (alreadyUsed) {
+                return res.status(409).send("This payment has already been used for a booking.");
+            }
+            // Pinned to the configured mode, so a test-mode intent can never satisfy a
+            // live booking (or the reverse).
+            const appState = await AppState.findOne();
+            const serverMode = appState?.stripeMode === 'live' ? 'live' : 'test';
+            const succeeded = await checkPaymentIntentSucceeded(payment_intent, serverMode);
+            paymentIntentSucceeded_test = serverMode === 'test' ? succeeded : false;
+            paymentIntentSucceeded_live = serverMode === 'live' ? succeeded : false;
+
+            if (succeeded) {
+                // The intent must name this payer and this expert.
+                assertIntentMatchesBooking(succeeded, {
+                    userId: String(req.user?.userId ?? customerUser._id),
+                    expertId: String(expertUser._id),
+                });
+            }
         }
         const charge = assertPaymentMatchesExpected(expectedCents, payment_intent, paymentIntentSucceeded_test, paymentIntentSucceeded_live);
 
@@ -141,7 +164,7 @@ const appendEvent = async (req, res) => {
 
         let eventExists
         if (eventId) {
-            eventExists = await Event.findById(eventId)
+            eventExists = await Event.findById(String(eventId))
             if (!eventExists) {
                 return res.status(404).send("Sorry, the invitation you are trying to accept doesn't exist")
             }
@@ -151,7 +174,7 @@ const appendEvent = async (req, res) => {
             excludeEventId: eventExists?._id?.toString(),
         });
 
-        console.log(eventId, eventExists)
+        console.log('[checkEvent]', eventId, eventExists)
         if (eventExists) {
             if (charge) {
                 eventExists.paidBy = charge.paidBy;
@@ -177,6 +200,19 @@ const appendEvent = async (req, res) => {
                     customer: customerUser._id.toString(),
                     expert: expertUser._id.toString(),
                     event: eventExists._id.toString(),
+                });
+
+                await sendBookingReceiptAndConfirmation({
+                    payment_intent,
+                    charge,
+                    sessionType: '1:1 Session',
+                    sessionName: title,
+                    expertName: expertUser.username,
+                    studentName: customerUser.username,
+                    studentEmail: customerUser.email,
+                    start,
+                    duration,
+                    timeZone: customerUser.timeZone,
                 });
             }
 
@@ -239,6 +275,19 @@ const appendEvent = async (req, res) => {
                     expert: expertUser._id.toString(),
                     event: event._id.toString(),
                 });
+
+                await sendBookingReceiptAndConfirmation({
+                    payment_intent,
+                    charge,
+                    sessionType: '1:1 Session',
+                    sessionName: title,
+                    expertName: expertUser.username,
+                    studentName: customerUser.username,
+                    studentEmail: customerUser.email,
+                    start,
+                    duration,
+                    timeZone: customerUser.timeZone,
+                });
             }
 
             const newExpert = await User.findByIdAndUpdate(expertUser._id, { events: [...expertUser.events, event._id] }, { new: true })
@@ -298,7 +347,8 @@ const appendEvent = async (req, res) => {
 
 const updateEvent = async (req, res) => {
     try {
-        const { eventId, updates } = req.body;
+        const { updates } = req.body;
+        const eventId = String(req.body.eventId);
 
         // Find the event by ID
         const event = await Event.findById(eventId);
@@ -359,7 +409,7 @@ const updateEvent = async (req, res) => {
 
 const acceptEvent = async (req, res) => {
     try {
-        const { eventId } = req.body
+        const eventId = String(req.body.eventId)
         const event = await Event.findById(eventId)
         if (!event)
             throw new Error("No event found with provided id")
@@ -411,7 +461,7 @@ const acceptEvent = async (req, res) => {
 
 const declineEvent = async (req, res) => {
     try {
-        const { eventId } = req.body
+        const eventId = String(req.body.eventId)
         const event = await Event.findById(eventId)
         if (!event)
             throw new Error("No event found with provided id")
@@ -437,7 +487,7 @@ const declineEvent = async (req, res) => {
 
 const cancelInvitation = async (req, res) => {
     try {
-        const { eventId } = req.body
+        const eventId = String(req.body.eventId)
         const event = await Event.findById(eventId)
         if (!event)
             throw new Error("No event found with provided id")
@@ -474,7 +524,7 @@ const cancelInvitation = async (req, res) => {
 
 const cancelEvent = async (req, res) => {
     try {
-        const { eventId } = req.body
+        const eventId = String(req.body.eventId)
         const event = await Event.findById(eventId)
         if (!event)
             throw new Error("No event found with provided id")
@@ -540,7 +590,9 @@ const getMyEvents = async (req, res) => {
 
 const getEventsBetweenCustomerAndExpert = async (req, res) => {
     try {
-        const { expertId, customerId, isOngoing } = req.body
+        const { isOngoing } = req.body
+        const expertId = String(req.body.expertId)
+        const customerId = String(req.body.customerId)
 
         const query: Record<string, any> = { expert: expertId, customer: customerId }
         if (isOngoing) {
@@ -560,7 +612,7 @@ const getEventsBetweenCustomerAndExpert = async (req, res) => {
 
 const checkIfTheEventOngoing = async (participants, eventId) => {
     try {
-        console.log(participants, eventId)
+        console.log('[checkIfTheEventOngoing]', participants, eventId)
         const event = await Event.find({
             $or: [
                 { expert: participants[0], customer: participants[1], _id: eventId, start: { $lte: new Date() }, end: { $gt: new Date() } },
@@ -579,7 +631,8 @@ const checkIfTheEventOngoing = async (participants, eventId) => {
 
 const createFeedback = async (req, res) => {
     try {
-        const { _id, updateData } = req.body;
+        const { updateData } = req.body;
+        const _id = String(req.body._id);
 
         if (!_id || !updateData) {
             return res.status(400).json({ error: "Event ID and feedback details are required." });
@@ -624,7 +677,7 @@ const createFeedback = async (req, res) => {
 // Get Feedback
 const getFeedback = async (req, res) => {
     try {
-        const { _id } = req.body;
+        const _id = String(req.body._id);
 
         if (!_id) {
             return res.status(400).json({ error: "Event ID is required." });

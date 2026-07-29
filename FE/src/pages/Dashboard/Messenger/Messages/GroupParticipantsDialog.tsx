@@ -6,18 +6,24 @@ import DialogActions from "@mui/material/DialogActions";
 import Button from "@mui/material/Button";
 import Avatar from "../../../../components/Avatar";
 import { Crown, Mail, UserMinus, Users, X } from "lucide-react";
-import { useDispatch } from "react-redux";
+import { useDispatch, useSelector } from "react-redux";
+import { RootState } from "../../../../store";
 import { removeCommunityMember } from "../../../../api/api";
 import { showErrorAlert, showSuccessAlert, showWarningAlert } from '../../../../actions/alertActions';
 import { setChosenGroupChatDetails } from "../../../../actions/chatActions";
 import { updateMe } from "../../../../actions/authActions";
+import { fetchChatUserProfile } from "../../../../api/chatApi";
+import { buildFallbackChatProfile, mergeChatProfile } from "../../../../utils/chatProfileModal";
+import ProfileModal from "./ProfileModal";
 
 interface Props {
     isDialogOpen: boolean;
     closeDialogHandler: () => void;
     groupDetails: any;
     currentUserId: string;
+    currentUserRole?: string;
     theme?: "light" | "dark";
+    resolvedImages?: Map<string, string>;
 }
 
 const GroupParticipantsDialog = ({
@@ -25,10 +31,58 @@ const GroupParticipantsDialog = ({
     closeDialogHandler,
     groupDetails,
     currentUserId,
+    currentUserRole,
     theme = "light",
+    resolvedImages,
 }: Props) => {
     const dispatch = useDispatch();
+    const myDetails = useSelector((state: RootState) => state.auth.userDetails);
     const [removingId, setRemovingId] = useState<string | null>(null);
+    const [profilePerson, setProfilePerson] = useState<any | null>(null);
+    const [profileOpen, setProfileOpen] = useState(false);
+
+    // Clicking a member opens their profile card layered on top of this dialog
+    // (which is lowered below ProfileModal's overlay), so closing the card
+    // returns to the list. Show a fallback immediately, then enrich it once the
+    // full profile loads.
+    const openParticipantProfile = async (participant: any) => {
+        const pid = String(participant?._id ?? participant?.id ?? "");
+        if (!pid) return;
+        if (pid === String(currentUserId)) {
+            const myRole =
+                String(myDetails?.role || currentUserRole || "").toLowerCase() === "expert"
+                    ? "expert"
+                    : "customer";
+            setProfilePerson({
+                keywords: [],
+                services: [],
+                country: null,
+                ...(myDetails || {}),
+                _id: pid,
+                username: myDetails?.username || participant?.username || "Member",
+                email: myDetails?.email || participant?.email || "",
+                image: myDetails?.image ?? participant?.image ?? null,
+                role: myRole,
+            });
+            setProfileOpen(true);
+            return;
+        }
+        const fallback = buildFallbackChatProfile(
+            { userId: pid, username: participant?.username, image: participant?.image ?? null },
+            String(currentUserRole || ""),
+        );
+        setProfilePerson(fallback);
+        setProfileOpen(true);
+        const response: any = await fetchChatUserProfile(pid);
+        if (response?.success && response?.result) {
+            setProfilePerson(mergeChatProfile(fallback, response.result));
+        }
+    };
+
+    const closeParticipantProfile = () => {
+        setProfileOpen(false);
+        setProfilePerson(null);
+    };
     const [removeReasonOpen, setRemoveReasonOpen] = useState(false);
     const [removeReason, setRemoveReason] = useState("");
     const [pendingRemoveMemberId, setPendingRemoveMemberId] = useState<string | null>(null);
@@ -43,6 +97,7 @@ const GroupParticipantsDialog = ({
             ? groupDetails.admin
             : groupDetails?.admin?._id || groupDetails?.admin?.id;
     const isCommunity = groupDetails?.type === "community";
+    const isIndividual = groupDetails?.type === "individual";
     const coModeratorIds = new Set(
         (groupDetails?.coModerators || []).map((c: any) => String(c?._id ?? c?.id ?? c)).filter(Boolean),
     );
@@ -50,7 +105,6 @@ const GroupParticipantsDialog = ({
         String(adminId || "") === String(currentUserId || "")
         || coModeratorIds.has(String(currentUserId || ""))
     );
-
     const handleRemove = async (memberUserId: string, reason: string) => {
         const gid = String(groupDetails?.groupId || groupDetails?._id || "");
         if (!gid || !memberUserId) return;
@@ -107,6 +161,7 @@ const GroupParticipantsDialog = ({
                 maxWidth="sm"
                 fullWidth
                 PaperProps={{ className: paperClass }}
+                sx={{ zIndex: profileOpen ? 150 : 1300 }}
             >
                 <div className={`border-b px-5 pt-5 pb-3 ${isLight ? "border-slate-100" : "border-slate-700"}`}>
                     <div className="flex items-start justify-between gap-3">
@@ -144,10 +199,26 @@ const GroupParticipantsDialog = ({
                             return (
                                 <div
                                     key={pid}
-                                    className={`rounded-xl border px-3 py-2.5 ${isLight ? "border-slate-200 bg-white" : "border-slate-700 bg-slate-800/70"}`}
+                                    role="button"
+                                    tabIndex={0}
+                                    onClick={() => void openParticipantProfile(participant)}
+                                    onKeyDown={(e) => {
+                                        if (e.key === "Enter" || e.key === " ") {
+                                            e.preventDefault();
+                                            void openParticipantProfile(participant);
+                                        }
+                                    }}
+                                    className={`cursor-pointer rounded-xl border px-3 py-2.5 transition-colors ${isLight ? "border-slate-200 bg-white hover:bg-slate-50" : "border-slate-700 bg-slate-800/70 hover:bg-slate-800"}`}
                                 >
                                     <div className="flex items-start gap-3">
-                                        <Avatar username={participant.username} image={participant.image} />
+                                        <Avatar
+                                            username={participant.username}
+                                            image={
+                                                (typeof participant.image === "string"
+                                                    ? resolvedImages?.get(participant.image.trim())
+                                                    : undefined) ?? participant.image
+                                            }
+                                        />
                                         <div className="min-w-0 flex-1">
                                             <div className="flex flex-wrap items-center gap-1.5">
                                                 <p className={`truncate text-sm font-semibold ${isLight ? "text-slate-900" : "text-slate-100"}`}>
@@ -158,7 +229,7 @@ const GroupParticipantsDialog = ({
                                                         You
                                                     </span>
                                                 ) : null}
-                                                {isAdmin ? (
+                                                {isAdmin && !isIndividual ? (
                                                     <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${isLight ? "bg-amber-50 text-amber-700 border border-amber-200" : "bg-amber-900/40 text-amber-200 border border-amber-700"}`}>
                                                         <Crown className="h-3 w-3" />
                                                         Admin
@@ -179,7 +250,10 @@ const GroupParticipantsDialog = ({
                                             <button
                                                 type="button"
                                                 disabled={removingId === pid}
-                                                onClick={() => openRemoveReasonDialog(pid, participant.username)}
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    openRemoveReasonDialog(pid, participant.username);
+                                                }}
                                                 className={`inline-flex shrink-0 items-center gap-1 rounded-lg px-2.5 py-1 text-[11px] font-semibold transition ${
                                                     isLight
                                                         ? "border border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100"
@@ -231,6 +305,16 @@ const GroupParticipantsDialog = ({
                     </Button>
                 </DialogActions>
             </Dialog>
+            {profilePerson ? (
+                <ProfileModal
+                    isOpen={profileOpen}
+                    onClose={closeParticipantProfile}
+                    userDetails={profilePerson}
+                    theme={theme}
+                    viewerRole={currentUserRole}
+                    previewImage={profilePerson?.image}
+                />
+            ) : null}
         </div>
     );
 };

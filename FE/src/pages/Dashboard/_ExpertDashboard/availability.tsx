@@ -6,12 +6,15 @@ import { useAppSelector } from '../../../store';
 import { doSetExpertBookingNoticeHours, doUpdateProfile, doUpdateTimeSlots } from '../../../api/api';
 import { updateMe } from '../../../actions/authActions';
 import {
+  buildWeeklyTimeSlots,
   formatHourRange,
   formatSubIntervals,
   halfHourIndicesToHours,
   hoursToHalfHourIndices,
   normalizeExpertPrice,
   unionDailyAvailabilityHours,
+  weeklyTimeSlotsEqual,
+  WEEKDAY_KEYS,
 } from '../../../utils/schedulingSlots';
 import { detectUserTimeZone } from '../../../utils/schedulingTimezone';
 import {
@@ -123,13 +126,38 @@ const AvailabilityPage: React.FC = () => {
         : [];
     const price = normalizeExpertPrice(userDetails?.price);
     const durations = normalizeAppointmentDurations(userDetails?.appointmentDurations);
+
+    const savedMode: AvailabilityMode =
+      userDetails?.availabilityMode === 'daily' ? 'daily' : 'common';
+    const savedWeekly = userDetails?.weeklyTimeSlots;
+    const hasWeekly =
+      savedWeekly &&
+      typeof savedWeekly === 'object' &&
+      WEEKDAY_KEYS.some((d) => Array.isArray(savedWeekly[d]) && savedWeekly[d].length > 0);
+    const dailyFromSaved: DailyAvailability[] | null = hasWeekly
+      ? DAYS.map((day) => {
+          const dayHours = halfHourIndicesToHours(
+            Array.isArray(savedWeekly[day]) ? savedWeekly[day] : [],
+          );
+          return { day, enabled: dayHours.length > 0, selectedSlots: dayHours };
+        })
+      : null;
+
     setForm((prev) => ({
       ...prev,
+      mode: savedMode,
       commonSlots: hours.length ? hours : prev.commonSlots,
       hourlyRate: price != null ? String(price) : prev.hourlyRate,
       appointmentDurations: durations,
+      dailyAvailability: dailyFromSaved ?? prev.dailyAvailability,
     }));
-  }, [userDetails?.timeSlots, userDetails?.price, userDetails?.appointmentDurations]);
+  }, [
+    userDetails?.timeSlots,
+    userDetails?.price,
+    userDetails?.appointmentDurations,
+    userDetails?.availabilityMode,
+    userDetails?.weeklyTimeSlots,
+  ]);
 
   const activeBookingNotice = useMemo(() => {
     const n = Number(userDetails?.bookingNoticeHours);
@@ -297,24 +325,36 @@ const AvailabilityPage: React.FC = () => {
       return;
     }
 
+    // `timeSlots` stays the flat union so 'common' mode and legacy consumers keep
+    // working; `weeklyTimeSlots` carries the per-weekday picks used by 'daily' mode.
     const selectedHours =
       form.mode === 'common'
         ? form.commonSlots
         : unionDailyAvailabilityHours(form.dailyAvailability);
     const timeSlots = hoursToHalfHourIndices(selectedHours);
+    const weeklyTimeSlots = buildWeeklyTimeSlots(form.dailyAvailability);
     const timeZone = detectUserTimeZone();
 
     const savedPrice = normalizeExpertPrice(userDetails?.price);
     const savedSlots = Array.isArray(userDetails?.timeSlots) ? userDetails.timeSlots : [];
     const savedDurations = normalizeAppointmentDurations(userDetails?.appointmentDurations);
+    const savedMode: AvailabilityMode =
+      userDetails?.availabilityMode === 'daily' ? 'daily' : 'common';
     const rateChanged = numRate !== savedPrice;
     const slotsChanged = !slotsIndicesEqual(timeSlots, savedSlots);
     const durationsChanged = !appointmentDurationsEqual(
       form.appointmentDurations,
       savedDurations,
     );
+    const modeChanged = form.mode !== savedMode;
+    // Per-weekday picks only count as a change in 'daily' mode; in 'common' mode the
+    // daily rows are just UI defaults and must not trigger a save on their own.
+    const weeklyChanged =
+      form.mode === 'daily' &&
+      !weeklyTimeSlotsEqual(weeklyTimeSlots, userDetails?.weeklyTimeSlots);
+    const availabilityChanged = slotsChanged || modeChanged || weeklyChanged;
 
-    if (!rateChanged && !slotsChanged && !durationsChanged) {
+    if (!rateChanged && !availabilityChanged && !durationsChanged) {
       setBanner({
         type: 'success',
         message: 'No changes to save.',
@@ -324,8 +364,11 @@ const AvailabilityPage: React.FC = () => {
 
     setSaveBusy(true);
     try {
-      if (slotsChanged) {
-        const slotsRes = await doUpdateTimeSlots(timeSlots);
+      if (availabilityChanged) {
+        const slotsRes = await doUpdateTimeSlots(timeSlots, {
+          availabilityMode: form.mode,
+          ...(form.mode === 'daily' ? { weeklyTimeSlots } : {}),
+        });
         if (!slotsRes || slotsRes === false) {
           throw new Error('Could not save time slots.');
         }
@@ -349,7 +392,7 @@ const AvailabilityPage: React.FC = () => {
         type: 'success',
         message: buildAvailabilitySaveSuccessMessage({
           rateChanged,
-          slotsChanged,
+          slotsChanged: availabilityChanged,
           durationsChanged,
           hourlyRate: numRate,
         }),
@@ -569,7 +612,7 @@ const AvailabilityPage: React.FC = () => {
           <h1 className="text-2xl font-semibold text-gray-900">Your Availability</h1>
           <p className="mt-1 text-sm text-gray-500">
             Set your hourly rate and weekly time slots, then use the calendar below to
-            view bookings and block full days when needed.
+            view bookings and block full days or individual time slots when needed.
           </p>
         </div>
 

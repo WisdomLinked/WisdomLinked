@@ -627,7 +627,8 @@ export const sendGroupMessage = async (req: any, res: Response) => {
             }
             const adm = groupChat.admin as any;
             if (adm?.email) emails.push(String(adm.email).toLowerCase());
-            const rcChannelId = await syncRocketGroupChannelMembers(String(groupChatId), emails);
+            const channelKeyId = (groupChat as any).seriesId ? String((groupChat as any).seriesId) : String(groupChatId);
+            const rcChannelId = await syncRocketGroupChannelMembers(channelKeyId, emails);
             if (rcChannelId) {
                 const rid = await sendMessageToRC(rcChannelId, content, wlDisplayName(me), me.email);
                 if (rid) sentId = rid;
@@ -689,7 +690,8 @@ export const getGroupHistory = async (req: any, res: Response) => {
             }
             const adm = groupChat.admin as any;
             if (adm?.email) emails.push(String(adm.email).toLowerCase());
-            const rcChannelId = await syncRocketGroupChannelMembers(String(groupChatId), emails);
+            const channelKeyId = (groupChat as any).seriesId ? String((groupChat as any).seriesId) : String(groupChatId);
+            const rcChannelId = await syncRocketGroupChannelMembers(channelKeyId, emails);
             if (rcChannelId) {
                 await GroupChat.updateOne(
                     { _id: groupChat._id },
@@ -1005,12 +1007,15 @@ export const getDmUnreadSnapshot = async (req: any, res: Response) => {
         const { userId } = req.user;
         const me = await User.findById(userId);
         if (!me?.email) return res.status(400).json({ error: 'User not found' });
-        const { unreadByRid, nameByRid } = await getChatUnreadSnapshotAsUser({
-            email: me.email,
-            username: me.username,
-            name: me.username,
-        });
-        return res.status(200).json({ success: true, unreadByRid, nameByRid });
+        const { unreadByRid, nameByRid, displayNameByRid, knownRids, nameResolutionFailed } =
+            await getChatUnreadSnapshotAsUser({
+                email: me.email,
+                username: me.username,
+                name: me.username,
+            });
+        return res
+            .status(200)
+            .json({ success: true, unreadByRid, nameByRid, displayNameByRid, knownRids, nameResolutionFailed });
     } catch (err: any) {
         console.error('[chat.getDmUnreadSnapshot]', err.message);
         return res.status(500).json({ error: safeErrorMessage(err) });
@@ -1064,9 +1069,11 @@ export const getChatUserProfile = async (req: any, res: Response) => {
             status: { $ne: 'blocked' },
         })
             .select(
-                '_id username email image role status title country keywords services specialNote description resume',
+                '_id username email image role status title country keywords customKeywords services specialNote description resume ' +
+                    'followers feedbacks rating price bookingNoticeHours createdAt ' +
+                    'currentUniversity gpa degreeSought intendedIntake rankingPercentile targetUniversities',
             )
-            .populate({ path: 'keywords', select: 'value label' })
+            .populate({ path: 'keywords', select: 'value label approved' })
             .populate({ path: 'services', select: 'value label' })
             .lean();
 
@@ -1076,6 +1083,34 @@ export const getChatUserProfile = async (req: any, res: Response) => {
         const isTargetExpert = String(doc.role || '').toLowerCase() === 'expert';
         if (!isTargetExpert || !viewerMaySeeExpertResume) {
             delete result.resume;
+        }
+
+        // Return trust-stat counts as scalars; never ship the full arrays.
+        result.followersCount = Array.isArray(doc.followers) ? doc.followers.length : 0;
+        result.ratingCount = Array.isArray(doc.feedbacks) ? doc.feedbacks.length : 0;
+        delete result.followers;
+        delete result.feedbacks;
+
+        // Expert session/seminar counts — the expert is the `admin`; include
+        // both pending and approved (active), excluding drafts and cancellations.
+        if (isTargetExpert) {
+            const liveStatuses = ['pending', 'active'];
+            const [oneOnOneCount, seminarCount] = await Promise.all([
+                GroupChat.countDocuments({ admin: targetId, type: 'individual', status: { $in: liveStatuses } }),
+                GroupChat.countDocuments({ admin: targetId, type: 'seminar', status: { $in: liveStatuses } }),
+            ]);
+            result.oneOnOneCount = oneOnOneCount;
+            result.seminarCount = seminarCount;
+        } else {
+            // Student trust stats: 1:1 sessions they've requested (live = pending +
+            // approved) and how many have already finished (approved & past end).
+            const now = new Date();
+            const [requestedCount, completedCount] = await Promise.all([
+                GroupChat.countDocuments({ participants: targetId, type: 'individual', status: { $in: ['pending', 'active'] } }),
+                GroupChat.countDocuments({ participants: targetId, type: 'individual', status: 'active', end: { $lt: now } }),
+            ]);
+            result.requestedCount = requestedCount;
+            result.completedCount = completedCount;
         }
 
         return res.status(200).json({ success: true, result });

@@ -4,12 +4,25 @@
 /** The (expanded) charge on a PaymentIntent, carrying Stripe's receipt fields. */
 export type StripeCharge = { receipt_url?: string | null; receipt_number?: string | null };
 
+export type IntentMetadata = {
+    bookingType?: string;
+    groupChatId?: string;
+    expertId?: string;
+    userId?: string;
+    seatRequest?: string;
+};
+
 /** A succeeded Stripe PaymentIntent, or a falsy value when none matched that mode. */
 export type PaymentIntentResult =
     | false
     | null
     | undefined
-    | { amount: number; currency: string; latest_charge?: StripeCharge | string | null };
+    | {
+          amount: number;
+          currency: string;
+          latest_charge?: StripeCharge | string | null;
+          metadata?: IntentMetadata | null;
+      };
 
 /** Price of a 1:1 booking in integer cents: (duration * hourlyRate) / 60. */
 export function computeBookingPriceCents(durationMinutes: number, hourlyRateDollars: number): number {
@@ -19,6 +32,35 @@ export function computeBookingPriceCents(durationMinutes: number, hourlyRateDoll
 /** Convert a stored dollar price (e.g. a seminar price) to integer cents. */
 export function dollarsToCents(dollars: unknown): number {
     return Math.round((Number(dollars ?? 0) || 0) * 100);
+}
+
+/**
+ * The amount actually captured on a (possibly partially-captured) PaymentIntent. After
+ * a partial capture Stripe leaves `amount` at the original authorization and puts the
+ * captured total in `amount_received`, so recording `amount` would overstate the charge
+ * and make later refunds/accounting wrong. Prefer `amount_received` when present.
+ */
+export function capturedAmountCents(intent: any): number {
+    const received = Number(intent?.amount_received);
+    if (Number.isFinite(received) && received > 0) return Math.round(received);
+    return Math.max(0, Math.round(Number(intent?.amount ?? 0) || 0));
+}
+
+// Standard US card processing fee (2.9% + 30¢). Stripe keeps this on refunds, so a
+// register-then-cancel loop would otherwise drain it from the platform on every cycle.
+export const STRIPE_FEE_PERCENT = 0.029;
+export const STRIPE_FEE_FIXED_CENTS = 30;
+
+/**
+ * Refund owed on a voluntary cancellation: the charge minus the non-recoverable
+ * processing fee, never below 0. Retaining the fee makes register-then-leave abuse
+ * cost-neutral for the platform instead of a per-cycle loss.
+ */
+export function voluntaryCancellationRefundCents(amountCents: unknown): number {
+    const amount = Math.max(0, Math.round(Number(amountCents ?? 0) || 0));
+    if (amount <= 0) return 0;
+    const fee = Math.round(amount * STRIPE_FEE_PERCENT) + STRIPE_FEE_FIXED_CENTS;
+    return Math.max(0, amount - fee);
 }
 
 /** Experts store a single hourly rate, sometimes as a number, sometimes as [number]. */
@@ -63,4 +105,47 @@ export function assertPaymentMatchesExpected(
         receiptUrl: charge?.receipt_url ?? null,
         receiptNumber: charge?.receipt_number ?? null,
     };
+}
+
+export function assertIntentMatchesBooking(
+    pi: PaymentIntentResult,
+    expected: { userId: string; groupChatId?: string; expertId?: string },
+): void {
+    const meta: IntentMetadata = (pi && typeof pi === 'object' && pi.metadata) || {};
+    if (expected.groupChatId) {
+        if (
+            String(meta.bookingType || '') !== 'groupChat' ||
+            String(meta.groupChatId || '') !== String(expected.groupChatId)
+        ) {
+            throw new Error("This payment was not created for this booking");
+        }
+    }
+    if (expected.expertId) {
+        if (
+            String(meta.bookingType || '') !== 'oneToOne' ||
+            String(meta.expertId || '') !== String(expected.expertId)
+        ) {
+            throw new Error("This payment was not created for this booking");
+        }
+    }
+    // The payer is bound to the account: an intent must carry the userId of whoever is
+    // redeeming it. Skipping the check when metadata.userId was absent let any account
+    // redeem another's intent for the same booking, so require a match whenever the
+    // caller knows who is booking (every current caller does).
+    if (expected.userId != null && String(expected.userId) !== '') {
+        if (String(meta.userId || '') !== String(expected.userId)) {
+            throw new Error("This payment was made from a different account");
+        }
+    }
+}
+
+export type BookingIntentInput =
+    | { kind: 'oneToOne'; durationMinutes: number; hourlyRateDollars: number }
+    | { kind: 'groupChat'; priceDollars: unknown };
+
+export function expectedBookingIntentCents(input: BookingIntentInput): number {
+    if (input.kind === 'oneToOne') {
+        return computeBookingPriceCents(input.durationMinutes, input.hourlyRateDollars);
+    }
+    return dollarsToCents(input.priceDollars);
 }

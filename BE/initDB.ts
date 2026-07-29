@@ -46,7 +46,8 @@ const appendAdminUserAndGroupChat = async () => {
                 username: 'Admin',
                 email: email.toLowerCase(),
                 password: encryptedPassword,
-                role: role
+                role: role,
+                status: 'active'
             });
             admin = await newUser.save();
         }

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useDispatch } from 'react-redux';
 import IconButton from '@mui/material/IconButton';
 import Dialog from '@mui/material/Dialog';
@@ -9,18 +9,21 @@ import Button from '@mui/material/Button';
 import { MessageCircle, Plus, X, CheckCircle2, MoreVertical, UserPlus, ArrowLeft } from 'lucide-react';
 import Messenger from '../../pages/Dashboard/Messenger/Messenger';
 import { useAppSelector } from '../../store';
-import { onSubscriptionChanged, subscribeToRoom } from '../../services/rcRealtime';
+import { onSubscriptionChanged, onNewMessage, normalizeRcStreamRoomMessage, subscribeToRoom } from '../../services/rcRealtime';
+import { toRocketChatUsername } from '../../utils/rocketchatUsername';
 import {
   doGetMyEvents,
   getAllCommunityChats,
   profileImageFetch,
   createCommunityChat,
   joinCommunityChat,
+  getMyFollowers,
   doFilterCustomers,
   doFilterExperts,
   searchPrivateChatUsers,
   joinPrivateChat,
   addParticipantsToCommunityChat,
+  ensureSeminarChannel,
 } from '../../api/api';
 import { clearDmThread, hideDmFromList, fetchDmUnreadSnapshot, fetchOnlineUsers } from '../../api/chatApi';
 import { setOnlineUsers } from '../../actions/friendActions';
@@ -121,10 +124,15 @@ const StudentChat: React.FC = () => {
   const [newName, setNewName] = useState('');
   const [newDescription, setNewDescription] = useState('');
   const [newOpenToAll, setNewOpenToAll] = useState(true);
+  const [newOpenToFollowers, setNewOpenToFollowers] = useState(false);
+  const [loadingFollowers, setLoadingFollowers] = useState(false);
   const [creating, setCreating] = useState(false);
   const [communityInviteQuery, setCommunityInviteQuery] = useState('');
   const [communityInviteRows, setCommunityInviteRows] = useState<PrivateRow[]>([]);
   const [communityInviteSelected, setCommunityInviteSelected] = useState<Array<{ id: string; title: string }>>([]);
+  // Ids of invitees that were pulled in by "Open to all followers", so unchecking
+  // the box can remove exactly those without touching manually-added members.
+  const communityFollowerIdsRef = useRef<Set<string>>(new Set());
   const [expertCustomerSearchRows, setExpertCustomerSearchRows] = useState<PrivateRow[]>([]);
   const [studentExpertSearchRows, setStudentExpertSearchRows] = useState<PrivateRow[]>([]);
 
@@ -167,6 +175,31 @@ const StudentChat: React.FC = () => {
 
     return results;
   }, [userDetails, isCustomer, isExpert, isAdmin, currentUserId]);
+
+  /** Seminar group chats the user belongs to (host expert or a joined student). */
+  const seminarRows = useMemo(() => {
+    const list: any[] = userDetails?.groupChats || [];
+    const seminars = list.filter(
+      (g: any) => g?.type === 'seminar' && (g?.status === 'active' || !g?.status),
+    );
+    const seen = new Set<string>();
+    const rows: any[] = [];
+    for (const g of seminars) {
+      const sid = g?.seriesId ? String(g.seriesId) : null;
+      if (sid) {
+        if (seen.has(sid)) continue;
+        seen.add(sid);
+      }
+      rows.push({
+        _id: String(g._id),
+        name: g.name || 'Seminar',
+        rcChannelId: g.rcChannelId ? String(g.rcChannelId) : undefined,
+        lastLine: g.description || 'Seminar chat',
+        raw: g,
+      });
+    }
+    return rows;
+  }, [userDetails?.groupChats]);
 
   const loadCommunityChats = React.useCallback(async () => {
     const uid = userDetails?._id ?? userDetails?.id ?? userDetails?.userId;
@@ -304,6 +337,74 @@ const StudentChat: React.FC = () => {
       if (rid) subscribeToRoom(String(rid));
     });
   }, [communityChats]);
+
+  useEffect(() => {
+    seminarRows.forEach(s => {
+      if (s.rcChannelId) subscribeToRoom(String(s.rcChannelId));
+    });
+  }, [seminarRows]);
+
+  /**
+   * Live unread for seminar + community rooms, counted from the RC message stream.
+   * RC's per-subscription `unread` (onSubscriptionChanged / snapshot) is reliable for 1:1 DMs
+   * but does not increment for channels/groups in this deployment, so seminars/communities never
+   * lit up. Count locally from incoming room messages instead — same source the open thread uses.
+   */
+  const [liveGroupUnread, setLiveGroupUnread] = useState<Record<string, number>>({});
+
+  const groupRidSetRef = React.useRef<Set<string>>(new Set());
+  useEffect(() => {
+    const s = new Set<string>();
+    communityChats.forEach(c => {
+      const rid = c.raw?.rcChannelId ? String(c.raw.rcChannelId) : '';
+      if (rid) s.add(rid);
+    });
+    seminarRows.forEach(r => {
+      if (r.rcChannelId) s.add(String(r.rcChannelId));
+    });
+    groupRidSetRef.current = s;
+  }, [communityChats, seminarRows]);
+
+  const activeGroupRidRef = React.useRef<string>('');
+  useEffect(() => {
+    activeGroupRidRef.current = chosenGroupChatDetails?.rcChannelId
+      ? String(chosenGroupChatDetails.rcChannelId)
+      : '';
+  }, [chosenGroupChatDetails]);
+
+  const myRcUsernameRef = React.useRef<string>('');
+  useEffect(() => {
+    myRcUsernameRef.current = userDetails?.email
+      ? toRocketChatUsername(userDetails.email).toLowerCase()
+      : '';
+  }, [userDetails?.email]);
+
+  useEffect(() => {
+    if (!isCustomer && !isExpert && !isAdmin) return;
+    const unsub = onNewMessage((raw: any) => {
+      const msg = normalizeRcStreamRoomMessage(raw);
+      const t = String(msg?.t || '');
+      // Ignore system / removal lines — only real chat messages count toward unread.
+      if (t === 'rm' || t === 'message_removed') return;
+      const rid = msg?.rid ? String(msg.rid) : '';
+      if (!rid || !groupRidSetRef.current.has(rid)) return;
+      // Don't badge the thread the user is currently reading, or echoes of our own sends.
+      if (rid === activeGroupRidRef.current) return;
+      const author = String(msg?.u?.username || '').toLowerCase();
+      if (author && myRcUsernameRef.current && author === myRcUsernameRef.current) return;
+      setLiveGroupUnread(prev => ({ ...prev, [rid]: (prev[rid] || 0) + 1 }));
+    });
+    return unsub;
+  }, [isCustomer, isExpert, isAdmin]);
+
+  const clearLiveGroupUnread = React.useCallback((rid: string) => {
+    setLiveGroupUnread(prev => {
+      if (!(rid in prev)) return prev;
+      const next = { ...prev };
+      delete next[rid];
+      return next;
+    });
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -473,8 +574,46 @@ const StudentChat: React.FC = () => {
       setCommunityInviteSelected([]);
       setCommunityInviteQuery('');
       setCommunityInviteRows([]);
+      setNewOpenToFollowers(false);
+      communityFollowerIdsRef.current = new Set();
     }
   }, [newOpenToAll]);
+
+  // "Open to all followers": a convenience that turns off open-to-everyone and
+  // bulk-adds every follower into the invite list, still leaving the panel open
+  // so the expert can search and add others on top.
+  const toggleOpenToFollowers = async (checked: boolean) => {
+    if (!checked) {
+      setNewOpenToFollowers(false);
+      const followerSet = communityFollowerIdsRef.current;
+      setCommunityInviteSelected(prev => prev.filter(x => !followerSet.has(x.id)));
+      communityFollowerIdsRef.current = new Set();
+      return;
+    }
+    setNewOpenToAll(false);
+    setNewOpenToFollowers(true);
+    setLoadingFollowers(true);
+    try {
+      const res: any = await getMyFollowers();
+      const list = Array.isArray(res?.result) ? res.result : [];
+      const followers = list
+        .map((f: any) => ({ id: String(f?._id || ''), title: String(f?.username || f?.email || 'Follower') }))
+        .filter((f: { id: string }) => f.id);
+      communityFollowerIdsRef.current = new Set(followers.map((f: { id: string }) => f.id));
+      setCommunityInviteSelected(prev => {
+        const seen = new Set(prev.map(x => x.id));
+        return [...prev, ...followers.filter((f: { id: string }) => !seen.has(f.id))];
+      });
+      if (followers.length === 0) {
+        dispatch(showWarningAlert('You have no followers yet. Add members manually below.'));
+      }
+    } catch {
+      setNewOpenToFollowers(false);
+      dispatch(showErrorAlert('Failed to load your followers. Please try again.'));
+    } finally {
+      setLoadingFollowers(false);
+    }
+  };
 
   useEffect(() => {
     if (!isCustomer) {
@@ -607,6 +746,14 @@ const StudentChat: React.FC = () => {
     );
   }, [communityChats, communityQuery]);
 
+  const filteredSeminars = useMemo(() => {
+    const q = communityQuery.trim().toLowerCase();
+    if (!q) return seminarRows;
+    return seminarRows.filter(
+      s => s.name.toLowerCase().includes(q) || s.lastLine.toLowerCase().includes(q),
+    );
+  }, [seminarRows, communityQuery]);
+
   const filteredPrivate = useMemo(() => {
     const q = privateQuery.trim().toLowerCase();
 
@@ -681,6 +828,7 @@ const StudentChat: React.FC = () => {
           delete next[rid];
           return next;
         });
+        clearLiveGroupUnread(rid);
       }
       if (isExpert && !row.raw?.isJoined) {
         try {
@@ -708,7 +856,7 @@ const StudentChat: React.FC = () => {
         payload: { receiverId: row._id, count: 0 },
       });
     },
-    [dispatch, isExpert, loadCommunityChats],
+    [dispatch, isExpert, loadCommunityChats, clearLiveGroupUnread],
   );
 
   const onCreateCommunity = async () => {
@@ -734,6 +882,8 @@ const StudentChat: React.FC = () => {
         setNewName('');
         setNewDescription('');
         setNewOpenToAll(true);
+        setNewOpenToFollowers(false);
+        communityFollowerIdsRef.current = new Set();
         setCommunityInviteSelected([]);
         setCommunityInviteQuery('');
         setCommunityInviteRows([]);
@@ -770,6 +920,68 @@ const StudentChat: React.FC = () => {
     [dispatch],
   );
 
+  /** Open (ensuring it exists) a 1:1 DM by the other user's id — used by calendar "Join chat". */
+  const openDmByUserId = React.useCallback(
+    async (opts: { id: string; title?: string; image?: string | null }) => {
+      const otherUserId = String(opts.id || '');
+      if (!otherUserId) return;
+      try {
+        const response: any = await joinPrivateChat(otherUserId);
+        const payload = response?.data ?? response;
+        const user = payload?.user ?? payload;
+        const other = payload?.otherUser;
+        if (user) dispatch({ type: 'updateUserDetails', payload: user });
+        const peerRole = String(other?.role || '').toLowerCase().trim() || undefined;
+        dispatch(
+          setChosenChatDetails({
+            userId: otherUserId,
+            username: other?.username ?? opts.title ?? 'Chat',
+            image: other?.image ?? opts.image ?? null,
+            peerRole,
+          }),
+        );
+      } catch (e: any) {
+        dispatch(showErrorAlert(e?.message || 'Failed to start private chat'));
+      }
+    },
+    [dispatch],
+  );
+
+  /** Open a seminar group chat, lazily provisioning its RC channel for older seminars. */
+  const openSeminar = React.useCallback(
+    async (row: { _id: string; name: string; rcChannelId?: string; raw: any }) => {
+      let rid = row.rcChannelId;
+      let raw = row.raw;
+      if (!rid) {
+        const res: any = await ensureSeminarChannel(row._id);
+        if (res?.status === 'SUCCESS' && res?.rcChannelId) {
+          rid = String(res.rcChannelId);
+          raw = { ...raw, rcChannelId: rid };
+          dispatch(updateMe() as any);
+        }
+      }
+      if (rid) {
+        const ridStr = rid;
+        dispatch(clearDmUnreadRid(ridStr));
+        setRcUnreadByRid(prev => {
+          const next = { ...prev };
+          delete next[ridStr];
+          return next;
+        });
+        clearLiveGroupUnread(ridStr);
+      }
+      dispatch(
+        setChosenGroupChatDetails({
+          ...raw,
+          groupId: row._id,
+          groupName: row.name,
+          name: row.name,
+        } as any),
+      );
+    },
+    [dispatch, clearLiveGroupUnread],
+  );
+
   const consumeStorageChatNav = React.useCallback(() => {
     const dmRid = localStorage.getItem('wl_open_dm_rid');
     if (dmRid) {
@@ -790,7 +1002,27 @@ const StudentChat: React.FC = () => {
         localStorage.removeItem('wl_open_community_rc_rid');
       }
     }
-  }, [privateRows, communityChats, openPrivateDm, openCommunity]);
+    const seminarId = localStorage.getItem('wl_open_seminar_id');
+    if (seminarId) {
+      const row = seminarRows.find(s => String(s._id) === String(seminarId));
+      if (row) {
+        void openSeminar(row);
+        localStorage.removeItem('wl_open_seminar_id');
+      }
+    }
+    const dmUserRaw = localStorage.getItem('wl_open_dm_userid');
+    if (dmUserRaw) {
+      try {
+        const parsed = JSON.parse(dmUserRaw);
+        if (parsed?.id) {
+          void openDmByUserId({ id: String(parsed.id), title: parsed.title, image: parsed.image ?? null });
+        }
+      } catch {
+        /* ignore malformed signal */
+      }
+      localStorage.removeItem('wl_open_dm_userid');
+    }
+  }, [privateRows, communityChats, seminarRows, openPrivateDm, openCommunity, openSeminar, openDmByUserId]);
 
   useEffect(() => {
     consumeStorageChatNav();
@@ -1015,8 +1247,8 @@ const StudentChat: React.FC = () => {
       <aside className={`${showMobileMessenger ? 'hidden md:flex' : 'flex'} w-full md:w-80 lg:w-96 flex-col border-r border-slate-200 bg-white`}>
         <div className="px-4 pt-4 pb-3 border-b border-slate-200">
           <div className="flex items-center justify-between gap-2">
-            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
-              Shared community chats
+            <p className="text-xs font-bold uppercase tracking-[0.12em] text-slate-600">
+              Communities
             </p>
             {isExpert ? (
               <button
@@ -1051,23 +1283,6 @@ const StudentChat: React.FC = () => {
         </div>
         <div className="flex-1 overflow-y-auto px-3 py-3 space-y-4">
           <div>
-            <div className="mb-2 flex items-center justify-between gap-2">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">Communities</p>
-              {filteredCommunity.some(chat => {
-                const crid = chat.raw?.rcChannelId ? String(chat.raw.rcChannelId) : '';
-                const liveUnread = crid
-                  ? Math.max(Number(dmUnreadByRid?.[crid] || 0), Number(rcUnreadByRid?.[crid] || 0))
-                  : 0;
-                const persistedUnread = Math.max(Number(chat.missedChats || 0), 0);
-                return liveUnread > 0 || persistedUnread > 0;
-              }) ? (
-                <span
-                  className="inline-block h-2.5 w-2.5 rounded-full bg-red-500 ring-2 ring-white"
-                  title="New community messages"
-                  aria-label="New community messages"
-                />
-              ) : null}
-            </div>
             {filteredCommunity.length === 0 ? (
               <p className="px-2 py-3 text-[11px] text-slate-500">
                 {communityQuery.trim()
@@ -1078,16 +1293,21 @@ const StudentChat: React.FC = () => {
               filteredCommunity.map(chat => {
                 const active = isCommunityActive(chat._id);
                 const crid = chat.raw?.rcChannelId ? String(chat.raw.rcChannelId) : '';
-                /** Same unread source as private DM rows: Redux snapshot + live RC subscription. */
+                /** Same unread source as private DM rows: Redux snapshot + live RC subscription + live message stream. */
                 const unreadCount = crid
                   ? Math.max(
                       Number(dmUnreadByRid?.[crid] || 0),
                       Number(rcUnreadByRid?.[crid] || 0),
+                      Number(liveGroupUnread?.[crid] || 0),
                     )
                   : 0;
                 const persistedUnread = Math.max(Number(chat.missedChats || 0), 0);
-                const hasUnread = unreadCount > 0 || persistedUnread > 0;
-                const lastLine = chat.lastLine;
+                const badgeCount = unreadCount > 0 ? unreadCount : persistedUnread;
+                const hasUnread = badgeCount > 0;
+                const lastLine =
+                  badgeCount > 0
+                    ? `${badgeCount > 99 ? '99+' : badgeCount}+ new message${badgeCount > 1 ? 's' : ''}`
+                    : chat.lastLine;
                 const rowTone = active
                   ? 'bg-[#E8EEF4] text-slate-900'
                   : hasUnread
@@ -1103,12 +1323,14 @@ const StudentChat: React.FC = () => {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between gap-2">
                         <p className="truncate font-semibold text-[11px]">{chat.name}</p>
-                        {hasUnread ? (
+                        {badgeCount > 0 ? (
                           <span
-                            className="ml-1 inline-block h-2.5 w-2.5 shrink-0 rounded-full bg-red-500 ring-2 ring-white"
+                            className="ml-1 shrink-0 rounded-full bg-amber-500/20 px-1.5 text-[10px] font-semibold text-amber-800"
                             title="New community messages"
-                            aria-label="New community messages"
-                          />
+                            aria-label={`${badgeCount > 99 ? '99+' : badgeCount} new community messages`}
+                          >
+                            {(badgeCount > 99 ? '99+' : badgeCount) + '+'}
+                          </span>
                         ) : null}
                       </div>
                       <p className="mt-0.5 line-clamp-2 text-[10px] text-slate-500">{lastLine}</p>
@@ -1121,9 +1343,6 @@ const StudentChat: React.FC = () => {
                     data-community-menu-root="true"
                     className={`relative mb-1 flex w-full items-stretch overflow-visible rounded-xl text-xs transition-colors ${rowTone}`}
                   >
-                    {hasUnread ? (
-                      <span className="pointer-events-none absolute right-1.5 top-1.5 inline-block h-2.5 w-2.5 rounded-full bg-red-500 ring-2 ring-white" />
-                    ) : null}
                     <button
                       type="button"
                       onClick={() => void openCommunity(chat)}
@@ -1166,7 +1385,7 @@ const StudentChat: React.FC = () => {
 
           <div className="pt-1 border-t border-slate-200">
             <div className="mb-2 flex items-center justify-between gap-2">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">Private chats</p>
+              <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-slate-600">1:1 Appointments</p>
               {(() => {
                 const n = privateRows.reduce((acc, r) => {
                   if (r.kind === 'privateDm' && r.rcChannelId) {
@@ -1395,6 +1614,68 @@ const StudentChat: React.FC = () => {
               })
             )}
           </div>
+
+          <div className="pt-1 border-t border-slate-200">
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-slate-600">Seminars</p>
+            </div>
+            {filteredSeminars.length === 0 ? (
+              <p className="px-2 py-3 text-[11px] text-slate-500">
+                {communityQuery.trim()
+                  ? 'No seminar chats match your search.'
+                  : 'No seminar chats yet.'}
+              </p>
+            ) : (
+              filteredSeminars.map(row => {
+                const active = isCommunityActive(row._id);
+                const crid = row.rcChannelId ? String(row.rcChannelId) : '';
+                const unreadCount = crid
+                  ? Math.max(
+                      Number(dmUnreadByRid?.[crid] || 0),
+                      Number(rcUnreadByRid?.[crid] || 0),
+                      Number(liveGroupUnread?.[crid] || 0),
+                    )
+                  : 0;
+                const hasUnread = unreadCount > 0;
+                const rowTone = active
+                  ? 'bg-[#E8EEF4] text-slate-900'
+                  : hasUnread
+                    ? 'bg-amber-50/80 text-slate-900 ring-1 ring-amber-200/80 hover:bg-amber-50'
+                    : 'hover:bg-slate-100 text-slate-700';
+                return (
+                  <button
+                    key={row._id}
+                    type="button"
+                    onClick={() => void openSeminar(row)}
+                    className={`mb-1 flex w-full items-start gap-2 rounded-xl px-3 py-2 text-left text-xs transition-colors ${rowTone}`}
+                  >
+                    <div className="mt-0.5 shrink-0">
+                      <CommunityRoomAvatar />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="truncate font-semibold text-[11px]">{row.name}</p>
+                        {hasUnread ? (
+                          <span
+                            className="ml-1 shrink-0 rounded-full bg-amber-500/20 px-1.5 text-[10px] font-semibold text-amber-800"
+                            title="New seminar messages"
+                            aria-label={`${unreadCount > 99 ? '99+' : unreadCount} new seminar messages`}
+                          >
+                            {(unreadCount > 99 ? '99+' : unreadCount) + '+'}
+                          </span>
+                        ) : null}
+                      </div>
+                      <p className="mt-0.5 line-clamp-2 text-[10px] text-slate-500">
+                        {hasUnread
+                          ? `${unreadCount > 99 ? '99+' : unreadCount}+ new message${unreadCount > 1 ? 's' : ''}`
+                          : row.lastLine}
+                      </p>
+                    </div>
+                  </button>
+                );
+              })
+            )}
+          </div>
         </div>
       </aside>
 
@@ -1504,6 +1785,8 @@ const StudentChat: React.FC = () => {
                 type="button"
                 onClick={() => {
                   setCreateOpen(false);
+                  setNewOpenToFollowers(false);
+                  communityFollowerIdsRef.current = new Set();
                   setCommunityInviteSelected([]);
                   setCommunityInviteQuery('');
                   setCommunityInviteRows([]);
@@ -1533,21 +1816,37 @@ const StudentChat: React.FC = () => {
                   placeholder="What is this community for?"
                 />
               </div>
-              <label className="flex items-center gap-2 text-sm text-slate-700">
-                <input
-                  type="checkbox"
-                  checked={newOpenToAll}
-                  onChange={e => setNewOpenToAll(e.target.checked)}
-                  className="h-4 w-4 rounded border-slate-300 text-[#234C6A] focus:ring-[#234C6A]"
-                />
-                Open to all users
-              </label>
+              <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
+                <label className="flex items-center gap-2 text-sm text-slate-700">
+                  <input
+                    type="checkbox"
+                    checked={newOpenToAll}
+                    onChange={e => setNewOpenToAll(e.target.checked)}
+                    className="h-4 w-4 rounded border-slate-300 text-[#234C6A] focus:ring-[#234C6A]"
+                  />
+                  Open to all users
+                </label>
+                <label className="flex items-center gap-2 text-sm text-slate-700">
+                  <input
+                    type="checkbox"
+                    checked={newOpenToFollowers}
+                    disabled={loadingFollowers}
+                    onChange={e => void toggleOpenToFollowers(e.target.checked)}
+                    className="h-4 w-4 rounded border-slate-300 text-[#234C6A] focus:ring-[#234C6A]"
+                  />
+                  Open to all followers
+                  {loadingFollowers ? (
+                    <span className="text-[11px] text-slate-400">loading…</span>
+                  ) : null}
+                </label>
+              </div>
               {!newOpenToAll ? (
                 <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-3">
                   <div className="mb-1 text-xs font-semibold text-slate-600">Invite members</div>
                   <p className="mb-2 text-[11px] text-slate-500">
-                    Search your customers and add them to this community. At least one invite is required when the room is
-                    not open to everyone.
+                    {newOpenToFollowers
+                      ? 'All your followers have been added. Search your customers below to add others too.'
+                      : 'Search your customers and add them to this community. At least one invite is required when the room is not open to everyone.'}
                   </p>
                   <input
                     className="mb-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 outline-none focus:border-[#234C6A] focus:ring-2 focus:ring-[#234C6A]/60"
@@ -1616,6 +1915,8 @@ const StudentChat: React.FC = () => {
                 type="button"
                 onClick={() => {
                   setCreateOpen(false);
+                  setNewOpenToFollowers(false);
+                  communityFollowerIdsRef.current = new Set();
                   setCommunityInviteSelected([]);
                   setCommunityInviteQuery('');
                   setCommunityInviteRows([]);

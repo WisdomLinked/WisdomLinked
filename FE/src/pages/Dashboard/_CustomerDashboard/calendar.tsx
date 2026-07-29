@@ -3,7 +3,7 @@ import { Calendar } from "react-big-calendar";
 import CloseIcon from '@mui/icons-material/Close';
 import EventDetail from "./eventDetail";
 import SelectDateTime from "../selectDateTime";
-import { doCancelEvent, doCancelPendingSeminar, doFilterExperts, doGetMyEvents, doUpdateEvent, doLeftSeminar, cancelIndividualAppointment } from "../../../api/api";
+import { doCancelEvent, doFilterExperts, doGetMyEvents, doUpdateEvent, doLeftSeminar, cancelIndividualAppointment } from "../../../api/api";
 import { useDispatch } from "react-redux";
 import SeminarDetails from "../seminarDetails";
 import { SetLoadingStatus } from "../../../actions/appActions";
@@ -151,31 +151,8 @@ const CustomerCalendar = () => {
                     });
                 }
             })
-            response.result.pendingGroupChats.map((item: any) => {
-                temp.push({
-                    ...item.groupChatId,
-                    id: item._id,
-                    start: new Date(item.groupChatId.start),
-                    end: new Date(item.groupChatId.end),
-                    title: '(PS)' + item.groupChatId.name,
-                    type: 'pending seminar'
-                })
-            })
             set_events([...temp])
         }
-    }
-
-    const cancelSeminarAppointment = async (data: any) => {
-        SetLoadingStatus(true)
-        const response = await doCancelPendingSeminar(data.id)
-        if (response) {
-            dispatch(updateMe())
-            getEvents()
-            dispatch(showSuccessAlert('Seminar Appointment Cancelled and your money refunded'))
-        }
-        set_seminarModalShow(false)
-        set_selectedEvent(null)
-        SetLoadingStatus(false)
     }
 
     const cancelAppointment = async (id : string) => {
@@ -409,7 +386,7 @@ const CustomerCalendar = () => {
                             }}
                         />
                         <div className="w-max max-w-[460px] bg-black rounded-lg text-white p-6 relative">
-                            <div className="text-center text-white text-2xl mb-2"> {selectedEvent?.type === "seminar" ? "Seminar Details" : "Session Details"}</div>
+                            <div className="text-center text-white text-2xl mb-2"> {selectedEvent?.type === "seminar" ? "Seminar Details" : "1:1 Session Details"}</div>
                             <button
                                 className="absolute right-2 top-2 rounded-md hover:bg-grey"
                                 onClick={() => {
@@ -427,14 +404,15 @@ const CustomerCalendar = () => {
                                 price={selectedEvent?.price}
                                 admin={selectedEvent?.admin}
                                 participants={selectedEvent?.participants}
+                                isRecurring={selectedEvent?.isRecurring}
+                                recurrenceFrequency={selectedEvent?.recurrenceFrequency}
+                                hideParticipants
                             />
                             <div className="w-full h-10 flex justify-center mt-6 space-x-4">
                                 <button
                                     className="w-fit px-4 rounded-lg bg-green flex items-center justify-center"
                                     onClick={() => {
-                                        if (selectedEvent?.type === 'pending seminar') {
-                                            cancelSeminarAppointment(selectedEvent)
-                                        } else if(selectedEvent?.type === 'individual' && selectedEvent?.status === 'pending'){
+                                        if(selectedEvent?.type === 'individual' && selectedEvent?.status === 'pending'){
                                             cancelAppointment(selectedEvent._id)
                                         } else{
                                             navigateSeminar(selectedEvent)
@@ -443,11 +421,9 @@ const CustomerCalendar = () => {
                                 >
                                     {
                                         selectedEvent?.end > new Date() ?
-                                            selectedEvent?.type === 'pending seminar' ?
-                                                'Cancel Request' : 
-                                            selectedEvent?.type === 'individual' ? 
-                                                (selectedEvent?.status === 'pending' ? 
-                                                    'Cancel request' : 'Enter Session') : 
+                                            selectedEvent?.type === 'individual' ?
+                                                (selectedEvent?.status === 'pending' ?
+                                                    'Cancel request' : 'Enter Session') :
                                                 'Enter Seminar' :
                                             'Chat History'
                                     }

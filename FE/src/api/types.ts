@@ -43,6 +43,8 @@ export type LeaveGroupArgs = {
 
 export type DeleteGroupArgs = {
     groupChatId: string;
+    /** 'occurrence' deletes only this session; 'series' (default) the whole series. */
+    scope?: 'occurrence' | 'series';
 };
 
 export type RemoveFriendArgs = {

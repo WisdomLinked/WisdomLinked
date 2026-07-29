@@ -12,14 +12,21 @@ import {
   Target,
   Users,
 } from 'lucide-react';
-import type { MentorCardProps } from '../MentorCard';
+import type { ExpertCardProps } from '../ExpertCard';
 import { useAppSelector } from '../../store';
 import FilePreviewModal from '../../pages/Dashboard/FilePreviewModal';
 import { hasResumeForPreview, resolveResumePublicUrl } from '../../utils/resumeUrl';
 import StudentExpertBookingPicker from './StudentExpertBookingPicker';
 import StudentBookingCheckout from './StudentBookingCheckout';
-import { createGroupChatByUser, getExpertById, profileImageFetch, addMemberToPendingGroup } from '../../api/api';
+import { purposeOptionsFromServices, PURPOSE_OTHER } from '../../constants/serviceOptions';
+import { createGroupChatByUser, getExpertById, profileImageFetch, registerForSeminar } from '../../api/api';
 import { resolveProfileImageSrc } from '../../utils/profileImage';
+import { seminarCapacityLabel } from '../../utils/seminarCapacityLabel';
+import {
+  seatRequestActionLabel,
+  seatRequestWindow,
+  seatRequestWindowMessage,
+} from '../../utils/seatRequestWindow';
 import { normalizeExpertPrice } from '../../utils/schedulingSlots';
 import { computeBookingPriceDollars } from '../../utils/bookingPrice';
 import {
@@ -46,7 +53,7 @@ export default function ExpertProfile({
   onPaymentReturnHandled,
   onGoToCalendar,
 }: {
-  mentor: MentorCardProps;
+  mentor: ExpertCardProps;
   onBack: () => void;
   /** Live count from parent (list + profile stay in sync). */
   followerCount?: number;
@@ -120,15 +127,52 @@ export default function ExpertProfile({
 
   const [bookingStep, setBookingStep] = useState<BookingStep>('pick');
   const [bookingError, setBookingError] = useState<string | null>(null);
+
+  const BOOKING_TITLE_MIN = 10;
+  const BOOKING_TITLE_MAX = 60;
+  const BOOKING_NOTE_MIN = 50;
+  const BOOKING_NOTE_MAX = 500;
+  const [bookingTitle, setBookingTitle] = useState('');
+  const [bookingNote, setBookingNote] = useState('');
+  const [bookingPurpose, setBookingPurpose] = useState('');
+  const [bookingPurposeOther, setBookingPurposeOther] = useState('');
+
+  const purposeOptions = useMemo(
+    () => purposeOptionsFromServices(expertDetails?.services),
+    [expertDetails?.services],
+  );
+
+  // The purpose stored on the booking: the free-text value when "Other" is picked,
+  // otherwise the chosen service label.
+  const resolvedPurpose = useMemo(
+    () => (bookingPurpose === PURPOSE_OTHER ? bookingPurposeOther.trim() : bookingPurpose),
+    [bookingPurpose, bookingPurposeOther],
+  );
+
+  const bookingFormError = useMemo(() => {
+    const titleLen = bookingTitle.trim().length;
+    if (titleLen < BOOKING_TITLE_MIN || titleLen > BOOKING_TITLE_MAX) {
+      return `Title must be between ${BOOKING_TITLE_MIN} and ${BOOKING_TITLE_MAX} characters.`;
+    }
+    const noteLen = bookingNote.trim().length;
+    if (noteLen > 0 && (noteLen < BOOKING_NOTE_MIN || noteLen > BOOKING_NOTE_MAX)) {
+      return `Note must be between ${BOOKING_NOTE_MIN} and ${BOOKING_NOTE_MAX} characters.`;
+    }
+    if (bookingPurpose === PURPOSE_OTHER && !bookingPurposeOther.trim()) {
+      return 'Please describe your purpose.';
+    }
+    return null;
+  }, [bookingTitle, bookingNote, bookingPurpose, bookingPurposeOther]);
   const [bookingViewerTz, setBookingViewerTz] = useState(
     () => userDetails?.timeZone || detectUserTimeZone(),
   );
 
   const [seminarBookingSuccessId, setSeminarBookingSuccessId] = useState<string | null>(null);
+  const [seminarSeatRequestedId, setSeminarSeatRequestedId] = useState<string | null>(null);
   const [seminarBookingError, setSeminarBookingError] = useState<string | null>(null);
   /** Open seminar checkout (real groupChat id + price) when a student books from the profile. */
   const [seminarCheckout, setSeminarCheckout] = useState<
-    { id: string; price: number; name: string } | null
+    { id: string; price: number; name: string; isSeatRequest?: boolean } | null
   >(null);
   const [resumePreviewOpen, setResumePreviewOpen] = useState(false);
 
@@ -159,6 +203,11 @@ export default function ExpertProfile({
     [],
   );
 
+  const handleFilterSlotConfirmed = useCallback(() => {
+    setBookingError(null);
+    setBookingStep('review');
+  }, []);
+
   const clearPickedSlot = useCallback(() => {
     setPickedStart(null);
     setPickedEnd(null);
@@ -187,7 +236,7 @@ export default function ExpertProfile({
   const bookingEventTitle = useMemo(() => {
     const student = userDetails?.username || 'Student';
     const expertName = mentor.name || expertDetails?.username || 'Expert';
-    return `${student}, ${expertName}`;
+    return `${student} & ${expertName}`;
   }, [userDetails?.username, mentor.name, expertDetails?.username]);
 
   const studentBookingReturnUrl = useMemo(() => {
@@ -211,7 +260,15 @@ export default function ExpertProfile({
       setBookingError(null);
       try {
         const response = await createGroupChatByUser({
-          name: bookingEventTitle,
+          name: bookingTitle.trim() || bookingEventTitle,
+          description: bookingNote.trim(),
+          services:
+            bookingPurpose === PURPOSE_OTHER
+              ? []
+              : resolvedPurpose
+                ? [resolvedPurpose]
+                : [],
+          purposeOther: bookingPurpose === PURPOSE_OTHER ? bookingPurposeOther.trim() : '',
           start: pickedStart.toISOString(),
           end: pickedEnd.toISOString(),
           duration: pickedDuration,
@@ -219,9 +276,17 @@ export default function ExpertProfile({
           expert: expertDetails?._id ?? mentor.id,
           payment_intent: paymentIntentId,
         });
-        if (response?.result) {
-          dispatch({ type: 'updateUserDetails', payload: response.result });
+        // createGroupChatByUser resolves to `false`/`{status:'FAIL'}` on failure
+        // (it never throws) — only advance to success when the session persisted.
+        if (!response || response === true || (response as any)?.status === 'FAIL' || !(response as any)?.result) {
+          setBookingError(
+            (response as any)?.error ||
+              'Your payment went through, but we could not confirm the session. Please check your bookings or contact support before rebooking.',
+          );
+          return;
         }
+        window.localStorage.removeItem('pendingDetails');
+        dispatch({ type: 'updateUserDetails', payload: (response as any).result });
         setBookingStep('success');
       } catch (err: unknown) {
         const message = err instanceof Error ? err.message : 'Booking failed. Please try again.';
@@ -235,6 +300,11 @@ export default function ExpertProfile({
       pickedEnd,
       pickedDuration,
       bookingEventTitle,
+      bookingTitle,
+      bookingNote,
+      bookingPurpose,
+      bookingPurposeOther,
+      resolvedPurpose,
       oneToOneSessionPrice,
       expertDetails?._id,
       mentor.id,
@@ -257,9 +327,20 @@ export default function ExpertProfile({
   // populated by getExpertById. Split into past/upcoming by start time.
   const seminarTimeline = useMemo(() => {
     const now = Date.now();
+    const freqLabel: Record<string, string> = {
+      weekly: 'Weekly',
+      biweekly: 'Biweekly',
+      monthly: 'Monthly',
+    };
     const mapSeminar = (g: any) => {
       const d = new Date(g?.start);
       const valid = !Number.isNaN(d.getTime());
+      // Enrolled students exclude the host (the admin is always a participant).
+      const enrolled = Math.max(
+        0,
+        (Array.isArray(g?.participants) ? g.participants.length : 0) - 1,
+      );
+      const maxAttendees = typeof g?.maxAttendees === 'number' ? g.maxAttendees : null;
       return {
         id: String(g?._id ?? ''),
         title: g?.name || 'Seminar',
@@ -269,20 +350,41 @@ export default function ExpertProfile({
           : '',
         startTs: valid ? d.getTime() : 0,
         price: typeof g?.price === 'number' ? g.price : 0,
-        attendees: Array.isArray(g?.participants) ? g.participants.length : 0,
+        attendees: enrolled,
+        maxAttendees,
+        isFull: maxAttendees != null && (maxAttendees <= 0 || enrolled >= maxAttendees),
+        seriesId: g?.seriesId ? String(g.seriesId) : null,
+        recurrenceLabel: g?.isRecurring ? freqLabel[g?.recurrenceFrequency] ?? null : null,
       };
     };
 
+    const collapseSeries = (list: any[]) => {
+      const seen = new Set<string>();
+      const out: any[] = [];
+      for (const s of list) {
+        if (s.seriesId) {
+          if (seen.has(s.seriesId)) continue;
+          seen.add(s.seriesId);
+        }
+        out.push(s);
+      }
+      return out;
+    };
+
     const all = (expertDetails?.groupChats || [])
-      .filter((g: any) => g?.type === 'seminar')
+      .filter((g: any) => g?.type === 'seminar' && g?.status !== 'draft' && g?.status !== 'cancelled')
       .map(mapSeminar);
 
-    const past = all
-      .filter((s: any) => s.startTs && s.startTs < now)
-      .sort((a: any, b: any) => b.startTs - a.startTs);
-    const upcoming = all
-      .filter((s: any) => !s.startTs || s.startTs >= now)
-      .sort((a: any, b: any) => a.startTs - b.startTs);
+    const past = collapseSeries(
+      all
+        .filter((s: any) => s.startTs && s.startTs < now)
+        .sort((a: any, b: any) => b.startTs - a.startTs),
+    );
+    const upcoming = collapseSeries(
+      all
+        .filter((s: any) => !s.startTs || s.startTs >= now)
+        .sort((a: any, b: any) => a.startTs - b.startTs),
+    );
 
     return { past, upcoming };
   }, [expertDetails?.groupChats]);
@@ -293,15 +395,20 @@ export default function ExpertProfile({
       SetLoadingStatus(true);
       setSeminarBookingError(null);
       try {
-        const res: any = await addMemberToPendingGroup({
+        const res: any = await registerForSeminar({
           groupChatId: seminarCheckout.id,
-          price: seminarCheckout.price,
           payment_intent: paymentIntentId,
         });
         if (res === false || res?.status === 'FAIL' || res?.error) {
           setSeminarBookingError(
             res?.error || 'Could not complete seminar registration.',
           );
+          return;
+        }
+        window.localStorage.removeItem('pendingDetails');
+        if (res?.status === 'pending_approval') {
+          setSeminarSeatRequestedId(seminarCheckout.id);
+          setSeminarCheckout(null);
           return;
         }
         setSeminarBookingSuccessId(seminarCheckout.id);
@@ -387,10 +494,23 @@ export default function ExpertProfile({
                 </p>
 
                 <div className="mt-4 flex flex-wrap items-center gap-2">
-                  <span className="inline-flex items-center gap-2 rounded-[3px] border border-[#E5E2DB] bg-[#F5F3EF] px-3 py-1.5 text-[12px] font-semibold text-[#1A3A4A]">
-                    <MapPin className="h-3.5 w-3.5" aria-hidden />
-                    {mentor.field}
-                  </span>
+                  {(mentor.majors && mentor.majors.length > 0
+                    ? mentor.majors
+                    : [{ label: mentor.field, custom: false }]
+                  ).map((major, idx) => (
+                    <span
+                      key={`${major.label}-${idx}`}
+                      title={major.custom ? 'Self-declared major, pending review' : undefined}
+                      className={
+                        major.custom
+                          ? 'inline-flex items-center gap-2 rounded-[3px] border border-dashed border-[#CFC9BC] bg-transparent px-3 py-1.5 text-[12px] font-semibold text-[#7A7A72]'
+                          : 'inline-flex items-center gap-2 rounded-[3px] border border-[#E5E2DB] bg-[#F5F3EF] px-3 py-1.5 text-[12px] font-semibold text-[#1A3A4A]'
+                      }
+                    >
+                      <MapPin className="h-3.5 w-3.5" aria-hidden />
+                      {major.label}
+                    </span>
+                  ))}
                   {mentor.services.slice(0, 3).map((s, idx) => (
                     <span
                       key={`${s}-${idx}`}
@@ -477,7 +597,7 @@ export default function ExpertProfile({
                     >
                       <p className="text-[13px] font-semibold text-[#1A3A4A]">{item.title}</p>
                       <p className="mt-1 text-[11px] text-[#7A7A72]">
-                        {item.date} · {item.attendees} attendees
+                        {item.date} · {seminarCapacityLabel(item.attendees, item.maxAttendees, { omitFullWord: true })}
                       </p>
                     </div>
                   ))
@@ -503,39 +623,76 @@ export default function ExpertProfile({
                     key={item.id}
                     className="rounded-lg border border-[#E5E2DB] bg-[#F5F3EF] px-3 py-2"
                   >
-                    <p className="text-[13px] font-semibold text-[#1A3A4A]">{item.title}</p>
+                    <div className="flex items-center gap-2">
+                      <p className="text-[13px] font-semibold text-[#1A3A4A]">{item.title}</p>
+                      {item.recurrenceLabel ? (
+                        <span className="inline-flex items-center rounded-full bg-[#E8EEF4] px-2 py-0.5 text-[10px] font-medium text-[#234C6A]">
+                          {item.recurrenceLabel}
+                        </span>
+                      ) : null}
+                      {item.isFull && seminarBookingSuccessId !== item.id ? (
+                        <span className="ml-auto inline-flex items-center rounded-full bg-rose-100 px-2 py-0.5 text-[10px] font-semibold text-rose-700">
+                          Full
+                        </span>
+                      ) : null}
+                    </div>
                     <p className="mt-1 text-[11px] text-[#7A7A72]">
-                      {item.date}{item.time ? ` · ${item.time}` : ''}
+                      {item.recurrenceLabel ? 'Next: ' : ''}{item.date}{item.time ? ` · ${item.time}` : ''}
                     </p>
                     <p className="mt-2 text-[12px] font-semibold text-[#1A3A4A]">
                       {item.price > 0 ? `$${item.price.toFixed(2)}` : 'Free'}
                     </p>
-                    <div className="mt-2">
-                      {seminarBookingSuccessId === item.id ? (
-                        <div className="rounded-[4px] bg-emerald-50 px-3 py-2 text-[11px] font-semibold text-emerald-800">
-                          Registered — awaiting expert approval.
-                        </div>
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setSeminarBookingError(null);
-                            if (!userDetails?._id) {
-                              setSeminarBookingError('Please log in again to book this session.');
-                              return;
-                            }
-                            setSeminarCheckout({
-                              id: item.id,
-                              price: item.price,
-                              name: item.title,
-                            });
-                          }}
-                          className="inline-flex w-full items-center justify-center rounded-[4px] bg-[#1A3A4A] px-3 py-1.5 text-[11px] font-semibold text-white hover:bg-[#122635]"
-                        >
-                          Book the session
-                        </button>
-                      )}
-                    </div>
+                    {seminarBookingSuccessId === item.id ? (
+                      <div className="mt-2 rounded-[4px] bg-emerald-50 px-3 py-2 text-[11px] font-semibold text-emerald-800">
+                        You're enrolled in this seminar.
+                      </div>
+                    ) : seminarSeatRequestedId === item.id ? (
+                      <div className="mt-2 rounded-[4px] bg-amber-50 px-3 py-2 text-[11px] font-semibold text-amber-800">
+                        You’re on the waiting list — awaiting host approval. Your card is authorized, not charged.
+                      </div>
+                    ) : (
+                      (() => {
+                        const waitingList = seatRequestWindow(item.startTs);
+                        const canJoinWaitingList =
+                          item.isFull && waitingList.state === 'open';
+                        return (
+                          <div className="mt-2 space-y-2">
+                            {item.isFull ? (
+                              <p
+                                className={`rounded-[4px] px-3 py-2 text-[11px] ${
+                                  canJoinWaitingList
+                                    ? 'bg-amber-50 text-amber-800'
+                                    : 'bg-[#F5F3EF] text-[#7A7A72]'
+                                }`}
+                              >
+                                {seatRequestWindowMessage(waitingList, { price: item.price })}
+                              </p>
+                            ) : null}
+                            {!item.isFull || canJoinWaitingList ? (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setSeminarBookingError(null);
+                                  if (!userDetails?._id) {
+                                    setSeminarBookingError('Please log in again to book this session.');
+                                    return;
+                                  }
+                                  setSeminarCheckout({
+                                    id: item.id,
+                                    price: item.price,
+                                    name: item.title,
+                                    isSeatRequest: item.isFull,
+                                  });
+                                }}
+                                className="inline-flex w-full items-center justify-center rounded-[4px] bg-[#1A3A4A] px-3 py-1.5 text-[11px] font-semibold text-white hover:bg-[#122635]"
+                              >
+                                {item.isFull ? seatRequestActionLabel(item.price) : 'Book the session'}
+                              </button>
+                            ) : null}
+                          </div>
+                        );
+                      })()
+                    )}
                   </div>
                   ))
                 )}
@@ -747,10 +904,7 @@ export default function ExpertProfile({
                         allowedDurationMinutes={offeredDurations}
                         confirmedSlotStart={pickedStart}
                         onViewerTimeZoneChange={setBookingViewerTz}
-                        onFilterSlotConfirmed={() => {
-                          setBookingError(null);
-                          setBookingStep('review');
-                        }}
+                        onFilterSlotConfirmed={handleFilterSlotConfirmed}
                       />
                     )}
                   </div>
@@ -855,10 +1009,80 @@ export default function ExpertProfile({
                 </dd>
               </div>
             </dl>
+
+            <div className="space-y-3 border-t border-[#E5E2DB] pt-3">
+              <div>
+                <div className="flex items-center justify-between">
+                  <label className="text-[13px] font-semibold text-[#1A3A4A]">
+                    Title <span className="font-normal text-[#7A7A72]">(subject of the meeting)</span>
+                  </label>
+                  <span className="text-[11px] text-[#7A7A72]">
+                    {bookingTitle.trim().length}/{BOOKING_TITLE_MAX}
+                  </span>
+                </div>
+                <input
+                  type="text"
+                  value={bookingTitle}
+                  maxLength={BOOKING_TITLE_MAX}
+                  onChange={(e) => setBookingTitle(e.target.value)}
+                  placeholder="e.g. PhD Application Advice"
+                  className="mt-1 w-full rounded-[4px] border border-[#E5E2DB] px-3 py-2 text-[13px] text-[#1A3A4A] outline-none focus:border-[#1A3A4A]"
+                />
+              </div>
+
+              <div>
+                <label className="text-[13px] font-semibold text-[#1A3A4A]">Purpose</label>
+                <select
+                  value={bookingPurpose}
+                  onChange={(e) => setBookingPurpose(e.target.value)}
+                  className="mt-1 w-full rounded-[4px] border border-[#E5E2DB] bg-white px-3 py-2 text-[13px] text-[#1A3A4A] outline-none focus:border-[#1A3A4A]"
+                >
+                  <option value="">Select a purpose…</option>
+                  {purposeOptions.map((opt) => (
+                    <option key={opt} value={opt}>{opt}</option>
+                  ))}
+                </select>
+                {bookingPurpose === PURPOSE_OTHER ? (
+                  <input
+                    type="text"
+                    value={bookingPurposeOther}
+                    maxLength={100}
+                    onChange={(e) => setBookingPurposeOther(e.target.value)}
+                    placeholder="Describe your purpose"
+                    className="mt-2 w-full rounded-[4px] border border-[#E5E2DB] px-3 py-2 text-[13px] text-[#1A3A4A] outline-none focus:border-[#1A3A4A]"
+                  />
+                ) : null}
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between">
+                  <label className="text-[13px] font-semibold text-[#1A3A4A]">
+                    Note <span className="font-normal text-[#7A7A72]">(optional)</span>
+                  </label>
+                  <span className="text-[11px] text-[#7A7A72]">
+                    {bookingNote.trim().length}/{BOOKING_NOTE_MAX}
+                  </span>
+                </div>
+                <textarea
+                  value={bookingNote}
+                  maxLength={BOOKING_NOTE_MAX}
+                  onChange={(e) => setBookingNote(e.target.value)}
+                  rows={3}
+                  placeholder="Add a brief note so the expert can prepare (e.g. goals, background, questions)."
+                  className="mt-1 w-full resize-y rounded-[4px] border border-[#E5E2DB] px-3 py-2 text-[13px] text-[#1A3A4A] outline-none focus:border-[#1A3A4A]"
+                />
+              </div>
+
+              {bookingFormError ? (
+                <p className="text-[12px] text-red-600">{bookingFormError}</p>
+              ) : null}
+            </div>
+
             <button
               type="button"
+              disabled={!!bookingFormError}
               onClick={() => setBookingStep('pay')}
-              className="inline-flex w-full items-center justify-center rounded-[4px] bg-[#1A3A4A] px-4 py-3 text-[13px] font-semibold text-white hover:bg-[#122635]"
+              className="inline-flex w-full items-center justify-center rounded-[4px] bg-[#1A3A4A] px-4 py-3 text-[13px] font-semibold text-white hover:bg-[#122635] disabled:opacity-50"
             >
               Continue to payment
             </button>
@@ -880,13 +1104,17 @@ export default function ExpertProfile({
           if (e.target === e.currentTarget) setBookingStep('review');
         }}
       >
-        <div className="my-auto w-full max-w-lg">
+        <div className="my-auto w-full max-w-2xl">
           <StudentBookingCheckout
             type="1:1 session"
             price={oneToOneSessionPrice}
+            holdsFunds
             returnUrl={studentBookingReturnUrl}
             pendingDetails={{
-              name: bookingEventTitle,
+              name: bookingTitle.trim() || bookingEventTitle,
+              description: bookingNote.trim(),
+              services: resolvedPurpose ? [resolvedPurpose] : [],
+              purposeOther: bookingPurpose === PURPOSE_OTHER ? bookingPurposeOther.trim() : '',
               start: pickedStart!.toISOString(),
               end: pickedEnd!.toISOString(),
               duration: pickedDuration,
@@ -907,10 +1135,12 @@ export default function ExpertProfile({
           if (e.target === e.currentTarget) setSeminarCheckout(null);
         }}
       >
-        <div className="my-auto w-full max-w-lg">
+        <div className="my-auto w-full max-w-2xl">
           <StudentBookingCheckout
             type="Seminar"
             price={seminarCheckout.price}
+            isSeatRequest={!!seminarCheckout.isSeatRequest}
+            holdsFunds
             returnUrl={studentBookingReturnUrl}
             pendingDetails={{
               groupChatId: seminarCheckout.id,

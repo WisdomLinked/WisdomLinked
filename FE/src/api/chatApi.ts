@@ -196,6 +196,9 @@ export const fetchDmUnreadSnapshot = async () => {
             success?: boolean;
             unreadByRid?: Record<string, number>;
             nameByRid?: Record<string, string>;
+            displayNameByRid?: Record<string, string>;
+            knownRids?: string[];
+            nameResolutionFailed?: boolean;
             error?: string;
         };
     } catch (err: any) {
@@ -220,7 +223,9 @@ export const fetchOnlineUsers = async () => {
 };
 
 /** Chat-target profile for header modal (role-agnostic endpoint). */
-export const fetchChatUserProfile = async (userId: string) => {
+export const fetchChatUserProfile = async (
+    userId: string,
+): Promise<{ success?: boolean; result?: any; error?: string }> => {
     try {
         const res = await api.get(`chat/user-profile/${encodeURIComponent(String(userId || '').trim())}`);
         return res.data as { success?: boolean; result?: any; error?: string };

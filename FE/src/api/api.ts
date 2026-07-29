@@ -5,7 +5,6 @@ import {
     AuthResponse,
     InviteFriendArgs,
     GetMeResponse,
-    AddMembersToGroupArgs,
     LeaveGroupArgs,
     RemoveFriendArgs,
     DeleteGroupArgs,
@@ -355,6 +354,16 @@ export const createGroupChat = async (details: any) => {
     }
 };
 
+/** Lazily ensure a seminar's group chat channel exists; returns { rcChannelId }. */
+export const ensureSeminarChannel = async (groupChatId: string) => {
+    try {
+        const res = await api.post("group-chat/ensure-seminar-channel", { groupChatId });
+        return res.data;
+    } catch (err: any) {
+        return checkForAuthorization(err);
+    }
+};
+
 export const uploadSeminarCover = async (file: File): Promise<string | null> => {
     try {
         const formData = new FormData();
@@ -370,6 +379,16 @@ export const uploadSeminarCover = async (file: File): Promise<string | null> => 
 export const createGroupChatByUser = async (details: any) => {
     try {
         const res = await api.post("group-chat/create-by-user", details);
+
+        return res.data;
+    } catch (err: any) {
+        return checkForAuthorization(err);
+    }
+};
+
+export const proposeIndividualAppointment = async (details: any) => {
+    try {
+        const res = await api.post("group-chat/propose-individual-appointment", details);
 
         return res.data;
     } catch (err: any) {
@@ -434,24 +453,11 @@ export const doUpdateEvent = async (eventId: any, updates: any) => {
     }
 }
 
-export const addMemberToGroup = async (data: any) => {
-    try {
-        const res = await api.post("group-chat/add", {
-            _id: data._id,
-            friendId: data.friendId,
-            groupChatId: data.groupChatId
-        });
-
-        return res.data;
-    } catch (err: any) {
-        return checkForAuthorization(err);
-    }
-};
-
 export const acceptIndividualAppointment = async (data: any) => {
     try {
         const res = await api.post("group-chat/accept-individual-appointment", {
             groupChatId: data.groupChatId,
+            payment_intent: data.payment_intent,
         });
 
         return res.data;
@@ -460,14 +466,71 @@ export const acceptIndividualAppointment = async (data: any) => {
     }
 };
 
-export const addMemberToPendingGroup = async (data: any) => {
+export const registerForSeminar = async (data: any) => {
     try {
-        const res = await api.post("group-chat/add-to-pending", {
+        const res = await api.post("group-chat/register-seminar", {
             groupChatId: data.groupChatId,
             payment_intent: data.payment_intent,
-            price: data.price
         });
 
+        return res.data;
+    } catch (err: any) {
+        return checkForAuthorization(err);
+    }
+};
+
+export const requestSeminarSeat = async (data: any) => {
+    try {
+        const res = await api.post("group-chat/request-seminar-seat", {
+            groupChatId: data.groupChatId,
+            payment_intent: data.payment_intent,
+        });
+
+        return res.data;
+    } catch (err: any) {
+        return checkForAuthorization(err);
+    }
+};
+
+export const getSeminarSeatRequests = async () => {
+    try {
+        const res = await api.get("group-chat/seat-requests");
+        return res.data;
+    } catch (err: any) {
+        return checkForAuthorization(err);
+    }
+};
+
+export const getMyFollowers = async () => {
+    try {
+        const res = await api.get("expert/followers");
+        return res.data;
+    } catch (err: any) {
+        return checkForAuthorization(err);
+    }
+};
+
+export const getMySeatRequests = async () => {
+    try {
+        const res = await api.get("group-chat/my-seat-requests");
+        return res.data;
+    } catch (err: any) {
+        return checkForAuthorization(err);
+    }
+};
+
+export const approveSeminarSeatRequest = async (requestId: string) => {
+    try {
+        const res = await api.post("group-chat/approve-seat-request", { requestId });
+        return res.data;
+    } catch (err: any) {
+        return checkForAuthorization(err);
+    }
+};
+
+export const rejectSeminarSeatRequest = async (requestId: string) => {
+    try {
+        const res = await api.post("group-chat/reject-seat-request", { requestId });
         return res.data;
     } catch (err: any) {
         return checkForAuthorization(err);
@@ -536,6 +599,7 @@ export const deleteGroup = async (data: DeleteGroupArgs) => {
     try {
         const res = await api.post("group-chat/delete", {
             groupChatId: data.groupChatId,
+            scope: data.scope,
         });
 
         return res.data;
@@ -557,6 +621,33 @@ export const doGetKeywordsAndServices = async () => {
     try {
         const res = await api.get("auth/getKeywordsAndServices");
         return res.data;
+    } catch (err: any) {
+        return checkForAuthorization(err);
+    }
+}
+
+export const doGetCustomMajors = async () => {
+    try {
+        const res = await api.get("admin/getCustomMajors");
+        return res.data?.result || [];
+    } catch (err: any) {
+        return checkForAuthorization(err);
+    }
+}
+
+export const doConsolidateMajors = async (data: { sources: string[]; target: string }) => {
+    try {
+        const res = await api.post("admin/consolidateMajors", data);
+        return res.data?.result;
+    } catch (err: any) {
+        return checkForAuthorization(err);
+    }
+}
+
+export const doGetMajorConsolidations = async () => {
+    try {
+        const res = await api.get("admin/getMajorConsolidations");
+        return res.data?.result || [];
     } catch (err: any) {
         return checkForAuthorization(err);
     }
@@ -666,7 +757,7 @@ export const createStripePaymentIntent = async (data: any) => {
         const res = await api.post("auth/createStripePaymentIntent", data);
         return res.data;
     } catch (err: any) {
-        return checkForAuthorization(err);
+        return handleAuthApiFailure(err);
     }
 }
 
@@ -682,6 +773,15 @@ export const getStripeMode = async () => {
 export const setStripeMode = async ({ stripeMode }: any) => {
     try {
         const res = await api.post("admin/setStripeMode", { stripeMode });
+        return res.data;
+    } catch (err: any) {
+        return checkForAuthorization(err);
+    }
+}
+
+export const setSeminarApprovalDeadline = async (seminarApprovalDeadlineHours: number) => {
+    try {
+        const res = await api.post("admin/setSeminarApprovalDeadline", { seminarApprovalDeadlineHours });
         return res.data;
     } catch (err: any) {
         return checkForAuthorization(err);
@@ -860,15 +960,6 @@ export const doCancelEvent = async (eventId: any) => {
     }
 }
 
-export const doCancelPendingSeminar = async (pendingSeminarId: any) => {
-    try {
-        const res = await api.post("customer/cancelPendingSeminar", { pendingSeminarId });
-        return res.data;
-    } catch (err: any) {
-        return checkForAuthorization(err);
-    }
-}
-
 export const doLeftSeminar = async (seminarId: any) => {
     try {
         const res = await api.post("customer/leftSeminar", { seminarId });
@@ -940,10 +1031,18 @@ export const doUpdateDailyTimeSlots = async (newSlots: Array<any>, startTime: nu
     }
 }
 
-export const doUpdateTimeSlots = async (timeSlots: any) => {
+export const doUpdateTimeSlots = async (
+    timeSlots: any,
+    options?: {
+        availabilityMode?: 'common' | 'daily';
+        weeklyTimeSlots?: Record<string, number[]>;
+    }
+) => {
     try {
         const res = await api.post("expert/updateTimeSlots", {
-            timeSlots
+            timeSlots,
+            ...(options?.availabilityMode ? { availabilityMode: options.availabilityMode } : {}),
+            ...(options?.weeklyTimeSlots ? { weeklyTimeSlots: options.weeklyTimeSlots } : {}),
         });
 
         return res.data;
@@ -956,6 +1055,18 @@ export const doUpdateTimeSlots = async (timeSlots: any) => {
 export const doSetExpertBlockedBookingDates = async (dates: string[]) => {
     try {
         const res = await api.post("expert/blockedBookingDates", { dates });
+        return res.data;
+    } catch (err: any) {
+        return checkForAuthorization(err);
+    }
+};
+
+/** Expert-only: replace per-date blocked time slots ({ "YYYY-MM-DD": [halfHourIndex, ...] }). */
+export const doSetExpertBlockedBookingSlots = async (
+    slots: Record<string, number[]>,
+) => {
+    try {
+        const res = await api.post("expert/blockedBookingSlots", { slots });
         return res.data;
     } catch (err: any) {
         return checkForAuthorization(err);

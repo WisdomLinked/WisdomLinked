@@ -9,10 +9,12 @@ const {
     updateDailyTimeSlots,
     setBookingNoticeHours,
     setBlockedBookingDates,
+    setBlockedBookingSlots,
     filterCustomers,
     getCustomerById,
     shareMeetingViaEmail,
     getMyPaymentHistory,
+    getMyFollowers,
 } = require('../controllers/expert.controller')
 const {
     acceptEvent,
@@ -46,6 +48,12 @@ router.post(
     "/blockedBookingDates",
     expertAuth(false),
     setBlockedBookingDates
+);
+
+router.post(
+    "/blockedBookingSlots",
+    expertAuth(false),
+    setBlockedBookingSlots
 );
 
 router.post(
@@ -95,5 +103,7 @@ router.post("/shareMeetingViaEmail", expertAuth(true), shareMeetingViaEmail);
 router.post("/getMyPaymentHistory", expertAuth(false), getMyPaymentHistory);
 
 router.post("/filterSeminars", expertAuth(false), filterSeminars);
+
+router.get("/followers", expertAuth(false), getMyFollowers);
 
 module.exports = router;

@@ -30,6 +30,34 @@ describe('mapExpertToMentor', () => {
     expect(mapExpertToMentor({ ...expert, status: 'review' }).status).toBe('review');
     expect(mapExpertToMentor(expert).status).toBeUndefined();
   });
+
+  it('lists official keywords first, then custom majors as unverified', () => {
+    const m = mapExpertToMentor({
+      ...expert,
+      keywords: [{ value: 'Aerospace Engineering' }],
+      customKeywords: ['Quantum Photonics'],
+    });
+    expect(m.majors).toEqual([
+      { label: 'Aerospace Engineering', custom: false },
+      { label: 'Quantum Photonics', custom: true },
+    ]);
+    expect(m.field).toBe('Aerospace Engineering');
+  });
+
+  it('treats a custom keyword matching a baseline major as official and dedupes', () => {
+    const m = mapExpertToMentor({
+      ...expert,
+      keywords: [{ value: 'Software Engineering' }],
+      customKeywords: ['software engineering', 'Software Engineering', '  '],
+    });
+    expect(m.majors).toEqual([{ label: 'Software Engineering', custom: false }]);
+  });
+
+  it('falls back to General when no majors are present', () => {
+    const m = mapExpertToMentor({ ...expert, keywords: [], customKeywords: [] });
+    expect(m.majors).toEqual([]);
+    expect(m.field).toBe('General');
+  });
 });
 
 describe('mapExpertToMentorWithImage', () => {

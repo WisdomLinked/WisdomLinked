@@ -12,12 +12,29 @@ const groupChatSchema = new mongoose.Schema(
         },
         image: { type: String },
         keywords: [{ type: mongoose.Schema.Types.ObjectId, ref: "Keyword" }],
+        customKeywords: [{ type: String }],
         services: [{ type: mongoose.Schema.Types.ObjectId, ref: "Service" }],
+        tags: [{ type: String }],
+        purposeOther: { type: String },
         start: { type: Date },
         end: { type: Date },
         duration: { type: Number },
         price: { type: Number },
         paidBy: { type: String },
+        maxAttendees: { type: Number },
+        currency: { type: String, default: "USD" },
+        timezone: { type: String },
+        isRecurring: { type: Boolean, default: false },
+        recurrenceFrequency: {
+            type: String,
+            enum: ["weekly", "biweekly", "monthly"],
+            default: undefined,
+        },
+        seriesId: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: "GroupChat",
+            default: null,
+        },
         type: {
             type: String,
             enum: ["seminar", "individual", "community"],
@@ -98,5 +115,7 @@ const groupChatSchema = new mongoose.Schema(
     },
     { timestamps: true }
 );
+
+groupChatSchema.index({ rcChannelId: 1 }, { sparse: true });
 
 module.exports = mongoose.model("GroupChat", groupChatSchema);

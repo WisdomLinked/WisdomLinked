@@ -1,4 +1,13 @@
 import { Request, Response } from 'express';
+import { safeErrorMessage } from '../utils/httpUserFacingCopy';
+import {
+    classifyBookingPayment,
+    foldChargeRows,
+    isActionable,
+    summarizeVerdicts,
+    BookingPaymentVerdict,
+} from '../utils/paymentIntegrity';
+const escapeRegExp = (value: unknown) => String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const { uploadFileToS3 } = require("./auth.controller")
 const User = require("../models/User");
 const Event = require("../models/Event");
@@ -6,6 +15,9 @@ const PaymentHistory = require("../models/PaymentHistory");
 const Conversation = require("../models/Conversation");
 const GroupChat = require("../models/GroupChat");
 const Keyword = require("../models/Keyword");
+const MajorConsolidation = require("../models/MajorConsolidation");
+const { classifyMajors } = require("../utils/majorClassification");
+const { isBaselineMajor } = require("../constants/majorOptions");
 const ContactedUs = require("../models/ContactedUs");
 const PendingUser = require("../models/PendingUser");
 const PendingLogin = require("../models/PendingLogin");
@@ -79,16 +91,16 @@ const filterUsers = async (req, res) => {
         let countQuery = User.countDocuments({ role: { $ne: 'admin' } })
 
         if (username) {
-            query.where({ username: { '$regex': username, '$options': 'i' } })
-            countQuery.where({ username: { '$regex': username, '$options': 'i' } })
+            query.where({ username: { '$regex': escapeRegExp(username), '$options': 'i' } })
+            countQuery.where({ username: { '$regex': escapeRegExp(username), '$options': 'i' } })
         }
         if (email) {
-            query.where({ email: { '$regex': email, '$options': 'i' } })
-            countQuery.where({ email: { '$regex': email, '$options': 'i' } })
+            query.where({ email: { '$regex': escapeRegExp(email), '$options': 'i' } })
+            countQuery.where({ email: { '$regex': escapeRegExp(email), '$options': 'i' } })
         }
         if (role) {
-            query.where({ role: role })
-            countQuery.where({ role: role })
+            query.where({ role: String(role) })
+            countQuery.where({ role: String(role) })
         }
 
         // Dynamic sorting based on `sortBy` and `sortOrder`
@@ -105,7 +117,7 @@ const filterUsers = async (req, res) => {
         })
     } catch (err) {
         console.log(err)
-        return res.status(500).send(err.message);
+        return res.status(500).send(safeErrorMessage(err));
     }
 }
 
@@ -116,7 +128,7 @@ const filterPaymentHistories = async (req, res) => {
         const countQuery = PaymentHistory.countDocuments()
 
         if (email) {
-            const user = await User.findOne({ email: email })
+            const user = await User.findOne({ email: String(email) })
             if (!user) {
                 return res.status(200).json({
                     result: [],
@@ -130,18 +142,18 @@ const filterPaymentHistories = async (req, res) => {
         }
 
         if (stripeMode) {
-            query.where({ stripeMode })
-            countQuery.where({ stripeMode })
+            query.where({ stripeMode: String(stripeMode) })
+            countQuery.where({ stripeMode: String(stripeMode) })
         }
 
         if (paymentType) {
-            query.where({ paymentType })
-            countQuery.where({ paymentType })
+            query.where({ paymentType: String(paymentType) })
+            countQuery.where({ paymentType: String(paymentType) })
         }
 
         if (status) {
-            query.where({ status })
-            countQuery.where({ status })
+            query.where({ status: String(status) })
+            countQuery.where({ status: String(status) })
         }
 
         if (dateFrom) {
@@ -164,7 +176,7 @@ const filterPaymentHistories = async (req, res) => {
         })
     } catch (err) {
         console.log(err)
-        return res.status(500).send(err.message);
+        return res.status(500).send(safeErrorMessage(err));
     }
 }
 
@@ -177,7 +189,7 @@ const getFullUserDataByEmail = async (req, res) => {
         })
     } catch (err) {
         console.log(err)
-        return res.status(500).send(err.message);
+        return res.status(500).send(safeErrorMessage(err));
     }
 }
 
@@ -207,23 +219,9 @@ const updateProfileOfUser = async (req, res) => {
             updates.status = status
         }
         if (keywords) {
-            let _keywords = []
-            for (let i = 0; i < keywords.length; i++) {
-                if (keywords[i].new) {
-                    const sameKeywordExist = await Keyword.find({ value: keywords[i].value })
-                    if (sameKeywordExist.length) {
-                        _keywords.push(sameKeywordExist[0]._id)
-                    } else {
-                        const temp = new Keyword(keywords[i])
-                        const newKeyword = await temp.save()
-                        _keywords.push(newKeyword._id)
-                    }
-                } else {
-                    _keywords.push(keywords[i]._id)
-                }
-            }
-            console.log(keywords, _keywords)
-            updates.keywords = keywords
+            const { officialIds, customValues } = await classifyMajors(keywords)
+            updates.keywords = officialIds
+            updates.customKeywords = customValues
         }
         if (country) {
             updates.country = country
@@ -245,7 +243,7 @@ const updateProfileOfUser = async (req, res) => {
                 typeof specialNote === 'string' ? specialNote.slice(0, 5000) : String(specialNote).slice(0, 5000);
         }
 
-        await User.findOneAndUpdate({ email: email }, updates, { new: true })
+        await User.findOneAndUpdate({ email: String(email) }, updates, { new: true })
         const result = await getFullUserData(email)
         if (status && status === 'active') {
             // If the user is activated, send an email notification
@@ -258,7 +256,7 @@ const updateProfileOfUser = async (req, res) => {
         });
     } catch (err) {
         console.log(err)
-        return res.status(500).send(err.message);
+        return res.status(500).send(safeErrorMessage(err));
     }
 }
 
@@ -266,7 +264,7 @@ const getDirectChatHistory = async (req, res) => {
     try {
         const { senderId, receiverId, currentPage } = req.body
         let conversation = await Conversation.findOne({
-            participants: { $all: [receiverId, senderId] },
+            participants: { $all: [String(receiverId), String(senderId)] },
             type: "DIRECT",
         });
         if (!conversation) {
@@ -303,14 +301,14 @@ const getDirectChatHistory = async (req, res) => {
 
     } catch (err) {
         console.log(err)
-        return res.status(500).send(err.message);
+        return res.status(500).send(safeErrorMessage(err));
     }
 }
 
 const getGroupChatHistory = async (req, res) => {
     try {
         const { groupChatId, currentPage } = req.body
-        const groupChat = await GroupChat.findById(groupChatId).populate({
+        const groupChat = await GroupChat.findById(String(groupChatId)).populate({
             path: "messages",
             model: "Message",
             populate: {
@@ -337,7 +335,7 @@ const getGroupChatHistory = async (req, res) => {
         });
     } catch (err) {
         console.log(err)
-        return res.status(500).send(err.message);
+        return res.status(500).send(safeErrorMessage(err));
     }
 }
 
@@ -347,7 +345,7 @@ const getUserFeedbacks = async (req, res) => {
         if (!userId) {
             return res.status(400).send("userId is required");
         }
-        const user = await User.findById(userId);
+        const user = await User.findById(String(userId));
         if (!user) {
             return res.status(404).send("User not found");
         }
@@ -389,7 +387,7 @@ const getUserFeedbacks = async (req, res) => {
         return res.status(200).json({ result: enriched });
     } catch (err) {
         console.log(err);
-        return res.status(500).send(err.message);
+        return res.status(500).send(safeErrorMessage(err));
     }
 };
 
@@ -400,11 +398,11 @@ const getContactedUs = async (req, res) => {
         let query = ContactedUs.find({});
 
         if (name) {
-            query = query.where("name", new RegExp(name, "i"));
+            query = query.where("name", new RegExp(escapeRegExp(name), "i"));
         }
 
         if (email) {
-            query = query.where("email", new RegExp(email, "i"));
+            query = query.where("email", new RegExp(escapeRegExp(email), "i"));
         }
 
         if (dateFrom && dateTo) {
@@ -435,14 +433,14 @@ const getContactedUs = async (req, res) => {
         });
     } catch (err) {
         console.error(err);
-        return res.status(500).send(err.message);
+        return res.status(500).send(safeErrorMessage(err));
     }
 };
 
 const toggleActionedStatus = async (req, res) => {
     try {
         const { id } = req.body;
-        const contactEntry = await ContactedUs.findById(id);
+        const contactEntry = await ContactedUs.findById(String(id));
 
         if (!contactEntry) {
             return res.status(404).json({ message: "Record not found" });
@@ -618,7 +616,7 @@ const getDashboardStats = async (req: Request, res: Response) => {
         });
     } catch (err: any) {
         console.error(err);
-        return res.status(500).json({ status: "FAILED", message: err?.message || "Server error" });
+        return res.status(500).json({ status: "FAILED", message: safeErrorMessage(err) });
     }
 };
 
@@ -709,7 +707,7 @@ const getAdminPlatformEvents = async (req: Request, res: Response) => {
         return res.status(200).json({ status: "SUCCESS", items });
     } catch (err: any) {
         console.error(err);
-        return res.status(500).json({ status: "FAILED", message: err?.message || "Server error" });
+        return res.status(500).json({ status: "FAILED", message: safeErrorMessage(err) });
     }
 };
 
@@ -718,7 +716,7 @@ const getPendingUsers = async (req, res) => {
         const pendingUsers = await PendingUser.find();
         return res.status(200).json(pendingUsers);
     } catch (err) {
-        return res.status(500).json({ message: err.message });
+        return res.status(500).json({ message: safeErrorMessage(err) });
     }
 };
 
@@ -727,7 +725,7 @@ const getPendingLogins = async (req, res) => {
         const pendingLogins = await PendingLogin.find();
         return res.status(200).json(pendingLogins);
     } catch (err) {
-        return res.status(500).json({ message: err.message });
+        return res.status(500).json({ message: safeErrorMessage(err) });
     }
 };
 
@@ -737,10 +735,10 @@ const deletePendingUser = async (req, res) => {
         if (!pendingUserId) {
             return res.status(400).json({ message: "pendingUserId is required" });
         }
-        await PendingUser.findByIdAndDelete(pendingUserId);
+        await PendingUser.findByIdAndDelete(String(pendingUserId));
         return res.status(200).json({ message: "Pending User deleted successfully" });
     } catch (err) {
-        return res.status(500).json({ message: err.message });
+        return res.status(500).json({ message: safeErrorMessage(err) });
     }
 };
 
@@ -750,10 +748,10 @@ const deletePendingLogin = async (req, res) => {
         if (!pendingLoginId) {
             return res.status(400).json({ message: "pendingLoginId is required" });
         }
-        await PendingLogin.findByIdAndDelete(pendingLoginId);
+        await PendingLogin.findByIdAndDelete(String(pendingLoginId));
         return res.status(200).json({ message: "Pending Login deleted successfully" });
     } catch (err) {
-        return res.status(500).json({ message: err.message });
+        return res.status(500).json({ message: safeErrorMessage(err) });
     }
 };
 
@@ -764,7 +762,7 @@ const convertPendingUserToUserByAdmin = async (req, res) => {
             return res.status(400).json({ message: "pendingUserId is required" });
         }
 
-        const pendingUser = await PendingUser.findById(pendingUserId);
+        const pendingUser = await PendingUser.findById(String(pendingUserId));
         if (!pendingUser) {
             return res.status(404).json({ message: "Pending User not found" });
         }
@@ -790,11 +788,11 @@ const convertPendingUserToUserByAdmin = async (req, res) => {
 
         await newUser.save();
 
-        await PendingUser.findByIdAndDelete(pendingUserId);
+        await PendingUser.findByIdAndDelete(String(pendingUserId));
 
         return res.status(200).json({ message: "Pending User converted to a regular User successfully" });
     } catch (err) {
-        return res.status(500).json({ message: err.message });
+        return res.status(500).json({ message: safeErrorMessage(err) });
     }
 };
 
@@ -836,21 +834,11 @@ const registerUserByAdmin = async (req, res) => {
         let resumeUrl = file ? await uploadFileToS3(file, 'resumes') : '';
 
         let _keywords = []
+        let _customKeywords = []
         if (keywords?.length) {
-            for (let i = 0; i < keywords.length; i++) {
-                if (keywords[i].new) {
-                    const sameKeywordExist = await Keyword.find({ value: keywords[i].value })
-                    if (sameKeywordExist.length) {
-                        _keywords.push(sameKeywordExist[0]._id)
-                    } else {
-                        const temp = new Keyword(keywords[i])
-                        const newKeyword = await temp.save()
-                        _keywords.push(newKeyword._id)
-                    }
-                } else {
-                    _keywords.push(keywords[i]._id)
-                }
-            }
+            const classified = await classifyMajors(keywords)
+            _keywords = classified.officialIds
+            _customKeywords = classified.customValues
         }
 
         // encrypt password
@@ -863,6 +851,7 @@ const registerUserByAdmin = async (req, res) => {
             description,
             services,
             keywords: _keywords,
+            customKeywords: _customKeywords,
             country,
             state,
             city,
@@ -884,13 +873,320 @@ const registerUserByAdmin = async (req, res) => {
         });
     } catch (err) {
         console.log(err);
-        return res.status(500).send(err.message);
+        return res.status(500).send(safeErrorMessage(err));
     }
 };
 
 
+const getCustomMajors = async (req: Request, res: Response) => {
+    try {
+        const pipeline = (idField: string) => [
+            { $unwind: "$customKeywords" },
+            { $match: { customKeywords: { $type: "string", $ne: "" } } },
+            {
+                $group: {
+                    _id: { $toLower: { $trim: { input: "$customKeywords" } } },
+                    value: { $first: "$customKeywords" },
+                    owners: { $addToSet: `$${idField}` },
+                },
+            },
+        ];
+
+        const [userRows, seminarRows] = await Promise.all([
+            User.aggregate(pipeline("_id")),
+            GroupChat.aggregate(pipeline("_id")),
+        ]);
+
+        const merged = new Map<string, { value: string; userCount: number; seminarCount: number; official: boolean }>();
+        const absorb = (rows: any[], field: "userCount" | "seminarCount") => {
+            for (const row of rows) {
+                const key = String(row._id);
+                const entry = merged.get(key) || { value: row.value, userCount: 0, seminarCount: 0, official: false };
+                entry[field] += Array.isArray(row.owners) ? row.owners.length : 0;
+                merged.set(key, entry);
+            }
+        };
+        absorb(userRows, "userCount");
+        absorb(seminarRows, "seminarCount");
+
+        const nonBaselineKeywords = (await Keyword.find({ approved: { $ne: true } }).select("_id value")).filter(
+            (k: any) => !isBaselineMajor(k.value),
+        );
+        for (const kw of nonBaselineKeywords) {
+            const [userCount, seminarCount] = await Promise.all([
+                User.countDocuments({ keywords: kw._id }),
+                GroupChat.countDocuments({ keywords: kw._id }),
+            ]);
+            const key = String(kw.value || "").trim().toLowerCase();
+            if (!key) continue;
+            const entry = merged.get(key) || { value: kw.value, userCount: 0, seminarCount: 0, official: false };
+            entry.userCount += userCount;
+            entry.seminarCount += seminarCount;
+            entry.official = true;
+            merged.set(key, entry);
+        }
+
+        const result = Array.from(merged.values())
+            .map((e) => ({
+                value: e.value,
+                count: e.userCount + e.seminarCount,
+                userCount: e.userCount,
+                seminarCount: e.seminarCount,
+                official: e.official,
+            }))
+            .sort((a, b) => b.count - a.count || a.value.localeCompare(b.value));
+
+        return res.status(200).json({ result });
+    } catch (err) {
+        console.log(err);
+        return res.status(500).send(safeErrorMessage(err));
+    }
+};
+
+const consolidateMajors = async (req: Request, res: Response) => {
+    try {
+        const sourcesRaw = Array.isArray(req.body?.sources) ? req.body.sources : [];
+        const target = String(req.body?.target || "").trim();
+        const sources = sourcesRaw
+            .map((s: any) => String(s || "").trim())
+            .filter((s: string) => s.length);
+
+        if (!target) {
+            return res.status(400).json({ status: "FAIL", error: "A target official major is required." });
+        }
+
+        const performedBy = (req as any).user?.email || (req as any).user?.username || "";
+
+        let keyword = await Keyword.findOne({
+            value: { $regex: new RegExp(`^${escapeRegExp(target)}$`, "i") },
+        });
+        const targetCreated = !keyword;
+        if (!keyword) {
+            keyword = await Keyword.create({ value: target, label: target, approved: true });
+        } else if (!keyword.approved) {
+            keyword.approved = true;
+            await keyword.save();
+        }
+
+        if (!sources.length) {
+            await MajorConsolidation.create({
+                target: keyword.value,
+                targetCreated,
+                sources: [],
+                usersUpdated: 0,
+                seminarsUpdated: 0,
+                performedBy,
+            });
+            return res.status(200).json({
+                result: { major: keyword.value, usersUpdated: 0, seminarsUpdated: 0 },
+            });
+        }
+
+        const matchesSource = (c: string) =>
+            sources.some((s: string) => s.toLowerCase() === String(c).trim().toLowerCase());
+        const sourceRegexes = sources.map((s: string) => new RegExp(`^${escapeRegExp(s)}$`, "i"));
+        const idEq = (a: any, b: any) => String(a) === String(b);
+
+        const touchedUserIds = new Set<string>();
+        const touchedSeminarIds = new Set<string>();
+
+        const affectedUsers = await User.find({ customKeywords: { $in: sourceRegexes } }).select("_id keywords customKeywords");
+        for (const user of affectedUsers) {
+            const hasKeyword = (user.keywords || []).some((k: any) => idEq(k, keyword._id));
+            if (!hasKeyword) user.keywords.push(keyword._id);
+            user.customKeywords = (user.customKeywords || []).filter((c: string) => !matchesSource(c));
+            await user.save();
+            touchedUserIds.add(String(user._id));
+        }
+
+        const affectedSeminars = await GroupChat.find({ customKeywords: { $in: sourceRegexes } }).select("_id keywords customKeywords");
+        for (const seminar of affectedSeminars) {
+            const hasKeyword = (seminar.keywords || []).some((k: any) => idEq(k, keyword._id));
+            if (!hasKeyword) seminar.keywords.push(keyword._id);
+            seminar.customKeywords = (seminar.customKeywords || []).filter((c: string) => !matchesSource(c));
+            await seminar.save();
+            touchedSeminarIds.add(String(seminar._id));
+        }
+
+        const sourceKeywords = await Keyword.find({
+            value: { $in: sourceRegexes },
+            _id: { $ne: keyword._id },
+        }).select("_id");
+        const sourceKeywordIds = sourceKeywords.map((k: any) => k._id);
+        if (sourceKeywordIds.length) {
+            const usersWithSourceKeyword = await User.find({ keywords: { $in: sourceKeywordIds } }).select("_id keywords");
+            for (const user of usersWithSourceKeyword) {
+                user.keywords = (user.keywords || []).filter((k: any) => !sourceKeywordIds.some((id: any) => idEq(id, k)));
+                if (!user.keywords.some((k: any) => idEq(k, keyword._id))) user.keywords.push(keyword._id);
+                await user.save();
+                touchedUserIds.add(String(user._id));
+            }
+
+            const seminarsWithSourceKeyword = await GroupChat.find({ keywords: { $in: sourceKeywordIds } }).select("_id keywords");
+            for (const seminar of seminarsWithSourceKeyword) {
+                seminar.keywords = (seminar.keywords || []).filter((k: any) => !sourceKeywordIds.some((id: any) => idEq(id, k)));
+                if (!seminar.keywords.some((k: any) => idEq(k, keyword._id))) seminar.keywords.push(keyword._id);
+                await seminar.save();
+                touchedSeminarIds.add(String(seminar._id));
+            }
+
+            await Keyword.deleteMany({ _id: { $in: sourceKeywordIds } });
+        }
+
+        const usersUpdated = touchedUserIds.size;
+        const seminarsUpdated = touchedSeminarIds.size;
+
+        await MajorConsolidation.create({
+            target: keyword.value,
+            targetCreated,
+            sources,
+            usersUpdated,
+            seminarsUpdated,
+            performedBy,
+        });
+
+        return res.status(200).json({
+            result: {
+                major: keyword.value,
+                usersUpdated,
+                seminarsUpdated,
+            },
+        });
+    } catch (err) {
+        console.log(err);
+        return res.status(500).send(safeErrorMessage(err));
+    }
+};
+
+const getMajorConsolidations = async (req: Request, res: Response) => {
+    try {
+        const rows = await MajorConsolidation.find()
+            .sort({ createdAt: -1 })
+            .limit(200)
+            .lean();
+        return res.status(200).json({ result: rows });
+    } catch (err) {
+        console.log(err);
+        return res.status(500).send(safeErrorMessage(err));
+    }
+};
+
+const INTEGRITY_LOOKBACK_MS = 120 * 24 * 60 * 60 * 1000;
+const INTEGRITY_STUCK_PENDING_MS = 60 * 60 * 1000;
+const INTEGRITY_MAX_BOOKINGS = 500;
+
+const getPaymentIntegrityReport = async (req, res) => {
+    try {
+        const onlyActionable = String(req.query?.onlyActionable ?? 'true') !== 'false';
+        const since = new Date(Date.now() - INTEGRITY_LOOKBACK_MS);
+
+        const bookings = await GroupChat.find({
+            type: { $in: ['seminar', 'individual'] },
+            price: { $gt: 0 },
+            status: { $in: ['active', 'pending'] },
+            createdAt: { $gte: since },
+        })
+            .select('_id name type price status start admin participants')
+            .limit(INTEGRITY_MAX_BOOKINGS)
+            .lean();
+
+        const bookingIds = bookings.map((b: any) => b._id);
+        const chargeRows = bookingIds.length
+            ? await PaymentHistory.find({
+                groupChat: { $in: bookingIds },
+                paymentType: 'charge',
+            }).select('groupChat customer status amount paymentIntent').lean()
+            : [];
+
+        // (bookingId|studentId) -> charge rows
+        const rowsByPair = new Map<string, any[]>();
+        for (const row of chargeRows) {
+            const key = `${String(row.groupChat)}|${String(row.customer)}`;
+            const list = rowsByPair.get(key) || [];
+            list.push(row);
+            rowsByPair.set(key, list);
+        }
+
+        const verdicts: BookingPaymentVerdict[] = [];
+        const rows: any[] = [];
+
+        for (const booking of bookings) {
+            const adminId = String(booking.admin ?? '');
+            const students = (booking.participants || [])
+                .map((p: any) => String(p))
+                .filter((p: string) => p && p !== adminId);
+
+            for (const studentId of students) {
+                const state = {
+                    priceCents: Math.round(Number(booking.price ?? 0) * 100),
+                    ...foldChargeRows(rowsByPair.get(`${String(booking._id)}|${studentId}`) || []),
+                };
+                const verdict = classifyBookingPayment(state);
+                verdicts.push(verdict);
+                if (onlyActionable && !isActionable(verdict)) continue;
+                rows.push({
+                    verdict,
+                    groupChatId: String(booking._id),
+                    name: booking.name,
+                    type: booking.type,
+                    status: booking.status,
+                    start: booking.start,
+                    priceCents: state.priceCents,
+                    customer: studentId,
+                    expert: adminId,
+                    paymentIntents: (rowsByPair.get(`${String(booking._id)}|${studentId}`) || [])
+                        .map((r: any) => r.paymentIntent)
+                        .filter(Boolean),
+                });
+            }
+        }
+
+        const stuckPending = await PaymentHistory.find({
+            paymentType: 'charge',
+            status: 'pending',
+            updatedAt: { $lte: new Date(Date.now() - INTEGRITY_STUCK_PENDING_MS) },
+        })
+            .select('paymentIntent amount currency customer expert groupChat stripeMode updatedAt description')
+            .limit(200)
+            .lean();
+
+        const userIds = new Set<string>();
+        for (const row of rows) {
+            if (row.customer) userIds.add(String(row.customer));
+            if (row.expert) userIds.add(String(row.expert));
+        }
+        const users = userIds.size
+            ? await User.find({ _id: { $in: Array.from(userIds) } }).select('email username role').lean()
+            : [];
+        const userById = new Map<string, any>(users.map((u: any) => [String(u._id), u]));
+        for (const row of rows) {
+            row.customerEmail = userById.get(String(row.customer))?.email ?? null;
+            row.expertEmail = userById.get(String(row.expert))?.email ?? null;
+        }
+
+        const order: Record<string, number> = { unpaid: 0, refunded: 1, in_flight: 2, paid: 3, free: 4 };
+        rows.sort((a, b) => (order[a.verdict] ?? 9) - (order[b.verdict] ?? 9));
+
+        return res.status(200).json({
+            summary: summarizeVerdicts(verdicts),
+            bookingsScanned: bookings.length,
+            truncated: bookings.length >= INTEGRITY_MAX_BOOKINGS,
+            lookbackDays: Math.round(INTEGRITY_LOOKBACK_MS / (24 * 60 * 60 * 1000)),
+            rows,
+            stuckPendingPayments: stuckPending,
+        });
+    } catch (err) {
+        console.log('[getPaymentIntegrityReport]', err);
+        return res.status(500).send(safeErrorMessage(err));
+    }
+};
+
 module.exports = {
+    getPaymentIntegrityReport,
     filterUsers,
+    getCustomMajors,
+    consolidateMajors,
+    getMajorConsolidations,
     getFullUserDataByEmail,
     updateProfileOfUser,
     filterPaymentHistories,

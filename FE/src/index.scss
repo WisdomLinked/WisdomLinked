@@ -299,6 +299,13 @@ code {
   max-height: none !important;
 }
 
+/* Expert profile avatar: collapse the library's size caption and (config-hidden)
+   editing bar so the framed box hugs the image instead of leaving white space. */
+.wl-photo-picker .ReactImagePickerEditor .place-image .caption,
+.wl-photo-picker .ReactImagePickerEditor .place-image .editing-bar-btn {
+  display: none !important;
+}
+
 .MultiSelection>div {
   background: transparent !important;
   border: 0px;

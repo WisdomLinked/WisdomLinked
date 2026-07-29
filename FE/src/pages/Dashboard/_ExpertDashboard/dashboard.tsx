@@ -4,7 +4,6 @@ import { useNavigate } from "react-router-dom";
 import Avatar from "../../../components/Avatar";
 import { formatDateYYYY_MM_DD_h_m } from "../../../actions/common";
 import {
-    addMemberToGroup,
     acceptIndividualAppointment,
     cancelIndividualAppointment,
     doAcceptEvent,
@@ -20,29 +19,16 @@ import { openExpertChatWithUser } from "../../../utils/expertOpenChatWithUser";
 const Dashboard = () => {
 
     const { auth: { userDetails = {} }, friends: { groupChatList } } = useAppSelector((state) => state);
-    const { _id, pendingGroupChats, groupChats: groupChat, events, status } = userDetails;
+    const { _id, groupChats: groupChat, events, status } = userDetails;
 
     const dispatch = useDispatch()
     const navigate = useNavigate()
 
-    const [groupChats, set_groupChats] = useState<any>([])
     const [sessions, set_sessions] = useState<any>([])
     const [acceptedSeminars, set_acceptedSeminars] = useState<any>([])
     const [pendingInvitations, set_pendingInvitations] = useState<any>([])
     const [base64Images, setBase64Images] = useState<Map<string, string>>(new Map());
     const fetchImagesRef = useRef(false); // Ref to track image fetch calls
-
-    const acceptSeminarAppointment = async (data: any) => {
-        const response = await addMemberToGroup({
-            _id: data._id,
-            friendId: data.customerId._id,
-            groupChatId: data.groupChatId._id
-        })
-        if (response) {
-            dispatch(updateMe())
-        }
-        SetLoadingStatus(false)
-    }
 
     const acceptAppointment = async (data: any) => {
         const response = await acceptIndividualAppointment({
@@ -108,18 +94,16 @@ const Dashboard = () => {
         // const updatedPendingInvitations = pendingGroupChats.filter((item: any) => new Date(item.groupChatId.end).getTime() >= now && item.groupChatId.type === 'individual');
         const updatedSessions = groupChat.filter((item: any) => new Date(item.end).getTime() >= now && item.type === 'individual' && item.status === 'active');
         const updatedPendingInvitations = groupChat.filter((item: any) => new Date(item.end).getTime() >= now && item.type === 'individual' && item.status === 'pending');
-        const updatedGroupChats = pendingGroupChats.filter((item: any) => new Date(item.groupChatId.end).getTime() >= now);
         const updatedSeminars = groupChat.filter((item: any) => new Date(item.end).getTime() >= now && item.type === 'seminar');
 
         set_sessions(updatedSessions);
         set_pendingInvitations(updatedPendingInvitations);
-        set_groupChats(updatedGroupChats);
         set_acceptedSeminars(updatedSeminars);
 
         // Combine sessions and pendingInvitations to fetch images
-        const allCustomers = [...updatedSessions, ...updatedPendingInvitations, ...groupChats, ...updatedSeminars];
+        const allCustomers = [...updatedSessions, ...updatedPendingInvitations, ...updatedSeminars];
         fetchImages(allCustomers);
-    }, [events, pendingGroupChats, groupChat]);
+    }, [events, groupChat]);
 
     const fetchImages = async (sessionList: any[]) => {
         const uniqueCustomers = new Map<string, string>();
@@ -208,47 +192,6 @@ const Dashboard = () => {
                     <div className="text-center text-lightgrey my-10">No Booked Seminar sessions</div>
             }
 
-            <div className="text-center text-2xl my-6">Pending Seminar Sessions</div>
-            {
-                groupChats.length ?
-                    <div className="flex flex-wrap justify-center gap-6">
-                        {
-                            groupChats.map((item: any, index: number) => (
-                                // <div key={index} className="w-fit p-4 bg-darkgrey">
-                                <div key={index} className="w-fit p-4 bg-darkgrey rounded-lg shadow-md transform transition-all duration-300 hover:scale-105 hover:shadow-lg overflow-hidden">
-                                    <div className="flex space-x-3 items-center">
-                                        <Avatar
-                                            username={item.customerId.username}
-                                            image={base64Images.get(item.customerId._id)}
-                                        />
-                                        <div>
-                                            <div className="text-lg">{item.customerId.username}</div>
-                                            <div className="text-sm">{item.customerId.email}</div>
-                                        </div>
-                                    </div>
-                                    <hr className="my-2"/>
-                                    <div><span className="font-bold">Title  : </span> {item.groupChatId.name}</div>
-                                    <div><span className="font-bold">Description  : </span> {item.groupChatId.description}</div>
-                                    <div><span
-                                        className="font-bold">Starts at : </span> {formatDateYYYY_MM_DD_h_m(item.groupChatId.start)}
-                                    </div>
-                                    <div><span className="font-bold">Duration  : </span> {item.groupChatId.duration} min
-                                    </div>
-                                    <div><span className="font-bold">Price  : </span> ${item.groupChatId.price}</div>
-                                    <hr className="my-2"/>
-                                    <button
-                                        className="py-1 w-full bg-[#234C6A] hover:bg-[#1b3c53] rounded-lg flex items-center justify-center disabled:opacity-50"
-                                        disabled={status === 'review'}
-                                        onClick={() => acceptSeminarAppointment(item)}
-                                    >
-                                        Accept
-                                    </button>
-                                </div>
-                            ))
-                        }
-                    </div> :
-                    <div className="text-center text-lightgrey my-10">No pending seminar sessions</div>
-            }
             <div className="text-center text-2xl mb-6">Booked Individual Sessions</div>
             {
                 sessions.length ?

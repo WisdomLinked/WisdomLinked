@@ -3,6 +3,7 @@ import gif from "../../../assets/images/typing.gif";
 import { useAppSelector } from "../../../store";
 import { onTyping } from "../../../services/rcRealtime";
 import { toRocketChatUsername } from "../../../utils/rocketchatUsername";
+import { displayRoomLabel } from "../../../utils/chatRoomLabel";
 
 const Typing = ({ theme = "dark" }: any) => {
     const { auth: { userDetails }, chat: { chosenChatDetails, chosenGroupChatDetails, rcChannelId } } = useAppSelector(state => state);
@@ -42,7 +43,7 @@ const Typing = ({ theme = "dark" }: any) => {
         });
         if (peer?.username) return String(peer.username);
 
-        return rcUsername;
+        return displayRoomLabel(rcUsername, 'Someone');
     };
 
     useEffect(() => {

@@ -7,6 +7,7 @@ import {
     useElements,
 } from '@stripe/react-stripe-js';
 import { createStripePaymentIntent, getStripeMode } from '../../../api/api';
+import { persistPendingDetails } from '../../../utils/safeLocalStorage';
 import FormAlert from '../../../components/FormAlert';
 import { SetLoadingStatus } from '../../../actions/appActions';
 
@@ -95,7 +96,7 @@ const CheckoutForm = ({
         try {
             if (price === 0) {
                 // Directly mark the payment as successful
-                window.localStorage.setItem('pendingDetails', JSON.stringify(pendingDetails));
+                persistPendingDetails(window.localStorage, pendingDetails);
                 window.location.replace(`${window.location.href.split('?')[0]}?redirect_status=succeeded&payment_intent=0`);
                 return;
             }
@@ -110,15 +111,17 @@ const CheckoutForm = ({
 
             SetLoadingStatus(true);
 
-            // Always create a PaymentIntent, even if amount=0
+            const details = pendingDetails as any;
             const response = await createStripePaymentIntent({
                 stripeMode,
-                amount: price, // Possibly 0
+                ...(details.groupChatId
+                    ? { groupChatId: details.groupChatId }
+                    : { expertId: String(details.expert), duration: details.duration }),
             });
             const { client_secret: clientSecret } = response;
 
             checkStorageUsage();
-            window.localStorage.setItem('pendingDetails', JSON.stringify(pendingDetails));
+            persistPendingDetails(window.localStorage, pendingDetails);
 
             const { paymentIntent } = await stripe.confirmPayment({
                 elements,

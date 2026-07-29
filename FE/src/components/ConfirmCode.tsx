@@ -3,6 +3,7 @@ import Header from "./header";
 import LandingFooter from "./landingFooter";
 import { SetLoadingStatus } from "../actions/appActions";
 import { login, confirmLoginByCode } from "../api/api";
+import { persistUserDetails } from "../utils/safeLocalStorage";
 import { useDispatch } from "react-redux";
 import { showSuccessAlert } from "../actions/alertActions";
 import FormAlert from "./FormAlert";
@@ -53,7 +54,7 @@ const ConfirmCode = ({ email, password }: any) => {
         // console.log(response, '////')
         if (response === false) return;
         if (response?.status === "SUCCESS") {
-            localStorage.setItem("currentUser", JSON.stringify(response.userDetails));
+            persistUserDetails(localStorage, "currentUser", response.userDetails);
             dispatch({
                 type: actionTypes.authenticate,
                 payload: response.userDetails

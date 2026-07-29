@@ -4,12 +4,12 @@ import {
   Mail,
   Lock,
   CreditCard,
-  ChevronDown,
   X,
   Check,
   Loader2,
   StickyNote,
   Save,
+  GraduationCap,
 } from 'lucide-react';
 import { useAppSelector } from '../../store';
 import { useDispatch } from 'react-redux';
@@ -22,6 +22,8 @@ import { usePaymentHistory, PaymentHistoryTable, PaymentHistorySummary } from '.
 import { resolveProfileImageSrc } from '../../utils/profileImage';
 import { saveProfilePhotoFile } from '../../utils/profileImageUpload';
 import { SERVICE_OPTIONS, canonicalLabelsFromMixedServiceEntries } from '../../constants/serviceOptions';
+import MajorSelect from '../MajorSelect';
+import OptionSelect from '../ui/OptionSelect';
 
 const PREFERENCE_OPTIONS = SERVICE_OPTIONS.map((o) => ({ id: o.value, label: o.label }));
 
@@ -55,40 +57,35 @@ function interestsFromKeywords(keywords: unknown[] | undefined): string[] {
   return out;
 }
 
-const INTEREST_OPTIONS = [
-  'Aerospace Engineering',
-  'Agricultural Engineering',
-  'Artificial Intelligence / Machine Learning',
-  'Automotive Engineering',
-  'Biomedical Engineering',
-  'Chemical Engineering',
-  'Civil Engineering',
-  'Computer Engineering',
-  'Computer Science',
-  'Data Science',
-  'Electrical Engineering',
-  'Electronics & Communication Engineering',
-  'Environmental Engineering',
-  'Geotechnical Engineering',
-  'Industrial Engineering',
-  'Information Technology',
-  'Marine Engineering',
-  'Materials Science & Engineering',
-  'Mechanical Engineering',
-  'Mechatronics Engineering',
-  'Nuclear Engineering',
-  'Petroleum Engineering',
-  'Robotics Engineering',
-  'Software Engineering',
-  'Structural Engineering',
-  'Systems Engineering',
-  'Telecommunications Engineering',
-  'Other',
-];
 
 const inputBase =
   'w-full rounded-xl border bg-white px-4 py-2.5 text-sm text-slate-800 placeholder-slate-400 outline-none transition-all focus:ring-2 focus:ring-[#234C6A]/30 focus:border-[#234C6A]';
 const inputNormal = `${inputBase} border-slate-200`;
+
+const DEGREE_OPTIONS = ["Bachelor's", "Master's", "PhD", 'Other'];
+const RANKING_OPTIONS = ['Top 10%', 'Top 25%', 'Top 50%', 'Other'];
+
+/** Academic-background fields are optional and free-form; coerce any stored shape to a string. */
+function coerceProfileString(value: unknown): string {
+  if (typeof value === 'string') return value;
+  if (value && typeof value === 'object') {
+    const doc = value as { label?: string; value?: string; name?: string };
+    return String(doc.label ?? doc.value ?? doc.name ?? '');
+  }
+  return '';
+}
+
+function academicFromUser(userDetails: any) {
+  return {
+    degreeSought: coerceProfileString(userDetails?.degreeSought),
+    intendedIntake: coerceProfileString(userDetails?.intendedIntake),
+    currentUniversity: coerceProfileString(userDetails?.currentUniversity),
+    gpa: coerceProfileString(userDetails?.gpa),
+    rankingPercentile: coerceProfileString(userDetails?.rankingPercentile),
+    targetUniversities: coerceProfileString(userDetails?.targetUniversities),
+    country: coerceProfileString(userDetails?.country),
+  };
+}
 
 
 export default function StudentProfile() {
@@ -113,9 +110,8 @@ export default function StudentProfile() {
     () => preferencesFromServices(userDetails?.services),
   );
   const [interests, setInterests] = useState<string[]>(
-    () => interestsFromKeywords(userDetails?.keywords),
+    () => interestsFromKeywords([...(userDetails?.keywords || []), ...(userDetails?.customKeywords || [])]),
   );
-  const [showInterestDropdown, setShowInterestDropdown] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [personalDirty, setPersonalDirty] = useState(false);
@@ -130,6 +126,14 @@ export default function StudentProfile() {
   const [specialNote, setSpecialNote] = useState(() => (userDetails as any)?.specialNote ?? '');
   const [notesDirty, setNotesDirty] = useState(false);
   const [notesSaving, setNotesSaving] = useState(false);
+
+  const [academic, setAcademic] = useState(() => academicFromUser(userDetails));
+  const [academicDirty, setAcademicDirty] = useState(false);
+  const [academicSaving, setAcademicSaving] = useState(false);
+  const setAcademicField = (key: keyof ReturnType<typeof academicFromUser>, value: string) => {
+    setAcademic(prev => ({ ...prev, [key]: value }));
+    setAcademicDirty(true);
+  };
 
   // Keep profile header fields in sync with the authenticated user.
   // Avoid overwriting while the user is editing the personal section.
@@ -157,6 +161,20 @@ export default function StudentProfile() {
     setSpecialNote((userDetails as any)?.specialNote ?? '');
   }, [notesDirty, (userDetails as any)?.specialNote]);
 
+  useEffect(() => {
+    if (academicDirty) return;
+    setAcademic(academicFromUser(userDetails));
+  }, [
+    academicDirty,
+    (userDetails as any)?.degreeSought,
+    (userDetails as any)?.intendedIntake,
+    (userDetails as any)?.currentUniversity,
+    (userDetails as any)?.gpa,
+    (userDetails as any)?.rankingPercentile,
+    (userDetails as any)?.targetUniversities,
+    (userDetails as any)?.country,
+  ]);
+
   // Load saved preferences (services) / interests (keywords) from the account.
   // Skip while the user has unsaved edits so we don't clobber their changes.
   useEffect(() => {
@@ -166,8 +184,8 @@ export default function StudentProfile() {
 
   useEffect(() => {
     if (interestsDirty) return;
-    setInterests(interestsFromKeywords(userDetails?.keywords));
-  }, [interestsDirty, userDetails?.keywords]);
+    setInterests(interestsFromKeywords([...(userDetails?.keywords || []), ...(userDetails?.customKeywords || [])]));
+  }, [interestsDirty, userDetails?.keywords, userDetails?.customKeywords]);
 
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [passwordStep, setPasswordStep] = useState<'request' | 'verify' | 'done'>('request');
@@ -186,28 +204,9 @@ export default function StudentProfile() {
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const { payments, loading: paymentsLoading, error: paymentsError } = usePaymentHistory(showPaymentModal);
 
-  const interestDropdownRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (interestDropdownRef.current && !interestDropdownRef.current.contains(e.target as Node)) {
-        setShowInterestDropdown(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
-
   const togglePreference = (id: string) => {
     setPreferences(prev => ({ ...prev, [id]: !prev[id] }));
     setPreferencesDirty(true);
-  };
-
-  const toggleInterest = (interest: string) => {
-    setInterests(prev => {
-      const next = prev.includes(interest) ? prev.filter(i => i !== interest) : [...prev, interest];
-      return next;
-    });
-    setInterestsDirty(true);
   };
 
   const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -231,7 +230,7 @@ export default function StudentProfile() {
     email.trim() !== (userDetails?.email ?? '').trim();
 
   const profileHasUnsavedChanges =
-    hasPersonalTextChanges || preferencesDirty || interestsDirty;
+    hasPersonalTextChanges || preferencesDirty || interestsDirty || academicDirty;
 
   const handleSavePhoto = async () => {
     if (!photoFile) return;
@@ -291,6 +290,33 @@ export default function StudentProfile() {
     if (hasPersonalTextChanges) await handleSavePersonal();
     if (preferencesDirty) await handleSavePreferences();
     if (interestsDirty) await handleSaveInterests();
+    if (academicDirty) await handleSaveAcademic();
+  };
+
+  // Academic background is optional; persist the fields the student filled in.
+  const handleSaveAcademic = async () => {
+    setAcademicSaving(true);
+    try {
+      const ok = await doUpdateProfile({
+        degreeSought: academic.degreeSought.trim(),
+        intendedIntake: academic.intendedIntake.trim(),
+        currentUniversity: academic.currentUniversity.trim(),
+        gpa: academic.gpa.trim(),
+        rankingPercentile: academic.rankingPercentile.trim(),
+        targetUniversities: academic.targetUniversities.trim(),
+        country: academic.country.trim(),
+      });
+      if (ok) {
+        setAcademicDirty(false);
+        dispatch(showSuccessAlert('Academic background saved'));
+      } else {
+        dispatch(showErrorAlert('Could not save academic background'));
+      }
+    } catch (err: any) {
+      dispatch(showErrorAlert(err?.message || 'Could not save academic background'));
+    } finally {
+      setAcademicSaving(false);
+    }
   };
 
   // Preferences are persisted as the user's `services` (the three canonical service options).
@@ -520,6 +546,107 @@ export default function StudentProfile() {
         </div>
       </section>
 
+      {/* Academic background (optional, recommended) */}
+      <section className={cardClass + ' mb-6'}>
+        <div className="mb-4 flex items-center justify-between gap-2">
+          <h2 className="text-sm font-semibold uppercase tracking-wider text-slate-900 flex items-center gap-2">
+            <GraduationCap className="h-4 w-4 text-[#234C6A]" aria-hidden />
+            Academic background
+          </h2>
+          {academicDirty && (
+            <button
+              type="button"
+              onClick={() => void handleSaveAcademic()}
+              disabled={academicSaving}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-[#234C6A] px-3 py-1.5 text-[11px] font-semibold text-white hover:brightness-110 disabled:opacity-60"
+            >
+              {academicSaving && <Loader2 className="h-3 w-3 animate-spin" aria-hidden />}
+              {academicSaving ? 'Saving…' : 'Save'}
+            </button>
+          )}
+        </div>
+        <p className="text-xs text-slate-600 mb-4">
+          Optional but recommended — experts you book use this to prepare for your session, so you don&apos;t have to
+          repeat it each time.
+        </p>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div>
+            <label className="block text-xs font-semibold text-slate-600 mb-1" htmlFor="degree-sought">
+              Degree sought
+            </label>
+            <OptionSelect
+              id="degree-sought"
+              ariaLabel="Degree sought"
+              value={academic.degreeSought}
+              onChange={next => setAcademicField('degreeSought', next)}
+              options={DEGREE_OPTIONS}
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-slate-600 mb-1">Intended intake</label>
+            <input
+              type="text"
+              value={academic.intendedIntake}
+              onChange={e => setAcademicField('intendedIntake', e.target.value)}
+              placeholder="e.g. Fall 2027"
+              className={inputNormal}
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-slate-600 mb-1">Current university</label>
+            <input
+              type="text"
+              value={academic.currentUniversity}
+              onChange={e => setAcademicField('currentUniversity', e.target.value)}
+              placeholder="e.g. HUST"
+              className={inputNormal}
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-slate-600 mb-1">GPA</label>
+            <input
+              type="text"
+              value={academic.gpa}
+              onChange={e => setAcademicField('gpa', e.target.value)}
+              placeholder="e.g. 3.75/4.0"
+              className={inputNormal}
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-slate-600 mb-1" htmlFor="ranking-percentile">
+              Ranking percentile
+            </label>
+            <OptionSelect
+              id="ranking-percentile"
+              ariaLabel="Ranking percentile"
+              value={academic.rankingPercentile}
+              onChange={next => setAcademicField('rankingPercentile', next)}
+              options={RANKING_OPTIONS}
+            />
+          </div>
+          <div className="sm:col-span-2">
+            <label className="block text-xs font-semibold text-slate-600 mb-1">Target universities</label>
+            <input
+              type="text"
+              value={academic.targetUniversities}
+              onChange={e => setAcademicField('targetUniversities', e.target.value)}
+              placeholder="Comma-separated, e.g. MIT, Stanford, CMU"
+              className={inputNormal}
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-slate-600 mb-1">Country</label>
+            <input
+              type="text"
+              value={academic.country}
+              onChange={e => setAcademicField('country', e.target.value)}
+              placeholder="e.g. China"
+              className={inputNormal}
+            />
+          </div>
+        </div>
+      </section>
+
       {/* Preferences & expectations (saved to your account) */}
       <section className={cardClass + ' mb-6'}>
         <div className="mb-4">
@@ -623,56 +750,12 @@ export default function StudentProfile() {
         <p className="text-xs text-slate-600 mb-3">
           Select your fields of interest (e.g. Civil Engineering, Computer Science, other).
         </p>
-        <div className="relative">
-          <div className="flex flex-wrap gap-2 mb-3">
-            {interests.map(interest => (
-              <span
-                key={interest}
-                className="inline-flex items-center gap-1 rounded-lg bg-[#E8EEF4] text-[#234C6A] px-3 py-1.5 text-xs font-medium"
-              >
-                {interest}
-                <button
-                  type="button"
-                  onClick={() => toggleInterest(interest)}
-                  className="hover:opacity-70"
-                  aria-label={`Remove ${interest}`}
-                >
-                  <X className="h-3 w-3" />
-                </button>
-              </span>
-            ))}
-          </div>
-          <div className="relative" ref={interestDropdownRef}>
-            <button
-              type="button"
-              onClick={() => setShowInterestDropdown(v => !v)}
-              className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-600 hover:bg-slate-50"
-            >
-              Add interest
-              <ChevronDown className={`h-4 w-4 transition-transform ${showInterestDropdown ? 'rotate-180' : ''}`} />
-            </button>
-            {showInterestDropdown && (
-              <div className="absolute left-0 top-full mt-1 w-64 rounded-xl border border-slate-200 bg-white py-2 shadow-lg z-10 max-h-56 overflow-y-auto">
-                {INTEREST_OPTIONS.filter(i => !interests.includes(i)).map(interest => (
-                  <button
-                    key={interest}
-                    type="button"
-                    onClick={() => {
-                      toggleInterest(interest);
-                      setShowInterestDropdown(false);
-                    }}
-                    className="w-full px-4 py-2 text-left text-sm text-slate-700 hover:bg-slate-50"
-                  >
-                    {interest}
-                  </button>
-                ))}
-                {INTEREST_OPTIONS.every(i => interests.includes(i)) && (
-                  <p className="px-4 py-2 text-xs text-slate-500">All interests selected.</p>
-                )}
-              </div>
-            )}
-          </div>
-        </div>
+        <MajorSelect
+          label=""
+          placeholder="Select your interests"
+          value={interests}
+          onChange={next => { setInterests(next); setInterestsDirty(true); }}
+        />
       </section>
 
       {/* Actions: Change password, Payment history */}

@@ -2,12 +2,13 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { MapPin, Briefcase, GraduationCap, Users } from 'lucide-react';
 import { isDisplayImageUrl } from '../utils/profileImage';
 
-export interface MentorCardProps {
+export interface ExpertCardProps {
   id: string | number;
   name: string;
   title: string;
   institution: string;
   field: string;
+  majors?: { label: string; custom: boolean }[];
   experience: string;
   services: string[];
   image: string | null;
@@ -19,7 +20,7 @@ export interface MentorCardProps {
   resume?: string | null;
   /** Account status from the BE; only 'active' experts can be booked. */
   status?: string;
-  onViewProfile?: (mentor: MentorCardProps) => void;
+  onViewProfile?: (mentor: ExpertCardProps) => void;
   isFollowing?: boolean;
   onToggleFollow?: (mentorId: string | number) => void;
 }
@@ -31,7 +32,7 @@ const serviceColorByIndex = (index: number) => {
   return 'border-[#E5E2DB] text-[#1A3A4A]';
 };
 
-const MentorCard: React.FC<MentorCardProps> = ({
+const ExpertCard: React.FC<ExpertCardProps> = ({
   name,
   title,
   institution,
@@ -40,6 +41,7 @@ const MentorCard: React.FC<MentorCardProps> = ({
   services,
   image,
   isNew,
+  majors,
   compact = false,
   followerCount = 0,
   resume = null,
@@ -49,6 +51,7 @@ const MentorCard: React.FC<MentorCardProps> = ({
   isFollowing = false,
   onToggleFollow,
 }) => {
+  const fieldIsCustom = Boolean(majors?.[0]?.custom);
   // Experts still in review (or otherwise not active) cannot be booked — mirrors the
   // legacy experts list which disabled the "Select" button for review experts.
   const isBookable = status === undefined || status === 'active';
@@ -64,12 +67,13 @@ const MentorCard: React.FC<MentorCardProps> = ({
     setImgSrc(image && isDisplayImageUrl(image) ? image : placeholder);
   }, [image, placeholder]);
 
-  const mentorPayload: MentorCardProps = {
+  const expertPayload: ExpertCardProps = {
     id,
     name,
     title,
     institution,
     field,
+    majors,
     experience,
     services,
     image,
@@ -83,7 +87,7 @@ const MentorCard: React.FC<MentorCardProps> = ({
   const canView = Boolean(onViewProfile) && isBookable;
   const handleView = () => {
     if (!canView) return;
-    onViewProfile?.(mentorPayload);
+    onViewProfile?.(expertPayload);
   };
 
   return (
@@ -150,7 +154,14 @@ const MentorCard: React.FC<MentorCardProps> = ({
             <span className="truncate">{institution}</span>
           </p>
           <div className="mt-2 flex flex-wrap items-center gap-2 text-[0.78rem] text-[#1A3A4A]">
-            <span className="inline-flex items-center gap-1 rounded-[3px] bg-[#F5F3EF] px-2 py-1">
+            <span
+              className={`inline-flex items-center gap-1 rounded-[3px] px-2 py-1 ${
+                fieldIsCustom
+                  ? 'border border-dashed border-[#CFC9BC] bg-transparent text-[#7A7A72]'
+                  : 'bg-[#F5F3EF]'
+              }`}
+              title={fieldIsCustom ? 'Self-declared major, pending review' : undefined}
+            >
               <GraduationCap className="h-3.5 w-3.5" aria-hidden />
               <span>{field}</span>
             </span>
@@ -209,5 +220,5 @@ const MentorCard: React.FC<MentorCardProps> = ({
   );
 };
 
-export default MentorCard;
+export default ExpertCard;
 

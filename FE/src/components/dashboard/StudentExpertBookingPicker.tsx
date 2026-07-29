@@ -13,8 +13,9 @@ import {
   formatPickedSlotWhenDisplay,
   formatSlotLabel,
   getViewerDayStartMs,
-  getViewerSlotsForDay,
+  getViewerSlotsForExpertDay,
   getViewerYmdFromCalendarDate,
+  isViewerSlotBlockedOnDate,
   resolveViewerTimeZone,
   toYMDInTimeZone,
   viewerSlotToInstant,
@@ -123,7 +124,7 @@ function isSameViewerCalendarDay(a: Date, b: Date): boolean {
  * Student-dashboard styled availability picker (light theme).
  * Replaces legacy dark SelectDateTime in Find Experts / ExpertProfile.
  */
-export default function StudentExpertBookingPicker({
+function StudentExpertBookingPicker({
   expert,
   onSlotSelected,
   hidePriceInDurationSelection = false,
@@ -152,7 +153,6 @@ export default function StudentExpertBookingPicker({
   );
 
   const [events, setEvents] = useState<any[]>([]);
-  const [rawExpertSlots, setRawExpertSlots] = useState<number[]>([]);
   const [modalOpen, setModalOpen] = useState(false);
   /** Remount calendar after closing time modal so the same day can be clicked again (RBC keeps slot selected). */
   const [calendarResetKey, setCalendarResetKey] = useState(0);
@@ -239,7 +239,7 @@ export default function StudentExpertBookingPicker({
       const viewerTodayYmd = toYMDInTimeZone(new Date(), viewerTz);
       if (viewerYmd < viewerTodayYmd) return [];
 
-      let slots = getViewerSlotsForDay(day, viewerTz, rawExpertSlots, expertTz);
+      let slots = getViewerSlotsForExpertDay(expert, day, viewerTz);
       slots = filterSlotsForDuration(slots, dur);
 
       const blocked = expert?.blockedBookingDates;
@@ -248,6 +248,14 @@ export default function StudentExpertBookingPicker({
           const instant = viewerSlotToInstant(day, slotIdx, viewerTz);
           return !blocked.includes(toYMDInTimeZone(instant, expertTz));
         });
+      }
+
+      const blockedSlots = expert?.blockedBookingSlots;
+      if (blockedSlots) {
+        slots = slots.filter(
+          (slotIdx) =>
+            !isViewerSlotBlockedOnDate(blockedSlots, day, slotIdx, viewerTz, expertTz),
+        );
       }
 
       if (viewerYmd === viewerTodayYmd) {
@@ -288,9 +296,7 @@ export default function StudentExpertBookingPicker({
     },
     [
       events,
-      rawExpertSlots,
-      expert?.bookingNoticeHours,
-      expert?.blockedBookingDates,
+      expert,
       expertTz,
       viewerTz,
     ],
@@ -553,7 +559,6 @@ export default function StudentExpertBookingPicker({
   };
 
   useEffect(() => {
-    setRawExpertSlots(expert?.timeSlots || []);
     const temp: any[] = [];
     expert?.events?.forEach((event: any) => {
       temp.push({
@@ -793,3 +798,5 @@ export default function StudentExpertBookingPicker({
     </div>
   );
 }
+
+export default React.memo(StudentExpertBookingPicker);

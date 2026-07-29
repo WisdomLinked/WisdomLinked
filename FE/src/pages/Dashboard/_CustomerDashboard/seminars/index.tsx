@@ -5,7 +5,7 @@ import FilterSeminars from "./filterSeminars";
 import Payment from "../payment";
 import { Link } from "react-router-dom";
 import { useAppSelector } from "../../../../store";
-import { addMemberToPendingGroup } from "../../../../api/api";
+import { registerForSeminar } from "../../../../api/api";
 import { useDispatch } from "react-redux";
 import { Swiper, SwiperSlide } from "swiper/react";
 import { Pagination, Navigation } from "swiper";
@@ -53,19 +53,17 @@ const Seminars = () => {
         set_paidBy('stripe')
         SetLoadingStatus(true)
         try {
-            const response = await addMemberToPendingGroup(details);
+            const response = await registerForSeminar(details);
             if (response === false) return;
             if (response?.status === 'FAIL' || response?.error) {
                 dispatch(showErrorAlert(response?.error || 'Could not complete seminar registration.'));
                 set_paymentFailed(true);
                 return;
             }
-            if (response?.pendingGroupChats) {
+            if (response?.result) {
                 dispatch({
                     type: 'updateUserDetails',
-                    payload: {
-                        pendingGroupChats: response.pendingGroupChats
-                    }
+                    payload: response.result,
                 })
                 set_step(2)
             } else {

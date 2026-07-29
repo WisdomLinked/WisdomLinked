@@ -27,7 +27,9 @@ import CloseIcon from '@mui/icons-material/Close';
 import EditIcon from '@mui/icons-material/Edit';
 import { fetchDirectCallHistory, startMeeting } from "../../../../api/chatApi";
 import { fetchChatUserProfile } from "../../../../api/chatApi";
-import {doLeftSeminar, doUpdateProfile, shareMeetingViaEmail} from "../../../../api/api";
+import {doLeftSeminar, doUpdateProfile, proposeIndividualAppointment, shareMeetingViaEmail} from "../../../../api/api";
+import { proposedTimeNeedsOverride, hasBookingConflict, presetAvailabilityRanges } from "../../../../utils/proposeAvailability";
+import { normalizeExpertPrice } from "../../../../utils/schedulingSlots";
 import {SetLoadingStatus, SetTotalTimeSpent} from "../../../../actions/appActions";
 import { updateMe } from "../../../../actions/authActions";
 import { showErrorAlert, showSuccessAlert, showWarningAlert } from '../../../../actions/alertActions';
@@ -91,6 +93,21 @@ const MessagesHeader = ({ events, openCalendarModal, openSeminarModal, openEditS
     const [callHistoryOpen, setCallHistoryOpen] = useState(false);
     const [callHistoryLoading, setCallHistoryLoading] = useState(false);
     const [callHistoryRows, setCallHistoryRows] = useState<Array<any>>([]);
+    const [proposeOpen, setProposeOpen] = useState(false);
+    const [proposeBusy, setProposeBusy] = useState(false);
+    const [proposeTitle, setProposeTitle] = useState('');
+    const [proposeDate, setProposeDate] = useState('');
+    const [proposeStart, setProposeStart] = useState('');
+    const [proposeDuration, setProposeDuration] = useState(30);
+    const [proposePrice, setProposePrice] = useState('');
+    const [proposePriceEdited, setProposePriceEdited] = useState(false);
+    const [proposeCustomerEmail, setProposeCustomerEmail] = useState<string | null>(null);
+    const [outsideConfirm, setOutsideConfirm] = useState(false);
+
+    const proposeSuggestedPrice = (durationMin: number) => {
+        const rate = normalizeExpertPrice((userDetails as any)?.price) ?? 0;
+        return Math.round(((rate * durationMin) / 60) * 100) / 100;
+    };
 
     const openMeetingUrl = (jitsiUrl?: string, pendingWindow: Window | null = null) => {
         if (!jitsiUrl) {
@@ -324,9 +341,131 @@ const MessagesHeader = ({ events, openCalendarModal, openSeminarModal, openEditS
         && (isGroupAdmin || groupCoModeratorIds.has(String(userDetails?._id || "")));
 
     const peerRoleLower = String(chosenChatDetails?.peerRole || "").toLowerCase();
-    /** Students never start Meet calls to experts; all other DM role combinations can ask the backend to start. */
-    const studentCannotStartDmVideoToExpert =
-        String(userDetails?.role || "").toLowerCase() === "customer" && peerRoleLower === "expert";
+    const viewerIsStudent = String(userDetails?.role || "").toLowerCase() === "customer";
+
+    // Ticks every 30s so the call window opens/closes without needing a refresh.
+    const [nowTick, setNowTick] = useState(Date.now());
+    useEffect(() => {
+        const id = setInterval(() => setNowTick(Date.now()), 30000);
+        return () => clearInterval(id);
+    }, []);
+
+    // The student's call to an expert is gated: it only opens within ~2 minutes of a
+    // scheduled (accepted) 1:1 starting, and stays open until it ends. Experts can
+    // call anytime. `events` holds the accepted/pending 1:1s between these two users.
+    const CALL_LEAD_MS = 2 * 60 * 1000;
+    const callWindowOpen = useMemo(() => {
+        const now = nowTick;
+        return (events || []).some((ev: any) => {
+            if (String(ev?.status || "").toLowerCase() !== "accepted") return false;
+            const start = new Date(ev.start).getTime();
+            const end = new Date(ev.end).getTime();
+            if (Number.isNaN(start) || Number.isNaN(end)) return false;
+            return now >= start - CALL_LEAD_MS && now < end;
+        });
+    }, [events, nowTick]);
+
+    const isStudentToExpertDm = viewerIsStudent && peerRoleLower === "expert";
+    /** A student may only start/join the call once the meeting window is open; experts are unrestricted. */
+    const studentCannotStartDmVideoToExpert = isStudentToExpertDm && !callWindowOpen;
+    const dmVideoTitle = studentCannotStartDmVideoToExpert
+        ? "You can join the call about 2 minutes before your scheduled meeting starts."
+        : !conversationId
+          ? "Chat is still loading — try again in a moment"
+          : "Start call";
+
+    // Hover shortcut on the peer's name → appointment flow. A student jumps to the
+    // expert's booking page to request a 1:1; an expert opens the appointments view
+    // for this person. Only offered for student↔expert DMs.
+    const canMakeAppointment = viewerIsStudent ? peerRoleLower === "expert" : peerRoleLower === "customer";
+    const handleNewAppointment = () => {
+        if (!chosenChatDetails?.userId) return;
+        if (viewerIsStudent) {
+            localStorage.setItem("studentDashboardExpertId", String(chosenChatDetails.userId));
+            window.dispatchEvent(new Event("wl-open-expert-profile"));
+            return;
+        }
+        // Expert proposes a 1:1 to this student: open a date/time/price form, resolving the
+        // student's email (the propose endpoint looks the student up by email) in the background.
+        setProposeTitle(`${chosenChatDetails.username || "Student"} & ${userDetails.username || "Expert"}`);
+        setProposeDate("");
+        setProposeStart("");
+        setProposeDuration(30);
+        setProposePrice(String(proposeSuggestedPrice(30)));
+        setProposePriceEdited(false);
+        setProposeCustomerEmail(null);
+        setOutsideConfirm(false);
+        setProposeOpen(true);
+        void fetchChatUserProfile(String(chosenChatDetails.userId)).then((r: any) => {
+            if (r?.success && r?.result?.email) setProposeCustomerEmail(String(r.result.email));
+        });
+    };
+
+    const submitPropose = async (override = false) => {
+        if (!proposeTitle.trim()) {
+            dispatch(showWarningAlert("Add a title for the session."));
+            return;
+        }
+        if (!proposeDate || !proposeStart) {
+            dispatch(showWarningAlert("Pick a date and start time."));
+            return;
+        }
+        if (!proposeCustomerEmail) {
+            dispatch(showErrorAlert("Still resolving the student — try again in a moment."));
+            return;
+        }
+        const start = new Date(`${proposeDate}T${proposeStart}:00`);
+        if (Number.isNaN(start.getTime())) {
+            dispatch(showErrorAlert("That date/time isn't valid."));
+            return;
+        }
+        if (start.getTime() <= Date.now()) {
+            dispatch(showWarningAlert("Pick a time in the future."));
+            return;
+        }
+        const end = new Date(start.getTime() + proposeDuration * 60000);
+        const price = Math.round(Number(proposePrice) * 100) / 100;
+        if (Number.isNaN(price) || price < 0) {
+            dispatch(showWarningAlert("Enter a valid price for the session."));
+            return;
+        }
+
+        if (hasBookingConflict(userDetails, start, end)) {
+            setOutsideConfirm(false);
+            dispatch(showWarningAlert("You already have a session at this time. Pick another time."));
+            return;
+        }
+
+        const needsOverride = proposedTimeNeedsOverride(userDetails, start, end);
+        if (needsOverride && !override) {
+            setOutsideConfirm(true);
+            return;
+        }
+        setOutsideConfirm(false);
+
+        setProposeBusy(true);
+        SetLoadingStatus(true);
+        const res: any = await proposeIndividualAppointment({
+            name: proposeTitle.trim(),
+            start,
+            end,
+            duration: proposeDuration,
+            price,
+            customer: proposeCustomerEmail,
+            overrideAvailability: needsOverride,
+        });
+        SetLoadingStatus(false);
+        setProposeBusy(false);
+        if (res && res !== false) {
+            if (res.userDetails) {
+                dispatch({ type: "updateUserDetails", payload: res.userDetails });
+            } else {
+                dispatch(updateMe());
+            }
+            dispatch(showSuccessAlert("Session proposed — the student will be notified to accept."));
+            setProposeOpen(false);
+        }
+    };
 
     const handleDmStartVideoOrVoice = async () => {
         const pendingWindow = window.open("", "_blank");
@@ -412,14 +551,10 @@ const MessagesHeader = ({ events, openCalendarModal, openSeminarModal, openEditS
                                             void handleProfileModalOpen(chosenChatDetails);
                                         }}
                                         onVideoClick={() => void handleDmStartVideoOrVoice()}
+                                        onNewAppointment={canMakeAppointment ? handleNewAppointment : undefined}
+                                        newAppointmentLabel={viewerIsStudent ? "Make a new appointment" : "Propose a new session"}
                                         videoDisabled={!conversationId || studentCannotStartDmVideoToExpert}
-                                        videoTitle={
-                                            studentCannotStartDmVideoToExpert
-                                                ? "Only your expert can start a video or audio call. You can keep messaging in this chat."
-                                                : !conversationId
-                                                  ? "Chat is still loading — try again in a moment"
-                                                  : "Start call"
-                                        }
+                                        videoTitle={dmVideoTitle}
                                         onMoreClick={() => set_buttonsModalShow(true)}
                                     />
                                 );
@@ -470,13 +605,7 @@ const MessagesHeader = ({ events, openCalendarModal, openSeminarModal, openEditS
                         <IconButton
                             style={{ color: theme === "light" ? "#0f172a" : "white" }}
                             className="disabled:opacity-50"
-                            title={
-                                studentCannotStartDmVideoToExpert
-                                    ? "Only your expert can start a video or audio call. You can keep messaging in this chat."
-                                    : !conversationId
-                                      ? "Chat is still loading — try again in a moment"
-                                      : "Start call"
-                            }
+                            title={dmVideoTitle}
                             disabled={!conversationId || studentCannotStartDmVideoToExpert}
                             onClick={async () => {
                                 const pendingWindow = window.open("", "_blank");
@@ -818,6 +947,7 @@ const MessagesHeader = ({ events, openCalendarModal, openSeminarModal, openEditS
                         closeDialogHandler={handleParticipantsCloseDialog}
                         groupDetails={chosenGroupChatDetails}
                         currentUserId={userDetails?._id}
+                        currentUserRole={userDetails?.role}
                         theme={theme === "light" ? "light" : "dark"}
                     />
                     {chosenGroupChatDetails?.type === "community" ? (
@@ -958,6 +1088,152 @@ const MessagesHeader = ({ events, openCalendarModal, openSeminarModal, openEditS
                 </DialogActions>
             </Dialog>
             {
+                proposeOpen ?
+                    <OverlayPortal closeModal={() => { if (!proposeBusy) setProposeOpen(false); }}>
+                        <div
+                            className="fixed inset-0 z-[1100] flex items-center justify-center bg-black/30 backdrop-blur-sm p-4"
+                            onClick={() => { if (!proposeBusy) setProposeOpen(false); }}
+                        >
+                            <div
+                                className={`w-full max-w-sm rounded-2xl p-5 relative shadow-xl border ${theme === "light" ? "bg-white text-slate-900 border-slate-200" : "bg-[#141414] text-white border-slate-700"}`}
+                                onClick={(e) => e.stopPropagation()}
+                            >
+                                <button
+                                    className={theme === "light" ? "absolute right-3 top-3 rounded-md hover:bg-slate-100 p-1" : "absolute right-3 top-3 rounded-md hover:opacity-60"}
+                                    onClick={() => { if (!proposeBusy) setProposeOpen(false); }}
+                                >
+                                    <CloseIcon fontSize="small" />
+                                </button>
+                                <h3 className="text-lg font-semibold">Propose a session</h3>
+                                <p className={`mt-1 text-xs ${theme === "light" ? "text-slate-500" : "text-slate-400"}`}>
+                                    {chosenChatDetails?.username
+                                        ? `${chosenChatDetails.username} will get an invitation to accept or decline.`
+                                        : "The student will get an invitation to accept or decline."}
+                                </p>
+
+                                <div className="mt-4 space-y-3">
+                                    <div>
+                                        <label className="mb-1 block text-xs font-semibold">Title</label>
+                                        <input
+                                            type="text"
+                                            value={proposeTitle}
+                                            maxLength={100}
+                                            onChange={(e) => setProposeTitle(e.target.value)}
+                                            className={`w-full rounded-lg border px-3 py-2 text-sm outline-none ${theme === "light" ? "border-slate-200 bg-white text-slate-900 focus:ring-2 focus:ring-[#234C6A]" : "border-slate-700 bg-[#1c1c1c] text-white"}`}
+                                        />
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <div>
+                                            <label className="mb-1 block text-xs font-semibold">Date</label>
+                                            <input
+                                                type="date"
+                                                value={proposeDate}
+                                                min={new Date().toLocaleDateString("en-CA")}
+                                                onChange={(e) => { setProposeDate(e.target.value); setOutsideConfirm(false); }}
+                                                className={`w-full rounded-lg border px-3 py-2 text-sm outline-none ${theme === "light" ? "border-slate-200 bg-white text-slate-900 focus:ring-2 focus:ring-[#234C6A]" : "border-slate-700 bg-[#1c1c1c] text-white"}`}
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="mb-1 block text-xs font-semibold">Start time</label>
+                                            <input
+                                                type="time"
+                                                value={proposeStart}
+                                                onChange={(e) => { setProposeStart(e.target.value); setOutsideConfirm(false); }}
+                                                className={`w-full rounded-lg border px-3 py-2 text-sm outline-none ${theme === "light" ? "border-slate-200 bg-white text-slate-900 focus:ring-2 focus:ring-[#234C6A]" : "border-slate-700 bg-[#1c1c1c] text-white"}`}
+                                            />
+                                        </div>
+                                    </div>
+                                    {proposeDate ? (
+                                        <div className={`rounded-lg px-3 py-2 text-[11px] ${theme === "light" ? "bg-slate-50 text-slate-600" : "bg-[#1c1c1c] text-slate-300"}`}>
+                                            {(() => {
+                                                const ranges = presetAvailabilityRanges(userDetails, proposeDate);
+                                                return ranges.length ? (
+                                                    <>
+                                                        <span className="font-semibold">Your preset availability this day:</span>{" "}
+                                                        {ranges.join(", ")}
+                                                    </>
+                                                ) : (
+                                                    <span>You have no preset availability on this day.</span>
+                                                );
+                                            })()}
+                                        </div>
+                                    ) : null}
+                                    <div>
+                                        <label className="mb-1 block text-xs font-semibold">Duration</label>
+                                        <select
+                                            value={proposeDuration}
+                                            onChange={(e) => {
+                                                const next = Number(e.target.value);
+                                                setProposeDuration(next);
+                                                setOutsideConfirm(false);
+                                                if (!proposePriceEdited) setProposePrice(String(proposeSuggestedPrice(next)));
+                                            }}
+                                            className={`w-full rounded-lg border px-3 py-2 text-sm outline-none ${theme === "light" ? "border-slate-200 bg-white text-slate-900 focus:ring-2 focus:ring-[#234C6A]" : "border-slate-700 bg-[#1c1c1c] text-white"}`}
+                                        >
+                                            <option value={30}>30 min</option>
+                                            <option value={60}>60 min</option>
+                                            <option value={90}>90 min</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className="mb-1 block text-xs font-semibold">Price (USD)</label>
+                                        <div className="relative">
+                                            <span className={`pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm ${theme === "light" ? "text-slate-500" : "text-slate-400"}`}>$</span>
+                                            <input
+                                                type="number"
+                                                min={0}
+                                                step="0.01"
+                                                value={proposePrice}
+                                                onChange={(e) => { setProposePrice(e.target.value); setProposePriceEdited(true); }}
+                                                className={`w-full rounded-lg border pl-6 pr-3 py-2 text-sm outline-none ${theme === "light" ? "border-slate-200 bg-white text-slate-900 focus:ring-2 focus:ring-[#234C6A]" : "border-slate-700 bg-[#1c1c1c] text-white"}`}
+                                            />
+                                        </div>
+                                        <p className={`mt-1 text-[11px] ${theme === "light" ? "text-slate-500" : "text-slate-400"}`}>
+                                            Prefilled from your rate for this duration — edit to set the final price the student will pay.
+                                        </p>
+                                    </div>
+                                </div>
+
+                                {outsideConfirm ? (
+                                    <div className={`mt-5 rounded-lg border p-3 ${theme === "light" ? "border-amber-300 bg-amber-50" : "border-amber-500/40 bg-amber-500/10"}`}>
+                                        <p className={`text-xs ${theme === "light" ? "text-amber-800" : "text-amber-200"}`}>
+                                            Your chosen time is outside your preset availability. Click <span className="font-semibold">Yes</span> to continue, or <span className="font-semibold">No</span> to re-select your time slot.
+                                        </p>
+                                        <div className="mt-3 flex gap-2">
+                                            <button
+                                                type="button"
+                                                disabled={proposeBusy}
+                                                onClick={() => setOutsideConfirm(false)}
+                                                className={`flex-1 rounded-lg border px-4 py-2 text-sm font-semibold disabled:opacity-60 ${theme === "light" ? "border-slate-300 text-slate-700 hover:bg-slate-100" : "border-slate-600 text-slate-200 hover:bg-slate-700/40"}`}
+                                            >
+                                                No, re-select
+                                            </button>
+                                            <button
+                                                type="button"
+                                                disabled={proposeBusy}
+                                                onClick={() => submitPropose(true)}
+                                                className="flex-1 rounded-lg bg-[#234C6A] px-4 py-2 text-sm font-semibold text-white hover:bg-[#1b3c53] disabled:opacity-60"
+                                            >
+                                                {proposeBusy ? "Sending…" : "Yes, continue"}
+                                            </button>
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <button
+                                        type="button"
+                                        disabled={proposeBusy}
+                                        onClick={() => submitPropose()}
+                                        className="mt-5 w-full rounded-lg bg-[#234C6A] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#1b3c53] disabled:opacity-60"
+                                    >
+                                        {proposeBusy ? "Sending…" : "Send proposal"}
+                                    </button>
+                                )}
+                            </div>
+                        </div>
+                    </OverlayPortal> :
+                    null
+            }
+            {
                 chosenGroupChatDetails?.duration && joinPopupShow ?
                     <div
                         className={
@@ -973,12 +1249,12 @@ const MessagesHeader = ({ events, openCalendarModal, openSeminarModal, openEditS
                         }
                     >
                         <button
-                            className={theme === "light" ? "absolute right-2 top-2 rounded-md hover:bg-slate-100 p-1" : "absolute right-1.5 top-0.5 rounded-md hover:opacity-50"}
+                            className={theme === "light" ? "absolute right-2 top-2 rounded-md hover:bg-slate-100 p-1" : "absolute right-1.5 top-1 rounded-md hover:opacity-50"}
                             onClick={closeJoinPopup}
                         >
-                            <CloseIcon />
+                            <CloseIcon fontSize="small" />
                         </button>
-                        <div className={theme === "light" ? "font-semibold" : ""}>Join a seminar once the button gets available.</div>
+                        <div className={theme === "light" ? "font-semibold pr-7" : "pr-7"}>Join a seminar once the button gets available.</div>
                         <div className="flex items-center space-x-2 mt-2">
                             <button
                                 className={`w-3 h-3 lg:w-4 lg:h-4 rounded-[4px] ${

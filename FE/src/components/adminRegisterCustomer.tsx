@@ -6,7 +6,7 @@ import {
 } from "../actions/common";
 
 import ShowFieldError from "./ShowFieldError";
-import MultiSelectionWithInputTag from "./MultiSelectionWithInputTag";
+import MajorSelect from "./MajorSelect";
 import SelectionWithCheckBox from "./SelectionWithCheckBox";
 import CountrySelect from "./CountrySelection";
 import PhoneInput from "react-phone-input-2";
@@ -23,7 +23,6 @@ function AdminRegisterCustomer() {
     const { userDetails } = useAppSelector((state) => state.auth);
     const { message: formBannerMessage, variant: formBannerVariant, setFormError, setFormSuccess, clearFormAlert } = useFormAlert();
 
-    const [keywords, set_keywords] = useState<any[]>([]);
     const [services, set_services] = useState<any[]>([]);
     const [name, set_name] = useState("");
     const [selectedKeywords, set_selectedKeywords] = useState<Array<any>>([]);
@@ -103,7 +102,6 @@ function AdminRegisterCustomer() {
     const getKeywordsAndServices = async () => {
         const response: any = await doGetKeywordsAndServices();
         if (response) {
-            set_keywords(response.keywords || []);
             set_services(filterApiServicesToCanonical(response.services || []));
         }
     };
@@ -188,10 +186,10 @@ function AdminRegisterCustomer() {
             />
 
             <div className={`${label} mt-5`}>Majors</div>
-            <MultiSelectionWithInputTag
-                options={keywords}
-                selectedOptions={selectedKeywords}
-                set_selectedOptions={set_selectedKeywords}
+            <MajorSelect
+                label=""
+                value={selectedKeywords}
+                onChange={set_selectedKeywords}
                 placeholder="Input or select majors"
             />
 

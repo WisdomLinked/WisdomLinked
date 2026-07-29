@@ -1,5 +1,6 @@
 const mongoose = require("mongoose");
 const jwt = require("jsonwebtoken");
+require("./PendingAppointmentToGroup");
 
 const userSchema = new mongoose.Schema(
     {
@@ -28,6 +29,7 @@ const userSchema = new mongoose.Schema(
         missedChats: { type: mongoose.Schema.Types.Mixed },
         events: [{ type: mongoose.Schema.Types.ObjectId, ref: "Event" }],
         keywords: [{ type: mongoose.Schema.Types.ObjectId, ref: "Keyword" }],
+        customKeywords: [{ type: String }],
         services: [{ type: mongoose.Schema.Types.ObjectId, ref: "Service" }],
         joinPopupBlocked: { type: Boolean, default: false },
         feedbacks: [{ type: mongoose.Schema.Types.Mixed }],
@@ -57,8 +59,24 @@ const userSchema = new mongoose.Schema(
         description: { type: String },
         timeSlots: [{ type: Number }],
         dailyTimeSlots: [{ type: Number }],
+        /** How `timeSlots` should be interpreted on the student side:
+         *  'common' = same recurring slots every day (uses `timeSlots`);
+         *  'daily'  = per-weekday slots taken from `weeklyTimeSlots`. */
+        availabilityMode: { type: String, enum: ['common', 'daily'], default: 'common' },
+        /** Per-weekday half-hour slot indices (expert-local), used when availabilityMode === 'daily'. */
+        weeklyTimeSlots: {
+            Mon: { type: [Number], default: undefined },
+            Tue: { type: [Number], default: undefined },
+            Wed: { type: [Number], default: undefined },
+            Thu: { type: [Number], default: undefined },
+            Fri: { type: [Number], default: undefined },
+            Sat: { type: [Number], default: undefined },
+            Sun: { type: [Number], default: undefined },
+        },
         /** YYYY-MM-DD dates when expert is not accepting bookings (whole day) */
         blockedBookingDates: [{ type: String }],
+        /** Per-date blocked half-hour slot indices (expert-local), e.g. { "2026-07-03": [28, 29] } */
+        blockedBookingSlots: { type: Map, of: [Number], default: undefined },
         /** Minimum hours before session start that students may book (24, 48, or 72). */
         bookingNoticeHours: { type: Number, default: 24 },
         /** Session lengths (minutes) this expert offers for 1:1 bookings: 30, 60, and/or 90. */
@@ -66,6 +84,15 @@ const userSchema = new mongoose.Schema(
         price: [{ type: Number, default: 5 }],
         rating: { type: Number, default: 0 },
         specialNote: { type: String },
+
+        // STUDENT ACADEMIC BACKGROUND (optional, recommended) ---------------
+        degreeSought: { type: String },
+        intendedIntake: { type: String },
+        currentUniversity: { type: String },
+        gpa: { type: String },
+        rankingPercentile: { type: String },
+        /** Comma-separated list of target universities the student is aiming for. */
+        targetUniversities: { type: String },
     },
     { timestamps: true }
 );

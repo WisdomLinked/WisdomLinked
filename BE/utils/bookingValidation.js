@@ -74,6 +74,22 @@ function assertNotBlockedDate(expertDoc, start) {
   }
 }
 
+function assertNotBlockedSlot(expertDoc, start, end) {
+  const map = expertDoc?.blockedBookingSlots;
+  if (!map) return;
+  const tz = expertDoc?.timeZone || "UTC";
+  const ymd = toYMDInTimeZone(start, tz);
+  const blocked = map instanceof Map ? map.get(ymd) : map[ymd];
+  if (!Array.isArray(blocked) || !blocked.length) return;
+  const blockedSet = new Set(blocked);
+  const needed = getSlotIndicesForRange(start, end, tz);
+  for (const idx of needed) {
+    if (blockedSet.has(idx)) {
+      throw new Error("Expert is not available at the selected time on this date");
+    }
+  }
+}
+
 function intervalsOverlap(aStart, aEnd, bStart, bEnd) {
   const as = new Date(aStart).getTime();
   const ae = new Date(aEnd).getTime();
@@ -127,8 +143,11 @@ function assertDurationAllowed(expertDoc, duration) {
 }
 
 async function assertBookingSlotValid(expertDoc, start, end, options = {}) {
-  assertNotBlockedDate(expertDoc, start);
-  assertSlotsInTimeSlots(expertDoc, start, end);
+  if (!options.allowOutsideAvailability) {
+    assertNotBlockedDate(expertDoc, start);
+    assertNotBlockedSlot(expertDoc, start, end);
+    assertSlotsInTimeSlots(expertDoc, start, end);
+  }
   const expertId = expertDoc._id || expertDoc.id;
   if (!expertId) {
     throw new Error("Expert not found");
@@ -142,6 +161,7 @@ module.exports = {
   getSlotIndicesForRange,
   assertSlotsInTimeSlots,
   assertNotBlockedDate,
+  assertNotBlockedSlot,
   intervalsOverlap,
   assertNoBookingOverlap,
   assertDurationAllowed,

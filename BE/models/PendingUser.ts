@@ -21,6 +21,7 @@ const pendingUserSchema = new mongoose.Schema(
         missedChats: { type: mongoose.Schema.Types.Mixed },
         events: [{ type: mongoose.Schema.Types.ObjectId, ref: "Event" }],
         keywords: [{ type: mongoose.Schema.Types.ObjectId, ref: "Keyword" }],
+        customKeywords: [{ type: String }],
         services: [{ type: mongoose.Schema.Types.ObjectId, ref: "Service" }],
         joinPopupBlocked: { type: Boolean, default: false },
         feedbacks: [{ type: mongoose.Schema.Types.Mixed }],

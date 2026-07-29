@@ -17,7 +17,6 @@ const {
     createFeedback,
 } = require('../controllers/event.controller')
 const {
-    cancelPendingSeminar,
     leftSeminar
 } = require('../controllers/groupChat.controller')
 
@@ -30,7 +29,6 @@ router.post("/filterSeminars", customerAuth(false), filterSeminars);
 router.post("/appendEvent", customerAuth(true), appendEvent);
 router.post("/updateEvent", customerAuth(true), updateEvent);
 router.post("/cancelEvent", customerAuth(false), cancelEvent);
-router.post("/cancelPendingSeminar", customerAuth(false), cancelPendingSeminar);
 router.post("/leftSeminar", customerAuth(false), leftSeminar);
 router.post("/createEventFeedback", customerAuth(true), createFeedback);
 router.post("/follow/:expertId", customerAuth(false), followExpert);

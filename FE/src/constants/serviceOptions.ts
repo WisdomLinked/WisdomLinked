@@ -94,3 +94,17 @@ export function canonicalLabelsFromMixedServiceEntries(entries: unknown[] | unde
   }
   return out;
 }
+
+/** Sentinel value for the free-text purpose choice. */
+export const PURPOSE_OTHER = 'Other';
+
+/**
+ * Purpose choices for booking/seminar forms: the expert's offered services
+ * (canonical labels) with an "Other" free-text option appended. Falls back to
+ * all three canonical services when the expert has none resolved yet.
+ */
+export function purposeOptionsFromServices(services: unknown[] | undefined): string[] {
+  const canonical = canonicalLabelsFromMixedServiceEntries(services);
+  const base = canonical.length > 0 ? canonical : [...SERVICE_LABELS];
+  return [...base, PURPOSE_OTHER];
+}

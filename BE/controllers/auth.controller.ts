@@ -8,6 +8,8 @@ const PendingEmailChange = require("../models/PendingEmailChange");
 const { authCookieOptions, clearAuthCookieOptions } = require("../config/authCookie");
 const Keyword = require("../models/Keyword")
 const Service = require("../models/Service")
+const { MAJOR_OPTIONS, isBaselineMajor } = require("../constants/majorOptions")
+const { classifyMajors } = require("../utils/majorClassification")
 const bcrypt = require("bcryptjs");
 const fs = require('fs')
 const path = require('path');
@@ -50,7 +52,7 @@ import {
     AUTH_OAUTH_PASSWORD_RESET_UNAVAILABLE,
     AUTH_EMAIL_NOT_FOUND,
 } from '../utils/authUserFacingCopy';
-import { HTTP_GENERIC_ERROR } from '../utils/httpUserFacingCopy';
+import { HTTP_GENERIC_ERROR, safeErrorMessage } from '../utils/httpUserFacingCopy';
 
 
 sgMail.setApiKey(process.env.SENDGRID_API_KEY);
@@ -164,7 +166,13 @@ export const getArrayField = (req: Request, key: string) => {
 
 const getKeywordsAndServices = async (req: Request, res: Response) => {
     try {
-        const keywords = await Keyword.find()
+        const dbKeywords = (await Keyword.find())
+            .filter((k: any) => k.approved === true || isBaselineMajor(k.value))
+        const seen = new Set(dbKeywords.map((k: any) => String(k.value || '').trim().toLowerCase()))
+        const baselineExtras = MAJOR_OPTIONS
+            .filter((m: string) => !seen.has(m.toLowerCase()))
+            .map((m: string) => ({ value: m, label: m }))
+        const keywords = [...dbKeywords, ...baselineExtras]
         const services = await Service.find()
         return res.status(200).json({
             keywords: keywords,
@@ -242,23 +250,7 @@ const register = async (req: Request, res: Response) => {
         const file = req.file
         let resumeUrl = file ? await uploadFileToS3(file, 'resumes') : '';
 
-        let _keywords = [];
-        if (keywords && Array.isArray(keywords)) {
-            for (let i = 0; i < keywords.length; i++) {
-                // The new frontend passes an array of strings, while the old one passed objects. 
-                // We handle both gracefully to prevent Mongoose 8 CastErrors.
-                const keywordValue = typeof keywords[i] === 'string' ? keywords[i] : keywords[i].value;
-                if (!keywordValue) continue;
-
-                const existingKeyword = await Keyword.findOne({ value: { $regex: new RegExp(`^${keywordValue}$`, 'i') } });
-                if (existingKeyword) {
-                    _keywords.push(existingKeyword._id);
-                } else {
-                    const newKeyword = await Keyword.create({ value: keywordValue, label: keywordValue });
-                    _keywords.push(newKeyword._id);
-                }
-            }
-        }
+        const { officialIds: _keywords, customValues: _customKeywords } = await classifyMajors(keywords);
 
         let _services = [];
         if (services && Array.isArray(services)) {
@@ -268,7 +260,7 @@ const register = async (req: Request, res: Response) => {
 
                 // Match dynamically, because the frontend might send "Study abroad" 
                 // but the DB has "Study abroad consultation"
-                const existingService = await Service.findOne({ value: { $regex: new RegExp(`^${serviceValue}`, 'i') } });
+                const existingService = await Service.findOne({ value: { $regex: new RegExp(`^${utils.escapeRegExp(serviceValue)}`, 'i') } });
                 if (existingService) {
                     _services.push(existingService._id);
                 } else {
@@ -289,6 +281,7 @@ const register = async (req: Request, res: Response) => {
             description,
             services: _services,
             keywords: _keywords,
+            customKeywords: _customKeywords,
             country,
             state,
             city,
@@ -424,6 +417,7 @@ const verifyRegistration = async (req: Request, res: Response) => {
             description: pendingUser.description,
             services: pendingUser.services,
             keywords: pendingUser.keywords,
+            customKeywords: pendingUser.customKeywords,
             country: pendingUser.country,
             state: pendingUser.state,
             city: pendingUser.city,
@@ -897,6 +891,12 @@ const updateProfile = async (req: any, res: Response) => {
         const state = safeParse(req.body.state) || req.body.state;
         const city = safeParse(req.body.city) || req.body.city;
         const phoneNumber = safeParse(req.body.phoneNumber) || req.body.phoneNumber;
+        const degreeSought = safeParse(req.body.degreeSought) || req.body.degreeSought;
+        const intendedIntake = safeParse(req.body.intendedIntake) || req.body.intendedIntake;
+        const currentUniversity = safeParse(req.body.currentUniversity) || req.body.currentUniversity;
+        const gpa = safeParse(req.body.gpa) || req.body.gpa;
+        const rankingPercentile = safeParse(req.body.rankingPercentile) || req.body.rankingPercentile;
+        const targetUniversities = safeParse(req.body.targetUniversities) || req.body.targetUniversities;
         const price = safeParse(req.body.price) || req.body.price;
         const joinPopupBlocked = safeParse(req.body.joinPopupBlocked) || req.body.joinPopupBlocked;
         const appointmentDurationsRaw =
@@ -928,7 +928,7 @@ const updateProfile = async (req: any, res: Response) => {
                 const serviceValue = typeof services[i] === 'string' ? services[i] : services[i].value;
                 if (!serviceValue) continue;
 
-                const existingService = await Service.findOne({ value: { $regex: new RegExp(`^${serviceValue}`, 'i') } });
+                const existingService = await Service.findOne({ value: { $regex: new RegExp(`^${utils.escapeRegExp(serviceValue)}`, 'i') } });
                 if (existingService) {
                     _services.push(existingService._id);
                 } else {
@@ -960,20 +960,9 @@ const updateProfile = async (req: any, res: Response) => {
         }
 
         if (keywords && Array.isArray(keywords)) {
-            let _keywords = [];
-            for (let i = 0; i < keywords.length; i++) {
-                const keywordValue = typeof keywords[i] === 'string' ? keywords[i] : keywords[i].value;
-                if (!keywordValue) continue;
-
-                const existingKeyword = await Keyword.findOne({ value: { $regex: new RegExp(`^${keywordValue}$`, 'i') } });
-                if (existingKeyword) {
-                    _keywords.push(existingKeyword._id);
-                } else {
-                    const newKeyword = await Keyword.create({ value: keywordValue, label: keywordValue });
-                    _keywords.push(newKeyword._id);
-                }
-            }
-            updates.keywords = _keywords;
+            const { officialIds, customValues } = await classifyMajors(keywords);
+            updates.keywords = officialIds;
+            updates.customKeywords = customValues;
         }
         if (country !== undefined && country !== null) {
             updates.country = country
@@ -986,6 +975,12 @@ const updateProfile = async (req: any, res: Response) => {
         }
         if (phoneNumber !== undefined && phoneNumber !== null) {
             updates.phoneNumber = phoneNumber
+        }
+        const academicFields = { degreeSought, intendedIntake, currentUniversity, gpa, rankingPercentile, targetUniversities };
+        for (const [key, value] of Object.entries(academicFields)) {
+            if (value !== undefined && value !== null) {
+                updates[key] = String(value).slice(0, 300);
+            }
         }
         if (joinPopupBlocked !== undefined && joinPopupBlocked !== null) {
             updates.joinPopupBlocked = joinPopupBlocked
@@ -1286,7 +1281,7 @@ const leaveFeedback = async (req: any, res: Response) => {
         const { userId, role } = req.user
         const { eventId = null, groupChatId = null, eventType, start, end, totalTimeSpent, otherUserId, description, rating } = req.body
 
-        const otherUser = await User.findById(otherUserId)
+        const otherUser = await User.findById(String(otherUserId))
 
         if (!otherUser) {
             throw new Error("No user found for feedback")
@@ -1309,12 +1304,14 @@ const leaveFeedback = async (req: any, res: Response) => {
             date: new Date()
         })
 
-        let userRating = 0
+        let ratingSum = 0
         for (let i = 0; i < otherUser.feedbacks.length; i++) {
 
-            userRating += otherUser.feedbacks[i].rating
+            ratingSum += otherUser.feedbacks[i].rating
         }
-        userRating = parseFloat((rating / otherUser.feedbacks.length).toFixed(2))
+        const userRating = otherUser.feedbacks.length
+            ? parseFloat((ratingSum / otherUser.feedbacks.length).toFixed(2))
+            : 0
 
         otherUser.rating = userRating
 
@@ -1482,7 +1479,7 @@ const uploadProfilePhoto = async (req: any, res: Response) => {
         });
     } catch (err: any) {
         console.log("[uploadProfilePhoto]", err?.message || err);
-        return res.status(500).json({ error: err?.message || "Failed to upload profile photo." });
+        return res.status(500).json({ error: safeErrorMessage(err) });
     }
 };
 

@@ -1,6 +1,7 @@
 import React, {
     useState,
     useEffect,
+    useMemo,
     ChangeEvent,
     KeyboardEvent,
   } from 'react';
@@ -13,12 +14,26 @@ import React, {
   import { showErrorAlert, showSuccessAlert, showWarningAlert } from '../../../actions/alertActions';
   import { updateMe } from '../../../actions/authActions';
   import { SERVICE_LABELS } from '../../../constants/serviceOptions';
+  import MajorSelect from '../../../components/MajorSelect';
   import DatePickerField from '../../../components/ui/DatePickerField';
   import TimePickerField from '../../../components/ui/TimePickerField';
   import SelectField from '../../../components/ui/SelectField';
+  import {
+    COMMON_IANA_TIMEZONES,
+    detectUserTimeZone,
+    getTimezoneOffsetHalfHours,
+  } from '../../../utils/schedulingTimezone';
 
   type StepId = 1 | 2 | 3;
-  
+
+  type RecurrenceFrequency = 'weekly' | 'biweekly' | 'monthly';
+
+  const RECURRENCE_OPTIONS: { value: RecurrenceFrequency; label: string; hint: string }[] = [
+    { value: 'weekly', label: 'Weekly', hint: 'Every week on this weekday for a year' },
+    { value: 'biweekly', label: 'Biweekly', hint: 'Every two weeks for a year' },
+    { value: 'monthly', label: 'Monthly', hint: 'Every month on this date for a year' },
+  ];
+
   interface StepConfig {
     id: StepId;
     label: string;
@@ -30,6 +45,7 @@ import React, {
     description: string;
     majors: string[];
     services: string[];
+    purposeOther: string;
     coverImage: File | null;
     tags: string[];
     date: string;
@@ -37,6 +53,7 @@ import React, {
     endTime: string;
     timezone: string;
     isRecurring: boolean;
+    recurrenceFrequency: RecurrenceFrequency;
     price: number | '';
     isFree: boolean;
     maxAttendees: number | '';
@@ -50,15 +67,24 @@ import React, {
       description?: string;
       keywords?: string[];
       services?: string[];
+      tags?: string[];
+      purposeOther?: string;
       start?: string | Date;
       end?: string | Date;
       duration?: number;
       price?: number;
+      maxAttendees?: number | null;
       image?: string | null;
       status?: string;
+      isRecurring?: boolean;
+      recurrenceFrequency?: RecurrenceFrequency;
     };
-    /** New expert shell: refresh user + switch tab without full page navigation */
-    onAfterSeminarSave?: () => void;
+    /**
+     * New expert shell: refresh user + switch tab without full page navigation.
+     * Receives the status just saved so the host stays on the editor after a
+     * draft save but returns to the list after publishing.
+     */
+    onAfterSeminarSave?: (status: 'active' | 'draft') => void;
     /** Return to seminar list without saving */
     onCancel?: () => void;
   }
@@ -84,6 +110,7 @@ import React, {
     description: '',
     majors: [],
     services: [],
+    purposeOther: '',
     coverImage: null,
     tags: [],
     date: '',
@@ -91,6 +118,7 @@ import React, {
     endTime: '',
     timezone: '',
     isRecurring: false,
+    recurrenceFrequency: 'weekly',
     price: '',
     isFree: false,
     maxAttendees: '',
@@ -101,27 +129,6 @@ import React, {
     { id: 1, label: 'Add Details', description: 'Basic information about your seminar.' },
     { id: 2, label: 'Date & Time', description: 'Schedule when this seminar will run.' },
     { id: 3, label: 'Set Price', description: 'Configure pricing and capacity.' },
-  ];
-  
-  const MAJORS_OPTIONS: string[] = [
-    'Computer Science',
-    'Business Administration',
-    'Data Science',
-    'Engineering',
-    'Marketing',
-    'Finance',
-    'Design',
-    'Healthcare',
-  ];
-  
-  const TIMEZONE_OPTIONS: string[] = [
-    'UTC',
-    'US/Eastern',
-    'US/Central',
-    'US/Pacific',
-    'IST',
-    'GMT',
-    'CET',
   ];
   
   const CURRENCY_OPTIONS: string[] = ['USD', 'EUR', 'GBP', 'INR'];
@@ -137,14 +144,124 @@ import React, {
       auth: { userDetails },
     } = useAppSelector((state) => state);
   
+    const browserTz = useMemo(() => detectUserTimeZone(), []);
+
+    // Timezone dropdown defaults to the browser zone but stays editable. Browser zone is
+    // surfaced first, then the common IANA list (deduped in case the browser zone is in it).
+    const timezoneOptions = useMemo(
+      () => Array.from(new Set<string>([browserTz, ...COMMON_IANA_TIMEZONES])),
+      [browserTz],
+    );
+
+    // Booking always happens in the browser's local time. If the timezone saved on
+    // the expert's profile resolves to a different UTC offset than the browser right
+    // now, surface a red warning so they know the scheduled time follows browser time.
+    const timezoneMismatch = useMemo(() => {
+      const profileTz = (userDetails as { timeZone?: string } | undefined)?.timeZone || 'UTC';
+      const now = new Date();
+      const matches =
+        getTimezoneOffsetHalfHours(browserTz, now) === getTimezoneOffsetHalfHours(profileTz, now);
+      return matches ? null : { browserTz, profileTz };
+    }, [userDetails, browserTz]);
+
     const [currentStep, setCurrentStep] = useState<StepId>(1);
-    const [formData, setFormData] = useState<SeminarFormData>(initialFormData);
+    const [formData, setFormData] = useState<SeminarFormData>(() => ({
+      ...initialFormData,
+      timezone: detectUserTimeZone(),
+    }));
     const [openDropdown, setOpenDropdown] = useState<DropdownId>(null);
     const [tagInput, setTagInput] = useState<string>('');
     const [errors, setErrors] = useState<SeminarErrors>({});
     const [coverPreview, setCoverPreview] = useState<string | null>(null);
     // URL of an already-uploaded cover (when editing/resuming); reused if no new file is picked.
     const [existingImageUrl, setExistingImageUrl] = useState<string | null>(null);
+    // The seminar's id once it exists. Seeded from the prop when editing/resuming;
+    // set after the first create so repeated draft saves update the same record
+    // instead of creating duplicates while the host stays on the editor.
+    const [savedGroupId, setSavedGroupId] = useState<string | undefined>(selectedSeminar?.groupId);
+
+    // The expert's existing 1:1 sessions and seminars, used to flag time clashes
+    // when scheduling a new seminar. Declined/cancelled/draft items are ignored,
+    // and the seminar being edited is excluded so it never conflicts with itself.
+    const existingBookings = useMemo(() => {
+      const out: { name: string; start: Date; end: Date }[] = [];
+      const editingId = savedGroupId ? String(savedGroupId) : null;
+      const push = (rec: any, name: string) => {
+        if (!rec?.start) return;
+        const start = new Date(rec.start);
+        const end = rec.end
+          ? new Date(rec.end)
+          : new Date(start.getTime() + (rec.duration ? rec.duration * 60000 : 60 * 60000));
+        if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return;
+        out.push({ name, start, end });
+      };
+
+      const events: any[] = Array.isArray((userDetails as any)?.events) ? (userDetails as any).events : [];
+      for (const ev of events) {
+        const status = String(ev?.status || '').toLowerCase();
+        if (status === 'declined' || status === 'cancelled') continue;
+        const who = ev?.customer?.username;
+        push(ev, who ? `a 1:1 with ${who}` : ev?.title || 'a 1:1 session');
+      }
+
+      const groupChats: any[] = Array.isArray((userDetails as any)?.groupChats)
+        ? (userDetails as any).groupChats
+        : [];
+      for (const g of groupChats) {
+        const type = String(g?.type || '');
+        if (type !== 'seminar' && type !== 'individual') continue;
+        const status = String(g?.status || '').toLowerCase();
+        if (status === 'draft' || status === 'cancelled') continue;
+        if (editingId && String(g?._id) === editingId) continue;
+        push(g, g?.name || (type === 'seminar' ? 'another seminar' : 'a 1:1 session'));
+      }
+      return out;
+    }, [userDetails, savedGroupId]);
+
+    // For the chosen date/time: a hard conflict with an existing booking (blocks
+    // creation) and a soft check against the expert's saved availability hours
+    // (warns but still allows creating the seminar).
+    const scheduleCheck = useMemo<{
+      conflict: { name: string } | null;
+      outsideAvailability: boolean;
+    }>(() => {
+      const { date, startTime, endTime } = formData;
+      if (!date || !startTime || !endTime) return { conflict: null, outsideAvailability: false };
+      const start = new Date(`${date}T${startTime}:00`);
+      const end = new Date(`${date}T${endTime}:00`);
+      if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end <= start) {
+        return { conflict: null, outsideAvailability: false };
+      }
+
+      const conflict = existingBookings.find((b) => start < b.end && b.start < end) || null;
+
+      const toMinutes = (t: string) => {
+        const [h, m] = t.split(':').map(Number);
+        return (h || 0) * 60 + (m || 0);
+      };
+      const startBlock = Math.floor(toMinutes(startTime) / 30);
+      const endBlock = Math.ceil(toMinutes(endTime) / 30);
+      const required: number[] = [];
+      for (let i = startBlock; i < endBlock; i += 1) required.push(i);
+
+      const weekdayKey = (['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as const)[start.getDay()];
+      const weekly = (userDetails as any)?.weeklyTimeSlots;
+      const hasWeekly =
+        weekly && typeof weekly === 'object'
+          ? Object.values(weekly).some((v) => Array.isArray(v) && v.length)
+          : false;
+
+      let availableSet: Set<number> | null = null;
+      if (hasWeekly) {
+        availableSet = new Set<number>(Array.isArray(weekly[weekdayKey]) ? weekly[weekdayKey] : []);
+      } else {
+        const flat = (userDetails as any)?.timeSlots;
+        if (Array.isArray(flat)) availableSet = new Set<number>(flat);
+      }
+
+      const outsideAvailability = availableSet ? !required.every((i) => availableSet!.has(i)) : false;
+      return { conflict: conflict ? { name: conflict.name } : null, outsideAvailability };
+    }, [formData.date, formData.startTime, formData.endTime, existingBookings, userDetails]);
   
     useEffect(() => {
       if (userDetails?.status === 'review') {
@@ -163,7 +280,12 @@ import React, {
         description: selectedSeminar.description || '',
         majors: keywordServiceToStrings(selectedSeminar.keywords as unknown[] | undefined),
         services: keywordServiceToStrings(selectedSeminar.services as unknown[] | undefined),
+        tags: Array.isArray(selectedSeminar.tags) ? selectedSeminar.tags.filter((t): t is string => typeof t === 'string') : [],
+        purposeOther: selectedSeminar.purposeOther || '',
         price: selectedSeminar.price ?? '',
+        maxAttendees: typeof selectedSeminar.maxAttendees === 'number' ? selectedSeminar.maxAttendees : '',
+        isRecurring: !!selectedSeminar.isRecurring,
+        recurrenceFrequency: selectedSeminar.recurrenceFrequency || 'weekly',
       };
   
       if (start && end) {
@@ -224,7 +346,7 @@ import React, {
       const nextValues = exists ? current.filter((v) => v !== value) : [...current, value];
       updateFormField(field, nextValues as SeminarFormData[MultiSelectField]);
     };
-  
+
     const handleTagAdd = (e: KeyboardEvent<HTMLInputElement>) => {
       if (e.key !== 'Enter' && e.key !== ',') return;
       e.preventDefault();
@@ -293,6 +415,8 @@ import React, {
   
     const handleNext = () => {
       if (!validateStep(currentStep)) return;
+      // A hard scheduling clash blocks moving past the date & time step.
+      if (currentStep === 2 && scheduleCheck.conflict) return;
       if (currentStep === 3) return;
       setCurrentStep((prev) => (prev + 1) as StepId);
     };
@@ -339,6 +463,17 @@ import React, {
         return;
       }
 
+      // A hard clash with an existing booking blocks saving at any status.
+      if (scheduleCheck.conflict) {
+        setCurrentStep(2);
+        dispatch(
+          showErrorAlert(
+            `This time clashes with ${scheduleCheck.conflict.name}. Pick a different time.`,
+          ),
+        );
+        return;
+      }
+
       // Publishing requires a valid date/time; a draft may be saved without one.
       let timeInfo = null;
       if (formData.date && formData.startTime && formData.endTime) {
@@ -364,6 +499,8 @@ import React, {
           description: formData.description.trim(),
           image: imageUrl || undefined,
           services: formData.services,
+          tags: formData.tags,
+          purposeOther: formData.purposeOther.trim(),
           keywords: formData.majors,
           start: timeInfo?.start,
           end: timeInfo?.end,
@@ -372,27 +509,39 @@ import React, {
           type: 'seminar' as const,
           status,
           createdBy: userDetails?._id,
-          maxAttendees: formData.maxAttendees === '' ? undefined : Number(formData.maxAttendees),
+          maxAttendees: formData.maxAttendees === '' ? null : Number(formData.maxAttendees),
           currency: formData.currency,
           isRecurring: formData.isRecurring,
+          recurrenceFrequency: formData.isRecurring ? formData.recurrenceFrequency : undefined,
           timezone: formData.timezone,
         };
 
-        const res = selectedSeminar?.groupId
-          ? await updateGroupChat({ groupId: selectedSeminar.groupId, ...payload })
+        const res = savedGroupId
+          ? await updateGroupChat({ groupId: savedGroupId, ...payload })
           : await createGroupChat(payload);
 
         if (res) {
           const msg =
             status === 'draft'
               ? 'Draft saved'
-              : selectedSeminar?.groupId
+              : savedGroupId
                 ? 'Seminar updated successfully'
                 : 'Seminar created successfully';
           dispatch(showSuccessAlert(msg));
+
+          // After a create, remember the new id (and keep the uploaded cover) so
+          // further edits on this editor update the same seminar.
+          if (!savedGroupId && res.createdGroupChatId) {
+            setSavedGroupId(String(res.createdGroupChatId));
+          }
+          if (formData.coverImage && imageUrl) {
+            setExistingImageUrl(imageUrl);
+            setFormData((prev) => ({ ...prev, coverImage: null }));
+          }
+
           await (dispatch as any)(updateMe());
           if (onAfterSeminarSave) {
-            onAfterSeminarSave();
+            onAfterSeminarSave(status);
           } else {
             navigate(`${process.env.REACT_APP_AUTH_URL}expertdashboard/calendar`);
           }
@@ -545,63 +694,12 @@ import React, {
             className="space-y-1.5"
             onClick={(e) => e.stopPropagation()}
           >
-              <label className="block text-sm font-medium text-gray-700">
-                Relevant Majors <span className="text-red-400">*</span>
-              </label>
-              <div className="relative">
-                <button
-                  type="button"
-                  onClick={() =>
-                    setOpenDropdown((prev) => (prev === 'majors' ? null : 'majors'))
-                  }
-                className="flex w-full items-center justify-between rounded-lg border border-gray-200 px-3 py-2.5 text-left text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#234C6A] focus:border-transparent"
-                >
-                  <span className={formData.majors.length ? 'text-gray-800' : 'text-gray-400'}>
-                    {formData.majors.length ? 'Selected majors' : 'Select majors…'}
-                  </span>
-                  <span className="text-xs text-gray-400">
-                    {formData.majors.length ? `${formData.majors.length} selected` : ''}
-                  </span>
-                </button>
-                {openDropdown === 'majors' && (
-                  <div className="absolute z-20 mt-1 max-h-48 w-full overflow-auto rounded-lg border border-gray-200 bg-white py-1 text-sm shadow-lg">
-                    {MAJORS_OPTIONS.map((option) => {
-                      const checked = formData.majors.includes(option);
-                      return (
-                        <label
-                          key={option}
-                          className="flex cursor-pointer items-center gap-2 px-3 py-1.5 hover:bg-gray-50"
-                        >
-                        <input
-                          type="checkbox"
-                          checked={checked}
-                          onChange={() => handleMultiSelect('majors', option)}
-                          className="h-3.5 w-3.5 rounded border-gray-300 text-[#234C6A] focus:ring-[#234C6A]"
-                        />
-                          <span className="text-xs text-gray-700">{option}</span>
-                        </label>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-              <div className="mt-2 flex flex-wrap gap-1.5">
-              {formData.majors.map((major) => (
-                <span
-                  key={major}
-                  className="inline-flex items-center gap-1 rounded-full bg-[#e8f0f8] px-2.5 py-1 text-xs text-[#234C6A]"
-                >
-                  {major}
-                  <button
-                    type="button"
-                    onClick={() => handleMultiSelect('majors', major)}
-                    className="text-[11px] text-[#234C6A]/70 hover:text-[#1b3c53]"
-                  >
-                    ×
-                  </button>
-                </span>
-              ))}
-              </div>
+              <MajorSelect
+                label="Relevant Majors"
+                required
+                value={formData.majors}
+                onChange={(next) => updateFormField('majors', next)}
+              />
             </div>
   
             {/* Services */}
@@ -666,9 +764,22 @@ import React, {
                 </span>
               ))}
               </div>
+              <div className="mt-2 space-y-1.5">
+                <label className="block text-sm font-medium text-gray-700">
+                  Other purpose <span className="font-normal text-gray-400">(optional)</span>
+                </label>
+                <input
+                  type="text"
+                  value={formData.purposeOther}
+                  maxLength={100}
+                  onChange={(e) => updateFormField('purposeOther', e.target.value)}
+                  placeholder="Add a purpose not listed above"
+                  className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-800 outline-none focus:border-[#234C6A]"
+                />
+              </div>
             </div>
           </div>
-  
+
           {/* Tags */}
           <div>
             <div className="mb-1.5 flex items-center justify-between">
@@ -714,6 +825,17 @@ import React, {
   
     const renderStep2 = () => (
       <div className="space-y-6 rounded-xl border border-gray-100 bg-white p-6">
+        {timezoneMismatch && (
+          <div
+            role="alert"
+            style={{ backgroundColor: '#fee2e2', borderColor: '#fca5a5', color: '#b91c1c' }}
+            className="rounded-lg border px-4 py-3 text-sm font-medium"
+          >
+            Your profile timezone (<strong>{timezoneMismatch.profileTz}</strong>) doesn’t match
+            your current browser time (<strong>{timezoneMismatch.browserTz}</strong>). This seminar
+            will be scheduled using your browser time.
+          </div>
+        )}
         <div>
           <label className="mb-1.5 block text-sm font-medium text-gray-700">
             Seminar Date <span className="text-red-400">*</span>
@@ -758,6 +880,23 @@ import React, {
             )}
           </div>
         </div>
+
+        {scheduleCheck.conflict ? (
+          <div
+            role="alert"
+            className="rounded-lg border border-rose-300 bg-rose-50 px-4 py-3 text-sm font-medium text-rose-700"
+          >
+            This time clashes with <strong>{scheduleCheck.conflict.name}</strong> already on your
+            calendar. Choose a different time to continue.
+          </div>
+        ) : scheduleCheck.outsideAvailability ? (
+          <div
+            role="alert"
+            className="rounded-lg border border-rose-300 bg-rose-50 px-4 py-3 text-sm font-medium text-rose-700"
+          >
+            This time is outside the availability hours you set. You can still create the seminar.
+          </div>
+        ) : null}
   
         <div>
           <label className="mb-1.5 block text-sm font-medium text-gray-700">
@@ -767,7 +906,7 @@ import React, {
           id="seminar-timezone"
           value={formData.timezone}
           onChange={(v) => updateFormField('timezone', v)}
-          options={TIMEZONE_OPTIONS.map((tz) => ({ value: tz, label: tz }))}
+          options={timezoneOptions.map((tz) => ({ value: tz, label: tz }))}
           placeholder="Select a timezone…"
         />
           {errors.timezone && (
@@ -798,9 +937,47 @@ import React, {
             />
           </button>
         </div>
+
+        {formData.isRecurring && (
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-gray-700">
+              Repeats
+            </label>
+            <div className="grid gap-3 sm:grid-cols-3">
+              {RECURRENCE_OPTIONS.map((option) => {
+                const active = formData.recurrenceFrequency === option.value;
+                return (
+                  <button
+                    key={option.value}
+                    type="button"
+                    onClick={() => updateFormField('recurrenceFrequency', option.value)}
+                    className={[
+                      'rounded-lg border px-4 py-3 text-left transition-colors',
+                      active
+                        ? 'border-[#234C6A] bg-[#e8f0f8]'
+                        : 'border-gray-200 bg-white hover:border-[#234C6A]/40',
+                    ].join(' ')}
+                  >
+                    <span
+                      className={[
+                        'block text-sm font-medium',
+                        active ? 'text-[#234C6A]' : 'text-gray-700',
+                      ].join(' ')}
+                    >
+                      {option.label}
+                    </span>
+                    <span className="mt-1 block text-xs text-gray-400">
+                      {option.hint}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
       </div>
     );
-  
+
     const renderStep3 = () => (
       <div className="space-y-6 rounded-xl border border-gray-100 bg-white p-6">
         <div className="flex items-start justify-between rounded-lg border border-gray-100 bg-gray-50 px-4 py-3">

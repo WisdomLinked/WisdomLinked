@@ -4,6 +4,7 @@ const keywordSchema = new mongoose.Schema(
     {
         value: { type: String },
         label: { type: String },
+        approved: { type: Boolean, default: false },
     },
     { timestamps: true }
 );

@@ -12,15 +12,7 @@ import FormAlert from '../components/FormAlert';
 import { useFormAlert } from '../hooks/useFormAlert';
 import { refreshCsrfToken } from '../api/csrf';
 import { resetAuthSessionForLogin } from '../utils/resetAuthSession';
-
-// Same majors / services as WLCustomerRegister & WLExpertRegister (regular sign-up)
-const ENGINEERING_MAJORS = [
-    'Aerospace Engineering', 'Biomedical Engineering', 'Chemical Engineering',
-    'Civil Engineering', 'Computer Engineering', 'Electrical Engineering',
-    'Environmental Engineering', 'Industrial Engineering', 'Mechanical Engineering',
-    'Materials Science & Engineering', 'Nuclear Engineering', 'Petroleum Engineering',
-    'Software Engineering', 'Systems Engineering', 'Other',
-];
+import MajorSelect from '../components/MajorSelect';
 
 const FOCUS_RING = "focus:ring-2 focus:ring-[#234C6A]/20 focus:border-[#234C6A]";
 
@@ -74,13 +66,8 @@ export default function WLProfileCompletion() {
     }, []);
     
     // Dropdown states
-    const [showMajorDrop, setShowMajorDrop] = useState(false);
     const [showServiceDrop, setShowServiceDrop] = useState(false);
-    const majorRef = useRef<HTMLDivElement>(null);
     const serviceRef = useRef<HTMLDivElement>(null);
-
-    const [majorSearch, setMajorSearch] = useState('');
-    const [customMajors, setCustomMajors] = useState<string[]>([]);
 
     useEffect(() => {
         if (userDetails?.email) {
@@ -120,10 +107,6 @@ export default function WLProfileCompletion() {
 
     useEffect(() => {
         const handler = (e: MouseEvent) => {
-            if (majorRef.current && !majorRef.current.contains(e.target as Node)) {
-                if (showMajorDrop) handleBlur('majors');
-                setShowMajorDrop(false);
-            }
             if (serviceRef.current && !serviceRef.current.contains(e.target as Node)) {
                 if (showServiceDrop) handleBlur(isExpert ? 'servicesOffered' : 'services');
                 setShowServiceDrop(false);
@@ -131,9 +114,7 @@ export default function WLProfileCompletion() {
         };
         document.addEventListener('mousedown', handler);
         return () => document.removeEventListener('mousedown', handler);
-    }, [showMajorDrop, showServiceDrop]);
-
-    const toTitleCase = (str: string) => str.toLowerCase().split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
+    }, [showServiceDrop]);
 
     const validateField = (field: string, value: any) => {
         if (field === 'fullName') {
@@ -174,20 +155,6 @@ export default function WLProfileCompletion() {
         }
     };
 
-    const toggleMajor = (m: string) => {
-        const newMajors = form.majors.includes(m) ? form.majors.filter(x => x !== m) : [...form.majors, m];
-        handleChange('majors', newMajors);
-    };
-
-    const handleAddCustomMajor = () => {
-        if (!majorSearch.trim()) return;
-        const formatted = toTitleCase(majorSearch.trim());
-        if (!customMajors.includes(formatted) && !ENGINEERING_MAJORS.includes(formatted)) {
-            setCustomMajors(prev => [...prev, formatted]);
-        }
-        toggleMajor(formatted);
-        setMajorSearch('');
-    };
 
     const toggleExpertService = (s: string) => {
         const newServices = form.servicesOffered.includes(s) 
@@ -418,74 +385,14 @@ export default function WLProfileCompletion() {
                         )}
 
                         {/* Majors (Both Roles) */}
-                        <div ref={majorRef} className="relative z-20">
-                            <label className="block text-sm font-semibold text-slate-700 mb-2">
-                                {isExpert ? "Majors / Disciplines" : "Your Major"} <span className="text-red-500">*</span>
-                            </label>
-                            <div
-                                onClick={() => setShowMajorDrop(!showMajorDrop)}
-                                className={`cursor-pointer min-h-[48px] flex flex-wrap items-center gap-2 ${errors.majors ? inputError : inputNormal}`}
-                            >
-                                {form.majors.length === 0 ? (
-                                    <span className="text-slate-400">Select major(s)</span>
-                                ) : (
-                                    form.majors.map(m => (
-                                        <span key={m} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-blue-50 text-blue-700 text-xs font-semibold border border-blue-100">
-                                            {m}
-                                            <button
-                                                type="button"
-                                                onClick={(e) => { e.stopPropagation(); toggleMajor(m); }}
-                                                className="hover:text-blue-900 focus:outline-none"
-                                            >
-                                                &times;
-                                            </button>
-                                        </span>
-                                    ))
-                                )}
-                                <ChevronDown size={18} className="text-slate-400 ml-auto flex-shrink-0" />
-                            </div>
-                            {errors.majors && <p className="mt-1.5 text-xs text-red-500 font-medium">{errors.majors}</p>}
-
-                            {showMajorDrop && (
-                                <div className="absolute top-full left-0 right-0 mt-2 bg-white border border-slate-200 rounded-xl shadow-xl overflow-hidden z-50">
-                                    <div className="p-2 border-b border-slate-100 bg-slate-50/50">
-                                        <input
-                                            type="text"
-                                            placeholder="Search or add custom major"
-                                            value={majorSearch}
-                                            onChange={e => setMajorSearch(e.target.value)}
-                                            onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleAddCustomMajor(); } }}
-                                            className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-300 focus:ring-1 focus:ring-blue-300"
-                                            onClick={e => e.stopPropagation()}
-                                        />
-                                        {majorSearch.trim() && !ENGINEERING_MAJORS.includes(toTitleCase(majorSearch)) && !customMajors.includes(toTitleCase(majorSearch)) && (
-                                            <button
-                                                type="button"
-                                                onClick={handleAddCustomMajor}
-                                                className="mt-2 w-full py-1.5 bg-blue-50 text-blue-600 text-xs font-semibold rounded-lg hover:bg-blue-100 transition-colors"
-                                            >
-                                                + Add "{toTitleCase(majorSearch)}"
-                                            </button>
-                                        )}
-                                    </div>
-                                    <div className="max-h-60 overflow-y-auto p-1.5">
-                                        {[...ENGINEERING_MAJORS, ...customMajors]
-                                            .filter(m => m.toLowerCase().includes(majorSearch.toLowerCase()))
-                                            .map(m => (
-                                                <button
-                                                    key={m}
-                                                    type="button"
-                                                    onClick={() => toggleMajor(m)}
-                                                    className="w-full flex items-center justify-between px-3 py-2.5 rounded-lg hover:bg-slate-50 text-sm text-left transition-colors"
-                                                >
-                                                    <span className={form.majors.includes(m) ? "font-semibold text-slate-800" : "text-slate-600"}>{m}</span>
-                                                    {form.majors.includes(m) && <Check size={16} className="text-blue-500" />}
-                                                </button>
-                                            ))}
-                                    </div>
-                                </div>
-                            )}
-                        </div>
+                        <MajorSelect
+                            label={isExpert ? "Majors / Disciplines" : "Your Major"}
+                            required
+                            value={form.majors}
+                            onChange={(next) => handleChange('majors', next)}
+                            onBlur={() => handleBlur('majors')}
+                            error={errors.majors}
+                        />
 
                         {/* Services */}
                         <div ref={serviceRef} className="relative z-10">
