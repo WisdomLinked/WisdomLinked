@@ -43,6 +43,8 @@ export type UpcomingModalSession = {
   seatRequestId?: string;
   /** Pending student-initiated 1:1 the expert can accept directly. */
   canAccept?: boolean;
+  /** Pending expert-proposed 1:1 the expert can withdraw while it is unpaid. */
+  canWithdraw?: boolean;
   /** Extra small lines under the date (e.g. "$20.00 held", "Decide by …"). */
   metaLines?: string[];
 };
@@ -72,6 +74,8 @@ export default function UpcomingSessionModal({
   onAcceptSeatRequest,
   onDeclineSeatRequest,
   onAcceptSession,
+  onDeclineSession,
+  onWithdrawSession,
   onViewProfile,
   sessions,
   role = 'student',
@@ -96,6 +100,10 @@ export default function UpcomingSessionModal({
   /** Expert accepts a pending student-initiated 1:1 request. Resolving `true`
    * shows a transient in-card confirmation before the row clears. */
   onAcceptSession?: (session: UpcomingModalSession) => void | Promise<void | boolean>;
+  /** Expert declines a pending student-initiated 1:1, refunding the student. */
+  onDeclineSession?: (session: UpcomingModalSession) => void | Promise<void | boolean>;
+  /** Expert withdraws their own unpaid 1:1 offer. Resolving `false` leaves the row. */
+  onWithdrawSession?: (session: UpcomingModalSession) => void | Promise<void | boolean>;
   sessions: UpcomingModalSession[];
   role?: 'student' | 'expert';
 }) {
@@ -108,6 +116,10 @@ export default function UpcomingSessionModal({
   const [briefSession, setBriefSession] = useState<UpcomingModalSession | null>(null);
   const [seatBusyId, setSeatBusyId] = useState<string | null>(null);
   const [acceptBusyId, setAcceptBusyId] = useState<string | null>(null);
+  const [withdrawBusyId, setWithdrawBusyId] = useState<string | null>(null);
+  const [withdrawConfirmId, setWithdrawConfirmId] = useState<string | null>(null);
+  const [declineBusyId, setDeclineBusyId] = useState<string | null>(null);
+  const [declineConfirmId, setDeclineConfirmId] = useState<string | null>(null);
   // Accepted 1:1 rows keep their card for a few seconds, showing a confirmation
   // in place of the session details before quietly clearing.
   const [acceptedNotices, setAcceptedNotices] = useState<
@@ -148,6 +160,42 @@ export default function UpcomingSessionModal({
       );
     } finally {
       setAcceptBusyId(null);
+    }
+  };
+
+  const withdrawSession = async (session: UpcomingModalSession) => {
+    if (!onWithdrawSession) return;
+    setWithdrawBusyId(session.id);
+    try {
+      const ok = await onWithdrawSession(session);
+      if (ok === false) return;
+      setWithdrawConfirmId(null);
+      flashNotice(
+        session,
+        `Your session offer${session.title ? ` “${session.title}”` : ''} has been withdrawn. ${
+          session.with || 'The student'
+        } was not charged.`,
+      );
+    } finally {
+      setWithdrawBusyId(null);
+    }
+  };
+
+  const declineSession = async (session: UpcomingModalSession) => {
+    if (!onDeclineSession) return;
+    setDeclineBusyId(session.id);
+    try {
+      const ok = await onDeclineSession(session);
+      if (ok === false) return;
+      setDeclineConfirmId(null);
+      flashNotice(
+        session,
+        `${session.with || 'The student'}'s request${
+          session.title ? ` for “${session.title}”` : ''
+        } was declined and their payment refunded in full.`,
+      );
+    } finally {
+      setDeclineBusyId(null);
     }
   };
 
@@ -365,14 +413,81 @@ export default function UpcomingSessionModal({
                         </button>
                       </div>
                     ) : session.canAccept && onAcceptSession ? (
-                      <button
-                        type="button"
-                        disabled={acceptBusyId === session.id}
-                        onClick={() => acceptSession(session)}
-                        className="mt-2 rounded-lg bg-[#234C6A] px-3 py-1.5 text-[11px] font-semibold text-white hover:brightness-110 disabled:opacity-60"
-                      >
-                        {acceptBusyId === session.id ? 'Accepting…' : 'Accept'}
-                      </button>
+                      declineConfirmId === session.id ? (
+                        <div className="mt-2 flex items-center justify-end gap-1.5">
+                          <button
+                            type="button"
+                            disabled={declineBusyId === session.id}
+                            onClick={() => setDeclineConfirmId(null)}
+                            className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-60"
+                          >
+                            Keep
+                          </button>
+                          <button
+                            type="button"
+                            disabled={declineBusyId === session.id}
+                            onClick={() => declineSession(session)}
+                            className="rounded-lg bg-rose-600 px-3 py-1.5 text-[11px] font-semibold text-white hover:bg-rose-700 disabled:opacity-60"
+                          >
+                            {declineBusyId === session.id ? 'Declining…' : 'Refund & decline'}
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="mt-2 flex items-center justify-end gap-1.5">
+                          <button
+                            type="button"
+                            disabled={acceptBusyId === session.id}
+                            onClick={() => acceptSession(session)}
+                            className="rounded-lg bg-[#234C6A] px-3 py-1.5 text-[11px] font-semibold text-white hover:brightness-110 disabled:opacity-60"
+                          >
+                            {acceptBusyId === session.id ? 'Accepting…' : 'Accept'}
+                          </button>
+                          {onDeclineSession ? (
+                            <button
+                              type="button"
+                              disabled={acceptBusyId === session.id}
+                              onClick={() => setDeclineConfirmId(session.id)}
+                              className="rounded-lg border border-rose-200 bg-white px-3 py-1.5 text-[11px] font-semibold text-rose-600 hover:bg-rose-50 disabled:opacity-60"
+                            >
+                              Decline
+                            </button>
+                          ) : null}
+                        </div>
+                      )
+                    ) : session.canWithdraw && onWithdrawSession ? (
+                      withdrawConfirmId === session.id ? (
+                        <div className="mt-2 flex items-center justify-end gap-1.5">
+                          <button
+                            type="button"
+                            disabled={withdrawBusyId === session.id}
+                            onClick={() => setWithdrawConfirmId(null)}
+                            className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-60"
+                          >
+                            Keep
+                          </button>
+                          <button
+                            type="button"
+                            disabled={withdrawBusyId === session.id}
+                            onClick={() => withdrawSession(session)}
+                            className="rounded-lg bg-rose-600 px-3 py-1.5 text-[11px] font-semibold text-white hover:bg-rose-700 disabled:opacity-60"
+                          >
+                            {withdrawBusyId === session.id ? 'Withdrawing…' : 'Confirm'}
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="mt-2 flex items-center justify-end gap-2">
+                          <span className="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-700">
+                            Awaiting payment
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => setWithdrawConfirmId(session.id)}
+                            className="rounded-lg border border-rose-200 bg-white px-3 py-1.5 text-[11px] font-semibold text-rose-600 hover:bg-rose-50"
+                          >
+                            Withdraw offer
+                          </button>
+                        </div>
+                      )
                     ) : (
                       <span className="mt-2 inline-flex rounded-lg border border-[#234C6A]/30 px-2 py-1 text-[10px] font-semibold text-[#234C6A]">
                         Pending

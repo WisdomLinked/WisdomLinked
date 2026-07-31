@@ -53,6 +53,12 @@ type CheckoutFormProps = {
   returnUrl: string;
   isSeatRequest?: boolean;
   onPaymentSuccess: (paymentIntentId: string, opts?: { requiresApproval?: boolean }) => void;
+  policyNotice?: BookingPolicyNotice;
+};
+
+export type BookingPolicyNotice = {
+  message: string;
+  acknowledgeLabel: string;
 };
 
 const CheckoutForm = ({
@@ -62,9 +68,11 @@ const CheckoutForm = ({
   returnUrl,
   isSeatRequest = false,
   onPaymentSuccess,
+  policyNotice,
 }: CheckoutFormProps) => {
   const stripe = useStripe();
   const elements = useElements();
+  const [acknowledged, setAcknowledged] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const [processing, setProcessing] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -103,6 +111,7 @@ const CheckoutForm = ({
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!stripe || !elements) return;
+    if (policyNotice && !acknowledged) return;
 
     try {
       if (price === 0) {
@@ -192,13 +201,27 @@ const CheckoutForm = ({
   return (
     <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
       <div className="min-h-0 flex-1 space-y-4 overflow-y-auto pr-1">
+        {policyNotice ? (
+          <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5">
+            <p className="text-[12px] font-medium text-amber-900">{policyNotice.message}</p>
+            <label className="mt-2 flex cursor-pointer items-start gap-2 text-[12px] text-amber-900">
+              <input
+                type="checkbox"
+                checked={acknowledged}
+                onChange={(e) => setAcknowledged(e.target.checked)}
+                className="mt-0.5 h-3.5 w-3.5 shrink-0 accent-[#1A3A4A]"
+              />
+              <span>{policyNotice.acknowledgeLabel}</span>
+            </label>
+          </div>
+        ) : null}
         <PaymentElement />
         <FormAlert variant="error" message={errorMessage} onDismiss={() => setErrorMessage('')} />
       </div>
       <div className="shrink-0 pt-3">
         <button
           type="submit"
-          disabled={!stripe || !elements || processing}
+          disabled={!stripe || !elements || processing || (!!policyNotice && !acknowledged)}
           className="inline-flex w-full items-center justify-center rounded-[4px] bg-[#1A3A4A] px-4 py-3 text-[13px] font-semibold text-white hover:bg-[#122635] disabled:opacity-60"
         >
           {processing
@@ -207,6 +230,11 @@ const CheckoutForm = ({
               ? (price > 0 ? `Authorize $${price} & join waiting list` : 'Join waiting list')
               : price > 0 ? `Pay $${price}` : 'Confirm booking'}
         </button>
+        {policyNotice && !acknowledged ? (
+          <p className="mt-2 text-center text-[11px] text-[#7A7A72]">
+            Tick the box above to continue.
+          </p>
+        ) : null}
         {/* Animated progress line under the button while the charge is processing. */}
         <div
           className="mt-2 h-1 w-full overflow-hidden rounded-full bg-[#1A3A4A]/10 transition-opacity duration-200"
@@ -233,12 +261,11 @@ type Props = {
   pendingDetails: StudentBookingPendingDetails;
   returnUrl?: string;
   isSeatRequest?: boolean;
-  /** Server authorizes (holds) rather than charges — must match the intent's
-   *  capture_method or confirmPayment throws a mismatch. True for all seminars. */
   holdsFunds?: boolean;
   onPaymentSuccess: (paymentIntentId: string, opts?: { requiresApproval?: boolean }) => void;
   onCancel?: () => void;
   cancelLabel?: string;
+  policyNotice?: BookingPolicyNotice;
 };
 
 export default function StudentBookingCheckout({
@@ -251,6 +278,7 @@ export default function StudentBookingCheckout({
   onPaymentSuccess,
   onCancel,
   cancelLabel = 'Back',
+  policyNotice,
 }: Props) {
   const stripeReturnBase =
     returnUrl ?? `${window.location.pathname}${window.location.search}`;
@@ -341,6 +369,7 @@ export default function StudentBookingCheckout({
             price={price}
             returnUrl={stripeReturnBase}
             isSeatRequest={isSeatRequest}
+            policyNotice={policyNotice}
             onPaymentSuccess={onPaymentSuccess}
           />
         </Elements>

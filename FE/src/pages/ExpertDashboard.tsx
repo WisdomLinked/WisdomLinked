@@ -24,6 +24,7 @@ import {
   getAllCommunityChats,
   profileImageFetch,
   acceptIndividualAppointment,
+  cancelIndividualAppointment,
   getSeminarSeatRequests,
   approveSeminarSeatRequest,
   rejectSeminarSeatRequest,
@@ -771,6 +772,97 @@ export default function ExpertDashboard() {
     [handleAcceptSession],
   );
 
+  const [withdrawingId, setWithdrawingId] = useState<string | null>(null);
+  const [withdrawConfirmId, setWithdrawConfirmId] = useState<string | null>(null);
+  const [decliningId, setDecliningId] = useState<string | null>(null);
+  const [declineConfirmId, setDeclineConfirmId] = useState<string | null>(null);
+  const cancelPendingSession = useCallback(
+    async (session: any, intent: 'withdraw' | 'decline'): Promise<boolean> => {
+      const setBusy = intent === 'withdraw' ? setWithdrawingId : setDecliningId;
+      setBusy(String(session._id));
+      try {
+        const res: any = await cancelIndividualAppointment(session._id);
+        if (res === false) return false;
+        dispatch(updateMe() as any);
+        return true;
+      } catch {
+        dispatch(
+          showErrorAlert(
+            intent === 'withdraw'
+              ? 'Could not withdraw the session offer. Please try again.'
+              : 'Could not decline the request. Please try again.',
+          ),
+        );
+        return false;
+      } finally {
+        setBusy(null);
+      }
+    },
+    [dispatch],
+  );
+  const handleWithdrawSession = useCallback(
+    (session: any) => cancelPendingSession(session, 'withdraw'),
+    [cancelPendingSession],
+  );
+  const handleDeclineSession = useCallback(
+    (session: any) => cancelPendingSession(session, 'decline'),
+    [cancelPendingSession],
+  );
+
+  const withdrawInlineSession = useCallback(
+    async (s: any) => {
+      const ok = await handleWithdrawSession(s);
+      if (!ok) return;
+      setWithdrawConfirmId(null);
+      const studentName =
+        pickStudent(s)?.username ||
+        (Array.isArray(s.participants) ? s.participants : []).find(
+          (p: any) => p && typeof p === 'object' && p.username,
+        )?.username ||
+        'The student';
+      const title = s.name || '';
+      const message = `Your session offer${title ? ` “${title}”` : ''} has been withdrawn. ${studentName} was not charged.`;
+      const id = String(s._id);
+      setAcceptedInline(prev => ({ ...prev, [id]: { message, session: s } }));
+      const timer = window.setTimeout(() => {
+        setAcceptedInline(prev => {
+          const next = { ...prev };
+          delete next[id];
+          return next;
+        });
+      }, 7000);
+      inlineNoticeTimers.current.push(timer);
+    },
+    [handleWithdrawSession],
+  );
+
+  const declineInlineSession = useCallback(
+    async (s: any) => {
+      const ok = await handleDeclineSession(s);
+      if (!ok) return;
+      setDeclineConfirmId(null);
+      const studentName =
+        pickStudent(s)?.username ||
+        (Array.isArray(s.participants) ? s.participants : []).find(
+          (p: any) => p && typeof p === 'object' && p.username,
+        )?.username ||
+        'The student';
+      const title = s.name || '';
+      const message = `${studentName}'s request${title ? ` for “${title}”` : ''} was declined and their payment refunded in full.`;
+      const id = String(s._id);
+      setAcceptedInline(prev => ({ ...prev, [id]: { message, session: s } }));
+      const timer = window.setTimeout(() => {
+        setAcceptedInline(prev => {
+          const next = { ...prev };
+          delete next[id];
+          return next;
+        });
+      }, 7000);
+      inlineNoticeTimers.current.push(timer);
+    },
+    [handleDeclineSession],
+  );
+
   // Keep just-accepted rows on screen for the notice window even after
   // pendingSessions refreshes them out of the list.
   const inlinePendingSessions = useMemo(() => {
@@ -792,7 +884,7 @@ export default function ExpertDashboard() {
         const createdById =
           typeof g.createdBy === 'object' ? g.createdBy?._id : g.createdBy;
         const expertProposed = String(createdById) === String(userDetails?._id);
-        return { ...base, canAccept: !expertProposed };
+        return { ...base, canAccept: !expertProposed, canWithdraw: expertProposed };
       });
     }
     if (status === 'pending') {
@@ -1057,18 +1149,85 @@ export default function ExpertDashboard() {
                       </div>
                     </div>
                     {expertProposed ? (
-                      <span className="shrink-0 inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-700">
-                        Awaiting payment
-                      </span>
+                      <div className="shrink-0 flex items-center gap-2">
+                        {withdrawConfirmId === String(s._id) ? (
+                          <>
+                            <span className="text-[10px] font-medium text-slate-600">
+                              Withdraw this offer?
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => setWithdrawConfirmId(null)}
+                              disabled={withdrawingId === String(s._id)}
+                              className="rounded-[4px] border border-slate-200 bg-white px-2.5 py-1.5 text-[10px] font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-60"
+                            >
+                              Keep
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => withdrawInlineSession(s)}
+                              disabled={withdrawingId === String(s._id)}
+                              className="rounded-[4px] bg-rose-600 px-2.5 py-1.5 text-[10px] font-semibold text-white hover:bg-rose-700 disabled:opacity-60"
+                            >
+                              {withdrawingId === String(s._id) ? 'Withdrawing…' : 'Confirm'}
+                            </button>
+                          </>
+                        ) : (
+                          <>
+                            <span className="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-700">
+                              Awaiting payment
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => setWithdrawConfirmId(String(s._id))}
+                              className="rounded-[4px] border border-rose-200 bg-white px-2.5 py-1.5 text-[10px] font-semibold text-rose-600 hover:bg-rose-50"
+                            >
+                              Withdraw offer
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    ) : declineConfirmId === String(s._id) ? (
+                      <div className="shrink-0 flex items-center gap-2">
+                        <span className="text-[10px] font-medium text-slate-600">
+                          Decline and refund?
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setDeclineConfirmId(null)}
+                          disabled={decliningId === String(s._id)}
+                          className="rounded-[4px] border border-slate-200 bg-white px-2.5 py-1.5 text-[10px] font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-60"
+                        >
+                          Keep
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => declineInlineSession(s)}
+                          disabled={decliningId === String(s._id)}
+                          className="rounded-[4px] bg-rose-600 px-2.5 py-1.5 text-[10px] font-semibold text-white hover:bg-rose-700 disabled:opacity-60"
+                        >
+                          {decliningId === String(s._id) ? 'Declining…' : 'Confirm'}
+                        </button>
+                      </div>
                     ) : (
-                      <button
-                        type="button"
-                        onClick={() => acceptInlineSession(s)}
-                        disabled={acceptingId === String(s._id)}
-                        className="shrink-0 inline-flex items-center rounded-[4px] bg-[#234C6A] px-3 py-1.5 text-[11px] font-semibold text-white hover:brightness-110 disabled:opacity-60"
-                      >
-                        {acceptingId === String(s._id) ? 'Accepting…' : 'Accept'}
-                      </button>
+                      <div className="shrink-0 flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => acceptInlineSession(s)}
+                          disabled={acceptingId === String(s._id)}
+                          className="inline-flex items-center rounded-[4px] bg-[#234C6A] px-3 py-1.5 text-[11px] font-semibold text-white hover:brightness-110 disabled:opacity-60"
+                        >
+                          {acceptingId === String(s._id) ? 'Accepting…' : 'Accept'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setDeclineConfirmId(String(s._id))}
+                          disabled={acceptingId === String(s._id)}
+                          className="inline-flex items-center rounded-[4px] border border-rose-200 bg-white px-3 py-1.5 text-[11px] font-semibold text-rose-600 hover:bg-rose-50 disabled:opacity-60"
+                        >
+                          Decline
+                        </button>
+                      </div>
                     )}
                   </div>
                 );
@@ -1200,6 +1359,16 @@ export default function ExpertDashboard() {
             onAcceptSession={
               expertUpcomingModal.kind === 'oneToOne' && expertUpcomingModal.status === 'pending'
                 ? (s) => handleAcceptSession({ _id: s.id, name: s.title, with: s.with })
+                : undefined
+            }
+            onWithdrawSession={
+              expertUpcomingModal.kind === 'oneToOne' && expertUpcomingModal.status === 'pending'
+                ? (s) => handleWithdrawSession({ _id: s.id, name: s.title, with: s.with })
+                : undefined
+            }
+            onDeclineSession={
+              expertUpcomingModal.kind === 'oneToOne' && expertUpcomingModal.status === 'pending'
+                ? (s) => handleDeclineSession({ _id: s.id, name: s.title, with: s.with })
                 : undefined
             }
           />

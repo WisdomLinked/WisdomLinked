@@ -586,7 +586,7 @@ export default function ExpertProfile({
               <h3 className="mt-1 font-serif text-[1rem] text-[#1A3A4A]">
                 Sessions previously hosted
               </h3>
-              <div className="mt-3 space-y-2">
+              <div className="mt-3 min-h-[140px] max-h-[420px] space-y-2 overflow-y-auto pr-1">
                 {seminarTimeline.past.length === 0 ? (
                   <p className="text-[12px] text-[#7A7A72]">No past seminars yet.</p>
                 ) : (
@@ -612,7 +612,7 @@ export default function ExpertProfile({
               <h3 className="mt-1 font-serif text-[1rem] text-[#1A3A4A]">
                 Next public sessions
               </h3>
-              <div className="mt-3 space-y-2">
+              <div className="mt-3 min-h-[140px] max-h-[420px] space-y-2 overflow-y-auto pr-1">
                 {seminarTimeline.upcoming.length === 0 ? (
                   <p className="text-[12px] text-[#7A7A72]">
                     No upcoming seminars scheduled.
@@ -1110,6 +1110,11 @@ export default function ExpertProfile({
             price={oneToOneSessionPrice}
             holdsFunds
             returnUrl={studentBookingReturnUrl}
+            policyNotice={{
+              message:
+                'Once you pay, you cannot cancel this request. If the expert declines it, you are refunded in full.',
+              acknowledgeLabel: 'I understand this payment cannot be cancelled.',
+            }}
             pendingDetails={{
               name: bookingTitle.trim() || bookingEventTitle,
               description: bookingNote.trim(),

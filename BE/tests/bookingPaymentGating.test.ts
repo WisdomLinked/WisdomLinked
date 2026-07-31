@@ -158,6 +158,7 @@ const withOneToOneModels = () => {
     userFindById: User.findById,
     groupCreate: GroupChat.create,
     groupFind: GroupChat.find,
+    groupFindOneAndUpdate: GroupChat.findOneAndUpdate,
     groupDeleteOne: GroupChat.deleteOne,
     groupUpdateOne: GroupChat.updateOne,
     userUpdateOne: User.updateOne,
@@ -177,6 +178,10 @@ const withOneToOneModels = () => {
     return { ...doc, _id: CHAT_ID };
   };
   GroupChat.find = () => ({ select: async () => [] });
+  GroupChat.findOneAndUpdate = async (filter: any, update: any) => {
+    record("groupFindOneAndUpdate", [filter, update]);
+    return { _id: CHAT_ID };
+  };
   GroupChat.deleteOne = async (filter: any) => {
     record("groupDeleteOne", [filter]);
     return { deletedCount: 1 };
@@ -210,6 +215,7 @@ const withOneToOneModels = () => {
     User.findById = original.userFindById;
     GroupChat.create = original.groupCreate;
     GroupChat.find = original.groupFind;
+    GroupChat.findOneAndUpdate = original.groupFindOneAndUpdate;
     GroupChat.deleteOne = original.groupDeleteOne;
     GroupChat.updateOne = original.groupUpdateOne;
     User.updateOne = original.userUpdateOne;

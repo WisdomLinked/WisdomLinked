@@ -7,16 +7,19 @@ const groupChatPath = require.resolve('../controllers/groupChat.controller');
 test('acceptIndividualAppointment returns 200 when notifications fail after save', async () => {
     const GroupChat = require('../models/GroupChat');
     const User = require('../models/User');
+    const PaymentHistory = require('../models/PaymentHistory');
 
     const originalFindOne = GroupChat.findOne;
+    const originalFindOneAndUpdate = GroupChat.findOneAndUpdate;
     const originalFindById = User.findById;
+    const originalHistoryExists = PaymentHistory.exists;
     const originalNotifications = require('../services/notifications');
 
     const savedGroup = {
         _id: 'gc-accept-1',
         name: '1:1 Session',
-        start: new Date('2026-07-01T18:00:00.000Z'),
-        end: new Date('2026-07-01T19:00:00.000Z'),
+        start: new Date(Date.now() + 48 * 60 * 60 * 1000),
+        end: new Date(Date.now() + 49 * 60 * 60 * 1000),
         duration: 60,
         price: 50,
         admin: 'expert-1',
@@ -30,6 +33,8 @@ test('acceptIndividualAppointment returns 200 when notifications fail after save
 
     try {
         GroupChat.findOne = async () => savedGroup;
+        GroupChat.findOneAndUpdate = async () => savedGroup;
+        PaymentHistory.exists = async () => null;
         User.findById = async (id: string) => {
             if (String(id) === 'expert-1') {
                 return {
@@ -91,6 +96,8 @@ test('acceptIndividualAppointment returns 200 when notifications fail after save
         assert.match(String(res.body), /accepted successfully/i);
     } finally {
         GroupChat.findOne = originalFindOne;
+        GroupChat.findOneAndUpdate = originalFindOneAndUpdate;
+        PaymentHistory.exists = originalHistoryExists;
         User.findById = originalFindById;
         require.cache[notificationsPath] = {
             id: notificationsPath,

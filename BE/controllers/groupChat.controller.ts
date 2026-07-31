@@ -3202,6 +3202,22 @@ const acceptIndividualAppointment = async (req, res) => {
             return res.status(400).send("This session has been cancelled.");
         }
 
+        const alreadyPaid = await PaymentHistory.exists({
+            groupChat: String(groupChat._id),
+            paymentType: 'charge',
+            status: { $in: ['completed', 'pending'] },
+        });
+        if (groupChat.status === 'active' || alreadyPaid) {
+            await releaseOrphanBookingIntent(payment_intent, userId, "Session is already confirmed");
+            return res.status(409).send("This session has already been confirmed and paid for. You have not been charged again.");
+        }
+
+        const startMs = groupChat.start ? new Date(groupChat.start).getTime() : 0;
+        if (startMs && startMs <= Date.now()) {
+            await releaseOrphanBookingIntent(payment_intent, userId, "Session start time has passed");
+            return res.status(400).send("This session's start time has already passed, so it can no longer be confirmed. You have not been charged.");
+        }
+
         let charge: any = null;
         let held = false;
         let payer: any = null;
@@ -3234,8 +3250,29 @@ const acceptIndividualAppointment = async (req, res) => {
         // than refunded if activation fails, so the student is never charged for it.
         const previousStatus = groupChat.status;
         try {
+            const activated = await GroupChat.findOneAndUpdate(
+                { _id: groupChat._id, status: { $ne: 'cancelled' } },
+                { $set: { status: 'active' } },
+            );
+            if (!activated) {
+                if (charge && held) {
+                    await cancelPaymentIntent(payment_intent, charge.paidBy);
+                    return res.status(409).send("This session was cancelled while your payment was being processed. Your payment hold has been released and you were not charged.");
+                }
+                if (charge) {
+                    await refundBookingCharge({
+                        payment_intent,
+                        charge,
+                        name: groupChat.name,
+                        customer: payer,
+                        expert: expertUser,
+                        groupChatId,
+                        reason: 'Session was cancelled during payment',
+                    });
+                }
+                return res.status(409).send("This session was cancelled while your payment was being processed. Any payment has been refunded.");
+            }
             groupChat.status = 'active';
-            await groupChat.save();
         } catch (activateErr) {
             if (charge && held) {
                 await cancelPaymentIntent(payment_intent, charge.paidBy);
@@ -3265,8 +3302,11 @@ const acceptIndividualAppointment = async (req, res) => {
             });
             if (!captured.ok) {
                 // Put the session back where it was — an unpaid session must not read as active.
+                await GroupChat.updateOne(
+                    { _id: groupChat._id, status: 'active' },
+                    { $set: { status: previousStatus } },
+                ).catch(() => null);
                 groupChat.status = previousStatus;
-                await groupChat.save().catch(() => null);
                 return res.status(captured.duplicate ? 409 : 502).send(captured.message);
             }
             charge = captured.charge;
@@ -3660,7 +3700,19 @@ const cancelIndividualAppointment = async (req, res) => {
         if (!groupChat) {
             throw new Error("Sorry, the group chat doesn't exist");
         }
+        if (!groupMemberIds(groupChat).includes(String(userId))) {
+            return res.status(403).send("This session is not yours to cancel.");
+        }
+
+        const expertId = String(groupChat.admin);
+        const cancelledByExpert = expertId === String(userId);
+        const expertProposed = String(groupChat.createdBy) === expertId;
+        const paidSessionMessage = "The student has already paid for this session, so it can no longer be cancelled here. Please contact an admin.";
+
         if (groupChat.status !== 'pending') {
+            if (expertProposed && cancelledByExpert && groupChat.status === 'active') {
+                return res.status(409).send(paidSessionMessage);
+            }
             throw new Error("Sorry, the group chat is not in pending status");
         }
 
@@ -3669,52 +3721,98 @@ const cancelIndividualAppointment = async (req, res) => {
             throw new Error("User not found");
         }
 
-        groupChat.participants.forEach(async (participantId) => {
-            const participant = await User.findById(String(participantId));
-            if (participant) {
-                participant.groupChats = participant.groupChats.filter((chat) => chat.toString() !== groupChatId);
-                await participant.save();
-            }
+        const claimed = await GroupChat.findOneAndUpdate(
+            { _id: groupChat._id, status: 'pending' },
+            { $set: { status: 'cancelled' } },
+        );
+        if (!claimed) {
+            return res.status(409).send("This session has already been updated. Please refresh and try again.");
+        }
+        const restorePending = async () => {
+            await GroupChat.updateOne(
+                { _id: groupChat._id, status: 'cancelled' },
+                { $set: { status: 'pending' } },
+            ).catch(() => null);
+        };
 
+        const payment = await PaymentHistory.findOne({
+            groupChat: String(groupChatId),
+            paymentType: 'charge',
+            status: { $in: ['completed', 'pending'] },
         });
 
-        if (groupChat.admin.toString() !== userId) {
-
-            const payment = await PaymentHistory.findOne({ groupChat: String(groupChatId), customer: userId, paymentType: 'charge', status: { $ne: 'refunded' } });
-
-            if (payment && payment.paymentIntent) {
-                const alreadyRefunded = await PaymentHistory.exists({
-                    paymentIntent: payment.paymentIntent,
-                    paymentType: 'refund',
-                });
-                if (!alreadyRefunded) {
-                    const refund = await refundPaymentIntent(payment.paymentIntent, payment.amount, payment.stripeMode)
-                    if (!refund) {
-                        return res.status(502).send("We couldn't refund your payment, so the appointment was not cancelled. Please try again or contact support.");
-                    }
-                    await appendPaymentHistory({
-                        stripeMode: payment.stripeMode,
-                        amount: payment.amount,
-                        currency: payment.currency,
-                        description: payment.description,
-                        customer: payment.customer,
-                        expert: payment.expert,
-                        // pendingAppointmentToGroup: PaymentHistory.pendingAppointmentToGroup,
-                        groupChat: payment.groupChat,
-                        event: payment.event,
-                        paymentType: 'refund',
-                        paymentIntent: refund.payment_intent,
-                        status: 'refunded',
-                    })
-                    await PaymentHistory.findByIdAndUpdate(payment._id, { status: 'refunded' });
-                }
-            }
+        if (payment && expertProposed && cancelledByExpert) {
+            await restorePending();
+            return res.status(409).send(paidSessionMessage);
+        }
+        if (payment && payment.status === 'pending') {
+            await restorePending();
+            return res.status(409).send("This payment is still being processed. Please try again in a moment.");
         }
 
-        groupChat.status = 'cancelled';
-        await groupChat.save();
+        const studentId = groupMemberIds(groupChat).find((id: string) => id !== expertId) || String(groupChat.createdBy);
+        const student = await User.findById(studentId);
+        const sessionName = groupChat.name || '1:1 session';
 
-        return res.status(200).send("Your appointment has been canceled!");
+        let refundMessage = '';
+        if (payment && payment.paymentIntent) {
+            const alreadyRefunded = await PaymentHistory.exists({
+                paymentIntent: payment.paymentIntent,
+                paymentType: 'refund',
+            });
+            if (!alreadyRefunded) {
+                const refund = await refundPaymentIntent(payment.paymentIntent, payment.amount, payment.stripeMode)
+                if (!refund) {
+                    await restorePending();
+                    return res.status(502).send("We couldn't refund the payment, so the session was not cancelled. Please try again or contact support.");
+                }
+                await appendPaymentHistory({
+                    stripeMode: payment.stripeMode,
+                    amount: payment.amount,
+                    currency: payment.currency,
+                    description: payment.description,
+                    customer: payment.customer,
+                    expert: payment.expert,
+                    groupChat: payment.groupChat,
+                    event: payment.event,
+                    paymentType: 'refund',
+                    paymentIntent: refund.payment_intent,
+                    status: 'refunded',
+                })
+                await PaymentHistory.findByIdAndUpdate(payment._id, { status: 'refunded' });
+                refundMessage = ' The payment has been refunded in full.';
+                if (student?.email) {
+                    await sendSeminarEmail(
+                        student.email,
+                        `Session cancelled — ${sessionName}`,
+                        `<h2 style="color:#007bff;margin-top:0;">Your session was cancelled</h2>
+                         <p>"<strong>${sessionName}</strong>" has been cancelled${cancelledByExpert ? ' by the expert' : ''}.</p>
+                         <p>Your payment of $${(Number(payment.amount || 0) / 100).toFixed(2)} has been refunded in full and will
+                            appear on your original payment method within 5–10 business days.</p>`,
+                    );
+                }
+            }
+        } else if (expertProposed && cancelledByExpert && student?.email) {
+            await sendSeminarEmail(
+                student.email,
+                `Session offer withdrawn — ${sessionName}`,
+                `<h2 style="color:#007bff;margin-top:0;">This session offer was withdrawn</h2>
+                 <p>The expert has withdrawn the proposed session "<strong>${sessionName}</strong>" before it was paid for.</p>
+                 <p>You have not been charged. You can book another time from the expert's profile.</p>`,
+            );
+        }
+
+        for (const participantId of groupChat.participants) {
+            await User.updateOne(
+                { _id: String(participantId) },
+                { $pull: { groupChats: groupChat._id } },
+            );
+        }
+
+        const cancelledLabel = expertProposed && cancelledByExpert
+            ? "The session offer has been withdrawn."
+            : "Your appointment has been canceled!";
+        return res.status(200).send(`${cancelledLabel}${refundMessage}`);
     } catch (err) {
         console.log(err);
         return res

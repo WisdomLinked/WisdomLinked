@@ -9,6 +9,7 @@ const stripeLive = require('stripe')(process.env.STRIPE_SECRET_KEY_LIVE);
 const AppState = require("../models/AppState");
 const User = require("../models/User");
 const GroupChat = require("../models/GroupChat");
+const PaymentHistory = require("../models/PaymentHistory");
 const { assertBookingLeadTime } = require("../utils/bookingLeadTime");
 
 const stripePay = async (req, res) => {
@@ -62,6 +63,18 @@ const createStripePaymentIntent = async (req, res) => {
                 }
                 if (groupChat.status === 'cancelled') {
                     return res.status(400).send({ error: 'This session is no longer available.' });
+                }
+                const alreadyPaid = await PaymentHistory.exists({
+                    groupChat: String(groupChat._id),
+                    paymentType: 'charge',
+                    status: { $in: ['completed', 'pending'] },
+                });
+                if (groupChat.status === 'active' || alreadyPaid) {
+                    return res.status(409).send({ error: 'This session has already been paid for.' });
+                }
+                const startMs = groupChat.start ? new Date(groupChat.start).getTime() : 0;
+                if (startMs && startMs <= Date.now()) {
+                    return res.status(400).send({ error: "This session's start time has already passed." });
                 }
                 // Hold the funds; they are captured only once the session is active.
                 manualCapture = true;

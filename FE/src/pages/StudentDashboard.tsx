@@ -283,7 +283,9 @@ function deriveModalSessions(
       // Expert-proposed pending 1:1s (createdBy = the mentor) await the student's
       // payment; student-booked ones (createdBy = me) await the mentor's approval.
       const createdById = String(g?.createdBy?._id ?? g?.createdBy ?? '');
-      const payable = status === 'pending' && createdById !== '' && createdById !== myId;
+      const expired = !Number.isNaN(at) && at > 0 && at <= Date.now();
+      const payable =
+        status === 'pending' && createdById !== '' && createdById !== myId && !expired;
       const mentor = g?.admin?.username || g?.admin?.email || 'Your mentor';
       const price = typeof g?.price === 'number' ? g.price : undefined;
       return {
@@ -1482,6 +1484,11 @@ export default function StudentDashboard() {
                 type="1:1 session"
                 price={payTarget.price}
                 holdsFunds
+                policyNotice={{
+                  message:
+                    'Paying confirms this session immediately. It cannot be cancelled and the payment is not refundable.',
+                  acknowledgeLabel: 'I understand this payment is non-refundable.',
+                }}
                 pendingDetails={{
                   kind: 'accept-1to1',
                   groupChatId: payTarget.groupChatId,
