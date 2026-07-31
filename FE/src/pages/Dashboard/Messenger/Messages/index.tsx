@@ -827,7 +827,7 @@ const Messages = ({ theme = "dark", onReplyMessage }: { theme?: string; onReplyM
             </div>
             <div
                 ref={scrollContainerRef}
-                className={`flex min-h-0 w-full flex-1 flex-col items-stretch overflow-y-auto overscroll-y-contain ${theme === "light" ? "bg-wl-page" : "bg-darkgrey-1"}`}
+                className={`wl-chat-scroll flex min-h-0 w-full flex-1 flex-col items-stretch overflow-y-auto overscroll-y-contain ${theme === "light" ? "bg-wl-page" : "wl-chat-scroll-dark bg-darkgrey-1"}`}
                 onScroll={handleScroll}
             >
             {

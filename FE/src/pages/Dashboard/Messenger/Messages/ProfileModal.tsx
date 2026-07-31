@@ -59,7 +59,7 @@ const ProfileModal: React.FC<ProfileModalProps> = ({
 
     const overlay = (
         <div
-            className={`fixed inset-0 z-[200] flex items-center justify-center p-4 ${
+            className={`fixed inset-0 z-[1500] flex items-center justify-center p-4 ${
                 isLight ? "bg-slate-900/45 backdrop-blur-[6px]" : "bg-black/70 backdrop-blur-sm"
             }`}
             role="presentation"

@@ -1243,8 +1243,8 @@ const StudentChat: React.FC = () => {
   const showMobileMessenger = shouldShowMobileMessenger(chosenChatDetails, chosenGroupChatDetails);
 
   return (
-    <div className="flex h-full bg-wl-page text-slate-900">
-      <aside className={`${showMobileMessenger ? 'hidden md:flex' : 'flex'} w-full md:w-80 lg:w-96 flex-col border-r border-slate-200 bg-white`}>
+    <div className="flex h-full min-h-0 overflow-hidden bg-wl-page text-slate-900">
+      <aside className={`${showMobileMessenger ? 'hidden md:flex' : 'flex'} w-full md:w-80 lg:w-96 min-h-0 flex-col border-r border-slate-200 bg-white`}>
         <div className="px-4 pt-4 pb-3 border-b border-slate-200">
           <div className="flex items-center justify-between gap-2">
             <p className="text-xs font-bold uppercase tracking-[0.12em] text-slate-600">
@@ -1281,8 +1281,9 @@ const StudentChat: React.FC = () => {
             />
           </div>
         </div>
-        <div className="flex-1 overflow-y-auto px-3 py-3 space-y-4">
-          <div>
+        <div className="wl-chat-scroll flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-3 py-3">
+          <div className="shrink-0">
+            <div className="wl-chat-scroll min-h-[3rem] max-h-[15rem] overflow-y-auto pr-1">
             {filteredCommunity.length === 0 ? (
               <p className="px-2 py-3 text-[11px] text-slate-500">
                 {communityQuery.trim()
@@ -1381,9 +1382,10 @@ const StudentChat: React.FC = () => {
                 );
               })
             )}
+            </div>
           </div>
 
-          <div className="pt-1 border-t border-slate-200">
+          <div className="shrink-0 pt-1 border-t border-slate-200">
             <div className="mb-2 flex items-center justify-between gap-2">
               <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-slate-600">1:1 Appointments</p>
               {(() => {
@@ -1416,6 +1418,7 @@ const StudentChat: React.FC = () => {
                 className="flex-1 min-w-0 bg-transparent outline-none text-xs text-slate-700 placeholder:text-slate-400"
               />
             </div>
+            <div className="wl-chat-scroll min-h-[3rem] max-h-[15rem] overflow-y-auto pr-1">
             {filteredPrivate.length === 0 ? (
               <p className="px-2 py-3 text-[11px] text-slate-500">
                 {privateQuery.trim()
@@ -1613,12 +1616,14 @@ const StudentChat: React.FC = () => {
                 );
               })
             )}
+            </div>
           </div>
 
-          <div className="pt-1 border-t border-slate-200">
+          <div className="flex min-h-0 flex-1 flex-col pt-1 border-t border-slate-200">
             <div className="mb-2 flex items-center justify-between gap-2">
               <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-slate-600">Seminars</p>
             </div>
+            <div className="wl-chat-scroll min-h-[3rem] flex-1 overflow-y-auto pr-1">
             {filteredSeminars.length === 0 ? (
               <p className="px-2 py-3 text-[11px] text-slate-500">
                 {communityQuery.trim()
@@ -1675,6 +1680,7 @@ const StudentChat: React.FC = () => {
                 );
               })
             )}
+            </div>
           </div>
         </div>
       </aside>

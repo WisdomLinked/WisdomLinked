@@ -41,10 +41,6 @@ const GroupParticipantsDialog = ({
     const [profilePerson, setProfilePerson] = useState<any | null>(null);
     const [profileOpen, setProfileOpen] = useState(false);
 
-    // Clicking a member opens their profile card layered on top of this dialog
-    // (which is lowered below ProfileModal's overlay), so closing the card
-    // returns to the list. Show a fallback immediately, then enrich it once the
-    // full profile loads.
     const openParticipantProfile = async (participant: any) => {
         const pid = String(participant?._id ?? participant?.id ?? "");
         if (!pid) return;
@@ -161,7 +157,7 @@ const GroupParticipantsDialog = ({
                 maxWidth="sm"
                 fullWidth
                 PaperProps={{ className: paperClass }}
-                sx={{ zIndex: profileOpen ? 150 : 1300 }}
+                sx={{ zIndex: 1300 }}
             >
                 <div className={`border-b px-5 pt-5 pb-3 ${isLight ? "border-slate-100" : "border-slate-700"}`}>
                     <div className="flex items-start justify-between gap-3">
