@@ -738,13 +738,17 @@ function SeminarDetailPane({
                 Your seminar
               </p>
               <p className="mt-2 text-sm text-[#5c5c56]">
-                Update schedule, pricing, or description anytime before the session.
+                {isPast
+                  ? 'This seminar has already finished, so its details can no longer be edited.'
+                  : 'Update schedule, pricing, or description anytime before the session.'}
               </p>
               <div className="mt-4 flex items-center gap-2">
                 <button
                   type="button"
                   onClick={onEdit}
-                  className="flex-1 inline-flex items-center justify-center gap-2 rounded-lg bg-[#234C6A] px-4 py-2.5 text-sm font-semibold text-white hover:brightness-110"
+                  disabled={isPast}
+                  title={isPast ? 'This seminar has already finished and can no longer be edited.' : undefined}
+                  className="flex-1 inline-flex items-center justify-center gap-2 rounded-lg bg-[#234C6A] px-4 py-2.5 text-sm font-semibold text-white hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:brightness-100"
                 >
                   <Pencil className="h-4 w-4" aria-hidden />
                   Edit seminar
