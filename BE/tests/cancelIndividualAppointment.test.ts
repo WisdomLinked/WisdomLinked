@@ -154,12 +154,16 @@ const resetCalls = () => {
   for (const key of Object.keys(calls)) delete calls[key];
 };
 
-const cancelAs = async (userId: string) => {
-  const req: any = { user: { userId }, body: { groupChatId: CHAT_ID } };
+const cancelAs = async (userId: string, note?: string) => {
+  const req: any = { user: { userId }, body: { groupChatId: CHAT_ID, note } };
   const res = createRes();
   await groupController.cancelIndividualAppointment(req, res);
   return res;
 };
+
+// An expert turning down a student's request must say why, so every decline in
+// these tests carries the note the endpoint now requires.
+const DECLINE_NOTE = "Unavailable that week — would 2:30pm Aug 19 work?";
 
 /** The status the claim wrote, ignoring any rollback that followed. */
 const claimedStatus = () => calls.claim?.[0]?.[1]?.$set?.status;
@@ -238,7 +242,7 @@ test("expert declining a paid student booking refunds the student", async () => 
     payment: chargeRow(),
   });
   try {
-    const res = await cancelAs(EXPERT_ID);
+    const res = await cancelAs(EXPERT_ID, DECLINE_NOTE);
 
     assert.equal(res.statusCode, 200);
     assert.match(String(res.body), /refunded/i);
@@ -312,6 +316,87 @@ test("losing the race to another update cancels nothing", async () => {
     assert.match(String(res.body), /already been updated/i);
     assert.equal(calls.userUpdateOne, undefined);
     assert.equal(calls.refund, undefined);
+  } finally {
+    restore();
+  }
+});
+
+test("an expert cannot decline a student's request without a note", async () => {
+  resetCalls();
+  const restore = withModels({
+    chat: chatDoc({ createdBy: STUDENT_ID }),
+    payment: chargeRow(),
+  });
+  try {
+    const res = await cancelAs(EXPERT_ID);
+
+    assert.equal(res.statusCode, 400);
+    assert.match(String(res.body), /note/i);
+    assert.equal(calls.claim, undefined, "nothing is cancelled without the note");
+    assert.equal(calls.refund, undefined);
+  } finally {
+    restore();
+  }
+});
+
+test("a note of only whitespace or markup does not count as a note", async () => {
+  for (const empty of ["   ", "<b></b>"]) {
+    resetCalls();
+    const restore = withModels({
+      chat: chatDoc({ createdBy: STUDENT_ID }),
+      payment: chargeRow(),
+    });
+    try {
+      const res = await cancelAs(EXPERT_ID, empty);
+      assert.equal(res.statusCode, 400, `"${empty}" should be rejected`);
+    } finally {
+      restore();
+    }
+  }
+});
+
+test("the decline note is stored on the cancelled session", async () => {
+  resetCalls();
+  const restore = withModels({
+    chat: chatDoc({ createdBy: STUDENT_ID }),
+    payment: chargeRow(),
+  });
+  try {
+    await cancelAs(EXPERT_ID, DECLINE_NOTE);
+
+    const claimed = calls.claim?.[0]?.[1]?.$set;
+    assert.equal(claimed?.decisionNote, DECLINE_NOTE);
+    assert.ok(claimed?.decisionNoteAt, "the note is dated so it can expire after 48h");
+    assert.equal(claimed?.decisionNoteReadAt, null, "a fresh note starts unread");
+  } finally {
+    restore();
+  }
+});
+
+test("withdrawing your own offer still needs no note", async () => {
+  resetCalls();
+  const restore = withModels({ chat: chatDoc() });
+  try {
+    const res = await cancelAs(EXPERT_ID);
+
+    assert.equal(res.statusCode, 200);
+    assert.equal(claimedStatus(), "cancelled");
+  } finally {
+    restore();
+  }
+});
+
+test("a student cancelling their own booking never needs a note", async () => {
+  resetCalls();
+  const restore = withModels({
+    chat: chatDoc({ createdBy: STUDENT_ID }),
+    payment: chargeRow(),
+  });
+  try {
+    const res = await cancelAs(STUDENT_ID);
+
+    assert.equal(res.statusCode, 200);
+    assert.equal(calls.claim?.[0]?.[1]?.$set?.decisionNote, undefined);
   } finally {
     restore();
   }

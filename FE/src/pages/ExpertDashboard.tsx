@@ -54,6 +54,7 @@ import ExpertRevenue from './Dashboard/_ExpertDashboard/ExpertRevenue';
 import ContactAdmin from './Dashboard/_ExpertDashboard/ContactAdmin';
 import StudentChat from '../components/dashboard/StudentChat';
 import JoinMeeting from '../components/dashboard/JoinMeeting';
+import DecisionNoteField from '../components/dashboard/DecisionNoteField';
 import StatCard from '../components/ui/StatCard';
 import Chatbot from '../components/chatbot';
 import UpcomingSessionModal, {
@@ -725,10 +726,10 @@ export default function ExpertDashboard() {
 
   // Accepting a 1:1 no longer pops a banner — callers surface an in-card message.
   const handleAcceptSession = useCallback(
-    async (session: any): Promise<boolean> => {
+    async (session: any, note = ''): Promise<boolean> => {
       setAcceptingId(String(session._id));
       try {
-        const res: any = await acceptIndividualAppointment({ groupChatId: session._id });
+        const res: any = await acceptIndividualAppointment({ groupChatId: session._id, note });
         if (res === false) return false;
         dispatch(updateMe() as any);
         return true;
@@ -745,8 +746,8 @@ export default function ExpertDashboard() {
   // Dashboard "1:1 Sessions" list: accept, then replace the row with a
   // transient confirmation that clears after 7 seconds.
   const acceptInlineSession = useCallback(
-    async (s: any) => {
-      const ok = await handleAcceptSession(s);
+    async (s: any, note = '') => {
+      const ok = await handleAcceptSession(s, note);
       if (!ok) return;
       const studentName =
         pickStudent(s)?.username ||
@@ -776,12 +777,20 @@ export default function ExpertDashboard() {
   const [withdrawConfirmId, setWithdrawConfirmId] = useState<string | null>(null);
   const [decliningId, setDecliningId] = useState<string | null>(null);
   const [declineConfirmId, setDeclineConfirmId] = useState<string | null>(null);
+  // Per-row note for the inline 1:1 list, so two open rows never share a draft.
+  const [inlineNotes, setInlineNotes] = useState<Record<string, string>>({});
+  const [inlineNoteErrors, setInlineNoteErrors] = useState<Record<string, string>>({});
+  const inlineNote = (id: string) => inlineNotes[id] ?? '';
+  const setInlineNote = (id: string, next: string) => {
+    setInlineNotes(prev => ({ ...prev, [id]: next }));
+    if (next.trim()) setInlineNoteErrors(prev => ({ ...prev, [id]: '' }));
+  };
   const cancelPendingSession = useCallback(
-    async (session: any, intent: 'withdraw' | 'decline'): Promise<boolean> => {
+    async (session: any, intent: 'withdraw' | 'decline', note = ''): Promise<boolean> => {
       const setBusy = intent === 'withdraw' ? setWithdrawingId : setDecliningId;
       setBusy(String(session._id));
       try {
-        const res: any = await cancelIndividualAppointment(session._id);
+        const res: any = await cancelIndividualAppointment(session._id, note);
         if (res === false) return false;
         dispatch(updateMe() as any);
         return true;
@@ -801,17 +810,17 @@ export default function ExpertDashboard() {
     [dispatch],
   );
   const handleWithdrawSession = useCallback(
-    (session: any) => cancelPendingSession(session, 'withdraw'),
+    (session: any, note = '') => cancelPendingSession(session, 'withdraw', note),
     [cancelPendingSession],
   );
   const handleDeclineSession = useCallback(
-    (session: any) => cancelPendingSession(session, 'decline'),
+    (session: any, note = '') => cancelPendingSession(session, 'decline', note),
     [cancelPendingSession],
   );
 
   const withdrawInlineSession = useCallback(
-    async (s: any) => {
-      const ok = await handleWithdrawSession(s);
+    async (s: any, note = '') => {
+      const ok = await handleWithdrawSession(s, note);
       if (!ok) return;
       setWithdrawConfirmId(null);
       const studentName =
@@ -837,8 +846,8 @@ export default function ExpertDashboard() {
   );
 
   const declineInlineSession = useCallback(
-    async (s: any) => {
-      const ok = await handleDeclineSession(s);
+    async (s: any, note = '') => {
+      const ok = await handleDeclineSession(s, note);
       if (!ok) return;
       setDeclineConfirmId(null);
       const studentName =
@@ -861,6 +870,23 @@ export default function ExpertDashboard() {
       inlineNoticeTimers.current.push(timer);
     },
     [handleDeclineSession],
+  );
+
+  // A decline has to carry a note, so the confirm button validates before firing.
+  const submitInlineDecline = useCallback(
+    (s: any) => {
+      const rowId = String(s._id);
+      const note = (inlineNotes[rowId] ?? '').trim();
+      if (!note) {
+        setInlineNoteErrors(prev => ({
+          ...prev,
+          [rowId]: 'Please add a short note so the student knows what to do next.',
+        }));
+        return;
+      }
+      void declineInlineSession(s, note);
+    },
+    [inlineNotes, declineInlineSession],
   );
 
   // Keep just-accepted rows on screen for the notice window even after
@@ -909,7 +935,11 @@ export default function ExpertDashboard() {
 
   // Returns the confirmation message so the modal can show it in-card (no banner).
   const handleSeatDecision = useCallback(
-    async (session: UpcomingModalSession, action: 'accept' | 'decline'): Promise<string | void> => {
+    async (
+      session: UpcomingModalSession,
+      action: 'accept' | 'decline',
+      note = '',
+    ): Promise<string | void> => {
       const requestId = session.seatRequestId;
       if (!requestId) return;
       const raw = seatRequests.find(r => String(r._id) === String(requestId));
@@ -919,8 +949,8 @@ export default function ExpertDashboard() {
       const amountLabel = cents > 0 ? `$${(cents / 100).toFixed(2)}` : '';
       try {
         const res: any = action === 'accept'
-          ? await approveSeminarSeatRequest(requestId)
-          : await rejectSeminarSeatRequest(requestId);
+          ? await approveSeminarSeatRequest(requestId, note)
+          : await rejectSeminarSeatRequest(requestId, note);
         if (res === false || res?.status === 'FAIL' || res?.error) {
           dispatch(showErrorAlert(res?.error || 'Could not update the seat request.'));
           return;
@@ -1135,11 +1165,15 @@ export default function ExpertDashboard() {
                   typeof s.createdBy === 'object' ? s.createdBy?._id : s.createdBy;
                 const expertProposed =
                   String(createdById) === String(userDetails?._id);
+                const rowId = String(s._id);
+                const noteRequired = !expertProposed && declineConfirmId === rowId;
+                const showNote = !expertProposed || withdrawConfirmId === rowId;
                 return (
                   <div
                     key={s._id}
-                    className="flex items-start justify-between gap-2 rounded-xl border border-amber-100 bg-amber-50 px-3 py-2.5"
+                    className="rounded-xl border border-amber-100 bg-amber-50 px-3 py-2.5"
                   >
+                  <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
                       <div className="text-[13px] font-semibold text-slate-900">
                         {s.name}
@@ -1165,7 +1199,7 @@ export default function ExpertDashboard() {
                             </button>
                             <button
                               type="button"
-                              onClick={() => withdrawInlineSession(s)}
+                              onClick={() => withdrawInlineSession(s, inlineNote(rowId))}
                               disabled={withdrawingId === String(s._id)}
                               className="rounded-[4px] bg-rose-600 px-2.5 py-1.5 text-[10px] font-semibold text-white hover:bg-rose-700 disabled:opacity-60"
                             >
@@ -1202,7 +1236,7 @@ export default function ExpertDashboard() {
                         </button>
                         <button
                           type="button"
-                          onClick={() => declineInlineSession(s)}
+                          onClick={() => submitInlineDecline(s)}
                           disabled={decliningId === String(s._id)}
                           className="rounded-[4px] bg-rose-600 px-2.5 py-1.5 text-[10px] font-semibold text-white hover:bg-rose-700 disabled:opacity-60"
                         >
@@ -1213,7 +1247,7 @@ export default function ExpertDashboard() {
                       <div className="shrink-0 flex items-center gap-2">
                         <button
                           type="button"
-                          onClick={() => acceptInlineSession(s)}
+                          onClick={() => acceptInlineSession(s, inlineNote(rowId))}
                           disabled={acceptingId === String(s._id)}
                           className="inline-flex items-center rounded-[4px] bg-[#234C6A] px-3 py-1.5 text-[11px] font-semibold text-white hover:brightness-110 disabled:opacity-60"
                         >
@@ -1229,6 +1263,32 @@ export default function ExpertDashboard() {
                         </button>
                       </div>
                     )}
+                  </div>
+                  {showNote ? (
+                    <div className="mt-2.5 border-t border-amber-200/70 pt-2">
+                      <DecisionNoteField
+                        id={`inline-decision-note-${rowId}`}
+                        value={inlineNote(rowId)}
+                        onChange={next => setInlineNote(rowId, next)}
+                        required={noteRequired}
+                        disabled={
+                          acceptingId === rowId ||
+                          decliningId === rowId ||
+                          withdrawingId === rowId
+                        }
+                        label={
+                          noteRequired
+                            ? 'Note to the student (required to decline)'
+                            : 'Note to the student (optional)'
+                        }
+                      />
+                      {inlineNoteErrors[rowId] ? (
+                        <p className="mt-1 text-[10px] font-semibold text-rose-600">
+                          {inlineNoteErrors[rowId]}
+                        </p>
+                      ) : null}
+                    </div>
+                  ) : null}
                   </div>
                 );
               })}
@@ -1348,27 +1408,27 @@ export default function ExpertDashboard() {
             }
             onAcceptSeatRequest={
               expertUpcomingModal.kind === 'seminar' && expertUpcomingModal.status === 'pending'
-                ? (s) => handleSeatDecision(s, 'accept')
+                ? (s, note) => handleSeatDecision(s, 'accept', note)
                 : undefined
             }
             onDeclineSeatRequest={
               expertUpcomingModal.kind === 'seminar' && expertUpcomingModal.status === 'pending'
-                ? (s) => handleSeatDecision(s, 'decline')
+                ? (s, note) => handleSeatDecision(s, 'decline', note)
                 : undefined
             }
             onAcceptSession={
               expertUpcomingModal.kind === 'oneToOne' && expertUpcomingModal.status === 'pending'
-                ? (s) => handleAcceptSession({ _id: s.id, name: s.title, with: s.with })
+                ? (s, note) => handleAcceptSession({ _id: s.id, name: s.title, with: s.with }, note)
                 : undefined
             }
             onWithdrawSession={
               expertUpcomingModal.kind === 'oneToOne' && expertUpcomingModal.status === 'pending'
-                ? (s) => handleWithdrawSession({ _id: s.id, name: s.title, with: s.with })
+                ? (s, note) => handleWithdrawSession({ _id: s.id, name: s.title, with: s.with }, note)
                 : undefined
             }
             onDeclineSession={
               expertUpcomingModal.kind === 'oneToOne' && expertUpcomingModal.status === 'pending'
-                ? (s) => handleDeclineSession({ _id: s.id, name: s.title, with: s.with })
+                ? (s, note) => handleDeclineSession({ _id: s.id, name: s.title, with: s.with }, note)
                 : undefined
             }
           />

@@ -152,6 +152,9 @@ const { scheduleEmailReminder, sendEmailMeetingRequestToCustomer, sendEmailMeeti
 const { assertBookingLeadTime } = require("../utils/bookingLeadTime");
 const { assertBookingSlotValid, assertDurationAllowed } = require("../utils/bookingValidation");
 import { buildRemovedUserNotice, normalizeModerationReason } from '../utils/videoModerationNotice';
+import { sanitizeDecisionNote, decisionNoteEmailBlock } from '../utils/decisionNote';
+import { describePastEditRejection } from '../utils/pastEventEdit';
+import { decisionNoticeCutoff, decisionNoticeIsVisible } from '../utils/decisionNotice';
 
 const createGeneralChatAndJoinGlobalChat = async (expertId) => {
     try {
@@ -1345,6 +1348,11 @@ const updateGroupChat = async (req, res) => {
             updateFields.totalTimeSpent = existingTotalTimeSpent + Number(totalTimeSpent);
         }
 
+        const pastEditRejection = describePastEditRejection(groupChat, updateFields);
+        if (pastEditRejection) {
+            return res.status(409).send(pastEditRejection);
+        }
+
         // Update group chat with only provided fields
         await GroupChat.findByIdAndUpdate(String(groupId), updateFields, { new: true });
 
@@ -2521,6 +2529,7 @@ const approveSeminarSeatRequest = async (req, res) => {
     try {
         const { userId } = req.user;
         const { requestId } = req.body;
+        const decisionNote = sanitizeDecisionNote(req.body.note);
 
         const request = await SeminarSeatRequest.findById(String(requestId));
         if (!request) {
@@ -2586,7 +2595,7 @@ const approveSeminarSeatRequest = async (req, res) => {
 
         const decided = await SeminarSeatRequest.findOneAndUpdate(
             { _id: request._id, status: 'pending' },
-            { $set: { status: 'approved' } },
+            { $set: { status: 'approved', decisionNote, decisionNoteAt: new Date(), decisionNoteReadAt: null } },
             { new: true },
         );
         if (!decided) {
@@ -2699,7 +2708,8 @@ const approveSeminarSeatRequest = async (req, res) => {
             `You're in — ${groupChat.name}`,
             `<h2 style="color:#28a745;margin-top:0;">Seat approved</h2>
              <p>${expert.username || 'The host'} approved your seat for
-             "<strong>${groupChat.name}</strong>". ${charge ? 'Your card has now been charged and you\'re registered.' : 'You\'re now registered.'}</p>`,
+             "<strong>${groupChat.name}</strong>". ${charge ? 'Your card has now been charged and you\'re registered.' : 'You\'re now registered.'}</p>
+             ${decisionNoteEmailBlock(decisionNote, 'Message from the host')}`,
         );
 
         return res.status(200).json({ success: true, status: 'approved' });
@@ -2739,6 +2749,12 @@ const rejectSeminarSeatRequest = async (req, res) => {
     try {
         const { userId } = req.user;
         const { requestId } = req.body;
+        // Turning a student away past capacity is a rejection, so the host owes them
+        // a reason they can act on (see the decline rule in cancelIndividualAppointment).
+        const decisionNote = sanitizeDecisionNote(req.body.note);
+        if (!decisionNote) {
+            return res.status(400).send("Please add a short note for the student explaining the decline.");
+        }
 
         const request = await SeminarSeatRequest.findById(String(requestId));
         if (!request) {
@@ -2758,7 +2774,7 @@ const rejectSeminarSeatRequest = async (req, res) => {
 
         const decided = await SeminarSeatRequest.findOneAndUpdate(
             { _id: request._id, status: 'pending' },
-            { $set: { status: 'rejected' } },
+            { $set: { status: 'rejected', decisionNote, decisionNoteAt: new Date(), decisionNoteReadAt: null } },
         );
         if (!decided) {
             return res.status(409).send("This request has already been decided.");
@@ -2778,7 +2794,8 @@ const rejectSeminarSeatRequest = async (req, res) => {
                 `Seat request update — ${groupChat.name}`,
                 `<h2 style="color:#333;margin-top:0;">Seat request declined</h2>
                  <p>Unfortunately the host could not offer you a seat for
-                 "<strong>${groupChat.name}</strong>".${moneyLine}</p>`,
+                 "<strong>${groupChat.name}</strong>".${moneyLine}</p>
+                 ${decisionNoteEmailBlock(decisionNote, 'Message from the host')}`,
             );
         }
 
@@ -2807,6 +2824,107 @@ const getSeminarSeatRequests = async (req, res) => {
             })
             .sort({ createdAt: 1 });
         return res.status(200).json({ success: true, result: requests });
+    } catch (err) {
+        console.log(err);
+        return res.status(500).send(safeHttp500Message(err));
+    }
+};
+
+const getMyDecisionNotices = async (req, res) => {
+    try {
+        const { userId } = req.user;
+        const cutoff = decisionNoticeCutoff();
+
+        const sessions = await GroupChat.find({
+            participants: userId,
+            admin: { $ne: userId },
+            type: 'individual',
+            decisionNote: { $nin: [null, ''] },
+            decisionNoteAt: { $gte: cutoff },
+            decisionNoteReadAt: null,
+        })
+            .select('name status decisionNote decisionNoteAt admin createdBy start')
+            .populate('admin', 'username image')
+            .sort({ decisionNoteAt: -1 })
+            .limit(20);
+
+        const seats = await SeminarSeatRequest.find({
+            customer: userId,
+            decisionNote: { $nin: [null, ''] },
+            decisionNoteAt: { $gte: cutoff },
+            decisionNoteReadAt: null,
+        })
+            .select('status decisionNote decisionNoteAt groupChat expert')
+            .populate('groupChat', 'name start')
+            .populate('expert', 'username image')
+            .sort({ decisionNoteAt: -1 })
+            .limit(20);
+
+        const notices = [
+            ...sessions.map((g: any) => ({
+                id: String(g._id),
+                kind: 'session',
+                // A pending session the expert created and then cancelled was an offer
+                // they withdrew; anything else they cancelled was the student's request.
+                outcome: g.status === 'active'
+                    ? 'accepted'
+                    : String(g.createdBy) === String(g.admin?._id ?? g.admin)
+                        ? 'withdrawn'
+                        : 'declined',
+                title: g.name || '1:1 session',
+                start: g.start,
+                note: g.decisionNote,
+                decidedAt: g.decisionNoteAt,
+                expertName: g.admin?.username || null,
+                expertImage: g.admin?.image || null,
+            })),
+            ...seats.map((r: any) => ({
+                id: String(r._id),
+                kind: 'seat',
+                outcome: r.status === 'approved' ? 'accepted' : 'declined',
+                title: r.groupChat?.name || 'Seminar',
+                start: r.groupChat?.start,
+                note: r.decisionNote,
+                decidedAt: r.decisionNoteAt,
+                expertName: r.expert?.username || null,
+                expertImage: r.expert?.image || null,
+            })),
+        ]
+            .filter((n) => decisionNoticeIsVisible({ note: n.note, decidedAt: n.decidedAt }))
+            .sort((a, b) => new Date(b.decidedAt).getTime() - new Date(a.decidedAt).getTime());
+
+        return res.status(200).json({ success: true, result: notices });
+    } catch (err) {
+        console.log(err);
+        return res.status(500).send(safeHttp500Message(err));
+    }
+};
+
+// Dismissing a notice is scoped to the caller's own rows, so one student can
+// never clear another's.
+const markDecisionNoticeRead = async (req, res) => {
+    try {
+        const { userId } = req.user;
+        const { noticeId, kind } = req.body;
+        if (!noticeId || (kind !== 'session' && kind !== 'seat')) {
+            return res.status(400).send("A notice id and kind are required.");
+        }
+
+        const readAt = new Date();
+        const updated = kind === 'session'
+            ? await GroupChat.updateOne(
+                { _id: String(noticeId), participants: userId, type: 'individual' },
+                { $set: { decisionNoteReadAt: readAt } },
+            )
+            : await SeminarSeatRequest.updateOne(
+                { _id: String(noticeId), customer: userId },
+                { $set: { decisionNoteReadAt: readAt } },
+            );
+
+        if (!updated?.matchedCount) {
+            return res.status(404).send("Notice not found.");
+        }
+        return res.status(200).json({ success: true });
     } catch (err) {
         console.log(err);
         return res.status(500).send(safeHttp500Message(err));
@@ -3178,6 +3296,9 @@ const acceptIndividualAppointment = async (req, res) => {
     try {
         const { userId, role } = req.user;
         const { groupChatId, payment_intent } = req.body;
+        // Only the expert's side of this endpoint carries a note; a student paying
+        // for a proposed session has nothing to tell the expert here.
+        const decisionNote = role === 'customer' ? '' : sanitizeDecisionNote(req.body.note);
 
         const groupChat = await GroupChat.findOne({ _id: String(groupChatId) });
 
@@ -3202,14 +3323,23 @@ const acceptIndividualAppointment = async (req, res) => {
             return res.status(400).send("This session has been cancelled.");
         }
 
-        const alreadyPaid = await PaymentHistory.exists({
-            groupChat: String(groupChat._id),
-            paymentType: 'charge',
-            status: { $in: ['completed', 'pending'] },
-        });
-        if (groupChat.status === 'active' || alreadyPaid) {
+        if (groupChat.status === 'active') {
             await releaseOrphanBookingIntent(payment_intent, userId, "Session is already confirmed");
-            return res.status(409).send("This session has already been confirmed and paid for. You have not been charged again.");
+            return res.status(409).send(role === 'customer'
+                ? "This session has already been confirmed and paid for. You have not been charged again."
+                : "This session has already been confirmed.");
+        }
+
+        if (role === 'customer') {
+            const alreadyPaid = await PaymentHistory.exists({
+                groupChat: String(groupChat._id),
+                paymentType: 'charge',
+                status: { $in: ['completed', 'pending'] },
+            });
+            if (alreadyPaid) {
+                await releaseOrphanBookingIntent(payment_intent, userId, "Session is already paid for");
+                return res.status(409).send("This session has already been confirmed and paid for. You have not been charged again.");
+            }
         }
 
         const startMs = groupChat.start ? new Date(groupChat.start).getTime() : 0;
@@ -3252,7 +3382,7 @@ const acceptIndividualAppointment = async (req, res) => {
         try {
             const activated = await GroupChat.findOneAndUpdate(
                 { _id: groupChat._id, status: { $ne: 'cancelled' } },
-                { $set: { status: 'active' } },
+                { $set: decisionNote ? { status: 'active', decisionNote, decisionNoteAt: new Date(), decisionNoteReadAt: null } : { status: 'active' } },
             );
             if (!activated) {
                 if (charge && held) {
@@ -3371,6 +3501,7 @@ const acceptIndividualAppointment = async (req, res) => {
                         groupChat.start,
                         groupChat.duration,
                         customerUser.timeZone,
+                        decisionNoteEmailBlock(decisionNote),
                     );
                 }
                 if (expertUser?.email) {
@@ -3709,6 +3840,15 @@ const cancelIndividualAppointment = async (req, res) => {
         const expertProposed = String(groupChat.createdBy) === expertId;
         const paidSessionMessage = "The student has already paid for this session, so it can no longer be cancelled here. Please contact an admin.";
 
+        // An expert turning down a student's request must say something the student
+        // can act on — that note is the whole point of the decline flow. Withdrawing
+        // one's own unpaid offer is not a rejection, so a note stays optional there.
+        const decisionNote = cancelledByExpert ? sanitizeDecisionNote(req.body.note) : '';
+        const decliningStudentRequest = cancelledByExpert && !expertProposed;
+        if (decliningStudentRequest && !decisionNote) {
+            return res.status(400).send("Please add a short note for the student explaining the decline.");
+        }
+
         if (groupChat.status !== 'pending') {
             if (expertProposed && cancelledByExpert && groupChat.status === 'active') {
                 return res.status(409).send(paidSessionMessage);
@@ -3723,7 +3863,7 @@ const cancelIndividualAppointment = async (req, res) => {
 
         const claimed = await GroupChat.findOneAndUpdate(
             { _id: groupChat._id, status: 'pending' },
-            { $set: { status: 'cancelled' } },
+            { $set: decisionNote ? { status: 'cancelled', decisionNote, decisionNoteAt: new Date(), decisionNoteReadAt: null } : { status: 'cancelled' } },
         );
         if (!claimed) {
             return res.status(409).send("This session has already been updated. Please refresh and try again.");
@@ -3753,6 +3893,12 @@ const cancelIndividualAppointment = async (req, res) => {
         const studentId = groupMemberIds(groupChat).find((id: string) => id !== expertId) || String(groupChat.createdBy);
         const student = await User.findById(studentId);
         const sessionName = groupChat.name || '1:1 session';
+
+        const noteBlock = decisionNoteEmailBlock(decisionNote);
+        // The note is the only channel the student has once the cancelled session
+        // drops off their dashboard, so every expert-side decline sends mail even
+        // when there was no payment to refund.
+        let studentNotified = false;
 
         let refundMessage = '';
         if (payment && payment.paymentIntent) {
@@ -3788,8 +3934,10 @@ const cancelIndividualAppointment = async (req, res) => {
                         `<h2 style="color:#007bff;margin-top:0;">Your session was cancelled</h2>
                          <p>"<strong>${sessionName}</strong>" has been cancelled${cancelledByExpert ? ' by the expert' : ''}.</p>
                          <p>Your payment of $${(Number(payment.amount || 0) / 100).toFixed(2)} has been refunded in full and will
-                            appear on your original payment method within 5–10 business days.</p>`,
+                            appear on your original payment method within 5–10 business days.</p>
+                         ${noteBlock}`,
                     );
+                    studentNotified = true;
                 }
             }
         } else if (expertProposed && cancelledByExpert && student?.email) {
@@ -3798,7 +3946,20 @@ const cancelIndividualAppointment = async (req, res) => {
                 `Session offer withdrawn — ${sessionName}`,
                 `<h2 style="color:#007bff;margin-top:0;">This session offer was withdrawn</h2>
                  <p>The expert has withdrawn the proposed session "<strong>${sessionName}</strong>" before it was paid for.</p>
-                 <p>You have not been charged. You can book another time from the expert's profile.</p>`,
+                 <p>You have not been charged. You can book another time from the expert's profile.</p>
+                 ${noteBlock}`,
+            );
+            studentNotified = true;
+        }
+
+        if (decliningStudentRequest && !studentNotified && student?.email) {
+            await sendSeminarEmail(
+                student.email,
+                `Session request declined — ${sessionName}`,
+                `<h2 style="color:#007bff;margin-top:0;">Your session request was declined</h2>
+                 <p>The expert could not take "<strong>${sessionName}</strong>" at the time you requested.
+                    You have not been charged.</p>
+                 ${noteBlock}`,
             );
         }
 
@@ -4006,6 +4167,8 @@ module.exports = {
     rejectSeminarSeatRequest,
     getSeminarSeatRequests,
     getMySeatRequests,
+    getMyDecisionNotices,
+    markDecisionNoticeRead,
     sweepExpiredSeatRequests,
     sweepPendingSeminarPayments,
     sweepOrphanedBookingIntents,

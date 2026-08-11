@@ -28,6 +28,9 @@ const seminarSeatRequestSchema = new mongoose.Schema(
             default: 'pending',
         },
         decisionDeadline: { type: Date },
+        decisionNote: { type: String, default: '' },
+        decisionNoteAt: { type: Date, default: null },
+        decisionNoteReadAt: { type: Date, default: null },
     },
     { timestamps: true }
 );

@@ -65,7 +65,7 @@ scheduleEmailReminder = async (targetEmail, userName, title,start, duration, tim
     }
 }
 
-sendEmailMeetingAcceptance = async (targetEmail, userName, title,start, duration, timeZone) => {
+sendEmailMeetingAcceptance = async (targetEmail, userName, title,start, duration, timeZone, noteHtml = '') => {
     subject = "Meeting accepted :" + title;
     const options = { timeZone: timeZone || "UTC" };
     const date = new Date(start).toLocaleString("en-US", options);
@@ -74,6 +74,7 @@ sendEmailMeetingAcceptance = async (targetEmail, userName, title,start, duration
         <p>Your meeting ${title} has been accepted.</p>
         <p>Starts at: ${date.toString()}</p>
         <p>Duration: ${duration} min</p>
+        ${noteHtml || ''}
         <p>Please log in to your account to view the details.</p>
         <p>
             <a href="${website_url}">Visit Website</a>

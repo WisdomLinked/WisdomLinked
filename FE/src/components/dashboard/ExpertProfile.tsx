@@ -19,7 +19,7 @@ import { hasResumeForPreview, resolveResumePublicUrl } from '../../utils/resumeU
 import StudentExpertBookingPicker from './StudentExpertBookingPicker';
 import StudentBookingCheckout from './StudentBookingCheckout';
 import { purposeOptionsFromServices, PURPOSE_OTHER } from '../../constants/serviceOptions';
-import { createGroupChatByUser, getExpertById, profileImageFetch, registerForSeminar } from '../../api/api';
+import { createGroupChatByUser, getExpertById, getMySeatRequests, profileImageFetch, registerForSeminar } from '../../api/api';
 import { resolveProfileImageSrc } from '../../utils/profileImage';
 import { seminarCapacityLabel } from '../../utils/seminarCapacityLabel';
 import {
@@ -323,6 +323,50 @@ export default function ExpertProfile({
     return `Professor ${mentor.name} is a ${mentor.title} focused on ${mentor.field}. With ${mentor.experience} of experience, they guide students through research and real-world preparation across 1:1 sessions and seminars.`;
   }, [mentor]);
 
+  // Seminars this student is already in. Without it the profile happily offers a
+  // second checkout for a seminar they have paid for — the backend rejects and
+  // refunds, but only after taking the money. A recurring series enrols across
+  // every occurrence, so one booked occurrence marks the whole series.
+  const myEnrollment = useMemo(() => {
+    const ids = new Set<string>();
+    const series = new Set<string>();
+    (userDetails?.groupChats || []).forEach((g: any) => {
+      if (g?.type !== 'seminar') return;
+      if (g?._id) ids.add(String(g._id));
+      if (g?.seriesId) series.add(String(g.seriesId));
+    });
+    return { ids, series };
+  }, [userDetails?.groupChats]);
+
+  // Seat requests still awaiting the host's decision — the card must not offer a
+  // second hold on top of the one already authorized.
+  const [pendingSeatRequests, setPendingSeatRequests] = useState<{
+    ids: Set<string>;
+    series: Set<string>;
+  }>(() => ({ ids: new Set(), series: new Set() }));
+
+  useEffect(() => {
+    if (!userDetails?._id) return;
+    let cancelled = false;
+    void (async () => {
+      const res: any = await getMySeatRequests();
+      if (cancelled) return;
+      const ids = new Set<string>();
+      const series = new Set<string>();
+      (Array.isArray(res?.result) ? res.result : []).forEach((r: any) => {
+        if (String(r?.status || '').toLowerCase() !== 'pending') return;
+        const seminar = r?.groupChat;
+        const id = typeof seminar === 'object' ? seminar?._id : seminar;
+        if (id) ids.add(String(id));
+        if (seminar?.seriesId) series.add(String(seminar.seriesId));
+      });
+      setPendingSeatRequests({ ids, series });
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [userDetails?._id, seminarBookingSuccessId, seminarSeatRequestedId]);
+
   // Real seminars this expert hosts come from their groupChats (type 'seminar'),
   // populated by getExpertById. Split into past/upcoming by start time.
   const seminarTimeline = useMemo(() => {
@@ -332,6 +376,9 @@ export default function ExpertProfile({
       biweekly: 'Biweekly',
       monthly: 'Monthly',
     };
+    const isMine = (g: any, ids: Set<string>, series: Set<string>) =>
+      ids.has(String(g?._id ?? '')) || (!!g?.seriesId && series.has(String(g.seriesId)));
+
     const mapSeminar = (g: any) => {
       const d = new Date(g?.start);
       const valid = !Number.isNaN(d.getTime());
@@ -355,6 +402,8 @@ export default function ExpertProfile({
         isFull: maxAttendees != null && (maxAttendees <= 0 || enrolled >= maxAttendees),
         seriesId: g?.seriesId ? String(g.seriesId) : null,
         recurrenceLabel: g?.isRecurring ? freqLabel[g?.recurrenceFrequency] ?? null : null,
+        registered: isMine(g, myEnrollment.ids, myEnrollment.series),
+        seatPending: isMine(g, pendingSeatRequests.ids, pendingSeatRequests.series),
       };
     };
 
@@ -387,7 +436,7 @@ export default function ExpertProfile({
     );
 
     return { past, upcoming };
-  }, [expertDetails?.groupChats]);
+  }, [expertDetails?.groupChats, myEnrollment, pendingSeatRequests]);
 
   const registerSeminar = useCallback(
     async (paymentIntentId: string) => {
@@ -630,7 +679,15 @@ export default function ExpertProfile({
                           {item.recurrenceLabel}
                         </span>
                       ) : null}
-                      {item.isFull && seminarBookingSuccessId !== item.id ? (
+                      {item.registered || seminarBookingSuccessId === item.id ? (
+                        <span className="ml-auto inline-flex items-center rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">
+                          Registered
+                        </span>
+                      ) : item.seatPending || seminarSeatRequestedId === item.id ? (
+                        <span className="ml-auto inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-700">
+                          Awaiting approval
+                        </span>
+                      ) : item.isFull ? (
                         <span className="ml-auto inline-flex items-center rounded-full bg-rose-100 px-2 py-0.5 text-[10px] font-semibold text-rose-700">
                           Full
                         </span>
@@ -644,9 +701,9 @@ export default function ExpertProfile({
                     </p>
                     {seminarBookingSuccessId === item.id ? (
                       <div className="mt-2 rounded-[4px] bg-emerald-50 px-3 py-2 text-[11px] font-semibold text-emerald-800">
-                        You're enrolled in this seminar.
+                        You're enrolled in this seminar{item.recurrenceLabel ? ' series' : ''}.
                       </div>
-                    ) : seminarSeatRequestedId === item.id ? (
+                    ) : item.registered ? null : item.seatPending || seminarSeatRequestedId === item.id ? (
                       <div className="mt-2 rounded-[4px] bg-amber-50 px-3 py-2 text-[11px] font-semibold text-amber-800">
                         You’re on the waiting list — awaiting host approval. Your card is authorized, not charged.
                       </div>

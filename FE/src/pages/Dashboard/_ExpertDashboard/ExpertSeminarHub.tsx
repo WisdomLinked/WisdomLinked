@@ -25,6 +25,7 @@ import { seminarCapacityLabel, seminarEnrollmentLabel } from '../../../utils/sem
 import { usePeerProfileModal } from '../../../hooks/usePeerProfileModal';
 import { canonicalLabelsFromMixedServiceEntries } from '../../../constants/serviceOptions';
 import Avatar from '../../../components/Avatar';
+import DecisionNoteField from '../../../components/dashboard/DecisionNoteField';
 import GroupParticipantsDialog from '../Messenger/Messages/GroupParticipantsDialog';
 import ExpertSeminar from './seminar';
 
@@ -276,6 +277,9 @@ function SeatRequestsPanel({ seminarId }: { seminarId: string }) {
   const [error, setError] = useState<string | null>(null);
   // Decided rows show a confirmation in place for a few seconds, then drop out.
   const [notices, setNotices] = useState<Record<string, string>>({});
+  // Per-request note the student receives with the decision.
+  const [notes, setNotes] = useState<Record<string, string>>({});
+  const [noteErrors, setNoteErrors] = useState<Record<string, string>>({});
   const noticeTimers = useRef<number[]>([]);
   useEffect(
     () => () => {
@@ -302,6 +306,15 @@ function SeatRequestsPanel({ seminarId }: { seminarId: string }) {
   }, [seminarId]);
 
   const decide = async (requestId: string, action: 'approve' | 'reject') => {
+    const note = (notes[String(requestId)] ?? '').trim();
+    // Turning a student away past capacity must come with something they can act on.
+    if (action === 'reject' && !note) {
+      setNoteErrors((prev) => ({
+        ...prev,
+        [String(requestId)]: 'Please add a short note so the student knows what to do next.',
+      }));
+      return;
+    }
     setBusyId(requestId);
     setError(null);
     const raw = requests.find((r) => String(r._id) === String(requestId));
@@ -311,8 +324,8 @@ function SeatRequestsPanel({ seminarId }: { seminarId: string }) {
     const amountLabel = cents > 0 ? `$${(cents / 100).toFixed(2)}` : '';
     try {
       const res: any = action === 'approve'
-        ? await approveSeminarSeatRequest(requestId)
-        : await rejectSeminarSeatRequest(requestId);
+        ? await approveSeminarSeatRequest(requestId, note)
+        : await rejectSeminarSeatRequest(requestId, note);
       if (res === false || res?.status === 'FAIL' || res?.error) {
         setError(res?.error || 'Could not update the seat request.');
         return;
@@ -398,6 +411,26 @@ function SeatRequestsPanel({ seminarId }: { seminarId: string }) {
                   Decide by {deadline.toLocaleString()}
                 </p>
               ) : null}
+              <div className="mt-2">
+                <DecisionNoteField
+                  id={`seat-note-${String(r._id)}`}
+                  value={notes[String(r._id)] ?? ''}
+                  onChange={(next) => {
+                    setNotes((prev) => ({ ...prev, [String(r._id)]: next }));
+                    if (next.trim()) {
+                      setNoteErrors((prev) => ({ ...prev, [String(r._id)]: '' }));
+                    }
+                  }}
+                  required
+                  disabled={busy}
+                  label="Note to the student (required to decline)"
+                />
+                {noteErrors[String(r._id)] ? (
+                  <p className="mt-1 text-[10px] font-semibold text-rose-600">
+                    {noteErrors[String(r._id)]}
+                  </p>
+                ) : null}
+              </div>
               <div className="mt-2 flex items-center gap-2">
                 <button
                   type="button"

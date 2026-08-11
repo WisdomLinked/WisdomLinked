@@ -357,9 +357,11 @@ const updateEvent = async (req, res) => {
             throw new Error("Event not found");
         }
 
-        // Check for invalid updates or constraints
-        if (event.status === 'accepted' && new Date(event.end).getTime() <= new Date().getTime()) {
-            throw new Error("Unable to update past or ongoing event");
+        // A finished event is a record of what happened, so its details are frozen
+        // whatever its status — only the post-meeting time tally may still be added.
+        const onlyTimeTally = Object.keys(updates || {}).every((key) => key === 'totalTimeSpent');
+        if (!onlyTimeTally && new Date(event.end).getTime() <= new Date().getTime()) {
+            return res.status(409).send("This appointment has already finished and can no longer be edited.");
         }
 
         if (updates.title && checkTitleNameInvalid('Title', updates.title)) {

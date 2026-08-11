@@ -41,6 +41,9 @@ const groupChatSchema = new mongoose.Schema(
             default: "seminar",
         },
         status: {type: String, enum: ["draft", "pending", "active", "cancelled"], default: 'pending'},
+        decisionNote: { type: String, default: '' },
+        decisionNoteAt: { type: Date, default: null },
+        decisionNoteReadAt: { type: Date, default: null },
         createdBy: {
             type: mongoose.Schema.Types.ObjectId,
             ref: "User",

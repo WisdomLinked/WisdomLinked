@@ -16,6 +16,7 @@ import StatsGrid from '../components/dashboard/StatsGrid';
 import CarouselSection, { type CarouselSectionData } from '../components/dashboard/CarouselSection';
 import StudentProfile from '../components/dashboard/StudentProfile';
 import StudentSettings from '../components/dashboard/StudentSettings';
+import DecisionNotices from '../components/dashboard/DecisionNotices';
 import StudentCalendar, { type Meeting as CalendarMeeting } from '../components/dashboard/StudentCalendar';
 import JoinMeeting from '../components/dashboard/JoinMeeting';
 import StudentSeminars from '../components/dashboard/StudentSeminars';
@@ -122,7 +123,7 @@ function deriveCalendarMeetings(u: any): CalendarMeeting[] {
     type: 'seminar' | 'session',
     status: 'pending' | 'confirmed',
     withLabel: string,
-    routing: Partial<Pick<CalendarMeeting, 'groupId' | 'peerUserId' | 'peerName' | 'peerImage' | 'recurrence' | 'seriesId' | 'details'>> = {},
+    routing: Partial<Pick<CalendarMeeting, 'groupId' | 'peerUserId' | 'peerName' | 'peerImage' | 'recurrence' | 'seriesId' | 'details' | 'raw'>> = {},
   ) => {
     // start may be an ISO string (Date field) or epoch ms — new Date handles both.
     const d = new Date(start);
@@ -160,6 +161,7 @@ function deriveCalendarMeetings(u: any): CalendarMeeting[] {
           recurrence: g?.isRecurring ? g?.recurrenceFrequency ?? null : null,
           seriesId: g?.seriesId ? String(g.seriesId) : null,
           details: meetingDetailsLine(g),
+          raw: g,
         },
       );
     } else if (g?.type === 'individual' && gStatus !== 'cancelled') {
@@ -177,6 +179,7 @@ function deriveCalendarMeetings(u: any): CalendarMeeting[] {
           peerName: host,
           peerImage: g?.admin?.image ?? null,
           details: meetingDetailsLine(g),
+          raw: g,
         },
       );
     }
@@ -200,6 +203,7 @@ function deriveCalendarMeetings(u: any): CalendarMeeting[] {
         peerUserId: e?.expert?._id != null ? String(e.expert._id) : undefined,
         peerName: mentor,
         peerImage: e?.expert?.image ?? null,
+        raw: e,
       },
     );
   }
@@ -1290,6 +1294,11 @@ export default function StudentDashboard() {
               >
                 Dismiss
               </button>
+            </div>
+          ) : null}
+          {activeItem !== 'chat' ? (
+            <div className="px-4 pt-3 sm:px-6">
+              <DecisionNotices />
             </div>
           ) : null}
           {activeItem === 'chat' ? (

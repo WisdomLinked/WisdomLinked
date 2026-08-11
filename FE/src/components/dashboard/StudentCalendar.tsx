@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { CalendarDays, Clock, MapPin, X, AlertCircle, Repeat } from 'lucide-react';
 import { toYMDLocal } from '../../utils/schedulingTimezone';
+import SeminarDetails from '../../pages/Dashboard/seminarDetails';
 
 const RECUR_LABEL: Record<string, string> = {
   weekly: 'Weekly',
@@ -73,6 +74,18 @@ export default function StudentCalendar({
 
   const [selectedDayDate, setSelectedDayDate] = useState<string | null>(null);
   const [showDayModal, setShowDayModal] = useState(false);
+
+  // The expert passes onSelectMeeting and renders its own detail modals. Nothing
+  // fills that role on the student side, so the calendar shows the details itself
+  // — otherwise clicking any meeting as a student does nothing at all.
+  const [detailMeeting, setDetailMeeting] = useState<Meeting | null>(null);
+  const openMeeting = (m: Meeting) => {
+    if (onSelectMeeting) {
+      onSelectMeeting(m);
+      return;
+    }
+    setDetailMeeting(m);
+  };
 
   const monthLabel = useMemo(
     () =>
@@ -419,10 +432,8 @@ export default function StudentCalendar({
                   return (
                   <div
                     key={m.id}
-                    onClick={isExpert ? () => onSelectMeeting?.(m) : undefined}
-                    className={`rounded-xl border border-slate-100 bg-slate-50 px-3 py-2 text-xs text-slate-700 ${
-                      isExpert ? 'cursor-pointer transition-colors hover:bg-slate-100' : ''
-                    }`}
+                    onClick={() => openMeeting(m)}
+                    className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-2 text-xs text-slate-700 cursor-pointer transition-colors hover:bg-slate-100"
                   >
                     <div className="flex items-center justify-between gap-2">
                       <p className="flex items-center gap-1 font-semibold text-slate-900 truncate">
@@ -477,7 +488,10 @@ export default function StudentCalendar({
                       <div className="mt-2 flex justify-end">
                         <button
                           type="button"
-                          onClick={() => onJoinMeeting?.(m)}
+                          onClick={e => {
+                            e.stopPropagation();
+                            onJoinMeeting?.(m);
+                          }}
                           className="inline-flex items-center justify-center rounded-[4px] bg-[#234C6A] px-3 py-1.5 text-[11px] font-semibold text-white hover:brightness-110 disabled:opacity-60"
                           disabled={!onJoinMeeting}
                         >
@@ -516,7 +530,10 @@ export default function StudentCalendar({
                       <button
                         key={m.id}
                         type="button"
-                        onClick={() => (isExpert ? onSelectMeeting?.(m) : setSelectedPastId(m.id))}
+                        onClick={() => {
+                          if (!isExpert) setSelectedPastId(m.id);
+                          openMeeting(m);
+                        }}
                         className={`w-full text-left rounded-xl border px-3 py-2 text-xs transition-colors ${
                           active && !isExpert
                             ? 'border-[#234C6A] bg-[#E8EEF4] text-slate-900'
@@ -632,18 +649,12 @@ export default function StudentCalendar({
                     .map(m => (
                       <div
                         key={m.id}
-                        onClick={
-                          isExpert
-                            ? () => {
-                                onSelectMeeting?.(m);
-                                setShowDayModal(false);
-                                setSelectedDayDate(null);
-                              }
-                            : undefined
-                        }
-                        className={`rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 ${
-                          isExpert ? 'cursor-pointer transition-colors hover:bg-slate-100' : ''
-                        }`}
+                        onClick={() => {
+                          openMeeting(m);
+                          setShowDayModal(false);
+                          setSelectedDayDate(null);
+                        }}
+                        className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 cursor-pointer transition-colors hover:bg-slate-100"
                       >
                         <div className="flex items-start justify-between gap-2">
                           <div className="min-w-0">
@@ -702,7 +713,10 @@ export default function StudentCalendar({
                                   <div className="mt-2">
                                     <button
                                       type="button"
-                                      onClick={() => onJoinMeeting?.(m)}
+                                      onClick={e => {
+                                        e.stopPropagation();
+                                        onJoinMeeting?.(m);
+                                      }}
                                       className="inline-flex w-full items-center justify-center rounded-[4px] bg-[#234C6A] px-3 py-1.5 text-[11px] font-semibold text-white hover:brightness-110"
                                     >
                                       {m.type === 'seminar' ? 'Join seminar chat' : 'Join chat'}
@@ -725,6 +739,96 @@ export default function StudentCalendar({
                 </div>
               )}
             </div>
+          </div>
+        </div>
+      )}
+
+      {detailMeeting && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/40 p-4"
+          onClick={e => {
+            if (e.target === e.currentTarget) setDetailMeeting(null);
+          }}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label={
+              detailMeeting.type === 'seminar' ? 'Seminar details' : 'Session details'
+            }
+            className="relative w-full max-w-md max-h-[88vh] overflow-y-auto rounded-2xl border border-slate-200 bg-white p-5 shadow-xl"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="mb-3 text-center text-lg font-semibold text-slate-900">
+              {detailMeeting.type === 'seminar' ? 'Seminar Details' : 'Session Details'}
+            </div>
+            <button
+              type="button"
+              onClick={() => setDetailMeeting(null)}
+              aria-label="Close"
+              className="absolute right-2 top-2 rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+            >
+              <X className="h-4 w-4" aria-hidden />
+            </button>
+
+            {detailMeeting.raw ? (
+              <SeminarDetails
+                title={detailMeeting.raw.name || detailMeeting.raw.title || detailMeeting.title}
+                description={detailMeeting.raw.description}
+                start={detailMeeting.raw.start}
+                duration={detailMeeting.raw.duration}
+                price={detailMeeting.raw.price}
+                admin={detailMeeting.raw.admin || detailMeeting.raw.expert}
+                participants={detailMeeting.raw.participants}
+                keywords={detailMeeting.raw.keywords}
+                services={detailMeeting.raw.services}
+                purposeOther={detailMeeting.raw.purposeOther}
+                type={detailMeeting.raw.type}
+                isRecurring={detailMeeting.raw.isRecurring}
+                recurrenceFrequency={detailMeeting.raw.recurrenceFrequency}
+                theme="light"
+              />
+            ) : (
+              // Older rows reach the calendar without their source record; show
+              // what the card itself knows rather than an empty popup.
+              <div className="space-y-2 text-xs text-slate-600">
+                <p className="text-sm font-semibold text-slate-900">{detailMeeting.title}</p>
+                <p className="flex items-center gap-2">
+                  <Clock className="h-3 w-3" aria-hidden />
+                  <span>
+                    {detailMeeting.date} · {detailMeeting.time}
+                  </span>
+                </p>
+                <p className="flex items-center gap-2">
+                  <MapPin className="h-3 w-3" aria-hidden />
+                  <span>{detailMeeting.location}</span>
+                </p>
+                <p className="text-slate-500">{detailMeeting.with}</p>
+                {detailMeeting.details ? (
+                  <p className="font-medium text-[#234C6A]">{detailMeeting.details}</p>
+                ) : null}
+              </div>
+            )}
+
+            {!isPastMeeting(detailMeeting) &&
+            !isPendingMeeting(detailMeeting) &&
+            onJoinMeeting ? (
+              <button
+                type="button"
+                onClick={() => {
+                  onJoinMeeting(detailMeeting);
+                  setDetailMeeting(null);
+                }}
+                className="mt-4 inline-flex w-full items-center justify-center rounded-[4px] bg-[#234C6A] px-3 py-2 text-xs font-semibold text-white hover:brightness-110"
+              >
+                {detailMeeting.type === 'seminar' ? 'Join seminar chat' : 'Join chat'}
+              </button>
+            ) : null}
+            {isPendingMeeting(detailMeeting) ? (
+              <p className="mt-4 rounded-[4px] bg-amber-50 px-3 py-2 text-[11px] font-medium text-amber-800">
+                Awaiting expert approval.
+              </p>
+            ) : null}
           </div>
         </div>
       )}

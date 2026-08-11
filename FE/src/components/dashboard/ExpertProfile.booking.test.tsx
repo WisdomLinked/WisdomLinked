@@ -15,6 +15,8 @@ vi.mock('../../api/api', () => ({
   getExpertById: vi.fn(),
   createGroupChatByUser: vi.fn(),
   profileImageFetch: vi.fn(async () => null),
+  getMySeatRequests: vi.fn(async () => ({ result: [] })),
+  registerForSeminar: vi.fn(),
 }));
 
 

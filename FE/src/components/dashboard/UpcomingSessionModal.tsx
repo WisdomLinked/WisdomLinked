@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Calendar, MapPin, BookOpen, UserCheck } from 'lucide-react';
 import SeminarDetails from '../../pages/Dashboard/seminarDetails';
+import DecisionNoteField from './DecisionNoteField';
 
 type SessionKind = 'seminar' | 'oneToOne';
 type SessionStatus = 'booked' | 'pending';
@@ -93,17 +94,17 @@ export default function UpcomingSessionModal({
   onViewProfile?: (session: UpcomingModalSession) => void;
   /** Expert approves an overflow seminar seat request. Resolving a string shows
    * it as a transient in-card confirmation. */
-  onAcceptSeatRequest?: (session: UpcomingModalSession) => void | Promise<void | string>;
+  onAcceptSeatRequest?: (session: UpcomingModalSession, note: string) => void | Promise<void | string>;
   /** Expert declines an overflow seminar seat request. Resolving a string shows
    * it as a transient in-card confirmation. */
-  onDeclineSeatRequest?: (session: UpcomingModalSession) => void | Promise<void | string>;
+  onDeclineSeatRequest?: (session: UpcomingModalSession, note: string) => void | Promise<void | string>;
   /** Expert accepts a pending student-initiated 1:1 request. Resolving `true`
    * shows a transient in-card confirmation before the row clears. */
-  onAcceptSession?: (session: UpcomingModalSession) => void | Promise<void | boolean>;
+  onAcceptSession?: (session: UpcomingModalSession, note: string) => void | Promise<void | boolean>;
   /** Expert declines a pending student-initiated 1:1, refunding the student. */
-  onDeclineSession?: (session: UpcomingModalSession) => void | Promise<void | boolean>;
+  onDeclineSession?: (session: UpcomingModalSession, note: string) => void | Promise<void | boolean>;
   /** Expert withdraws their own unpaid 1:1 offer. Resolving `false` leaves the row. */
-  onWithdrawSession?: (session: UpcomingModalSession) => void | Promise<void | boolean>;
+  onWithdrawSession?: (session: UpcomingModalSession, note: string) => void | Promise<void | boolean>;
   sessions: UpcomingModalSession[];
   role?: 'student' | 'expert';
 }) {
@@ -120,6 +121,21 @@ export default function UpcomingSessionModal({
   const [withdrawConfirmId, setWithdrawConfirmId] = useState<string | null>(null);
   const [declineBusyId, setDeclineBusyId] = useState<string | null>(null);
   const [declineConfirmId, setDeclineConfirmId] = useState<string | null>(null);
+  const [notes, setNotes] = useState<Record<string, string>>({});
+  const [noteErrors, setNoteErrors] = useState<Record<string, string>>({});
+  const noteFor = (id: string) => notes[id] ?? '';
+  const setNoteFor = (id: string, next: string) => {
+    setNotes(prev => ({ ...prev, [id]: next }));
+    if (next.trim()) setNoteErrors(prev => ({ ...prev, [id]: '' }));
+  };
+  const requireNote = (id: string) => {
+    if (noteFor(id).trim()) return true;
+    setNoteErrors(prev => ({
+      ...prev,
+      [id]: 'Please add a short note so the student knows what to do next.',
+    }));
+    return false;
+  };
   // Accepted 1:1 rows keep their card for a few seconds, showing a confirmation
   // in place of the session details before quietly clearing.
   const [acceptedNotices, setAcceptedNotices] = useState<
@@ -150,7 +166,7 @@ export default function UpcomingSessionModal({
     if (!onAcceptSession) return;
     setAcceptBusyId(session.id);
     try {
-      const ok = await onAcceptSession(session);
+      const ok = await onAcceptSession(session, noteFor(session.id).trim());
       if (ok === false) return;
       flashNotice(
         session,
@@ -167,7 +183,7 @@ export default function UpcomingSessionModal({
     if (!onWithdrawSession) return;
     setWithdrawBusyId(session.id);
     try {
-      const ok = await onWithdrawSession(session);
+      const ok = await onWithdrawSession(session, noteFor(session.id).trim());
       if (ok === false) return;
       setWithdrawConfirmId(null);
       flashNotice(
@@ -183,9 +199,10 @@ export default function UpcomingSessionModal({
 
   const declineSession = async (session: UpcomingModalSession) => {
     if (!onDeclineSession) return;
+    if (!requireNote(session.id)) return;
     setDeclineBusyId(session.id);
     try {
-      const ok = await onDeclineSession(session);
+      const ok = await onDeclineSession(session, noteFor(session.id).trim());
       if (ok === false) return;
       setDeclineConfirmId(null);
       flashNotice(
@@ -205,9 +222,10 @@ export default function UpcomingSessionModal({
   ) => {
     const handler = action === 'accept' ? onAcceptSeatRequest : onDeclineSeatRequest;
     if (!handler) return;
+    if (action === 'decline' && !requireNote(session.id)) return;
     setSeatBusyId(session.id);
     try {
-      const result = await handler(session);
+      const result = await handler(session, noteFor(session.id).trim());
       if (typeof result === 'string' && result) flashNotice(session, result);
     } finally {
       setSeatBusyId(null);
@@ -495,6 +513,51 @@ export default function UpcomingSessionModal({
                     )}
                   </div>
                 </div>
+                {(() => {
+                  // The note lives full-width under the row: the action column is
+                  // too narrow for a textarea, and the same field serves both the
+                  // accept and the decline branch above.
+                  const seatDecision =
+                    !showJoin &&
+                    !!session.seatRequestId &&
+                    !!(onAcceptSeatRequest || onDeclineSeatRequest);
+                  const oneToOneDecision =
+                    !showJoin && !!session.canAccept && !!onAcceptSession;
+                  const withdrawing =
+                    !showJoin &&
+                    !!session.canWithdraw &&
+                    !!onWithdrawSession &&
+                    withdrawConfirmId === session.id;
+                  if (!seatDecision && !oneToOneDecision && !withdrawing) return null;
+                  const noteRequired =
+                    (oneToOneDecision && declineConfirmId === session.id) || seatDecision;
+                  const busy =
+                    seatBusyId === session.id ||
+                    acceptBusyId === session.id ||
+                    declineBusyId === session.id ||
+                    withdrawBusyId === session.id;
+                  return (
+                    <div className="mt-3 border-t border-slate-100 pt-2.5">
+                      <DecisionNoteField
+                        id={`decision-note-${session.id}`}
+                        value={noteFor(session.id)}
+                        onChange={next => setNoteFor(session.id, next)}
+                        required={noteRequired}
+                        disabled={busy}
+                        label={
+                          noteRequired
+                            ? 'Note to the student (required to decline)'
+                            : 'Note to the student (optional)'
+                        }
+                      />
+                      {noteErrors[session.id] ? (
+                        <p className="mt-1 text-[10px] font-semibold text-rose-600">
+                          {noteErrors[session.id]}
+                        </p>
+                      ) : null}
+                    </div>
+                  );
+                })()}
               </div>
               );
             })}

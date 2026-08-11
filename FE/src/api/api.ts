@@ -426,9 +426,9 @@ export const updateGroupChat = async (details: any) => {
     }
 };
 
-export const cancelIndividualAppointment = async (groupChatId: any) => {
+export const cancelIndividualAppointment = async (groupChatId: any, note?: string) => {
     try {
-        const res = await api.post("group-chat/cancel-individual-appointment", { groupChatId });
+        const res = await api.post("group-chat/cancel-individual-appointment", { groupChatId, note });
         return res.data;
     } catch (err: any) {
         return checkForAuthorization(err);
@@ -458,6 +458,7 @@ export const acceptIndividualAppointment = async (data: any) => {
         const res = await api.post("group-chat/accept-individual-appointment", {
             groupChatId: data.groupChatId,
             payment_intent: data.payment_intent,
+            note: data.note,
         });
 
         return res.data;
@@ -519,18 +520,36 @@ export const getMySeatRequests = async () => {
     }
 };
 
-export const approveSeminarSeatRequest = async (requestId: string) => {
+export const getMyDecisionNotices = async () => {
     try {
-        const res = await api.post("group-chat/approve-seat-request", { requestId });
+        const res = await api.get("group-chat/decision-notices");
         return res.data;
     } catch (err: any) {
         return checkForAuthorization(err);
     }
 };
 
-export const rejectSeminarSeatRequest = async (requestId: string) => {
+export const markDecisionNoticeRead = async (noticeId: string, kind: 'session' | 'seat') => {
     try {
-        const res = await api.post("group-chat/reject-seat-request", { requestId });
+        const res = await api.post("group-chat/decision-notices/read", { noticeId, kind });
+        return res.data;
+    } catch (err: any) {
+        return checkForAuthorization(err);
+    }
+};
+
+export const approveSeminarSeatRequest = async (requestId: string, note?: string) => {
+    try {
+        const res = await api.post("group-chat/approve-seat-request", { requestId, note });
+        return res.data;
+    } catch (err: any) {
+        return checkForAuthorization(err);
+    }
+};
+
+export const rejectSeminarSeatRequest = async (requestId: string, note?: string) => {
+    try {
+        const res = await api.post("group-chat/reject-seat-request", { requestId, note });
         return res.data;
     } catch (err: any) {
         return checkForAuthorization(err);

@@ -21,6 +21,7 @@ import { openExpertChatWithUser } from "../../../utils/expertOpenChatWithUser";
 import { toYMDLocal } from "../../../utils/schedulingTimezone";
 import { canonicalLabelsFromMixedServiceEntries } from "../../../constants/serviceOptions";
 import { usePeerProfileModal } from "../../../hooks/usePeerProfileModal";
+import { eventIsUpcoming } from "../../../utils/eventTiming";
 
 const pad2 = (n: number) => String(n).padStart(2, "0");
 
@@ -50,6 +51,7 @@ const ExpertCalendar: React.FC = () => {
   const [selectedEvent, setSelectedEvent] = useState<any | null>(null);
   const [eventModalShow, setEventModalShow] = useState<boolean>(false);
   const [seminarModalShow, setSeminarModalShow] = useState<boolean>(false);
+  const [cancelError, setCancelError] = useState<string | null>(null);
 
   // Map the expert's events/group chats to the shared calendar's Meeting shape,
   // carrying the original record on `raw` so clicks can reopen the detail modals.
@@ -112,6 +114,7 @@ const ExpertCalendar: React.FC = () => {
   const handleSelectEvent = (event: any) => {
     if (!event) return;
     setSelectedEvent(event);
+    setCancelError(null);
     if (event.type === "event") {
       setEventModalShow(true);
     } else {
@@ -252,15 +255,18 @@ const ExpertCalendar: React.FC = () => {
     SetLoadingStatus(false);
   };
 
-  const cancelAppointment = async (id: string) => {
+   const cancelAppointment = async (id: string) => {
     SetLoadingStatus(true);
     const response = await cancelIndividualAppointment(id);
     if (response) {
       dispatch(updateMe());
       getEvents();
+      setSeminarModalShow(false);
+      setSelectedEvent(null);
+      setCancelError(null);
+    } else {
+      setCancelError("Could not withdraw this session offer. Please try again.");
     }
-    setSeminarModalShow(false);
-    setSelectedEvent(null);
     SetLoadingStatus(false);
   };
 
@@ -338,7 +344,7 @@ const ExpertCalendar: React.FC = () => {
               theme="light"
             />
 
-            {selectedEvent?.end > new Date() ? (
+            {eventIsUpcoming(selectedEvent) ? (
               selectedEvent?.paidBy === "none" ? (
                 <div className="w-full h-10 flex justify-center mt-6">
                   <button
@@ -428,23 +434,27 @@ const ExpertCalendar: React.FC = () => {
               theme="light"
             />
 
+            {cancelError ? (
+              <p className="mt-2 text-[11px] font-semibold text-rose-600">{cancelError}</p>
+            ) : null}
+
             <div className="w-full h-10 flex justify-center mt-4 space-x-4">
               <button
                 className="w-fit px-4 rounded-xl bg-[#234C6A] hover:bg-[#1b3c53] text-white flex items-center justify-center"
                 onClick={() => {
                   if (selectedEvent?.type === "individual" && selectedEvent?.status === "pending") {
-                    cancelAppointment(selectedEvent._id);
+                    void cancelAppointment(selectedEvent._id);
                   } else {
                     enterChatForSelected(selectedEvent);
                   }
                 }}
               >
-                {selectedEvent?.end > new Date()
+                {eventIsUpcoming(selectedEvent)
                   ? selectedEvent?.type === "pending seminar"
                     ? "Cancel Request"
                     : selectedEvent?.type === "individual"
                     ? selectedEvent?.status === "pending"
-                      ? "Cancel request"
+                      ? "Withdraw offer"
                       : "Enter Chat"
                     : "Enter Seminar Chat"
                   : "Chat History"}
