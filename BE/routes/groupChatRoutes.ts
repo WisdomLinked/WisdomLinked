@@ -13,6 +13,7 @@ const {
     requestSeminarSeat,
     approveSeminarSeatRequest,
     rejectSeminarSeatRequest,
+    paySeminarSeatRequest,
     getSeminarSeatRequests,
     getMySeatRequests,
     getMyDecisionNotices,
@@ -159,6 +160,13 @@ router.post(
     "/reject-seat-request",
     expertAuth(true),
     rejectSeminarSeatRequest
+);
+
+// student settles an approved wallet seat within their payment window
+router.post(
+    "/pay-seat-request",
+    requireAuth(true),
+    paySeminarSeatRequest
 );
 
 router.post(

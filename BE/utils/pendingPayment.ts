@@ -5,11 +5,16 @@ export type PendingPaymentState = {
     stillAuthorized: boolean;
     ownedByOpenSeatRequest: boolean;
     enrolled: boolean;
+    /** Wallet payment Stripe is still clearing (PaymentIntent status `processing`). */
+    settling?: boolean;
 };
 
 export function resolvePendingPayment(state: PendingPaymentState): PendingPaymentAction {
     if (state.ownedByOpenSeatRequest) return 'wait';
     if (state.captured) return state.enrolled ? 'settle' : 'refund';
+    // Money on its way from a wallet can be neither released nor refunded, and failing
+    // the row would write off a payment that is about to land. Wait for the webhook.
+    if (state.settling) return 'wait';
     if (state.stillAuthorized) return 'release';
     return 'fail';
 }

@@ -66,7 +66,7 @@ scheduleEmailReminder = async (targetEmail, userName, title,start, duration, tim
 }
 
 sendEmailMeetingAcceptance = async (targetEmail, userName, title,start, duration, timeZone, noteHtml = '') => {
-    subject = "Meeting accepted :" + title;
+    subject = "Meeting accepted: " + title;
     const options = { timeZone: timeZone || "UTC" };
     const date = new Date(start).toLocaleString("en-US", options);
     html = `
@@ -168,7 +168,7 @@ shareMeetingId = (targetEmail, name, meetingId, title) =>{
     sendNotificationEmail(targetEmail, subject, html);
 }
 
-sendPaymentConfirmationEmail = async ({ to, sessionType, sessionName, expertName, studentName, start, duration, amount, currency, receiptUrl, timeZone }) => {
+sendPaymentConfirmationEmail = async ({ to, sessionType, sessionName, expertName, studentName, start, duration, amount, currency, receiptUrl, timeZone, noteHtml = '' }) => {
     const dateStr = new Date(start).toLocaleString("en-US", {
         timeZone: timeZone || "UTC",
         weekday: "short",
@@ -208,6 +208,7 @@ sendPaymentConfirmationEmail = async ({ to, sessionType, sessionName, expertName
                         ${row("Amount paid", amountStr)}
                     </tbody>
                 </table>
+                ${noteHtml || ''}
                 ${receiptButton}
                 <p style="color: #94a3b8; font-size: 13px; line-height: 1.5; margin: 24px 0 0 0;">You can view and manage this session anytime by logging in to WisdomLinked.</p>
             </div>

@@ -9,6 +9,9 @@ const paymentController = require("../controllers/payment.controller");
 
 type Stubs = {
   refund?: (pi: string, amount: any, mode: string) => any;
+  cancelIntent?: (pi: string) => any;
+  succeeded?: () => any;
+  authorized?: () => any;
 };
 
 let stubs: Stubs = {};
@@ -22,10 +25,15 @@ stripeController.refundPaymentIntent = async (pi: string, amount: any, mode: str
   record("refund", [pi, amount, mode]);
   return stubs.refund ? stubs.refund(pi, amount, mode) : { payment_intent: pi };
 };
-stripeController.checkPaymentIntentAuthorized = async () => false;
-stripeController.checkPaymentIntentSucceeded = async () => false;
+stripeController.checkPaymentIntentAuthorized = async () =>
+  (stubs.authorized ? stubs.authorized() : false);
+stripeController.checkPaymentIntentSucceeded = async () =>
+  (stubs.succeeded ? stubs.succeeded() : false);
 stripeController.capturePaymentIntent = async () => false;
-stripeController.cancelPaymentIntent = async () => ({ status: "canceled" });
+stripeController.cancelPaymentIntent = async (pi: string) => {
+  record("cancelIntent", [pi]);
+  return stubs.cancelIntent ? stubs.cancelIntent(pi) : { status: "canceled" };
+};
 stripeController.sendBookingReceiptAndConfirmation = async () => {};
 stripeController.listReconcilableBookingIntents = async () => [];
 
@@ -97,7 +105,14 @@ const chargeRow = (overrides: any = {}) => ({
 });
 
 /** Installs the model stubs the cancel path needs; returns a restore function. */
-const withModels = ({ chat, payment, claimWins = true }: any) => {
+const parkedRow = (overrides: any = {}) => chargeRow({
+  _id: "fffffffffffffffffffffff6",
+  status: "withheld",
+  paymentIntent: "pi_held",
+  ...overrides,
+});
+
+const withModels = ({ chat, payment, parked, claimWins = true }: any) => {
   const original = {
     groupFindOne: GroupChat.findOne,
     groupFindOneAndUpdate: GroupChat.findOneAndUpdate,
@@ -129,6 +144,7 @@ const withModels = ({ chat, payment, claimWins = true }: any) => {
   };
   PaymentHistory.findOne = async (filter: any) => {
     record("historyFindOne", [filter]);
+    if (filter?.status === "withheld") return parked || null;
     return payment || null;
   };
   PaymentHistory.exists = async () => null;
@@ -252,6 +268,111 @@ test("expert declining a paid student booking refunds the student", async () => 
     assert.equal(calls.appendPaymentHistory?.[0]?.[0]?.status, "refunded");
     assert.equal(calls.historyUpdate?.[0]?.[1]?.status, "refunded");
     assert.equal(rolledBackToPending(), false);
+  } finally {
+    restore();
+  }
+});
+
+test("expert declining a held request releases the authorization instead of refunding", async () => {
+  resetCalls();
+  const restore = withModels({
+    chat: chatDoc({ createdBy: STUDENT_ID }),
+    parked: parkedRow(),
+  });
+  try {
+    const res = await cancelAs(EXPERT_ID, DECLINE_NOTE);
+
+    assert.equal(res.statusCode, 200);
+    assert.match(String(res.body), /authorization has been released/i);
+    assert.equal(calls.cancelIntent?.length, 1, "the hold is cancelled");
+    assert.equal(calls.cancelIntent?.[0]?.[0], "pi_held");
+    assert.equal(calls.refund, undefined, "no refund is issued for money never taken");
+    assert.equal(calls.historyUpdate?.[0]?.[1]?.status, "released");
+    assert.equal(
+      calls.appendPaymentHistory,
+      undefined,
+      "a released hold writes no refund row",
+    );
+    assert.equal(rolledBackToPending(), false);
+  } finally {
+    restore();
+  }
+});
+
+test("the decline email tells the student no payment was processed", async () => {
+  resetCalls();
+  const restore = withModels({
+    chat: chatDoc({ createdBy: STUDENT_ID }),
+    parked: parkedRow(),
+  });
+  try {
+    await cancelAs(EXPERT_ID, DECLINE_NOTE);
+
+    const sent = (calls.email || []).find((c: any[]) =>
+      /Appointment Request Declined/i.test(String(c[1])),
+    );
+    assert.ok(sent, "the student is emailed about the decline");
+    assert.equal(sent[0], "student@test.com");
+  } finally {
+    restore();
+  }
+});
+
+test("a hold that was already captured is refunded rather than released", async () => {
+  resetCalls();
+  const restore = withModels({
+    chat: chatDoc({ createdBy: STUDENT_ID }),
+    parked: parkedRow(),
+  });
+  try {
+    stubs.cancelIntent = () => false;
+    stubs.succeeded = () => ({ status: "succeeded" });
+
+    const res = await cancelAs(EXPERT_ID, DECLINE_NOTE);
+
+    assert.equal(res.statusCode, 200);
+    assert.match(String(res.body), /refunded/i);
+    assert.equal(calls.refund?.length, 1, "money that was taken must come back");
+    assert.equal(calls.historyUpdate?.[0]?.[1]?.status, "refunded");
+    assert.equal(calls.appendPaymentHistory?.[0]?.[0]?.paymentType, "refund");
+  } finally {
+    restore();
+  }
+});
+
+test("a hold that can be neither released nor refunded leaves the session standing", async () => {
+  resetCalls();
+  const restore = withModels({
+    chat: chatDoc({ createdBy: STUDENT_ID }),
+    parked: parkedRow(),
+  });
+  try {
+    stubs.cancelIntent = () => false;
+    stubs.succeeded = () => false;
+    stubs.authorized = () => ({ status: "requires_capture" });
+
+    const res = await cancelAs(EXPERT_ID, DECLINE_NOTE);
+
+    assert.equal(res.statusCode, 502);
+    assert.equal(rolledBackToPending(), true, "the decline does not stand");
+  } finally {
+    restore();
+  }
+});
+
+test("a student cancelling their own held request gets the authorization released", async () => {
+  resetCalls();
+  const restore = withModels({
+    chat: chatDoc({ createdBy: STUDENT_ID }),
+    parked: parkedRow(),
+  });
+  try {
+    const res = await cancelAs(STUDENT_ID);
+
+    assert.equal(res.statusCode, 200);
+    assert.equal(calls.cancelIntent?.length, 1);
+    assert.equal(calls.refund, undefined, "nothing was captured to refund");
+    assert.equal(calls.historyUpdate?.[0]?.[1]?.status, "released");
   } finally {
     restore();
   }

@@ -6,6 +6,8 @@ import {
   decisionNoticeCutoff,
   decisionNoticeExpiresAt,
   decisionNoticeIsVisible,
+  resolveSessionDecisionOutcome,
+  resolveSeatDecisionOutcome,
 } from "../utils/decisionNotice";
 
 const NOW = Date.parse("2026-08-10T12:00:00Z");
@@ -73,4 +75,63 @@ test("the expiry instant is 48 hours after the decision", () => {
 
 test("the query cutoff matches the window, so expired rows are never fetched", () => {
   assert.equal(decisionNoticeCutoff(NOW).getTime(), NOW - DECISION_NOTICE_TTL_MS);
+});
+
+test("an active session reads as accepted", () => {
+  assert.equal(
+    resolveSessionDecisionOutcome({ status: "active", expertCreated: false }),
+    "accepted",
+  );
+});
+
+test("a cancelled student request reads as declined", () => {
+  assert.equal(
+    resolveSessionDecisionOutcome({ status: "cancelled", expertCreated: false }),
+    "declined",
+  );
+});
+
+test("a cancelled expert proposal reads as withdrawn, not declined", () => {
+  assert.equal(
+    resolveSessionDecisionOutcome({ status: "cancelled", expertCreated: true }),
+    "withdrawn",
+  );
+});
+
+test("an accepted wallet session awaiting payment is not a decline", () => {
+  // The expert said yes; the booking is simply not paid for yet. Calling this
+  // 'declined' told the student the opposite of what happened.
+  assert.equal(
+    resolveSessionDecisionOutcome({
+      status: "pending",
+      expertCreated: false,
+      awaitingPayment: true,
+    }),
+    "accepted_awaiting_payment",
+  );
+});
+
+test("cancellation still wins over an unpaid window", () => {
+  assert.equal(
+    resolveSessionDecisionOutcome({
+      status: "cancelled",
+      expertCreated: false,
+      awaitingPayment: true,
+    }),
+    "declined",
+  );
+});
+
+test("a pending session with no payment window keeps the old reading", () => {
+  assert.equal(
+    resolveSessionDecisionOutcome({ status: "pending", expertCreated: false }),
+    "declined",
+  );
+});
+
+test("seat outcomes distinguish approved, awaiting payment, and rejected", () => {
+  assert.equal(resolveSeatDecisionOutcome("approved"), "accepted");
+  assert.equal(resolveSeatDecisionOutcome("awaiting_payment"), "accepted_awaiting_payment");
+  assert.equal(resolveSeatDecisionOutcome("rejected"), "declined");
+  assert.equal(resolveSeatDecisionOutcome("expired"), "declined");
 });

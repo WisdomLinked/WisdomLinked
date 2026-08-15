@@ -16,12 +16,18 @@ const record = (name: string, args: any[]) => {
 stripeController.refundPaymentIntent = async () => ({ payment_intent: "pi" });
 stripeController.checkPaymentIntentAuthorized = async () => false;
 stripeController.checkPaymentIntentSucceeded = async () => false;
-stripeController.capturePaymentIntent = async () => false;
+let captureResult: any = false;
+stripeController.capturePaymentIntent = async (pi: string) => {
+  record("capture", [pi]);
+  return captureResult;
+};
 stripeController.cancelPaymentIntent = async (pi: string) => {
   record("cancelIntent", [pi]);
   return { status: "canceled" };
 };
-stripeController.sendBookingReceiptAndConfirmation = async () => {};
+stripeController.sendBookingReceiptAndConfirmation = async (args: any) => {
+  record("receiptEmail", [args]);
+};
 stripeController.listReconcilableBookingIntents = async () => [];
 
 notifications.sendNotificationEmail = async () => {};
@@ -88,13 +94,34 @@ const studentRequest = (overrides: any = {}) => ({
   ...overrides,
 });
 
-const withModels = ({ chat, paid = true, activateWins = true }: any) => {
+const parkedHold = (overrides: any = {}) => ({
+  _id: "parked-row",
+  paymentIntent: "pi_held",
+  stripeMode: "test",
+  amount: 10000,
+  currency: "usd",
+  customer: STUDENT_ID,
+  expert: EXPERT_ID,
+  groupChat: CHAT_ID,
+  status: "withheld",
+  ...overrides,
+});
+
+const withModels = ({ chat, paid = true, activateWins = true, parked = null }: any) => {
   const original = {
     groupFindOne: GroupChat.findOne,
     groupFindOneAndUpdate: GroupChat.findOneAndUpdate,
     groupUpdateOne: GroupChat.updateOne,
     userFindById: User.findById,
     historyExists: PaymentHistory.exists,
+    historyFindOne: PaymentHistory.findOne,
+    historyFindByIdAndUpdate: PaymentHistory.findByIdAndUpdate,
+  };
+
+  PaymentHistory.findOne = async () => parked;
+  PaymentHistory.findByIdAndUpdate = async (id: any, update: any) => {
+    record("historyUpdate", [String(id), update]);
+    return { _id: id };
   };
 
   GroupChat.findOne = async () => chat;
@@ -119,6 +146,8 @@ const withModels = ({ chat, paid = true, activateWins = true }: any) => {
     GroupChat.updateOne = original.groupUpdateOne;
     User.findById = original.userFindById;
     PaymentHistory.exists = original.historyExists;
+    PaymentHistory.findOne = original.historyFindOne;
+    PaymentHistory.findByIdAndUpdate = original.historyFindByIdAndUpdate;
   };
 };
 
@@ -135,17 +164,71 @@ const acceptAs = async (userId: string, role: string, body: any = {}) => {
 
 const activatedStatus = () => calls.activate?.[0]?.[1]?.$set?.status;
 
-// The regression: a student pays up front, so the pending session already carries
-// a completed charge. Treating that as "already confirmed" made it impossible for
-// an expert to ever accept a paid 1:1 request.
-test("an expert can accept a student request that is already paid for", async () => {
+const withCapture = (result: any) => {
+  captureResult = result;
+  return () => {
+    captureResult = false;
+  };
+};
+
+const capturedIntent = {
+  status: "succeeded",
+  amount_received: 10000,
+  currency: "usd",
+  latest_charge: { receipt_url: "https://receipt", receipt_number: "R-1" },
+};
+
+test("an expert accepting a held request captures the authorization", async () => {
   resetCalls();
-  const restore = withModels({ chat: studentRequest(), paid: true });
+  const restore = withModels({ chat: studentRequest(), paid: false, parked: parkedHold() });
+  const restoreCapture = withCapture(capturedIntent);
   try {
     const res = await acceptAs(EXPERT_ID, "expert");
 
     assert.equal(res.statusCode, 200);
     assert.equal(activatedStatus(), "active");
+    assert.equal(calls.capture?.[0]?.[0], "pi_held", "the held intent is the one captured");
+    const settled = calls.historyUpdate?.find((c: any[]) => c[1]?.status === "completed");
+    assert.ok(settled, "the withheld row is settled to completed");
+    assert.equal(settled[0], "parked-row", "the existing row is settled, not a new one");
+    assert.equal(calls.appendPaymentHistory, undefined, "no duplicate charge row is written");
+  } finally {
+    restoreCapture();
+    restore();
+  }
+});
+
+test("a hold that can no longer be captured leaves the session pending", async () => {
+  resetCalls();
+  const chat = studentRequest();
+  const restore = withModels({ chat, paid: false, parked: parkedHold() });
+  const restoreCapture = withCapture(false);
+  try {
+    const res = await acceptAs(EXPERT_ID, "expert");
+
+    assert.equal(res.statusCode, 502);
+    assert.match(String(res.body), /authorization has expired|has not been confirmed/i);
+    const rolledBack = calls.groupUpdateOne?.find(
+      (c: any[]) => c[1]?.$set?.status === "pending",
+    );
+    assert.ok(rolledBack, "the session is put back to pending");
+  } finally {
+    restoreCapture();
+    restore();
+  }
+});
+
+test("an expert cannot accept once the decision deadline has passed", async () => {
+  resetCalls();
+  const chat = studentRequest({ decisionDeadline: new Date(Date.now() - 1000) });
+  const restore = withModels({ chat, paid: false, parked: parkedHold() });
+  try {
+    const res = await acceptAs(EXPERT_ID, "expert");
+
+    assert.equal(res.statusCode, 409);
+    assert.match(String(res.body), /time to decide/i);
+    assert.equal(calls.activate, undefined, "an expired request is not activated");
+    assert.equal(calls.capture, undefined, "no capture is attempted");
   } finally {
     restore();
   }
@@ -224,6 +307,49 @@ test("an expert is still told to leave their own proposal to the student", async
 
     assert.equal(res.statusCode, 403);
     assert.match(String(res.body), /must accept and pay/i);
+  } finally {
+    restore();
+  }
+});
+
+test("a paid accept sends one email: the note rides on the receipt", async () => {
+  resetCalls();
+  const restore = withModels({ chat: studentRequest(), paid: false, parked: parkedHold() });
+  const restoreCapture = withCapture(capturedIntent);
+  try {
+    await acceptAs(EXPERT_ID, "expert", { note: "See you then — bring your draft." });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    assert.equal(calls.receiptEmail?.length, 1, "the receipt is sent");
+    assert.match(
+      String(calls.receiptEmail?.[0]?.[0]?.noteHtml || ""),
+      /bring your draft/i,
+      "the expert's note travels with the receipt",
+    );
+    assert.equal(
+      calls.acceptanceEmail,
+      undefined,
+      "no second email repeating what the receipt already said",
+    );
+  } finally {
+    restoreCapture();
+    restore();
+  }
+});
+
+test("a free accept still gets its own acceptance email", async () => {
+  resetCalls();
+  const restore = withModels({ chat: studentRequest(), paid: false, parked: null });
+  try {
+    await acceptAs(EXPERT_ID, "expert", { note: "Looking forward to it." });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    assert.equal(calls.receiptEmail, undefined, "nothing was charged, so no receipt");
+    assert.match(
+      String(calls.acceptanceEmail?.[0]?.[1] || ""),
+      /looking forward/i,
+      "the student is still told, and still gets the note",
+    );
   } finally {
     restore();
   }

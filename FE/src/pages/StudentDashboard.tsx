@@ -42,6 +42,8 @@ import {
 import { patchDmUnreadRid, setDmUnreadByRidBulk } from '../actions/chatActions';
 import { canonicalLabelsFromMixedServiceEntries } from '../constants/serviceOptions';
 import { useEndMeetingOnReturn } from '../hooks/useEndMeetingOnReturn';
+import { pendingRequestIsLive } from '../utils/bookingLifecycle';
+
 function deriveSessionCounts(u: any) {
   if (!u) {
     return { bookedSem: 0, bookedInd: 0, pendInd: 0 };
@@ -54,7 +56,8 @@ function deriveSessionCounts(u: any) {
   // / legacy ones are events. Count both so the cards reflect every 1:1.
   const indChats = gcs.filter((g: any) => g.type === 'individual');
   const pendIndChats = indChats.filter(
-    (g: any) => (g.status || '').toLowerCase() === 'pending',
+    (g: any) =>
+      (g.status || '').toLowerCase() === 'pending' && pendingRequestIsLive(g),
   ).length;
   const bookedIndChats = indChats.filter(
     (g: any) => (g.status || '').toLowerCase() === 'active',
@@ -280,7 +283,11 @@ function deriveModalSessions(
   const fromChats = (u.groupChats || [])
     .filter(
       (g: any) =>
-        g?.type === 'individual' && indChatWanted((g?.status || '').toLowerCase()),
+        g?.type === 'individual' &&
+        indChatWanted((g?.status || '').toLowerCase()) &&
+        // A request whose session time has passed can no longer be accepted or paid
+        // for, so listing it as awaiting approval promises a decision that can't come.
+        (status !== 'pending' || pendingRequestIsLive(g)),
     )
     .map((g: any) => {
       const at = new Date(g?.start).getTime();
@@ -288,8 +295,16 @@ function deriveModalSessions(
       // payment; student-booked ones (createdBy = me) await the mentor's approval.
       const createdById = String(g?.createdBy?._id ?? g?.createdBy ?? '');
       const expired = !Number.isNaN(at) && at > 0 && at <= Date.now();
+      // A wallet 1:1 the student booked is theirs to pay for once the expert accepts,
+      // which is the moment a payment deadline appears on it.
+      const walletWindowOpen =
+        g?.paymentMode === 'wallet' &&
+        !!g?.paymentDeadline &&
+        new Date(g.paymentDeadline).getTime() > Date.now();
       const payable =
-        status === 'pending' && createdById !== '' && createdById !== myId && !expired;
+        status === 'pending' &&
+        !expired &&
+        ((createdById !== '' && createdById !== myId) || walletWindowOpen);
       const mentor = g?.admin?.username || g?.admin?.email || 'Your mentor';
       const price = typeof g?.price === 'number' ? g.price : undefined;
       return {
@@ -302,6 +317,7 @@ function deriveModalSessions(
         peerUserId: String(g?.admin?._id ?? g?.admin ?? ''),
         payable,
         price,
+        paymentMode: g?.paymentMode,
         detail: {
           title: g?.name || '1:1 session',
           description: g?.description,
@@ -519,7 +535,12 @@ export default function StudentDashboard() {
       navigate({ pathname: location.pathname, search: '' }, { replace: true });
     };
 
-    if (redirect_status === 'succeeded' && payment_intent) {
+    // WeChat Pay and Alipay come back as 'pending' while Stripe clears the funds. The
+    // student has paid, so the booking is completed on both — never treat pending as a
+    // failure, which would discard the recovery state after taking their money.
+    const paidOrClearing = redirect_status === 'succeeded' || redirect_status === 'pending';
+
+    if (paidOrClearing && payment_intent) {
       let cancelled = false;
       (async () => {
         const attemptsKey = `wl_booking_attempts_${payment_intent}`;
@@ -582,7 +603,9 @@ export default function StudentDashboard() {
       };
     }
 
-    if (redirect_status && redirect_status !== 'succeeded') {
+    // Only a genuinely failed payment discards the booking. Anything still clearing was
+    // handled above, so reaching here means Stripe reported the payment did not go through.
+    if (redirect_status && !paidOrClearing) {
       window.localStorage.removeItem('pendingDetails');
       clearBookingQuery();
       setBookingReturnError('Payment was not completed. Please try again.');
@@ -659,8 +682,18 @@ export default function StudentDashboard() {
     void loadMySeatRequests();
   }, [userDetails?.role, userDetails?._id, loadMySeatRequests]);
 
+  // Still in play: waiting on the host, or approved and waiting on the student's wallet
+  // payment. Both belong on the "Pending seminars" card.
   const pendingSeatRequests = useMemo(
-    () => mySeatRequests.filter((r: any) => (r?.status || '').toLowerCase() === 'pending'),
+    () =>
+      mySeatRequests.filter((r: any) => {
+        const status = (r?.status || '').toLowerCase();
+        if (status === 'pending') return true;
+        return (
+          status === 'awaiting_payment' &&
+          (!r?.paymentDeadline || new Date(r.paymentDeadline).getTime() > Date.now())
+        );
+      }),
     [mySeatRequests],
   );
 
@@ -675,16 +708,28 @@ export default function StudentDashboard() {
               timeStyle: 'short',
             })
           : '—';
-        const metaLines: string[] = ['Awaiting host approval'];
-        if (typeof r?.amount === 'number' && r.amount > 0) {
-          metaLines.push(`$${(r.amount / 100).toFixed(2)} on hold`);
+        const awaitingPayment = (r?.status || '').toLowerCase() === 'awaiting_payment';
+        const amountDollars = typeof r?.amount === 'number' ? r.amount / 100 : 0;
+        const metaLines: string[] = [
+          awaitingPayment ? 'Approved — payment needed' : 'Awaiting host approval',
+        ];
+        if (amountDollars > 0) {
+          metaLines.push(
+            awaitingPayment
+              ? `$${amountDollars.toFixed(2)} due`
+              : `$${amountDollars.toFixed(2)} on hold`,
+          );
         }
-        if (r?.decisionDeadline) {
+        if (awaitingPayment && r?.paymentDeadline) {
+          metaLines.push(`Pay by ${new Date(r.paymentDeadline).toLocaleString()}`);
+        } else if (r?.decisionDeadline) {
           metaLines.push(`Decision by ${new Date(r.decisionDeadline).toLocaleString()}`);
         }
         const host = seminar?.admin;
         return {
           id: String(r._id),
+          payable: awaitingPayment,
+          price: amountDollars > 0 ? amountDollars : undefined,
           title: seminar?.name || 'Seminar',
           at: start,
           when,
@@ -713,6 +758,15 @@ export default function StudentDashboard() {
     [pendingSeatRequests],
   );
   const [payTarget, setPayTarget] = useState<{
+    groupChatId: string;
+    price: number;
+    name: string;
+    /** Wallet bookings skipped the card hold, so they settle by wallet only. */
+    walletOnly?: boolean;
+  } | null>(null);
+  /** Settling an approved overflow seat (wallet) — keyed by seat request, not session. */
+  const [seatPayTarget, setSeatPayTarget] = useState<{
+    requestId: string;
     groupChatId: string;
     price: number;
     name: string;
@@ -1298,7 +1352,26 @@ export default function StudentDashboard() {
           ) : null}
           {activeItem !== 'chat' ? (
             <div className="px-4 pt-3 sm:px-6">
-              <DecisionNotices />
+              <DecisionNotices
+                onPay={(notice) => {
+                  if (notice.kind === 'seat') {
+                    setSeatPayTarget({
+                      requestId: notice.id,
+                      groupChatId: String(notice.groupChatId ?? ''),
+                      price: typeof notice.price === 'number' ? notice.price : 0,
+                      name: notice.title,
+                    });
+                    return;
+                  }
+                  setPayTarget({
+                    groupChatId: notice.id,
+                    price: typeof notice.price === 'number' ? notice.price : 0,
+                    name: notice.title,
+                    // Only a wallet booking is ever awaiting payment after acceptance.
+                    walletOnly: true,
+                  });
+                }}
+              />
             </div>
           ) : null}
           {activeItem === 'chat' ? (
@@ -1464,10 +1537,22 @@ export default function StudentDashboard() {
             onViewProfile={handleViewPeerProfile}
             onPay={(session) => {
               setUpcomingModal(null);
+              // Seat requests are listed by request id, so they settle on their own route.
+              const seat = mySeatRequests.find((r: any) => String(r?._id) === session.id);
+              if (seat) {
+                setSeatPayTarget({
+                  requestId: String(seat._id),
+                  groupChatId: String(seat.groupChat?._id ?? seat.groupChat ?? ''),
+                  price: typeof seat.amount === 'number' ? seat.amount / 100 : 0,
+                  name: seat.groupChat?.name || session.title,
+                });
+                return;
+              }
               setPayTarget({
                 groupChatId: session.id,
                 price: typeof session.price === 'number' ? session.price : 0,
                 name: session.title,
+                walletOnly: session.paymentMode === 'wallet',
               });
             }}
           />
@@ -1504,6 +1589,9 @@ export default function StudentDashboard() {
                   price: payTarget.price,
                   name: payTarget.name,
                 }}
+                // The expert is already committed here, so a wallet can settle outright.
+                // A booking requested by wallet stays wallet-only (it skipped the hold).
+                walletOption={{ kind: 'charge', only: payTarget.walletOnly }}
                 returnUrl={(() => {
                   try {
                     const url = new URL(window.location.href);
@@ -1531,6 +1619,64 @@ export default function StudentDashboard() {
                   setPaySuccessToast(true);
                 }}
                 onCancel={() => setPayTarget(null)}
+              />
+            </div>
+          </div>
+        )}
+        {seatPayTarget && (
+          <div
+            className="fixed inset-0 z-[60] flex items-center justify-center overflow-y-auto bg-[#1A3A4A]/40 p-4 backdrop-blur-sm"
+            onClick={(e) => {
+              if (e.target === e.currentTarget) setSeatPayTarget(null);
+            }}
+          >
+            <div className="my-auto w-full max-w-2xl" onClick={(e) => e.stopPropagation()}>
+              <StudentBookingCheckout
+                type="Seminar seat"
+                price={seatPayTarget.price}
+                policyNotice={{
+                  message:
+                    'Paying claims your approved seat immediately. It cannot be cancelled and the payment is not refundable.',
+                  acknowledgeLabel: 'I understand this payment is non-refundable.',
+                }}
+                pendingDetails={{
+                  kind: 'pay-seat-request',
+                  requestId: seatPayTarget.requestId,
+                  groupChatId: seatPayTarget.groupChatId,
+                  price: seatPayTarget.price,
+                  name: seatPayTarget.name,
+                }}
+                // Approved without a hold, so it settles in the mode it was requested in.
+                walletOption={{ kind: 'charge', only: true }}
+                returnUrl={(() => {
+                  try {
+                    const url = new URL(window.location.href);
+                    url.search = '';
+                    url.searchParams.set('student_booking', '1');
+                    return url.toString();
+                  } catch {
+                    return '/user/studentdashboard?student_booking=1';
+                  }
+                })()}
+                onPaymentSuccess={async (paymentIntentId) => {
+                  const { paySeminarSeatRequest } = await import('../api/api');
+                  const response = await paySeminarSeatRequest({
+                    requestId: seatPayTarget.requestId,
+                    payment_intent: paymentIntentId,
+                  });
+                  setSeatPayTarget(null);
+                  if (response === false || response?.status === 'FAIL' || response?.error) {
+                    setBookingReturnError(
+                      response?.error || 'Could not confirm your seat after payment.',
+                    );
+                    return;
+                  }
+                  window.localStorage.removeItem('pendingDetails');
+                  dispatch(updateMe());
+                  void loadMySeatRequests();
+                  setPaySuccessToast(true);
+                }}
+                onCancel={() => setSeatPayTarget(null)}
               />
             </div>
           </div>

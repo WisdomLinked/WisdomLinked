@@ -137,9 +137,13 @@ const filterPaymentHistories = async (req, res) => {
             }
             query.where({ [user.role]: user._id.toString() })
             countQuery.where({ [user.role]: user._id.toString() })
-        } else {
-            query.populate(['expert', 'customer'])
         }
+
+        query.populate([
+            { path: 'expert', select: 'username email role' },
+            { path: 'customer', select: 'username email role' },
+            { path: 'groupChat', select: 'type name status' },
+        ])
 
         if (stripeMode) {
             query.where({ stripeMode: String(stripeMode) })

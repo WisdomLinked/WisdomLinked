@@ -17,6 +17,8 @@ export type UpcomingModalSession = {
   /** Pending 1:1 the student must pay to confirm (expert-proposed). */
   payable?: boolean;
   price?: number;
+  /** How this booking must be paid — 'wallet' bookings cannot settle by card. */
+  paymentMode?: string;
   peerUserId?: string;
   /** Optional per-session detail rows shown behind a button (expert: student
    * background; student: their own booking details). */
@@ -136,8 +138,6 @@ export default function UpcomingSessionModal({
     }));
     return false;
   };
-  // Accepted 1:1 rows keep their card for a few seconds, showing a confirmation
-  // in place of the session details before quietly clearing.
   const [acceptedNotices, setAcceptedNotices] = useState<
     Record<string, { message: string; session: UpcomingModalSession }>
   >({});
@@ -209,7 +209,7 @@ export default function UpcomingSessionModal({
         session,
         `${session.with || 'The student'}'s request${
           session.title ? ` for “${session.title}”` : ''
-        } was declined and their payment refunded in full.`,
+        } was declined and their payment authorization released. They were not charged.`,
       );
     } finally {
       setDeclineBusyId(null);
@@ -447,7 +447,7 @@ export default function UpcomingSessionModal({
                             onClick={() => declineSession(session)}
                             className="rounded-lg bg-rose-600 px-3 py-1.5 text-[11px] font-semibold text-white hover:bg-rose-700 disabled:opacity-60"
                           >
-                            {declineBusyId === session.id ? 'Declining…' : 'Refund & decline'}
+                            {declineBusyId === session.id ? 'Declining…' : 'Release & decline'}
                           </button>
                         </div>
                       ) : (
@@ -514,9 +514,6 @@ export default function UpcomingSessionModal({
                   </div>
                 </div>
                 {(() => {
-                  // The note lives full-width under the row: the action column is
-                  // too narrow for a textarea, and the same field serves both the
-                  // accept and the decline branch above.
                   const seatDecision =
                     !showJoin &&
                     !!session.seatRequestId &&

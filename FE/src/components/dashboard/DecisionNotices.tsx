@@ -5,15 +5,20 @@ import { getMyDecisionNotices, markDecisionNoticeRead } from '../../api/api';
 export type DecisionNotice = {
   id: string;
   kind: 'session' | 'seat';
-  outcome: 'accepted' | 'declined' | 'withdrawn';
+  outcome: 'accepted' | 'accepted_awaiting_payment' | 'declined' | 'withdrawn';
   title: string;
   note: string;
   decidedAt: string;
+  /** Set only while payment is owed, so the notice can offer to collect it. */
+  price?: number | null;
+  payBy?: string | null;
+  groupChatId?: string | null;
   expertName?: string | null;
 };
 
 const HEADLINE: Record<DecisionNotice['outcome'], string> = {
   accepted: 'accepted',
+  accepted_awaiting_payment: 'accepted',
   declined: 'declined',
   withdrawn: 'withdrew',
 };
@@ -29,7 +34,13 @@ const hoursLeft = (decidedAt: string) => {
  * returns notices inside the 48-hour window, and dismissing one marks it read so
  * it never comes back — email remains the durable copy.
  */
-export default function DecisionNotices({ enabled = true }: { enabled?: boolean }) {
+export default function DecisionNotices({
+  enabled = true,
+  onPay,
+}: {
+  enabled?: boolean;
+  onPay?: (notice: DecisionNotice) => void;
+}) {
   const [notices, setNotices] = useState<DecisionNotice[]>([]);
 
   const load = useCallback(async () => {
@@ -52,7 +63,8 @@ export default function DecisionNotices({ enabled = true }: { enabled?: boolean 
   return (
     <section className="space-y-2" aria-label="Responses from experts">
       {notices.map(notice => {
-        const accepted = notice.outcome === 'accepted';
+        const awaitingPayment = notice.outcome === 'accepted_awaiting_payment';
+        const accepted = notice.outcome === 'accepted' || awaitingPayment;
         const who = notice.expertName || 'The expert';
         const what = notice.kind === 'seat' ? 'seminar seat request' : '1:1 request';
         const remaining = hoursLeft(notice.decidedAt);
@@ -80,6 +92,28 @@ export default function DecisionNotices({ enabled = true }: { enabled?: boolean 
                 {notice.title ? ` for “${notice.title}”` : ''}.
               </p>
               <p className="mt-1 whitespace-pre-line text-[12px] text-slate-700">{notice.note}</p>
+              {awaitingPayment ? (
+                <div className="mt-2">
+                  <p className="text-[12px] font-medium text-emerald-900">
+                    Pay
+                    {typeof notice.price === 'number' ? ` $${notice.price}` : ''} with WeChat Pay or
+                    Alipay to confirm it
+                    {notice.payBy
+                      ? ` by ${new Date(notice.payBy).toLocaleString()}`
+                      : ''}
+                    .
+                  </p>
+                  {onPay ? (
+                    <button
+                      type="button"
+                      onClick={() => onPay(notice)}
+                      className="mt-2 rounded-[4px] bg-[#1A3A4A] px-3 py-1.5 text-[12px] font-semibold text-white hover:bg-[#122635]"
+                    >
+                      Pay now
+                    </button>
+                  ) : null}
+                </div>
+              ) : null}
               <p className="mt-1 text-[10px] text-slate-500">
                 Also sent to your email
                 {remaining > 0 ? ` · this message clears in ${remaining}h` : ''}

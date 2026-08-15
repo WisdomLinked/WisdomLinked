@@ -31,6 +31,19 @@ test('an intent that is neither captured nor held has failed', () => {
     assert.equal(resolvePendingPayment(state()), 'fail');
 });
 
+test('a wallet payment still clearing waits instead of being written off', () => {
+    // WeChat Pay / Alipay sit in `processing`: not captured and not authorized, which
+    // would otherwise read as failure and discard money that is about to land.
+    assert.equal(resolvePendingPayment(state({ settling: true })), 'wait');
+});
+
+test('a cleared wallet payment settles once it is captured', () => {
+    assert.equal(
+        resolvePendingPayment(state({ settling: false, captured: true, enrolled: true })),
+        'settle',
+    );
+});
+
 const orphan = (over: Partial<Parameters<typeof resolveOrphanedIntent>[0]> = {}) => ({
     status: 'requires_capture',
     recorded: false,

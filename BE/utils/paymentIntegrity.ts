@@ -10,11 +10,14 @@ export type BookingChargeState = {
     hasPendingCharge: boolean;
     /** The charge was refunded but the student still holds the seat. */
     hasRefundedCharge: boolean;
+    /** Funds are authorized and waiting on the expert's decision. */
+    hasWithheldCharge: boolean;
 };
 
 export type BookingPaymentVerdict =
     | 'free'          // nothing was owed
     | 'paid'          // money captured and recorded
+    | 'withheld'      // authorized, not captured, awaiting the expert's decision
     | 'in_flight'     // a capture is in progress; the sweep will settle it
     | 'refunded'      // paid then refunded, yet access remains — needs review
     | 'unpaid';       // access with no money behind it — the revenue-loss case
@@ -22,6 +25,7 @@ export type BookingPaymentVerdict =
 export function classifyBookingPayment(state: BookingChargeState): BookingPaymentVerdict {
     if (!(state.priceCents > 0)) return 'free';
     if (state.hasCompletedCharge) return 'paid';
+    if (state.hasWithheldCharge) return 'withheld';
     if (state.hasPendingCharge) return 'in_flight';
     if (state.hasRefundedCharge) return 'refunded';
     return 'unpaid';
@@ -37,7 +41,7 @@ export function isActionable(verdict: BookingPaymentVerdict): boolean {
 export type IntegritySummary = Record<BookingPaymentVerdict, number>;
 
 export function summarizeVerdicts(verdicts: BookingPaymentVerdict[]): IntegritySummary {
-    const summary: IntegritySummary = { free: 0, paid: 0, in_flight: 0, refunded: 0, unpaid: 0 };
+    const summary: IntegritySummary = { free: 0, paid: 0, withheld: 0, in_flight: 0, refunded: 0, unpaid: 0 };
     for (const verdict of verdicts) summary[verdict] += 1;
     return summary;
 }
@@ -51,10 +55,12 @@ export function foldChargeRows(rows: Array<{ status?: string }>): Omit<BookingCh
     let hasCompletedCharge = false;
     let hasPendingCharge = false;
     let hasRefundedCharge = false;
+    let hasWithheldCharge = false;
     for (const row of rows || []) {
         if (row?.status === 'completed') hasCompletedCharge = true;
+        else if (row?.status === 'withheld') hasWithheldCharge = true;
         else if (row?.status === 'pending') hasPendingCharge = true;
         else if (row?.status === 'refunded') hasRefundedCharge = true;
     }
-    return { hasCompletedCharge, hasPendingCharge, hasRefundedCharge };
+    return { hasCompletedCharge, hasPendingCharge, hasRefundedCharge, hasWithheldCharge };
 }

@@ -485,6 +485,21 @@ export const requestSeminarSeat = async (data: any) => {
         const res = await api.post("group-chat/request-seminar-seat", {
             groupChatId: data.groupChatId,
             payment_intent: data.payment_intent,
+            paymentMode: data.paymentMode,
+        });
+
+        return res.data;
+    } catch (err: any) {
+        return checkForAuthorization(err);
+    }
+};
+
+/** Settle an overflow seat the host approved, paid by WeChat Pay / Alipay. */
+export const paySeminarSeatRequest = async (data: any) => {
+    try {
+        const res = await api.post("group-chat/pay-seat-request", {
+            requestId: data.requestId,
+            payment_intent: data.payment_intent,
         });
 
         return res.data;
@@ -801,6 +816,15 @@ export const setStripeMode = async ({ stripeMode }: any) => {
 export const setSeminarApprovalDeadline = async (seminarApprovalDeadlineHours: number) => {
     try {
         const res = await api.post("admin/setSeminarApprovalDeadline", { seminarApprovalDeadlineHours });
+        return res.data;
+    } catch (err: any) {
+        return checkForAuthorization(err);
+    }
+}
+
+export const setWalletPaymentWindow = async (walletPaymentWindowHours: number) => {
+    try {
+        const res = await api.post("admin/setWalletPaymentWindow", { walletPaymentWindowHours });
         return res.data;
     } catch (err: any) {
         return checkForAuthorization(err);

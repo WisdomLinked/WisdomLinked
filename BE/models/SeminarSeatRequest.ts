@@ -24,9 +24,11 @@ const seminarSeatRequestSchema = new mongoose.Schema(
         currency: { type: String, default: 'usd' },
         status: {
             type: String,
-            enum: ['pending', 'approved', 'rejected', 'expired', 'failed'],
+            enum: ['pending', 'awaiting_payment', 'approved', 'rejected', 'expired', 'failed'],
             default: 'pending',
         },
+        paymentMode: { type: String, enum: ['card', 'wallet'], default: 'card' },
+        paymentDeadline: { type: Date },
         decisionDeadline: { type: Date },
         decisionNote: { type: String, default: '' },
         decisionNoteAt: { type: Date, default: null },
@@ -44,6 +46,18 @@ seminarSeatRequestSchema.index(
         unique: true,
         partialFilterExpression: { status: 'pending' },
         name: 'uniq_pending_seat_request_per_student',
+    },
+);
+
+// A wallet request that the host approved sits in awaiting_payment until the student
+// pays. Only equality filters are allowed in a unique partial index, so this is a
+// second index rather than an $in on the one above.
+seminarSeatRequestSchema.index(
+    { customer: 1, groupChat: 1 },
+    {
+        unique: true,
+        partialFilterExpression: { status: 'awaiting_payment' },
+        name: 'uniq_awaiting_payment_seat_request_per_student',
     },
 );
 

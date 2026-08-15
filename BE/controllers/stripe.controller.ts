@@ -3,6 +3,17 @@ import { BOOKING_PAYMENT_AMOUNT_INVALID } from '../utils/bookingUserFacingCopy';
 import { HTTP_GENERIC_ERROR, safeErrorMessage } from '../utils/httpUserFacingCopy';
 import { expectedBookingIntentCents, extractHourlyRate } from '../utils/bookingPrice';
 import { seminarIsFull, firstFullFutureOccurrence, seatRequestUnavailableMessage } from '../utils/seminarCapacity';
+import {
+    normalizePaymentMode,
+    isWallet,
+    pinnedSettlementMode,
+    walletChargeAllowed,
+    walletWindowLapsed,
+    WALLET_PAYMENT_METHOD_TYPES,
+    WALLET_NEEDS_APPROVAL_MESSAGE,
+    WALLET_NOT_YET_PAYABLE,
+    walletWindowHours,
+} from '../utils/walletPayment';
 
 const stripeTest = require('stripe')(process.env.STRIPE_SECRET_KEY_TEST);
 const stripeLive = require('stripe')(process.env.STRIPE_SECRET_KEY_LIVE);
@@ -37,16 +48,46 @@ const stripePay = async (req, res) => {
 
 const createStripePaymentIntent = async (req, res) => {
     try {
-        const { groupChatId, expertId, duration } = req.body
+        const { groupChatId, expertId, duration, seatRequestId } = req.body
         const payerId = req.user?.userId ? String(req.user.userId) : '';
         const appState = await AppState.findOne();
         const stripeMode = appState?.stripeMode === 'live' ? 'live' : 'test';
+        // The client's choice is only a request: for a booking already taken through the
+        // wallet path, the stored mode is pinned over it (see pinnedSettlementMode).
+        let paymentMode = normalizePaymentMode(req.body.paymentMethod);
+        let wallet = paymentMode === 'wallet';
 
         let expectedCents: number;
         let metadata: Record<string, string>;
         let manualCapture = false;
         let requiresApproval = false;
-        if (groupChatId) {
+        if (seatRequestId) {
+            // Paying for an overflow seat the host already approved. Nothing was ever
+            // held here, so the amount comes from the snapshot taken at approval.
+            const SeminarSeatRequest = require("../models/SeminarSeatRequest");
+            const request = await SeminarSeatRequest.findById(String(seatRequestId));
+            if (!request || String(request.customer) !== payerId) {
+                return res.status(404).send({ error: 'Seat request not found.' });
+            }
+            if (request.status !== 'awaiting_payment') {
+                return res.status(409).send({ error: WALLET_NOT_YET_PAYABLE });
+            }
+            if (walletWindowLapsed(request.paymentDeadline)) {
+                return res.status(410).send({ error: 'The payment window for this seat has closed.' });
+            }
+            // This seat was requested without a hold, so it settles in the mode it was
+            // requested under — paying by card here would be an opt-out of the deposit
+            // every other student going through the card path has to make.
+            paymentMode = pinnedSettlementMode(request.paymentMode);
+            wallet = paymentMode === 'wallet';
+            expectedCents = Number(request.amount) || 0;
+            metadata = {
+                bookingType: 'groupChat',
+                groupChatId: String(request.groupChat),
+                seatRequestId: String(request._id),
+                userId: payerId,
+            };
+        } else if (groupChatId) {
             const groupChat = await GroupChat.findById(String(groupChatId));
             if (!groupChat) {
                 return res.status(404).send(BOOKING_PAYMENT_AMOUNT_INVALID);
@@ -67,7 +108,7 @@ const createStripePaymentIntent = async (req, res) => {
                 const alreadyPaid = await PaymentHistory.exists({
                     groupChat: String(groupChat._id),
                     paymentType: 'charge',
-                    status: { $in: ['completed', 'pending'] },
+                    status: { $in: ['completed', 'pending', 'withheld'] },
                 });
                 if (groupChat.status === 'active' || alreadyPaid) {
                     return res.status(409).send({ error: 'This session has already been paid for.' });
@@ -76,8 +117,27 @@ const createStripePaymentIntent = async (req, res) => {
                 if (startMs && startMs <= Date.now()) {
                     return res.status(400).send({ error: "This session's start time has already passed." });
                 }
-                // Hold the funds; they are captured only once the session is active.
-                manualCapture = true;
+                // A session requested via the wallet path carries no hold, so it settles
+                // in that same mode — otherwise the wallet tab is just a way to book an
+                // expert's time without committing anything.
+                if (isWallet(groupChat.paymentMode)) {
+                    paymentMode = 'wallet';
+                    wallet = true;
+                }
+
+                if (wallet) {
+                    const expertProposed = String(groupChat.createdBy) === String(groupChat.admin);
+                    const accepted = !!groupChat.paymentDeadline || expertProposed;
+                    if (!walletChargeAllowed({ flow: 'oneToOne', approved: accepted })) {
+                        return res.status(409).send({ error: WALLET_NOT_YET_PAYABLE });
+                    }
+                    if (walletWindowLapsed(groupChat.paymentDeadline)) {
+                        return res.status(410).send({ error: 'The payment window for this session has closed.' });
+                    }
+                } else {
+                    // Hold the funds; they are captured only once the session is active.
+                    manualCapture = true;
+                }
             }
 
             if (groupChat.type === 'seminar') {
@@ -102,6 +162,9 @@ const createStripePaymentIntent = async (req, res) => {
                     if (unavailable) {
                         return res.status(400).send({ error: unavailable });
                     }
+                    if (wallet) {
+                        return res.status(409).send({ error: WALLET_NEEDS_APPROVAL_MESSAGE });
+                    }
                     manualCapture = true;
                     requiresApproval = true;
                     metadata.seatRequest = 'true';
@@ -122,13 +185,17 @@ const createStripePaymentIntent = async (req, res) => {
                     } catch (leadErr) {
                         return res.status(400).send({ error: leadErr.message || 'This seminar can no longer be booked.' });
                     }
-                    manualCapture = true;
+                    if (!wallet) manualCapture = true;
                 }
             }
         } else {
             const expertUser = await User.findById(String(expertId));
             if (!expertUser) {
                 return res.status(404).send(BOOKING_PAYMENT_AMOUNT_INVALID);
+            }
+            // A brand-new 1:1 still needs the expert's yes, which a wallet cannot wait on.
+            if (wallet) {
+                return res.status(409).send({ error: WALLET_NEEDS_APPROVAL_MESSAGE });
             }
             expectedCents = expectedBookingIntentCents({ kind: 'oneToOne', durationMinutes: Number(duration), hourlyRateDollars: extractHourlyRate(expertUser.price) });
             metadata = { bookingType: 'oneToOne', expertId: String(expertUser._id), duration: String(duration), userId: payerId };
@@ -143,14 +210,20 @@ const createStripePaymentIntent = async (req, res) => {
         const paymentIntent = await stripe.paymentIntents.create({
             amount: expectedCents,
             currency: 'usd',
-            automatic_payment_methods: { enabled: true },
+            ...(wallet
+                ? {
+                    payment_method_types: WALLET_PAYMENT_METHOD_TYPES,
+                    payment_method_options: { wechat_pay: { client: 'web' } },
+                }
+                : { automatic_payment_methods: { enabled: true } }),
             ...(manualCapture ? { capture_method: 'manual' } : {}),
-            metadata,
+            metadata: { ...metadata, paymentMode },
         });
         res.send({
             client_secret: paymentIntent.client_secret,
             requiresApproval,
             holdsFunds: manualCapture,
+            paymentMode,
         });
     } catch (err) {
         console.log(err);
@@ -191,6 +264,7 @@ const getStripeMode = async (req, res) => {
         res.send({
             stripeMode: appState.stripeMode,
             seminarApprovalDeadlineHours: appState.seminarApprovalDeadlineHours ?? 24,
+            walletPaymentWindowHours: walletWindowHours(appState),
         });
     } catch (err) {
         console.log(err);
@@ -212,6 +286,26 @@ const setSeminarApprovalDeadline = async (req, res) => {
             await appState.save();
         }
         res.send({ result: 'SUCCESS', seminarApprovalDeadlineHours: appState.seminarApprovalDeadlineHours });
+    } catch (err) {
+        console.log(err);
+        return res.status(500).send(HTTP_GENERIC_ERROR);
+    }
+};
+
+const setWalletPaymentWindow = async (req, res) => {
+    try {
+        const hours = Number(req.body.walletPaymentWindowHours);
+        if (!Number.isFinite(hours) || hours <= 0 || hours > 168) {
+            return res.status(400).send({ error: 'The payment window must be between 1 and 168 hours.' });
+        }
+        let appState = await AppState.findOne();
+        if (!appState) {
+            appState = await AppState.create({ walletPaymentWindowHours: hours });
+        } else {
+            appState.walletPaymentWindowHours = hours;
+            await appState.save();
+        }
+        res.send({ result: 'SUCCESS', walletPaymentWindowHours: appState.walletPaymentWindowHours });
     } catch (err) {
         console.log(err);
         return res.status(500).send(HTTP_GENERIC_ERROR);
@@ -250,6 +344,20 @@ const checkPaymentIntentAuthorized = async (payment_intent, stripeMode) => {
     }
 };
 
+const checkPaymentIntentProcessing = async (payment_intent, stripeMode) => {
+    try {
+        const stripe = require('stripe')(stripeMode === 'test' ? process.env.STRIPE_SECRET_KEY_TEST : process.env.STRIPE_SECRET_KEY_LIVE);
+        const paymentIntent = await stripe.paymentIntents.retrieve(payment_intent, { expand: ['latest_charge'] });
+        if (paymentIntent?.status === 'processing') {
+            return paymentIntent;
+        }
+        return false;
+    } catch (err) {
+        console.log('[checkPaymentIntentProcessing]', err.message);
+        return false;
+    }
+};
+
 const capturePaymentIntent = async (payment_intent, stripeMode, amountToCaptureCents?: number) => {
     try {
         const stripe = require('stripe')(stripeMode === 'test' ? process.env.STRIPE_SECRET_KEY_TEST : process.env.STRIPE_SECRET_KEY_LIVE);
@@ -284,19 +392,48 @@ const refundPaymentIntent = async (payment_intent, amountCents, stripeMode) => {
             payment_intent: payment_intent,
         };
 
-        // Add amount if specified (for partial refunds)
-        if (amountCents) {
-            refundData.amount = Math.round(Math.abs(Number(amountCents)));
+        if (amountCents !== null && amountCents !== undefined && amountCents !== '') {
+            const cents = Math.round(Math.abs(Number(amountCents)));
+            if (!Number.isFinite(cents) || cents < 1) {
+                console.log('[refundPaymentIntent] nothing to refund on', payment_intent, '— requested amount rounds to zero');
+                return false;
+            }
+            refundData.amount = cents;
         }
 
         const refund = await stripe.refunds.create(refundData);
         console.log('Refund succeeded', refund);
         return refund
     } catch (err) {
+        const existing = await settledRefundForIntent(payment_intent, stripeMode);
+        if (existing) {
+            console.log('[refundPaymentIntent] already refunded at Stripe, reusing', existing.id);
+            return { ...existing, alreadyRefunded: true };
+        }
         console.log('[refundPaymentIntent]', err.message)
         return false
     }
 }
+const settledRefundForIntent = async (payment_intent: string, stripeMode: string) => {
+    try {
+        const stripe = require('stripe')(stripeMode === 'test' ? process.env.STRIPE_SECRET_KEY_TEST : process.env.STRIPE_SECRET_KEY_LIVE);
+        const intent = await stripe.paymentIntents.retrieve(payment_intent, { expand: ['latest_charge'] });
+        const charge = intent?.latest_charge && typeof intent.latest_charge === 'object'
+            ? intent.latest_charge
+            : null;
+        if (!charge) return null;
+
+        const paid = Number(charge.amount_captured ?? charge.amount ?? 0);
+        const refunded = Number(charge.amount_refunded ?? 0);
+        if (!(refunded > 0) || refunded < paid) return null;
+
+        const refunds = await stripe.refunds.list({ payment_intent, limit: 1 });
+        return refunds?.data?.[0] || null;
+    } catch (err: any) {
+        console.log('[settledRefundForIntent]', err.message);
+        return null;
+    }
+};
 
 const listReconcilableBookingIntents = async (
     stripeMode: string,
@@ -344,9 +481,17 @@ const enrichPaymentIntentReceipt = async ({ payment_intent, stripeMode, descript
     }
 };
 
-const sendBookingReceiptAndConfirmation = async ({ payment_intent, charge, sessionType, sessionName, expertName, studentName, studentEmail, start, duration, timeZone }) => {
+const sendBookingReceiptAndConfirmation = async ({ payment_intent, charge, sessionType, sessionName, expertName, studentName, studentEmail, start, duration, timeZone, noteHtml = '' }) => {
     try {
         if (!charge || !studentEmail) return;
+        if (!payment_intent) return;
+
+        const settled = await checkPaymentIntentSucceeded(payment_intent, charge.paidBy);
+        if (!settled) {
+            console.log('[sendBookingReceiptAndConfirmation] no receipt for uncaptured payment', payment_intent);
+            return;
+        }
+
         const { sendPaymentConfirmationEmail } = require("../services/notifications");
         const dateStr = new Date(start).toLocaleString("en-US", { timeZone: timeZone || "UTC" });
         const description = `WisdomLinked ${sessionType} — "${sessionName}" with ${expertName} · ${dateStr}`;
@@ -377,6 +522,7 @@ const sendBookingReceiptAndConfirmation = async ({ payment_intent, charge, sessi
             currency: charge.currency,
             receiptUrl: charge.receiptUrl,
             timeZone,
+            noteHtml,
         });
     } catch (err) {
         console.error('[sendBookingReceiptAndConfirmation]', err.message);
@@ -819,6 +965,20 @@ const processRefund = async (req, res) => {
             });
         }
 
+        if (paymentHistory.status === 'withheld') {
+            return res.status(400).json({
+                status: 'FAILED',
+                message: 'This payment is authorized but not captured, so there is nothing to refund. Decline the request to release the authorization instead.'
+            });
+        }
+
+        if (paymentHistory.status === 'released') {
+            return res.status(400).json({
+                status: 'FAILED',
+                message: 'This authorization was already released and never charged, so there is nothing to refund.'
+            });
+        }
+
         if (!paymentHistory.paymentIntent) {
             return res.status(400).json({
                 status: 'FAILED',
@@ -850,6 +1010,14 @@ const processRefund = async (req, res) => {
             return res.status(500).json({
                 status: 'FAILED',
                 message: 'Failed to process refund with Stripe.'
+            });
+        }
+
+        if ((refundResult as any).alreadyRefunded) {
+            await PaymentHistory.findByIdAndUpdate(paymentHistory._id, { status: 'refunded' }).catch(() => null);
+            return res.status(409).json({
+                status: 'FAILED',
+                message: 'This charge was already fully refunded at Stripe. No further refund was made; the payment record has been corrected.'
             });
         }
 
@@ -1165,10 +1333,12 @@ module.exports = {
     getStripeMode,
     checkPaymentIntentSucceeded,
     checkPaymentIntentAuthorized,
+    checkPaymentIntentProcessing,
     capturePaymentIntent,
     cancelPaymentIntent,
     setStripeMode,
     setSeminarApprovalDeadline,
+    setWalletPaymentWindow,
     refundPaymentIntent,
     listReconcilableBookingIntents,
     sendPaymentLinkToUser,

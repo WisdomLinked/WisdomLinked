@@ -32,3 +32,25 @@ export const decisionNoticeExpiresAt = (state: DecisionNoticeState): number | nu
 /** Only rows still inside the window need fetching — the cutoff for the DB query. */
 export const decisionNoticeCutoff = (now: number = Date.now()): Date =>
     new Date(now - DECISION_NOTICE_TTL_MS);
+
+export type DecisionOutcome = 'accepted' | 'accepted_awaiting_payment' | 'declined' | 'withdrawn';
+
+// What the expert's note actually means for the student. A wallet booking splits the
+// old single event in two: the expert says yes, and the booking is confirmed later when
+// the student pays. Reading "not yet confirmed" as "declined" tells them the opposite of
+// what happened, so the in-between state is named rather than lumped in with a refusal.
+export const resolveSessionDecisionOutcome = (input: {
+    status: string;
+    expertCreated: boolean;
+    awaitingPayment?: boolean;
+}): DecisionOutcome => {
+    if (input.status === 'active') return 'accepted';
+    if (input.status !== 'cancelled' && input.awaitingPayment) return 'accepted_awaiting_payment';
+    return input.expertCreated ? 'withdrawn' : 'declined';
+};
+
+export const resolveSeatDecisionOutcome = (status: string): DecisionOutcome => {
+    if (status === 'approved') return 'accepted';
+    if (status === 'awaiting_payment') return 'accepted_awaiting_payment';
+    return 'declined';
+};

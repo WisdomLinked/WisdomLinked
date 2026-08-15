@@ -35,6 +35,7 @@ import { displayRoomLabel, shouldNotifyRoom } from '../utils/chatRoomLabel';
 import { seminarEnrollmentLabel } from '../utils/seminarCapacityLabel';
 import { fetchDmUnreadSnapshot, fetchChatUserProfile } from '../api/chatApi';
 import ProfileModal from './Dashboard/Messenger/Messages/ProfileModal';
+import SeminarDetails from './Dashboard/seminarDetails';
 import { buildFallbackChatProfile, mergeChatProfile } from '../utils/chatProfileModal';
 import { useAppSelector } from '../store';
 import { logoutUser, updateMe } from '../actions/authActions';
@@ -56,6 +57,7 @@ import StudentChat from '../components/dashboard/StudentChat';
 import JoinMeeting from '../components/dashboard/JoinMeeting';
 import DecisionNoteField from '../components/dashboard/DecisionNoteField';
 import StatCard from '../components/ui/StatCard';
+import { awaitsExpertDecision, awaitsWalletPayment } from '../utils/bookingLifecycle';
 import Chatbot from '../components/chatbot';
 import UpcomingSessionModal, {
   type UpcomingModalSession,
@@ -97,7 +99,12 @@ function mapSeatRequestToModalSession(r: any): UpcomingModalSession {
     : '—';
   const metaLines: string[] = [];
   if (typeof r?.amount === 'number' && r.amount > 0) {
-    metaLines.push(`$${(r.amount / 100).toFixed(2)} held`);
+    // A wallet request holds nothing — approving it asks the student to pay.
+    metaLines.push(
+      r?.paymentMode === 'wallet'
+        ? `$${(r.amount / 100).toFixed(2)} — WeChat Pay / Alipay, paid after you approve`
+        : `$${(r.amount / 100).toFixed(2)} held`,
+    );
   } else {
     metaLines.push('Free seminar');
   }
@@ -164,6 +171,23 @@ function mapExpertGroupToModalSession(g: any, waitingCount = 0): UpcomingModalSe
     const maxAttendees =
       typeof g?.maxAttendees === 'number' ? g.maxAttendees : null;
     metaLines.push(seminarEnrollmentLabel(enrolled, waitingCount, maxAttendees));
+  }
+  if (g?.type === 'individual' && g?.status === 'pending') {
+    // A wallet request holds nothing: accepting it asks the student to pay, and the
+    // session is confirmed only when that payment lands.
+    const wallet = g?.paymentMode === 'wallet';
+    if (typeof g?.price === 'number' && g.price > 0) {
+      metaLines.push(
+        wallet
+          ? `$${g.price.toFixed(2)} — WeChat Pay / Alipay, paid after you accept`
+          : `$${g.price.toFixed(2)} authorized, not charged`,
+      );
+    }
+    if (wallet && g?.paymentDeadline) {
+      metaLines.push(`Accepted — student to pay by ${new Date(g.paymentDeadline).toLocaleString()}`);
+    } else if (g?.decisionDeadline) {
+      metaLines.push(`Decide by ${new Date(g.decisionDeadline).toLocaleString()}`);
+    }
   }
   return {
     id: String(g._id),
@@ -232,6 +256,7 @@ export default function ExpertDashboard() {
   // Student profile card opened from a row in the upcoming-sessions modal or followers list.
   const [peerProfile, setPeerProfile] = useState<any | null>(null);
   const [peerProfileOpen, setPeerProfileOpen] = useState(false);
+  const [inlineDetailSession, setInlineDetailSession] = useState<UpcomingModalSession | null>(null);
 
   const openPeerProfileById = useCallback(
     async (peerId: string, username?: string, image?: string | null) => {
@@ -649,6 +674,7 @@ export default function ExpertDashboard() {
     acceptedSeminars,
     bookedSessions,
     pendingSessions,
+    awaitingPaymentSessions,
   } = useMemo(() => {
     const { groupChats = [] } = (userDetails || {}) as any;
     const nowTs = Date.now();
@@ -688,23 +714,27 @@ export default function ExpertDashboard() {
 
     // Pending requests are NOT scoped to the today/week range — the expert must
     // see every booking awaiting action regardless of which date window is shown.
-    const pendingSess = (groupChats || [])
-      .filter(
-        (g: any) =>
-          g.type === 'individual' &&
-          g.status === 'pending' &&
-          upcoming(g.start, g.end)
-      )
-      .sort(
-        (a: any, b: any) =>
-          new Date(b.createdAt || b.start).getTime() -
-          new Date(a.createdAt || a.start).getTime()
-      );
+    const byNewest = (a: any, b: any) =>
+      new Date(b.createdAt || b.start).getTime() -
+      new Date(a.createdAt || a.start).getTime();
+
+    const stillPending = (groupChats || []).filter(
+      (g: any) =>
+        g.type === 'individual' &&
+        g.status === 'pending' &&
+        upcoming(g.start, g.end)
+    );
+
+    // A wallet request the expert already accepted stays `pending` until the student
+    // pays, so it must not be counted or offered as something left to decide.
+    const pendingSess = stillPending.filter((g: any) => awaitsExpertDecision(g)).sort(byNewest);
+    const awaitingPaymentSess = stillPending.filter((g: any) => awaitsWalletPayment(g)).sort(byNewest);
 
     return {
       acceptedSeminars: seminars,
       bookedSessions: sessions,
       pendingSessions: pendingSess,
+      awaitingPaymentSessions: awaitingPaymentSess,
     };
   }, [userDetails, range]);
 
@@ -756,9 +786,15 @@ export default function ExpertDashboard() {
         )?.username ||
         'The student';
       const title = s.name || '';
-      const message = `${studentName} has been accepted for the 1:1 session${
-        title ? ` “${title}”` : ''
-      }.`;
+      // A wallet booking isn't confirmed by acceptance — the student still has to pay.
+      const message =
+        s?.paymentMode === 'wallet'
+          ? `${studentName} has been accepted for the 1:1 session${
+              title ? ` “${title}”` : ''
+            }. They pay by WeChat Pay or Alipay, so it is confirmed once their payment comes through.`
+          : `${studentName} has been accepted for the 1:1 session${
+              title ? ` “${title}”` : ''
+            }.`;
       const id = String(s._id);
       setAcceptedInline(prev => ({ ...prev, [id]: { message, session: s } }));
       const timer = window.setTimeout(() => {
@@ -857,7 +893,7 @@ export default function ExpertDashboard() {
         )?.username ||
         'The student';
       const title = s.name || '';
-      const message = `${studentName}'s request${title ? ` for “${title}”` : ''} was declined and their payment refunded in full.`;
+      const message = `${studentName}'s request${title ? ` for “${title}”` : ''} was declined and their payment authorization released. They were not charged.`;
       const id = String(s._id);
       setAcceptedInline(prev => ({ ...prev, [id]: { message, session: s } }));
       const timer = window.setTimeout(() => {
@@ -903,10 +939,14 @@ export default function ExpertDashboard() {
     if (!expertUpcomingModal) return [];
     const { kind, status } = expertUpcomingModal;
     if (kind === 'oneToOne') {
-      const list = status === 'booked' ? bookedSessions : pendingSessions;
+      // Sessions the expert accepted but the student has not paid for are shown here for
+      // visibility, with no accept/decline — that decision is already made.
+      const list = status === 'booked'
+        ? bookedSessions
+        : [...pendingSessions, ...awaitingPaymentSessions];
       return list.map((g: any) => {
         const base = mapExpertGroupToModalSession(g);
-        if (status !== 'pending') return base;
+        if (status !== 'pending' || awaitsWalletPayment(g)) return base;
         const createdById =
           typeof g.createdBy === 'object' ? g.createdBy?._id : g.createdBy;
         const expertProposed = String(createdById) === String(userDetails?._id);
@@ -928,6 +968,7 @@ export default function ExpertDashboard() {
     expertUpcomingModal,
     bookedSessions,
     pendingSessions,
+    awaitingPaymentSessions,
     acceptedSeminars,
     seatRequests,
     userDetails,
@@ -1175,12 +1216,41 @@ export default function ExpertDashboard() {
                   >
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
-                      <div className="text-[13px] font-semibold text-slate-900">
+                      <button
+                        type="button"
+                        onClick={() => setInlineDetailSession(mapExpertGroupToModalSession(s))}
+                        title="View appointment details"
+                        className="block max-w-full truncate text-left text-[13px] font-semibold text-slate-900 hover:underline"
+                      >
                         {s.name}
-                      </div>
+                      </button>
                       <div className="text-[11px] text-slate-600">
                         {new Date(s.start).toLocaleString()}
                       </div>
+                      {(() => {
+                        const student = pickStudent(s);
+                        const studentId = student?._id ? String(student._id) : '';
+                        const studentName =
+                          student?.username || student?.email || 'Student';
+                        if (!studentId || expertProposed) return null;
+                        return (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              void openPeerProfileById(studentId, studentName, student?.image ?? null)
+                            }
+                            title="View student card"
+                            className="mt-0.5 block max-w-full truncate text-left text-[11px] font-medium text-[#234C6A] hover:underline"
+                          >
+                            {studentName}
+                          </button>
+                        );
+                      })()}
+                      {!expertProposed && s.decisionDeadline ? (
+                        <div className="mt-0.5 text-[10px] font-semibold text-amber-700">
+                          Decide by {new Date(s.decisionDeadline).toLocaleString()}
+                        </div>
+                      ) : null}
                     </div>
                     {expertProposed ? (
                       <div className="shrink-0 flex items-center gap-2">
@@ -1224,7 +1294,7 @@ export default function ExpertDashboard() {
                     ) : declineConfirmId === String(s._id) ? (
                       <div className="shrink-0 flex items-center gap-2">
                         <span className="text-[10px] font-medium text-slate-600">
-                          Decline and refund?
+                          Decline and release the hold?
                         </span>
                         <button
                           type="button"
@@ -1448,6 +1518,41 @@ export default function ExpertDashboard() {
             viewerRole={userDetails?.role}
             previewImage={peerProfile?.image}
           />
+        ) : null}
+        {inlineDetailSession?.detail ? (
+          <div
+            className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/50 p-4"
+            onClick={e => {
+              if (e.target === e.currentTarget) setInlineDetailSession(null);
+            }}
+          >
+            <div
+              className="w-full max-w-[460px] max-h-[88vh] overflow-y-auto rounded-2xl border border-slate-200 bg-white shadow-xl"
+              onClick={e => e.stopPropagation()}
+            >
+              <div className="flex items-start justify-between gap-3 border-b border-slate-200 px-5 py-4">
+                <div className="min-w-0">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
+                    {inlineDetailSession.briefLabel || 'Session details'}
+                  </p>
+                  <h3 className="mt-1 text-base font-semibold text-slate-900 truncate">
+                    {inlineDetailSession.title}
+                  </h3>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setInlineDetailSession(null)}
+                  className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+                  aria-label="Close"
+                >
+                  ✕
+                </button>
+              </div>
+              <div className="px-5 py-4">
+                <SeminarDetails {...inlineDetailSession.detail} theme="light" />
+              </div>
+            </div>
+          </div>
         ) : null}
       </div>
     </div>

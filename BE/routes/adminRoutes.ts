@@ -8,6 +8,7 @@ const {
 const {
     setStripeMode,
     setSeminarApprovalDeadline,
+    setWalletPaymentWindow,
     sendPaymentLinkToUser,
     processRefund,
     sendAdHocPaymentLink
@@ -54,6 +55,7 @@ const {
 
 router.post("/setStripeMode", adminAuth, setStripeMode)
 router.post("/setSeminarApprovalDeadline", adminAuth, setSeminarApprovalDeadline)
+router.post("/setWalletPaymentWindow", adminAuth, setWalletPaymentWindow)
 router.post("/sendPaymentLinkToUser", adminAuth, sendPaymentLinkToUser)
 router.post("/processRefund", adminAuth, processRefund)
 router.post("/sendAdHocPaymentLink", adminAuth, sendAdHocPaymentLink)

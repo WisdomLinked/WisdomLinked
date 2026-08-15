@@ -3,7 +3,13 @@ import { useDispatch } from 'react-redux';
 import { Search, CalendarDays, Clock, MapPin, ArrowLeft, User, Users, Repeat, Check, MessageSquare } from 'lucide-react';
 import FilterDropdown, { type FilterOption } from '../ui/FilterDropdown';
 import { useAppSelector } from '../../store';
-import { registerForSeminar, requestSeminarSeat, doFilterSeminars, profileImageFetch, doGetKeywordsAndServices, getExpertById } from '../../api/api';
+import { registerForSeminar, requestSeminarSeat, paySeminarSeatRequest, getMySeatRequests, doFilterSeminars, profileImageFetch, doGetKeywordsAndServices, getExpertById } from '../../api/api';
+import {
+  emptySeatRequestIndex,
+  indexSeatRequests,
+  seatRequestFor,
+  type SeatRequestIndex,
+} from '../../utils/seatRequestState';
 import { canonicalLabelsFromMixedServiceEntries } from '../../constants/serviceOptions';
 import { resolveProfileImageSrc } from '../../utils/profileImage';
 import { seminarCapacityLabel } from '../../utils/seminarCapacityLabel';
@@ -170,6 +176,12 @@ export default function StudentSeminars({
   const [checkout, setCheckout] = useState<'review' | 'pay' | null>(null);
   const [bookingDone, setBookingDone] = useState(false);
   const [seatRequested, setSeatRequested] = useState(false);
+  // Seat requests already in flight. Without these, reopening this page offered the
+  // waiting-list button again to a student who had already asked — or been approved.
+  const [seatRequestIndex, setSeatRequestIndex] = useState<SeatRequestIndex>(
+    emptySeatRequestIndex,
+  );
+  const [seatPaying, setSeatPaying] = useState(false);
   const [bookingError, setBookingError] = useState<string | null>(null);
   const dispatch = useDispatch();
   const { openPeerProfile, peerProfileModal } = usePeerProfileModal(userDetails?.role);
@@ -240,6 +252,73 @@ export default function StudentSeminars({
     } catch (err: unknown) {
       setBookingError(
         err instanceof Error ? err.message : 'Could not complete seminar registration.',
+      );
+    } finally {
+      SetLoadingStatus(false);
+    }
+  };
+
+  // Wallet route for a full seminar: the host decides before any money moves.
+  const loadSeatRequests = async () => {
+    const res: any = await getMySeatRequests();
+    setSeatRequestIndex(indexSeatRequests(res?.result));
+  };
+
+  useEffect(() => {
+    if (!userDetails?._id) return;
+    void loadSeatRequests();
+  }, [userDetails?._id]);
+
+  const paySeat = async (paymentIntentId: string) => {
+    const target = selectedSeminar ? seatRequestFor(seatRequestIndex, selectedSeminar) : null;
+    if (!target) return;
+    setSeatPaying(true);
+    SetLoadingStatus(true);
+    setBookingError(null);
+    try {
+      const res: any = await paySeminarSeatRequest({
+        requestId: target.requestId,
+        payment_intent: paymentIntentId,
+      });
+      if (res === false || res?.status === 'FAIL' || res?.error) {
+        setBookingError(res?.error || 'Could not confirm your seat after payment.');
+        return;
+      }
+      window.localStorage.removeItem('pendingDetails');
+      dispatch(updateMe() as any);
+      setCheckout(null);
+      setBookingDone(true);
+      void loadSeatRequests();
+    } catch (err: unknown) {
+      setBookingError(
+        err instanceof Error ? err.message : 'Could not confirm your seat after payment.',
+      );
+    } finally {
+      setSeatPaying(false);
+      SetLoadingStatus(false);
+    }
+  };
+
+  const requestSeatWithWallet = async () => {
+    if (!selectedSeminar) return;
+    SetLoadingStatus(true);
+    setBookingError(null);
+    try {
+      const response: any = await requestSeminarSeat({
+        groupChatId: selectedSeminar.id,
+        paymentMode: 'wallet',
+      });
+      if (response === false || response?.status === 'FAIL' || response?.error) {
+        setBookingError(response?.error || 'Could not submit your seat request.');
+        return;
+      }
+      window.localStorage.removeItem('pendingDetails');
+      setCheckout(null);
+      setSeatRequested(true);
+      void loadSeatRequests();
+    } catch (err: unknown) {
+      setBookingError(
+        err instanceof Error ? err.message : 'Could not submit your seat request.',
       );
     } finally {
       SetLoadingStatus(false);
@@ -579,7 +658,12 @@ export default function StudentSeminars({
     const isFull = s.isFull && !alreadyRegistered;
     const waitingList = seatRequestWindow(s.startMs);
     const waitingListOpen = waitingList.state === 'open';
-    const canRequestSeat = isFull && waitingListOpen;
+    // An open request — awaiting the host, or approved and waiting to be paid — means
+    // there is nothing to ask for again.
+    const openSeatRequest = alreadyRegistered ? null : seatRequestFor(seatRequestIndex, s);
+    const seatAwaitingPayment = openSeatRequest?.state === 'awaiting_payment';
+    const onWaitingList = seatRequested || openSeatRequest?.state === 'awaiting_host';
+    const canRequestSeat = isFull && waitingListOpen && !openSeatRequest && !seatRequested;
 
     return (
       <div className={containerClass}>
@@ -736,7 +820,28 @@ export default function StudentSeminars({
               </p>
             )}
 
-            {seatRequested ? (
+            {seatAwaitingPayment ? (
+              <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-3">
+                <p className="text-sm font-semibold text-emerald-900">
+                  Your seat was approved.
+                </p>
+                <p className="mt-1 text-xs text-emerald-800">
+                  Pay ${openSeatRequest!.price} to claim it
+                  {openSeatRequest!.payBy
+                    ? ` by ${new Date(openSeatRequest!.payBy).toLocaleString()}`
+                    : ''}
+                  . The seat is released if payment isn't completed in time.
+                </p>
+                <button
+                  type="button"
+                  disabled={seatPaying}
+                  onClick={() => setCheckout('pay')}
+                  className="mt-3 w-full inline-flex items-center justify-center rounded-lg bg-[#1A3A4A] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#122635] disabled:opacity-60"
+                >
+                  Pay ${openSeatRequest!.price} to confirm your seat
+                </button>
+              </div>
+            ) : onWaitingList ? (
               <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-3 py-3">
                 <p className="text-sm font-semibold text-amber-900">
                   You’re on the waiting list.
@@ -878,17 +983,42 @@ export default function StudentSeminars({
             }}
           >
             <div className="my-auto w-full max-w-2xl space-y-3">
-              <StudentBookingCheckout
-                type="Seminar"
-                price={s.price}
-                isSeatRequest={isFull}
-                holdsFunds
-                returnUrl={seminarReturnUrl}
-                pendingDetails={{ groupChatId: s.id, price: s.price, name: s.title }}
-                onPaymentSuccess={joinSeminar}
-                onCancel={() => setCheckout('review')}
-                cancelLabel="Back"
-              />
+              {seatAwaitingPayment ? (
+                <StudentBookingCheckout
+                  type="Seminar seat"
+                  price={openSeatRequest!.price}
+                  returnUrl={seminarReturnUrl}
+                  pendingDetails={{
+                    kind: 'pay-seat-request',
+                    requestId: openSeatRequest!.requestId,
+                    groupChatId: s.id,
+                    price: openSeatRequest!.price,
+                    name: s.title,
+                  }}
+                  // Approved without a hold, so it settles in the mode it was asked in.
+                  walletOption={{ kind: 'charge', only: true }}
+                  onPaymentSuccess={paySeat}
+                  onCancel={() => setCheckout('review')}
+                  cancelLabel="Back"
+                />
+              ) : (
+                <StudentBookingCheckout
+                  type="Seminar"
+                  price={s.price}
+                  isSeatRequest={isFull}
+                  holdsFunds
+                  returnUrl={seminarReturnUrl}
+                  pendingDetails={{ groupChatId: s.id, price: s.price, name: s.title }}
+                  walletOption={
+                    isFull
+                      ? { kind: 'request', onSubmit: requestSeatWithWallet }
+                      : { kind: 'charge' }
+                  }
+                  onPaymentSuccess={joinSeminar}
+                  onCancel={() => setCheckout('review')}
+                  cancelLabel="Back"
+                />
+              )}
               {bookingError ? (
                 <p className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-medium text-rose-700">
                   {bookingError}

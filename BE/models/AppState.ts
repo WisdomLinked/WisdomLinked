@@ -4,6 +4,7 @@ const appStateSchema = new mongoose.Schema(
     {
         stripeMode: { type: String, default: 'test' },
         seminarApprovalDeadlineHours: { type: Number, default: 24 },
+        walletPaymentWindowHours: { type: Number, default: 24 },
     },
     { timestamps: true }
 );
