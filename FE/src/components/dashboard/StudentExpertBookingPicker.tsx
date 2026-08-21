@@ -156,6 +156,7 @@ function StudentExpertBookingPicker({
   const [modalOpen, setModalOpen] = useState(false);
   /** Remount calendar after closing time modal so the same day can be clicked again (RBC keeps slot selected). */
   const [calendarResetKey, setCalendarResetKey] = useState(0);
+  const [calendarDate, setCalendarDate] = useState(() => new Date());
   const [tzMode, setTzMode] = useState<BookingDisplayTimeZoneMode>('mine');
   const [customTz, setCustomTz] = useState(detectUserTimeZone());
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
@@ -316,8 +317,6 @@ function StudentExpertBookingPicker({
     },
     [viewerTz, expert, expertTz, getAvailableTimeSlots, duration, filterSlotIndex],
   );
-
-  const isDateAvailable = (date: number) => isDayClickable(new Date(date));
 
   const dayStyleGetter = useCallback(
     (date: Date) => {
@@ -542,21 +541,48 @@ function StudentExpertBookingPicker({
     ],
   );
 
-  const handleSelectDate = ({ start, end }: { start: Date; end: Date }) => {
-    const dayStart = new Date(start).getTime();
-    const dayEnd = new Date(end).getTime();
-    if (dayEnd - dayStart !== 3600 * 24 * 1000) return;
-    if (dayEnd < Date.now()) return;
-    if (!isDateAvailable(start.getTime())) return;
+  const openDay = useCallback(
+    (day: Date) => {
+      if (Number.isNaN(day.getTime())) return;
+      if (!isDayClickable(day)) return;
 
-    setSelectedDate(start);
-    if (filterSlotIndex >= 0) {
-      setSelectedTimeSlot(filterSlotIndex);
-      confirmSlot(filterSlotIndex, start);
-    } else {
-      setModalOpen(true);
-    }
+      setSelectedDate(day);
+      if (filterSlotIndex >= 0) {
+        setSelectedTimeSlot(filterSlotIndex);
+        confirmSlot(filterSlotIndex, day);
+      } else {
+        setModalOpen(true);
+      }
+    },
+    [isDayClickable, filterSlotIndex, confirmSlot],
+  );
+
+  const handleSelectDate = ({ start, end }: { start: Date; end: Date }) => {
+    const nextDay = new Date(start);
+    nextDay.setDate(nextDay.getDate() + 1);
+    if (nextDay.getTime() !== new Date(end).getTime()) return;
+    if (new Date(end).getTime() < Date.now()) return;
+
+    openDay(start);
   };
+
+  const handleSelectEvent = useCallback(
+    (event: any) => {
+      const eventStart = new Date(event?.start);
+      if (Number.isNaN(eventStart.getTime())) return;
+      const day = new Date(eventStart);
+      day.setHours(0, 0, 0, 0);
+      openDay(day);
+    },
+    [openDay],
+  );
+
+  const handleShowMoreDay = useCallback(
+    (_events: any[], day: Date) => {
+      openDay(new Date(day));
+    },
+    [openDay],
+  );
 
   useEffect(() => {
     const temp: any[] = [];
@@ -676,13 +702,17 @@ function StudentExpertBookingPicker({
           selectable
           localizer={localizer}
           formats={calendarFormats}
-          defaultDate={new Date()}
+          date={calendarDate}
+          onNavigate={setCalendarDate}
           defaultView="month"
           events={events}
           components={calendarComponents}
           eventPropGetter={eventStyleGetter}
           dayPropGetter={dayStyleGetter}
           onSelectSlot={handleSelectDate}
+          onSelectEvent={handleSelectEvent}
+          doShowMoreDrillDown={false}
+          onShowMore={handleShowMoreDay}
         />
       </div>
 
