@@ -776,6 +776,7 @@ export default function StudentCalendar({
                 title={detailMeeting.raw.name || detailMeeting.raw.title || detailMeeting.title}
                 description={detailMeeting.raw.description}
                 start={detailMeeting.raw.start}
+                end={detailMeeting.raw.end}
                 duration={detailMeeting.raw.duration}
                 price={detailMeeting.raw.price}
                 admin={detailMeeting.raw.admin || detailMeeting.raw.expert}

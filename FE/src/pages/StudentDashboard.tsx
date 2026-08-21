@@ -6,6 +6,7 @@ import { BookOpen, UserCheck, AlertCircle, MessageSquare, Users } from 'lucide-r
 import { useAppSelector } from '../store';
 import { doGetMyEvents, getAllCommunityChats, profileImageFetch, doFilterExperts, doFilterSeminars } from '../api/api';
 import { resolveProfileImageSrc } from '../utils/profileImage';
+import { sessionDurationLabel, sessionDurationMinutes } from '../utils/sessionDuration';
 import { displayRoomLabel, shouldNotifyRoom } from '../utils/chatRoomLabel';
 import { fetchDmUnreadSnapshot, fetchChatUserProfile } from '../api/chatApi';
 import ProfileModal from './Dashboard/Messenger/Messages/ProfileModal';
@@ -104,7 +105,8 @@ function timeHHMMInTimeZone(d: Date, timeZone: string): string {
 /** "45 min · Study Abroad" line for a session/seminar card. */
 function meetingDetailsLine(g: any): string {
   const parts: string[] = [];
-  if (g?.duration) parts.push(`${g.duration} min`);
+  const duration = sessionDurationLabel(g);
+  if (duration) parts.push(duration);
   const purpose =
     (typeof g?.purposeOther === 'string' && g.purposeOther.trim()) ||
     canonicalLabelsFromMixedServiceEntries(g?.services)[0] ||
@@ -206,6 +208,7 @@ function deriveCalendarMeetings(u: any): CalendarMeeting[] {
         peerUserId: e?.expert?._id != null ? String(e.expert._id) : undefined,
         peerName: mentor,
         peerImage: e?.expert?.image ?? null,
+        details: meetingDetailsLine(e),
         raw: e,
       },
     );
@@ -243,6 +246,7 @@ function deriveModalSessions(
       title: g?.name || 'Seminar',
       at: Number.isNaN(at) ? 0 : at,
       when: Number.isNaN(at) ? 'TBD' : modalWhen(at),
+      durationMinutes: sessionDurationMinutes(g) ?? undefined,
       location: 'Online · WisdomLinked Room',
       with: g?.admin?.username || g?.admin?.email || 'WisdomLinked',
       peerUserId: String(g?.admin?._id ?? g?.admin ?? ''),
@@ -250,6 +254,7 @@ function deriveModalSessions(
         title: g?.name || 'Seminar',
         description: g?.description,
         start: g?.start,
+        end: g?.end,
         duration: g?.duration,
         price: typeof g?.price === 'number' ? g.price : undefined,
         admin: g?.admin,
@@ -312,6 +317,7 @@ function deriveModalSessions(
         title: g?.name || '1:1 session',
         at: Number.isNaN(at) ? 0 : at,
         when: Number.isNaN(at) ? 'TBD' : modalWhen(at),
+        durationMinutes: sessionDurationMinutes(g) ?? undefined,
         location: 'Online · WisdomLinked Room',
         with: mentor,
         peerUserId: String(g?.admin?._id ?? g?.admin ?? ''),
@@ -322,6 +328,7 @@ function deriveModalSessions(
           title: g?.name || '1:1 session',
           description: g?.description,
           start: g?.start,
+          end: g?.end,
           duration: g?.duration,
           price,
           admin: g?.admin,
@@ -350,6 +357,7 @@ function deriveModalSessions(
         title: e?.title || '1:1 session',
         at: Number.isNaN(at) ? 0 : at,
         when: Number.isNaN(at) ? 'TBD' : modalWhen(at),
+        durationMinutes: sessionDurationMinutes(e) ?? undefined,
         location: 'Online · WisdomLinked Room',
         with: e?.expert?.username || e?.expert?.email || 'Your mentor',
         peerUserId: String(e?.expert?._id ?? e?.expert ?? ''),
@@ -391,11 +399,17 @@ function deriveUpcomingSessions(u: any): {
       g?.type === 'individual' && (status === 'active' || status === 'pending');
 
     if (isSeminar && (!nextSeminar || startAt < nextSeminar.startAt)) {
-      nextSeminar = { title: g?.name || 'Seminar', startAt, id: String(g?._id ?? '') };
+      nextSeminar = {
+        title: g?.name || 'Seminar',
+        startAt,
+        durationMinutes: sessionDurationMinutes(g) ?? undefined,
+        id: String(g?._id ?? ''),
+      };
     } else if (isSession) {
       considerOneToOne({
         title: g?.name || '1:1 session',
         startAt,
+        durationMinutes: sessionDurationMinutes(g) ?? undefined,
         peerUserId: String(g?.admin?._id ?? g?.admin ?? ''),
         pending: status === 'pending',
       });
@@ -412,6 +426,7 @@ function deriveUpcomingSessions(u: any): {
     considerOneToOne({
       title: e?.title || '1:1 session',
       startAt,
+      durationMinutes: sessionDurationMinutes(e) ?? undefined,
       peerUserId: String(e?.expert?._id ?? e?.expert ?? ''),
       pending: isPending,
     });
@@ -733,6 +748,7 @@ export default function StudentDashboard() {
           title: seminar?.name || 'Seminar',
           at: start,
           when,
+          durationMinutes: sessionDurationMinutes(seminar) ?? undefined,
           location: 'Online · WisdomLinked',
           with: host?.username || host?.email || 'WisdomLinked',
           peerUserId: host?._id ? String(host._id) : undefined,
@@ -740,6 +756,7 @@ export default function StudentDashboard() {
             title: seminar?.name || 'Seminar',
             description: seminar?.description,
             start: seminar?.start,
+            end: seminar?.end,
             duration: seminar?.duration,
             price: typeof seminar?.price === 'number' ? seminar.price : undefined,
             admin: host,

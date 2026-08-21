@@ -22,13 +22,15 @@ import { toYMDLocal } from "../../../utils/schedulingTimezone";
 import { canonicalLabelsFromMixedServiceEntries } from "../../../constants/serviceOptions";
 import { usePeerProfileModal } from "../../../hooks/usePeerProfileModal";
 import { eventIsUpcoming } from "../../../utils/eventTiming";
+import { sessionDurationLabel } from "../../../utils/sessionDuration";
 
 const pad2 = (n: number) => String(n).padStart(2, "0");
 
 /** "45 min · Study Abroad" line for a session/seminar card. */
 const meetingDetailsLine = (e: any): string => {
   const parts: string[] = [];
-  if (e?.duration) parts.push(`${e.duration} min`);
+  const duration = sessionDurationLabel(e);
+  if (duration) parts.push(duration);
   const purpose =
     (typeof e?.purposeOther === "string" && e.purposeOther.trim()) ||
     canonicalLabelsFromMixedServiceEntries(e?.services)[0] ||
@@ -338,6 +340,7 @@ const ExpertCalendar: React.FC = () => {
               title={selectedEvent?.title}
               description={selectedEvent?.customer?.email}
               start={selectedEvent?.start}
+              end={selectedEvent?.end}
               duration={selectedEvent?.duration}
               price={selectedEvent?.price}
               paidBy={selectedEvent?.paidBy}
@@ -421,6 +424,7 @@ const ExpertCalendar: React.FC = () => {
               title={selectedEvent?.name}
               description={selectedEvent?.description}
               start={selectedEvent?.start}
+              end={selectedEvent?.end}
               duration={selectedEvent?.duration}
               price={selectedEvent?.price}
               admin={selectedEvent?.admin}

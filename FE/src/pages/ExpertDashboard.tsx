@@ -62,6 +62,7 @@ import Chatbot from '../components/chatbot';
 import UpcomingSessionModal, {
   type UpcomingModalSession,
 } from '../components/dashboard/UpcomingSessionModal';
+import { sessionDurationLabel, sessionDurationMinutes } from '../utils/sessionDuration';
 import FollowersModal, {
   type FollowerEntry,
 } from '../components/dashboard/FollowersModal';
@@ -116,6 +117,7 @@ function mapSeatRequestToModalSession(r: any): UpcomingModalSession {
     title: seminar?.name || 'Seminar',
     at: start,
     when,
+    durationMinutes: sessionDurationMinutes(seminar) ?? undefined,
     location: 'Online · WisdomLinked',
     with: r?.customer?.username || r?.customer?.email || 'Student',
     peerUserId: r?.customer?._id ? String(r.customer._id) : undefined,
@@ -124,6 +126,7 @@ function mapSeatRequestToModalSession(r: any): UpcomingModalSession {
       title: seminar?.name || 'Seminar',
       description: seminar?.description,
       start: seminar?.start,
+      end: seminar?.end,
       duration: seminar?.duration,
       price: typeof seminar?.price === 'number' ? seminar.price : undefined,
       admin: seminar?.admin,
@@ -194,6 +197,7 @@ function mapExpertGroupToModalSession(g: any, waitingCount = 0): UpcomingModalSe
     title: g.name || 'Session',
     at: start,
     when,
+    durationMinutes: sessionDurationMinutes(g) ?? undefined,
     location: 'Online · WisdomLinked',
     with: withLabel,
     metaLines: metaLines.length ? metaLines : undefined,
@@ -203,6 +207,7 @@ function mapExpertGroupToModalSession(g: any, waitingCount = 0): UpcomingModalSe
       title: g?.name || 'Session',
       description: g?.description,
       start: g?.start,
+      end: g?.end,
       duration: g?.duration,
       price: typeof g?.price === 'number' ? g.price : undefined,
       admin: g?.admin,
@@ -1226,6 +1231,7 @@ export default function ExpertDashboard() {
                       </button>
                       <div className="text-[11px] text-slate-600">
                         {new Date(s.start).toLocaleString()}
+                        {sessionDurationLabel(s) ? ` · ${sessionDurationLabel(s)}` : ''}
                       </div>
                       {(() => {
                         const student = pickStudent(s);
@@ -1373,6 +1379,7 @@ export default function ExpertDashboard() {
                     </div>
                     <div className="text-[11px] text-slate-500">
                       {new Date(s.start).toLocaleString()}
+                      {sessionDurationLabel(s) ? ` · ${sessionDurationLabel(s)}` : ''}
                     </div>
                   </div>
                   <span className="inline-flex items-center rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">

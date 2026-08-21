@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Calendar, MapPin, BookOpen, UserCheck } from 'lucide-react';
+import { Calendar, Clock, MapPin, BookOpen, UserCheck } from 'lucide-react';
 import SeminarDetails from '../../pages/Dashboard/seminarDetails';
+import { formatSessionDuration } from '../../utils/sessionDuration';
 import DecisionNoteField from './DecisionNoteField';
 
 type SessionKind = 'seminar' | 'oneToOne';
@@ -12,6 +13,7 @@ export type UpcomingModalSession = {
   title: string;
   at: number;
   when: string;
+  durationMinutes?: number;
   location?: string;
   with?: string;
   /** Pending 1:1 the student must pay to confirm (expert-proposed). */
@@ -31,6 +33,7 @@ export type UpcomingModalSession = {
     title: string;
     description?: string;
     start?: string;
+    end?: string;
     duration?: number;
     price?: number;
     admin: any;
@@ -375,6 +378,12 @@ export default function UpcomingSessionModal({
                         <Calendar className="h-3.5 w-3.5" aria-hidden />
                         <span>{session.when}</span>
                       </p>
+                      {formatSessionDuration(session.durationMinutes) ? (
+                        <p className="flex items-center gap-1.5">
+                          <Clock className="h-3.5 w-3.5" aria-hidden />
+                          <span>{formatSessionDuration(session.durationMinutes)}</span>
+                        </p>
+                      ) : null}
                       <p className="flex items-center gap-1.5">
                         <MapPin className="h-3.5 w-3.5" aria-hidden />
                         <span>{session.location}</span>

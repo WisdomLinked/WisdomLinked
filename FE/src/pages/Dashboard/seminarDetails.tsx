@@ -7,6 +7,7 @@ import { Calendar, Clock3, DollarSign, Users, Sparkles, UserRound, Repeat } from
 import { SERVICE_OPTIONS, matchesServiceOption } from "../../constants/serviceOptions";
 import { resolveProfileImageSrc } from "../../utils/profileImage";
 import { profileImageFetch } from "../../api/api";
+import { sessionDurationLabel } from "../../utils/sessionDuration";
 
 const RECURRENCE_LABEL: Record<string, string> = {
     weekly: "Weekly",
@@ -18,6 +19,7 @@ interface SeminarDetailsProps {
     title: string;
     description?: string;
     start?: string;
+    end?: string;
     duration?: number;
     price?: number;
     admin: any;
@@ -39,6 +41,7 @@ const SeminarDetails = ({
     title,
     description,
     start,
+    end,
     duration,
     price,
     admin,
@@ -121,7 +124,7 @@ const SeminarDetails = ({
 
     const sessionStats = [
         { Icon: Calendar, label: "Date", value: formatDate12h(start) },
-        { Icon: Clock3, label: "Duration", value: `${duration ?? 0} min` },
+        { Icon: Clock3, label: "Duration", value: sessionDurationLabel({ duration, start, end }) || "—" },
         { Icon: DollarSign, label: "Price", value: `$${price ?? 0}` },
     ];
 
