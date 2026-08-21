@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { CalendarDays, Clock, MapPin, X, AlertCircle, Repeat } from 'lucide-react';
 import { toYMDLocal } from '../../utils/schedulingTimezone';
 import SeminarDetails from '../../pages/Dashboard/seminarDetails';
+import { sessionEndMs } from '../../utils/sessionDuration';
 
 const RECUR_LABEL: Record<string, string> = {
   weekly: 'Weekly',
@@ -130,6 +131,10 @@ export default function StudentCalendar({
   };
 
   const isPastMeeting = (m: Meeting) => {
+    // A session is spent when it ends, not when it starts — greying one that is
+    // under way would hide the meeting the student is meant to be joining.
+    const endMs = sessionEndMs(m.raw);
+    if (endMs != null) return endMs <= Date.now();
     const dt = getMeetingDateTime(m);
     if (!dt) return false;
     return dt.getTime() < Date.now();

@@ -4,6 +4,7 @@ import {
   awaitsWalletPayment,
   awaitsExpertDecision,
   pendingRequestIsLive,
+  paymentWindowOpen,
 } from './bookingLifecycle';
 
 const NOW = Date.parse('2026-08-14T12:00:00Z');
@@ -90,5 +91,25 @@ describe('pendingRequestIsLive', () => {
     expect(pendingRequestIsLive({ start: null }, NOW)).toBe(true);
     expect(pendingRequestIsLive({ start: 'not a date' }, NOW)).toBe(true);
     expect(pendingRequestIsLive(null, NOW)).toBe(true);
+  });
+});
+
+describe('paymentWindowOpen', () => {
+  it('is true while the deadline is ahead', () => {
+    expect(paymentWindowOpen({ paymentDeadline: inHours(4) }, NOW)).toBe(true);
+  });
+
+  it('is false once the deadline has passed', () => {
+    expect(paymentWindowOpen({ paymentDeadline: inHours(-1) }, NOW)).toBe(false);
+  });
+
+  it('treats a booking with no deadline as still payable', () => {
+    expect(paymentWindowOpen({}, NOW)).toBe(true);
+    expect(paymentWindowOpen({ paymentDeadline: null }, NOW)).toBe(true);
+    expect(paymentWindowOpen(null, NOW)).toBe(true);
+  });
+
+  it('does not close the window on an unreadable deadline', () => {
+    expect(paymentWindowOpen({ paymentDeadline: 'not a date' }, NOW)).toBe(true);
   });
 });

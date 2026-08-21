@@ -109,3 +109,37 @@ describe('StudentCalendar meeting details', () => {
     expect(screen.queryByTestId('seminar-details')).toBeNull();
   });
 });
+
+describe('StudentCalendar past/upcoming split', () => {
+  const inMinutes = (m: number) => new Date(Date.now() + m * 60_000);
+
+  const atTime = (d: Date) =>
+    `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+
+  const running = inMinutes(-10);
+  const finished = inMinutes(-180);
+
+  it('keeps a session that is under way out of the past list', () => {
+    const m = meeting({
+      id: 'running',
+      date: ymd(running),
+      time: atTime(running),
+      raw: { ...meeting().raw, start: running.toISOString(), duration: 60 },
+    });
+    render(<StudentCalendar meetings={[m]} />);
+
+    expect(screen.getByText('No past meetings yet.')).toBeInTheDocument();
+  });
+
+  it('moves a finished session into the past list', () => {
+    const m = meeting({
+      id: 'finished',
+      date: ymd(finished),
+      time: atTime(finished),
+      raw: { ...meeting().raw, start: finished.toISOString(), duration: 60 },
+    });
+    render(<StudentCalendar meetings={[m]} />);
+
+    expect(screen.queryByText('No past meetings yet.')).not.toBeInTheDocument();
+  });
+});

@@ -6,7 +6,13 @@ import { BookOpen, UserCheck, AlertCircle, MessageSquare, Users } from 'lucide-r
 import { useAppSelector } from '../store';
 import { doGetMyEvents, getAllCommunityChats, profileImageFetch, doFilterExperts, doFilterSeminars } from '../api/api';
 import { resolveProfileImageSrc } from '../utils/profileImage';
-import { sessionDurationLabel, sessionDurationMinutes } from '../utils/sessionDuration';
+import {
+  formatSessionWhen,
+  sessionDurationLabel,
+  sessionDurationMinutes,
+  sessionEndMs,
+} from '../utils/sessionDuration';
+import { paymentWindowOpen } from '../utils/bookingLifecycle';
 import { displayRoomLabel, shouldNotifyRoom } from '../utils/chatRoomLabel';
 import { fetchDmUnreadSnapshot, fetchChatUserProfile } from '../api/chatApi';
 import ProfileModal from './Dashboard/Messenger/Messages/ProfileModal';
@@ -28,7 +34,7 @@ import UpcomingCountdownCard, { type UpcomingSession } from '../components/dashb
 import UpcomingSessionModal, { type UpcomingModalSession } from '../components/dashboard/UpcomingSessionModal';
 import ExpertProfile from '../components/dashboard/ExpertProfile';
 import StudentBookingCheckout, { completeStudentBookingFromStorage } from '../components/dashboard/StudentBookingCheckout';
-import { getExpertById, doFollowExpert, doUnfollowExpert, acceptIndividualAppointment, getMySeatRequests } from '../api/api';
+import { getExpertById, doFollowExpert, doUnfollowExpert, acceptIndividualAppointment, cancelIndividualAppointment, getMySeatRequests } from '../api/api';
 import { updateMe } from '../actions/authActions';
 import type { ExpertCardProps } from '../components/ExpertCard';
 import { mapExpertToMentorWithImage } from '../utils/mapExpertToMentor';
@@ -217,16 +223,6 @@ function deriveCalendarMeetings(u: any): CalendarMeeting[] {
   return out;
 }
 
-function modalWhen(ms: number): string {
-  const d = new Date(ms);
-  if (Number.isNaN(d.getTime())) return '';
-  return d.toLocaleString(undefined, {
-    weekday: 'short',
-    hour: 'numeric',
-    minute: '2-digit',
-  });
-}
-
 /**
  * Build the session list for the UpcomingSessionModal opened from a StatsGrid
  * card. Mirrors deriveSessionCounts so the rows match the card's number:
@@ -245,8 +241,9 @@ function deriveModalSessions(
       id: String(g?._id ?? `${g?.type}-${at}`),
       title: g?.name || 'Seminar',
       at: Number.isNaN(at) ? 0 : at,
-      when: Number.isNaN(at) ? 'TBD' : modalWhen(at),
+      when: Number.isNaN(at) ? 'TBD' : formatSessionWhen(at),
       durationMinutes: sessionDurationMinutes(g) ?? undefined,
+      endsAt: sessionEndMs(g) ?? undefined,
       location: 'Online · WisdomLinked Room',
       with: g?.admin?.username || g?.admin?.email || 'WisdomLinked',
       peerUserId: String(g?.admin?._id ?? g?.admin ?? ''),
@@ -306,22 +303,39 @@ function deriveModalSessions(
         g?.paymentMode === 'wallet' &&
         !!g?.paymentDeadline &&
         new Date(g.paymentDeadline).getTime() > Date.now();
+      // An expert's offer carries its own deadline from the moment it is made; once it
+      // lapses the server refuses the payment, so the button must go with it.
+      const expertProposed = createdById !== '' && createdById !== myId;
+      const windowOpen = paymentWindowOpen(g);
       const payable =
         status === 'pending' &&
         !expired &&
-        ((createdById !== '' && createdById !== myId) || walletWindowOpen);
+        windowOpen &&
+        (expertProposed || walletWindowOpen);
+      const canDecline = status === 'pending' && !expired && expertProposed;
+      const metaLines: string[] = [];
+      if (expertProposed && g?.paymentDeadline) {
+        metaLines.push(
+          windowOpen
+            ? `Pay by ${new Date(g.paymentDeadline).toLocaleString()}`
+            : 'Payment window closed — this offer is being released',
+        );
+      }
       const mentor = g?.admin?.username || g?.admin?.email || 'Your mentor';
       const price = typeof g?.price === 'number' ? g.price : undefined;
       return {
         id: String(g?._id ?? `session-${at}`),
         title: g?.name || '1:1 session',
         at: Number.isNaN(at) ? 0 : at,
-        when: Number.isNaN(at) ? 'TBD' : modalWhen(at),
+        when: Number.isNaN(at) ? 'TBD' : formatSessionWhen(at),
         durationMinutes: sessionDurationMinutes(g) ?? undefined,
+        endsAt: sessionEndMs(g) ?? undefined,
         location: 'Online · WisdomLinked Room',
         with: mentor,
         peerUserId: String(g?.admin?._id ?? g?.admin ?? ''),
         payable,
+        canDecline,
+        metaLines: metaLines.length ? metaLines : undefined,
         price,
         paymentMode: g?.paymentMode,
         detail: {
@@ -356,8 +370,9 @@ function deriveModalSessions(
         id: String(e?._id ?? `event-${at}`),
         title: e?.title || '1:1 session',
         at: Number.isNaN(at) ? 0 : at,
-        when: Number.isNaN(at) ? 'TBD' : modalWhen(at),
+        when: Number.isNaN(at) ? 'TBD' : formatSessionWhen(at),
         durationMinutes: sessionDurationMinutes(e) ?? undefined,
+        endsAt: sessionEndMs(e) ?? undefined,
         location: 'Online · WisdomLinked Room',
         with: e?.expert?.username || e?.expert?.email || 'Your mentor',
         peerUserId: String(e?.expert?._id ?? e?.expert ?? ''),
@@ -749,6 +764,7 @@ export default function StudentDashboard() {
           at: start,
           when,
           durationMinutes: sessionDurationMinutes(seminar) ?? undefined,
+          endsAt: sessionEndMs(seminar) ?? undefined,
           location: 'Online · WisdomLinked',
           with: host?.username || host?.email || 'WisdomLinked',
           peerUserId: host?._id ? String(host._id) : undefined,
@@ -1284,6 +1300,17 @@ export default function StudentDashboard() {
     setActiveItem('chat');
   };
 
+  const handleDeclineProposal = useCallback(
+    async (session: UpcomingModalSession, note: string): Promise<boolean> => {
+      const res: any = await cancelIndividualAppointment(session.id, note);
+      if (res === false) return false;
+      dispatch(updateMe() as any);
+      setEventsReloadKey((k) => k + 1);
+      return true;
+    },
+    [dispatch],
+  );
+
   const handleUpcomingJoinSession = (session: UpcomingModalSession) => {
     setUpcomingModal(null);
     if (upcomingModal?.kind === 'seminar') openSeminarChat(session.id);
@@ -1552,6 +1579,7 @@ export default function StudentDashboard() {
             onClose={() => setUpcomingModal(null)}
             onJoinSession={handleUpcomingJoinSession}
             onViewProfile={handleViewPeerProfile}
+            onDeclineProposal={handleDeclineProposal}
             onPay={(session) => {
               setUpcomingModal(null);
               // Seat requests are listed by request id, so they settle on their own route.

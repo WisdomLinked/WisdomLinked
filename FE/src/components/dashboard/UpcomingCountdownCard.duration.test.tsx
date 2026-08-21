@@ -14,7 +14,7 @@ describe('UpcomingCountdownCard duration', () => {
       />,
     );
 
-    expect(screen.getByText('45 min')).toBeInTheDocument();
+    expect(screen.getByText(/·\s*45 min$/)).toBeInTheDocument();
   });
 
   it('shows the length of a pending 1:1 too', () => {
@@ -30,7 +30,23 @@ describe('UpcomingCountdownCard duration', () => {
     );
 
     expect(screen.getByText('Pending')).toBeInTheDocument();
-    expect(screen.getByText('1 hr')).toBeInTheDocument();
+    expect(screen.getByText(/·\s*1 hr$/)).toBeInTheDocument();
+  });
+
+  it('shows the date alongside the length', () => {
+    render(
+      <UpcomingCountdownCard
+        nextOneToOne={{
+          title: 'Essay review',
+          startAt: Date.parse('2026-08-28T15:00:00.000Z'),
+          durationMinutes: 45,
+        }}
+      />,
+    );
+
+    const line = screen.getByText(/45 min$/);
+    expect(line.textContent).toMatch(/Aug/);
+    expect(line.textContent).toMatch(/28/);
   });
 
   it('renders nothing extra when the duration is unknown', () => {
@@ -41,5 +57,6 @@ describe('UpcomingCountdownCard duration', () => {
     );
 
     expect(screen.queryByText(/\d+ min$/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/ · /)).not.toBeInTheDocument();
   });
 });

@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { BookOpen, Clock, UserCheck } from 'lucide-react';
-import { formatSessionDuration } from '../../utils/sessionDuration';
+import { formatSessionDuration, formatSessionWhen } from '../../utils/sessionDuration';
 
 const pad2 = (n: number) => String(n).padStart(2, '0');
+
 
 function formatDuration(ms: number) {
   const safe = Math.max(0, ms);
@@ -64,9 +65,11 @@ function CountdownRow({
               <p className="truncate text-[12px] font-semibold text-slate-700">
                 {session ? session.title : emptyLabel}
               </p>
-              {session && formatSessionDuration(session.durationMinutes) ? (
+              {session ? (
                 <p className="text-[11px] text-slate-500">
-                  {formatSessionDuration(session.durationMinutes)}
+                  {[formatSessionWhen(session.startAt), formatSessionDuration(session.durationMinutes)]
+                    .filter(Boolean)
+                    .join(' · ')}
                 </p>
               ) : null}
             </div>

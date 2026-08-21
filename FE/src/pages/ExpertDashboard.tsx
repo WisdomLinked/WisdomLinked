@@ -62,7 +62,7 @@ import Chatbot from '../components/chatbot';
 import UpcomingSessionModal, {
   type UpcomingModalSession,
 } from '../components/dashboard/UpcomingSessionModal';
-import { sessionDurationLabel, sessionDurationMinutes } from '../utils/sessionDuration';
+import { sessionDurationLabel, sessionDurationMinutes, sessionEndMs } from '../utils/sessionDuration';
 import FollowersModal, {
   type FollowerEntry,
 } from '../components/dashboard/FollowersModal';
@@ -118,6 +118,7 @@ function mapSeatRequestToModalSession(r: any): UpcomingModalSession {
     at: start,
     when,
     durationMinutes: sessionDurationMinutes(seminar) ?? undefined,
+    endsAt: sessionEndMs(seminar) ?? undefined,
     location: 'Online · WisdomLinked',
     with: r?.customer?.username || r?.customer?.email || 'Student',
     peerUserId: r?.customer?._id ? String(r.customer._id) : undefined,
@@ -186,8 +187,11 @@ function mapExpertGroupToModalSession(g: any, waitingCount = 0): UpcomingModalSe
           : `$${g.price.toFixed(2)} authorized, not charged`,
       );
     }
+    const expertProposed = refIdOf(g?.createdBy) === refIdOf(g?.admin);
     if (wallet && g?.paymentDeadline) {
       metaLines.push(`Accepted — student to pay by ${new Date(g.paymentDeadline).toLocaleString()}`);
+    } else if (expertProposed && g?.paymentDeadline) {
+      metaLines.push(`Student to pay by ${new Date(g.paymentDeadline).toLocaleString()}`);
     } else if (g?.decisionDeadline) {
       metaLines.push(`Decide by ${new Date(g.decisionDeadline).toLocaleString()}`);
     }
@@ -198,6 +202,7 @@ function mapExpertGroupToModalSession(g: any, waitingCount = 0): UpcomingModalSe
     at: start,
     when,
     durationMinutes: sessionDurationMinutes(g) ?? undefined,
+    endsAt: sessionEndMs(g) ?? undefined,
     location: 'Online · WisdomLinked',
     with: withLabel,
     metaLines: metaLines.length ? metaLines : undefined,
@@ -1255,6 +1260,11 @@ export default function ExpertDashboard() {
                       {!expertProposed && s.decisionDeadline ? (
                         <div className="mt-0.5 text-[10px] font-semibold text-amber-700">
                           Decide by {new Date(s.decisionDeadline).toLocaleString()}
+                        </div>
+                      ) : null}
+                      {expertProposed && s.paymentDeadline ? (
+                        <div className="mt-0.5 text-[10px] font-semibold text-amber-700">
+                          Student to pay by {new Date(s.paymentDeadline).toLocaleString()}
                         </div>
                       ) : null}
                     </div>

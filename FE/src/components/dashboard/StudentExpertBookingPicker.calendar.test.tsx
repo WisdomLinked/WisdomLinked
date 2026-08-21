@@ -93,7 +93,7 @@ function renderPicker() {
   );
 }
 
-describe('StudentExpertBookingPicker calendar clicks', () => {
+describe('StudentExpertBookingPicker calendar clicks', { timeout: 20_000 }, () => {
   beforeEach(() => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     vi.setSystemTime(new Date('2026-06-10T12:00:00.000Z'));

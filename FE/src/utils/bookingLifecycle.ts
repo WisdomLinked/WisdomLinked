@@ -28,3 +28,13 @@ export const pendingRequestIsLive = (chat: any, now: number = Date.now()): boole
     if (!Number.isFinite(at) || at <= 0) return true;
     return at > now;
 };
+
+/**
+ * Whether a booking can still be paid for. A row without a deadline has no window to
+ * have missed — that is the plain card request, which the expert's decision governs.
+ */
+export const paymentWindowOpen = (chat: any, now: number = Date.now()): boolean => {
+    if (!chat?.paymentDeadline) return true;
+    const due = new Date(chat.paymentDeadline).getTime();
+    return !Number.isFinite(due) || due > now;
+};

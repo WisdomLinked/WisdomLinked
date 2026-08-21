@@ -822,9 +822,9 @@ export const setSeminarApprovalDeadline = async (seminarApprovalDeadlineHours: n
     }
 }
 
-export const setWalletPaymentWindow = async (walletPaymentWindowHours: number) => {
+export const setPaymentWindow = async (paymentWindowHours: number) => {
     try {
-        const res = await api.post("admin/setWalletPaymentWindow", { walletPaymentWindowHours });
+        const res = await api.post("admin/setPaymentWindow", { paymentWindowHours });
         return res.data;
     } catch (err: any) {
         return checkForAuthorization(err);

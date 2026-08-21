@@ -14,6 +14,8 @@ export type UpcomingModalSession = {
   at: number;
   when: string;
   durationMinutes?: number;
+  /** Epoch ms the session ends; past sessions are shown greyed and inert. */
+  endsAt?: number;
   location?: string;
   with?: string;
   /** Pending 1:1 the student must pay to confirm (expert-proposed). */
@@ -51,6 +53,8 @@ export type UpcomingModalSession = {
   canAccept?: boolean;
   /** Pending expert-proposed 1:1 the expert can withdraw while it is unpaid. */
   canWithdraw?: boolean;
+  /** Pending expert-proposed 1:1 the student can turn down instead of paying. */
+  canDecline?: boolean;
   /** Extra small lines under the date (e.g. "$20.00 held", "Decide by …"). */
   metaLines?: string[];
 };
@@ -82,6 +86,7 @@ export default function UpcomingSessionModal({
   onAcceptSession,
   onDeclineSession,
   onWithdrawSession,
+  onDeclineProposal,
   onViewProfile,
   sessions,
   role = 'student',
@@ -110,6 +115,8 @@ export default function UpcomingSessionModal({
   onDeclineSession?: (session: UpcomingModalSession, note: string) => void | Promise<void | boolean>;
   /** Expert withdraws their own unpaid 1:1 offer. Resolving `false` leaves the row. */
   onWithdrawSession?: (session: UpcomingModalSession, note: string) => void | Promise<void | boolean>;
+  /** Student turns down an expert's offer instead of paying for it. */
+  onDeclineProposal?: (session: UpcomingModalSession, note: string) => void | Promise<void | boolean>;
   sessions: UpcomingModalSession[];
   role?: 'student' | 'expert';
 }) {
@@ -126,6 +133,7 @@ export default function UpcomingSessionModal({
   const [withdrawConfirmId, setWithdrawConfirmId] = useState<string | null>(null);
   const [declineBusyId, setDeclineBusyId] = useState<string | null>(null);
   const [declineConfirmId, setDeclineConfirmId] = useState<string | null>(null);
+  const [proposalDeclineId, setProposalDeclineId] = useState<string | null>(null);
   const [notes, setNotes] = useState<Record<string, string>>({});
   const [noteErrors, setNoteErrors] = useState<Record<string, string>>({});
   const noteFor = (id: string) => notes[id] ?? '';
@@ -219,6 +227,24 @@ export default function UpcomingSessionModal({
     }
   };
 
+  const declineProposal = async (session: UpcomingModalSession) => {
+    if (!onDeclineProposal) return;
+    setDeclineBusyId(session.id);
+    try {
+      const ok = await onDeclineProposal(session, noteFor(session.id).trim());
+      if (ok === false) return;
+      setProposalDeclineId(null);
+      flashNotice(
+        session,
+        `You declined ${session.with || 'the mentor'}'s offer${
+          session.title ? ` “${session.title}”` : ''
+        }. They have been told, and you were not charged.`,
+      );
+    } finally {
+      setDeclineBusyId(null);
+    }
+  };
+
   const decideSeatRequest = async (
     session: UpcomingModalSession,
     action: 'accept' | 'decline',
@@ -266,6 +292,18 @@ export default function UpcomingSessionModal({
   }, [kind, status, role]);
 
   const showJoin = status === 'booked';
+
+  // A session whose end time has passed can no longer be joined, paid for or decided
+  // on, so it is shown as a spent row rather than one with a countdown and buttons.
+  const sessionEndMs = (session: UpcomingModalSession): number => {
+    if (typeof session.endsAt === 'number' && session.endsAt > 0) return session.endsAt;
+    const mins = session.durationMinutes;
+    if (typeof mins === 'number' && mins > 0) return session.at + mins * 60_000;
+    return session.at;
+  };
+  const hasEnded = (session: UpcomingModalSession) => sessionEndMs(session) <= tick;
+  const inProgress = (session: UpcomingModalSession) =>
+    !hasEnded(session) && session.at <= tick;
 
   // Keep just-accepted rows on screen for the notice window even after the
   // parent drops them from `sessions` (its list refreshes on accept).
@@ -329,8 +367,17 @@ export default function UpcomingSessionModal({
                   </div>
                 );
               }
+              const ended = hasEnded(session);
               return (
-              <div key={session.id} className="rounded-xl border border-slate-200 bg-[#F8FAFC] p-3">
+              <div
+                key={session.id}
+                data-ended={ended ? 'true' : undefined}
+                className={`rounded-xl border p-3 ${
+                  ended
+                    ? 'border-slate-200 bg-slate-100 opacity-60 grayscale'
+                    : 'border-slate-200 bg-[#F8FAFC]'
+                }`}
+              >
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">
@@ -396,12 +443,20 @@ export default function UpcomingSessionModal({
 
                   <div className="shrink-0 text-right">
                     <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
-                      Starts in
+                      {ended ? 'Status' : inProgress(session) ? 'Now' : 'Starts in'}
                     </p>
-                    <div className="mt-0.5 font-mono text-[14px] font-semibold tabular-nums text-[#234C6A]">
-                      {formatDuration(session.at - tick)}
+                    <div
+                      className={`mt-0.5 font-mono text-[14px] font-semibold tabular-nums ${
+                        ended || inProgress(session) ? 'text-slate-500' : 'text-[#234C6A]'
+                      }`}
+                    >
+                      {ended
+                        ? 'Ended'
+                        : inProgress(session)
+                          ? 'In progress'
+                          : formatDuration(session.at - tick)}
                     </div>
-                    {showJoin ? (
+                    {ended ? null : showJoin ? (
                       <button
                         type="button"
                         onClick={() => {
@@ -412,14 +467,49 @@ export default function UpcomingSessionModal({
                       >
                         {kind === 'seminar' ? 'Join seminar chat' : 'Join chat'}
                       </button>
-                    ) : session.payable && onPay ? (
-                      <button
-                        type="button"
-                        onClick={() => onPay(session)}
-                        className="mt-2 rounded-lg bg-[#234C6A] px-3 py-1.5 text-[11px] font-semibold text-white hover:brightness-110"
-                      >
-                        {typeof session.price === 'number' ? `Pay $${session.price}` : 'Pay'}
-                      </button>
+                    ) : (session.payable && onPay) ||
+                      (session.canDecline && onDeclineProposal) ? (
+                      proposalDeclineId === session.id ? (
+                        <div className="mt-2 flex items-center justify-end gap-1.5">
+                          <button
+                            type="button"
+                            disabled={declineBusyId === session.id}
+                            onClick={() => setProposalDeclineId(null)}
+                            className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-60"
+                          >
+                            Keep
+                          </button>
+                          <button
+                            type="button"
+                            disabled={declineBusyId === session.id}
+                            onClick={() => declineProposal(session)}
+                            className="rounded-lg bg-rose-600 px-3 py-1.5 text-[11px] font-semibold text-white hover:bg-rose-700 disabled:opacity-60"
+                          >
+                            {declineBusyId === session.id ? 'Declining…' : 'Confirm decline'}
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="mt-2 flex items-center justify-end gap-1.5">
+                          {session.payable && onPay ? (
+                            <button
+                              type="button"
+                              onClick={() => onPay(session)}
+                              className="rounded-lg bg-[#234C6A] px-3 py-1.5 text-[11px] font-semibold text-white hover:brightness-110"
+                            >
+                              {typeof session.price === 'number' ? `Pay $${session.price}` : 'Pay'}
+                            </button>
+                          ) : null}
+                          {session.canDecline && onDeclineProposal ? (
+                            <button
+                              type="button"
+                              onClick={() => setProposalDeclineId(session.id)}
+                              className="rounded-lg border border-rose-200 bg-white px-3 py-1.5 text-[11px] font-semibold text-rose-600 hover:bg-rose-50"
+                            >
+                              Decline
+                            </button>
+                          ) : null}
+                        </div>
+                      )
                     ) : session.seatRequestId && (onAcceptSeatRequest || onDeclineSeatRequest) ? (
                       <div className="mt-2 flex flex-col items-stretch gap-1.5">
                         <button
@@ -534,7 +624,14 @@ export default function UpcomingSessionModal({
                     !!session.canWithdraw &&
                     !!onWithdrawSession &&
                     withdrawConfirmId === session.id;
-                  if (!seatDecision && !oneToOneDecision && !withdrawing) return null;
+                  const decliningProposal =
+                    !showJoin &&
+                    !!session.canDecline &&
+                    !!onDeclineProposal &&
+                    proposalDeclineId === session.id;
+                  if (!seatDecision && !oneToOneDecision && !withdrawing && !decliningProposal) {
+                    return null;
+                  }
                   const noteRequired =
                     (oneToOneDecision && declineConfirmId === session.id) || seatDecision;
                   const busy =
@@ -551,9 +648,11 @@ export default function UpcomingSessionModal({
                         required={noteRequired}
                         disabled={busy}
                         label={
-                          noteRequired
-                            ? 'Note to the student (required to decline)'
-                            : 'Note to the student (optional)'
+                          decliningProposal
+                            ? 'Note to the mentor (optional)'
+                            : noteRequired
+                              ? 'Note to the student (required to decline)'
+                              : 'Note to the student (optional)'
                         }
                       />
                       {noteErrors[session.id] ? (
