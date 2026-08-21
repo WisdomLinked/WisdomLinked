@@ -101,6 +101,24 @@ const initAppStates = async () => {
             stripeMode: 'test'
         })
         await newAppState.save()
+        return
+    }
+
+    // The wallet and expert-offer windows used to be two settings; they are one now.
+    // A value an admin set under the old name would otherwise be silently ignored,
+    // so it is carried over once and the retired key dropped. Read through the raw
+    // collection — the schema no longer declares the old field.
+    const raw = await AppState.collection.findOne({ _id: appState._id })
+    const legacy = Number(raw?.walletPaymentWindowHours)
+    if (raw && raw.walletPaymentWindowHours !== undefined) {
+        const carryOver = Number.isFinite(legacy) && legacy > 0 && raw.paymentWindowHours === undefined
+        await AppState.collection.updateOne(
+            { _id: appState._id },
+            {
+                ...(carryOver ? { $set: { paymentWindowHours: Math.min(legacy, 168) } } : {}),
+                $unset: { walletPaymentWindowHours: '', proposalPaymentWindowHours: '' },
+            },
+        )
     }
 }
 

@@ -93,9 +93,9 @@ import { describeSeminarChanges } from '../utils/seminarChanges';
 import {
     normalizePaymentMode,
     isWallet,
-    walletWindowHours,
-    walletPaymentDeadline,
-    walletWindowLapsed,
+    paymentWindowHours,
+    paymentWindowDeadline,
+    paymentWindowLapsed,
     WALLET_NOT_YET_PAYABLE,
 } from '../utils/walletPayment';
 
@@ -948,6 +948,14 @@ const proposeIndividualAppointment = async (req, res) => {
 
         const finalPrice = Math.max(0, Math.round(Number(price) * 100) / 100);
 
+        const appState = await AppState.findOne();
+        const payBy = finalPrice > 0
+            ? paymentWindowDeadline({
+                sessionStartMs: start ? new Date(start).getTime() : 0,
+                windowHours: paymentWindowHours(appState),
+            })
+            : null;
+
         const chat = await GroupChat.create({
             name,
             description,
@@ -960,6 +968,7 @@ const proposeIndividualAppointment = async (req, res) => {
             type: 'individual',
             status: 'pending',
             createdBy: expertUser._id,
+            paymentDeadline: payBy,
         });
 
         expertUser.groupChats.push(chat._id);
@@ -968,7 +977,7 @@ const proposeIndividualAppointment = async (req, res) => {
         customerUser.groupChats.push(chat._id);
         await customerUser.save();
 
-        sendEmailMeetingRequestToCustomer(customerUser.email, name, customerUser.username, chat.start, duration, finalPrice, customerUser.timeZone);
+        sendEmailMeetingRequestToCustomer(customerUser.email, name, customerUser.username, chat.start, duration, finalPrice, customerUser.timeZone, payBy);
 
         let userDetails = await getFullUserData(expertUser.email);
         userDetails.token = null;
@@ -2812,9 +2821,9 @@ const approveSeminarSeatRequest = async (req, res) => {
 
         if (walletRequest && currentPriceCents > 0) {
             const appState = await AppState.findOne();
-            const payBy = walletPaymentDeadline({
+            const payBy = paymentWindowDeadline({
                 sessionStartMs: groupChat.start ? new Date(groupChat.start).getTime() : 0,
-                windowHours: walletWindowHours(appState),
+                windowHours: paymentWindowHours(appState),
             });
             const awaiting = await SeminarSeatRequest.findOneAndUpdate(
                 { _id: request._id, status: 'pending' },
@@ -2990,7 +2999,7 @@ const paySeminarSeatRequest = async (req, res) => {
                 ? "This seat is already paid for and confirmed."
                 : WALLET_NOT_YET_PAYABLE);
         }
-        if (walletWindowLapsed(request.paymentDeadline)) {
+        if (paymentWindowLapsed(request.paymentDeadline)) {
             return res.status(410).send("The payment window for this seat has closed, so it has been released. Please request a seat again.");
         }
 
@@ -3652,6 +3661,72 @@ const sweepExpiredWalletPayments = async () => {
     return expired;
 };
 
+// An expert's offer holds a slot no student has committed to, so it is released when
+// its payment window lapses. Nothing was authorized on this path, so there is no money
+// to return — only a slot to free and two people to tell.
+const sweepExpiredProposedSessions = async () => {
+    let expired = 0;
+    try {
+        const sessions = await GroupChat.find({
+            type: 'individual',
+            status: 'pending',
+            paymentMode: { $ne: 'wallet' },
+            paymentDeadline: { $ne: null, $lte: new Date() },
+        }).select('name admin createdBy participants start price paymentDeadline');
+
+        for (const chat of sessions) {
+            // Only the expert's own offers expire this way; a student's request is the
+            // expert's to decide on and is governed by the hold, not by this window.
+            if (String(chat.createdBy) !== String(chat.admin)) continue;
+
+            const claimed = await GroupChat.findOneAndUpdate(
+                { _id: chat._id, status: 'pending' },
+                { $set: { status: 'cancelled', paymentDeadline: null, decisionDeadline: null } },
+            );
+            if (!claimed) continue;
+            expired += 1;
+
+            const expertId = String(chat.admin);
+            const studentId = groupMemberIds(chat).find((id: string) => id !== expertId);
+            const sessionName = chat.name || '1:1 session';
+
+            for (const participantId of chat.participants || []) {
+                await User.updateOne(
+                    { _id: String(participantId) },
+                    { $pull: { groupChats: chat._id } },
+                );
+            }
+
+            const student = studentId ? await User.findById(studentId) : null;
+            if (student?.email) {
+                await sendSeminarEmail(
+                    student.email,
+                    `Session offer expired — ${sessionName}`,
+                    `<h2 style="color:#333;margin-top:0;">This session offer has expired</h2>
+                     <p>The offer for "<strong>${sessionName}</strong>" wasn't paid for in time, so the slot has
+                        been released. You were not charged.</p>
+                     <p>You're welcome to book the expert again if the time still suits you.</p>`,
+                );
+            }
+
+            const expert = await User.findById(expertId);
+            if (expert?.email) {
+                await sendSeminarEmail(
+                    expert.email,
+                    `Offer expired — ${sessionName}`,
+                    `<h2 style="color:#333;margin-top:0;">Your session offer expired</h2>
+                     <p>${student?.username || 'The student'} did not pay for "<strong>${sessionName}</strong>"
+                        within the payment window, so the offer has been released and your time is free again.</p>`,
+                );
+            }
+        }
+    } catch (err: any) {
+        console.log('[sweepExpiredProposedSessions]', err.message);
+    }
+
+    return expired;
+};
+
 const PENDING_PAYMENT_GRACE_MS = 60 * 60 * 1000;
 
 const sweepPendingSeminarPayments = async () => {
@@ -4133,9 +4208,9 @@ const acceptIndividualAppointment = async (req, res) => {
                     return res.status(409).send("You have already accepted this request. It is waiting for the student to pay.");
                 }
                 const appState = await AppState.findOne();
-                const deadline = walletPaymentDeadline({
+                const deadline = paymentWindowDeadline({
                     sessionStartMs: groupChat.start ? new Date(groupChat.start).getTime() : 0,
-                    windowHours: walletWindowHours(appState),
+                    windowHours: paymentWindowHours(appState),
                 });
                 const accepted = await GroupChat.findOneAndUpdate(
                     { _id: groupChat._id, status: 'pending', paymentDeadline: null },
@@ -4187,13 +4262,13 @@ const acceptIndividualAppointment = async (req, res) => {
 
             // Paying a wallet booking is only possible in the window the expert's
             // acceptance opened — before that there is no sale, after it the slot is gone.
-            if (isWallet(groupChat.paymentMode) && expectedCents > 0) {
-                if (!groupChat.paymentDeadline) {
-                    return res.status(409).send(WALLET_NOT_YET_PAYABLE);
-                }
-                if (walletWindowLapsed(groupChat.paymentDeadline)) {
-                    return res.status(410).send("The payment window for this session has closed, so it has been released. Please book again if you still want it.");
-                }
+            if (isWallet(groupChat.paymentMode) && expectedCents > 0 && !groupChat.paymentDeadline) {
+                return res.status(409).send(WALLET_NOT_YET_PAYABLE);
+            }
+            // An expert's offer carries its own window from the moment it is made, so a
+            // lapsed deadline closes the sale whichever rail it was going to settle on.
+            if (expectedCents > 0 && paymentWindowLapsed(groupChat.paymentDeadline)) {
+                return res.status(410).send("The payment window for this session has closed, so it has been released. Please book again if you still want it.");
             }
             if (expectedCents > 0 && await paymentIntentAlreadyConsumed(payment_intent)) {
                 return res.status(409).send("This payment has already been used for a booking.");
@@ -4712,6 +4787,9 @@ const cancelIndividualAppointment = async (req, res) => {
         // can act on — that note is the whole point of the decline flow. Withdrawing
         // one's own unpaid offer is not a rejection, so a note stays optional there.
         const decisionNote = cancelledByExpert ? sanitizeDecisionNote(req.body.note) : '';
+        // A student turning down an offer owes no explanation, but if they leave one it
+        // is the only thing the expert learns from the decline.
+        const studentNote = !cancelledByExpert && expertProposed ? sanitizeDecisionNote(req.body.note) : '';
         const decliningStudentRequest = cancelledByExpert && !expertProposed;
         if (decliningStudentRequest && !decisionNote) {
             return res.status(400).send("Please add a short note for the student explaining the decline.");
@@ -4762,6 +4840,8 @@ const cancelIndividualAppointment = async (req, res) => {
         const studentId = groupMemberIds(groupChat).find((id: string) => id !== expertId) || String(groupChat.createdBy);
         const student = await User.findById(studentId);
         const sessionName = groupChat.name || '1:1 session';
+        const startLabel = groupChat.start ? new Date(groupChat.start).toLocaleString() : '';
+        const declinedProposal = expertProposed && !cancelledByExpert;
 
         const noteBlock = decisionNoteEmailBlock(decisionNote);
         // The note is the only channel the student has once the cancelled session
@@ -4879,6 +4959,21 @@ const cancelIndividualAppointment = async (req, res) => {
             );
         }
 
+        if (declinedProposal) {
+            const expert = await User.findById(expertId);
+            if (expert?.email) {
+                await sendSeminarEmail(
+                    expert.email,
+                    `Session offer declined — ${sessionName}`,
+                    `<h2 style="color:#007bff;margin-top:0;">Your session offer was declined</h2>
+                     <p>${student?.username || 'The student'} declined the session you proposed,
+                        "<strong>${sessionName}</strong>"${startLabel ? ` on ${startLabel}` : ''}.
+                        Nothing was charged and the time is free again.</p>
+                     ${decisionNoteEmailBlock(studentNote, 'Message from the student')}`,
+                );
+            }
+        }
+
         for (const participantId of groupChat.participants) {
             await User.updateOne(
                 { _id: String(participantId) },
@@ -4888,7 +4983,9 @@ const cancelIndividualAppointment = async (req, res) => {
 
         const cancelledLabel = expertProposed && cancelledByExpert
             ? "The session offer has been withdrawn."
-            : "Your appointment has been canceled!";
+            : declinedProposal
+                ? "The session offer has been declined."
+                : "Your appointment has been canceled!";
         return res.status(200).send(`${cancelledLabel}${refundMessage}`);
     } catch (err) {
         console.log(err);
@@ -5089,6 +5186,7 @@ module.exports = {
     sweepExpiredSeatRequests,
     sweepExpiredSessionHolds,
     sweepExpiredWalletPayments,
+    sweepExpiredProposedSessions,
     sweepPendingSeminarPayments,
     sweepOrphanedBookingIntents,
     handleBookingPaymentIntentEvent,

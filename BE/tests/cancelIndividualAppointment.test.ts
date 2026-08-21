@@ -522,3 +522,37 @@ test("a student cancelling their own booking never needs a note", async () => {
     restore();
   }
 });
+
+test("student declines an expert's offer and the expert is told", async () => {
+  resetCalls();
+  const restore = withModels({ chat: chatDoc() });
+  try {
+    const res = await cancelAs(STUDENT_ID, "Thanks, but I found another slot.");
+
+    assert.equal(res.statusCode, 200);
+    assert.match(String(res.body), /declined/i);
+    assert.equal(claimedStatus(), "cancelled");
+    assert.equal(rolledBackToPending(), false, "the decline must stand");
+    assert.equal(calls.refund, undefined, "an unpaid offer has nothing to refund");
+    const toExpert = (calls.email || []).find((c: any[]) => String(c[0]) === "expert@test.com");
+    assert.ok(toExpert, "the expert must hear about the decline");
+    assert.match(String(toExpert?.[1]), /declined/i);
+  } finally {
+    restore();
+  }
+});
+
+test("student cancelling their own pending request does not mail the expert a decline", async () => {
+  resetCalls();
+  // createdBy is the student, so this is their request, not an offer they can decline.
+  const restore = withModels({ chat: chatDoc({ createdBy: STUDENT_ID }) });
+  try {
+    const res = await cancelAs(STUDENT_ID);
+
+    assert.equal(res.statusCode, 200);
+    const toExpert = (calls.email || []).find((c: any[]) => String(c[0]) === "expert@test.com");
+    assert.equal(toExpert, undefined);
+  } finally {
+    restore();
+  }
+});

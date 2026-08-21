@@ -2,28 +2,31 @@ export type PaymentMode = 'card' | 'wallet';
 
 export const WALLET_PAYMENT_METHOD_TYPES = ['alipay', 'wechat_pay'];
 
-export const DEFAULT_WALLET_WINDOW_HOURS = 24;
+export const DEFAULT_PAYMENT_WINDOW_HOURS = 48;
 
 export const normalizePaymentMode = (value: any): PaymentMode =>
     String(value) === 'wallet' ? 'wallet' : 'card';
 
 export const isWallet = (value: any): boolean => normalizePaymentMode(value) === 'wallet';
 
-export const walletWindowHours = (appState: any): number => {
-    const hours = appState?.walletPaymentWindowHours;
+// One window governs every booking a student still owes money on, whichever rail it
+// settles on: a wallet request the expert accepted, or an offer the expert made.
+export const paymentWindowHours = (appState: any): number => {
+    const hours = appState?.paymentWindowHours;
     if (typeof hours !== 'number' || !Number.isFinite(hours) || hours <= 0) {
-        return DEFAULT_WALLET_WINDOW_HOURS;
+        return DEFAULT_PAYMENT_WINDOW_HOURS;
     }
     return Math.min(hours, 168);
 };
 
-// The student's window to pay after the expert says yes. It never runs past the
-// session itself — paying after the start would buy nothing — and it is never
-// returned in the past, so a session approved at the last minute still gets a
-// (short) chance to be paid rather than being born already expired.
-export const walletPaymentDeadline = ({
+// The payer's window: for a wallet booking it opens when the expert says yes, for an
+// expert's offer it opens the moment the offer is made. It never runs past the session
+// itself — paying after the start would buy nothing — and it is never returned in the
+// past, so a session offered at the last minute still gets a (short) chance to be paid
+// rather than being born already expired.
+export const paymentWindowDeadline = ({
     sessionStartMs,
-    windowHours = DEFAULT_WALLET_WINDOW_HOURS,
+    windowHours = DEFAULT_PAYMENT_WINDOW_HOURS,
     now = Date.now(),
 }: {
     sessionStartMs?: number;
@@ -37,7 +40,7 @@ export const walletPaymentDeadline = ({
     return new Date(Math.max(deadline, now));
 };
 
-export const walletWindowLapsed = (deadline: any, now = Date.now()): boolean => {
+export const paymentWindowLapsed = (deadline: any, now = Date.now()): boolean => {
     if (!deadline) return false;
     const ms = deadline instanceof Date ? deadline.getTime() : new Date(deadline).getTime();
     if (!Number.isFinite(ms)) return false;

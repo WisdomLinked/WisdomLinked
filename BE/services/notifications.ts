@@ -121,16 +121,20 @@ sendEmailMeetingRequestToExpert = (targetEmail, expertName, name,start, duration
     sendNotificationEmail(targetEmail, subject, html);
 }
 
-sendEmailMeetingRequestToCustomer = (targetEmail, name, customerName,start,duration,price, timeZone) => {
+sendEmailMeetingRequestToCustomer = (targetEmail, name, customerName,start,duration,price, timeZone, payBy) => {
     subject = "New meeting request: " + name;
     const options = { timeZone: timeZone || "UTC" };
     const date = new Date(start).toLocaleString("en-US", options);
+    const payByLine = payBy
+        ? `<p><strong>Please pay by ${new Date(payBy).toLocaleString("en-US", options)}</strong> to confirm this session. The slot is released if it isn't paid for by then.</p>`
+        : "";
     html = `
         <p>Dear ${customerName},</p>
         <p>You have a new meeting request: ${name}.</p>
         <p>Starts at: ${date.toString()}</p>
         <p>Duration: ${duration} min</p>
         <p>Price: ${price}$</p>
+        ${payByLine}
         <p>Please log in to your account to view the details and respond to the request.</p>
         <p>
             <a href="${website_url}">Visit Website</a>

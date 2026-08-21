@@ -4,12 +4,12 @@ import assert from "node:assert/strict";
 import {
   normalizePaymentMode,
   isWallet,
-  walletWindowHours,
-  walletPaymentDeadline,
-  walletWindowLapsed,
+  paymentWindowHours,
+  paymentWindowDeadline,
+  paymentWindowLapsed,
   walletChargeAllowed,
   pinnedSettlementMode,
-  DEFAULT_WALLET_WINDOW_HOURS,
+  DEFAULT_PAYMENT_WINDOW_HOURS,
   WALLET_PAYMENT_METHOD_TYPES,
 } from "../utils/walletPayment";
 
@@ -32,18 +32,21 @@ test("wechat pay and alipay are the wallet methods offered", () => {
   assert.deepEqual(WALLET_PAYMENT_METHOD_TYPES, ["alipay", "wechat_pay"]);
 });
 
-test("the payment window falls back to 24h and is clamped to a week", () => {
-  assert.equal(walletWindowHours(null), DEFAULT_WALLET_WINDOW_HOURS);
-  assert.equal(walletWindowHours({}), 24);
-  assert.equal(walletWindowHours({ walletPaymentWindowHours: 48 }), 48);
-  assert.equal(walletWindowHours({ walletPaymentWindowHours: 0 }), 24);
-  assert.equal(walletWindowHours({ walletPaymentWindowHours: -3 }), 24);
-  assert.equal(walletWindowHours({ walletPaymentWindowHours: "12" }), 24);
-  assert.equal(walletWindowHours({ walletPaymentWindowHours: 5000 }), 168);
+test("the payment window falls back to 48h and is clamped to a week", () => {
+  assert.equal(paymentWindowHours(null), DEFAULT_PAYMENT_WINDOW_HOURS);
+  assert.equal(paymentWindowHours({}), 48);
+  assert.equal(paymentWindowHours({ paymentWindowHours: 24 }), 24);
+  assert.equal(paymentWindowHours({ paymentWindowHours: 0 }), 48);
+  assert.equal(paymentWindowHours({ paymentWindowHours: -3 }), 48);
+  assert.equal(paymentWindowHours({ paymentWindowHours: "12" }), 48);
+  assert.equal(paymentWindowHours({ paymentWindowHours: 5000 }), 168);
+  // The retired per-rail settings must not steer the one window that replaced them.
+  assert.equal(paymentWindowHours({ walletPaymentWindowHours: 72 }), 48);
+  assert.equal(paymentWindowHours({ proposalPaymentWindowHours: 72 }), 48);
 });
 
 test("a student gets the full window when the session is far enough out", () => {
-  const deadline = walletPaymentDeadline({
+  const deadline = paymentWindowDeadline({
     sessionStartMs: NOW + 30 * DAY,
     windowHours: 24,
     now: NOW,
@@ -53,12 +56,12 @@ test("a student gets the full window when the session is far enough out", () => 
 
 test("the window never runs past the session it is paying for", () => {
   const start = NOW + 6 * HOUR;
-  const deadline = walletPaymentDeadline({ sessionStartMs: start, windowHours: 24, now: NOW });
+  const deadline = paymentWindowDeadline({ sessionStartMs: start, windowHours: 24, now: NOW });
   assert.equal(deadline.getTime(), start);
 });
 
 test("a session that already started still yields a deadline no earlier than now", () => {
-  const deadline = walletPaymentDeadline({
+  const deadline = paymentWindowDeadline({
     sessionStartMs: NOW - 2 * HOUR,
     windowHours: 24,
     now: NOW,
@@ -68,18 +71,18 @@ test("a session that already started still yields a deadline no earlier than now
 });
 
 test("an undated session just gets the plain window", () => {
-  const deadline = walletPaymentDeadline({ windowHours: 24, now: NOW });
+  const deadline = paymentWindowDeadline({ windowHours: 24, now: NOW });
   assert.equal(deadline.getTime(), NOW + 24 * HOUR);
 });
 
 test("a lapsed window is detected from a Date, a string, or not at all", () => {
-  assert.equal(walletWindowLapsed(new Date(NOW - 1), NOW), true);
-  assert.equal(walletWindowLapsed(new Date(NOW + 1), NOW), false);
-  assert.equal(walletWindowLapsed(new Date(NOW).toISOString(), NOW), true);
+  assert.equal(paymentWindowLapsed(new Date(NOW - 1), NOW), true);
+  assert.equal(paymentWindowLapsed(new Date(NOW + 1), NOW), false);
+  assert.equal(paymentWindowLapsed(new Date(NOW).toISOString(), NOW), true);
   // No deadline means nothing to lapse — an unaccepted request is not expired.
-  assert.equal(walletWindowLapsed(null, NOW), false);
-  assert.equal(walletWindowLapsed(undefined, NOW), false);
-  assert.equal(walletWindowLapsed("not a date", NOW), false);
+  assert.equal(paymentWindowLapsed(null, NOW), false);
+  assert.equal(paymentWindowLapsed(undefined, NOW), false);
+  assert.equal(paymentWindowLapsed("not a date", NOW), false);
 });
 
 test("a wallet may charge for a seminar seat that is free to take", () => {

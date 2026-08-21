@@ -8,11 +8,11 @@ import {
     isWallet,
     pinnedSettlementMode,
     walletChargeAllowed,
-    walletWindowLapsed,
+    paymentWindowLapsed,
     WALLET_PAYMENT_METHOD_TYPES,
     WALLET_NEEDS_APPROVAL_MESSAGE,
     WALLET_NOT_YET_PAYABLE,
-    walletWindowHours,
+    paymentWindowHours,
 } from '../utils/walletPayment';
 
 const stripeTest = require('stripe')(process.env.STRIPE_SECRET_KEY_TEST);
@@ -72,7 +72,7 @@ const createStripePaymentIntent = async (req, res) => {
             if (request.status !== 'awaiting_payment') {
                 return res.status(409).send({ error: WALLET_NOT_YET_PAYABLE });
             }
-            if (walletWindowLapsed(request.paymentDeadline)) {
+            if (paymentWindowLapsed(request.paymentDeadline)) {
                 return res.status(410).send({ error: 'The payment window for this seat has closed.' });
             }
             // This seat was requested without a hold, so it settles in the mode it was
@@ -131,12 +131,14 @@ const createStripePaymentIntent = async (req, res) => {
                     if (!walletChargeAllowed({ flow: 'oneToOne', approved: accepted })) {
                         return res.status(409).send({ error: WALLET_NOT_YET_PAYABLE });
                     }
-                    if (walletWindowLapsed(groupChat.paymentDeadline)) {
-                        return res.status(410).send({ error: 'The payment window for this session has closed.' });
-                    }
                 } else {
                     // Hold the funds; they are captured only once the session is active.
                     manualCapture = true;
+                }
+                // An expert's offer expires whether or not it was going to settle by
+                // wallet, so the window is checked on both rails before an intent exists.
+                if (paymentWindowLapsed(groupChat.paymentDeadline)) {
+                    return res.status(410).send({ error: 'The payment window for this session has closed.' });
                 }
             }
 
@@ -264,7 +266,7 @@ const getStripeMode = async (req, res) => {
         res.send({
             stripeMode: appState.stripeMode,
             seminarApprovalDeadlineHours: appState.seminarApprovalDeadlineHours ?? 24,
-            walletPaymentWindowHours: walletWindowHours(appState),
+            paymentWindowHours: paymentWindowHours(appState),
         });
     } catch (err) {
         console.log(err);
@@ -292,20 +294,20 @@ const setSeminarApprovalDeadline = async (req, res) => {
     }
 };
 
-const setWalletPaymentWindow = async (req, res) => {
+const setPaymentWindow = async (req, res) => {
     try {
-        const hours = Number(req.body.walletPaymentWindowHours);
+        const hours = Number(req.body.paymentWindowHours);
         if (!Number.isFinite(hours) || hours <= 0 || hours > 168) {
             return res.status(400).send({ error: 'The payment window must be between 1 and 168 hours.' });
         }
         let appState = await AppState.findOne();
         if (!appState) {
-            appState = await AppState.create({ walletPaymentWindowHours: hours });
+            appState = await AppState.create({ paymentWindowHours: hours });
         } else {
-            appState.walletPaymentWindowHours = hours;
+            appState.paymentWindowHours = hours;
             await appState.save();
         }
-        res.send({ result: 'SUCCESS', walletPaymentWindowHours: appState.walletPaymentWindowHours });
+        res.send({ result: 'SUCCESS', paymentWindowHours: appState.paymentWindowHours });
     } catch (err) {
         console.log(err);
         return res.status(500).send(HTTP_GENERIC_ERROR);
@@ -1338,7 +1340,7 @@ module.exports = {
     cancelPaymentIntent,
     setStripeMode,
     setSeminarApprovalDeadline,
-    setWalletPaymentWindow,
+    setPaymentWindow,
     refundPaymentIntent,
     listReconcilableBookingIntents,
     sendPaymentLinkToUser,
