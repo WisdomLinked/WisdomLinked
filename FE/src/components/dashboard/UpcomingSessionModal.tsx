@@ -3,6 +3,7 @@ import { Calendar, Clock, MapPin, BookOpen, UserCheck } from 'lucide-react';
 import SeminarDetails from '../../pages/Dashboard/seminarDetails';
 import { formatSessionDuration } from '../../utils/sessionDuration';
 import DecisionNoteField from './DecisionNoteField';
+import type { PendingSessionState } from '../../utils/bookingLifecycle';
 
 type SessionKind = 'seminar' | 'oneToOne';
 type SessionStatus = 'booked' | 'pending';
@@ -57,6 +58,7 @@ export type UpcomingModalSession = {
   canDecline?: boolean;
   /** Extra small lines under the date (e.g. "$20.00 held", "Decide by …"). */
   metaLines?: string[];
+  pendingState?: PendingSessionState;
 };
 
 const pad2 = (n: number) => String(n).padStart(2, '0');
@@ -72,6 +74,52 @@ function formatDuration(ms: number) {
   return days > 0
     ? `${days}d ${pad2(hours)}:${pad2(minutes)}:${pad2(seconds)}`
     : `${pad2(hours)}:${pad2(minutes)}:${pad2(seconds)}`;
+}
+
+const pendingStateLabel = (state?: PendingSessionState) => {
+  if (state === 'accepted_awaiting_payment' || state === 'offer_awaiting_payment') {
+    return 'Awaiting payment';
+  }
+  if (state === 'awaiting_expert') return 'Your decision';
+  return 'Pending';
+};
+
+function expertPendingDescription(sessions: UpcomingModalSession[]) {
+  if (!sessions.length) return 'No 1:1 requests are pending right now.';
+  const states = new Set(
+    sessions.map(session => session.pendingState).filter(Boolean) as PendingSessionState[],
+  );
+  if (!states.size) return '1:1 requests waiting for you or the student to confirm.';
+
+  const needsYou = states.has('awaiting_expert');
+  const acceptedUnpaid = states.has('accepted_awaiting_payment');
+  const offerUnpaid = states.has('offer_awaiting_payment');
+
+  if (needsYou && (acceptedUnpaid || offerUnpaid)) {
+    return 'Some of these need your decision; the rest are waiting for the student to pay. Each card says which.';
+  }
+  if (needsYou) {
+    return 'These 1:1 requests need your decision. The student is only charged once you accept — declining or letting the deadline pass costs them nothing.';
+  }
+  if (acceptedUnpaid && offerUnpaid) {
+    return 'Nothing here needs your decision. Each session confirms once the student pays by the deadline shown.';
+  }
+  if (acceptedUnpaid) {
+    return 'You have already accepted these. Nothing more is needed from you — each one confirms when the student pays by the deadline shown.';
+  }
+  return 'These are offers you sent. Nothing more is needed from you — each one confirms when the student pays, and you can withdraw an offer until then.';
+}
+
+function studentPendingDescription(sessions: UpcomingModalSession[]) {
+  if (!sessions.length) return 'You have no pending 1:1 requests right now.';
+  const payable = sessions.filter(session => session.payable).length;
+  if (payable === sessions.length) {
+    return 'These are waiting for your payment. Each one confirms as soon as your payment goes through — pay before the deadline shown or the slot is released.';
+  }
+  if (payable === 0) {
+    return 'These 1:1 requests are waiting for mentor approval. You are only charged once your mentor accepts.';
+  }
+  return 'Some of these are waiting for your payment; the rest are waiting for mentor approval. Each card says which.';
 }
 
 export default function UpcomingSessionModal({
@@ -282,14 +330,14 @@ export default function UpcomingSessionModal({
       typeLabel: '1-1 session',
       description: expert
         ? status === 'pending'
-          ? '1:1 requests waiting for you or the student to confirm.'
+          ? expertPendingDescription(sessions)
           : 'Confirmed 1:1 sessions — join opens the session in chat.'
         : status === 'pending'
-          ? 'These 1:1 requests are waiting for mentor approval.'
+          ? studentPendingDescription(sessions)
           : 'These are your upcoming booked 1:1 sessions.',
       icon: <UserCheck className="h-4 w-4" aria-hidden />,
     };
-  }, [kind, status, role]);
+  }, [kind, status, role, sessions]);
 
   const showJoin = status === 'booked';
 
@@ -606,8 +654,16 @@ export default function UpcomingSessionModal({
                         </div>
                       )
                     ) : (
-                      <span className="mt-2 inline-flex rounded-lg border border-[#234C6A]/30 px-2 py-1 text-[10px] font-semibold text-[#234C6A]">
-                        Pending
+                      <span
+                        className={`mt-2 inline-flex rounded-lg px-2 py-1 text-[10px] font-semibold ${
+                          session.pendingState === 'awaiting_expert'
+                            ? 'border border-[#234C6A]/30 text-[#234C6A]'
+                            : session.pendingState
+                              ? 'bg-amber-100 text-amber-700'
+                              : 'border border-[#234C6A]/30 text-[#234C6A]'
+                        }`}
+                      >
+                        {pendingStateLabel(session.pendingState)}
                       </span>
                     )}
                   </div>

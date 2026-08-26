@@ -5,6 +5,7 @@ import {
   awaitsExpertDecision,
   pendingRequestIsLive,
   paymentWindowOpen,
+  pendingSessionState,
 } from './bookingLifecycle';
 
 const NOW = Date.parse('2026-08-14T12:00:00Z');
@@ -111,5 +112,40 @@ describe('paymentWindowOpen', () => {
 
   it('does not close the window on an unreadable deadline', () => {
     expect(paymentWindowOpen({ paymentDeadline: 'not a date' }, NOW)).toBe(true);
+  });
+});
+
+describe('pendingSessionState', () => {
+  const EXPERT = 'expert-1';
+  const STUDENT = 'student-1';
+
+  it('reads a student request the expert has not decided as the expert\'s move', () => {
+    const chat = { status: 'pending', admin: EXPERT, createdBy: STUDENT, paymentMode: 'card' };
+    expect(pendingSessionState(chat, EXPERT, NOW)).toBe('awaiting_expert');
+  });
+
+  it('reads a wallet request the expert has not decided as the expert\'s move', () => {
+    const chat = { status: 'pending', admin: EXPERT, createdBy: STUDENT, paymentMode: 'wallet' };
+    expect(pendingSessionState(chat, EXPERT, NOW)).toBe('awaiting_expert');
+  });
+
+  it('reads an accepted wallet request as waiting on the student to pay', () => {
+    const chat = walletChat({ admin: EXPERT, createdBy: STUDENT });
+    expect(pendingSessionState(chat, EXPERT, NOW)).toBe('accepted_awaiting_payment');
+  });
+
+  it('reads the expert\'s own offer as waiting on the student to pay', () => {
+    const chat = { status: 'pending', admin: EXPERT, createdBy: EXPERT, paymentMode: 'card' };
+    expect(pendingSessionState(chat, EXPERT, NOW)).toBe('offer_awaiting_payment');
+  });
+
+  it('falls back to the session admin when no expert id is supplied', () => {
+    const chat = { status: 'pending', admin: { _id: EXPERT }, createdBy: { _id: EXPERT } };
+    expect(pendingSessionState(chat, undefined, NOW)).toBe('offer_awaiting_payment');
+  });
+
+  it('stops calling a lapsed wallet window an acceptance', () => {
+    const chat = walletChat({ admin: EXPERT, createdBy: STUDENT, paymentDeadline: inHours(-1) });
+    expect(pendingSessionState(chat, EXPERT, NOW)).toBe('awaiting_expert');
   });
 });

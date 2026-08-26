@@ -57,7 +57,7 @@ import StudentChat from '../components/dashboard/StudentChat';
 import JoinMeeting from '../components/dashboard/JoinMeeting';
 import DecisionNoteField from '../components/dashboard/DecisionNoteField';
 import StatCard from '../components/ui/StatCard';
-import { awaitsExpertDecision, awaitsWalletPayment } from '../utils/bookingLifecycle';
+import { awaitsExpertDecision, awaitsWalletPayment, pendingSessionState } from '../utils/bookingLifecycle';
 import Chatbot from '../components/chatbot';
 import UpcomingSessionModal, {
   type UpcomingModalSession,
@@ -189,11 +189,11 @@ function mapExpertGroupToModalSession(g: any, waitingCount = 0): UpcomingModalSe
     }
     const expertProposed = refIdOf(g?.createdBy) === refIdOf(g?.admin);
     if (wallet && g?.paymentDeadline) {
-      metaLines.push(`Accepted — student to pay by ${new Date(g.paymentDeadline).toLocaleString()}`);
+      metaLines.push(`Accepted by you — waiting for the student to pay by ${new Date(g.paymentDeadline).toLocaleString()}`);
     } else if (expertProposed && g?.paymentDeadline) {
-      metaLines.push(`Student to pay by ${new Date(g.paymentDeadline).toLocaleString()}`);
+      metaLines.push(`Your offer — waiting for the student to pay by ${new Date(g.paymentDeadline).toLocaleString()}`);
     } else if (g?.decisionDeadline) {
-      metaLines.push(`Decide by ${new Date(g.decisionDeadline).toLocaleString()}`);
+      metaLines.push(`Waiting for your decision — decide by ${new Date(g.decisionDeadline).toLocaleString()}`);
     }
   }
   return {
@@ -956,11 +956,16 @@ export default function ExpertDashboard() {
         : [...pendingSessions, ...awaitingPaymentSessions];
       return list.map((g: any) => {
         const base = mapExpertGroupToModalSession(g);
-        if (status !== 'pending' || awaitsWalletPayment(g)) return base;
-        const createdById =
-          typeof g.createdBy === 'object' ? g.createdBy?._id : g.createdBy;
-        const expertProposed = String(createdById) === String(userDetails?._id);
-        return { ...base, canAccept: !expertProposed, canWithdraw: expertProposed };
+        if (status !== 'pending') return base;
+        const pendingState = pendingSessionState(g, String(userDetails?._id ?? ''));
+        if (pendingState === 'accepted_awaiting_payment') return { ...base, pendingState };
+        const expertProposed = pendingState === 'offer_awaiting_payment';
+        return {
+          ...base,
+          pendingState,
+          canAccept: !expertProposed,
+          canWithdraw: expertProposed,
+        };
       });
     }
     if (status === 'pending') {

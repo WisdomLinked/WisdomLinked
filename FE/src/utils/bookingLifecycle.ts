@@ -38,3 +38,22 @@ export const paymentWindowOpen = (chat: any, now: number = Date.now()): boolean 
     const due = new Date(chat.paymentDeadline).getTime();
     return !Number.isFinite(due) || due > now;
 };
+
+export type PendingSessionState =
+    | 'awaiting_expert'
+    | 'accepted_awaiting_payment'
+    | 'offer_awaiting_payment';
+
+const refId = (value: any): string =>
+    String((value && typeof value === 'object' ? value._id : value) ?? '');
+
+export const pendingSessionState = (
+    chat: any,
+    expertUserId?: string,
+    now: number = Date.now(),
+): PendingSessionState => {
+    if (awaitsWalletPayment(chat, now)) return 'accepted_awaiting_payment';
+    const expertId = refId(expertUserId) || refId(chat?.admin);
+    if (expertId && refId(chat?.createdBy) === expertId) return 'offer_awaiting_payment';
+    return 'awaiting_expert';
+};
