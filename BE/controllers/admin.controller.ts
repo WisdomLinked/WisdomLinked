@@ -9,6 +9,15 @@ import {
 } from '../utils/paymentIntegrity';
 const escapeRegExp = (value: unknown) => String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const { uploadFileToS3 } = require("./auth.controller")
+const {
+    renderEmail: renderAdminEmail,
+    paragraph: adminParagraph,
+    facts: adminFacts,
+    button: adminButton,
+    callout: adminCallout,
+    escapeHtml: adminEscape,
+    emailAttachments: adminAttachments,
+} = require('../services/emailTemplate');
 const User = require("../models/User");
 const Event = require("../models/Event");
 const PaymentHistory = require("../models/PaymentHistory");
@@ -476,15 +485,16 @@ const sendWelcomeEmail = async (req, res) => {
             });
         }
 
-        const html = `
-        <p>Greetings of the day!</p>
-        <p>Your account has been successfully registered at Wisdom Linked.</p>
-        <p>Below are your credentials:</p>
-        <p>Email ID: ${email}</p>
-        <p>Password: ${password}</p>
-        <p>We look forward to having you explore our services.</p>
-        <p>Best Regards,<br>Team WisdomLinked</p>
-        `;
+        const html = renderAdminEmail({
+            heading: 'Welcome to WisdomLinked',
+            previewText: 'Your account is ready.',
+            blocks: [
+                adminParagraph('Your account has been registered. You can sign in with the credentials below.'),
+                adminFacts([['Email', email], ['Temporary password', password]]),
+                adminCallout('Please sign in and change this password as soon as you can — it was sent by email and should not be treated as permanent.', 'warn'),
+                adminButton('Sign in'),
+            ],
+        });
 
         const msg = {
             to: email,
@@ -497,6 +507,8 @@ const sendWelcomeEmail = async (req, res) => {
         };
 
         try {
+            const inlineHeader = adminAttachments();
+            if (inlineHeader.length) (msg as any).attachments = inlineHeader;
             const response = await sgMail.send(msg);
             console.log("Welcome email sent via SendGrid:", response[0].statusCode);
         } catch (error) {
@@ -528,14 +540,15 @@ const sendEmailToUser = async (req, res) => {
             });
         }
 
-        const html = `
-        <p>Hello from WisdomLink.io</p>
-        <p>Thank you for reaching out to us. Whether you're seeking academic guidance or offering your expertise, we appreciate your interest.</p>
-        <p><strong>Here's our response to your inquiry:</strong></p>
-        <p>${message}</p>
-        <p>If you have any further questions or need more assistance, please let us know.</p>
-        <p>Best Regards,<br>Team WisdomLinked</p>
-        `;
+        const html = renderAdminEmail({
+            heading: 'A reply to your enquiry',
+            blocks: [
+                adminParagraph('Thank you for reaching out. Whether you are seeking academic guidance or offering your expertise, we appreciate your interest.'),
+                adminParagraph('<strong>Our response:</strong>'),
+                adminCallout(adminEscape(message)),
+                adminParagraph('If you have any further questions, just reply to this email.'),
+            ],
+        });
 
         const msg = {
             to: email,
@@ -543,12 +556,14 @@ const sendEmailToUser = async (req, res) => {
                 name: "WisdomLinked Admin",
                 email: adminEmail,
             },
-            subject: "Message from WisdomLink.io",
+            subject: "A reply from WisdomLinked",
             html,
             replyTo: email,
         };
 
         try {
+            const inlineHeader = adminAttachments();
+            if (inlineHeader.length) (msg as any).attachments = inlineHeader;
             const response = await sgMail.send(msg);
             console.log("Contact email sent via SendGrid:", response[0].statusCode);
         } catch (error) {

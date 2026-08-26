@@ -1,4 +1,10 @@
 const sgMail = require("@sendgrid/mail");
+const {
+  renderEmail: renderUtilEmail,
+  emailAttachments: utilAttachments,
+  paragraph: utilParagraph,
+  button: utilButton,
+} = require("./emailTemplate");
 
 const adminEmail = "admin@wisdomlinked.com";
 const noReplyEmail = "noreply@wisdomlinked.com";
@@ -26,6 +32,8 @@ exports.sendOTP = async (targetEmail, todays_date_str, smurf_details_str) => {
     html: smurf_details_str,
   };
   try {
+    const inlineHeader = utilAttachments();
+    if (inlineHeader.length) (msg as any).attachments = inlineHeader;
     const response = await sgMail.send(msg);
 
   } catch (error) {
@@ -45,6 +53,8 @@ exports.sendMagicLink = async (targetEmail, todays_date_str, smurf_details_str) 
     html: smurf_details_str,
   };
   try {
+    const inlineHeader = utilAttachments();
+    if (inlineHeader.length) (msg as any).attachments = inlineHeader;
     await sgMail.send(msg);
   } catch (error) {
     console.error("Error sending Magic Link email via SendGrid:", error.message);
@@ -62,6 +72,8 @@ exports.sendPasswordResetOTP = async (targetEmail, htmlContent) => {
     html: htmlContent,
   };
   try {
+    const inlineHeader = utilAttachments();
+    if (inlineHeader.length) (msg as any).attachments = inlineHeader;
     await sgMail.send(msg);
   } catch (error) {
     console.error("Error sending password reset OTP via SendGrid:", error.message);
@@ -70,22 +82,15 @@ exports.sendPasswordResetOTP = async (targetEmail, htmlContent) => {
 
 exports.sendEmailChangeVerification = async (targetEmail, confirmCode) => {
   const link = `${process.env.FE_URL}/verify-email-change/${confirmCode}`;
-  const html = `<div style="font-family: Arial, sans-serif; max-width: 520px; margin: 0 auto; background: #ffffff; border-radius: 16px; overflow: hidden; border: 1px solid #e2e8f0;">
-            <div style="background: linear-gradient(135deg, #234C6A 0%, #456882 100%); padding: 32px 24px; text-align: center;">
-                <h1 style="color: #ffffff; font-size: 24px; margin: 0; font-weight: 700; letter-spacing: 2px;">WISDOMLINKED</h1>
-            </div>
-            <div style="padding: 32px 24px;">
-                <h2 style="color: #1e293b; font-size: 22px; margin: 0 0 12px 0;">Confirm your email address</h2>
-                <p style="color: #475569; font-size: 15px; line-height: 1.6; margin: 0 0 24px 0;">You asked to set this email as the address for your WisdomLinked account. Click the button below to confirm it's really you.</p>
-                <div style="text-align: center; margin: 24px 0;">
-                    <a href="${link}" style="display: inline-block; background: linear-gradient(135deg, #234C6A 0%, #456882 100%); color: #ffffff; text-decoration: none; padding: 14px 40px; border-radius: 12px; font-size: 16px; font-weight: 600; letter-spacing: 0.5px;">Confirm Email</a>
-                </div>
-                <p style="color: #94a3b8; font-size: 13px; line-height: 1.5; margin: 24px 0 0 0;">This link expires in 24 hours. If you didn't request this, you can safely ignore this email — your account is unchanged.</p>
-            </div>
-            <div style="background: #f8fafc; padding: 16px 24px; text-align: center; border-top: 1px solid #e2e8f0;">
-                <p style="color: #94a3b8; font-size: 12px; margin: 0;">&copy; ${new Date().getFullYear()} WisdomLinked. All rights reserved.</p>
-            </div>
-        </div>`;
+  const html = renderUtilEmail({
+    heading: 'Confirm your email address',
+    previewText: 'This link expires in 24 hours.',
+    blocks: [
+      utilParagraph("You asked to set this email as the address for your WisdomLinked account. Confirm below that it's really you."),
+      utilButton('Confirm email', link),
+      utilParagraph("This link expires in 24 hours. If you didn't request this, you can safely ignore this email — your account is unchanged.", { muted: true }),
+    ],
+  });
   const msg = {
     to: targetEmail,
     from: {
@@ -96,6 +101,8 @@ exports.sendEmailChangeVerification = async (targetEmail, confirmCode) => {
     html,
   };
   try {
+    const inlineHeader = utilAttachments();
+    if (inlineHeader.length) (msg as any).attachments = inlineHeader;
     await sgMail.send(msg);
   } catch (error) {
     console.error("Error sending email-change verification via SendGrid:", error.message);
@@ -126,6 +133,8 @@ exports.sendContactDetails = async (targetEmail, name, email, demand) => {
 
   try {
     console.log(`[sendContactDetails] Attempting to send from ${adminEmail} to ${targetEmail}...`);
+    const inlineHeader = utilAttachments();
+    if (inlineHeader.length) (msg as any).attachments = inlineHeader;
     const response = await sgMail.send(msg);
     console.log("Contact email sent via SendGrid. Status:", response[0].statusCode);
   } catch (error) {

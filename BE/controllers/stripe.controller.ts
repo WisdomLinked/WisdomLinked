@@ -483,6 +483,60 @@ const enrichPaymentIntentReceipt = async ({ payment_intent, stripeMode, descript
     }
 };
 
+const describePaymentMethod = (intent: any): string => {
+    const types: string[] = Array.isArray(intent?.payment_method_types) ? intent.payment_method_types : [];
+    if (types.includes('wechat_pay')) return 'WeChat Pay';
+    if (types.includes('alipay')) return 'Alipay';
+    if (types.includes('card')) return 'Credit card';
+    return '';
+};
+
+const {
+    renderEmail: renderStripeEmail,
+    emailAttachments: stripeAttachments,
+    moneyFromCents: stripeMoneyFromCents,
+    paragraph: stripeParagraph,
+    facts: stripeFacts,
+    button: stripeButton,
+    callout: stripeCallout,
+    escapeHtml: stripeEscape,
+} = require("../services/emailTemplate");
+
+const buildPaymentRequestEmail = ({ customerName, amountCents, description, url }: any) => renderStripeEmail({
+    heading: 'Payment requested',
+    previewText: `${stripeMoneyFromCents(amountCents)} due.`,
+    blocks: [
+        stripeParagraph(`Hello ${stripeEscape(customerName || 'there')},`),
+        stripeFacts([
+            ['Amount', stripeMoneyFromCents(amountCents)],
+            ['For', description],
+        ]),
+        stripeButton(`Pay ${stripeMoneyFromCents(amountCents)}`, url),
+        stripeParagraph('Payment is handled securely by Stripe. You will receive a confirmation email once it has been processed.', { muted: true }),
+    ],
+});
+
+const buildRefundEmail = ({ customerName, amountCents, currency, isFullRefund, retainedCents, description, expertName, start, reference }: any) => renderStripeEmail({
+    heading: 'Your refund has been processed',
+    previewText: `${stripeMoneyFromCents(amountCents, currency)} refunded.`,
+    blocks: [
+        stripeParagraph(`Dear ${stripeEscape(customerName || 'there')}, your refund has been processed.`),
+        stripeFacts([
+            ['Booking', description],
+            ['Expert', expertName],
+            ['Scheduled for', start],
+            ['Refund amount', stripeMoneyFromCents(amountCents, currency)],
+            ['Refund date', new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })],
+            ['Reference', reference],
+        ]),
+        isFullRefund
+            ? ''
+            : stripeCallout(`${stripeMoneyFromCents(retainedCents, currency)} of your original payment has been retained in accordance with the applicable cancellation and refund policy.`),
+        stripeCallout('The refund will be credited to your original payment method and may take 5–10 business days to appear, depending on your bank. Your card issuer may notify you separately when it posts.', 'bad'),
+        stripeParagraph('If the refund has not reached you within 10 business days, contact the administrator through WisdomLinked quoting the reference above.', { muted: true }),
+    ],
+});
+
 const sendBookingReceiptAndConfirmation = async ({ payment_intent, charge, sessionType, sessionName, expertName, studentName, studentEmail, start, duration, timeZone, noteHtml = '' }) => {
     try {
         if (!charge || !studentEmail) return;
@@ -495,6 +549,7 @@ const sendBookingReceiptAndConfirmation = async ({ payment_intent, charge, sessi
         }
 
         const { sendPaymentConfirmationEmail } = require("../services/notifications");
+        const paymentMethodLabel = describePaymentMethod(settled);
         const dateStr = new Date(start).toLocaleString("en-US", { timeZone: timeZone || "UTC" });
         const description = `WisdomLinked ${sessionType} — "${sessionName}" with ${expertName} · ${dateStr}`;
         const metadata = {
@@ -523,6 +578,8 @@ const sendBookingReceiptAndConfirmation = async ({ payment_intent, charge, sessi
             amount: charge.amount,
             currency: charge.currency,
             receiptUrl: charge.receiptUrl,
+            receiptNumber: charge.receiptNumber,
+            paymentMethod: paymentMethodLabel,
             timeZone,
             noteHtml,
         });
@@ -617,42 +674,12 @@ const sendPaymentLinkToUser = async (req, res) => {
         await immediatePaymentHistory.save();
         console.log('Created pending payment record:', immediatePaymentHistory._id);
 
-        const html = `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-            <div style="background-color: #f8f9fa; padding: 20px; border-radius: 8px; border-left: 4px solid #007bff;">
-                <h2 style="color: #007bff; margin-top: 0;">Pending Payment Request</h2>
-                <p>Hello,</p>
-                
-                <p>You have a pending payment for our services. Please use the link below to complete your payment:</p>
-                
-                <div style="background-color: white; padding: 15px; border-radius: 5px; margin: 15px 0;">
-                    <h3 style="margin-top: 0; color: #333;">Payment Details</h3>
-                    <p><strong>Amount:</strong> $${(finalAmount / 100).toFixed(2)} USD</p>
-                    <p><strong>Description:</strong> ${finalDescription}</p>
-                </div>
-                
-                <div style="text-align: center; margin: 20px 0;">
-                    <a href="${paymentLink.url}" style="background-color: #007bff; color: white; padding: 12px 24px; text-decoration: none; border-radius: 5px; display: inline-block; font-weight: bold;">Complete Payment</a>
-                </div>
-                
-                <p><strong>Payment Process:</strong></p>
-                <ul>
-                    <li>Click the "Complete Payment" button above</li>
-                    <li>Enter your payment details securely through Stripe</li>
-                    <li>You will receive a confirmation email once payment is processed</li>
-                </ul>
-                
-                <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;">
-                
-                <p style="color: #666; font-size: 14px;">
-                    If you have any questions about this payment request, please contact our support team.<br><br>
-                    Best regards,<br>
-                    <strong>WisdomLinked Team</strong>
-                </p>
-            </div>
-        </div>
-        `;
-
+        const html = buildPaymentRequestEmail({
+            customerName: paymentHistory?.customer?.username,
+            amountCents: finalAmount,
+            description: finalDescription,
+            url: paymentLink.url,
+        });
 
         const msg = {
             to: customerEmail,
@@ -660,10 +687,12 @@ const sendPaymentLinkToUser = async (req, res) => {
                 name: "WisdomLinked",
                 email: adminEmail,
             },
-            subject: "Pending Payment - WisdomLinked",
+            subject: `Payment requested — ${stripeMoneyFromCents(finalAmount)} due`,
             html,
         };
 
+        const inline_msg = stripeAttachments();
+        if (inline_msg.length) (msg as any).attachments = inline_msg;
         await sgMail.send(msg);
 
         res.status(200).json({
@@ -1057,43 +1086,19 @@ const processRefund = async (req, res) => {
 
             const refundType = isFullRefund ? 'Full Refund' : 'Partial Refund';
 
-            const refundEmailHtml = `
-            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-                <div style="background-color: #f8f9fa; padding: 20px; border-radius: 8px; border-left: 4px solid #28a745;">
-                    <h2 style="color: #28a745; margin-top: 0;">${refundType} Processed - WisdomLinked</h2>
-                    <p>Dear Valued Customer,</p>
-                    
-                    <p>We have processed a refund for your payment. Here are the details:</p>
-                    
-                    <div style="background-color: white; padding: 15px; border-radius: 5px; margin: 15px 0;">
-                        <h3 style="margin-top: 0; color: #333;">Refund Details</h3>
-                        <p><strong>Refund Amount:</strong> $${refundAmount.toFixed(2)} ${(paymentHistory.currency || 'USD').toUpperCase()}</p>
-                        <p><strong>Original Payment Amount:</strong> $${maxRefundAmount.toFixed(2)} ${(paymentHistory.currency || 'USD').toUpperCase()}</p>
-                        <p><strong>Refund Type:</strong> ${refundType}</p>
-                        <p><strong>Reason:</strong> ${refundReason}</p>
-                        <p><strong>Original Description:</strong> ${paymentHistory.description || 'N/A'}</p>
-                        <p><strong>Refund Date:</strong> ${new Date().toLocaleDateString()}</p>
-                    </div>
-                    
-                    <p><strong>What happens next?</strong></p>
-                    <ul>
-                        <li>The refund will appear on your original payment method within 5-10 business days</li>
-                        <li>You will receive a separate notification from your bank/card provider when the refund is processed</li>
-                        ${!isFullRefund ? '<li>The remaining balance on your original payment remains valid</li>' : ''}
-                    </ul>
-                    
-                    <p>If you have any questions about this refund, please don't hesitate to contact our support team.</p>
-                    
-                    <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;">
-                    
-                    <p style="color: #666; font-size: 14px;">
-                        Thank you for your understanding.<br>
-                        Best regards,<br>
-                        <strong>WisdomLinked Support Team</strong>
-                    </p>
-                </div>
-            </div>
-            `;
+            const refundEmailHtml = buildRefundEmail({
+                customerName: paymentHistory.customer?.username,
+                amountCents: Math.round(refundAmount * 100),
+                currency: paymentHistory.currency,
+                isFullRefund,
+                retainedCents: Math.round((maxRefundAmount - refundAmount) * 100),
+                description: paymentHistory.description,
+                expertName: paymentHistory.expert?.username,
+                start: paymentHistory.groupChat?.start
+                    ? new Date(paymentHistory.groupChat.start).toLocaleString()
+                    : '',
+                reference: refundHistory?._id ? String(refundHistory._id) : paymentHistory.paymentIntent,
+            });
 
             const refundEmailMsg = {
                 to: paymentHistory.customer.email,
@@ -1101,11 +1106,13 @@ const processRefund = async (req, res) => {
                     name: "WisdomLinked",
                     email: adminEmail,
                 },
-                subject: `${refundType} Confirmation - WisdomLinked`,
+                subject: `${stripeMoneyFromCents(Math.round(refundAmount * 100), paymentHistory.currency)} refund processed`,
                 html: refundEmailHtml,
             };
 
             try {
+                const inline_refundEmailMsg = stripeAttachments();
+                if (inline_refundEmailMsg.length) (refundEmailMsg as any).attachments = inline_refundEmailMsg;
                 await sgMail.send(refundEmailMsg);
                 console.log('Refund notification email sent to:', paymentHistory.customer.email);
             } catch (emailError) {
@@ -1259,41 +1266,12 @@ const sendAdHocPaymentLink = async (req, res) => {
         const adminEmail = "noreply@wisdomlinked.com";
         sgMail.setApiKey(process.env.SENDGRID_API_KEY);
 
-        const html = `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-            <div style="background-color: #f8f9fa; padding: 20px; border-radius: 8px; border-left: 4px solid #007bff;">
-                <h2 style="color: #007bff; margin-top: 0;">Payment Request - WisdomLinked</h2>
-                <p>Hello${customerName ? ` ${customerName}` : ''},</p>
-                
-                <p>You have received a payment request from WisdomLinked. Please use the link below to complete your payment:</p>
-                
-                <div style="background-color: white; padding: 15px; border-radius: 5px; margin: 15px 0;">
-                    <h3 style="margin-top: 0; color: #333;">Payment Details</h3>
-                    <p><strong>Amount:</strong> $${(finalAmount / 100).toFixed(2)} USD</p>
-                    <p><strong>Description:</strong> ${finalDescription}</p>
-                </div>
-                
-                <div style="text-align: center; margin: 20px 0;">
-                    <a href="${paymentLink.url}" style="background-color: #007bff; color: white; padding: 12px 24px; text-decoration: none; border-radius: 5px; display: inline-block; font-weight: bold;">Complete Payment</a>
-                </div>
-                
-                <p><strong>Payment Process:</strong></p>
-                <ul>
-                    <li>Click the "Complete Payment" button above</li>
-                    <li>Enter your payment details securely through Stripe</li>
-                    <li>You will receive a confirmation email once payment is processed</li>
-                </ul>
-                
-                <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;">
-                
-                <p style="color: #666; font-size: 14px;">
-                    If you have any questions about this payment request, please contact our support team.<br><br>
-                    Best regards,<br>
-                    <strong>WisdomLinked Team</strong>
-                </p>
-            </div>
-        </div>
-        `;
+        const html = buildPaymentRequestEmail({
+            customerName: customerName || (customerEmail || '').split('@')[0],
+            amountCents: finalAmount,
+            description: finalDescription,
+            url: paymentLink.url,
+        });
 
         const emailMsg = {
             to: customerEmail.trim(),
@@ -1301,10 +1279,12 @@ const sendAdHocPaymentLink = async (req, res) => {
                 name: "WisdomLinked",
                 email: adminEmail,
             },
-            subject: `Payment Request - $${(finalAmount / 100).toFixed(2)} - WisdomLinked`,
+            subject: `Payment requested — ${stripeMoneyFromCents(finalAmount)} due`,
             html: html,
         };
 
+        const inline_emailMsg = stripeAttachments();
+        if (inline_emailMsg.length) (emailMsg as any).attachments = inline_emailMsg;
         await sgMail.send(emailMsg);
         console.log('Ad-hoc payment link email sent to:', customerEmail.trim());
 

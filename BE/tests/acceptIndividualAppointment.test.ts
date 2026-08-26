@@ -33,6 +33,7 @@ stripeController.listReconcilableBookingIntents = async () => [];
 notifications.sendNotificationEmail = async () => {};
 notifications.sendEmailMeetingRequestToExpert = async () => {};
 notifications.sendEmailMeetingRequestToCustomer = async () => {};
+notifications.sendEmailSessionPaidToExpert = async () => {};
 notifications.sendEmailMeetingAcceptance = async (
   to: string,
   _name: string,

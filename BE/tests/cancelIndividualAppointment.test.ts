@@ -42,6 +42,7 @@ notifications.sendNotificationEmail = async (to: string, subject: string) => {
 };
 notifications.sendEmailMeetingRequestToExpert = async () => {};
 notifications.sendEmailMeetingRequestToCustomer = async () => {};
+notifications.sendEmailSessionPaidToExpert = async () => {};
 notifications.sendEmailMeetingAcceptance = async () => {};
 notifications.scheduleEmailReminder = () => {};
 paymentController.appendPaymentHistory = async (data: any) => {
@@ -309,10 +310,12 @@ test("the decline email tells the student no payment was processed", async () =>
     await cancelAs(EXPERT_ID, DECLINE_NOTE);
 
     const sent = (calls.email || []).find((c: any[]) =>
-      /Appointment Request Declined/i.test(String(c[1])),
+      /session request was declined/i.test(String(c[1])),
     );
     assert.ok(sent, "the student is emailed about the decline");
     assert.equal(sent[0], "student@test.com");
+    assert.match(String(sent[1]), /no charge processed/i, "the subject settles the money question");
+    assert.doesNotMatch(String(sent[1]), /refund/i, "a released hold is never called a refund");
   } finally {
     restore();
   }

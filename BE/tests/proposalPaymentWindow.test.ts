@@ -30,6 +30,7 @@ notifications.sendNotificationEmail = async (to: string, subject: string) => {
 };
 notifications.sendEmailMeetingRequestToExpert = async () => {};
 notifications.sendEmailMeetingRequestToCustomer = async () => {};
+notifications.sendEmailSessionPaidToExpert = async () => {};
 notifications.sendEmailMeetingAcceptance = async () => {};
 notifications.scheduleEmailReminder = () => {};
 paymentController.appendPaymentHistory = async () => true;

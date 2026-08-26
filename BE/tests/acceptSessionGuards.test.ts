@@ -46,6 +46,7 @@ stripeController.listReconcilableBookingIntents = async () => [];
 notifications.sendNotificationEmail = async () => {};
 notifications.sendEmailMeetingRequestToExpert = async () => {};
 notifications.sendEmailMeetingRequestToCustomer = async () => {};
+notifications.sendEmailSessionPaidToExpert = async () => {};
 notifications.sendEmailMeetingAcceptance = async () => {};
 notifications.scheduleEmailReminder = () => {};
 paymentController.appendPaymentHistory = async (data: any) => {
