@@ -157,7 +157,20 @@ async function syncGroupRocketChannel(groupChatId: string) {
     }
 }
 const { checkTitleNameInvalid } = require('../services/global')
-const { scheduleEmailReminder, sendEmailMeetingRequestToCustomer, sendEmailMeetingRequestToExpert, sendEmailMeetingAcceptance, sendNotificationEmail } = require('../services/notifications')
+const {
+    renderEmail,
+    money: emailMoney,
+    moneyFromCents: emailMoneyFromCents,
+    formatWhen: emailWhen,
+    paragraph: emailParagraph,
+    facts: emailFacts,
+    bullets: emailBullets,
+    button: emailButton,
+    callout: emailCallout,
+    expertNote: emailExpertNote,
+    escapeHtml: emailEscape,
+} = require('../services/emailTemplate')
+const { scheduleEmailReminder, sendEmailMeetingRequestToCustomer, sendEmailMeetingRequestToExpert, sendEmailSessionPaidToExpert, sendEmailSessionOfferSentToExpert, sendEmailMeetingAcceptance, sendNotificationEmail } = require('../services/notifications')
 const { assertBookingLeadTime } = require("../utils/bookingLeadTime");
 const { assertBookingSlotValid, assertDurationAllowed } = require("../utils/bookingValidation");
 import { buildRemovedUserNotice, normalizeModerationReason } from '../utils/videoModerationNotice';
@@ -772,21 +785,34 @@ const createGroupChatByUser = async (req, res) => {
 
         if (walletRequest) {
             Promise.resolve(
-                sendEmailMeetingRequestToExpert(expertUser.email, expertUser.username, name, chat.start, duration, expectedCents / 100, true, expertUser.timeZone),
+                sendEmailMeetingRequestToExpert(expertUser.email, expertUser.username, name, chat.start, duration, expectedCents / 100, true, expertUser.timeZone, 'wallet', { studentName: currentUser.username, decisionDeadline: chat.decisionDeadline }),
             ).catch((emailErr) => console.log('[createGroupChatByUser] expert notification failed', emailErr));
 
             if (currentUser?.email) {
                 try {
                     await sendSeminarEmail(
                         currentUser.email,
-                        `Session request sent — ${chat.name}`,
-                        `<h2 style="color:#007bff;margin-top:0;">Your session request is with the expert</h2>
-                         <p>Your request for "<strong>${chat.name}</strong>" has been sent.
-                            <strong>Nothing has been charged yet.</strong> WeChat Pay and Alipay are paid in full at
-                            the time of payment, so we ask the expert first and only collect
-                            <strong>$${(expectedCents / 100).toFixed(2)}</strong> once they accept.</p>
-                         <p>If they accept, we'll email you a payment link and you'll have a limited window to pay
-                            and confirm the session.</p>`,
+                        'Request sent — no charge processed yet',
+                        {
+                            heading: `Your request has been sent to ${expertUser.username}`,
+                            previewText: 'Nothing has been charged.',
+                            blocks: [
+                                emailFacts([
+                                    ['Session', chat.name],
+                                    ['Expert', expertUser.username],
+                                    ['Date & time', emailWhen(chat.start, currentUser.timeZone)],
+                                    ['Duration', duration ? `${duration} minutes` : ''],
+                                    ['Price', emailMoneyFromCents(expectedCents)],
+                                ]),
+                                emailCallout('<strong>Nothing has been charged.</strong> Alipay and WeChat Pay are paid in full at the moment of payment, so we ask the expert first.'),
+                                emailBullets([
+                                    `If ${emailEscape(expertUser.username)} <strong>accepts</strong>, we email you a payment link and you have ${emailEscape(await walletWindowLabel())} to pay ${emailMoneyFromCents(expectedCents)}. Your session is confirmed only once that payment completes.`,
+                                    'If they <strong>decline</strong> or do not respond in time, no payment is requested and no charge is made.',
+                                ]),
+                                emailParagraph('You can check the status of your request at any time from your dashboard.', { muted: true }),
+                                emailButton('View your requests'),
+                            ],
+                        },
                     );
                 } catch (emailErr) {
                     console.log('[createGroupChatByUser] wallet request email failed', emailErr);
@@ -823,20 +849,34 @@ const createGroupChatByUser = async (req, res) => {
             chat.decisionDeadline = parked.decisionDeadline;
 
             Promise.resolve(
-                sendEmailMeetingRequestToExpert(expertUser.email, expertUser.username, name, chat.start, duration, expectedCents / 100, true, expertUser.timeZone),
+                sendEmailMeetingRequestToExpert(expertUser.email, expertUser.username, name, chat.start, duration, expectedCents / 100, true, expertUser.timeZone, 'hold', { studentName: currentUser.username, decisionDeadline: parked.decisionDeadline }),
             ).catch((emailErr) => console.log('[createGroupChatByUser] expert notification failed', emailErr));
 
             if (currentUser?.email) {
                 try {
                     await sendSeminarEmail(
                         currentUser.email,
-                        `Session request sent — ${chat.name}`,
-                        `<h2 style="color:#007bff;margin-top:0;">Your session request is with the expert</h2>
-                         <p>Your request for "<strong>${chat.name}</strong>" has been sent. Your card has been
-                            authorized for <strong>$${(charge.amount / 100).toFixed(2)} ${String(charge.currency || 'USD').toUpperCase()}</strong>
-                            but <strong>not charged</strong>. You are only charged if the expert accepts; otherwise the
-                            authorization is released.</p>
-                         <p>The expert has until <strong>${parked.decisionDeadline.toLocaleString()}</strong> to decide.</p>`,
+                        'Request sent — no charge processed yet',
+                        {
+                            heading: `Your request has been sent to ${expertUser.username}`,
+                            previewText: 'Your card has not been charged.',
+                            blocks: [
+                                emailFacts([
+                                    ['Session', chat.name],
+                                    ['Expert', expertUser.username],
+                                    ['Date & time', emailWhen(chat.start, currentUser.timeZone)],
+                                    ['Duration', duration ? `${duration} minutes` : ''],
+                                    ['Respond by', emailWhen(parked.decisionDeadline, currentUser.timeZone)],
+                                ]),
+                                emailCallout(`<strong>No charge has been made.</strong> A temporary authorization of ${emailMoneyFromCents(charge.amount, charge.currency)} is held on your card.`),
+                                emailBullets([
+                                    `If ${emailEscape(expertUser.username)} <strong>accepts</strong>, the ${emailMoneyFromCents(charge.amount, charge.currency)} is charged automatically and your session is confirmed.`,
+                                    'If they <strong>decline</strong>, or do not respond before the deadline, the authorization is released automatically and no charge is made.',
+                                ]),
+                                emailParagraph('We will email you as soon as they respond. You can also check the status from your dashboard.', { muted: true }),
+                                emailButton('View your requests'),
+                            ],
+                        },
                     );
                 } catch (emailErr) {
                     console.log('[createGroupChatByUser] hold notice email failed', emailErr);
@@ -909,7 +949,7 @@ const createGroupChatByUser = async (req, res) => {
         }
 
         Promise.resolve(
-            sendEmailMeetingRequestToExpert(expertUser.email, expertUser.username, name, chat.start, duration, expectedCents / 100, true, expertUser.timeZone),
+            sendEmailMeetingRequestToExpert(expertUser.email, expertUser.username, name, chat.start, duration, expectedCents / 100, true, expertUser.timeZone, charge ? 'paid' : undefined, { studentName: currentUser.username, decisionDeadline: chat.decisionDeadline }),
         ).catch((emailErr) => {
             console.log('[createGroupChatByUser] expert notification email failed', emailErr);
         });
@@ -977,7 +1017,13 @@ const proposeIndividualAppointment = async (req, res) => {
         customerUser.groupChats.push(chat._id);
         await customerUser.save();
 
-        sendEmailMeetingRequestToCustomer(customerUser.email, name, customerUser.username, chat.start, duration, finalPrice, customerUser.timeZone, payBy);
+        sendEmailMeetingRequestToCustomer(customerUser.email, name, customerUser.username, chat.start, duration, finalPrice, customerUser.timeZone, payBy, { expertName: expertUser.username });
+
+        if (expertUser?.email) {
+            Promise.resolve(
+                sendEmailSessionOfferSentToExpert(expertUser.email, expertUser.username, customerUser.username, name, chat.start, duration, finalPrice, expertUser.timeZone, payBy),
+            ).catch((emailErr) => console.log('[proposeIndividualAppointment] offer-sent email failed', emailErr));
+        }
 
         let userDetails = await getFullUserData(expertUser.email);
         userDetails.token = null;
@@ -1130,7 +1176,7 @@ const createGroupChat = async (req, res) => {
 
             // [REMOVED] updateUsersGroupChatList(customerId.toString());
 
-            sendEmailMeetingRequestToCustomer(customer.email, name, customer.username, start, duration, _price, customer.timeZone)
+            sendEmailMeetingRequestToCustomer(customer.email, name, customer.username, start, duration, _price, customer.timeZone, null, { expertName: currentUser.username })
 
         }
 
@@ -1353,12 +1399,18 @@ const notifySeminarChangeToStudents = async (before: any, changes: string[]) => 
         if (!student?.email) continue;
         await sendSeminarEmail(
             student.email,
-            `Update to your seminar — ${before?.name || 'Seminar'}`,
-            `<h2 style="color:#007bff;margin-top:0;">Your seminar has been updated</h2>
-             <p>The host changed "<strong>${before?.name || 'your seminar'}</strong>", which you're enrolled in:</p>
-             <ul style="padding-left:18px;">${changeList}</ul>
-             <p>Your seat is unchanged and no action is needed. If the new time or price no longer
-             works for you, you can leave the seminar from your dashboard.</p>`,
+            `Your seminar ${before?.name || 'Seminar'} has been updated`,
+            {
+                heading: 'Your seminar has been updated',
+                previewText: 'Your registration remains confirmed.',
+                blocks: [
+                    emailParagraph(`The host has updated <strong>${emailEscape(before?.name || 'your seminar')}</strong>, for which you are registered.`),
+                    emailBullets(changes.map((c: string) => String(c))),
+                    emailCallout('Your registration remains confirmed. No action is required unless these changes affect your plans.'),
+                    emailParagraph('If the updated details no longer work for you, you can withdraw from the seminar through your dashboard, subject to the applicable cancellation and refund policy.'),
+                    emailButton('View the seminar'),
+                ],
+            },
         );
     }
 };
@@ -1862,6 +1914,22 @@ const registerForSeminar = async (req, res) => {
                 groupChatId: groupChat._id.toString(),
             });
             if (!payment.ok) {
+                if (customer?.email) {
+                    await sendSeminarEmail(
+                        customer.email,
+                        "We couldn't complete your booking — no charge processed",
+                        {
+                            heading: "We couldn't complete your booking",
+                            previewText: 'No charge has been made.',
+                            blocks: [
+                                emailParagraph(`Your booking for <strong>${emailEscape(groupChat.name)}</strong>${expert?.username ? ` with ${emailEscape(expert.username)}` : ''} could not be completed.`),
+                                emailCallout('No charge has been made to your account. Any authorization placed on your card has been released automatically.'),
+                                emailParagraph('Please try again later. If the problem continues, contact the administrator through WisdomLinked.'),
+                                emailParagraph('For your security, repeated unsuccessful payment attempts may temporarily restrict your account.', { muted: true }),
+                            ],
+                        },
+                    ).catch(() => null);
+                }
                 return res.status(payment.code).send(payment.message);
             }
             charge = payment.charge;
@@ -1876,6 +1944,35 @@ const registerForSeminar = async (req, res) => {
             }
             if (held) {
                 const cancelled = await cancelPaymentIntent(payment_intent, charge.paidBy);
+                if (customer?.email) {
+                    const tookLastSeat = /capacity|full/i.test(String(reason));
+                    await sendSeminarEmail(
+                        customer.email,
+                        tookLastSeat
+                            ? 'The last seat was just taken — no charge processed'
+                            : 'Reservation cancelled — no charge processed',
+                        {
+                            heading: tookLastSeat ? 'The last seat was just taken' : 'Your reservation has been cancelled',
+                            previewText: 'No charge has been made.',
+                            blocks: [
+                                emailParagraph(tookLastSeat
+                                    ? `Another participant secured the last available seat just before your reservation completed, so your reservation for <strong>${emailEscape(groupChat.name)}</strong> was cancelled.`
+                                    : `We could not complete your registration for <strong>${emailEscape(groupChat.name)}</strong>, so your reservation was cancelled.`),
+                                emailFacts([
+                                    ['Seminar', groupChat.name],
+                                    ['Date & time', emailWhen(groupChat.start, customer.timeZone)],
+                                ]),
+                                emailCallout(cancelled
+                                    ? 'No charge has been made to your account. The temporary authorization on your card has been released.'
+                                    : 'No charge has been made to your account. Any authorization on your card is released automatically — contact the administrator if it has not cleared in a few days.'),
+                                emailParagraph(tookLastSeat
+                                    ? 'You can request a seat on the waiting list from the seminar page, or browse other seminars.'
+                                    : 'You are welcome to register again if seats are still available.'),
+                                emailButton('View the seminar'),
+                            ],
+                        },
+                    ).catch(() => null);
+                }
                 return res.status(code).send(cancelled
                     ? `${message} Your payment hold has been released and you were not charged.`
                     : `${message} Any hold on your card will be released automatically — please contact support if it does not clear.`);
@@ -2108,16 +2205,41 @@ const registerForSeminar = async (req, res) => {
     }
 };
 
-const sendSeminarEmail = async (to: string, subject: string, bodyHtml: string) => {
+const sessionDeclinedEmail = ({ sessionName, expertName, start, timeZone, refunded, amountCents, currency, noteHtml }: any) => ({
+    heading: 'Your 1:1 session request was not approved',
+    previewText: refunded ? 'Your payment has been refunded.' : 'No charge has been made.',
+    blocks: [
+        emailParagraph(`${emailEscape(expertName || 'The expert')} was unable to accept your request for <strong>${emailEscape(sessionName)}</strong>.`),
+        emailFacts([
+            ['Session', sessionName],
+            ['Expert', expertName],
+            ['Date & time', emailWhen(start, timeZone)],
+        ]),
+        refunded
+            ? emailCallout(`Your payment of <strong>${emailMoneyFromCents(amountCents, currency)}</strong> has been refunded in full. It will appear on your original payment method within 5–10 business days.`, 'bad')
+            : emailCallout('No charge has been made to your account. Any authorization placed on your card has been released automatically.'),
+        noteHtml || '',
+        emailParagraph(`You are welcome to request another session with ${emailEscape(expertName || 'this expert')}, or book with a different expert on WisdomLinked.`),
+        emailButton('Find an expert'),
+    ],
+});
+
+const walletWindowLabel = async () => {
+    try {
+        const appState = await AppState.findOne();
+        const hours = paymentWindowHours(appState);
+        return hours % 24 === 0 && hours >= 24 ? `${hours / 24} day${hours > 24 ? 's' : ''}` : `${hours} hours`;
+    } catch {
+        return 'a limited window';
+    }
+};
+
+const sendSeminarEmail = async (to: string, subject: string, content: any) => {
     if (!to) return;
-    const html = `
-    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-        <div style="background-color: #f8f9fa; padding: 20px; border-radius: 8px; border-left: 4px solid #007bff;">
-            ${bodyHtml}
-            <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;">
-            <p style="color: #666; font-size: 14px;">Best regards,<br><strong>WisdomLinked Team</strong></p>
-        </div>
-    </div>`;
+    const spec = typeof content === 'string'
+        ? { heading: subject, blocks: [emailParagraph(content)] }
+        : content;
+    const html = renderEmail(spec);
     try {
         await sendNotificationEmail(to, subject, html);
     } catch (err) {
@@ -2125,17 +2247,79 @@ const sendSeminarEmail = async (to: string, subject: string, bodyHtml: string) =
     }
 };
 
-const buildBookingRefundEmail = (bookingName: string | null, amountCents: number, currency: string, reason: string) => `
-    <h2 style="color:#28a745;margin-top:0;">Payment refunded</h2>
-    <p>We were unable to complete your booking${bookingName ? ` for "<strong>${bookingName}</strong>"` : ''},
-       so your payment has been fully refunded. You have not been enrolled.</p>
-    <div style="background-color:#fff;padding:12px 15px;border-radius:6px;margin:12px 0;">
-        <p style="margin:4px 0;"><strong>Amount:</strong> $${(amountCents / 100).toFixed(2)} ${String(currency || 'USD').toUpperCase()}</p>
-        <p style="margin:4px 0;"><strong>Reason:</strong> ${reason}</p>
-        <p style="margin:4px 0;"><strong>Date:</strong> ${new Date().toLocaleString()}</p>
-    </div>
-    <p>The refund will appear on your original payment method within 5–10 business days.
-       Feel free to try again, or contact support if you need help.</p>`;
+const buildBookingRefundEmail = (bookingName: string | null, amountCents: number, currency: string, reference?: string) => ({
+    heading: 'Your payment has been refunded',
+    previewText: 'You have not been enrolled.',
+    blocks: [
+        emailParagraph(`We were unable to complete your booking${bookingName ? ` for <strong>${emailEscape(bookingName)}</strong>` : ''}, so your payment has been refunded in full. You have <strong>not</strong> been enrolled.`),
+        emailFacts([
+            ['Booking', bookingName],
+            ['Refunded', emailMoneyFromCents(amountCents, currency)],
+            ['Date', new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })],
+            ['Reference', reference],
+        ]),
+        emailCallout('The refund will be credited to your original payment method and may take 5–10 business days to appear, depending on your bank.', 'bad'),
+        emailParagraph('You are welcome to try again. If the refund has not reached you within 10 business days, contact the administrator through WisdomLinked quoting the reference above.'),
+    ],
+});
+
+const sessionHasLivePayment = async (groupChatId: string) => {
+    const rows = await PaymentHistory.find({
+        groupChat: String(groupChatId),
+        paymentType: { $in: ['charge', 'refund'] },
+    }).select('paymentType status paymentIntent');
+    const refundedIntents = new Set(
+        rows
+            .filter((row: any) => row.paymentType === 'refund')
+            .map((row: any) => String(row.paymentIntent)),
+    );
+    return rows.some((row: any) => row.paymentType === 'charge'
+        && ['completed', 'withheld', 'pending'].includes(String(row.status))
+        && !refundedIntents.has(String(row.paymentIntent)));
+};
+
+const reconcileRefundedSession = async (groupChatId: any, reason: string) => {
+    if (!groupChatId || !mongoose.isValidObjectId(String(groupChatId))) return;
+    const chat = await GroupChat.findById(String(groupChatId))
+        .select('name status type admin participants createdBy start')
+        .catch(() => null);
+    if (!chat || chat.type !== 'individual' || chat.status !== 'active') return;
+    if (await sessionHasLivePayment(String(groupChatId))) return;
+
+    const unconfirmed = await GroupChat.findOneAndUpdate(
+        { _id: chat._id, status: 'active' },
+        { $set: { status: 'cancelled', paymentDeadline: null, decisionDeadline: null } },
+    ).catch(() => null);
+    if (!unconfirmed) return;
+
+    console.error('[reconcileRefundedSession] refunded session was still confirmed — released', String(chat._id), reason);
+
+    const sessionName = chat.name || '1:1 session';
+    const startLabel = chat.start ? new Date(chat.start).toLocaleString() : '';
+    const expertId = String(chat.admin);
+    const studentId = groupMemberIds(chat).find((id: string) => id !== expertId) || String(chat.createdBy);
+    const body = {
+        heading: 'Session released — the payment was refunded',
+        previewText: 'This session is no longer confirmed.',
+        blocks: [
+            emailParagraph(`The payment for <strong>${emailEscape(sessionName)}</strong>${startLabel ? ` on <strong>${emailEscape(startLabel)}</strong>` : ''} was refunded, so the session is no longer confirmed and the time slot has been released.`),
+            emailFacts([
+                ['Session', sessionName],
+                ['Date & time', startLabel],
+                ['Reference', String(chat._id)],
+            ]),
+            emailCallout('No money is owed. If this session should still go ahead, please book it again or contact the administrator through WisdomLinked.', 'bad'),
+        ],
+    };
+
+    for (const id of [expertId, studentId]) {
+        if (!id || !mongoose.isValidObjectId(id)) continue;
+        const person = await User.findById(id).catch(() => null);
+        if (!person?.email) continue;
+        await sendSeminarEmail(person.email, `Session released — ${sessionName}`, body)
+            .catch((emailErr: any) => console.log('[reconcileRefundedSession] notice failed', emailErr?.message));
+    }
+};
 
 const refundBookingCharge = async ({ payment_intent, charge, name, customer, expert, groupChatId, reason, recordStatus }: any) => {
     if (!charge || !payment_intent) return false;
@@ -2160,10 +2344,37 @@ const refundBookingCharge = async ({ payment_intent, charge, name, customer, exp
         await sendSeminarEmail(
             customer.email,
             `Refund issued — ${name || 'Booking'}`,
-            buildBookingRefundEmail(name || null, charge.amount, charge.currency, reason),
+            buildBookingRefundEmail(name || null, charge.amount, charge.currency, payment_intent),
         );
     }
+    if (groupChatId) {
+        await reconcileRefundedSession(groupChatId, reason).catch((reconcileErr: any) =>
+            console.error('[refundBookingCharge] session reconcile failed', String(groupChatId), reconcileErr?.message));
+    }
     return true;
+};
+
+const bookingIntentIsRecorded = async (payment_intent: string) => {
+    if (!payment_intent) return false;
+    try {
+        return await paymentIntentAlreadyConsumed(payment_intent);
+    } catch (err: any) {
+        console.log('[bookingIntentIsRecorded] lookup failed — treating as recorded', payment_intent, err?.message);
+        return true;
+    }
+};
+
+const orphanIntentBookingContext = async (meta: any) => {
+    const groupChatId = meta?.groupChatId ? String(meta.groupChatId) : undefined;
+    let chat: any = null;
+    if (groupChatId && mongoose.isValidObjectId(groupChatId)) {
+        chat = await GroupChat.findById(groupChatId).select('name admin').catch(() => null);
+    }
+    const expertId = chat?.admin ? String(chat.admin) : (meta?.expertId ? String(meta.expertId) : null);
+    const expert = expertId && mongoose.isValidObjectId(expertId)
+        ? await User.findById(expertId).catch(() => null)
+        : null;
+    return { groupChatId, name: chat?.name || null, expert };
 };
 
 const refundOrphanBookingCharge = async (payment_intent: string, userId: string, reason: string) => {
@@ -2182,13 +2393,14 @@ const refundOrphanBookingCharge = async (payment_intent: string, userId: string,
         return;
     }
     const customer = userId ? await User.findById(String(userId)) : null;
+    const context = await orphanIntentBookingContext(meta);
     await refundBookingCharge({
         payment_intent,
         charge: { paidBy: mode, amount: intent.amount, currency: intent.currency },
-        name: null,
+        name: context.name,
         customer,
-        expert: null,
-        groupChatId: undefined,
+        expert: context.expert,
+        groupChatId: context.groupChatId,
         reason,
         recordStatus: 'refunded',
     });
@@ -2196,6 +2408,10 @@ const refundOrphanBookingCharge = async (payment_intent: string, userId: string,
 
 const releaseOrphanBookingIntent = async (payment_intent: string, userId: string, reason: string) => {
     if (!payment_intent) return;
+    if (await bookingIntentIsRecorded(payment_intent)) {
+        console.log('[releaseOrphanBookingIntent] intent already paid for a booking — leaving it', payment_intent, reason);
+        return;
+    }
     try {
         const mode = await resolveServerStripeMode();
         const auth = await checkPaymentIntentAuthorized(payment_intent, mode);
@@ -2570,13 +2786,43 @@ const recordSeatRequest = async ({ groupChat, userId, charge, payment_intent, pa
             : paymentMode === 'wallet'
                 ? `Nothing has been charged yet. If the host approves your seat, we'll email you a link to pay <strong>$${(dollarsToCents(groupChat.price) / 100).toFixed(2)}</strong> with WeChat Pay or Alipay within a limited window.`
                 : 'This is a free seminar, so no payment is involved.';
+        const seatPrice = dollarsToCents(groupChat.price);
+        const seatOutcomes = charge
+            ? [
+                `If ${emailEscape(expert?.username || 'the host')} <strong>approves</strong>, the ${emailMoneyFromCents(charge.amount, charge.currency)} authorization is charged and your seat is confirmed.`,
+                'If they <strong>decline</strong>, or do not respond before the deadline, the authorization is released automatically and no charge is made.',
+            ]
+            : paymentMode === 'wallet' && seatPrice > 0
+                ? [
+                    `If they <strong>approve</strong>, we email you a payment link and you have ${emailEscape(await walletWindowLabel())} to pay ${emailMoneyFromCents(seatPrice)}. Your seat is confirmed only once that payment completes.`,
+                    'If they <strong>decline</strong>, or do not respond in time, no payment is requested and no charge is made.',
+                ]
+                : [
+                    'If they <strong>approve</strong>, your seat is confirmed. This is a free seminar, so no payment is involved.',
+                    'If they <strong>decline</strong>, or do not respond before the deadline, the request expires automatically.',
+                ];
         await sendSeminarEmail(
             customer.email,
-            `Seat request received — ${groupChat.name}`,
-            `<h2 style="color:#007bff;margin-top:0;">Seat request received</h2>
-             <p>Thanks! Your request for a seat in the full seminar
-             "<strong>${groupChat.name}</strong>" has been sent to the host. ${holdLine}</p>
-             <p>The host has until <strong>${decisionDeadline.toLocaleString()}</strong> to decide.</p>`,
+            charge ? 'Request submitted — no charge processed' : 'Request submitted — no payment required yet',
+            {
+                heading: `You are on the waiting list for ${groupChat.name}`,
+                previewText: 'Nothing has been charged.',
+                blocks: [
+                    emailParagraph('Your request to join this fully booked seminar has been received and is on the waiting list.'),
+                    emailFacts([
+                        ['Seminar', groupChat.name],
+                        ['Hosted by', expert?.username],
+                        ['Date & time', emailWhen(groupChat.start, customer.timeZone)],
+                        ['Host responds by', emailWhen(decisionDeadline, customer.timeZone)],
+                    ]),
+                    charge
+                        ? emailCallout(`<strong>No charge has been made.</strong> A temporary authorization of ${emailMoneyFromCents(charge.amount, charge.currency)} is held on your card.`)
+                        : emailCallout('<strong>Nothing has been charged.</strong>'),
+                    emailBullets(seatOutcomes),
+                    emailParagraph('You can check the status of your request at any time from your dashboard.', { muted: true }),
+                    emailButton('View your requests'),
+                ],
+            },
         );
     }
 
@@ -2591,12 +2837,26 @@ const recordSeatRequest = async ({ groupChat, userId, charge, payment_intent, pa
             : 'otherwise the request expires automatically.';
         await sendSeminarEmail(
             expert.email,
-            `New seat request — ${groupChat.name}`,
-            `<h2 style="color:#007bff;margin-top:0;">New seat request</h2>
-             <p>${customer?.username || 'A student'} has requested a seat for your full seminar
-             "<strong>${groupChat.name}</strong>". ${holdNote}</p>
-             <p>Please approve or decline from your Seminar Hub before
-             <strong>${decisionDeadline.toLocaleString()}</strong>, ${releaseNote}</p>`,
+            `Action required: respond to a seat request by ${emailWhen(decisionDeadline, expert.timeZone)}`,
+            {
+                heading: 'New seat request for your seminar',
+                previewText: `${customer?.username || 'A student'} would like a seat.`,
+                blocks: [
+                    emailParagraph(`${emailEscape(customer?.username || 'A student')} has asked to join <strong>${emailEscape(groupChat.name)}</strong>, which is currently full.`),
+                    emailFacts([
+                        ['Seminar', groupChat.name],
+                        ['Date & time', emailWhen(groupChat.start, expert.timeZone)],
+                        ['Student', customer?.username],
+                        ['Respond by', emailWhen(decisionDeadline, expert.timeZone)],
+                    ]),
+                    emailCallout(holdNote),
+                    emailBullets([
+                        'If you <strong>accept</strong>, the student is enrolled beyond the seminar capacity once their payment completes.',
+                        `If you <strong>decline</strong>, or take no action before the deadline, the request expires automatically, ${releaseNote}`,
+                    ]),
+                    emailButton('Review the request'),
+                ],
+            },
         );
     }
 
@@ -2845,14 +3105,24 @@ const approveSeminarSeatRequest = async (req, res) => {
 
             await sendSeminarEmail(
                 customer.email,
-                `Seat approved — pay to confirm "${groupChat.name}"`,
-                `<h2 style="color:#28a745;margin-top:0;">Your seat was approved</h2>
-                 <p>${expert.username || 'The host'} approved your seat for
-                 "<strong>${groupChat.name}</strong>". To claim it, please pay
-                 <strong>$${(currentPriceCents / 100).toFixed(2)}</strong> with WeChat Pay or Alipay
-                 from your dashboard by <strong>${payBy.toLocaleString()}</strong>.</p>
-                 <p>The seat is released if payment isn't completed by then.</p>
-                 ${decisionNoteEmailBlock(decisionNote, 'Message from the host')}`,
+                `Approved — pay by ${emailWhen(payBy, customer.timeZone)} to confirm your seat`,
+                {
+                    heading: 'Your request has been approved',
+                    previewText: 'Complete payment to confirm your seat.',
+                    blocks: [
+                        emailParagraph(`${emailEscape(expert.username || 'The host')} has approved your request to join <strong>${emailEscape(groupChat.name)}</strong>.`),
+                        emailFacts([
+                            ['Seminar', groupChat.name],
+                            ['Hosted by', expert.username],
+                            ['Date & time', emailWhen(groupChat.start, customer.timeZone)],
+                            ['Payment due', `${emailMoneyFromCents(currentPriceCents)} by Alipay or WeChat Pay`],
+                            ['Payment deadline', emailWhen(payBy, customer.timeZone)],
+                        ]),
+                        emailCallout(`Your seat is confirmed only once payment completes. If it is not received by <strong>${emailEscape(emailWhen(payBy, customer.timeZone))}</strong>, this approval expires automatically, the seat is released and no charge is made.`, 'warn'),
+                        emailExpertNote(decisionNote, "Host's note"),
+                        emailButton(`Pay ${emailMoneyFromCents(currentPriceCents)}`),
+                    ],
+                },
             );
 
             return res.status(200).json({ success: true, status: 'awaiting_payment', paymentDeadline: payBy });
@@ -2937,11 +3207,26 @@ const approveSeminarSeatRequest = async (req, res) => {
 
             await sendSeminarEmail(
                 customer.email,
-                `Couldn't complete your seat — ${groupChat.name}`,
-                `<h2 style="color:#dc3545;margin-top:0;">Seat could not be completed</h2>
-                 <p>The host approved your seat for "<strong>${groupChat.name}</strong>", but we hit an
-                 error finishing your enrollment, so you are not registered.
-                 ${charge ? (refunded ? 'Your payment has been fully refunded.' : 'Our team is processing your refund.') : ''}</p>`,
+                charge
+                    ? `Not able to complete your booking — ${emailMoneyFromCents(charge.amount, charge.currency)} refunded`
+                    : "Not able to complete your booking — no charge processed",
+                {
+                    heading: "We couldn't complete your registration",
+                    previewText: charge ? 'Your payment is being returned.' : 'You have not been charged.',
+                    blocks: [
+                        emailParagraph(`Your request to join <strong>${emailEscape(groupChat.name)}</strong> was approved by ${emailEscape(expert?.username || 'the host')}, but a system issue stopped us completing your registration. You have <strong>not</strong> been enrolled.`),
+                        emailFacts([
+                            ['Seminar', groupChat.name],
+                            ['Date & time', emailWhen(groupChat.start, customer.timeZone)],
+                            ['Reference', String(request._id)],
+                        ]),
+                        charge
+                            ? emailCallout(`Your refund of <strong>${emailMoneyFromCents(charge.amount, charge.currency)}</strong> ${refunded ? 'has been issued' : 'is being processed'}. It will be credited to your original payment method and may take 5–10 business days to appear, depending on your bank.`, 'bad')
+                            : emailCallout('No charge has been made to your account.', 'bad'),
+                        emailParagraph('If you would still like to attend, please try again, or contact the administrator through WisdomLinked quoting the reference above and we will help.'),
+                        emailParagraph('We are sorry for the inconvenience.', { muted: true }),
+                    ],
+                },
             );
 
             return res
@@ -2970,11 +3255,30 @@ const approveSeminarSeatRequest = async (req, res) => {
 
         await sendSeminarEmail(
             customer.email,
-            `You're in — ${groupChat.name}`,
-            `<h2 style="color:#28a745;margin-top:0;">Seat approved</h2>
-             <p>${expert.username || 'The host'} approved your seat for
-             "<strong>${groupChat.name}</strong>". ${charge ? 'Your card has now been charged and you\'re registered.' : 'You\'re now registered.'}</p>
-             ${decisionNoteEmailBlock(decisionNote, 'Message from the host')}`,
+            charge
+                ? `Booking successful — ${emailMoneyFromCents(charge.amount, charge.currency)} charged for ${groupChat.name}`
+                : `You are confirmed for ${groupChat.name}`,
+            {
+                heading: 'Your seat has been confirmed',
+                previewText: charge ? `${emailMoneyFromCents(charge.amount, charge.currency)} charged.` : 'You are registered.',
+                blocks: [
+                    emailParagraph(`Your request to join <strong>${emailEscape(groupChat.name)}</strong> was approved by ${emailEscape(expert.username || 'the host')}.`),
+                    emailFacts([
+                        ['Seminar', groupChat.name],
+                        ['Hosted by', expert.username],
+                        ['Date & time', emailWhen(groupChat.start, customer.timeZone)],
+                        ['Amount paid', charge ? emailMoneyFromCents(charge.amount, charge.currency) : 'Free seminar'],
+                    ]),
+                    charge
+                        ? emailCallout(`Your payment of <strong>${emailMoneyFromCents(charge.amount, charge.currency)}</strong> has been processed. Your seat is reserved and no further action is needed.`, 'good')
+                        : emailCallout('You are registered. No payment was required for this seminar.', 'good'),
+                    emailExpertNote(decisionNote, "Host's note"),
+                    charge && charge.receiptUrl ? emailButton('View your receipt', charge.receiptUrl) : emailButton('View the seminar'),
+                    emailParagraph('<strong>Before the seminar</strong>'),
+                    emailParagraph('You can open the seminar at any time from your calendar or dashboard. Before the start time you can use the seminar chat to ask questions or share information with the host and other participants.'),
+                    emailParagraph('The chat is provided for convenience only — participants are not required to read or reply before the seminar begins. Video and audio become available at the scheduled start time.', { muted: true }),
+                ],
+            },
         );
 
         return res.status(200).json({ success: true, status: 'approved' });
@@ -3267,6 +3571,7 @@ const rejectSeminarSeatRequest = async (req, res) => {
         await settleSeatRequestPayment(request, outcome, `Hold released — seat request declined: ${groupChat.name}`);
 
         const customer = await User.findById(request.customer.toString());
+        const decliningHost = await User.findById(normalizeId(groupChat.admin)).catch(() => null);
         if (customer?.email) {
             const moneyLine = !request.paymentIntent ? ''
                 : outcome === 'refunded' ? ' Your payment has been refunded.'
@@ -3274,11 +3579,22 @@ const rejectSeminarSeatRequest = async (req, res) => {
                 : ' Your payment hold has been released and you were not charged.';
             await sendSeminarEmail(
                 customer.email,
-                `Seat request update — ${groupChat.name}`,
-                `<h2 style="color:#333;margin-top:0;">Seat request declined</h2>
-                 <p>Unfortunately the host could not offer you a seat for
-                 "<strong>${groupChat.name}</strong>".${moneyLine}</p>
-                 ${decisionNoteEmailBlock(decisionNote, 'Message from the host')}`,
+                'Request declined — no charge processed',
+                {
+                    heading: 'Your request was not approved',
+                    previewText: 'No charge has been made.',
+                    blocks: [
+                        emailParagraph(`${emailEscape(decliningHost?.username || 'The host')} was unable to offer you a seat for <strong>${emailEscape(groupChat.name)}</strong>.`),
+                        emailFacts([
+                            ['Seminar', groupChat.name],
+                            ['Date & time', emailWhen(groupChat.start, customer.timeZone)],
+                        ]),
+                        emailCallout(moneyLine ? String(moneyLine).trim() : 'No charge has been made to your account.'),
+                        emailExpertNote(decisionNote, "Host's note"),
+                        emailParagraph('You are welcome to explore other seminars on WisdomLinked.'),
+                        emailButton('Browse seminars'),
+                    ],
+                },
             );
         }
 
@@ -3477,10 +3793,17 @@ const sweepExpiredSeatRequests = async () => {
                     : ' Your payment hold has been released and you were not charged.';
                 await sendSeminarEmail(
                     customer.email,
-                    `Seat request expired — ${request.groupChat?.name || 'Seminar'}`,
-                    `<h2 style="color:#333;margin-top:0;">Seat request expired</h2>
-                     <p>The host didn't respond in time to your seat request for
-                     "<strong>${request.groupChat?.name || 'the seminar'}</strong>".${moneyLine}</p>`,
+                    'Request expired — no charge processed',
+                    {
+                        heading: 'Your request has expired',
+                        previewText: 'No charge has been made.',
+                        blocks: [
+                            emailParagraph(`The response period for your request to join <strong>${emailEscape(request.groupChat?.name || 'the seminar')}</strong> ended without a decision, so the request has expired.`),
+                            emailCallout(moneyLine ? String(moneyLine).trim() : 'No charge has been made to your account.'),
+                            emailParagraph('You are welcome to explore other seminars, or request a seat again if one becomes available.'),
+                            emailButton('Browse seminars'),
+                        ],
+                    },
                 );
             }
         }
@@ -3525,11 +3848,17 @@ const sweepExpiredSessionHolds = async () => {
                     if (student?.email) {
                         await sendSeminarEmail(
                             student.email,
-                            `Session request expired — ${chat.name || '1:1 session'}`,
-                            `<h2 style="color:#333;margin-top:0;">Session request expired</h2>
-                             <p>The expert didn't respond in time to your 1:1 session request for
-                                "<strong>${chat.name || '1:1 session'}</strong>". You were never charged.</p>
-                             <p>Thank you for using WisdomLinked. We hope you find another expert who meets your needs.</p>`,
+                            'Your request expired — no charge processed',
+                            {
+                                heading: 'Your 1:1 session request has expired',
+                                previewText: 'No charge has been made.',
+                                blocks: [
+                                    emailParagraph(`Your request for <strong>${emailEscape(chat.name || '1:1 session')}</strong> expired because the expert did not respond before the deadline.`),
+                                    emailCallout('No charge has been made to your account. Any authorization placed on your card has been released automatically.'),
+                                    emailParagraph('Experts are occasionally unavailable within the response window — we appreciate your understanding. You are welcome to request another session, or book with a different expert.'),
+                                    emailButton('Find an expert'),
+                                ],
+                            },
                         );
                     }
                     continue;
@@ -3580,11 +3909,17 @@ const sweepExpiredSessionHolds = async () => {
                         : ' Your payment authorization has been released, and no payment has been processed.';
                 await sendSeminarEmail(
                     customer.email,
-                    `Session request expired — ${sessionName}`,
-                    `<h2 style="color:#333;margin-top:0;">Session request expired</h2>
-                     <p>The expert didn't respond in time to your 1:1 session request for
-                        "<strong>${sessionName}</strong>".${moneyLine}</p>
-                     <p>Thank you for using WisdomLinked. We hope you find another expert who meets your needs.</p>`,
+                    'Your request expired — no charge processed',
+                    {
+                        heading: 'Your 1:1 session request has expired',
+                        previewText: 'No charge has been made.',
+                        blocks: [
+                            emailParagraph(`Your request for <strong>${emailEscape(sessionName)}</strong> expired because the expert did not respond before the deadline.`),
+                            emailCallout(moneyLine ? String(moneyLine).trim() : 'No charge has been made to your account.'),
+                            emailParagraph('Experts are occasionally unavailable within the response window — we appreciate your understanding. You are welcome to request another session, or book with a different expert.'),
+                            emailButton('Find an expert'),
+                        ],
+                    },
                 );
             }
         }
@@ -3617,11 +3952,17 @@ const sweepExpiredWalletPayments = async () => {
             if (student?.email) {
                 await sendSeminarEmail(
                     student.email,
-                    `Session released — ${chat.name || '1:1 session'}`,
-                    `<h2 style="color:#333;margin-top:0;">Your session was released</h2>
-                     <p>Payment for "<strong>${chat.name || 'your 1:1 session'}</strong>" wasn't completed in time,
-                        so the slot has been released. You were not charged.</p>
-                     <p>You're welcome to book it again if it's still available.</p>`,
+                    'Offer expired — no charge processed',
+                    {
+                        heading: 'Your payment window has expired',
+                        previewText: 'No charge has been made.',
+                        blocks: [
+                            emailParagraph(`The payment deadline for <strong>${emailEscape(chat.name || 'your 1:1 session')}</strong> has passed, so the reserved time slot has been released.`),
+                            emailCallout('No charge has been made to your account, and the session has not been confirmed.'),
+                            emailParagraph('You are welcome to request the session again if the time still suits you.'),
+                            emailButton('Book again'),
+                        ],
+                    },
                 );
             }
         }
@@ -3647,10 +3988,17 @@ const sweepExpiredWalletPayments = async () => {
             if (customer?.email) {
                 await sendSeminarEmail(
                     customer.email,
-                    `Seat released — ${request.groupChat?.name || 'Seminar'}`,
-                    `<h2 style="color:#333;margin-top:0;">Your seat was released</h2>
-                     <p>Payment for your approved seat in "<strong>${request.groupChat?.name || 'the seminar'}</strong>"
-                        wasn't completed in time, so the seat has been released. You were not charged.</p>`,
+                    'Offer expired — no charge processed',
+                    {
+                        heading: 'Your payment window has expired',
+                        previewText: 'No charge has been made.',
+                        blocks: [
+                            emailParagraph(`The payment deadline for your approved seat in <strong>${emailEscape(request.groupChat?.name || 'the seminar')}</strong> has passed, so the reservation has expired and the seat has been released.`),
+                            emailCallout('No charge has been made to your account, and you have not been enrolled.'),
+                            emailParagraph('If seats are still available, you are welcome to request one again.'),
+                            emailButton('View the seminar'),
+                        ],
+                    },
                 );
             }
         }
@@ -3701,11 +4049,17 @@ const sweepExpiredProposedSessions = async () => {
             if (student?.email) {
                 await sendSeminarEmail(
                     student.email,
-                    `Session offer expired — ${sessionName}`,
-                    `<h2 style="color:#333;margin-top:0;">This session offer has expired</h2>
-                     <p>The offer for "<strong>${sessionName}</strong>" wasn't paid for in time, so the slot has
-                        been released. You were not charged.</p>
-                     <p>You're welcome to book the expert again if the time still suits you.</p>`,
+                    'Offer expired — no charge processed',
+                    {
+                        heading: 'This session offer has expired',
+                        previewText: 'No charge has been made.',
+                        blocks: [
+                            emailParagraph(`The offer for <strong>${emailEscape(sessionName)}</strong> was not paid for before the deadline, so the time slot has been released.`),
+                            emailCallout('No charge has been made to your account.'),
+                            emailParagraph('You are welcome to request the session again if the time still suits you.'),
+                            emailButton('Book again'),
+                        ],
+                    },
                 );
             }
 
@@ -3713,10 +4067,15 @@ const sweepExpiredProposedSessions = async () => {
             if (expert?.email) {
                 await sendSeminarEmail(
                     expert.email,
-                    `Offer expired — ${sessionName}`,
-                    `<h2 style="color:#333;margin-top:0;">Your session offer expired</h2>
-                     <p>${student?.username || 'The student'} did not pay for "<strong>${sessionName}</strong>"
-                        within the payment window, so the offer has been released and your time is free again.</p>`,
+                    'Your session offer expired — no charge was made',
+                    {
+                        heading: 'Your session offer has expired',
+                        blocks: [
+                            emailParagraph(`${emailEscape(student?.username || 'The student')} did not pay for <strong>${emailEscape(sessionName)}</strong> within the payment window, so the offer has been released and your time is free again.`),
+                            emailCallout('No charge was made to the student.'),
+                            emailButton('View your calendar'),
+                        ],
+                    },
                 );
             }
         }
@@ -3823,14 +4182,28 @@ const sweepPendingSeminarPayments = async () => {
                     if (student?.email) {
                         await sendSeminarEmail(
                             student.email,
-                            action === 'refund' ? 'Payment refunded' : 'Payment hold released',
                             action === 'refund'
-                                ? `<h2 style="color:#28a745;margin-top:0;">Payment refunded</h2>
-                                   <p>We charged your card for a seminar seat but could not complete your
-                                   registration, so the payment has been fully refunded. You were not enrolled.</p>`
-                                : `<h2 style="color:#28a745;margin-top:0;">Payment hold released</h2>
-                                   <p>A seminar registration didn't complete, so the hold on your card has been
-                                   released. You were not charged and you were not enrolled.</p>`,
+                                ? 'Unable to complete your booking — payment refunded'
+                                : 'Reservation cancelled — no charge processed',
+                            action === 'refund'
+                                ? {
+                                    heading: 'Your payment has been refunded',
+                                    previewText: 'You were not enrolled.',
+                                    blocks: [
+                                        emailParagraph('We were unable to complete your seminar registration, so your payment has been refunded in full. You have <strong>not</strong> been enrolled.'),
+                                        emailCallout('The refund will be credited to your original payment method and may take 5–10 business days to appear, depending on your bank.', 'bad'),
+                                        emailParagraph('You are welcome to try again. If you need help, contact the administrator through WisdomLinked.'),
+                                    ],
+                                }
+                                : {
+                                    heading: 'Your reservation has been cancelled',
+                                    previewText: 'No charge has been made.',
+                                    blocks: [
+                                        emailParagraph('A seminar registration did not complete, so your reservation has been cancelled. You have <strong>not</strong> been enrolled.'),
+                                        emailCallout('No charge has been made to your account. Any authorization placed on your card has been released automatically.'),
+                                        emailParagraph('You are welcome to register again if seats are still available.'),
+                                    ],
+                                },
                         );
                     }
                 }
@@ -3961,10 +4334,16 @@ const sweepOrphanedBookingIntentsForMode = async (stripeMode: 'test' | 'live') =
                 if (student?.email) {
                     await sendSeminarEmail(
                         student.email,
-                        'Payment refunded',
-                        `<h2 style="color:#28a745;margin-top:0;">Payment refunded</h2>
-                         <p>A booking payment didn't complete, so it has been fully refunded.
-                         You were not enrolled. The refund appears within 5–10 business days.</p>`,
+                        'Unable to complete your booking — payment refunded',
+                        {
+                            heading: 'Your payment has been refunded',
+                            previewText: 'You were not enrolled.',
+                            blocks: [
+                                emailParagraph('A booking payment did not complete, so it has been refunded in full. You have <strong>not</strong> been enrolled.'),
+                                emailCallout('The refund will be credited to your original payment method and may take 5–10 business days to appear, depending on your bank.', 'bad'),
+                                emailParagraph('You are welcome to try again. If you need help, contact the administrator through WisdomLinked.'),
+                            ],
+                        },
                     );
                 }
             }
@@ -4055,18 +4434,43 @@ const handleBookingPaymentIntentEvent = async (event: any): Promise<string> => {
         // moment the student can be told their payment actually landed.
         try {
             const chat = settled.groupChat
-                ? await GroupChat.findById(String(settled.groupChat)).select('name')
+                ? await GroupChat.findById(String(settled.groupChat)).select('name admin start duration type')
                 : null;
             const student = await User.findById(String(settled.customer));
             if (student?.email) {
                 await sendSeminarEmail(
                     student.email,
-                    `Payment confirmed — ${chat?.name || 'your booking'}`,
-                    `<h2 style="color:#28a745;margin-top:0;">Payment confirmed</h2>
-                     <p>Your payment of <strong>$${(capturedAmountCents(intent) / 100).toFixed(2)}
-                     ${String(intent.currency || 'USD').toUpperCase()}</strong> for
-                     "<strong>${chat?.name || 'your booking'}</strong>" has cleared. Your booking is confirmed.</p>`,
+                    `Booking successful — ${emailMoneyFromCents(capturedAmountCents(intent), intent.currency)} charged for ${chat?.name || 'your booking'}`,
+                    {
+                        heading: `You are confirmed for ${chat?.name || 'your booking'}`,
+                        previewText: 'Your payment has cleared.',
+                        blocks: [
+                            emailParagraph(`Your payment of <strong>${emailMoneyFromCents(capturedAmountCents(intent), intent.currency)}</strong> has been successfully processed. Your booking is confirmed and no further action is needed.`),
+                            emailFacts([
+                                [chat?.type === 'seminar' ? 'Seminar' : 'Session', chat?.name],
+                                ['Date & time', emailWhen(chat?.start, student?.timeZone)],
+                                ['Payment method', 'Alipay / WeChat Pay'],
+                            ]),
+                            emailButton('View your booking'),
+                            emailParagraph('You can open this booking at any time from your calendar or dashboard. Video and audio become available at the scheduled start time.', { muted: true }),
+                        ],
+                    },
                 );
+            }
+            if (chat?.type === 'individual' && chat.admin) {
+                const paidExpert = await User.findById(String(chat.admin));
+                if (paidExpert?.email) {
+                    await sendEmailSessionPaidToExpert(
+                        paidExpert.email,
+                        paidExpert.username,
+                        student?.username,
+                        chat.name,
+                        chat.start,
+                        chat.duration,
+                        capturedAmountCents(intent) / 100,
+                        paidExpert.timeZone,
+                    );
+                }
             }
         } catch (notifyErr: any) {
             console.log('[handleBookingPaymentIntentEvent] settle notice failed', notifyErr?.message);
@@ -4233,14 +4637,23 @@ const acceptIndividualAppointment = async (req, res) => {
                     try {
                         await sendSeminarEmail(
                             student.email,
-                            `Accepted — pay to confirm "${groupChat.name}"`,
-                            `<h2 style="color:#28a745;margin-top:0;">Your session was accepted</h2>
-                             <p>Good news — your request for "<strong>${groupChat.name}</strong>" was accepted.
-                                To confirm it, please pay <strong>$${Number(groupChat.price || 0).toFixed(2)}</strong>
-                                with WeChat Pay or Alipay from your dashboard by
-                                <strong>${deadline.toLocaleString()}</strong>.</p>
-                             <p>The slot is released if payment isn't completed by then.</p>
-                             ${decisionNoteEmailBlock(decisionNote)}`,
+                            `Your request has been approved — complete payment by ${emailWhen(deadline, student.timeZone)}`,
+                            {
+                                heading: 'Your request has been approved',
+                                previewText: 'Complete payment to confirm your session.',
+                                blocks: [
+                                    emailParagraph(`Your request for <strong>${emailEscape(groupChat.name)}</strong> has been accepted.`),
+                                    emailFacts([
+                                        ['Session', groupChat.name],
+                                        ['Date & time', emailWhen(groupChat.start, student.timeZone)],
+                                        ['Payment due', `${emailMoney(groupChat.price)} by Alipay or WeChat Pay`],
+                                        ['Payment deadline', emailWhen(deadline, student.timeZone)],
+                                    ]),
+                                    emailCallout(`Your session is confirmed only once payment completes. If it is not received by <strong>${emailEscape(emailWhen(deadline, student.timeZone))}</strong>, the approval expires automatically, the time slot is released and no charge is made.`, 'warn'),
+                                    emailExpertNote(decisionNote),
+                                    emailButton(`Pay ${emailMoney(groupChat.price)}`),
+                                ],
+                            },
                         );
                     } catch (emailErr) {
                         console.log('[acceptIndividualAppointment] wallet pay-now email failed', emailErr);
@@ -4446,6 +4859,21 @@ const acceptIndividualAppointment = async (req, res) => {
                         customerUser.timeZone,
                         decisionNoteEmailBlock(decisionNote),
                     );
+                }
+                if (role === 'customer' && charge && !settling) {
+                    const paidExpert = await User.findById(groupChat.admin.toString());
+                    if (paidExpert?.email) {
+                        await sendEmailSessionPaidToExpert(
+                            paidExpert.email,
+                            paidExpert.username,
+                            payer?.username,
+                            groupChat.name,
+                            groupChat.start,
+                            groupChat.duration,
+                            charge.amount / 100,
+                            paidExpert.timeZone,
+                        );
+                    }
                 }
                 if (expertUser?.email) {
                     await scheduleEmailReminder(
@@ -4839,6 +5267,7 @@ const cancelIndividualAppointment = async (req, res) => {
 
         const studentId = groupMemberIds(groupChat).find((id: string) => id !== expertId) || String(groupChat.createdBy);
         const student = await User.findById(studentId);
+        const expertUser = await User.findById(expertId).catch(() => null);
         const sessionName = groupChat.name || '1:1 session';
         const startLabel = groupChat.start ? new Date(groupChat.start).toLocaleString() : '';
         const declinedProposal = expertProposed && !cancelledByExpert;
@@ -4886,14 +5315,19 @@ const cancelIndividualAppointment = async (req, res) => {
             if (student?.email) {
                 await sendSeminarEmail(
                     student.email,
-                    `Appointment Request Declined — ${sessionName}`,
-                    `<h2 style="color:#007bff;margin-top:0;">Appointment Request Declined</h2>
-                     <p>We regret to inform you that the expert has declined your 1:1 session request.
-                        ${outcome === 'refunded'
-                            ? 'Your payment has been refunded in full and will appear on your original payment method within 5–10 business days.'
-                            : 'Your payment authorization has been released, and no payment has been processed. No further action is required on your part.'}</p>
-                     <p>Thank you for using WisdomLinked. We hope you find another expert who meets your needs.</p>
-                     ${noteBlock}`,
+                    outcome === 'refunded'
+                        ? `Your 1:1 session request was declined — ${emailMoneyFromCents(payment?.amount, payment?.currency)} refunded`
+                        : 'Your 1:1 session request was declined — no charge processed',
+                    sessionDeclinedEmail({
+                        sessionName,
+                        expertName: expertUser?.username,
+                        start: groupChat.start,
+                        timeZone: student.timeZone,
+                        refunded: outcome === 'refunded',
+                        amountCents: payment?.amount,
+                        currency: payment?.currency,
+                        noteHtml: noteBlock,
+                    }),
                 );
                 studentNotified = true;
             }
@@ -4926,12 +5360,23 @@ const cancelIndividualAppointment = async (req, res) => {
                 if (student?.email) {
                     await sendSeminarEmail(
                         student.email,
-                        `Session cancelled — ${sessionName}`,
-                        `<h2 style="color:#007bff;margin-top:0;">Your session was cancelled</h2>
-                         <p>"<strong>${sessionName}</strong>" has been cancelled${cancelledByExpert ? ' by the expert' : ''}.</p>
-                         <p>Your payment of $${(Number(payment.amount || 0) / 100).toFixed(2)} has been refunded in full and will
-                            appear on your original payment method within 5–10 business days.</p>
-                         ${noteBlock}`,
+                        `Session cancelled — ${emailMoneyFromCents(payment.amount, payment.currency)} refunded`,
+                        {
+                            heading: cancelledByExpert ? 'Your session has been cancelled' : 'Your session has been cancelled',
+                            previewText: 'Your payment has been refunded in full.',
+                            blocks: [
+                                emailParagraph(`<strong>${emailEscape(sessionName)}</strong> has been cancelled${cancelledByExpert ? ' by the expert' : ''}.`),
+                                emailFacts([
+                                    ['Session', sessionName],
+                                    ['Date & time', emailWhen(groupChat.start, student.timeZone)],
+                                    ['Refunded', emailMoneyFromCents(payment.amount, payment.currency)],
+                                    ['Reference', String(groupChat._id)],
+                                ]),
+                                emailCallout(`Your payment of <strong>${emailMoneyFromCents(payment.amount, payment.currency)}</strong> has been refunded in full. It will be credited to your original payment method and may take 5–10 business days to appear. No action is required from you.`, 'bad'),
+                                noteBlock || '',
+                                emailParagraph('If the refund has not reached you within 10 business days, contact the administrator through WisdomLinked quoting the reference above.', { muted: true }),
+                            ],
+                        },
                     );
                     studentNotified = true;
                 }
@@ -4940,10 +5385,17 @@ const cancelIndividualAppointment = async (req, res) => {
             await sendSeminarEmail(
                 student.email,
                 `Session offer withdrawn — ${sessionName}`,
-                `<h2 style="color:#007bff;margin-top:0;">This session offer was withdrawn</h2>
-                 <p>The expert has withdrawn the proposed session "<strong>${sessionName}</strong>" before it was paid for.</p>
-                 <p>You have not been charged. You can book another time from the expert's profile.</p>
-                 ${noteBlock}`,
+                {
+                    heading: 'This session offer has been withdrawn',
+                    previewText: 'No charge has been made.',
+                    blocks: [
+                        emailParagraph(`The expert has withdrawn the proposed session <strong>${emailEscape(sessionName)}</strong> before your payment was completed.`),
+                        emailCallout('No charge has been made to your account.'),
+                        noteBlock || '',
+                        emailParagraph('You are welcome to request another session with this expert, or browse other experts on WisdomLinked.'),
+                        emailButton('Find an expert'),
+                    ],
+                },
             );
             studentNotified = true;
         }
@@ -4951,11 +5403,15 @@ const cancelIndividualAppointment = async (req, res) => {
         if (decliningStudentRequest && !studentNotified && student?.email) {
             await sendSeminarEmail(
                 student.email,
-                `Session request declined — ${sessionName}`,
-                `<h2 style="color:#007bff;margin-top:0;">Your session request was declined</h2>
-                 <p>The expert could not take "<strong>${sessionName}</strong>" at the time you requested.
-                    You have not been charged.</p>
-                 ${noteBlock}`,
+                'Your 1:1 session request was declined — no charge processed',
+                sessionDeclinedEmail({
+                    sessionName,
+                    expertName: expertUser?.username,
+                    start: groupChat.start,
+                    timeZone: student.timeZone,
+                    refunded: false,
+                    noteHtml: noteBlock,
+                }),
             );
         }
 
@@ -4964,12 +5420,16 @@ const cancelIndividualAppointment = async (req, res) => {
             if (expert?.email) {
                 await sendSeminarEmail(
                     expert.email,
-                    `Session offer declined — ${sessionName}`,
-                    `<h2 style="color:#007bff;margin-top:0;">Your session offer was declined</h2>
-                     <p>${student?.username || 'The student'} declined the session you proposed,
-                        "<strong>${sessionName}</strong>"${startLabel ? ` on ${startLabel}` : ''}.
-                        Nothing was charged and the time is free again.</p>
-                     ${decisionNoteEmailBlock(studentNote, 'Message from the student')}`,
+                    `Your session offer was declined — ${sessionName}`,
+                    {
+                        heading: 'Your session offer was declined',
+                        blocks: [
+                            emailParagraph(`${emailEscape(student?.username || 'The student')} declined the session you proposed, <strong>${emailEscape(sessionName)}</strong>${startLabel ? ` on ${emailEscape(startLabel)}` : ''}.`),
+                            emailCallout('Nothing was charged and your time is free again.'),
+                            emailExpertNote(studentNote, 'Message from the student'),
+                            emailButton('View your calendar'),
+                        ],
+                    },
                 );
             }
         }
@@ -5190,6 +5650,7 @@ module.exports = {
     sweepPendingSeminarPayments,
     sweepOrphanedBookingIntents,
     handleBookingPaymentIntentEvent,
+    reconcileRefundedSession,
     acceptIndividualAppointment,
     leaveGroup,
     deleteGroup,
