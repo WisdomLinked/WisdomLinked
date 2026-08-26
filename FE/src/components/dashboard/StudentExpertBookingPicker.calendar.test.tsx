@@ -140,4 +140,49 @@ describe('StudentExpertBookingPicker calendar clicks', { timeout: 20_000 }, () =
     clickAt(4 * COL_W + 50, 2 * ROW_H + 50, chip);
     expect(timeModalOpen()).toBe(true);
   });
+
+  it('says why a day inside the notice window cannot be picked', () => {
+    renderPicker();
+    layout();
+
+    clickAt(3 * COL_W + 50, 1 * ROW_H + 50);
+
+    expect(timeModalOpen()).toBe(false);
+    const notice = screen.getByTestId('day-unavailable-notice');
+    expect(notice.textContent).toMatch(/at least 24 hours' notice/i);
+  });
+
+  it('says why a past day cannot be picked instead of ignoring the click', () => {
+    renderPicker();
+    layout();
+
+    clickAt(0 * COL_W + 50, 0 * ROW_H + 50);
+
+    expect(timeModalOpen()).toBe(false);
+    expect(screen.getByTestId('day-unavailable-notice').textContent).toMatch(
+      /already passed/i,
+    );
+  });
+
+  it('clears the notice once a bookable day is picked', () => {
+    renderPicker();
+    layout();
+
+    clickAt(0 * COL_W + 50, 0 * ROW_H + 50);
+    expect(screen.getByTestId('day-unavailable-notice')).toBeTruthy();
+
+    layout();
+    clickAt(3 * COL_W + 50, 3 * ROW_H + 50);
+
+    expect(timeModalOpen()).toBe(true);
+    expect(screen.queryByTestId('day-unavailable-notice')).toBeNull();
+  });
+
+  it('states the notice requirement before anything is clicked', () => {
+    renderPicker();
+
+    expect(
+      screen.getByText(/needs at least 24 hours' notice/i),
+    ).toBeInTheDocument();
+  });
 });

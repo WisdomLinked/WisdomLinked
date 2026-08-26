@@ -168,6 +168,7 @@ function StudentExpertBookingPicker({
   const [filterSlotIndex, setFilterSlotIndex] = useState(-1);
   const [showTimeFilter, setShowTimeFilter] = useState(false);
   const [confirmedSlotStart, setConfirmedSlotStart] = useState<Date | null>(null);
+  const [dayNotice, setDayNotice] = useState<string | null>(null);
   const duration = selectedDurationMinutes ?? internalDuration;
 
   useEffect(() => {
@@ -193,6 +194,7 @@ function StudentExpertBookingPicker({
     (value: string) => {
       if (confirmedSlotStart) return;
       const mins = Number(value) as SessionDurationMinutes;
+      setDayNotice(null);
       if (onDurationMinutesChange) {
         onDurationMinutesChange(mins);
       } else {
@@ -205,6 +207,7 @@ function StudentExpertBookingPicker({
   const clearTimeFilter = useCallback(() => {
     setFilterSlotIndex(-1);
     setConfirmedSlotStart(null);
+    setDayNotice(null);
   }, []);
 
   const expertTz = expert?.timeZone || 'UTC';
@@ -233,6 +236,11 @@ function StudentExpertBookingPicker({
   );
 
   const hourlyRate = normalizeExpertPrice(expert?.price) ?? 0;
+
+  const noticeHours = useMemo(() => {
+    const raw = Number(expert?.bookingNoticeHours);
+    return [24, 48, 72].includes(raw) ? raw : 24;
+  }, [expert?.bookingNoticeHours]);
 
   const getAvailableTimeSlots = useCallback(
     (day: Date, dur: number) => {
@@ -286,9 +294,7 @@ function StudentExpertBookingPicker({
         }
       }
 
-      const noticeRaw = Number(expert?.bookingNoticeHours);
-      const noticeH = [24, 48, 72].includes(noticeRaw) ? noticeRaw : 24;
-      const earliestMs = Date.now() + noticeH * 60 * 60 * 1000;
+      const earliestMs = Date.now() + noticeHours * 60 * 60 * 1000;
       updated = updated.filter((slotIdx) => {
         return viewerSlotToInstant(day, slotIdx, viewerTz).getTime() >= earliestMs;
       });
@@ -300,6 +306,7 @@ function StudentExpertBookingPicker({
       expert,
       expertTz,
       viewerTz,
+      noticeHours,
     ],
   );
 
@@ -316,6 +323,44 @@ function StudentExpertBookingPicker({
       return true;
     },
     [viewerTz, expert, expertTz, getAvailableTimeSlots, duration, filterSlotIndex],
+  );
+
+  const dayUnavailableReason = useCallback(
+    (date: Date): string | null => {
+      const viewerTodayYmd = toYMDInTimeZone(new Date(), viewerTz);
+      const viewerDayYmd = getViewerYmdFromCalendarDate(date);
+      if (viewerDayYmd < viewerTodayYmd) return 'That day has already passed.';
+      if (isExpertBlockedOnViewerDay(date, expert, expertTz, viewerTz)) {
+        return `${expertName} is not available on that date.`;
+      }
+
+      const available = getAvailableTimeSlots(date, duration);
+      if (!available.length) {
+        const earliestBookableYmd = toYMDInTimeZone(
+          new Date(Date.now() + noticeHours * 60 * 60 * 1000),
+          viewerTz,
+        );
+        if (viewerDayYmd < earliestBookableYmd) {
+          return `${expertName} needs at least ${noticeHours} hours' notice, so that day is too soon to book. Please pick a later date.`;
+        }
+        return `${expertName} has no free ${duration}-minute slot on that day. Try another date, or a shorter session.`;
+      }
+      if (filterSlotIndex >= 0 && !available.includes(filterSlotIndex)) {
+        const label = TIME_FILTER_OPTIONS.find((o) => o.value === String(filterSlotIndex))?.label;
+        return `No ${label || 'matching'} slot is free that day. Clear the time filter to see the times that are.`;
+      }
+      return null;
+    },
+    [
+      viewerTz,
+      expert,
+      expertTz,
+      expertName,
+      getAvailableTimeSlots,
+      duration,
+      filterSlotIndex,
+      noticeHours,
+    ],
   );
 
   const dayStyleGetter = useCallback(
@@ -544,7 +589,11 @@ function StudentExpertBookingPicker({
   const openDay = useCallback(
     (day: Date) => {
       if (Number.isNaN(day.getTime())) return;
-      if (!isDayClickable(day)) return;
+      if (!isDayClickable(day)) {
+        setDayNotice(dayUnavailableReason(day) ?? 'That day cannot be booked.');
+        return;
+      }
+      setDayNotice(null);
 
       setSelectedDate(day);
       if (filterSlotIndex >= 0) {
@@ -554,14 +603,13 @@ function StudentExpertBookingPicker({
         setModalOpen(true);
       }
     },
-    [isDayClickable, filterSlotIndex, confirmSlot],
+    [isDayClickable, filterSlotIndex, confirmSlot, dayUnavailableReason],
   );
 
   const handleSelectDate = ({ start, end }: { start: Date; end: Date }) => {
     const nextDay = new Date(start);
     nextDay.setDate(nextDay.getDate() + 1);
     if (nextDay.getTime() !== new Date(end).getTime()) return;
-    if (new Date(end).getTime() < Date.now()) return;
 
     openDay(start);
   };
@@ -658,6 +706,10 @@ function StudentExpertBookingPicker({
               Unavailable
             </span>
           </div>
+          <p className="mt-2 text-[12px] text-[#7A7A72]">
+            {expertName} needs at least {noticeHours} hours' notice, so the next{' '}
+            {noticeHours === 24 ? 'day' : `${noticeHours / 24} days`} cannot be booked.
+          </p>
         </div>
         <button
           type="button"
@@ -680,6 +732,7 @@ function StudentExpertBookingPicker({
                 onChange={(v) => {
                   setFilterSlotIndex(v === '' ? -1 : Number(v));
                   setConfirmedSlotStart(null);
+                  setDayNotice(null);
                 }}
               />
             </div>
@@ -693,6 +746,23 @@ function StudentExpertBookingPicker({
           </div>
         </div>
       )}
+
+      {dayNotice ? (
+        <div
+          data-testid="day-unavailable-notice"
+          role="status"
+          className="mb-3 flex items-start justify-between gap-3 rounded-lg border border-[#C9A84C]/40 bg-[#FEF3C7] px-4 py-3"
+        >
+          <p className="text-[13px] text-[#1A3A4A]">{dayNotice}</p>
+          <button
+            type="button"
+            onClick={() => setDayNotice(null)}
+            className="shrink-0 text-[12px] font-semibold text-[#1A3A4A] hover:underline"
+          >
+            Dismiss
+          </button>
+        </div>
+      ) : null}
 
       <div className="overflow-hidden rounded-xl border border-[#E5E2DB] bg-white p-2">
         <Calendar
