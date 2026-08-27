@@ -185,4 +185,44 @@ describe('StudentExpertBookingPicker calendar clicks', { timeout: 20_000 }, () =
       screen.getByText(/needs at least 24 hours' notice/i),
     ).toBeInTheDocument();
   });
+
+  it('opens the time picker when the date number itself is clicked', () => {
+    renderPicker();
+    layout();
+
+    // react-big-calendar paints .rbc-date-cell over the day background, so a click
+    // on the number never reaches onSelectSlot. Its own handler is a view
+    // drill-down, and with only the month view registered it rendered the number
+    // as an inert <span> — the day looked clickable and did nothing.
+    const number = screen
+      .getAllByRole('button')
+      .find(el => el.textContent?.trim() === '18' && el.closest('.rbc-date-cell'));
+
+    expect(number, 'the date number must be a real button').toBeTruthy();
+
+    act(() => {
+      number!.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+    });
+
+    expect(timeModalOpen()).toBe(true);
+  });
+
+  it('explains itself when the number of an unbookable day is clicked', () => {
+    renderPicker();
+    layout();
+
+    // June 5 is behind the June 10 clock, so it can never be booked.
+    const past = screen
+      .getAllByRole('button')
+      .find(el => el.textContent?.trim() === '05' && el.closest('.rbc-date-cell'));
+
+    expect(past).toBeTruthy();
+
+    act(() => {
+      past!.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+    });
+
+    expect(timeModalOpen()).toBe(false);
+    expect(screen.getByTestId('day-unavailable-notice')).toBeTruthy();
+  });
 });

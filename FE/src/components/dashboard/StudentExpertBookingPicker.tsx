@@ -444,103 +444,6 @@ function StudentExpertBookingPicker({
     ],
   );
 
-  const renderDateHeader = useCallback(
-    (
-      label: string,
-      date: Date,
-      drilldownView?: string,
-      onDrillDown?: (e: React.MouseEvent) => void,
-    ) => {
-      const blockedTitle = getBlockedDayTitle(date);
-      const isSelected =
-        confirmedSlotStart != null && isSameViewerCalendarDay(date, confirmedSlotStart);
-      const clickable = isDayClickable(date);
-      const cursorClass = clickable ? 'cursor-pointer' : 'cursor-not-allowed';
-      const content = (
-        <span
-          className={
-            isSelected
-              ? 'inline-flex items-center gap-1 font-bold text-[#1A3A4A]'
-              : undefined
-          }
-        >
-          {label}
-          {isSelected ? (
-            <Check className="h-3 w-3 shrink-0 text-[#1A3A4A]" aria-hidden />
-          ) : null}
-        </span>
-      );
-
-      if (!drilldownView) {
-        return (
-          <span title={blockedTitle} className={cursorClass}>
-            {content}
-          </span>
-        );
-      }
-
-      return (
-        <button
-          type="button"
-          className={`rbc-button-link ${cursorClass}${isSelected ? ' studentBookingCalendar-day-selected' : ''}`}
-          title={blockedTitle}
-          aria-label={isSelected ? `${label}, selected` : label}
-          onClick={onDrillDown}
-        >
-          {content}
-        </button>
-      );
-    },
-    [confirmedSlotStart, getBlockedDayTitle, isDayClickable],
-  );
-
-  const calendarComponents = useMemo(
-    () => ({
-      toolbar: StudentBookingToolbar,
-      dateCellWrapper: ({ value, children }: { value: Date; children: React.ReactElement }) => {
-        const title = getBlockedDayTitle(value);
-        // "Today" follows the selected viewer timezone (same basis the calendar
-        // uses to disable past days), so picking e.g. India can advance it a day.
-        const isToday =
-          getViewerYmdFromCalendarDate(value) === toYMDInTimeZone(new Date(), viewerTz);
-        if (!title && !isToday) return children;
-        const wrapped = title
-          ? Children.map(children, (child) => {
-              if (!React.isValidElement(child)) return child;
-              return React.cloneElement(child as React.ReactElement<any>, { title });
-            })
-          : children;
-        // Match react-big-calendar's own day-cell flex sizing (flex: 1 0 0%) so
-        // wrapping the cell doesn't collapse/shift it out of alignment with the
-        // date numbers in the content row.
-        return (
-          <div title={title} className="relative h-full" style={{ flex: '1 0 0%' }}>
-            {wrapped}
-            {isToday && (
-              <span className="pointer-events-none absolute bottom-1 left-1/2 -translate-x-1/2 rounded-full bg-[#1A3A4A] px-2 py-[2px] text-[9px] font-semibold leading-none text-white shadow-sm">
-                Today
-              </span>
-            )}
-          </div>
-        );
-      },
-      month: {
-        dateHeader: ({
-          label,
-          date,
-          drilldownView,
-          onDrillDown,
-        }: {
-          label: string;
-          date: Date;
-          drilldownView?: string;
-          onDrillDown?: (e: React.MouseEvent) => void;
-        }) => renderDateHeader(label, date, drilldownView, onDrillDown),
-      },
-    }),
-    [getBlockedDayTitle, renderDateHeader, viewerTz],
-  );
-
   const eventStyleGetter = (event: any, _s: any, end: Date) => {
     const past = end < new Date();
     const legacy = event.type === 'event';
@@ -605,6 +508,90 @@ function StudentExpertBookingPicker({
     },
     [isDayClickable, filterSlotIndex, confirmSlot, dayUnavailableReason],
   );
+  const renderDateHeader = useCallback(
+    (label: string, date: Date) => {
+      const blockedTitle = getBlockedDayTitle(date);
+      const isSelected =
+        confirmedSlotStart != null && isSameViewerCalendarDay(date, confirmedSlotStart);
+      const clickable = isDayClickable(date);
+      const cursorClass = clickable ? 'cursor-pointer' : 'cursor-not-allowed';
+      const content = (
+        <span
+          className={
+            isSelected
+              ? 'inline-flex items-center gap-1 font-bold text-[#1A3A4A]'
+              : undefined
+          }
+        >
+          {label}
+          {isSelected ? (
+            <Check className="h-3 w-3 shrink-0 text-[#1A3A4A]" aria-hidden />
+          ) : null}
+        </span>
+      );
+
+      // The number is its own click target: it sits in .rbc-date-cell, which is
+      // painted over the day background, so clicks on it never reach onSelectSlot.
+      // rbc's own handler is a view drill-down, which is not what a booking
+      // calendar wants — and with only the month view registered it renders the
+      // number as an inert span instead.
+      return (
+        <button
+          type="button"
+          className={`rbc-button-link ${cursorClass}${isSelected ? ' studentBookingCalendar-day-selected' : ''}`}
+          title={blockedTitle}
+          aria-label={isSelected ? `${label}, selected` : label}
+          onClick={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            openDay(date);
+          }}
+        >
+          {content}
+        </button>
+      );
+    },
+    [confirmedSlotStart, getBlockedDayTitle, isDayClickable, openDay],
+  );
+
+  const calendarComponents = useMemo(
+    () => ({
+      toolbar: StudentBookingToolbar,
+      dateCellWrapper: ({ value, children }: { value: Date; children: React.ReactElement }) => {
+        const title = getBlockedDayTitle(value);
+        // "Today" follows the selected viewer timezone (same basis the calendar
+        // uses to disable past days), so picking e.g. India can advance it a day.
+        const isToday =
+          getViewerYmdFromCalendarDate(value) === toYMDInTimeZone(new Date(), viewerTz);
+        if (!title && !isToday) return children;
+        const wrapped = title
+          ? Children.map(children, (child) => {
+              if (!React.isValidElement(child)) return child;
+              return React.cloneElement(child as React.ReactElement<any>, { title });
+            })
+          : children;
+        // Match react-big-calendar's own day-cell flex sizing (flex: 1 0 0%) so
+        // wrapping the cell doesn't collapse/shift it out of alignment with the
+        // date numbers in the content row.
+        return (
+          <div title={title} className="relative h-full" style={{ flex: '1 0 0%' }}>
+            {wrapped}
+            {isToday && (
+              <span className="pointer-events-none absolute bottom-1 left-1/2 -translate-x-1/2 rounded-full bg-[#1A3A4A] px-2 py-[2px] text-[9px] font-semibold leading-none text-white shadow-sm">
+                Today
+              </span>
+            )}
+          </div>
+        );
+      },
+      month: {
+        dateHeader: ({ label, date }: { label: string; date: Date }) =>
+          renderDateHeader(label, date),
+      },
+    }),
+    [getBlockedDayTitle, renderDateHeader, viewerTz],
+  );
+
 
   const handleSelectDate = ({ start, end }: { start: Date; end: Date }) => {
     const nextDay = new Date(start);
