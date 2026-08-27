@@ -4,7 +4,7 @@ export const DECISION_NOTE_MAX_LENGTH = 280;
 export const sanitizeDecisionNote = (note: unknown): string => {
     if (typeof note !== 'string') return '';
     const withoutTags = note
-        .replace(/<[^>]*>/g, ' ')
+        .replace(/<[^<>]*>/g, ' ')
         .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, '');
     const collapsed = withoutTags
         .split(/\r?\n/)

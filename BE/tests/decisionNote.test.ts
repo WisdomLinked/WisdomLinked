@@ -31,6 +31,19 @@ test("markup is stripped rather than kept, so the email never carries a tag", ()
   assert.equal(sanitizeDecisionNote('<img src=x onerror=y>'), "");
 });
 
+test("a note of pathological markup is stripped in linear time", () => {
+  // The tag strip runs on the raw note, before the 280-char cap, so an unbounded
+  // run of '<' used to cost O(n^2): 60k of them took about a second.
+  const attack = "<".repeat(60_000);
+
+  const started = Date.now();
+  const result = sanitizeDecisionNote(attack);
+  const elapsed = Date.now() - started;
+
+  assert.ok(elapsed < 250, `sanitizing took ${elapsed}ms — the tag regex has gone quadratic again`);
+  assert.ok(result.length <= DECISION_NOTE_MAX_LENGTH);
+});
+
 test("a note longer than the limit is truncated, not rejected", () => {
   const long = "a".repeat(DECISION_NOTE_MAX_LENGTH + 50);
   assert.equal(sanitizeDecisionNote(long).length, DECISION_NOTE_MAX_LENGTH);

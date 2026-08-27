@@ -19,7 +19,7 @@ const reset = () => {
 };
 const last = () => sent[sent.length - 1];
 const text = (html: string) =>
-  html.replace(/<[^>]+>/g, " ").replace(/&nbsp;/g, " ").replace(/\s+/g, " ");
+  html.replace(/<[^<>]+>/g, " ").replace(/&nbsp;/g, " ").replace(/\s+/g, " ");
 
 test("every email carries the same branded shell", () => {
   const html = template.renderEmail({
@@ -105,8 +105,9 @@ test("content from users is escaped, not injected into the markup", () => {
     blocks: [template.facts([["Session", '<img onerror=x>']])],
   });
 
-  assert.doesNotMatch(html, /<script>/);
-  assert.doesNotMatch(html, /<img onerror/);
+  const lowered = html.toLowerCase();
+  assert.ok(!lowered.includes("<script"), "no script tag survives, in any casing");
+  assert.ok(!lowered.includes("<img onerror"), "no event handler survives");
   assert.match(html, /&lt;script&gt;/);
 });
 
