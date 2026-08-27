@@ -1006,6 +1006,42 @@ export default function ExpertProfile({
               </div>
 
               <div>
+                <h3 className="text-[12px] font-semibold uppercase tracking-[0.16em] text-[#7A7A72] mb-2">
+                  Rates
+                </h3>
+                <div className="rounded-xl border border-[#E5E2DB] bg-[#F5F3EF] px-4 py-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-[12px] font-semibold uppercase tracking-[0.14em] text-[#7A7A72]">
+                        1:1 session
+                      </p>
+                      {expertLoading ? (
+                        <p className="mt-2 text-[14px] text-[#7A7A72]">Loading rates…</p>
+                      ) : publishedOneToOneRate != null ? (
+                        <>
+                          <p className="mt-2 text-[20px] font-serif font-semibold text-[#1A3A4A]">
+                            ${publishedOneToOneRate.toFixed(2)}
+                          </p>
+                          <p className="mt-1 text-[12px] text-[#7A7A72]">
+                            per hour — {formatOfferedDurationsList(offeredDurations)} totals scale
+                            from this rate
+                          </p>
+                          {pickedStart && pickedEnd && pickedDuration ? (
+                            <p className="mt-2 text-[12px] font-semibold text-[#1A3A4A]">
+                              {pickedDuration} min · ${oneToOneSessionPrice.toFixed(2)} · {pickedSlotDisplay}
+                            </p>
+                          ) : null}
+                        </>
+                      ) : (
+                        <p className="mt-2 text-[14px] text-[#7A7A72]">Rate not published yet</p>
+                      )}
+                    </div>
+                    <Star className="h-5 w-5 text-[#C9A84C]" aria-hidden />
+                  </div>
+                </div>
+              </div>
+
+              <div>
                 <p className="text-[12px] font-semibold uppercase tracking-[0.16em] text-[#7A7A72] mb-2">
                   Availability
                 </p>
@@ -1067,43 +1103,6 @@ export default function ExpertProfile({
                   Back to experts
                 </button>
               ) : null}
-            </div>
-          </section>
-
-          <section className="rounded-2xl border border-[#E5E2DB] bg-white p-6">
-            <h2 className="font-serif text-[1.15rem] font-medium text-[#1A3A4A]">Rates</h2>
-
-            <div className="mt-4 space-y-3">
-              <div className="rounded-xl border border-[#E5E2DB] bg-[#F5F3EF] px-4 py-4">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="text-[12px] font-semibold uppercase tracking-[0.14em] text-[#7A7A72]">
-                      1:1 session
-                    </p>
-                    {expertLoading ? (
-                      <p className="mt-2 text-[14px] text-[#7A7A72]">Loading rates…</p>
-                    ) : publishedOneToOneRate != null ? (
-                      <>
-                        <p className="mt-2 text-[20px] font-serif font-semibold text-[#1A3A4A]">
-                          ${publishedOneToOneRate.toFixed(2)}
-                        </p>
-                        <p className="mt-1 text-[12px] text-[#7A7A72]">
-                          per hour — {formatOfferedDurationsList(offeredDurations)} totals scale
-                          from this rate
-                        </p>
-                        {pickedStart && pickedEnd && pickedDuration ? (
-                          <p className="mt-2 text-[12px] font-semibold text-[#1A3A4A]">
-                            {pickedDuration} min · ${oneToOneSessionPrice.toFixed(2)} · {pickedSlotDisplay}
-                          </p>
-                        ) : null}
-                      </>
-                    ) : (
-                      <p className="mt-2 text-[14px] text-[#7A7A72]">Rate not published yet</p>
-                    )}
-                  </div>
-                  <Star className="h-5 w-5 text-[#C9A84C]" aria-hidden />
-                </div>
-              </div>
             </div>
           </section>
         </aside>
