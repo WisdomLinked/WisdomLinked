@@ -1,7 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { BookOpen, Clock, UserCheck } from 'lucide-react';
+import { formatSessionDuration, formatSessionWhen } from '../../utils/sessionDuration';
 
 const pad2 = (n: number) => String(n).padStart(2, '0');
+
 
 function formatDuration(ms: number) {
   const safe = Math.max(0, ms);
@@ -19,6 +21,7 @@ function formatDuration(ms: number) {
 export type UpcomingSession = {
   title: string;
   startAt: number; // epoch ms
+  durationMinutes?: number;
   id?: string;
   peerUserId?: string;
   pending?: boolean;
@@ -62,6 +65,13 @@ function CountdownRow({
               <p className="truncate text-[12px] font-semibold text-slate-700">
                 {session ? session.title : emptyLabel}
               </p>
+              {session ? (
+                <p className="text-[11px] text-slate-500">
+                  {[formatSessionWhen(session.startAt), formatSessionDuration(session.durationMinutes)]
+                    .filter(Boolean)
+                    .join(' · ')}
+                </p>
+              ) : null}
             </div>
           </div>
 

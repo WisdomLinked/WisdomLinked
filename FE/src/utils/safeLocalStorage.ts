@@ -20,7 +20,10 @@ export function persistUserDetails(storage: Storage, key: string, user: unknown)
 export interface PendingBookingDetails {
   kind?: string;
   groupChatId?: string;
+  /** Seat request being settled — wallets always redirect, so this must survive. */
+  requestId?: string;
   requiresApproval?: boolean;
+  paymentMode?: string;
   expert?: string;
   name?: string;
   description?: string;
@@ -43,7 +46,9 @@ export function sanitizePendingDetails(details: unknown): PendingBookingDetails 
   const out: PendingBookingDetails = {};
   if (d.kind != null) out.kind = str(d.kind);
   if (d.groupChatId != null) out.groupChatId = str(d.groupChatId);
+  if (d.requestId != null) out.requestId = str(d.requestId);
   if (d.requiresApproval != null) out.requiresApproval = !!d.requiresApproval;
+  if (d.paymentMode != null) out.paymentMode = d.paymentMode === 'wallet' ? 'wallet' : 'card';
   if (d.expert != null) out.expert = str(d.expert);
   if (d.name != null) out.name = str(d.name);
   if (d.description != null) out.description = str(d.description);

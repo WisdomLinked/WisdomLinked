@@ -41,10 +41,28 @@ export type StudentAcceptOneToOnePendingDetails = {
   name?: string;
 };
 
+export type StudentSeatPaymentPendingDetails = {
+  kind: 'pay-seat-request';
+  requestId: string;
+  groupChatId: string;
+  price: number;
+  name?: string;
+};
+
 export type StudentBookingPendingDetails =
   | StudentOneToOnePendingDetails
   | StudentSeminarPendingDetails
-  | StudentAcceptOneToOnePendingDetails;
+  | StudentAcceptOneToOnePendingDetails
+  | StudentSeatPaymentPendingDetails;
+
+export type PaymentMode = 'card' | 'wallet';
+
+
+export type WalletOption =
+  // `only` pins the checkout to the wallet: a booking requested through the wallet path
+  // skipped the card hold, so the server will not let it settle by card either.
+  | { kind: 'charge'; only?: boolean }
+  | { kind: 'request'; onSubmit: () => void | Promise<void>; submitLabel?: string; note?: string };
 
 type CheckoutFormProps = {
   pendingDetails: StudentBookingPendingDetails;
@@ -52,7 +70,29 @@ type CheckoutFormProps = {
   price: number;
   returnUrl: string;
   isSeatRequest?: boolean;
+  paymentMode?: PaymentMode;
   onPaymentSuccess: (paymentIntentId: string, opts?: { requiresApproval?: boolean }) => void;
+  policyNotice?: BookingPolicyNotice;
+};
+
+export type BookingPolicyNotice = {
+  message: string;
+  acknowledgeLabel: string;
+};
+
+const WALLET_METHOD_NAMES: Record<string, string> = {
+  wechat_pay: 'WeChat Pay',
+  alipay: 'Alipay',
+};
+
+export const payButtonLabel = (
+  price: number,
+  paymentMode: PaymentMode,
+  selectedMethod: string,
+): string => {
+  if (paymentMode !== 'wallet') return `Pay $${price}`;
+  const name = WALLET_METHOD_NAMES[selectedMethod];
+  return name ? `Pay $${price} with ${name}` : `Pay $${price}`;
 };
 
 const CheckoutForm = ({
@@ -61,13 +101,19 @@ const CheckoutForm = ({
   price,
   returnUrl,
   isSeatRequest = false,
+  paymentMode = 'card',
   onPaymentSuccess,
+  policyNotice,
 }: CheckoutFormProps) => {
   const stripe = useStripe();
   const elements = useElements();
+  const [acknowledged, setAcknowledged] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const [processing, setProcessing] = useState(false);
   const [progress, setProgress] = useState(0);
+  // Which wallet the student picked inside the Payment Element, so the button can name
+  // the one they chose instead of listing every option.
+  const [selectedMethod, setSelectedMethod] = useState('');
   const progressTimer = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const clearProgressTimer = () => {
@@ -103,6 +149,7 @@ const CheckoutForm = ({
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!stripe || !elements) return;
+    if (policyNotice && !acknowledged) return;
 
     try {
       if (price === 0) {
@@ -124,9 +171,12 @@ const CheckoutForm = ({
       const details = pendingDetails as any;
       const response = await createStripePaymentIntent({
         stripeMode,
-        ...(details.groupChatId
-          ? { groupChatId: details.groupChatId }
-          : { expertId: String(details.expert), duration: details.duration }),
+        paymentMethod: paymentMode,
+        ...(details.kind === 'pay-seat-request'
+          ? { seatRequestId: details.requestId }
+          : details.groupChatId
+            ? { groupChatId: details.groupChatId }
+            : { expertId: String(details.expert), duration: details.duration }),
       });
       const clientSecret = response && response.client_secret;
       if (!clientSecret) {
@@ -146,7 +196,7 @@ const CheckoutForm = ({
           ? response.requiresApproval
           : isSeatRequest;
 
-      persistPendingDetails(window.localStorage, { ...pendingDetails, requiresApproval });
+      persistPendingDetails(window.localStorage, { ...pendingDetails, requiresApproval, paymentMode });
 
       const { paymentIntent, error: confirmError } = await stripe.confirmPayment({
         elements,
@@ -162,6 +212,11 @@ const CheckoutForm = ({
       if (paymentIntent?.status === 'succeeded' || paymentIntent?.status === 'requires_capture') {
         endProgress(true);
         onPaymentSuccess(paymentIntent.id, { requiresApproval });
+      } else if (paymentIntent?.status === 'processing') {
+        endProgress(true);
+        setErrorMessage(
+          'Your payment is still being confirmed by the wallet provider. This page will finish your booking once it clears — please check back in a moment.',
+        );
       } else if (confirmError) {
         // Integration/validation errors resolve (not throw) with an error object.
         endProgress(false);
@@ -192,21 +247,42 @@ const CheckoutForm = ({
   return (
     <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
       <div className="min-h-0 flex-1 space-y-4 overflow-y-auto pr-1">
-        <PaymentElement />
+        {policyNotice ? (
+          <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5">
+            <p className="text-[12px] font-medium text-amber-900">{policyNotice.message}</p>
+            <label className="mt-2 flex cursor-pointer items-start gap-2 text-[12px] text-amber-900">
+              <input
+                type="checkbox"
+                checked={acknowledged}
+                onChange={(e) => setAcknowledged(e.target.checked)}
+                className="mt-0.5 h-3.5 w-3.5 shrink-0 accent-[#1A3A4A]"
+              />
+              <span>{policyNotice.acknowledgeLabel}</span>
+            </label>
+          </div>
+        ) : null}
+        <PaymentElement onChange={(e: any) => setSelectedMethod(e?.value?.type ?? '')} />
         <FormAlert variant="error" message={errorMessage} onDismiss={() => setErrorMessage('')} />
       </div>
       <div className="shrink-0 pt-3">
         <button
           type="submit"
-          disabled={!stripe || !elements || processing}
+          disabled={!stripe || !elements || processing || (!!policyNotice && !acknowledged)}
           className="inline-flex w-full items-center justify-center rounded-[4px] bg-[#1A3A4A] px-4 py-3 text-[13px] font-semibold text-white hover:bg-[#122635] disabled:opacity-60"
         >
           {processing
             ? (isSeatRequest ? 'Joining the waiting list…' : 'Processing payment…')
             : isSeatRequest
               ? (price > 0 ? `Authorize $${price} & join waiting list` : 'Join waiting list')
-              : price > 0 ? `Pay $${price}` : 'Confirm booking'}
+              : price > 0
+                ? payButtonLabel(price, paymentMode, selectedMethod)
+                : 'Confirm booking'}
         </button>
+        {policyNotice && !acknowledged ? (
+          <p className="mt-2 text-center text-[11px] text-[#7A7A72]">
+            Tick the box above to continue.
+          </p>
+        ) : null}
         {/* Animated progress line under the button while the charge is processing. */}
         <div
           className="mt-2 h-1 w-full overflow-hidden rounded-full bg-[#1A3A4A]/10 transition-opacity duration-200"
@@ -233,12 +309,24 @@ type Props = {
   pendingDetails: StudentBookingPendingDetails;
   returnUrl?: string;
   isSeatRequest?: boolean;
-  /** Server authorizes (holds) rather than charges — must match the intent's
-   *  capture_method or confirmPayment throws a mismatch. True for all seminars. */
   holdsFunds?: boolean;
+  walletOption?: WalletOption;
   onPaymentSuccess: (paymentIntentId: string, opts?: { requiresApproval?: boolean }) => void;
   onCancel?: () => void;
   cancelLabel?: string;
+  policyNotice?: BookingPolicyNotice;
+};
+
+const APPEARANCE = {
+  theme: 'stripe' as const,
+  variables: {
+    colorPrimary: '#1A3A4A',
+    colorBackground: '#ffffff',
+    colorText: '#1A3A4A',
+    colorDanger: '#dc2626',
+    borderRadius: '8px',
+    fontFamily: 'inherit',
+  },
 };
 
 export default function StudentBookingCheckout({
@@ -248,12 +336,22 @@ export default function StudentBookingCheckout({
   returnUrl,
   isSeatRequest = false,
   holdsFunds = false,
+  walletOption,
   onPaymentSuccess,
   onCancel,
   cancelLabel = 'Back',
+  policyNotice,
 }: Props) {
   const stripeReturnBase =
     returnUrl ?? `${window.location.pathname}${window.location.search}`;
+
+  // Free bookings never reach a wallet, so the tabs would only be noise.
+  const walletAvailable = !!walletOption && price > 0;
+  const walletOnly =
+    walletAvailable && walletOption?.kind === 'charge' && !!walletOption.only;
+  const [tab, setTab] = useState<PaymentMode>(walletOnly ? 'wallet' : 'card');
+  const activeTab: PaymentMode = walletOnly ? 'wallet' : walletAvailable ? tab : 'card';
+  const [walletSubmitting, setWalletSubmitting] = useState(false);
 
   const options = useMemo(
     () => ({
@@ -262,21 +360,19 @@ export default function StudentBookingCheckout({
       currency: 'usd' as const,
       // Seminar bookings authorize (hold) the funds — the deferred Element must
       // declare the same manual capture or confirmPayment throws a capture_method
-      // mismatch and the submit silently fails.
-      ...((isSeatRequest || holdsFunds) && price > 0 ? { captureMethod: 'manual' as const } : {}),
-      appearance: {
-        theme: 'stripe' as const,
-        variables: {
-          colorPrimary: '#1A3A4A',
-          colorBackground: '#ffffff',
-          colorText: '#1A3A4A',
-          colorDanger: '#dc2626',
-          borderRadius: '8px',
-          fontFamily: 'inherit',
-        },
-      },
+      // mismatch and the submit silently fails. Wallets cannot hold at all, so they
+      // always settle immediately and must not declare manual capture.
+      ...((isSeatRequest || holdsFunds) && price > 0 && activeTab === 'card'
+        ? { captureMethod: 'manual' as const }
+        : {}),
+      // Wallets are redirect/QR methods that never surface on their own, so they are
+      // requested explicitly rather than left to automatic payment methods.
+      ...(activeTab === 'wallet'
+        ? { paymentMethodTypes: ['alipay', 'wechat_pay'] }
+        : {}),
+      appearance: APPEARANCE,
     }),
-    [price, isSeatRequest, holdsFunds],
+    [price, isSeatRequest, holdsFunds, activeTab],
   );
 
   const [stripeMode, setStripeMode] = useState('');
@@ -325,7 +421,7 @@ export default function StudentBookingCheckout({
           Total: <span className="font-semibold text-[#1A3A4A]">${price}</span>
           {stripeMode === 'test' ? ' · test mode' : ''}
         </p>
-        {isSeatRequest ? (
+        {isSeatRequest && activeTab === 'card' ? (
           <p className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[12px] text-amber-800">
             This seminar is full. {price > 0
               ? 'Pay to get on the waiting list for the host to approve — your card is authorized but not charged, and you\'re only charged if the host approves. Otherwise the hold is released.'
@@ -333,17 +429,94 @@ export default function StudentBookingCheckout({
           </p>
         ) : null}
       </div>
+
+      {walletOnly ? (
+        <p className="mt-4 shrink-0 rounded-lg border border-[#E5E2DB] bg-[#F5F3EF] px-3 py-2 text-[12px] text-[#7A7A72]">
+          You requested this with WeChat Pay or Alipay, so it is paid the same way.
+        </p>
+      ) : null}
+
+      {walletAvailable && !walletOnly ? (
+        <div
+          role="tablist"
+          aria-label="Payment method"
+          className="mt-4 grid shrink-0 grid-cols-2 gap-1 rounded-[6px] border border-[#E5E2DB] bg-[#F5F3EF] p-1"
+        >
+          {([
+            { id: 'card' as const, label: 'Pay with card' },
+            { id: 'wallet' as const, label: 'Pay with wallet' },
+          ]).map((t) => (
+            <button
+              key={t.id}
+              type="button"
+              role="tab"
+              aria-selected={activeTab === t.id}
+              onClick={() => setTab(t.id)}
+              className={`rounded-[4px] px-3 py-2 text-[13px] font-semibold transition ${
+                activeTab === t.id
+                  ? 'bg-white text-[#1A3A4A] shadow-sm'
+                  : 'text-[#7A7A72] hover:text-[#1A3A4A]'
+              }`}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+      ) : null}
+
       <div className="mt-4 flex min-h-0 flex-1 flex-col">
-        <Elements stripe={stripePromise} options={options}>
-          <CheckoutForm
-            pendingDetails={pendingDetails}
-            stripeMode={stripeMode}
-            price={price}
-            returnUrl={stripeReturnBase}
-            isSeatRequest={isSeatRequest}
-            onPaymentSuccess={onPaymentSuccess}
-          />
-        </Elements>
+        {activeTab === 'wallet' && walletOption?.kind === 'request' ? (
+          <div className="flex min-h-0 flex-1 flex-col">
+            <div className="min-h-0 flex-1 space-y-3 overflow-y-auto pr-1">
+              <div className="rounded-lg border border-[#E5E2DB] bg-[#F5F3EF] px-3 py-2.5">
+                <p className="text-[12px] font-semibold text-[#1A3A4A]">
+                  WeChat Pay and Alipay are paid in full, so we ask first
+                </p>
+                <p className="mt-1 text-[12px] text-[#7A7A72]">
+                  These wallets can't hold funds the way a card can. We'll send this as a
+                  request and <strong>charge you nothing now</strong>. If it's accepted, we'll
+                  email you a link to pay ${price} — you'll have 24 hours to complete it, and
+                  the booking is confirmed the moment you do.
+                </p>
+              </div>
+              {walletOption.note ? (
+                <p className="text-[12px] text-[#7A7A72]">{walletOption.note}</p>
+              ) : null}
+            </div>
+            <div className="shrink-0 pt-3">
+              <button
+                type="button"
+                disabled={walletSubmitting}
+                onClick={async () => {
+                  setWalletSubmitting(true);
+                  try {
+                    await walletOption.onSubmit();
+                  } finally {
+                    setWalletSubmitting(false);
+                  }
+                }}
+                className="inline-flex w-full items-center justify-center rounded-[4px] bg-[#1A3A4A] px-4 py-3 text-[13px] font-semibold text-white hover:bg-[#122635] disabled:opacity-60"
+              >
+                {walletSubmitting
+                  ? 'Sending request…'
+                  : walletOption.submitLabel ?? 'Send request — pay after it is accepted'}
+              </button>
+            </div>
+          </div>
+        ) : (
+          <Elements key={activeTab} stripe={stripePromise} options={options}>
+            <CheckoutForm
+              pendingDetails={pendingDetails}
+              stripeMode={stripeMode}
+              price={price}
+              returnUrl={stripeReturnBase}
+              isSeatRequest={isSeatRequest && activeTab === 'card'}
+              paymentMode={activeTab}
+              policyNotice={activeTab === 'card' ? policyNotice : undefined}
+              onPaymentSuccess={onPaymentSuccess}
+            />
+          </Elements>
+        )}
       </div>
       {onCancel ? (
         <button
@@ -379,6 +552,20 @@ export async function completeStudentBookingFromStorage(
     // failure (transient or business) keeps pendingDetails so a refresh can retry — the
     // server guards against double-processing the same payment_intent.
     const clearPending = () => window.localStorage.removeItem('pendingDetails');
+
+    // Settling an overflow seat the host approved — enrols on payment, no re-approval.
+    if (details.kind === 'pay-seat-request') {
+      const { paySeminarSeatRequest } = await import('../../api/api');
+      const response = await paySeminarSeatRequest({
+        requestId: details.requestId,
+        payment_intent: paymentIntent,
+      });
+      if (response === false || response?.status === 'FAIL' || response?.error) {
+        return { ok: false, error: response?.error || 'Could not confirm your seat after payment.', retryable: true };
+      }
+      clearPending();
+      return { ok: true, kind: 'seminar', userDetails: response?.result ?? null };
+    }
 
     // Paying to confirm an expert-proposed 1:1 — flips the session to active, no re-approval.
     if (details.kind === 'accept-1to1') {

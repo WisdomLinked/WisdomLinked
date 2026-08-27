@@ -365,6 +365,14 @@ const MessagesHeader = ({ events, openCalendarModal, openSeminarModal, openEditS
         });
     }, [events, nowTick]);
 
+    const seminarHasEnded = useMemo(() => {
+        if (chosenGroupChatDetails?.type !== "seminar") return false;
+        const boundary = chosenGroupChatDetails?.end || chosenGroupChatDetails?.start;
+        if (!boundary) return false;
+        const ts = new Date(boundary).getTime();
+        return !Number.isNaN(ts) && ts < nowTick;
+    }, [chosenGroupChatDetails?.type, chosenGroupChatDetails?.end, chosenGroupChatDetails?.start, nowTick]);
+
     const isStudentToExpertDm = viewerIsStudent && peerRoleLower === "expert";
     /** A student may only start/join the call once the meeting window is open; experts are unrestricted. */
     const studentCannotStartDmVideoToExpert = isStudentToExpertDm && !callWindowOpen;
@@ -823,7 +831,8 @@ const MessagesHeader = ({ events, openCalendarModal, openSeminarModal, openEditS
                                                                     className={`mt-0.5 flex w-full items-center justify-between gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-medium ${
                                                                         theme === "light" ? "text-slate-800 hover:bg-slate-50" : "hover:bg-white/10"
                                                                     } disabled:opacity-50`}
-                                                                    disabled={(chosenGroupChatDetails?.participants?.length ?? 0) > 1}
+                                                                    disabled={(chosenGroupChatDetails?.participants?.length ?? 0) > 1 || seminarHasEnded}
+                                                                    title={seminarHasEnded ? "This seminar has already finished and can no longer be edited." : undefined}
                                                                     onClick={() => {
                                                                         set_buttonsModalShow(false)
                                                                         openEditSeminarModal()

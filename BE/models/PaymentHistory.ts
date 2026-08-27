@@ -10,10 +10,10 @@ const PaymentHistorySchema = new mongoose.Schema(
         paymentIntent: { type: String },
         receiptUrl: { type: String },
         receiptNumber: { type: String },
-        status: { 
-            type: String, 
-            enum: ['pending', 'completed', 'failed', 'refunded'], 
-            default: 'completed' 
+        status: {
+            type: String,
+            enum: ['pending', 'completed', 'failed', 'refunded', 'withheld', 'released'],
+            default: 'completed'
         },
         customer: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
         expert: { type: mongoose.Schema.Types.ObjectId, ref: "User" },

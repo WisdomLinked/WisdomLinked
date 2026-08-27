@@ -15,6 +15,8 @@ vi.mock('../../api/api', () => ({
   getExpertById: vi.fn(),
   createGroupChatByUser: vi.fn(),
   profileImageFetch: vi.fn(async () => null),
+  getMySeatRequests: vi.fn(async () => ({ result: [] })),
+  registerForSeminar: vi.fn(),
 }));
 
 
@@ -346,7 +348,7 @@ describe('ExpertProfile booking', () => {
 
 
 
-    expect(await screen.findByText(/session booked/i)).toBeInTheDocument();
+    expect(await screen.findByText(/request sent/i)).toBeInTheDocument();
 
   });
 
@@ -366,7 +368,7 @@ describe('ExpertProfile booking', () => {
 
 
 
-    expect(await screen.findByText(/session booked/i)).toBeInTheDocument();
+    expect(await screen.findByText(/request sent/i)).toBeInTheDocument();
 
   });
 

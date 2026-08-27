@@ -47,6 +47,7 @@ stripeController.listReconcilableBookingIntents = async () => [];
 
 notifications.sendEmailMeetingRequestToExpert = async () => {};
 notifications.sendEmailMeetingRequestToCustomer = async () => {};
+notifications.sendEmailSessionPaidToExpert = async () => {};
 notifications.sendEmailMeetingAcceptance = async () => {};
 notifications.sendNotificationEmail = async () => {};
 notifications.scheduleEmailReminder = () => {};
@@ -158,6 +159,7 @@ const withOneToOneModels = () => {
     userFindById: User.findById,
     groupCreate: GroupChat.create,
     groupFind: GroupChat.find,
+    groupFindOneAndUpdate: GroupChat.findOneAndUpdate,
     groupDeleteOne: GroupChat.deleteOne,
     groupUpdateOne: GroupChat.updateOne,
     userUpdateOne: User.updateOne,
@@ -177,6 +179,10 @@ const withOneToOneModels = () => {
     return { ...doc, _id: CHAT_ID };
   };
   GroupChat.find = () => ({ select: async () => [] });
+  GroupChat.findOneAndUpdate = async (filter: any, update: any) => {
+    record("groupFindOneAndUpdate", [filter, update]);
+    return { _id: CHAT_ID };
+  };
   GroupChat.deleteOne = async (filter: any) => {
     record("groupDeleteOne", [filter]);
     return { deletedCount: 1 };
@@ -210,6 +216,7 @@ const withOneToOneModels = () => {
     User.findById = original.userFindById;
     GroupChat.create = original.groupCreate;
     GroupChat.find = original.groupFind;
+    GroupChat.findOneAndUpdate = original.groupFindOneAndUpdate;
     GroupChat.deleteOne = original.groupDeleteOne;
     GroupChat.updateOne = original.groupUpdateOne;
     User.updateOne = original.userUpdateOne;
@@ -305,43 +312,11 @@ test("1:1 booking is refused and the hold released when the amount does not matc
   }
 });
 
-test("1:1 booking rolls the session back when the capture fails", async () => {
+test("1:1 booking holds the money and never captures at request time", async () => {
   resetCalls();
   const restore = withOneToOneModels();
   try {
     stubs.authorized = () => heldIntent();
-    stubs.capture = () => false;
-    stubs.succeeded = () => false;
-    stubs.cancel = () => ({ status: "canceled" });
-
-    const req: any = { user: { userId: STUDENT_ID }, body: oneToOneBody };
-    const res = createRes();
-    await groupController.createGroupChatByUser(req, res);
-
-    assert.equal(res.statusCode, 502);
-    assert.match(String(res.body), /have not been charged/i);
-    assert.equal(calls.groupCreate?.length, 1, "the session was created before capture");
-    assert.equal(calls.groupDeleteOne?.length, 1, "the unpaid session must be removed");
-    assert.equal(calls.cancel?.length, 1, "the hold must be released");
-    // The pre-capture row is deleted, so nothing is left claiming money was taken.
-    assert.equal(calls.historyDelete?.length, 1);
-  } finally {
-    restore();
-  }
-});
-
-test("1:1 booking captures only after the session exists, and settles the pending row", async () => {
-  resetCalls();
-  const restore = withOneToOneModels();
-  try {
-    stubs.authorized = () => heldIntent();
-    stubs.capture = () => ({
-      status: "succeeded",
-      amount: EXPECTED_CENTS,
-      amount_received: EXPECTED_CENTS,
-      currency: "usd",
-      latest_charge: { receipt_url: "https://receipt", receipt_number: "R-1" },
-    });
 
     const req: any = { user: { userId: STUDENT_ID }, body: oneToOneBody };
     const res = createRes();
@@ -349,11 +324,58 @@ test("1:1 booking captures only after the session exists, and settles the pendin
 
     assert.equal(res.statusCode, 200);
     assert.equal(calls.groupCreate?.length, 1);
-    assert.equal(calls.capture?.length, 1, "exactly one capture");
-    // The row is written as pending before capture, then settled to completed.
-    assert.equal(calls.historySave?.[0]?.[0]?.status, "pending");
-    assert.equal(calls.historyUpdate?.[0]?.[1]?.status, "completed");
-    assert.equal(calls.cancel, undefined, "a successful booking releases nothing");
+    assert.equal(calls.capture, undefined, "the expert has not agreed yet, so nothing is captured");
+    assert.equal(calls.cancel, undefined, "the hold stays live");
+    assert.equal(calls.historySave?.[0]?.[0]?.status, "withheld");
+    assert.equal(res.body?.paymentState, "withheld");
+  } finally {
+    restore();
+  }
+});
+
+test("1:1 booking stamps a decision deadline inside the authorization window", async () => {
+  resetCalls();
+  const restore = withOneToOneModels();
+  const captureBeforeSec = Math.floor((Date.now() + 7 * 24 * 60 * 60 * 1000) / 1000);
+  try {
+    stubs.authorized = () =>
+      heldIntent({
+        latest_charge: { payment_method_details: { card: { capture_before: captureBeforeSec } } },
+      });
+
+    const req: any = { user: { userId: STUDENT_ID }, body: oneToOneBody };
+    const res = createRes();
+    await groupController.createGroupChatByUser(req, res);
+
+    assert.equal(res.statusCode, 200);
+    const stamped = calls.groupUpdateOne?.find((c: any[]) => c[1]?.$set?.decisionDeadline);
+    assert.ok(stamped, "the session carries a decision deadline");
+
+    const deadline = new Date(stamped[1].$set.decisionDeadline).getTime();
+    assert.ok(deadline < captureBeforeSec * 1000, "the deadline lands before Stripe's own expiry");
+    assert.ok(deadline > Date.now(), "and in the future");
+  } finally {
+    restore();
+  }
+});
+
+test("1:1 booking rolls the session back when the hold cannot be recorded", async () => {
+  resetCalls();
+  const restore = withOneToOneModels();
+  try {
+    stubs.authorized = () => heldIntent();
+    stubs.cancel = () => ({ status: "canceled" });
+    PaymentHistory.prototype.save = async function () {
+      throw new Error("history write failed");
+    };
+
+    const req: any = { user: { userId: STUDENT_ID }, body: oneToOneBody };
+    const res = createRes();
+    await groupController.createGroupChatByUser(req, res);
+
+    assert.equal(res.statusCode, 502);
+    assert.equal(calls.groupDeleteOne?.length, 1, "the unbacked session must be removed");
+    assert.equal(calls.cancel?.length, 1, "the hold must be released");
   } finally {
     restore();
   }

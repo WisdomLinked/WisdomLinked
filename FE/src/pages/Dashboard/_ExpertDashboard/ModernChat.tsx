@@ -219,7 +219,7 @@ export default function ModernChat({ videoChaton }: { videoChaton: boolean }) {
             </div>
           </div>
 
-          <div className="flex-1 overflow-y-auto px-3 py-3 space-y-2">
+          <div className="wl-chat-scroll min-h-0 flex-1 overflow-y-auto px-3 py-3 space-y-2">
             {loading ? (
               <div className="px-2 py-3 text-[11px] text-slate-500">Loading…</div>
             ) : tab === 'community' ? (

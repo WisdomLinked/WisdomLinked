@@ -74,8 +74,26 @@ test("a completed charge outranks a later partial-refund row", () => {
     hasCompletedCharge: true,
     hasPendingCharge: false,
     hasRefundedCharge: true,
+    hasWithheldCharge: false,
   });
   assert.equal(classifyBookingPayment({ priceCents: 5000, ...folded }), "paid");
+});
+
+test("a held authorization awaiting the expert is not reported as unpaid", () => {
+  const folded = foldChargeRows([{ status: "withheld" }]);
+  assert.deepEqual(folded, {
+    hasCompletedCharge: false,
+    hasPendingCharge: false,
+    hasRefundedCharge: false,
+    hasWithheldCharge: true,
+  });
+  assert.equal(classifyBookingPayment({ priceCents: 10000, ...folded }), "withheld");
+  assert.equal(isActionable("withheld"), false);
+});
+
+test("a captured charge outranks the withheld row it settled", () => {
+  const folded = foldChargeRows([{ status: "withheld" }, { status: "completed" }]);
+  assert.equal(classifyBookingPayment({ priceCents: 10000, ...folded }), "paid");
 });
 
 test("foldChargeRows tolerates no rows and junk rows", () => {
@@ -83,11 +101,13 @@ test("foldChargeRows tolerates no rows and junk rows", () => {
     hasCompletedCharge: false,
     hasPendingCharge: false,
     hasRefundedCharge: false,
+    hasWithheldCharge: false,
   });
   assert.deepEqual(foldChargeRows([{}, { status: "failed" }] as any), {
     hasCompletedCharge: false,
     hasPendingCharge: false,
     hasRefundedCharge: false,
+    hasWithheldCharge: false,
   });
 });
 
@@ -100,9 +120,10 @@ test("only unpaid and refunded are actionable", () => {
 });
 
 test("summarizeVerdicts counts every bucket", () => {
-  assert.deepEqual(summarizeVerdicts(["paid", "paid", "unpaid", "free"]), {
+  assert.deepEqual(summarizeVerdicts(["paid", "paid", "unpaid", "free", "withheld"]), {
     free: 1,
     paid: 2,
+    withheld: 1,
     in_flight: 0,
     refunded: 0,
     unpaid: 1,

@@ -19,7 +19,13 @@ import { hasResumeForPreview, resolveResumePublicUrl } from '../../utils/resumeU
 import StudentExpertBookingPicker from './StudentExpertBookingPicker';
 import StudentBookingCheckout from './StudentBookingCheckout';
 import { purposeOptionsFromServices, PURPOSE_OTHER } from '../../constants/serviceOptions';
-import { createGroupChatByUser, getExpertById, profileImageFetch, registerForSeminar } from '../../api/api';
+import { createGroupChatByUser, getExpertById, getMySeatRequests, profileImageFetch, registerForSeminar, requestSeminarSeat } from '../../api/api';
+import {
+  emptySeatRequestIndex,
+  indexSeatRequests,
+  seatRequestFor,
+  type SeatRequestIndex,
+} from '../../utils/seatRequestState';
 import { resolveProfileImageSrc } from '../../utils/profileImage';
 import { seminarCapacityLabel } from '../../utils/seminarCapacityLabel';
 import {
@@ -126,6 +132,8 @@ export default function ExpertProfile({
   const [sessionDurationMinutes, setSessionDurationMinutes] = useState<30 | 60 | 90>(60);
 
   const [bookingStep, setBookingStep] = useState<BookingStep>('pick');
+  // A wallet booking is only a request until the expert accepts and it is paid for.
+  const [bookingAwaitsWalletPayment, setBookingAwaitsWalletPayment] = useState(false);
   const [bookingError, setBookingError] = useState<string | null>(null);
 
   const BOOKING_TITLE_MIN = 10;
@@ -173,6 +181,10 @@ export default function ExpertProfile({
   /** Open seminar checkout (real groupChat id + price) when a student books from the profile. */
   const [seminarCheckout, setSeminarCheckout] = useState<
     { id: string; price: number; name: string; isSeatRequest?: boolean } | null
+  >(null);
+  /** Settling an overflow seat the host approved (wallet-pinned). */
+  const [seatPayTarget, setSeatPayTarget] = useState<
+    { requestId: string; groupChatId: string; price: number; name: string } | null
   >(null);
   const [resumePreviewOpen, setResumePreviewOpen] = useState(false);
 
@@ -250,8 +262,8 @@ export default function ExpertProfile({
     }
   }, []);
 
-  const submitOneToOneBooking = useCallback(
-    async (paymentIntentId: string) => {
+  const submitOneToOne = useCallback(
+    async (paymentIntentId: string, paymentMode: 'card' | 'wallet' = 'card') => {
       if (!pickedStart || !pickedEnd || !pickedDuration) {
         setBookingError('Please select a date and time on the calendar.');
         return;
@@ -260,6 +272,7 @@ export default function ExpertProfile({
       setBookingError(null);
       try {
         const response = await createGroupChatByUser({
+          paymentMode,
           name: bookingTitle.trim() || bookingEventTitle,
           description: bookingNote.trim(),
           services:
@@ -281,12 +294,15 @@ export default function ExpertProfile({
         if (!response || response === true || (response as any)?.status === 'FAIL' || !(response as any)?.result) {
           setBookingError(
             (response as any)?.error ||
-              'Your payment went through, but we could not confirm the session. Please check your bookings or contact support before rebooking.',
+              (paymentMode === 'wallet'
+                ? 'We could not send your session request. You have not been charged — please try again.'
+                : 'Your card was authorized, but we could not confirm the session. Please check your bookings or contact support before rebooking — any authorization is released automatically.'),
           );
           return;
         }
         window.localStorage.removeItem('pendingDetails');
         dispatch({ type: 'updateUserDetails', payload: (response as any).result });
+        setBookingAwaitsWalletPayment(paymentMode === 'wallet');
         setBookingStep('success');
       } catch (err: unknown) {
         const message = err instanceof Error ? err.message : 'Booking failed. Please try again.';
@@ -323,6 +339,42 @@ export default function ExpertProfile({
     return `Professor ${mentor.name} is a ${mentor.title} focused on ${mentor.field}. With ${mentor.experience} of experience, they guide students through research and real-world preparation across 1:1 sessions and seminars.`;
   }, [mentor]);
 
+  // Seminars this student is already in. Without it the profile happily offers a
+  // second checkout for a seminar they have paid for — the backend rejects and
+  // refunds, but only after taking the money. A recurring series enrols across
+  // every occurrence, so one booked occurrence marks the whole series.
+  const myEnrollment = useMemo(() => {
+    const ids = new Set<string>();
+    const series = new Set<string>();
+    (userDetails?.groupChats || []).forEach((g: any) => {
+      if (g?.type !== 'seminar') return;
+      if (g?._id) ids.add(String(g._id));
+      if (g?.seriesId) series.add(String(g.seriesId));
+    });
+    return { ids, series };
+  }, [userDetails?.groupChats]);
+
+  // Seat requests still awaiting the host's decision — the card must not offer a
+  // second hold on top of the one already authorized.
+  // Open seat requests, both those awaiting the host and those approved but unpaid —
+  // an unpaid approval must not read as "no request" and re-offer the waiting list.
+  const [seatRequestIndex, setSeatRequestIndex] = useState<SeatRequestIndex>(
+    emptySeatRequestIndex,
+  );
+
+  useEffect(() => {
+    if (!userDetails?._id) return;
+    let cancelled = false;
+    void (async () => {
+      const res: any = await getMySeatRequests();
+      if (cancelled) return;
+      setSeatRequestIndex(indexSeatRequests(res?.result));
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [userDetails?._id, seminarBookingSuccessId, seminarSeatRequestedId]);
+
   // Real seminars this expert hosts come from their groupChats (type 'seminar'),
   // populated by getExpertById. Split into past/upcoming by start time.
   const seminarTimeline = useMemo(() => {
@@ -332,6 +384,9 @@ export default function ExpertProfile({
       biweekly: 'Biweekly',
       monthly: 'Monthly',
     };
+    const isMine = (g: any, ids: Set<string>, series: Set<string>) =>
+      ids.has(String(g?._id ?? '')) || (!!g?.seriesId && series.has(String(g.seriesId)));
+
     const mapSeminar = (g: any) => {
       const d = new Date(g?.start);
       const valid = !Number.isNaN(d.getTime());
@@ -355,6 +410,9 @@ export default function ExpertProfile({
         isFull: maxAttendees != null && (maxAttendees <= 0 || enrolled >= maxAttendees),
         seriesId: g?.seriesId ? String(g.seriesId) : null,
         recurrenceLabel: g?.isRecurring ? freqLabel[g?.recurrenceFrequency] ?? null : null,
+        registered: isMine(g, myEnrollment.ids, myEnrollment.series),
+        // Distinguishes "waiting on the host" from "approved, pay to claim it".
+        seatRequest: seatRequestFor(seatRequestIndex, g),
       };
     };
 
@@ -387,7 +445,7 @@ export default function ExpertProfile({
     );
 
     return { past, upcoming };
-  }, [expertDetails?.groupChats]);
+  }, [expertDetails?.groupChats, myEnrollment, seatRequestIndex]);
 
   const registerSeminar = useCallback(
     async (paymentIntentId: string) => {
@@ -424,6 +482,56 @@ export default function ExpertProfile({
     },
     [seminarCheckout, loadExpertDetails],
   );
+
+  // Settle an approved overflow seat, then reflect the new enrollment.
+  const paySeatRequest = useCallback(async (paymentIntentId: string) => {
+    if (!seatPayTarget) return;
+    SetLoadingStatus(true);
+    setSeminarBookingError(null);
+    try {
+      const { paySeminarSeatRequest } = await import('../../api/api');
+      const res: any = await paySeminarSeatRequest({
+        requestId: seatPayTarget.requestId,
+        payment_intent: paymentIntentId,
+      });
+      if (res === false || res?.status === 'FAIL' || res?.error) {
+        setSeminarBookingError(res?.error || 'Could not confirm your seat after payment.');
+        return;
+      }
+      window.localStorage.removeItem('pendingDetails');
+      setSeminarBookingSuccessId(seatPayTarget.groupChatId);
+      setSeatPayTarget(null);
+      void loadExpertDetails();
+    } catch (e: any) {
+      setSeminarBookingError(e?.message || 'Could not confirm your seat after payment.');
+    } finally {
+      SetLoadingStatus(false);
+    }
+  }, [seatPayTarget, loadExpertDetails]);
+
+  // Wallet route for a full seminar: ask the host first, pay only once approved.
+  const requestSeminarSeatWithWallet = useCallback(async () => {
+    if (!seminarCheckout) return;
+    SetLoadingStatus(true);
+    setSeminarBookingError(null);
+    try {
+      const res: any = await requestSeminarSeat({
+        groupChatId: seminarCheckout.id,
+        paymentMode: 'wallet',
+      });
+      if (res === false || res?.status === 'FAIL' || res?.error) {
+        setSeminarBookingError(res?.error || 'Could not send your seat request.');
+        return;
+      }
+      window.localStorage.removeItem('pendingDetails');
+      setSeminarSeatRequestedId(seminarCheckout.id);
+      setSeminarCheckout(null);
+    } catch (e: any) {
+      setSeminarBookingError(e?.message || 'Could not send your seat request.');
+    } finally {
+      SetLoadingStatus(false);
+    }
+  }, [seminarCheckout]);
 
   const displayFollowers =
     followerCountLive ?? mentor.followerCount ?? 0;
@@ -586,7 +694,7 @@ export default function ExpertProfile({
               <h3 className="mt-1 font-serif text-[1rem] text-[#1A3A4A]">
                 Sessions previously hosted
               </h3>
-              <div className="mt-3 space-y-2">
+              <div className="mt-3 min-h-[140px] max-h-[420px] space-y-2 overflow-y-auto pr-1">
                 {seminarTimeline.past.length === 0 ? (
                   <p className="text-[12px] text-[#7A7A72]">No past seminars yet.</p>
                 ) : (
@@ -612,7 +720,7 @@ export default function ExpertProfile({
               <h3 className="mt-1 font-serif text-[1rem] text-[#1A3A4A]">
                 Next public sessions
               </h3>
-              <div className="mt-3 space-y-2">
+              <div className="mt-3 min-h-[140px] max-h-[420px] space-y-2 overflow-y-auto pr-1">
                 {seminarTimeline.upcoming.length === 0 ? (
                   <p className="text-[12px] text-[#7A7A72]">
                     No upcoming seminars scheduled.
@@ -630,7 +738,19 @@ export default function ExpertProfile({
                           {item.recurrenceLabel}
                         </span>
                       ) : null}
-                      {item.isFull && seminarBookingSuccessId !== item.id ? (
+                      {item.registered || seminarBookingSuccessId === item.id ? (
+                        <span className="ml-auto inline-flex items-center rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">
+                          Registered
+                        </span>
+                      ) : item.seatRequest?.state === 'awaiting_payment' ? (
+                        <span className="ml-auto inline-flex items-center rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">
+                          Seat approved
+                        </span>
+                      ) : item.seatRequest || seminarSeatRequestedId === item.id ? (
+                        <span className="ml-auto inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-700">
+                          Awaiting approval
+                        </span>
+                      ) : item.isFull ? (
                         <span className="ml-auto inline-flex items-center rounded-full bg-rose-100 px-2 py-0.5 text-[10px] font-semibold text-rose-700">
                           Full
                         </span>
@@ -644,11 +764,33 @@ export default function ExpertProfile({
                     </p>
                     {seminarBookingSuccessId === item.id ? (
                       <div className="mt-2 rounded-[4px] bg-emerald-50 px-3 py-2 text-[11px] font-semibold text-emerald-800">
-                        You're enrolled in this seminar.
+                        You're enrolled in this seminar{item.recurrenceLabel ? ' series' : ''}.
                       </div>
-                    ) : seminarSeatRequestedId === item.id ? (
+                    ) : item.registered ? null : item.seatRequest?.state === 'awaiting_payment' ? (
+                      <div className="mt-2 space-y-2">
+                        <p className="rounded-[4px] bg-emerald-50 px-3 py-2 text-[11px] font-semibold text-emerald-800">
+                          The host approved your seat. Pay to claim it
+                          {item.seatRequest.payBy
+                            ? ` by ${new Date(item.seatRequest.payBy).toLocaleString()}`
+                            : ''}
+                          .
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => setSeatPayTarget({
+                            requestId: item.seatRequest!.requestId,
+                            groupChatId: item.id,
+                            price: item.seatRequest!.price,
+                            name: item.title,
+                          })}
+                          className="inline-flex w-full items-center justify-center rounded-[4px] bg-[#1A3A4A] px-3 py-1.5 text-[11px] font-semibold text-white hover:bg-[#122635]"
+                        >
+                          Pay ${item.seatRequest.price} to confirm your seat
+                        </button>
+                      </div>
+                    ) : item.seatRequest || seminarSeatRequestedId === item.id ? (
                       <div className="mt-2 rounded-[4px] bg-amber-50 px-3 py-2 text-[11px] font-semibold text-amber-800">
-                        You’re on the waiting list — awaiting host approval. Your card is authorized, not charged.
+                        You’re on the waiting list — awaiting host approval.
                       </div>
                     ) : (
                       (() => {
@@ -870,11 +1012,12 @@ export default function ExpertProfile({
                 {bookingStep === 'success' ? (
                     <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-4">
                       <p className="text-[14px] font-semibold text-emerald-900">
-                        Session booked
+                        Request sent
                       </p>
                       <p className="mt-1 text-[12px] text-emerald-800">
-                        Your request was sent to {mentor.name}. You will see it on your calendar
-                        once confirmed.
+                        {bookingAwaitsWalletPayment
+                          ? `Your request was sent to ${mentor.name} and nothing has been charged. If they accept, we'll email you a link to pay with WeChat Pay or Alipay — you'll have 24 hours to complete it, and the session is confirmed as soon as you do.`
+                          : `Your request was sent to ${mentor.name}. Your card is authorized but not charged — you are only charged if they accept. You will see the session on your calendar once confirmed.`}
                       </p>
                       {onGoToCalendar ? (
                         <button
@@ -1110,6 +1253,11 @@ export default function ExpertProfile({
             price={oneToOneSessionPrice}
             holdsFunds
             returnUrl={studentBookingReturnUrl}
+            policyNotice={{
+              message:
+                'Once you submit, you cannot cancel this request. Your card is authorized but not charged — if the expert declines, the authorization is released and no payment is processed.',
+              acknowledgeLabel: 'I understand this payment cannot be cancelled.',
+            }}
             pendingDetails={{
               name: bookingTitle.trim() || bookingEventTitle,
               description: bookingNote.trim(),
@@ -1121,7 +1269,11 @@ export default function ExpertProfile({
               price: oneToOneSessionPrice,
               expert: String(expertDetails?._id ?? mentor.id),
             }}
-            onPaymentSuccess={submitOneToOneBooking}
+            walletOption={{
+              kind: 'request',
+              onSubmit: () => submitOneToOne('', 'wallet'),
+            }}
+            onPaymentSuccess={(paymentIntentId) => submitOneToOne(paymentIntentId, 'card')}
             onCancel={() => setBookingStep('review')}
             cancelLabel="Back"
           />
@@ -1147,8 +1299,41 @@ export default function ExpertProfile({
               price: seminarCheckout.price,
               name: seminarCheckout.name,
             }}
+            walletOption={
+              seminarCheckout.isSeatRequest
+                ? { kind: 'request', onSubmit: requestSeminarSeatWithWallet }
+                : { kind: 'charge' }
+            }
             onPaymentSuccess={registerSeminar}
             onCancel={() => setSeminarCheckout(null)}
+          />
+        </div>
+      </div>
+    ) : null}
+    {seatPayTarget ? (
+      <div
+        className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-[#1A3A4A]/40 p-4 backdrop-blur-sm"
+        onClick={(e) => {
+          if (e.target === e.currentTarget) setSeatPayTarget(null);
+        }}
+      >
+        <div className="my-auto w-full max-w-2xl">
+          <StudentBookingCheckout
+            type="Seminar seat"
+            price={seatPayTarget.price}
+            pendingDetails={{
+              kind: 'pay-seat-request',
+              requestId: seatPayTarget.requestId,
+              groupChatId: seatPayTarget.groupChatId,
+              price: seatPayTarget.price,
+              name: seatPayTarget.name,
+            }}
+            returnUrl={studentBookingReturnUrl}
+            // Approved without a hold, so it settles in the mode it was requested in.
+            walletOption={{ kind: 'charge', only: true }}
+            onPaymentSuccess={paySeatRequest}
+            onCancel={() => setSeatPayTarget(null)}
+            cancelLabel="Back"
           />
         </div>
       </div>

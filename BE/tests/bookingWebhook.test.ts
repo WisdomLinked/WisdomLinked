@@ -77,6 +77,7 @@ const withWebhookModels = (opts: any = {}) => {
     historyFind: PaymentHistory.find,
     historyExists: PaymentHistory.exists,
     historyUpdateOne: PaymentHistory.updateOne,
+    historyFindOneAndUpdate: PaymentHistory.findOneAndUpdate,
     groupExists: GroupChat.exists,
     groupFindById: GroupChat.findById,
     groupUpdateOne: GroupChat.updateOne,
@@ -92,9 +93,22 @@ const withWebhookModels = (opts: any = {}) => {
     record("historyUpdateOne", [filter, update]);
     return { modifiedCount: 1 };
   };
+  // Settles a wallet row left 'pending' while the funds cleared; null when there is none.
+  PaymentHistory.findOneAndUpdate = async (filter: any, update: any) => {
+    record("historyFindOneAndUpdate", [filter, update]);
+    return opts.settlingRow ?? null;
+  };
   GroupChat.exists = async () => (opts.delivered ? { _id: CHAT_ID } : null);
   GroupChat.findById = (id: any) => ({
-    select: async () => ({ _id: id, admin: EXPERT_ID, type: opts.chatType ?? "seminar", status: "active" }),
+    select: async () => ({
+      _id: id,
+      admin: EXPERT_ID,
+      type: opts.chatType ?? "seminar",
+      // Delivery is read off the chat itself: a seminar seat means membership, a 1:1
+      // means an active session (both parties are members from the moment it is asked for).
+      status: opts.chatStatus ?? "active",
+      participants: opts.delivered ? [STUDENT_ID] : [],
+    }),
   });
   GroupChat.updateOne = async (filter: any, update: any) => {
     record("groupUpdateOne", [filter, update]);
@@ -107,6 +121,7 @@ const withWebhookModels = (opts: any = {}) => {
     PaymentHistory.find = original.historyFind;
     PaymentHistory.exists = original.historyExists;
     PaymentHistory.updateOne = original.historyUpdateOne;
+    PaymentHistory.findOneAndUpdate = original.historyFindOneAndUpdate;
     GroupChat.exists = original.groupExists;
     GroupChat.findById = original.groupFindById;
     GroupChat.updateOne = original.groupUpdateOne;
@@ -137,6 +152,54 @@ test("webhook does not re-record a payment a request already recorded", async ()
     );
     assert.equal(outcome, "already_recorded");
     assert.equal(calls.appendPaymentHistory, undefined, "replays must not duplicate the charge");
+  } finally {
+    restore();
+  }
+});
+
+test("a paid-but-unconfirmed 1:1 is not treated as delivered", async () => {
+  resetCalls();
+  // Both people join a 1:1 when it is requested, so membership must not be read as
+  // payment — a still-pending session means the booking never completed.
+  const restore = withWebhookModels({
+    delivered: true,
+    chatType: "individual",
+    chatStatus: "pending",
+  });
+  try {
+    const outcome = await groupController.handleBookingPaymentIntentEvent(
+      bookingEvent("payment_intent.succeeded"),
+    );
+    assert.equal(outcome, "awaiting_sweep");
+    assert.equal(
+      calls.appendPaymentHistory,
+      undefined,
+      "money must not be booked against an unconfirmed session",
+    );
+  } finally {
+    restore();
+  }
+});
+
+test("webhook settles a wallet row left pending while the funds cleared", async () => {
+  resetCalls();
+  // The booking was already confirmed optimistically; this event is the money landing.
+  const restore = withWebhookModels({
+    settlingRow: { _id: "ph_wallet", groupChat: CHAT_ID, customer: "cust1" },
+  });
+  try {
+    const outcome = await groupController.handleBookingPaymentIntentEvent(
+      bookingEvent("payment_intent.succeeded"),
+    );
+    assert.equal(outcome, "settled_pending");
+    const [filter, update] = calls.historyFindOneAndUpdate?.[0] ?? [];
+    assert.equal(filter.status, "pending");
+    assert.equal(update.$set.status, "completed");
+    assert.equal(
+      calls.appendPaymentHistory,
+      undefined,
+      "settling an existing row must not add a second charge",
+    );
   } finally {
     restore();
   }

@@ -13,6 +13,42 @@ import RetryPaymentModal from "../../../components/RetryPaymentModal";
 import RefundPaymentModal from "../../../components/RefundPaymentModal";
 import AdHocPaymentModal from "../../../components/AdHocPaymentModal";
 
+const STATUS_LABELS: Record<string, string> = {
+    withheld: 'Withheld',
+    pending: 'Pending',
+    completed: 'Completed',
+    released: 'Released',
+    failed: 'Failed',
+    refunded: 'Refunded',
+};
+
+const STATUS_STYLES: Record<string, string> = {
+    withheld: 'bg-amber-500/20 text-amber-600',
+    pending: 'bg-yellow-500/20 text-yellow-500',
+    completed: 'bg-green/20 text-green',
+    released: 'bg-slate-500/20 text-slate-600',
+    failed: 'bg-red-500/20 text-red-500',
+    refunded: 'bg-blue-500/20 text-blue-500',
+};
+
+const STATUS_HINTS: Record<string, string> = {
+    withheld: 'Card authorized, not charged — waiting on the host or expert to decide.',
+    pending: 'A capture is in flight, or the row needs manual reconciliation.',
+    completed: 'Money captured and settled.',
+    released: 'Authorization released. The card was never charged.',
+    failed: 'The payment did not go through.',
+    refunded: 'Money was captured, then returned to the customer.',
+};
+
+const eventTypeLabel = (item: any) => {
+    if (item?.event) return 'Event';
+    const type = item?.groupChat?.type;
+    if (type === 'seminar') return 'Seminar';
+    if (type === 'individual') return '1:1 Session';
+    if (type) return 'Chat';
+    return item?.groupChat ? 'Session' : '—';
+};
+
 const currentYear = new Date().getFullYear();
 const currentMonth = new Date().getMonth() + 1;
 const currentDate = new Date().getDate();
@@ -53,12 +89,20 @@ const Payment = () => {
             label: "All"
         },
         {
+            value: "withheld",
+            label: "Withheld"
+        },
+        {
             value: "pending",
             label: "Pending"
         },
         {
             value: "completed",
             label: "Completed"
+        },
+        {
+            value: "released",
+            label: "Released"
         },
         {
             value: "failed",
@@ -649,26 +693,23 @@ const Payment = () => {
                                                 <td className='text-center px-2'>{item.currency}</td>
                                                 <td className='text-center px-2'>{item.expert?.email}</td>
                                                 <td className='text-center px-2'>{item.customer?.email}</td>
-                                                <td className='px-2 text-center'>{item.event ? 'Event' : 'Seminar'}</td>
+                                                <td className='px-2 text-center'>{eventTypeLabel(item)}</td>
                                                 <td className='px-2 max-w-[200px] truncate'>{item.description}</td>
                                                 <td className='px-2 text-center'>{item.stripeMode}</td>
                                                 <td className='px-2 text-center'>{item.paymentType}</td>
                                                 <td className='px-2 text-center'>
-                                                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                                                        item.status === 'completed' ? 'bg-green/20 text-green' :
-                                                        item.status === 'pending' ? 'bg-yellow-500/20 text-yellow-500' :
-                                                        item.status === 'failed' ? 'bg-red-500/20 text-red-500' :
-                                                        item.status === 'refunded' ? 'bg-blue-500/20 text-blue-500' :
-                                                        'bg-grey/20 text-grey'
-                                                    }`}>
-                                                        {item.status || 'completed'}
+                                                    <span
+                                                        className={`px-2 py-1 rounded-full text-xs font-medium ${STATUS_STYLES[item.status] || 'bg-grey/20 text-grey'}`}
+                                                        title={STATUS_HINTS[item.status] || ''}
+                                                    >
+                                                        {STATUS_LABELS[item.status] || item.status || 'Completed'}
                                                     </span>
                                                 </td>
                                                 <td className='px-2'>{item.paymentIntent || 'N/A'}</td>
                                                 <td className='px-2 text-center'>
                                                     <div className="flex gap-2 justify-center">
                                                         {/* Show Retry button only for non-refunded payments and non-refund records */}
-                                                        {item.status !== 'refunded' && item.paymentType !== 'refund' && item.paymentType !== 'retry' && (
+                                                        {item.status !== 'refunded' && item.status !== 'withheld' && item.status !== 'released' && item.paymentType !== 'refund' && item.paymentType !== 'retry' && (
                                                             <button
                                                                 onClick={() => handleRetryPaymentClick(item)}
                                                                 className='bg-green hover:bg-green/80 text-white px-3 py-1 rounded text-sm font-medium transition-colors'
@@ -689,7 +730,10 @@ const Payment = () => {
                                                                 Refund
                                                             </button>
                                                         )}
-                                                        {(item.status === 'refunded' || item.paymentType === 'refund') && (
+                                                        {item.status === 'withheld' && (
+                                                            <span className="text-grey text-sm italic">Awaiting decision</span>
+                                                        )}
+                                                        {(item.status === 'refunded' || item.status === 'released' || item.paymentType === 'refund') && (
                                                             <span className="text-grey text-sm italic">No actions available</span>
                                                         )}
                                                     </div>

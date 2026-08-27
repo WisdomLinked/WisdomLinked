@@ -94,6 +94,7 @@ const StudentChat: React.FC = () => {
 
   const [communityQuery, setCommunityQuery] = useState('');
   const [privateQuery, setPrivateQuery] = useState('');
+  const [seminarQuery, setSeminarQuery] = useState('');
   const [communityChats, setCommunityChats] = useState<CommunityRow[]>([]);
   const [privateRows, setPrivateRows] = useState<PrivateRow[]>([]);
   const [events, setEvents] = useState<any[]>([]);
@@ -747,12 +748,12 @@ const StudentChat: React.FC = () => {
   }, [communityChats, communityQuery]);
 
   const filteredSeminars = useMemo(() => {
-    const q = communityQuery.trim().toLowerCase();
+    const q = seminarQuery.trim().toLowerCase();
     if (!q) return seminarRows;
     return seminarRows.filter(
       s => s.name.toLowerCase().includes(q) || s.lastLine.toLowerCase().includes(q),
     );
-  }, [seminarRows, communityQuery]);
+  }, [seminarRows, seminarQuery]);
 
   const filteredPrivate = useMemo(() => {
     const q = privateQuery.trim().toLowerCase();
@@ -1243,8 +1244,8 @@ const StudentChat: React.FC = () => {
   const showMobileMessenger = shouldShowMobileMessenger(chosenChatDetails, chosenGroupChatDetails);
 
   return (
-    <div className="flex h-full bg-wl-page text-slate-900">
-      <aside className={`${showMobileMessenger ? 'hidden md:flex' : 'flex'} w-full md:w-80 lg:w-96 flex-col border-r border-slate-200 bg-white`}>
+    <div className="flex h-full min-h-0 overflow-hidden bg-wl-page text-slate-900">
+      <aside className={`${showMobileMessenger ? 'hidden md:flex' : 'flex'} w-full md:w-80 lg:w-96 min-h-0 flex-col border-r border-slate-200 bg-white`}>
         <div className="px-4 pt-4 pb-3 border-b border-slate-200">
           <div className="flex items-center justify-between gap-2">
             <p className="text-xs font-bold uppercase tracking-[0.12em] text-slate-600">
@@ -1281,8 +1282,9 @@ const StudentChat: React.FC = () => {
             />
           </div>
         </div>
-        <div className="flex-1 overflow-y-auto px-3 py-3 space-y-4">
-          <div>
+        <div className="wl-chat-scroll flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-3 py-3">
+          <div className="shrink-0">
+            <div className="wl-chat-scroll min-h-[3rem] max-h-[15rem] overflow-y-auto pr-1">
             {filteredCommunity.length === 0 ? (
               <p className="px-2 py-3 text-[11px] text-slate-500">
                 {communityQuery.trim()
@@ -1381,9 +1383,10 @@ const StudentChat: React.FC = () => {
                 );
               })
             )}
+            </div>
           </div>
 
-          <div className="pt-1 border-t border-slate-200">
+          <div className="shrink-0 pt-1 border-t border-slate-200">
             <div className="mb-2 flex items-center justify-between gap-2">
               <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-slate-600">1:1 Appointments</p>
               {(() => {
@@ -1416,6 +1419,7 @@ const StudentChat: React.FC = () => {
                 className="flex-1 min-w-0 bg-transparent outline-none text-xs text-slate-700 placeholder:text-slate-400"
               />
             </div>
+            <div className="wl-chat-scroll min-h-[3rem] max-h-[15rem] overflow-y-auto pr-1">
             {filteredPrivate.length === 0 ? (
               <p className="px-2 py-3 text-[11px] text-slate-500">
                 {privateQuery.trim()
@@ -1613,15 +1617,28 @@ const StudentChat: React.FC = () => {
                 );
               })
             )}
+            </div>
           </div>
 
-          <div className="pt-1 border-t border-slate-200">
+          <div className="flex min-h-0 flex-1 flex-col pt-1 border-t border-slate-200">
             <div className="mb-2 flex items-center justify-between gap-2">
               <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-slate-600">Seminars</p>
             </div>
+            <div className="shrink-0 rounded-lg bg-slate-100 px-3 py-2 mb-2 flex items-center gap-2 text-xs text-slate-500">
+              <MessageCircle className="h-3.5 w-3.5 text-slate-500 shrink-0" aria-hidden />
+              <input
+                type="text"
+                value={seminarQuery}
+                onChange={e => setSeminarQuery(e.target.value)}
+                placeholder="Search by name or last message…"
+                aria-label="Search seminar chats by title or last message"
+                className="flex-1 min-w-0 bg-transparent outline-none text-xs text-slate-700 placeholder:text-slate-400"
+              />
+            </div>
+            <div className="wl-chat-scroll min-h-[3rem] flex-1 overflow-y-auto pr-1">
             {filteredSeminars.length === 0 ? (
               <p className="px-2 py-3 text-[11px] text-slate-500">
-                {communityQuery.trim()
+                {seminarQuery.trim()
                   ? 'No seminar chats match your search.'
                   : 'No seminar chats yet.'}
               </p>
@@ -1675,6 +1692,7 @@ const StudentChat: React.FC = () => {
                 );
               })
             )}
+            </div>
           </div>
         </div>
       </aside>

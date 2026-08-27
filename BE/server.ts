@@ -123,9 +123,18 @@ mongoose
         initAppStates();
 
 
-        const { sweepExpiredSeatRequests, sweepPendingSeminarPayments, sweepOrphanedBookingIntents } = require('./controllers/groupChat.controller');
+        const { sweepExpiredSeatRequests, sweepExpiredSessionHolds, sweepExpiredWalletPayments, sweepExpiredProposedSessions, sweepPendingSeminarPayments, sweepOrphanedBookingIntents } = require('./controllers/groupChat.controller');
         sweepExpiredSeatRequests();
         setInterval(sweepExpiredSeatRequests, 15 * 60 * 1000);
+
+        sweepExpiredWalletPayments();
+        setInterval(sweepExpiredWalletPayments, 15 * 60 * 1000);
+
+        sweepExpiredProposedSessions();
+        setInterval(sweepExpiredProposedSessions, 15 * 60 * 1000);
+
+        sweepExpiredSessionHolds();
+        setInterval(sweepExpiredSessionHolds, 15 * 60 * 1000);
 
         sweepPendingSeminarPayments();
         setInterval(sweepPendingSeminarPayments, 15 * 60 * 1000);

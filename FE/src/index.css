@@ -756,6 +756,55 @@ code {
   }
 }
 
+.wl-chat-scroll {
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(35, 76, 106, 0.45) rgba(15, 23, 42, 0.07);
+}
+
+.wl-chat-scroll::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.wl-chat-scroll::-webkit-scrollbar-track {
+  background: rgba(15, 23, 42, 0.07);
+  border: 3px solid transparent;
+  background-clip: padding-box;
+  border-radius: 999px;
+}
+
+.wl-chat-scroll::-webkit-scrollbar-thumb {
+  background: rgba(35, 76, 106, 0.45);
+  background-clip: padding-box;
+  border: 3px solid transparent;
+  border-radius: 999px;
+}
+
+.wl-chat-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(35, 76, 106, 0.7);
+  background-clip: padding-box;
+}
+
+.wl-chat-scroll-dark {
+  scrollbar-color: rgba(226, 232, 240, 0.45) rgba(226, 232, 240, 0.1);
+}
+
+.wl-chat-scroll-dark::-webkit-scrollbar-track {
+  background: rgba(226, 232, 240, 0.1);
+  background-clip: padding-box;
+}
+
+.wl-chat-scroll-dark::-webkit-scrollbar-thumb {
+  background: rgba(226, 232, 240, 0.45);
+  background-clip: padding-box;
+}
+
+.wl-chat-scroll-dark::-webkit-scrollbar-thumb:hover {
+  background: rgba(226, 232, 240, 0.7);
+  background-clip: padding-box;
+}
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;/*# sourceMappingURL=index.css.map */

@@ -72,8 +72,10 @@ const kindLabel = (k: PaymentKind | undefined) => {
 
 const statusStyles: Record<string, string> = {
   completed: 'bg-emerald-50 text-emerald-800 border-emerald-100',
+  withheld: 'bg-amber-50 text-amber-900 border-amber-200',
   pending: 'bg-amber-50 text-amber-800 border-amber-100',
   failed: 'bg-red-50 text-red-800 border-red-100',
+  released: 'bg-slate-100 text-slate-600 border-slate-200',
   refunded: 'bg-slate-100 text-slate-600 border-slate-200',
 };
 

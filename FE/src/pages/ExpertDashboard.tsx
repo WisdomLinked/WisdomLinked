@@ -24,6 +24,7 @@ import {
   getAllCommunityChats,
   profileImageFetch,
   acceptIndividualAppointment,
+  cancelIndividualAppointment,
   getSeminarSeatRequests,
   approveSeminarSeatRequest,
   rejectSeminarSeatRequest,
@@ -34,6 +35,7 @@ import { displayRoomLabel, shouldNotifyRoom } from '../utils/chatRoomLabel';
 import { seminarEnrollmentLabel } from '../utils/seminarCapacityLabel';
 import { fetchDmUnreadSnapshot, fetchChatUserProfile } from '../api/chatApi';
 import ProfileModal from './Dashboard/Messenger/Messages/ProfileModal';
+import SeminarDetails from './Dashboard/seminarDetails';
 import { buildFallbackChatProfile, mergeChatProfile } from '../utils/chatProfileModal';
 import { useAppSelector } from '../store';
 import { logoutUser, updateMe } from '../actions/authActions';
@@ -53,11 +55,14 @@ import ExpertRevenue from './Dashboard/_ExpertDashboard/ExpertRevenue';
 import ContactAdmin from './Dashboard/_ExpertDashboard/ContactAdmin';
 import StudentChat from '../components/dashboard/StudentChat';
 import JoinMeeting from '../components/dashboard/JoinMeeting';
+import DecisionNoteField from '../components/dashboard/DecisionNoteField';
 import StatCard from '../components/ui/StatCard';
+import { awaitsExpertDecision, awaitsWalletPayment, pendingSessionState } from '../utils/bookingLifecycle';
 import Chatbot from '../components/chatbot';
 import UpcomingSessionModal, {
   type UpcomingModalSession,
 } from '../components/dashboard/UpcomingSessionModal';
+import { sessionDurationLabel, sessionDurationMinutes, sessionEndMs } from '../utils/sessionDuration';
 import FollowersModal, {
   type FollowerEntry,
 } from '../components/dashboard/FollowersModal';
@@ -95,7 +100,12 @@ function mapSeatRequestToModalSession(r: any): UpcomingModalSession {
     : '—';
   const metaLines: string[] = [];
   if (typeof r?.amount === 'number' && r.amount > 0) {
-    metaLines.push(`$${(r.amount / 100).toFixed(2)} held`);
+    // A wallet request holds nothing — approving it asks the student to pay.
+    metaLines.push(
+      r?.paymentMode === 'wallet'
+        ? `$${(r.amount / 100).toFixed(2)} — WeChat Pay / Alipay, paid after you approve`
+        : `$${(r.amount / 100).toFixed(2)} held`,
+    );
   } else {
     metaLines.push('Free seminar');
   }
@@ -107,6 +117,8 @@ function mapSeatRequestToModalSession(r: any): UpcomingModalSession {
     title: seminar?.name || 'Seminar',
     at: start,
     when,
+    durationMinutes: sessionDurationMinutes(seminar) ?? undefined,
+    endsAt: sessionEndMs(seminar) ?? undefined,
     location: 'Online · WisdomLinked',
     with: r?.customer?.username || r?.customer?.email || 'Student',
     peerUserId: r?.customer?._id ? String(r.customer._id) : undefined,
@@ -115,6 +127,7 @@ function mapSeatRequestToModalSession(r: any): UpcomingModalSession {
       title: seminar?.name || 'Seminar',
       description: seminar?.description,
       start: seminar?.start,
+      end: seminar?.end,
       duration: seminar?.duration,
       price: typeof seminar?.price === 'number' ? seminar.price : undefined,
       admin: seminar?.admin,
@@ -163,11 +176,33 @@ function mapExpertGroupToModalSession(g: any, waitingCount = 0): UpcomingModalSe
       typeof g?.maxAttendees === 'number' ? g.maxAttendees : null;
     metaLines.push(seminarEnrollmentLabel(enrolled, waitingCount, maxAttendees));
   }
+  if (g?.type === 'individual' && g?.status === 'pending') {
+    // A wallet request holds nothing: accepting it asks the student to pay, and the
+    // session is confirmed only when that payment lands.
+    const wallet = g?.paymentMode === 'wallet';
+    if (typeof g?.price === 'number' && g.price > 0) {
+      metaLines.push(
+        wallet
+          ? `$${g.price.toFixed(2)} — WeChat Pay / Alipay, paid after you accept`
+          : `$${g.price.toFixed(2)} authorized, not charged`,
+      );
+    }
+    const expertProposed = refIdOf(g?.createdBy) === refIdOf(g?.admin);
+    if (wallet && g?.paymentDeadline) {
+      metaLines.push(`Accepted by you — waiting for the student to pay by ${new Date(g.paymentDeadline).toLocaleString()}`);
+    } else if (expertProposed && g?.paymentDeadline) {
+      metaLines.push(`Your offer — waiting for the student to pay by ${new Date(g.paymentDeadline).toLocaleString()}`);
+    } else if (g?.decisionDeadline) {
+      metaLines.push(`Waiting for your decision — decide by ${new Date(g.decisionDeadline).toLocaleString()}`);
+    }
+  }
   return {
     id: String(g._id),
     title: g.name || 'Session',
     at: start,
     when,
+    durationMinutes: sessionDurationMinutes(g) ?? undefined,
+    endsAt: sessionEndMs(g) ?? undefined,
     location: 'Online · WisdomLinked',
     with: withLabel,
     metaLines: metaLines.length ? metaLines : undefined,
@@ -177,6 +212,7 @@ function mapExpertGroupToModalSession(g: any, waitingCount = 0): UpcomingModalSe
       title: g?.name || 'Session',
       description: g?.description,
       start: g?.start,
+      end: g?.end,
       duration: g?.duration,
       price: typeof g?.price === 'number' ? g.price : undefined,
       admin: g?.admin,
@@ -230,6 +266,7 @@ export default function ExpertDashboard() {
   // Student profile card opened from a row in the upcoming-sessions modal or followers list.
   const [peerProfile, setPeerProfile] = useState<any | null>(null);
   const [peerProfileOpen, setPeerProfileOpen] = useState(false);
+  const [inlineDetailSession, setInlineDetailSession] = useState<UpcomingModalSession | null>(null);
 
   const openPeerProfileById = useCallback(
     async (peerId: string, username?: string, image?: string | null) => {
@@ -647,6 +684,7 @@ export default function ExpertDashboard() {
     acceptedSeminars,
     bookedSessions,
     pendingSessions,
+    awaitingPaymentSessions,
   } = useMemo(() => {
     const { groupChats = [] } = (userDetails || {}) as any;
     const nowTs = Date.now();
@@ -686,23 +724,27 @@ export default function ExpertDashboard() {
 
     // Pending requests are NOT scoped to the today/week range — the expert must
     // see every booking awaiting action regardless of which date window is shown.
-    const pendingSess = (groupChats || [])
-      .filter(
-        (g: any) =>
-          g.type === 'individual' &&
-          g.status === 'pending' &&
-          upcoming(g.start, g.end)
-      )
-      .sort(
-        (a: any, b: any) =>
-          new Date(b.createdAt || b.start).getTime() -
-          new Date(a.createdAt || a.start).getTime()
-      );
+    const byNewest = (a: any, b: any) =>
+      new Date(b.createdAt || b.start).getTime() -
+      new Date(a.createdAt || a.start).getTime();
+
+    const stillPending = (groupChats || []).filter(
+      (g: any) =>
+        g.type === 'individual' &&
+        g.status === 'pending' &&
+        upcoming(g.start, g.end)
+    );
+
+    // A wallet request the expert already accepted stays `pending` until the student
+    // pays, so it must not be counted or offered as something left to decide.
+    const pendingSess = stillPending.filter((g: any) => awaitsExpertDecision(g)).sort(byNewest);
+    const awaitingPaymentSess = stillPending.filter((g: any) => awaitsWalletPayment(g)).sort(byNewest);
 
     return {
       acceptedSeminars: seminars,
       bookedSessions: sessions,
       pendingSessions: pendingSess,
+      awaitingPaymentSessions: awaitingPaymentSess,
     };
   }, [userDetails, range]);
 
@@ -724,10 +766,10 @@ export default function ExpertDashboard() {
 
   // Accepting a 1:1 no longer pops a banner — callers surface an in-card message.
   const handleAcceptSession = useCallback(
-    async (session: any): Promise<boolean> => {
+    async (session: any, note = ''): Promise<boolean> => {
       setAcceptingId(String(session._id));
       try {
-        const res: any = await acceptIndividualAppointment({ groupChatId: session._id });
+        const res: any = await acceptIndividualAppointment({ groupChatId: session._id, note });
         if (res === false) return false;
         dispatch(updateMe() as any);
         return true;
@@ -744,8 +786,8 @@ export default function ExpertDashboard() {
   // Dashboard "1:1 Sessions" list: accept, then replace the row with a
   // transient confirmation that clears after 7 seconds.
   const acceptInlineSession = useCallback(
-    async (s: any) => {
-      const ok = await handleAcceptSession(s);
+    async (s: any, note = '') => {
+      const ok = await handleAcceptSession(s, note);
       if (!ok) return;
       const studentName =
         pickStudent(s)?.username ||
@@ -754,9 +796,15 @@ export default function ExpertDashboard() {
         )?.username ||
         'The student';
       const title = s.name || '';
-      const message = `${studentName} has been accepted for the 1:1 session${
-        title ? ` “${title}”` : ''
-      }.`;
+      // A wallet booking isn't confirmed by acceptance — the student still has to pay.
+      const message =
+        s?.paymentMode === 'wallet'
+          ? `${studentName} has been accepted for the 1:1 session${
+              title ? ` “${title}”` : ''
+            }. They pay by WeChat Pay or Alipay, so it is confirmed once their payment comes through.`
+          : `${studentName} has been accepted for the 1:1 session${
+              title ? ` “${title}”` : ''
+            }.`;
       const id = String(s._id);
       setAcceptedInline(prev => ({ ...prev, [id]: { message, session: s } }));
       const timer = window.setTimeout(() => {
@@ -769,6 +817,122 @@ export default function ExpertDashboard() {
       inlineNoticeTimers.current.push(timer);
     },
     [handleAcceptSession],
+  );
+
+  const [withdrawingId, setWithdrawingId] = useState<string | null>(null);
+  const [withdrawConfirmId, setWithdrawConfirmId] = useState<string | null>(null);
+  const [decliningId, setDecliningId] = useState<string | null>(null);
+  const [declineConfirmId, setDeclineConfirmId] = useState<string | null>(null);
+  // Per-row note for the inline 1:1 list, so two open rows never share a draft.
+  const [inlineNotes, setInlineNotes] = useState<Record<string, string>>({});
+  const [inlineNoteErrors, setInlineNoteErrors] = useState<Record<string, string>>({});
+  const inlineNote = (id: string) => inlineNotes[id] ?? '';
+  const setInlineNote = (id: string, next: string) => {
+    setInlineNotes(prev => ({ ...prev, [id]: next }));
+    if (next.trim()) setInlineNoteErrors(prev => ({ ...prev, [id]: '' }));
+  };
+  const cancelPendingSession = useCallback(
+    async (session: any, intent: 'withdraw' | 'decline', note = ''): Promise<boolean> => {
+      const setBusy = intent === 'withdraw' ? setWithdrawingId : setDecliningId;
+      setBusy(String(session._id));
+      try {
+        const res: any = await cancelIndividualAppointment(session._id, note);
+        if (res === false) return false;
+        dispatch(updateMe() as any);
+        return true;
+      } catch {
+        dispatch(
+          showErrorAlert(
+            intent === 'withdraw'
+              ? 'Could not withdraw the session offer. Please try again.'
+              : 'Could not decline the request. Please try again.',
+          ),
+        );
+        return false;
+      } finally {
+        setBusy(null);
+      }
+    },
+    [dispatch],
+  );
+  const handleWithdrawSession = useCallback(
+    (session: any, note = '') => cancelPendingSession(session, 'withdraw', note),
+    [cancelPendingSession],
+  );
+  const handleDeclineSession = useCallback(
+    (session: any, note = '') => cancelPendingSession(session, 'decline', note),
+    [cancelPendingSession],
+  );
+
+  const withdrawInlineSession = useCallback(
+    async (s: any, note = '') => {
+      const ok = await handleWithdrawSession(s, note);
+      if (!ok) return;
+      setWithdrawConfirmId(null);
+      const studentName =
+        pickStudent(s)?.username ||
+        (Array.isArray(s.participants) ? s.participants : []).find(
+          (p: any) => p && typeof p === 'object' && p.username,
+        )?.username ||
+        'The student';
+      const title = s.name || '';
+      const message = `Your session offer${title ? ` “${title}”` : ''} has been withdrawn. ${studentName} was not charged.`;
+      const id = String(s._id);
+      setAcceptedInline(prev => ({ ...prev, [id]: { message, session: s } }));
+      const timer = window.setTimeout(() => {
+        setAcceptedInline(prev => {
+          const next = { ...prev };
+          delete next[id];
+          return next;
+        });
+      }, 7000);
+      inlineNoticeTimers.current.push(timer);
+    },
+    [handleWithdrawSession],
+  );
+
+  const declineInlineSession = useCallback(
+    async (s: any, note = '') => {
+      const ok = await handleDeclineSession(s, note);
+      if (!ok) return;
+      setDeclineConfirmId(null);
+      const studentName =
+        pickStudent(s)?.username ||
+        (Array.isArray(s.participants) ? s.participants : []).find(
+          (p: any) => p && typeof p === 'object' && p.username,
+        )?.username ||
+        'The student';
+      const title = s.name || '';
+      const message = `${studentName}'s request${title ? ` for “${title}”` : ''} was declined and their payment authorization released. They were not charged.`;
+      const id = String(s._id);
+      setAcceptedInline(prev => ({ ...prev, [id]: { message, session: s } }));
+      const timer = window.setTimeout(() => {
+        setAcceptedInline(prev => {
+          const next = { ...prev };
+          delete next[id];
+          return next;
+        });
+      }, 7000);
+      inlineNoticeTimers.current.push(timer);
+    },
+    [handleDeclineSession],
+  );
+
+  // A decline has to carry a note, so the confirm button validates before firing.
+  const submitInlineDecline = useCallback(
+    (s: any) => {
+      const rowId = String(s._id);
+      const note = (inlineNotes[rowId] ?? '').trim();
+      if (!note) {
+        setInlineNoteErrors(prev => ({
+          ...prev,
+          [rowId]: 'Please add a short note so the student knows what to do next.',
+        }));
+        return;
+      }
+      void declineInlineSession(s, note);
+    },
+    [inlineNotes, declineInlineSession],
   );
 
   // Keep just-accepted rows on screen for the notice window even after
@@ -785,14 +949,23 @@ export default function ExpertDashboard() {
     if (!expertUpcomingModal) return [];
     const { kind, status } = expertUpcomingModal;
     if (kind === 'oneToOne') {
-      const list = status === 'booked' ? bookedSessions : pendingSessions;
+      // Sessions the expert accepted but the student has not paid for are shown here for
+      // visibility, with no accept/decline — that decision is already made.
+      const list = status === 'booked'
+        ? bookedSessions
+        : [...pendingSessions, ...awaitingPaymentSessions];
       return list.map((g: any) => {
         const base = mapExpertGroupToModalSession(g);
         if (status !== 'pending') return base;
-        const createdById =
-          typeof g.createdBy === 'object' ? g.createdBy?._id : g.createdBy;
-        const expertProposed = String(createdById) === String(userDetails?._id);
-        return { ...base, canAccept: !expertProposed };
+        const pendingState = pendingSessionState(g, String(userDetails?._id ?? ''));
+        if (pendingState === 'accepted_awaiting_payment') return { ...base, pendingState };
+        const expertProposed = pendingState === 'offer_awaiting_payment';
+        return {
+          ...base,
+          pendingState,
+          canAccept: !expertProposed,
+          canWithdraw: expertProposed,
+        };
       });
     }
     if (status === 'pending') {
@@ -810,6 +983,7 @@ export default function ExpertDashboard() {
     expertUpcomingModal,
     bookedSessions,
     pendingSessions,
+    awaitingPaymentSessions,
     acceptedSeminars,
     seatRequests,
     userDetails,
@@ -817,7 +991,11 @@ export default function ExpertDashboard() {
 
   // Returns the confirmation message so the modal can show it in-card (no banner).
   const handleSeatDecision = useCallback(
-    async (session: UpcomingModalSession, action: 'accept' | 'decline'): Promise<string | void> => {
+    async (
+      session: UpcomingModalSession,
+      action: 'accept' | 'decline',
+      note = '',
+    ): Promise<string | void> => {
       const requestId = session.seatRequestId;
       if (!requestId) return;
       const raw = seatRequests.find(r => String(r._id) === String(requestId));
@@ -827,8 +1005,8 @@ export default function ExpertDashboard() {
       const amountLabel = cents > 0 ? `$${(cents / 100).toFixed(2)}` : '';
       try {
         const res: any = action === 'accept'
-          ? await approveSeminarSeatRequest(requestId)
-          : await rejectSeminarSeatRequest(requestId);
+          ? await approveSeminarSeatRequest(requestId, note)
+          : await rejectSeminarSeatRequest(requestId, note);
         if (res === false || res?.status === 'FAIL' || res?.error) {
           dispatch(showErrorAlert(res?.error || 'Could not update the seat request.'));
           return;
@@ -1043,33 +1221,165 @@ export default function ExpertDashboard() {
                   typeof s.createdBy === 'object' ? s.createdBy?._id : s.createdBy;
                 const expertProposed =
                   String(createdById) === String(userDetails?._id);
+                const rowId = String(s._id);
+                const noteRequired = !expertProposed && declineConfirmId === rowId;
+                const showNote = !expertProposed || withdrawConfirmId === rowId;
                 return (
                   <div
                     key={s._id}
-                    className="flex items-start justify-between gap-2 rounded-xl border border-amber-100 bg-amber-50 px-3 py-2.5"
+                    className="rounded-xl border border-amber-100 bg-amber-50 px-3 py-2.5"
                   >
+                  <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
-                      <div className="text-[13px] font-semibold text-slate-900">
-                        {s.name}
-                      </div>
-                      <div className="text-[11px] text-slate-600">
-                        {new Date(s.start).toLocaleString()}
-                      </div>
-                    </div>
-                    {expertProposed ? (
-                      <span className="shrink-0 inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-700">
-                        Awaiting payment
-                      </span>
-                    ) : (
                       <button
                         type="button"
-                        onClick={() => acceptInlineSession(s)}
-                        disabled={acceptingId === String(s._id)}
-                        className="shrink-0 inline-flex items-center rounded-[4px] bg-[#234C6A] px-3 py-1.5 text-[11px] font-semibold text-white hover:brightness-110 disabled:opacity-60"
+                        onClick={() => setInlineDetailSession(mapExpertGroupToModalSession(s))}
+                        title="View appointment details"
+                        className="block max-w-full truncate text-left text-[13px] font-semibold text-slate-900 hover:underline"
                       >
-                        {acceptingId === String(s._id) ? 'Accepting…' : 'Accept'}
+                        {s.name}
                       </button>
+                      <div className="text-[11px] text-slate-600">
+                        {new Date(s.start).toLocaleString()}
+                        {sessionDurationLabel(s) ? ` · ${sessionDurationLabel(s)}` : ''}
+                      </div>
+                      {(() => {
+                        const student = pickStudent(s);
+                        const studentId = student?._id ? String(student._id) : '';
+                        const studentName =
+                          student?.username || student?.email || 'Student';
+                        if (!studentId || expertProposed) return null;
+                        return (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              void openPeerProfileById(studentId, studentName, student?.image ?? null)
+                            }
+                            title="View student card"
+                            className="mt-0.5 block max-w-full truncate text-left text-[11px] font-medium text-[#234C6A] hover:underline"
+                          >
+                            {studentName}
+                          </button>
+                        );
+                      })()}
+                      {!expertProposed && s.decisionDeadline ? (
+                        <div className="mt-0.5 text-[10px] font-semibold text-amber-700">
+                          Decide by {new Date(s.decisionDeadline).toLocaleString()}
+                        </div>
+                      ) : null}
+                      {expertProposed && s.paymentDeadline ? (
+                        <div className="mt-0.5 text-[10px] font-semibold text-amber-700">
+                          Student to pay by {new Date(s.paymentDeadline).toLocaleString()}
+                        </div>
+                      ) : null}
+                    </div>
+                    {expertProposed ? (
+                      <div className="shrink-0 flex items-center gap-2">
+                        {withdrawConfirmId === String(s._id) ? (
+                          <>
+                            <span className="text-[10px] font-medium text-slate-600">
+                              Withdraw this offer?
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => setWithdrawConfirmId(null)}
+                              disabled={withdrawingId === String(s._id)}
+                              className="rounded-[4px] border border-slate-200 bg-white px-2.5 py-1.5 text-[10px] font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-60"
+                            >
+                              Keep
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => withdrawInlineSession(s, inlineNote(rowId))}
+                              disabled={withdrawingId === String(s._id)}
+                              className="rounded-[4px] bg-rose-600 px-2.5 py-1.5 text-[10px] font-semibold text-white hover:bg-rose-700 disabled:opacity-60"
+                            >
+                              {withdrawingId === String(s._id) ? 'Withdrawing…' : 'Confirm'}
+                            </button>
+                          </>
+                        ) : (
+                          <>
+                            <span className="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-700">
+                              Awaiting payment
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => setWithdrawConfirmId(String(s._id))}
+                              className="rounded-[4px] border border-rose-200 bg-white px-2.5 py-1.5 text-[10px] font-semibold text-rose-600 hover:bg-rose-50"
+                            >
+                              Withdraw offer
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    ) : declineConfirmId === String(s._id) ? (
+                      <div className="shrink-0 flex items-center gap-2">
+                        <span className="text-[10px] font-medium text-slate-600">
+                          Decline and release the hold?
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setDeclineConfirmId(null)}
+                          disabled={decliningId === String(s._id)}
+                          className="rounded-[4px] border border-slate-200 bg-white px-2.5 py-1.5 text-[10px] font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-60"
+                        >
+                          Keep
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => submitInlineDecline(s)}
+                          disabled={decliningId === String(s._id)}
+                          className="rounded-[4px] bg-rose-600 px-2.5 py-1.5 text-[10px] font-semibold text-white hover:bg-rose-700 disabled:opacity-60"
+                        >
+                          {decliningId === String(s._id) ? 'Declining…' : 'Confirm'}
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="shrink-0 flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => acceptInlineSession(s, inlineNote(rowId))}
+                          disabled={acceptingId === String(s._id)}
+                          className="inline-flex items-center rounded-[4px] bg-[#234C6A] px-3 py-1.5 text-[11px] font-semibold text-white hover:brightness-110 disabled:opacity-60"
+                        >
+                          {acceptingId === String(s._id) ? 'Accepting…' : 'Accept'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setDeclineConfirmId(String(s._id))}
+                          disabled={acceptingId === String(s._id)}
+                          className="inline-flex items-center rounded-[4px] border border-rose-200 bg-white px-3 py-1.5 text-[11px] font-semibold text-rose-600 hover:bg-rose-50 disabled:opacity-60"
+                        >
+                          Decline
+                        </button>
+                      </div>
                     )}
+                  </div>
+                  {showNote ? (
+                    <div className="mt-2.5 border-t border-amber-200/70 pt-2">
+                      <DecisionNoteField
+                        id={`inline-decision-note-${rowId}`}
+                        value={inlineNote(rowId)}
+                        onChange={next => setInlineNote(rowId, next)}
+                        required={noteRequired}
+                        disabled={
+                          acceptingId === rowId ||
+                          decliningId === rowId ||
+                          withdrawingId === rowId
+                        }
+                        label={
+                          noteRequired
+                            ? 'Note to the student (required to decline)'
+                            : 'Note to the student (optional)'
+                        }
+                      />
+                      {inlineNoteErrors[rowId] ? (
+                        <p className="mt-1 text-[10px] font-semibold text-rose-600">
+                          {inlineNoteErrors[rowId]}
+                        </p>
+                      ) : null}
+                    </div>
+                  ) : null}
                   </div>
                 );
               })}
@@ -1084,6 +1394,7 @@ export default function ExpertDashboard() {
                     </div>
                     <div className="text-[11px] text-slate-500">
                       {new Date(s.start).toLocaleString()}
+                      {sessionDurationLabel(s) ? ` · ${sessionDurationLabel(s)}` : ''}
                     </div>
                   </div>
                   <span className="inline-flex items-center rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">
@@ -1189,17 +1500,27 @@ export default function ExpertDashboard() {
             }
             onAcceptSeatRequest={
               expertUpcomingModal.kind === 'seminar' && expertUpcomingModal.status === 'pending'
-                ? (s) => handleSeatDecision(s, 'accept')
+                ? (s, note) => handleSeatDecision(s, 'accept', note)
                 : undefined
             }
             onDeclineSeatRequest={
               expertUpcomingModal.kind === 'seminar' && expertUpcomingModal.status === 'pending'
-                ? (s) => handleSeatDecision(s, 'decline')
+                ? (s, note) => handleSeatDecision(s, 'decline', note)
                 : undefined
             }
             onAcceptSession={
               expertUpcomingModal.kind === 'oneToOne' && expertUpcomingModal.status === 'pending'
-                ? (s) => handleAcceptSession({ _id: s.id, name: s.title, with: s.with })
+                ? (s, note) => handleAcceptSession({ _id: s.id, name: s.title, with: s.with }, note)
+                : undefined
+            }
+            onWithdrawSession={
+              expertUpcomingModal.kind === 'oneToOne' && expertUpcomingModal.status === 'pending'
+                ? (s, note) => handleWithdrawSession({ _id: s.id, name: s.title, with: s.with }, note)
+                : undefined
+            }
+            onDeclineSession={
+              expertUpcomingModal.kind === 'oneToOne' && expertUpcomingModal.status === 'pending'
+                ? (s, note) => handleDeclineSession({ _id: s.id, name: s.title, with: s.with }, note)
                 : undefined
             }
           />
@@ -1219,6 +1540,41 @@ export default function ExpertDashboard() {
             viewerRole={userDetails?.role}
             previewImage={peerProfile?.image}
           />
+        ) : null}
+        {inlineDetailSession?.detail ? (
+          <div
+            className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/50 p-4"
+            onClick={e => {
+              if (e.target === e.currentTarget) setInlineDetailSession(null);
+            }}
+          >
+            <div
+              className="w-full max-w-[460px] max-h-[88vh] overflow-y-auto rounded-2xl border border-slate-200 bg-white shadow-xl"
+              onClick={e => e.stopPropagation()}
+            >
+              <div className="flex items-start justify-between gap-3 border-b border-slate-200 px-5 py-4">
+                <div className="min-w-0">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
+                    {inlineDetailSession.briefLabel || 'Session details'}
+                  </p>
+                  <h3 className="mt-1 text-base font-semibold text-slate-900 truncate">
+                    {inlineDetailSession.title}
+                  </h3>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setInlineDetailSession(null)}
+                  className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+                  aria-label="Close"
+                >
+                  ✕
+                </button>
+              </div>
+              <div className="px-5 py-4">
+                <SeminarDetails {...inlineDetailSession.detail} theme="light" />
+              </div>
+            </div>
+          </div>
         ) : null}
       </div>
     </div>

@@ -6,6 +6,13 @@ import { BookOpen, UserCheck, AlertCircle, MessageSquare, Users } from 'lucide-r
 import { useAppSelector } from '../store';
 import { doGetMyEvents, getAllCommunityChats, profileImageFetch, doFilterExperts, doFilterSeminars } from '../api/api';
 import { resolveProfileImageSrc } from '../utils/profileImage';
+import {
+  formatSessionWhen,
+  sessionDurationLabel,
+  sessionDurationMinutes,
+  sessionEndMs,
+} from '../utils/sessionDuration';
+import { paymentWindowOpen } from '../utils/bookingLifecycle';
 import { displayRoomLabel, shouldNotifyRoom } from '../utils/chatRoomLabel';
 import { fetchDmUnreadSnapshot, fetchChatUserProfile } from '../api/chatApi';
 import ProfileModal from './Dashboard/Messenger/Messages/ProfileModal';
@@ -16,6 +23,7 @@ import StatsGrid from '../components/dashboard/StatsGrid';
 import CarouselSection, { type CarouselSectionData } from '../components/dashboard/CarouselSection';
 import StudentProfile from '../components/dashboard/StudentProfile';
 import StudentSettings from '../components/dashboard/StudentSettings';
+import DecisionNotices from '../components/dashboard/DecisionNotices';
 import StudentCalendar, { type Meeting as CalendarMeeting } from '../components/dashboard/StudentCalendar';
 import JoinMeeting from '../components/dashboard/JoinMeeting';
 import StudentSeminars from '../components/dashboard/StudentSeminars';
@@ -26,7 +34,7 @@ import UpcomingCountdownCard, { type UpcomingSession } from '../components/dashb
 import UpcomingSessionModal, { type UpcomingModalSession } from '../components/dashboard/UpcomingSessionModal';
 import ExpertProfile from '../components/dashboard/ExpertProfile';
 import StudentBookingCheckout, { completeStudentBookingFromStorage } from '../components/dashboard/StudentBookingCheckout';
-import { getExpertById, doFollowExpert, doUnfollowExpert, acceptIndividualAppointment, getMySeatRequests } from '../api/api';
+import { getExpertById, doFollowExpert, doUnfollowExpert, acceptIndividualAppointment, cancelIndividualAppointment, getMySeatRequests } from '../api/api';
 import { updateMe } from '../actions/authActions';
 import type { ExpertCardProps } from '../components/ExpertCard';
 import { mapExpertToMentorWithImage } from '../utils/mapExpertToMentor';
@@ -41,6 +49,8 @@ import {
 import { patchDmUnreadRid, setDmUnreadByRidBulk } from '../actions/chatActions';
 import { canonicalLabelsFromMixedServiceEntries } from '../constants/serviceOptions';
 import { useEndMeetingOnReturn } from '../hooks/useEndMeetingOnReturn';
+import { pendingRequestIsLive } from '../utils/bookingLifecycle';
+
 function deriveSessionCounts(u: any) {
   if (!u) {
     return { bookedSem: 0, bookedInd: 0, pendInd: 0 };
@@ -53,7 +63,8 @@ function deriveSessionCounts(u: any) {
   // / legacy ones are events. Count both so the cards reflect every 1:1.
   const indChats = gcs.filter((g: any) => g.type === 'individual');
   const pendIndChats = indChats.filter(
-    (g: any) => (g.status || '').toLowerCase() === 'pending',
+    (g: any) =>
+      (g.status || '').toLowerCase() === 'pending' && pendingRequestIsLive(g),
   ).length;
   const bookedIndChats = indChats.filter(
     (g: any) => (g.status || '').toLowerCase() === 'active',
@@ -100,7 +111,8 @@ function timeHHMMInTimeZone(d: Date, timeZone: string): string {
 /** "45 min · Study Abroad" line for a session/seminar card. */
 function meetingDetailsLine(g: any): string {
   const parts: string[] = [];
-  if (g?.duration) parts.push(`${g.duration} min`);
+  const duration = sessionDurationLabel(g);
+  if (duration) parts.push(duration);
   const purpose =
     (typeof g?.purposeOther === 'string' && g.purposeOther.trim()) ||
     canonicalLabelsFromMixedServiceEntries(g?.services)[0] ||
@@ -122,7 +134,7 @@ function deriveCalendarMeetings(u: any): CalendarMeeting[] {
     type: 'seminar' | 'session',
     status: 'pending' | 'confirmed',
     withLabel: string,
-    routing: Partial<Pick<CalendarMeeting, 'groupId' | 'peerUserId' | 'peerName' | 'peerImage' | 'recurrence' | 'seriesId' | 'details'>> = {},
+    routing: Partial<Pick<CalendarMeeting, 'groupId' | 'peerUserId' | 'peerName' | 'peerImage' | 'recurrence' | 'seriesId' | 'details' | 'raw'>> = {},
   ) => {
     // start may be an ISO string (Date field) or epoch ms — new Date handles both.
     const d = new Date(start);
@@ -160,6 +172,7 @@ function deriveCalendarMeetings(u: any): CalendarMeeting[] {
           recurrence: g?.isRecurring ? g?.recurrenceFrequency ?? null : null,
           seriesId: g?.seriesId ? String(g.seriesId) : null,
           details: meetingDetailsLine(g),
+          raw: g,
         },
       );
     } else if (g?.type === 'individual' && gStatus !== 'cancelled') {
@@ -177,6 +190,7 @@ function deriveCalendarMeetings(u: any): CalendarMeeting[] {
           peerName: host,
           peerImage: g?.admin?.image ?? null,
           details: meetingDetailsLine(g),
+          raw: g,
         },
       );
     }
@@ -200,21 +214,13 @@ function deriveCalendarMeetings(u: any): CalendarMeeting[] {
         peerUserId: e?.expert?._id != null ? String(e.expert._id) : undefined,
         peerName: mentor,
         peerImage: e?.expert?.image ?? null,
+        details: meetingDetailsLine(e),
+        raw: e,
       },
     );
   }
 
   return out;
-}
-
-function modalWhen(ms: number): string {
-  const d = new Date(ms);
-  if (Number.isNaN(d.getTime())) return '';
-  return d.toLocaleString(undefined, {
-    weekday: 'short',
-    hour: 'numeric',
-    minute: '2-digit',
-  });
 }
 
 /**
@@ -235,7 +241,9 @@ function deriveModalSessions(
       id: String(g?._id ?? `${g?.type}-${at}`),
       title: g?.name || 'Seminar',
       at: Number.isNaN(at) ? 0 : at,
-      when: Number.isNaN(at) ? 'TBD' : modalWhen(at),
+      when: Number.isNaN(at) ? 'TBD' : formatSessionWhen(at),
+      durationMinutes: sessionDurationMinutes(g) ?? undefined,
+      endsAt: sessionEndMs(g) ?? undefined,
       location: 'Online · WisdomLinked Room',
       with: g?.admin?.username || g?.admin?.email || 'WisdomLinked',
       peerUserId: String(g?.admin?._id ?? g?.admin ?? ''),
@@ -243,6 +251,7 @@ function deriveModalSessions(
         title: g?.name || 'Seminar',
         description: g?.description,
         start: g?.start,
+        end: g?.end,
         duration: g?.duration,
         price: typeof g?.price === 'number' ? g.price : undefined,
         admin: g?.admin,
@@ -276,30 +285,64 @@ function deriveModalSessions(
   const fromChats = (u.groupChats || [])
     .filter(
       (g: any) =>
-        g?.type === 'individual' && indChatWanted((g?.status || '').toLowerCase()),
+        g?.type === 'individual' &&
+        indChatWanted((g?.status || '').toLowerCase()) &&
+        // A request whose session time has passed can no longer be accepted or paid
+        // for, so listing it as awaiting approval promises a decision that can't come.
+        (status !== 'pending' || pendingRequestIsLive(g)),
     )
     .map((g: any) => {
       const at = new Date(g?.start).getTime();
       // Expert-proposed pending 1:1s (createdBy = the mentor) await the student's
       // payment; student-booked ones (createdBy = me) await the mentor's approval.
       const createdById = String(g?.createdBy?._id ?? g?.createdBy ?? '');
-      const payable = status === 'pending' && createdById !== '' && createdById !== myId;
+      const expired = !Number.isNaN(at) && at > 0 && at <= Date.now();
+      // A wallet 1:1 the student booked is theirs to pay for once the expert accepts,
+      // which is the moment a payment deadline appears on it.
+      const walletWindowOpen =
+        g?.paymentMode === 'wallet' &&
+        !!g?.paymentDeadline &&
+        new Date(g.paymentDeadline).getTime() > Date.now();
+      // An expert's offer carries its own deadline from the moment it is made; once it
+      // lapses the server refuses the payment, so the button must go with it.
+      const expertProposed = createdById !== '' && createdById !== myId;
+      const windowOpen = paymentWindowOpen(g);
+      const payable =
+        status === 'pending' &&
+        !expired &&
+        windowOpen &&
+        (expertProposed || walletWindowOpen);
+      const canDecline = status === 'pending' && !expired && expertProposed;
+      const metaLines: string[] = [];
+      if (expertProposed && g?.paymentDeadline) {
+        metaLines.push(
+          windowOpen
+            ? `Pay by ${new Date(g.paymentDeadline).toLocaleString()}`
+            : 'Payment window closed — this offer is being released',
+        );
+      }
       const mentor = g?.admin?.username || g?.admin?.email || 'Your mentor';
       const price = typeof g?.price === 'number' ? g.price : undefined;
       return {
         id: String(g?._id ?? `session-${at}`),
         title: g?.name || '1:1 session',
         at: Number.isNaN(at) ? 0 : at,
-        when: Number.isNaN(at) ? 'TBD' : modalWhen(at),
+        when: Number.isNaN(at) ? 'TBD' : formatSessionWhen(at),
+        durationMinutes: sessionDurationMinutes(g) ?? undefined,
+        endsAt: sessionEndMs(g) ?? undefined,
         location: 'Online · WisdomLinked Room',
         with: mentor,
         peerUserId: String(g?.admin?._id ?? g?.admin ?? ''),
         payable,
+        canDecline,
+        metaLines: metaLines.length ? metaLines : undefined,
         price,
+        paymentMode: g?.paymentMode,
         detail: {
           title: g?.name || '1:1 session',
           description: g?.description,
           start: g?.start,
+          end: g?.end,
           duration: g?.duration,
           price,
           admin: g?.admin,
@@ -327,7 +370,9 @@ function deriveModalSessions(
         id: String(e?._id ?? `event-${at}`),
         title: e?.title || '1:1 session',
         at: Number.isNaN(at) ? 0 : at,
-        when: Number.isNaN(at) ? 'TBD' : modalWhen(at),
+        when: Number.isNaN(at) ? 'TBD' : formatSessionWhen(at),
+        durationMinutes: sessionDurationMinutes(e) ?? undefined,
+        endsAt: sessionEndMs(e) ?? undefined,
         location: 'Online · WisdomLinked Room',
         with: e?.expert?.username || e?.expert?.email || 'Your mentor',
         peerUserId: String(e?.expert?._id ?? e?.expert ?? ''),
@@ -369,11 +414,17 @@ function deriveUpcomingSessions(u: any): {
       g?.type === 'individual' && (status === 'active' || status === 'pending');
 
     if (isSeminar && (!nextSeminar || startAt < nextSeminar.startAt)) {
-      nextSeminar = { title: g?.name || 'Seminar', startAt, id: String(g?._id ?? '') };
+      nextSeminar = {
+        title: g?.name || 'Seminar',
+        startAt,
+        durationMinutes: sessionDurationMinutes(g) ?? undefined,
+        id: String(g?._id ?? ''),
+      };
     } else if (isSession) {
       considerOneToOne({
         title: g?.name || '1:1 session',
         startAt,
+        durationMinutes: sessionDurationMinutes(g) ?? undefined,
         peerUserId: String(g?.admin?._id ?? g?.admin ?? ''),
         pending: status === 'pending',
       });
@@ -390,6 +441,7 @@ function deriveUpcomingSessions(u: any): {
     considerOneToOne({
       title: e?.title || '1:1 session',
       startAt,
+      durationMinutes: sessionDurationMinutes(e) ?? undefined,
       peerUserId: String(e?.expert?._id ?? e?.expert ?? ''),
       pending: isPending,
     });
@@ -513,7 +565,12 @@ export default function StudentDashboard() {
       navigate({ pathname: location.pathname, search: '' }, { replace: true });
     };
 
-    if (redirect_status === 'succeeded' && payment_intent) {
+    // WeChat Pay and Alipay come back as 'pending' while Stripe clears the funds. The
+    // student has paid, so the booking is completed on both — never treat pending as a
+    // failure, which would discard the recovery state after taking their money.
+    const paidOrClearing = redirect_status === 'succeeded' || redirect_status === 'pending';
+
+    if (paidOrClearing && payment_intent) {
       let cancelled = false;
       (async () => {
         const attemptsKey = `wl_booking_attempts_${payment_intent}`;
@@ -576,7 +633,9 @@ export default function StudentDashboard() {
       };
     }
 
-    if (redirect_status && redirect_status !== 'succeeded') {
+    // Only a genuinely failed payment discards the booking. Anything still clearing was
+    // handled above, so reaching here means Stripe reported the payment did not go through.
+    if (redirect_status && !paidOrClearing) {
       window.localStorage.removeItem('pendingDetails');
       clearBookingQuery();
       setBookingReturnError('Payment was not completed. Please try again.');
@@ -653,8 +712,18 @@ export default function StudentDashboard() {
     void loadMySeatRequests();
   }, [userDetails?.role, userDetails?._id, loadMySeatRequests]);
 
+  // Still in play: waiting on the host, or approved and waiting on the student's wallet
+  // payment. Both belong on the "Pending seminars" card.
   const pendingSeatRequests = useMemo(
-    () => mySeatRequests.filter((r: any) => (r?.status || '').toLowerCase() === 'pending'),
+    () =>
+      mySeatRequests.filter((r: any) => {
+        const status = (r?.status || '').toLowerCase();
+        if (status === 'pending') return true;
+        return (
+          status === 'awaiting_payment' &&
+          (!r?.paymentDeadline || new Date(r.paymentDeadline).getTime() > Date.now())
+        );
+      }),
     [mySeatRequests],
   );
 
@@ -669,19 +738,33 @@ export default function StudentDashboard() {
               timeStyle: 'short',
             })
           : '—';
-        const metaLines: string[] = ['Awaiting host approval'];
-        if (typeof r?.amount === 'number' && r.amount > 0) {
-          metaLines.push(`$${(r.amount / 100).toFixed(2)} on hold`);
+        const awaitingPayment = (r?.status || '').toLowerCase() === 'awaiting_payment';
+        const amountDollars = typeof r?.amount === 'number' ? r.amount / 100 : 0;
+        const metaLines: string[] = [
+          awaitingPayment ? 'Approved — payment needed' : 'Awaiting host approval',
+        ];
+        if (amountDollars > 0) {
+          metaLines.push(
+            awaitingPayment
+              ? `$${amountDollars.toFixed(2)} due`
+              : `$${amountDollars.toFixed(2)} on hold`,
+          );
         }
-        if (r?.decisionDeadline) {
+        if (awaitingPayment && r?.paymentDeadline) {
+          metaLines.push(`Pay by ${new Date(r.paymentDeadline).toLocaleString()}`);
+        } else if (r?.decisionDeadline) {
           metaLines.push(`Decision by ${new Date(r.decisionDeadline).toLocaleString()}`);
         }
         const host = seminar?.admin;
         return {
           id: String(r._id),
+          payable: awaitingPayment,
+          price: amountDollars > 0 ? amountDollars : undefined,
           title: seminar?.name || 'Seminar',
           at: start,
           when,
+          durationMinutes: sessionDurationMinutes(seminar) ?? undefined,
+          endsAt: sessionEndMs(seminar) ?? undefined,
           location: 'Online · WisdomLinked',
           with: host?.username || host?.email || 'WisdomLinked',
           peerUserId: host?._id ? String(host._id) : undefined,
@@ -689,6 +772,7 @@ export default function StudentDashboard() {
             title: seminar?.name || 'Seminar',
             description: seminar?.description,
             start: seminar?.start,
+            end: seminar?.end,
             duration: seminar?.duration,
             price: typeof seminar?.price === 'number' ? seminar.price : undefined,
             admin: host,
@@ -707,6 +791,15 @@ export default function StudentDashboard() {
     [pendingSeatRequests],
   );
   const [payTarget, setPayTarget] = useState<{
+    groupChatId: string;
+    price: number;
+    name: string;
+    /** Wallet bookings skipped the card hold, so they settle by wallet only. */
+    walletOnly?: boolean;
+  } | null>(null);
+  /** Settling an approved overflow seat (wallet) — keyed by seat request, not session. */
+  const [seatPayTarget, setSeatPayTarget] = useState<{
+    requestId: string;
     groupChatId: string;
     price: number;
     name: string;
@@ -1207,6 +1300,17 @@ export default function StudentDashboard() {
     setActiveItem('chat');
   };
 
+  const handleDeclineProposal = useCallback(
+    async (session: UpcomingModalSession, note: string): Promise<boolean> => {
+      const res: any = await cancelIndividualAppointment(session.id, note);
+      if (res === false) return false;
+      dispatch(updateMe() as any);
+      setEventsReloadKey((k) => k + 1);
+      return true;
+    },
+    [dispatch],
+  );
+
   const handleUpcomingJoinSession = (session: UpcomingModalSession) => {
     setUpcomingModal(null);
     if (upcomingModal?.kind === 'seminar') openSeminarChat(session.id);
@@ -1288,6 +1392,30 @@ export default function StudentDashboard() {
               >
                 Dismiss
               </button>
+            </div>
+          ) : null}
+          {activeItem !== 'chat' ? (
+            <div className="px-4 pt-3 sm:px-6">
+              <DecisionNotices
+                onPay={(notice) => {
+                  if (notice.kind === 'seat') {
+                    setSeatPayTarget({
+                      requestId: notice.id,
+                      groupChatId: String(notice.groupChatId ?? ''),
+                      price: typeof notice.price === 'number' ? notice.price : 0,
+                      name: notice.title,
+                    });
+                    return;
+                  }
+                  setPayTarget({
+                    groupChatId: notice.id,
+                    price: typeof notice.price === 'number' ? notice.price : 0,
+                    name: notice.title,
+                    // Only a wallet booking is ever awaiting payment after acceptance.
+                    walletOnly: true,
+                  });
+                }}
+              />
             </div>
           ) : null}
           {activeItem === 'chat' ? (
@@ -1451,12 +1579,25 @@ export default function StudentDashboard() {
             onClose={() => setUpcomingModal(null)}
             onJoinSession={handleUpcomingJoinSession}
             onViewProfile={handleViewPeerProfile}
+            onDeclineProposal={handleDeclineProposal}
             onPay={(session) => {
               setUpcomingModal(null);
+              // Seat requests are listed by request id, so they settle on their own route.
+              const seat = mySeatRequests.find((r: any) => String(r?._id) === session.id);
+              if (seat) {
+                setSeatPayTarget({
+                  requestId: String(seat._id),
+                  groupChatId: String(seat.groupChat?._id ?? seat.groupChat ?? ''),
+                  price: typeof seat.amount === 'number' ? seat.amount / 100 : 0,
+                  name: seat.groupChat?.name || session.title,
+                });
+                return;
+              }
               setPayTarget({
                 groupChatId: session.id,
                 price: typeof session.price === 'number' ? session.price : 0,
                 name: session.title,
+                walletOnly: session.paymentMode === 'wallet',
               });
             }}
           />
@@ -1482,12 +1623,20 @@ export default function StudentDashboard() {
                 type="1:1 session"
                 price={payTarget.price}
                 holdsFunds
+                policyNotice={{
+                  message:
+                    'Paying confirms this session immediately. It cannot be cancelled and the payment is not refundable.',
+                  acknowledgeLabel: 'I understand this payment is non-refundable.',
+                }}
                 pendingDetails={{
                   kind: 'accept-1to1',
                   groupChatId: payTarget.groupChatId,
                   price: payTarget.price,
                   name: payTarget.name,
                 }}
+                // The expert is already committed here, so a wallet can settle outright.
+                // A booking requested by wallet stays wallet-only (it skipped the hold).
+                walletOption={{ kind: 'charge', only: payTarget.walletOnly }}
                 returnUrl={(() => {
                   try {
                     const url = new URL(window.location.href);
@@ -1515,6 +1664,64 @@ export default function StudentDashboard() {
                   setPaySuccessToast(true);
                 }}
                 onCancel={() => setPayTarget(null)}
+              />
+            </div>
+          </div>
+        )}
+        {seatPayTarget && (
+          <div
+            className="fixed inset-0 z-[60] flex items-center justify-center overflow-y-auto bg-[#1A3A4A]/40 p-4 backdrop-blur-sm"
+            onClick={(e) => {
+              if (e.target === e.currentTarget) setSeatPayTarget(null);
+            }}
+          >
+            <div className="my-auto w-full max-w-2xl" onClick={(e) => e.stopPropagation()}>
+              <StudentBookingCheckout
+                type="Seminar seat"
+                price={seatPayTarget.price}
+                policyNotice={{
+                  message:
+                    'Paying claims your approved seat immediately. It cannot be cancelled and the payment is not refundable.',
+                  acknowledgeLabel: 'I understand this payment is non-refundable.',
+                }}
+                pendingDetails={{
+                  kind: 'pay-seat-request',
+                  requestId: seatPayTarget.requestId,
+                  groupChatId: seatPayTarget.groupChatId,
+                  price: seatPayTarget.price,
+                  name: seatPayTarget.name,
+                }}
+                // Approved without a hold, so it settles in the mode it was requested in.
+                walletOption={{ kind: 'charge', only: true }}
+                returnUrl={(() => {
+                  try {
+                    const url = new URL(window.location.href);
+                    url.search = '';
+                    url.searchParams.set('student_booking', '1');
+                    return url.toString();
+                  } catch {
+                    return '/user/studentdashboard?student_booking=1';
+                  }
+                })()}
+                onPaymentSuccess={async (paymentIntentId) => {
+                  const { paySeminarSeatRequest } = await import('../api/api');
+                  const response = await paySeminarSeatRequest({
+                    requestId: seatPayTarget.requestId,
+                    payment_intent: paymentIntentId,
+                  });
+                  setSeatPayTarget(null);
+                  if (response === false || response?.status === 'FAIL' || response?.error) {
+                    setBookingReturnError(
+                      response?.error || 'Could not confirm your seat after payment.',
+                    );
+                    return;
+                  }
+                  window.localStorage.removeItem('pendingDetails');
+                  dispatch(updateMe());
+                  void loadMySeatRequests();
+                  setPaySuccessToast(true);
+                }}
+                onCancel={() => setSeatPayTarget(null)}
               />
             </div>
           </div>

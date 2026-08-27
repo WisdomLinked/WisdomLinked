@@ -10,7 +10,16 @@ const { getFullUserData } = require("../middlewares/requireAuth");
 const { checkPaymentIntentSucceeded, refundPaymentIntent, sendBookingReceiptAndConfirmation } = require("./stripe.controller");
 const { appendPaymentHistory } = require("./payment.controller");
 const { checkTitleNameInvalid } = require('../services/global')
-const { sendEmailMeetingRequestToExpert, sendEmailMeetingRequestToCustomer, scheduleEmailReminder, sendEmailMeetingAcceptance } = require('../services/notifications')
+const { sendEmailMeetingRequestToExpert, sendEmailMeetingRequestToCustomer, scheduleEmailReminder, sendEmailMeetingAcceptance, sendNotificationEmail } = require('../services/notifications')
+const {
+    renderEmail: renderEventEmail,
+    moneyFromCents: eventMoneyFromCents,
+    formatWhen: eventWhen,
+    paragraph: eventParagraph,
+    facts: eventFacts,
+    callout: eventCallout,
+    escapeHtml: eventEscape,
+} = require('../services/emailTemplate')
 const { assertBookingLeadTime } = require("../utils/bookingLeadTime");
 const { assertBookingSlotValid, assertDurationAllowed } = require("../utils/bookingValidation");
 
@@ -244,7 +253,7 @@ const appendEvent = async (req, res) => {
                 newEvent: eventExists
             });
         } else {
-            sendEmailMeetingRequestToExpert(expertUser.email, expertUser.username, customerUser.username, start, duration, expectedCents / 100, true, expert.timeZone)
+            sendEmailMeetingRequestToExpert(expertUser.email, expertUser.username, title, start, duration, expectedCents / 100, true, expertUser.timeZone, charge ? 'paid' : undefined, { studentName: customerUser.username })
             const newEvent = new Event({
                 title: title,
                 start: start,
@@ -357,9 +366,11 @@ const updateEvent = async (req, res) => {
             throw new Error("Event not found");
         }
 
-        // Check for invalid updates or constraints
-        if (event.status === 'accepted' && new Date(event.end).getTime() <= new Date().getTime()) {
-            throw new Error("Unable to update past or ongoing event");
+        // A finished event is a record of what happened, so its details are frozen
+        // whatever its status — only the post-meeting time tally may still be added.
+        const onlyTimeTally = Object.keys(updates || {}).every((key) => key === 'totalTimeSpent');
+        if (!onlyTimeTally && new Date(event.end).getTime() <= new Date().getTime()) {
+            return res.status(409).send("This appointment has already finished and can no longer be edited.");
         }
 
         if (updates.title && checkTitleNameInvalid('Title', updates.title)) {
@@ -385,7 +396,7 @@ const updateEvent = async (req, res) => {
             newEventData.status = updates.status;
             const expert = await User.findById(event.expert);
             const customer = await User.findById(event.customer);
-            sendEmailMeetingRequestToExpert(expert.email, expert.username, customer.username, updates.start, event.duration, event.price, false, expert.timeZone);
+            sendEmailMeetingRequestToExpert(expert.email, expert.username, event.title, updates.start, event.duration, event.price, false, expert.timeZone, undefined, { studentName: customer.username });
         }
 
         if (updates.totalTimeSpent) {
@@ -522,6 +533,56 @@ const cancelInvitation = async (req, res) => {
     }
 }
 
+const notifyCancelledEventRefund = async ({ event, expert, customer, payment, reference }) => {
+    const amount = eventMoneyFromCents(payment.amount, payment.currency)
+    const when = eventWhen(event.start, customer?.timeZone)
+    const expertWhen = eventWhen(event.start, expert?.timeZone)
+    try {
+        if (customer?.email) {
+            await sendNotificationEmail(
+                customer.email,
+                `Session cancelled — ${amount} refunded`,
+                renderEventEmail({
+                    heading: 'Your session has been cancelled',
+                    previewText: 'Your payment has been refunded in full.',
+                    blocks: [
+                        eventParagraph(`Your session${event.title ? ` <strong>${eventEscape(event.title)}</strong>` : ''} has been cancelled.`),
+                        eventFacts([
+                            ['Session', event.title],
+                            ['Expert', expert?.username],
+                            ['Date & time', when],
+                            ['Refunded', amount],
+                            ['Reference', reference],
+                        ]),
+                        eventCallout(`Your payment of <strong>${amount}</strong> has been refunded in full. It will be credited to your original payment method and may take 5–10 business days to appear, depending on your bank. No action is required from you.`, 'bad'),
+                        eventParagraph('If the refund has not reached you within 10 business days, contact the administrator through WisdomLinked quoting the reference above.', { muted: true }),
+                    ],
+                }),
+            )
+        }
+        if (expert?.email) {
+            await sendNotificationEmail(
+                expert.email,
+                `Session cancelled — ${event.title || '1:1 session'}`,
+                renderEventEmail({
+                    heading: 'Your session has been cancelled',
+                    blocks: [
+                        eventParagraph(`Your session with ${eventEscape(customer?.username || 'the student')} has been cancelled.`),
+                        eventFacts([
+                            ['Session', event.title],
+                            ['Student', customer?.username],
+                            ['Date & time', expertWhen],
+                        ]),
+                        eventCallout(`The student's payment of ${amount} has been refunded in full. No action is required from you.`),
+                    ],
+                }),
+            )
+        }
+    } catch (emailErr) {
+        console.log('[cancelEvent] cancellation email failed', emailErr?.message || emailErr)
+    }
+}
+
 const cancelEvent = async (req, res) => {
     try {
         const eventId = String(req.body.eventId)
@@ -542,10 +603,8 @@ const cancelEvent = async (req, res) => {
         await customer.save()
 
         const payment = await PaymentHistory.findOne({ event: eventId })
-        console.log(payment, '///')
         if (payment) {
             const refund = await refundPaymentIntent(payment.paymentIntent, payment.amount, payment.stripeMode)
-            console.log(refund, '///')
             if (refund) {
                 appendPaymentHistory({
                     stripeMode: payment.stripeMode,
@@ -560,6 +619,10 @@ const cancelEvent = async (req, res) => {
                     paymentType: 'refund',
                     paymentIntent: refund.payment_intent,
                 })
+
+                await notifyCancelledEventRefund({ event, expert, customer, payment, reference: refund.payment_intent })
+            } else {
+                console.error('[cancelEvent] refund failed — reconcile manually', payment.paymentIntent)
             }
         }
 

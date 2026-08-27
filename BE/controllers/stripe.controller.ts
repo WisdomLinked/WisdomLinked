@@ -3,12 +3,24 @@ import { BOOKING_PAYMENT_AMOUNT_INVALID } from '../utils/bookingUserFacingCopy';
 import { HTTP_GENERIC_ERROR, safeErrorMessage } from '../utils/httpUserFacingCopy';
 import { expectedBookingIntentCents, extractHourlyRate } from '../utils/bookingPrice';
 import { seminarIsFull, firstFullFutureOccurrence, seatRequestUnavailableMessage } from '../utils/seminarCapacity';
+import {
+    normalizePaymentMode,
+    isWallet,
+    pinnedSettlementMode,
+    walletChargeAllowed,
+    paymentWindowLapsed,
+    WALLET_PAYMENT_METHOD_TYPES,
+    WALLET_NEEDS_APPROVAL_MESSAGE,
+    WALLET_NOT_YET_PAYABLE,
+    paymentWindowHours,
+} from '../utils/walletPayment';
 
 const stripeTest = require('stripe')(process.env.STRIPE_SECRET_KEY_TEST);
 const stripeLive = require('stripe')(process.env.STRIPE_SECRET_KEY_LIVE);
 const AppState = require("../models/AppState");
 const User = require("../models/User");
 const GroupChat = require("../models/GroupChat");
+const PaymentHistory = require("../models/PaymentHistory");
 const { assertBookingLeadTime } = require("../utils/bookingLeadTime");
 
 const stripePay = async (req, res) => {
@@ -36,16 +48,46 @@ const stripePay = async (req, res) => {
 
 const createStripePaymentIntent = async (req, res) => {
     try {
-        const { groupChatId, expertId, duration } = req.body
+        const { groupChatId, expertId, duration, seatRequestId } = req.body
         const payerId = req.user?.userId ? String(req.user.userId) : '';
         const appState = await AppState.findOne();
         const stripeMode = appState?.stripeMode === 'live' ? 'live' : 'test';
+        // The client's choice is only a request: for a booking already taken through the
+        // wallet path, the stored mode is pinned over it (see pinnedSettlementMode).
+        let paymentMode = normalizePaymentMode(req.body.paymentMethod);
+        let wallet = paymentMode === 'wallet';
 
         let expectedCents: number;
         let metadata: Record<string, string>;
         let manualCapture = false;
         let requiresApproval = false;
-        if (groupChatId) {
+        if (seatRequestId) {
+            // Paying for an overflow seat the host already approved. Nothing was ever
+            // held here, so the amount comes from the snapshot taken at approval.
+            const SeminarSeatRequest = require("../models/SeminarSeatRequest");
+            const request = await SeminarSeatRequest.findById(String(seatRequestId));
+            if (!request || String(request.customer) !== payerId) {
+                return res.status(404).send({ error: 'Seat request not found.' });
+            }
+            if (request.status !== 'awaiting_payment') {
+                return res.status(409).send({ error: WALLET_NOT_YET_PAYABLE });
+            }
+            if (paymentWindowLapsed(request.paymentDeadline)) {
+                return res.status(410).send({ error: 'The payment window for this seat has closed.' });
+            }
+            // This seat was requested without a hold, so it settles in the mode it was
+            // requested under — paying by card here would be an opt-out of the deposit
+            // every other student going through the card path has to make.
+            paymentMode = pinnedSettlementMode(request.paymentMode);
+            wallet = paymentMode === 'wallet';
+            expectedCents = Number(request.amount) || 0;
+            metadata = {
+                bookingType: 'groupChat',
+                groupChatId: String(request.groupChat),
+                seatRequestId: String(request._id),
+                userId: payerId,
+            };
+        } else if (groupChatId) {
             const groupChat = await GroupChat.findById(String(groupChatId));
             if (!groupChat) {
                 return res.status(404).send(BOOKING_PAYMENT_AMOUNT_INVALID);
@@ -63,8 +105,41 @@ const createStripePaymentIntent = async (req, res) => {
                 if (groupChat.status === 'cancelled') {
                     return res.status(400).send({ error: 'This session is no longer available.' });
                 }
-                // Hold the funds; they are captured only once the session is active.
-                manualCapture = true;
+                const alreadyPaid = await PaymentHistory.exists({
+                    groupChat: String(groupChat._id),
+                    paymentType: 'charge',
+                    status: { $in: ['completed', 'pending', 'withheld'] },
+                });
+                if (groupChat.status === 'active' || alreadyPaid) {
+                    return res.status(409).send({ error: 'This session has already been paid for.' });
+                }
+                const startMs = groupChat.start ? new Date(groupChat.start).getTime() : 0;
+                if (startMs && startMs <= Date.now()) {
+                    return res.status(400).send({ error: "This session's start time has already passed." });
+                }
+                // A session requested via the wallet path carries no hold, so it settles
+                // in that same mode — otherwise the wallet tab is just a way to book an
+                // expert's time without committing anything.
+                if (isWallet(groupChat.paymentMode)) {
+                    paymentMode = 'wallet';
+                    wallet = true;
+                }
+
+                if (wallet) {
+                    const expertProposed = String(groupChat.createdBy) === String(groupChat.admin);
+                    const accepted = !!groupChat.paymentDeadline || expertProposed;
+                    if (!walletChargeAllowed({ flow: 'oneToOne', approved: accepted })) {
+                        return res.status(409).send({ error: WALLET_NOT_YET_PAYABLE });
+                    }
+                } else {
+                    // Hold the funds; they are captured only once the session is active.
+                    manualCapture = true;
+                }
+                // An expert's offer expires whether or not it was going to settle by
+                // wallet, so the window is checked on both rails before an intent exists.
+                if (paymentWindowLapsed(groupChat.paymentDeadline)) {
+                    return res.status(410).send({ error: 'The payment window for this session has closed.' });
+                }
             }
 
             if (groupChat.type === 'seminar') {
@@ -89,6 +164,9 @@ const createStripePaymentIntent = async (req, res) => {
                     if (unavailable) {
                         return res.status(400).send({ error: unavailable });
                     }
+                    if (wallet) {
+                        return res.status(409).send({ error: WALLET_NEEDS_APPROVAL_MESSAGE });
+                    }
                     manualCapture = true;
                     requiresApproval = true;
                     metadata.seatRequest = 'true';
@@ -109,13 +187,17 @@ const createStripePaymentIntent = async (req, res) => {
                     } catch (leadErr) {
                         return res.status(400).send({ error: leadErr.message || 'This seminar can no longer be booked.' });
                     }
-                    manualCapture = true;
+                    if (!wallet) manualCapture = true;
                 }
             }
         } else {
             const expertUser = await User.findById(String(expertId));
             if (!expertUser) {
                 return res.status(404).send(BOOKING_PAYMENT_AMOUNT_INVALID);
+            }
+            // A brand-new 1:1 still needs the expert's yes, which a wallet cannot wait on.
+            if (wallet) {
+                return res.status(409).send({ error: WALLET_NEEDS_APPROVAL_MESSAGE });
             }
             expectedCents = expectedBookingIntentCents({ kind: 'oneToOne', durationMinutes: Number(duration), hourlyRateDollars: extractHourlyRate(expertUser.price) });
             metadata = { bookingType: 'oneToOne', expertId: String(expertUser._id), duration: String(duration), userId: payerId };
@@ -130,14 +212,20 @@ const createStripePaymentIntent = async (req, res) => {
         const paymentIntent = await stripe.paymentIntents.create({
             amount: expectedCents,
             currency: 'usd',
-            automatic_payment_methods: { enabled: true },
+            ...(wallet
+                ? {
+                    payment_method_types: WALLET_PAYMENT_METHOD_TYPES,
+                    payment_method_options: { wechat_pay: { client: 'web' } },
+                }
+                : { automatic_payment_methods: { enabled: true } }),
             ...(manualCapture ? { capture_method: 'manual' } : {}),
-            metadata,
+            metadata: { ...metadata, paymentMode },
         });
         res.send({
             client_secret: paymentIntent.client_secret,
             requiresApproval,
             holdsFunds: manualCapture,
+            paymentMode,
         });
     } catch (err) {
         console.log(err);
@@ -178,6 +266,7 @@ const getStripeMode = async (req, res) => {
         res.send({
             stripeMode: appState.stripeMode,
             seminarApprovalDeadlineHours: appState.seminarApprovalDeadlineHours ?? 24,
+            paymentWindowHours: paymentWindowHours(appState),
         });
     } catch (err) {
         console.log(err);
@@ -199,6 +288,26 @@ const setSeminarApprovalDeadline = async (req, res) => {
             await appState.save();
         }
         res.send({ result: 'SUCCESS', seminarApprovalDeadlineHours: appState.seminarApprovalDeadlineHours });
+    } catch (err) {
+        console.log(err);
+        return res.status(500).send(HTTP_GENERIC_ERROR);
+    }
+};
+
+const setPaymentWindow = async (req, res) => {
+    try {
+        const hours = Number(req.body.paymentWindowHours);
+        if (!Number.isFinite(hours) || hours <= 0 || hours > 168) {
+            return res.status(400).send({ error: 'The payment window must be between 1 and 168 hours.' });
+        }
+        let appState = await AppState.findOne();
+        if (!appState) {
+            appState = await AppState.create({ paymentWindowHours: hours });
+        } else {
+            appState.paymentWindowHours = hours;
+            await appState.save();
+        }
+        res.send({ result: 'SUCCESS', paymentWindowHours: appState.paymentWindowHours });
     } catch (err) {
         console.log(err);
         return res.status(500).send(HTTP_GENERIC_ERROR);
@@ -237,6 +346,20 @@ const checkPaymentIntentAuthorized = async (payment_intent, stripeMode) => {
     }
 };
 
+const checkPaymentIntentProcessing = async (payment_intent, stripeMode) => {
+    try {
+        const stripe = require('stripe')(stripeMode === 'test' ? process.env.STRIPE_SECRET_KEY_TEST : process.env.STRIPE_SECRET_KEY_LIVE);
+        const paymentIntent = await stripe.paymentIntents.retrieve(payment_intent, { expand: ['latest_charge'] });
+        if (paymentIntent?.status === 'processing') {
+            return paymentIntent;
+        }
+        return false;
+    } catch (err) {
+        console.log('[checkPaymentIntentProcessing]', err.message);
+        return false;
+    }
+};
+
 const capturePaymentIntent = async (payment_intent, stripeMode, amountToCaptureCents?: number) => {
     try {
         const stripe = require('stripe')(stripeMode === 'test' ? process.env.STRIPE_SECRET_KEY_TEST : process.env.STRIPE_SECRET_KEY_LIVE);
@@ -271,19 +394,48 @@ const refundPaymentIntent = async (payment_intent, amountCents, stripeMode) => {
             payment_intent: payment_intent,
         };
 
-        // Add amount if specified (for partial refunds)
-        if (amountCents) {
-            refundData.amount = Math.round(Math.abs(Number(amountCents)));
+        if (amountCents !== null && amountCents !== undefined && amountCents !== '') {
+            const cents = Math.round(Math.abs(Number(amountCents)));
+            if (!Number.isFinite(cents) || cents < 1) {
+                console.log('[refundPaymentIntent] nothing to refund on', payment_intent, '— requested amount rounds to zero');
+                return false;
+            }
+            refundData.amount = cents;
         }
 
         const refund = await stripe.refunds.create(refundData);
         console.log('Refund succeeded', refund);
         return refund
     } catch (err) {
+        const existing = await settledRefundForIntent(payment_intent, stripeMode);
+        if (existing) {
+            console.log('[refundPaymentIntent] already refunded at Stripe, reusing', existing.id);
+            return { ...existing, alreadyRefunded: true };
+        }
         console.log('[refundPaymentIntent]', err.message)
         return false
     }
 }
+const settledRefundForIntent = async (payment_intent: string, stripeMode: string) => {
+    try {
+        const stripe = require('stripe')(stripeMode === 'test' ? process.env.STRIPE_SECRET_KEY_TEST : process.env.STRIPE_SECRET_KEY_LIVE);
+        const intent = await stripe.paymentIntents.retrieve(payment_intent, { expand: ['latest_charge'] });
+        const charge = intent?.latest_charge && typeof intent.latest_charge === 'object'
+            ? intent.latest_charge
+            : null;
+        if (!charge) return null;
+
+        const paid = Number(charge.amount_captured ?? charge.amount ?? 0);
+        const refunded = Number(charge.amount_refunded ?? 0);
+        if (!(refunded > 0) || refunded < paid) return null;
+
+        const refunds = await stripe.refunds.list({ payment_intent, limit: 1 });
+        return refunds?.data?.[0] || null;
+    } catch (err: any) {
+        console.log('[settledRefundForIntent]', err.message);
+        return null;
+    }
+};
 
 const listReconcilableBookingIntents = async (
     stripeMode: string,
@@ -331,10 +483,73 @@ const enrichPaymentIntentReceipt = async ({ payment_intent, stripeMode, descript
     }
 };
 
-const sendBookingReceiptAndConfirmation = async ({ payment_intent, charge, sessionType, sessionName, expertName, studentName, studentEmail, start, duration, timeZone }) => {
+const describePaymentMethod = (intent: any): string => {
+    const types: string[] = Array.isArray(intent?.payment_method_types) ? intent.payment_method_types : [];
+    if (types.includes('wechat_pay')) return 'WeChat Pay';
+    if (types.includes('alipay')) return 'Alipay';
+    if (types.includes('card')) return 'Credit card';
+    return '';
+};
+
+const {
+    renderEmail: renderStripeEmail,
+    emailAttachments: stripeAttachments,
+    moneyFromCents: stripeMoneyFromCents,
+    paragraph: stripeParagraph,
+    facts: stripeFacts,
+    button: stripeButton,
+    callout: stripeCallout,
+    escapeHtml: stripeEscape,
+} = require("../services/emailTemplate");
+
+const buildPaymentRequestEmail = ({ customerName, amountCents, description, url }: any) => renderStripeEmail({
+    heading: 'Payment requested',
+    previewText: `${stripeMoneyFromCents(amountCents)} due.`,
+    blocks: [
+        stripeParagraph(`Hello ${stripeEscape(customerName || 'there')},`),
+        stripeFacts([
+            ['Amount', stripeMoneyFromCents(amountCents)],
+            ['For', description],
+        ]),
+        stripeButton(`Pay ${stripeMoneyFromCents(amountCents)}`, url),
+        stripeParagraph('Payment is handled securely by Stripe. You will receive a confirmation email once it has been processed.', { muted: true }),
+    ],
+});
+
+const buildRefundEmail = ({ customerName, amountCents, currency, isFullRefund, retainedCents, description, expertName, start, reference }: any) => renderStripeEmail({
+    heading: 'Your refund has been processed',
+    previewText: `${stripeMoneyFromCents(amountCents, currency)} refunded.`,
+    blocks: [
+        stripeParagraph(`Dear ${stripeEscape(customerName || 'there')}, your refund has been processed.`),
+        stripeFacts([
+            ['Booking', description],
+            ['Expert', expertName],
+            ['Scheduled for', start],
+            ['Refund amount', stripeMoneyFromCents(amountCents, currency)],
+            ['Refund date', new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })],
+            ['Reference', reference],
+        ]),
+        isFullRefund
+            ? ''
+            : stripeCallout(`${stripeMoneyFromCents(retainedCents, currency)} of your original payment has been retained in accordance with the applicable cancellation and refund policy.`),
+        stripeCallout('The refund will be credited to your original payment method and may take 5–10 business days to appear, depending on your bank. Your card issuer may notify you separately when it posts.', 'bad'),
+        stripeParagraph('If the refund has not reached you within 10 business days, contact the administrator through WisdomLinked quoting the reference above.', { muted: true }),
+    ],
+});
+
+const sendBookingReceiptAndConfirmation = async ({ payment_intent, charge, sessionType, sessionName, expertName, studentName, studentEmail, start, duration, timeZone, noteHtml = '' }) => {
     try {
         if (!charge || !studentEmail) return;
+        if (!payment_intent) return;
+
+        const settled = await checkPaymentIntentSucceeded(payment_intent, charge.paidBy);
+        if (!settled) {
+            console.log('[sendBookingReceiptAndConfirmation] no receipt for uncaptured payment', payment_intent);
+            return;
+        }
+
         const { sendPaymentConfirmationEmail } = require("../services/notifications");
+        const paymentMethodLabel = describePaymentMethod(settled);
         const dateStr = new Date(start).toLocaleString("en-US", { timeZone: timeZone || "UTC" });
         const description = `WisdomLinked ${sessionType} — "${sessionName}" with ${expertName} · ${dateStr}`;
         const metadata = {
@@ -363,7 +578,10 @@ const sendBookingReceiptAndConfirmation = async ({ payment_intent, charge, sessi
             amount: charge.amount,
             currency: charge.currency,
             receiptUrl: charge.receiptUrl,
+            receiptNumber: charge.receiptNumber,
+            paymentMethod: paymentMethodLabel,
             timeZone,
+            noteHtml,
         });
     } catch (err) {
         console.error('[sendBookingReceiptAndConfirmation]', err.message);
@@ -456,42 +674,12 @@ const sendPaymentLinkToUser = async (req, res) => {
         await immediatePaymentHistory.save();
         console.log('Created pending payment record:', immediatePaymentHistory._id);
 
-        const html = `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-            <div style="background-color: #f8f9fa; padding: 20px; border-radius: 8px; border-left: 4px solid #007bff;">
-                <h2 style="color: #007bff; margin-top: 0;">Pending Payment Request</h2>
-                <p>Hello,</p>
-                
-                <p>You have a pending payment for our services. Please use the link below to complete your payment:</p>
-                
-                <div style="background-color: white; padding: 15px; border-radius: 5px; margin: 15px 0;">
-                    <h3 style="margin-top: 0; color: #333;">Payment Details</h3>
-                    <p><strong>Amount:</strong> $${(finalAmount / 100).toFixed(2)} USD</p>
-                    <p><strong>Description:</strong> ${finalDescription}</p>
-                </div>
-                
-                <div style="text-align: center; margin: 20px 0;">
-                    <a href="${paymentLink.url}" style="background-color: #007bff; color: white; padding: 12px 24px; text-decoration: none; border-radius: 5px; display: inline-block; font-weight: bold;">Complete Payment</a>
-                </div>
-                
-                <p><strong>Payment Process:</strong></p>
-                <ul>
-                    <li>Click the "Complete Payment" button above</li>
-                    <li>Enter your payment details securely through Stripe</li>
-                    <li>You will receive a confirmation email once payment is processed</li>
-                </ul>
-                
-                <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;">
-                
-                <p style="color: #666; font-size: 14px;">
-                    If you have any questions about this payment request, please contact our support team.<br><br>
-                    Best regards,<br>
-                    <strong>WisdomLinked Team</strong>
-                </p>
-            </div>
-        </div>
-        `;
-
+        const html = buildPaymentRequestEmail({
+            customerName: paymentHistory?.customer?.username,
+            amountCents: finalAmount,
+            description: finalDescription,
+            url: paymentLink.url,
+        });
 
         const msg = {
             to: customerEmail,
@@ -499,10 +687,12 @@ const sendPaymentLinkToUser = async (req, res) => {
                 name: "WisdomLinked",
                 email: adminEmail,
             },
-            subject: "Pending Payment - WisdomLinked",
+            subject: `Payment requested — ${stripeMoneyFromCents(finalAmount)} due`,
             html,
         };
 
+        const inline_msg = stripeAttachments();
+        if (inline_msg.length) (msg as any).attachments = inline_msg;
         await sgMail.send(msg);
 
         res.status(200).json({
@@ -806,6 +996,20 @@ const processRefund = async (req, res) => {
             });
         }
 
+        if (paymentHistory.status === 'withheld') {
+            return res.status(400).json({
+                status: 'FAILED',
+                message: 'This payment is authorized but not captured, so there is nothing to refund. Decline the request to release the authorization instead.'
+            });
+        }
+
+        if (paymentHistory.status === 'released') {
+            return res.status(400).json({
+                status: 'FAILED',
+                message: 'This authorization was already released and never charged, so there is nothing to refund.'
+            });
+        }
+
         if (!paymentHistory.paymentIntent) {
             return res.status(400).json({
                 status: 'FAILED',
@@ -837,6 +1041,14 @@ const processRefund = async (req, res) => {
             return res.status(500).json({
                 status: 'FAILED',
                 message: 'Failed to process refund with Stripe.'
+            });
+        }
+
+        if ((refundResult as any).alreadyRefunded) {
+            await PaymentHistory.findByIdAndUpdate(paymentHistory._id, { status: 'refunded' }).catch(() => null);
+            return res.status(409).json({
+                status: 'FAILED',
+                message: 'This charge was already fully refunded at Stripe. No further refund was made; the payment record has been corrected.'
             });
         }
 
@@ -874,43 +1086,19 @@ const processRefund = async (req, res) => {
 
             const refundType = isFullRefund ? 'Full Refund' : 'Partial Refund';
 
-            const refundEmailHtml = `
-            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-                <div style="background-color: #f8f9fa; padding: 20px; border-radius: 8px; border-left: 4px solid #28a745;">
-                    <h2 style="color: #28a745; margin-top: 0;">${refundType} Processed - WisdomLinked</h2>
-                    <p>Dear Valued Customer,</p>
-                    
-                    <p>We have processed a refund for your payment. Here are the details:</p>
-                    
-                    <div style="background-color: white; padding: 15px; border-radius: 5px; margin: 15px 0;">
-                        <h3 style="margin-top: 0; color: #333;">Refund Details</h3>
-                        <p><strong>Refund Amount:</strong> $${refundAmount.toFixed(2)} ${(paymentHistory.currency || 'USD').toUpperCase()}</p>
-                        <p><strong>Original Payment Amount:</strong> $${maxRefundAmount.toFixed(2)} ${(paymentHistory.currency || 'USD').toUpperCase()}</p>
-                        <p><strong>Refund Type:</strong> ${refundType}</p>
-                        <p><strong>Reason:</strong> ${refundReason}</p>
-                        <p><strong>Original Description:</strong> ${paymentHistory.description || 'N/A'}</p>
-                        <p><strong>Refund Date:</strong> ${new Date().toLocaleDateString()}</p>
-                    </div>
-                    
-                    <p><strong>What happens next?</strong></p>
-                    <ul>
-                        <li>The refund will appear on your original payment method within 5-10 business days</li>
-                        <li>You will receive a separate notification from your bank/card provider when the refund is processed</li>
-                        ${!isFullRefund ? '<li>The remaining balance on your original payment remains valid</li>' : ''}
-                    </ul>
-                    
-                    <p>If you have any questions about this refund, please don't hesitate to contact our support team.</p>
-                    
-                    <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;">
-                    
-                    <p style="color: #666; font-size: 14px;">
-                        Thank you for your understanding.<br>
-                        Best regards,<br>
-                        <strong>WisdomLinked Support Team</strong>
-                    </p>
-                </div>
-            </div>
-            `;
+            const refundEmailHtml = buildRefundEmail({
+                customerName: paymentHistory.customer?.username,
+                amountCents: Math.round(refundAmount * 100),
+                currency: paymentHistory.currency,
+                isFullRefund,
+                retainedCents: Math.round((maxRefundAmount - refundAmount) * 100),
+                description: paymentHistory.description,
+                expertName: paymentHistory.expert?.username,
+                start: paymentHistory.groupChat?.start
+                    ? new Date(paymentHistory.groupChat.start).toLocaleString()
+                    : '',
+                reference: refundHistory?._id ? String(refundHistory._id) : paymentHistory.paymentIntent,
+            });
 
             const refundEmailMsg = {
                 to: paymentHistory.customer.email,
@@ -918,11 +1106,13 @@ const processRefund = async (req, res) => {
                     name: "WisdomLinked",
                     email: adminEmail,
                 },
-                subject: `${refundType} Confirmation - WisdomLinked`,
+                subject: `${stripeMoneyFromCents(Math.round(refundAmount * 100), paymentHistory.currency)} refund processed`,
                 html: refundEmailHtml,
             };
 
             try {
+                const inline_refundEmailMsg = stripeAttachments();
+                if (inline_refundEmailMsg.length) (refundEmailMsg as any).attachments = inline_refundEmailMsg;
                 await sgMail.send(refundEmailMsg);
                 console.log('Refund notification email sent to:', paymentHistory.customer.email);
             } catch (emailError) {
@@ -1076,41 +1266,12 @@ const sendAdHocPaymentLink = async (req, res) => {
         const adminEmail = "noreply@wisdomlinked.com";
         sgMail.setApiKey(process.env.SENDGRID_API_KEY);
 
-        const html = `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-            <div style="background-color: #f8f9fa; padding: 20px; border-radius: 8px; border-left: 4px solid #007bff;">
-                <h2 style="color: #007bff; margin-top: 0;">Payment Request - WisdomLinked</h2>
-                <p>Hello${customerName ? ` ${customerName}` : ''},</p>
-                
-                <p>You have received a payment request from WisdomLinked. Please use the link below to complete your payment:</p>
-                
-                <div style="background-color: white; padding: 15px; border-radius: 5px; margin: 15px 0;">
-                    <h3 style="margin-top: 0; color: #333;">Payment Details</h3>
-                    <p><strong>Amount:</strong> $${(finalAmount / 100).toFixed(2)} USD</p>
-                    <p><strong>Description:</strong> ${finalDescription}</p>
-                </div>
-                
-                <div style="text-align: center; margin: 20px 0;">
-                    <a href="${paymentLink.url}" style="background-color: #007bff; color: white; padding: 12px 24px; text-decoration: none; border-radius: 5px; display: inline-block; font-weight: bold;">Complete Payment</a>
-                </div>
-                
-                <p><strong>Payment Process:</strong></p>
-                <ul>
-                    <li>Click the "Complete Payment" button above</li>
-                    <li>Enter your payment details securely through Stripe</li>
-                    <li>You will receive a confirmation email once payment is processed</li>
-                </ul>
-                
-                <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;">
-                
-                <p style="color: #666; font-size: 14px;">
-                    If you have any questions about this payment request, please contact our support team.<br><br>
-                    Best regards,<br>
-                    <strong>WisdomLinked Team</strong>
-                </p>
-            </div>
-        </div>
-        `;
+        const html = buildPaymentRequestEmail({
+            customerName: customerName || (customerEmail || '').split('@')[0],
+            amountCents: finalAmount,
+            description: finalDescription,
+            url: paymentLink.url,
+        });
 
         const emailMsg = {
             to: customerEmail.trim(),
@@ -1118,10 +1279,12 @@ const sendAdHocPaymentLink = async (req, res) => {
                 name: "WisdomLinked",
                 email: adminEmail,
             },
-            subject: `Payment Request - $${(finalAmount / 100).toFixed(2)} - WisdomLinked`,
+            subject: `Payment requested — ${stripeMoneyFromCents(finalAmount)} due`,
             html: html,
         };
 
+        const inline_emailMsg = stripeAttachments();
+        if (inline_emailMsg.length) (emailMsg as any).attachments = inline_emailMsg;
         await sgMail.send(emailMsg);
         console.log('Ad-hoc payment link email sent to:', customerEmail.trim());
 
@@ -1152,10 +1315,12 @@ module.exports = {
     getStripeMode,
     checkPaymentIntentSucceeded,
     checkPaymentIntentAuthorized,
+    checkPaymentIntentProcessing,
     capturePaymentIntent,
     cancelPaymentIntent,
     setStripeMode,
     setSeminarApprovalDeadline,
+    setPaymentWindow,
     refundPaymentIntent,
     listReconcilableBookingIntents,
     sendPaymentLinkToUser,
