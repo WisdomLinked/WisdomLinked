@@ -1620,7 +1620,7 @@ const StudentChat: React.FC = () => {
             </div>
           </div>
 
-          <div className="flex min-h-0 flex-1 flex-col pt-1 border-t border-slate-200">
+          <div className="flex shrink-0 flex-col pt-1 border-t border-slate-200">
             <div className="mb-2 flex items-center justify-between gap-2">
               <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-slate-600">Seminars</p>
             </div>
@@ -1635,7 +1635,7 @@ const StudentChat: React.FC = () => {
                 className="flex-1 min-w-0 bg-transparent outline-none text-xs text-slate-700 placeholder:text-slate-400"
               />
             </div>
-            <div className="wl-chat-scroll min-h-[3rem] flex-1 overflow-y-auto pr-1">
+            <div className="wl-chat-scroll min-h-[3rem] max-h-[15rem] overflow-y-auto pr-1">
             {filteredSeminars.length === 0 ? (
               <p className="px-2 py-3 text-[11px] text-slate-500">
                 {seminarQuery.trim()

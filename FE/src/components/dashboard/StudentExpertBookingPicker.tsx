@@ -376,8 +376,8 @@ function StudentExpertBookingPicker({
         return {
           className: dayClass,
           style: {
-            backgroundColor: '#E5E2DB',
-            color: '#7A7A72',
+            backgroundColor: '#CDC9C0',
+            color: '#54524C',
             cursor: 'not-allowed',
           },
         };
@@ -410,10 +410,10 @@ function StudentExpertBookingPicker({
         } else if (hasEvent) {
           backgroundColor = '#FEF3C7';
         } else {
-          backgroundColor = '#E8F0F8';
+          backgroundColor = '#DCFCE7';
         }
       } else if (daySlots.includes(filterSlotIndex)) {
-        backgroundColor = '#E8F0F8';
+        backgroundColor = '#DCFCE7';
       } else {
         backgroundColor = '#FEE2E2';
       }
@@ -515,6 +515,9 @@ function StudentExpertBookingPicker({
         confirmedSlotStart != null && isSameViewerCalendarDay(date, confirmedSlotStart);
       const clickable = isDayClickable(date);
       const cursorClass = clickable ? 'cursor-pointer' : 'cursor-not-allowed';
+      const isPast =
+        getViewerYmdFromCalendarDate(date) < toYMDInTimeZone(new Date(), viewerTz);
+      const pastClass = isPast ? ' studentBookingCalendar-day-past' : '';
       const content = (
         <span
           className={
@@ -538,7 +541,7 @@ function StudentExpertBookingPicker({
       return (
         <button
           type="button"
-          className={`rbc-button-link ${cursorClass}${isSelected ? ' studentBookingCalendar-day-selected' : ''}`}
+          className={`rbc-button-link ${cursorClass}${pastClass}${isSelected ? ' studentBookingCalendar-day-selected' : ''}`}
           title={blockedTitle}
           aria-label={isSelected ? `${label}, selected` : label}
           onClick={(event) => {
@@ -551,7 +554,7 @@ function StudentExpertBookingPicker({
         </button>
       );
     },
-    [confirmedSlotStart, getBlockedDayTitle, isDayClickable, openDay],
+    [confirmedSlotStart, getBlockedDayTitle, isDayClickable, openDay, viewerTz],
   );
 
   const calendarComponents = useMemo(
@@ -681,7 +684,7 @@ function StudentExpertBookingPicker({
           </p>
           <div className="mt-2 flex flex-wrap gap-3 text-[12px] text-[#1A3A4A]">
             <span className="inline-flex items-center gap-1.5">
-              <span className="h-3 w-3 rounded-sm bg-[#E8F0F8] border border-[#234C6A]/30" />
+              <span className="h-3 w-3 rounded-sm bg-[#DCFCE7] border border-green-300" />
               Available
             </span>
             <span className="inline-flex items-center gap-1.5">
@@ -690,7 +693,11 @@ function StudentExpertBookingPicker({
             </span>
             <span className="inline-flex items-center gap-1.5">
               <span className="h-3 w-3 rounded-sm bg-[#FEE2E2] border border-red-200" />
-              Unavailable
+              Fully booked
+            </span>
+            <span className="inline-flex items-center gap-1.5">
+              <span className="h-3 w-3 rounded-sm bg-[#CDC9C0] border border-[#7A7A72]/40" />
+              Past
             </span>
           </div>
           <p className="mt-2 text-[12px] text-[#7A7A72]">

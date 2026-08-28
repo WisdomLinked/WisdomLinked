@@ -724,9 +724,16 @@ export default function ExpertDashboard() {
 
     // Pending requests are NOT scoped to the today/week range — the expert must
     // see every booking awaiting action regardless of which date window is shown.
-    const byNewest = (a: any, b: any) =>
-      new Date(b.createdAt || b.start).getTime() -
-      new Date(a.createdAt || a.start).getTime();
+    // Every session list is ordered by when the session happens, so a card sits in the
+    // same place whether it is read on the dashboard or in the modal. Ordering pending
+    // requests by arrival instead put them in a different order from the same rows in
+    // the modal, which sorts by start.
+    const byStart = (a: any, b: any) => {
+      const at = new Date(a.start).getTime();
+      const bt = new Date(b.start).getTime();
+      if (at !== bt) return at - bt;
+      return String(a.name || '').localeCompare(String(b.name || ''));
+    };
 
     const stillPending = (groupChats || []).filter(
       (g: any) =>
@@ -737,12 +744,12 @@ export default function ExpertDashboard() {
 
     // A wallet request the expert already accepted stays `pending` until the student
     // pays, so it must not be counted or offered as something left to decide.
-    const pendingSess = stillPending.filter((g: any) => awaitsExpertDecision(g)).sort(byNewest);
-    const awaitingPaymentSess = stillPending.filter((g: any) => awaitsWalletPayment(g)).sort(byNewest);
+    const pendingSess = stillPending.filter((g: any) => awaitsExpertDecision(g)).sort(byStart);
+    const awaitingPaymentSess = stillPending.filter((g: any) => awaitsWalletPayment(g)).sort(byStart);
 
     return {
       acceptedSeminars: seminars,
-      bookedSessions: sessions,
+      bookedSessions: [...sessions].sort(byStart),
       pendingSessions: pendingSess,
       awaitingPaymentSessions: awaitingPaymentSess,
     };
