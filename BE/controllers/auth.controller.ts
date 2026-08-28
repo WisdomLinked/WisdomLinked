@@ -849,6 +849,15 @@ const updateMissedChats = async (req: any, res: Response) => {
     }
 }
 
+const withoutOperatorKeys = (source: Record<string, any>): Record<string, any> => {
+    const safe: Record<string, any> = {};
+    for (const key of Object.keys(source)) {
+        if (key.startsWith('$') || key.includes('.')) continue;
+        safe[key] = source[key];
+    }
+    return safe;
+};
+
 const updateProfile = async (req: any, res: Response) => {
     try {
         const { email } = req.user
@@ -1028,7 +1037,7 @@ const updateProfile = async (req: any, res: Response) => {
         }
 
         // [User Model] -- add more updating fields based on the user model
-        await User.findOneAndUpdate({ email: String(email) }, updates, { new: true })
+        await User.findOneAndUpdate({ email: String(email) }, { $set: withoutOperatorKeys(updates) }, { new: true })
 
         const resultEmail = boundEmail || email;
         if (freshToken) {

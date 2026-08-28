@@ -109,7 +109,7 @@ app.use(express.static(uploadsRoot));
 app.get('/uploads/*', apiLimiter, (req, res) => {
     const requested = path.normalize(decodeURI(req.path.replace(/^\/uploads\/?/, '')));
     const resolved = path.resolve(uploadsRoot, requested);
-    if (resolved !== uploadsRoot && !resolved.startsWith(uploadsRoot + path.sep)) {
+    if (!resolved.startsWith(uploadsRoot + path.sep)) {
         return res.status(404).send('Not found');
     }
     return res.sendFile(resolved);

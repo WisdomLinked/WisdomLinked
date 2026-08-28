@@ -2,7 +2,9 @@ export type ProfileImageFetcher = (imageRef: string, size: string) => Promise<un
 
 export const isDisplayImageUrl = (value: unknown): value is string => {
   const v = typeof value === "string" ? value.trim() : "";
-  return !!v && (/^https?:\/\//i.test(v) || /^data:image\//i.test(v) || /^blob:/i.test(v) || v.startsWith("/"));
+  if (!v) return false;
+  if (/^data:image\/svg/i.test(v)) return false;
+  return /^https?:\/\//i.test(v) || /^data:image\//i.test(v) || /^blob:/i.test(v) || v.startsWith("/");
 };
 
 export const resolveProfileImageSrc = async (

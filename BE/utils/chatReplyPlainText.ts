@@ -17,7 +17,7 @@ export function peelHtmlReplyQuotesRegex(html: string): {
     const quotes: PeeledHtmlReplyQuote[] = [];
     let remaining = String(html ?? '').trim();
     const re =
-        /^<blockquote([^>]*)>\s*<strong>\s*Replying to([^<]+)<\/strong>\s*<br\s*\/?>\s*([\s\S]*?)<\/blockquote>/i;
+        /^<blockquote([^>]*)>\s*<strong>\s*Replying to([^<]+)<\/strong>\s*<br\s*\/?>([\s\S]*?)<\/blockquote>/i;
 
     for (let i = 0; i < 12; i++) {
         const m = remaining.match(re);
