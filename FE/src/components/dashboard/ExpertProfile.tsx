@@ -43,6 +43,8 @@ import {
 } from '../../utils/appointmentDurations';
 import { detectUserTimeZone, formatPickedSlotWhenDisplay } from '../../utils/schedulingTimezone';
 import { SetLoadingStatus } from '../../actions/appActions';
+import { showSuccessAlert } from '../../actions/alertActions';
+import { paymentBannerMessage, stripeTransactionId } from '../../utils/paymentBanner';
 
 type BookingStep = 'pick' | 'review' | 'pay' | 'success';
 
@@ -303,6 +305,15 @@ export default function ExpertProfile({
         window.localStorage.removeItem('pendingDetails');
         dispatch({ type: 'updateUserDetails', payload: (response as any).result });
         setBookingAwaitsWalletPayment(paymentMode === 'wallet');
+        dispatch(
+          showSuccessAlert(
+            paymentBannerMessage(
+              paymentMode === 'wallet'
+                ? { kind: 'requestSent', deciderName: mentor.name }
+                : { kind: 'withheld', amount: oneToOneSessionPrice, deciderName: mentor.name },
+            ),
+          ),
+        );
         setBookingStep('success');
       } catch (err: unknown) {
         const message = err instanceof Error ? err.message : 'Booking failed. Please try again.';
@@ -324,6 +335,7 @@ export default function ExpertProfile({
       oneToOneSessionPrice,
       expertDetails?._id,
       mentor.id,
+      mentor.name,
       dispatch,
     ],
   );
@@ -447,14 +459,14 @@ export default function ExpertProfile({
     return { past, upcoming };
   }, [expertDetails?.groupChats, myEnrollment, seatRequestIndex]);
 
-  const registerSeminar = useCallback(
-    async (paymentIntentId: string) => {
-      if (!seminarCheckout) return;
+  const registerSeminarFor = useCallback(
+    async (paymentIntentId: string, target: typeof seminarCheckout) => {
+      if (!target) return;
       SetLoadingStatus(true);
       setSeminarBookingError(null);
       try {
         const res: any = await registerForSeminar({
-          groupChatId: seminarCheckout.id,
+          groupChatId: target.id,
           payment_intent: paymentIntentId,
         });
         if (res === false || res?.status === 'FAIL' || res?.error) {
@@ -465,11 +477,29 @@ export default function ExpertProfile({
         }
         window.localStorage.removeItem('pendingDetails');
         if (res?.status === 'pending_approval') {
-          setSeminarSeatRequestedId(seminarCheckout.id);
+          dispatch(
+            showSuccessAlert(
+              paymentBannerMessage({
+                kind: 'withheld',
+                amount: target.price,
+                deciderName: mentor.name,
+              }),
+            ),
+          );
+          setSeminarSeatRequestedId(target.id);
           setSeminarCheckout(null);
           return;
         }
-        setSeminarBookingSuccessId(seminarCheckout.id);
+        dispatch(
+          showSuccessAlert(
+            paymentBannerMessage({
+              kind: 'paid',
+              forWhat: `you are registered for ${target.name}`,
+              transactionId: stripeTransactionId(paymentIntentId),
+            }),
+          ),
+        );
+        setSeminarBookingSuccessId(target.id);
         setSeminarCheckout(null);
         void loadExpertDetails();
       } catch (e: any) {
@@ -480,7 +510,14 @@ export default function ExpertProfile({
         SetLoadingStatus(false);
       }
     },
-    [seminarCheckout, loadExpertDetails],
+    [loadExpertDetails, mentor.name, dispatch],
+  );
+
+  const registerSeminar = useCallback(
+    (paymentIntentId: string) => {
+      void registerSeminarFor(paymentIntentId, seminarCheckout);
+    },
+    [registerSeminarFor, seminarCheckout],
   );
 
   // Settle an approved overflow seat, then reflect the new enrollment.
@@ -499,6 +536,15 @@ export default function ExpertProfile({
         return;
       }
       window.localStorage.removeItem('pendingDetails');
+      dispatch(
+        showSuccessAlert(
+          paymentBannerMessage({
+            kind: 'paid',
+            forWhat: 'your seat is confirmed',
+            transactionId: stripeTransactionId(paymentIntentId),
+          }),
+        ),
+      );
       setSeminarBookingSuccessId(seatPayTarget.groupChatId);
       setSeatPayTarget(null);
       void loadExpertDetails();
@@ -507,7 +553,7 @@ export default function ExpertProfile({
     } finally {
       SetLoadingStatus(false);
     }
-  }, [seatPayTarget, loadExpertDetails]);
+  }, [seatPayTarget, loadExpertDetails, dispatch]);
 
   // Wallet route for a full seminar: ask the host first, pay only once approved.
   const requestSeminarSeatWithWallet = useCallback(async () => {
@@ -819,12 +865,19 @@ export default function ExpertProfile({
                                     setSeminarBookingError('Please log in again to book this session.');
                                     return;
                                   }
-                                  setSeminarCheckout({
+                                  const target = {
                                     id: item.id,
                                     price: item.price,
                                     name: item.title,
                                     isSeatRequest: item.isFull,
-                                  });
+                                  };
+                                  // Nothing to collect on a free seminar, so the
+                                  // checkout would only ask them to confirm twice.
+                                  if (target.price > 0) {
+                                    setSeminarCheckout(target);
+                                    return;
+                                  }
+                                  void registerSeminarFor('0', target);
                                 }}
                                 className="inline-flex w-full items-center justify-center rounded-[4px] bg-[#1A3A4A] px-3 py-1.5 text-[11px] font-semibold text-white hover:bg-[#122635]"
                               >
