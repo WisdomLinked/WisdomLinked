@@ -7,6 +7,10 @@ export const isDisplayImageUrl = (value: unknown): value is string => {
   return /^https?:\/\//i.test(v) || /^data:image\//i.test(v) || /^blob:/i.test(v) || v.startsWith("/");
 };
 
+/** Guard at the point of use: anything that is not a displayable image URL renders no src at all. */
+export const safeImageSrc = (value: unknown): string | undefined =>
+  isDisplayImageUrl(value) ? value : undefined;
+
 export const resolveProfileImageSrc = async (
   imageRef: unknown,
   size: "small" | "medium" = "small",

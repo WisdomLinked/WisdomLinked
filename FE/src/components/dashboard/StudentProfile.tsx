@@ -19,7 +19,7 @@ import { doUpdateProfile, profileImageFetch, passwordResetRequest, confirmPasswo
 import FormAlert from '../FormAlert';
 import { useFormAlert } from '../../hooks/useFormAlert';
 import { usePaymentHistory, PaymentHistoryTable, PaymentHistorySummary } from './PaymentHistoryTable';
-import { resolveProfileImageSrc } from '../../utils/profileImage';
+import { resolveProfileImageSrc, safeImageSrc } from '../../utils/profileImage';
 import { saveProfilePhotoFile } from '../../utils/profileImageUpload';
 import { SERVICE_OPTIONS, canonicalLabelsFromMixedServiceEntries } from '../../constants/serviceOptions';
 import MajorSelect from '../MajorSelect';
@@ -471,7 +471,7 @@ export default function StudentProfile() {
             <div className="relative">
               <div className="h-24 w-24 rounded-2xl border-2 border-slate-200 bg-slate-100 overflow-hidden flex items-center justify-center">
                 {photoUrl ? (
-                  <img src={photoUrl} alt="Profile" className="h-full w-full object-cover" />
+                  <img src={safeImageSrc(photoUrl)} alt="Profile" className="h-full w-full object-cover" />
                 ) : (
                   <span className="text-3xl font-bold text-[#234C6A]">
                     {String(name ?? '')
