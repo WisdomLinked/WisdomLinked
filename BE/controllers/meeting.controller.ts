@@ -409,9 +409,9 @@ const reconcileStaleActiveMeetingFromHeartbeat = async (meeting: any): Promise<b
 
 const closeActiveMeetingsForScope = async (scope: { conversationId?: any; groupChatId?: any }) => {
     const query = scope.conversationId
-        ? { conversationId: scope.conversationId, status: 'active' }
+        ? { conversationId: String(scope.conversationId), status: 'active' }
         : scope.groupChatId
-          ? { groupChatId: scope.groupChatId, status: 'active' }
+          ? { groupChatId: String(scope.groupChatId), status: 'active' }
           : null;
     if (!query) return;
     const activeMeetings = await MeetingThread.find(query);
@@ -455,7 +455,8 @@ const requireMeetingAccess = async (
 export const startMeeting = async (req: any, res: Response) => {
     try {
         const { userId } = req.user;
-        const { conversationId, groupChatId } = req.body;
+        const conversationId = req.body?.conversationId ? String(req.body.conversationId) : '';
+        const groupChatId = req.body?.groupChatId ? String(req.body.groupChatId) : '';
 
         if (!conversationId && !groupChatId) {
             return res.status(400).json({ error: 'conversationId or groupChatId is required' });
@@ -597,7 +598,7 @@ export const startMeeting = async (req: any, res: Response) => {
 export const endMeeting = async (req: any, res: Response) => {
     try {
         const { userId } = req.user;
-        const { meetingThreadId } = req.body;
+        const meetingThreadId = req.body?.meetingThreadId ? String(req.body.meetingThreadId) : '';
         if (!meetingThreadId) return res.status(400).json({ error: 'meetingThreadId is required' });
 
         const meeting = await MeetingThread.findById(meetingThreadId).populate('startedBy');
@@ -645,7 +646,8 @@ export const endMeeting = async (req: any, res: Response) => {
 export const addTranscriptMessage = async (req: any, res: Response) => {
     try {
         const { userId } = req.user;
-        const { meetingThreadId, content, authorName } = req.body;
+        const { content, authorName } = req.body;
+        const meetingThreadId = req.body?.meetingThreadId ? String(req.body.meetingThreadId) : '';
 
         if (!meetingThreadId || !content) {
             return res.status(400).json({ error: 'meetingThreadId and content are required' });
@@ -852,7 +854,7 @@ export const syncMeetingChatMessage = async (req: any, res: Response) => {
 export const getMeetingThread = async (req: any, res: Response) => {
     try {
         const { userId } = req.user;
-        const { meetingThreadId } = req.params;
+        const meetingThreadId = String(req.params?.meetingThreadId ?? '');
 
         const rawMeeting = await MeetingThread.findById(meetingThreadId).select(
             'jitsiRoomName status conversationId groupChatId removedParticipants participants startedBy delegatedModerators startedAt endedAt duration lastHeartbeatAt lastReportedRemoteCount',
@@ -883,7 +885,7 @@ export const getMeetingThread = async (req: any, res: Response) => {
 export const getMeetingRatingState = async (req: any, res: Response) => {
     try {
         const { userId } = req.user;
-        const { meetingThreadId } = req.params;
+        const meetingThreadId = String(req.params?.meetingThreadId ?? '');
         const meeting = await MeetingThread.findById(meetingThreadId)
             .populate('startedBy', 'username _id')
             .populate('participants', 'username _id');
@@ -929,7 +931,8 @@ export const getMeetingRatingState = async (req: any, res: Response) => {
 export const submitMeetingRating = async (req: any, res: Response) => {
     try {
         const { userId } = req.user;
-        const { meetingThreadId, score, comment } = req.body;
+        const { score, comment } = req.body;
+        const meetingThreadId = req.body?.meetingThreadId ? String(req.body.meetingThreadId) : '';
         const numericScore = Number(score);
         if (!meetingThreadId) return res.status(400).json({ error: 'meetingThreadId is required' });
         if (!Number.isFinite(numericScore) || numericScore < 1 || numericScore > 5) {
@@ -1000,7 +1003,8 @@ const hashInviteToken = (token: string) => crypto.createHash('sha256').update(to
 export const createMeetingGuestInvite = async (req: any, res: Response) => {
     try {
         const { userId } = req.user;
-        const { meetingThreadId, ttlHours } = req.body || {};
+        const { ttlHours } = req.body || {};
+        const meetingThreadId = req.body?.meetingThreadId ? String(req.body.meetingThreadId) : '';
         if (!meetingThreadId) return res.status(400).json({ error: 'meetingThreadId is required' });
         const meeting = await MeetingThread.findById(meetingThreadId);
         if (!meeting) return res.status(404).json({ error: 'Meeting not found' });
@@ -1177,7 +1181,7 @@ export const joinMeetingFromGuestInvite = async (req: any, res: Response) => {
 export const getMeetingJoinInfo = async (req: any, res: Response) => {
     try {
         const { userId } = req.user;
-        const { meetingThreadId } = req.params;
+        const meetingThreadId = String(req.params?.meetingThreadId ?? '');
         if (!meetingThreadId) return res.status(400).json({ error: 'meetingThreadId is required' });
         const meeting = await MeetingThread.findById(meetingThreadId).select(
             'jitsiRoomName status conversationId groupChatId removedParticipants joinEvents participants startedBy delegatedModerators startedAt endedAt duration',
@@ -1238,7 +1242,9 @@ export const getMeetingJoinInfo = async (req: any, res: Response) => {
 export const revokeMeetingParticipant = async (req: any, res: Response) => {
     try {
         const { userId } = req.user;
-        const { meetingThreadId, targetUserId, reason } = req.body || {};
+        const { reason } = req.body || {};
+        const meetingThreadId = req.body?.meetingThreadId ? String(req.body.meetingThreadId) : '';
+        const targetUserId = req.body?.targetUserId ? String(req.body.targetUserId) : '';
         if (!meetingThreadId || !targetUserId) {
             return res.status(400).json({ error: 'meetingThreadId and targetUserId are required' });
         }
@@ -1363,7 +1369,7 @@ export const delegateMeetingModerator = async (req: any, res: Response) => {
     try {
         const userId = resolveMeetingActorUserId(req);
         const claims = req.meetingChatClaims as MeetingChatTokenClaims | undefined;
-        const { targetUserId } = req.body || {};
+        const targetUserId = req.body?.targetUserId ? String(req.body.targetUserId) : '';
         const meetingThreadId = meetingThreadIdFromRequest(req);
         if (claims?.typ === 'wl-meeting-chat' && meetingThreadId && String(claims.mid) !== meetingThreadId) {
             return res.status(400).json({ error: 'meetingThreadId does not match token' });
@@ -1416,7 +1422,7 @@ export const revokeDelegatedMeetingModerator = async (req: any, res: Response) =
     try {
         const userId = resolveMeetingActorUserId(req);
         const claims = req.meetingChatClaims as MeetingChatTokenClaims | undefined;
-        const { targetUserId } = req.body || {};
+        const targetUserId = req.body?.targetUserId ? String(req.body.targetUserId) : '';
         const meetingThreadId = meetingThreadIdFromRequest(req);
         if (claims?.typ === 'wl-meeting-chat' && meetingThreadId && String(claims.mid) !== meetingThreadId) {
             return res.status(400).json({ error: 'meetingThreadId does not match token' });

@@ -35,7 +35,9 @@ const escapeText = (value: string): string =>
   value
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
 
 function filterSafeSpanStyle(raw: string): string {
   const parts: string[] = [];
@@ -119,10 +121,15 @@ function anchorProps(attribs: Record<string, string | undefined>) {
 }
 
 export function sanitizeMessageHtml(html: string | undefined | null): string {
-  const cleaned = String(html || "").replace(
-    /<(script|style|iframe|object)\b[^>]*>[\s\S]*?<\/\1>|<(script|style|iframe|object)\b[^>]*\/?>/gi,
-    "",
-  );
+  let cleaned = String(html || "");
+  let previous: string;
+  do {
+    previous = cleaned;
+    cleaned = cleaned.replace(
+      /<(script|style|iframe|object)\b[^<>]*>[\s\S]*?<\/\1>|<(script|style|iframe|object)\b[^<>]*\/?>/gi,
+      "",
+    );
+  } while (cleaned !== previous);
 
   if (typeof window === "undefined" || typeof window.DOMParser === "undefined") {
     return escapeText(cleaned);

@@ -5,6 +5,26 @@
  */
 import { isRichHtmlWire } from './chatRichHtmlWire';
 
+
+const ENTITIES: Record<string, string> = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", '#39': "'", nbsp: ' ' };
+
+export function stripTags(value: string): string {
+    let out = String(value ?? '');
+    let previous: string;
+    do {
+        previous = out;
+        out = out.replace(/<[^<>]*>/g, '');
+    } while (out !== previous);
+    return out;
+}
+
+export function decodeBasicEntities(value: string): string {
+    return String(value ?? '').replace(
+        /&(amp|lt|gt|quot|apos|#39|nbsp);/gi,
+        (_match, name) => ENTITIES[String(name).toLowerCase()] ?? _match,
+    );
+}
+
 export function wlHtmlToPlainTextForRocketChat(raw: string): string {
     const s = String(raw ?? '');
     if (!s.trim()) return '';
@@ -14,16 +34,12 @@ export function wlHtmlToPlainTextForRocketChat(raw: string): string {
     if (s.startsWith('Chatfile:') || s.startsWith('Call Lasted for:') || s.startsWith('Seminar Lasted for:')) {
         return s;
     }
-    return s
+    const withBreaks = s
         .replace(/<br\s*\/?>/gi, '\n')
         .replace(/<\/p>/gi, '\n')
         .replace(/<\/div>/gi, '\n')
-        .replace(/<\/li>/gi, '\n')
-        .replace(/<[^>]+>/g, '')
-        .replace(/&nbsp;/g, ' ')
-        .replace(/&amp;/g, '&')
-        .replace(/&lt;/g, '<')
-        .replace(/&gt;/g, '>')
+        .replace(/<\/li>/gi, '\n');
+    return decodeBasicEntities(stripTags(withBreaks))
         .replace(/\r\n/g, '\n')
         .replace(/\n{3,}/g, '\n\n')
         .trim();

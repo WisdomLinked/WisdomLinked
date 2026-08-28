@@ -18,7 +18,7 @@ export const resolveProfileImageSrc = async (
   try {
     const fetched = await fetchProfileImage(raw, size);
     const url = typeof fetched === "string" ? fetched.trim() : "";
-    return url || null;
+    return isDisplayImageUrl(url) ? url : null;
   } catch {
     return null;
   }

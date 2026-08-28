@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 const jwt = require("jsonwebtoken");
 const UserModel = require('../models/User')
 const { authCookieOptions } = require('../config/authCookie')
+import { safeErrorMessage } from '../utils/httpUserFacingCopy';
 
 const config = process.env;
 
@@ -146,7 +147,7 @@ const requireAuth = (restrictUnderReview = false) => async (req, res, next) => {
         next();
     } catch (err) {
         console.log(err);
-        return res.status(401).send(err.message);
+        return res.status(401).send(safeErrorMessage(err));
     }
 };
 
@@ -203,7 +204,7 @@ const customerAuth = (restrictUnderReview = false) => async (req, res, next) => 
         next();
     } catch (err) {
         console.log(err);
-        return res.status(401).send(err.message);
+        return res.status(401).send(safeErrorMessage(err));
     }
 };
 
@@ -260,7 +261,7 @@ const expertAuth = (restrictUnderReview = false) => async (req, res, next) => {
         next();
     } catch (err) {
         console.log(err);
-        return res.status(401).send(err.message);
+        return res.status(401).send(safeErrorMessage(err));
     }
 };
 
@@ -309,7 +310,7 @@ const adminAuth = async (req, res, next) => {
         next();
     } catch (err) {
         console.log(err);
-        return res.status(401).send(err.message);
+        return res.status(401).send(safeErrorMessage(err));
     }
 };
 

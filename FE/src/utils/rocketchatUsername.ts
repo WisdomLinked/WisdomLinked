@@ -4,7 +4,7 @@
  */
 export function toRocketChatUsername(email: string | undefined | null): string {
   if (!email || typeof email !== 'string') {
-    return `wl_${Math.random().toString(36).slice(2, 12)}`;
+    return 'wl_user';
   }
   const trimmed = email.trim().toLowerCase();
   const at = trimmed.lastIndexOf('@');

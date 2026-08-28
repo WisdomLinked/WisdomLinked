@@ -1,9 +1,11 @@
 import { Request, Response } from 'express';
 const chatBotQA = require('../models/chatBotQA');
+import { safeErrorMessage } from '../utils/httpUserFacingCopy';
 
 const createChatBotQA = async (req, res) => {
     try {
-        const { question, answer, role } = req.body;
+        const { answer, role } = req.body;
+        const question = String(req.body?.question ?? '');
 
         // Check if a document with this question already exists
         const existingQA = await chatBotQA.findOne({ question });
@@ -27,14 +29,14 @@ const createChatBotQA = async (req, res) => {
         });
     } catch (err) {
         console.error(err);
-        return res.status(500).send(err.message);
+        return res.status(500).send(safeErrorMessage(err));
     }
 };
 
 const getChatBotAnswer = async (req, res) => {
     try {
         const { role } = req.user || {};
-        const { question } = req.body;
+        const question = String(req.body?.question ?? '');
 
         const results = await chatBotQA.find(
             { $text: { $search: question } },
@@ -82,7 +84,7 @@ const getChatBotAnswer = async (req, res) => {
         });
     } catch (err) {
         console.error(err);
-        return res.status(500).send(err.message);
+        return res.status(500).send(safeErrorMessage(err));
     }
 };
 
@@ -104,13 +106,13 @@ const getChatBotQA = async (req, res) => {
         });
     } catch (err) {
         console.error(err);
-        return res.status(500).send(err.message);
+        return res.status(500).send(safeErrorMessage(err));
     }
 };
 
 const updateChatBotQA = async (req, res) => {
     try {
-        const { id } = req.params;
+        const id = String(req.params?.id ?? '');
         const { question, answer, role } = req.body;
 
         // Find the ChatBotQA document by ID
@@ -137,13 +139,13 @@ const updateChatBotQA = async (req, res) => {
         });
     } catch (err) {
         console.error(err);
-        return res.status(500).send(err.message);
+        return res.status(500).send(safeErrorMessage(err));
     }
 };
 
 const deleteChatBotQA = async (req, res) => {
     try {
-        const { id } = req.params;
+        const id = String(req.params?.id ?? '');
         const deletedChatBotQA = await chatBotQA.findByIdAndDelete(id);
         if (!deletedChatBotQA) {
             return res.status(404).json({
@@ -158,7 +160,7 @@ const deleteChatBotQA = async (req, res) => {
         });
     } catch (err) {
         console.error(err);
-        return res.status(500).send(err.message);
+        return res.status(500).send(safeErrorMessage(err));
     }
 }
 

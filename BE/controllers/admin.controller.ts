@@ -428,7 +428,7 @@ const getContactedUs = async (req, res) => {
         }
 
         if (actioned) {
-            query = query.where("actioned", actioned);
+            query = query.where("actioned", String(actioned));
         }
 
         query = query.collation({ locale: "en", strength: 2 });

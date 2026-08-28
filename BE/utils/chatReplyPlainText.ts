@@ -1,4 +1,4 @@
-import { wlHtmlToPlainTextForRocketChat } from './wlHtmlPlainText';
+import { wlHtmlToPlainTextForRocketChat, decodeBasicEntities, stripTags } from './wlHtmlPlainText';
 import { encodeRichHtmlWire, hasRichHtmlMarkup } from './chatRichHtmlWire';
 
 export const WL_REPLY_WIRE_PREFIX = '__WL_REPLY__';
@@ -17,7 +17,7 @@ export function peelHtmlReplyQuotesRegex(html: string): {
     const quotes: PeeledHtmlReplyQuote[] = [];
     let remaining = String(html ?? '').trim();
     const re =
-        /^<blockquote([^>]*)>\s*<strong>\s*Replying to\s+([^<]+)<\/strong>\s*<br\s*\/?>\s*([\s\S]*?)<\/blockquote>/i;
+        /^<blockquote([^>]*)>\s*<strong>\s*Replying to([^<]+)<\/strong>\s*<br\s*\/?>\s*([\s\S]*?)<\/blockquote>/i;
 
     for (let i = 0; i < 12; i++) {
         const m = remaining.match(re);
@@ -25,16 +25,8 @@ export function peelHtmlReplyQuotesRegex(html: string): {
         const attrs = m[1] || '';
         const idMatch = /data-wl-reply-id\s*=\s*["']([^"']+)["']/i.exec(attrs);
         const messageId = idMatch ? idMatch[1].trim() : undefined;
-        const to = m[2]
-            .trim()
-            .replace(/&amp;/g, '&')
-            .replace(/&lt;/g, '<')
-            .replace(/&gt;/g, '>');
-        const excerpt = m[3]
-            .replace(/<[^>]+>/g, ' ')
-            .replace(/&nbsp;/gi, ' ')
-            .replace(/\s+/g, ' ')
-            .trim();
+        const to = decodeBasicEntities(m[2].trim());
+        const excerpt = decodeBasicEntities(stripTags(m[3]).replace(/\s+/g, ' ')).trim();
         quotes.push({ to, excerpt, messageId });
         remaining = remaining.slice(m[0].length).trim();
     }

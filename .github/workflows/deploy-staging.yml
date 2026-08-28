@@ -11,6 +11,9 @@ env:
   FRONTEND_IMAGE: wisdomlinked/wisdomlinked/chat-frontend
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
+permissions:
+  contents: read
+
 jobs:
   # Detect which directories changed
   changes:

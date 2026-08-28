@@ -1028,7 +1028,7 @@ const updateProfile = async (req: any, res: Response) => {
         }
 
         // [User Model] -- add more updating fields based on the user model
-        await User.findOneAndUpdate({ email: email }, updates, { new: true })
+        await User.findOneAndUpdate({ email: String(email) }, updates, { new: true })
 
         const resultEmail = boundEmail || email;
         if (freshToken) {
@@ -1252,7 +1252,8 @@ const handleSubmit = async (req: Request, res: Response) => {
             // If the directory doesn't exist, create it
             fs.mkdirSync(directory, { recursive: true });
         }
-        const filePath = path.join(__dirname, '../uploads/docs', `${new Date().getTime()}_${file.originalname}`);
+        const safeName = path.basename(String(file.originalname || 'upload')).replace(/[^A-Za-z0-9._-]/g, '_');
+        const filePath = path.join(directory, `${new Date().getTime()}_${safeName}`);
         fs.writeFileSync(filePath, file.buffer);
 
         res.status(200).send('SUCCESS')

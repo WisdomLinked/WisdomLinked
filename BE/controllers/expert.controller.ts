@@ -116,7 +116,7 @@ const updateDailyTimeSlots = async (req, res) => {
                 slots.push(slot)
             }
         })
-        await User.findOneAndUpdate({ email: email }, { dailyTimeSlots: slots }, { new: true })
+        await User.findOneAndUpdate({ email: String(email) }, { dailyTimeSlots: slots }, { new: true })
 
         return res.status(200).json({
             dailyTimeSlots: slots

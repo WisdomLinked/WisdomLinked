@@ -1,11 +1,11 @@
 import { Request, Response } from 'express';
-import { HTTP_GENERIC_ERROR } from '../utils/httpUserFacingCopy';
+import { HTTP_GENERIC_ERROR, safeErrorMessage } from '../utils/httpUserFacingCopy';
 const FriendInvitation = require("../models/FriendInvitation");
 const User = require("../models/User");
 
 const inviteFriend = async (req, res) => {
     const { email: senderEmailAddress, userId } = req.user;
-    const { email: receiverEmailAddress } = req.body;
+    const receiverEmailAddress = String(req.body?.email ?? '');
 
     // check if user is inviting himself
     if (senderEmailAddress === receiverEmailAddress) {
@@ -63,7 +63,7 @@ const acceptInvitation = async (req, res) => {
 
     try {
 
-        const { invitationId } = req.body;
+        const invitationId = String(req.body?.invitationId ?? '');
 
         // check if invitation exists
         const invitation = await FriendInvitation.exists({ _id: invitationId });
@@ -102,7 +102,7 @@ const acceptInvitation = async (req, res) => {
 
 const rejectInvitation = async (req, res) => {
     try {
-        const { invitationId } = req.body;
+        const invitationId = String(req.body?.invitationId ?? '');
 
         // check if invitation exists
         const invitation = await FriendInvitation.exists({ _id: invitationId });
@@ -121,16 +121,14 @@ const rejectInvitation = async (req, res) => {
 
         return res.status(200).send("Invitation rejected successfully!");
     } catch (err) {
-        res.status(500).send(
-            err.message
-        );
+        res.status(500).send(safeErrorMessage(err));
     }
 };
 
 const removeFriend = async (req, res) => {
     try {
         const { userId } = req.user;
-        const { friendId } = req.body;
+        const friendId = String(req.body?.friendId ?? '');
 
         // check if friend exists
         const friend = await User.findOne({ _id: friendId });
@@ -156,9 +154,7 @@ const removeFriend = async (req, res) => {
 
         return res.status(200).send("Friend removed successfully!");
     } catch (err) {
-        return res
-            .status(500)
-            .send(err.message);
+        return res.status(500).send(safeErrorMessage(err));
     }
 };
 
