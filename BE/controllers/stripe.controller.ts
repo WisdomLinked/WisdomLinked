@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
 import { BOOKING_PAYMENT_AMOUNT_INVALID } from '../utils/bookingUserFacingCopy';
 import { HTTP_GENERIC_ERROR, safeErrorMessage } from '../utils/httpUserFacingCopy';
-import { expectedBookingIntentCents, extractHourlyRate } from '../utils/bookingPrice';
+import { expectedBookingIntentCents, extractHourlyRate, balanceTransactionId } from '../utils/bookingPrice';
 import { seminarIsFull, firstFullFutureOccurrence, seatRequestUnavailableMessage } from '../utils/seminarCapacity';
 import {
     normalizePaymentMode,
@@ -10,6 +10,7 @@ import {
     walletChargeAllowed,
     paymentWindowLapsed,
     WALLET_PAYMENT_METHOD_TYPES,
+    CARD_PAYMENT_METHOD_TYPES,
     WALLET_NEEDS_APPROVAL_MESSAGE,
     WALLET_NOT_YET_PAYABLE,
     paymentWindowHours,
@@ -217,7 +218,7 @@ const createStripePaymentIntent = async (req, res) => {
                     payment_method_types: WALLET_PAYMENT_METHOD_TYPES,
                     payment_method_options: { wechat_pay: { client: 'web' } },
                 }
-                : { automatic_payment_methods: { enabled: true } }),
+                : { payment_method_types: CARD_PAYMENT_METHOD_TYPES }),
             ...(manualCapture ? { capture_method: 'manual' } : {}),
             metadata: { ...metadata, paymentMode },
         });
@@ -516,7 +517,7 @@ const buildPaymentRequestEmail = ({ customerName, amountCents, description, url 
     ],
 });
 
-const buildRefundEmail = ({ customerName, amountCents, currency, isFullRefund, retainedCents, description, expertName, start, reference }: any) => renderStripeEmail({
+const buildRefundEmail = ({ customerName, amountCents, currency, isFullRefund, retainedCents, description, expertName, start, reference, transactionId }: any) => renderStripeEmail({
     heading: 'Your refund has been processed',
     previewText: `${stripeMoneyFromCents(amountCents, currency)} refunded.`,
     blocks: [
@@ -528,6 +529,7 @@ const buildRefundEmail = ({ customerName, amountCents, currency, isFullRefund, r
             ['Refund amount', stripeMoneyFromCents(amountCents, currency)],
             ['Refund date', new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })],
             ['Reference', reference],
+            ['Transaction ID', transactionId],
         ]),
         isFullRefund
             ? ''
@@ -580,6 +582,8 @@ const sendBookingReceiptAndConfirmation = async ({ payment_intent, charge, sessi
             receiptUrl: charge.receiptUrl,
             receiptNumber: charge.receiptNumber,
             paymentMethod: paymentMethodLabel,
+            transactionId: payment_intent,
+            balanceTransaction: balanceTransactionId(settled?.latest_charge),
             timeZone,
             noteHtml,
         });
@@ -1098,6 +1102,7 @@ const processRefund = async (req, res) => {
                     ? new Date(paymentHistory.groupChat.start).toLocaleString()
                     : '',
                 reference: refundHistory?._id ? String(refundHistory._id) : paymentHistory.paymentIntent,
+                transactionId: paymentHistory.paymentIntent,
             });
 
             const refundEmailMsg = {

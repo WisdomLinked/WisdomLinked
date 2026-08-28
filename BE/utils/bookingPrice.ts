@@ -81,7 +81,7 @@ export function assertPaymentMatchesExpected(
     payment_intent: string | undefined | null,
     testResult: PaymentIntentResult,
     liveResult: PaymentIntentResult,
-): { paidBy: 'test' | 'live'; amount: number; currency: string; receiptUrl: string | null; receiptNumber: string | null } | null {
+): { paidBy: 'test' | 'live'; amount: number; currency: string; receiptUrl: string | null; receiptNumber: string | null; balanceTransaction: string | null } | null {
     if (expectedCents <= 0) return null; // free booking — no payment expected
     if (!payment_intent) {
         throw new Error("Payment intent is required");
@@ -104,7 +104,20 @@ export function assertPaymentMatchesExpected(
         currency: pi.currency,
         receiptUrl: charge?.receipt_url ?? null,
         receiptNumber: charge?.receipt_number ?? null,
+        balanceTransaction: balanceTransactionId(charge),
     };
+}
+
+/**
+ * The balance transaction (`txn_…`) is the ledger entry a payout is made of, so it is
+ * the reference finance reconciles against — distinct from the payment intent, which
+ * identifies the payment itself. It only exists once funds have actually settled, so
+ * a held or still-clearing charge has none yet.
+ */
+export function balanceTransactionId(charge: any): string | null {
+    const bt = charge?.balance_transaction;
+    if (!bt) return null;
+    return typeof bt === 'string' ? bt : (bt.id ?? null);
 }
 
 export function assertIntentMatchesBooking(

@@ -168,7 +168,7 @@ sendEmailMeetingRequestToExpert = (targetEmail, expertName, name, start, duratio
     return deliver(targetEmail, subject, html);
 }
 
-sendEmailSessionPaidToExpert = (targetEmail, expertName, studentName, name, start, duration, price, timeZone) => {
+sendEmailSessionPaidToExpert = (targetEmail, expertName, studentName, name, start, duration, price, timeZone, transactionId, balanceTransaction) => {
     const who = studentName || 'The student';
     subject = `Your session offer was accepted — payment received`;
     html = renderEmail({
@@ -181,6 +181,8 @@ sendEmailSessionPaidToExpert = (targetEmail, expertName, studentName, name, star
                 ['Date & time', emailWhen(start, timeZone)],
                 ['Duration', duration ? `${duration} minutes` : ''],
                 ['Student payment', emailMoney(price)],
+                ['Transaction ID', transactionId],
+                ['Balance transaction', balanceTransaction],
             ]),
             emailParagraph('We will send you reminders before the session begins. You can open the session chat at any time beforehand to share preparation notes or documents.'),
             emailParagraph('The chat is a convenience only — neither side is required to read or reply before the session, and video and audio become available at the scheduled start time.', { muted: true }),
@@ -273,7 +275,7 @@ shareMeetingId = (targetEmail, name, meetingId, title) =>{
     return deliver(targetEmail, subject, html);
 }
 
-sendPaymentConfirmationEmail = async ({ to, sessionType, sessionName, expertName, studentName, start, duration, amount, currency, receiptUrl, receiptNumber, timeZone, paymentMethod, noteHtml = '', noteText = '' }) => {
+sendPaymentConfirmationEmail = async ({ to, sessionType, sessionName, expertName, studentName, start, duration, amount, currency, receiptUrl, receiptNumber, timeZone, paymentMethod, transactionId, balanceTransaction, noteHtml = '', noteText = '' }) => {
     const isSeminar = String(sessionType || '').toLowerCase().includes('seminar');
     const amountStr = emailMoneyFromCents(amount, currency);
     const subjectLine = isSeminar
@@ -298,6 +300,8 @@ sendPaymentConfirmationEmail = async ({ to, sessionType, sessionName, expertName
                 ['Amount paid', amountStr],
                 ['Payment method', paymentMethod],
                 ['Receipt no.', receiptNumber],
+                ['Transaction ID', transactionId],
+                ['Balance transaction', balanceTransaction],
             ]),
             noteHtml || emailExpertNote(noteText),
             receiptUrl ? emailButton('View your receipt', receiptUrl) : emailButton(`View the ${chatWord}`),

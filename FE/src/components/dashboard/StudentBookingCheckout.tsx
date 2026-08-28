@@ -365,11 +365,13 @@ export default function StudentBookingCheckout({
       ...((isSeatRequest || holdsFunds) && price > 0 && activeTab === 'card'
         ? { captureMethod: 'manual' as const }
         : {}),
-      // Wallets are redirect/QR methods that never surface on their own, so they are
-      // requested explicitly rather than left to automatic payment methods.
-      ...(activeTab === 'wallet'
-        ? { paymentMethodTypes: ['alipay', 'wechat_pay'] }
-        : {}),
+      // Each rail names its methods explicitly. Wallets are redirect/QR methods that
+      // never surface on their own, and left to automatic payment methods the card
+      // rail offers everything enabled in the dashboard — which both adds a method
+      // picker and can disagree with the payment_method_types on the intent the
+      // server creates at confirm time.
+      paymentMethodTypes:
+        activeTab === 'wallet' ? ['alipay', 'wechat_pay'] : ['card'],
       appearance: APPEARANCE,
     }),
     [price, isSeatRequest, holdsFunds, activeTab],
@@ -444,7 +446,7 @@ export default function StudentBookingCheckout({
         >
           {([
             { id: 'card' as const, label: 'Pay with card' },
-            { id: 'wallet' as const, label: 'Pay with wallet' },
+            { id: 'wallet' as const, label: 'Pay with WeChat Pay / Alipay' },
           ]).map((t) => (
             <button
               key={t.id}
@@ -452,7 +454,7 @@ export default function StudentBookingCheckout({
               role="tab"
               aria-selected={activeTab === t.id}
               onClick={() => setTab(t.id)}
-              className={`rounded-[4px] px-3 py-2 text-[13px] font-semibold transition ${
+              className={`rounded-[4px] px-3 py-2 text-[13px] font-semibold leading-tight transition ${
                 activeTab === t.id
                   ? 'bg-white text-[#1A3A4A] shadow-sm'
                   : 'text-[#7A7A72] hover:text-[#1A3A4A]'

@@ -2,6 +2,8 @@ export type PaymentMode = 'card' | 'wallet';
 
 export const WALLET_PAYMENT_METHOD_TYPES = ['alipay', 'wechat_pay'];
 
+export const CARD_PAYMENT_METHOD_TYPES = ['card'];
+
 export const DEFAULT_PAYMENT_WINDOW_HOURS = 48;
 
 export const normalizePaymentMode = (value: any): PaymentMode =>

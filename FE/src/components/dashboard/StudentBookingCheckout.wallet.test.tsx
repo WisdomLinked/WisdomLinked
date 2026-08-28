@@ -19,6 +19,8 @@ vi.mock('@stripe/stripe-js', () => ({
   loadStripe: vi.fn(async () => ({})),
 }));
 
+const elementsOptions: any[] = [];
+
 const confirmPayment = vi.fn(async () => ({
   paymentIntent: { id: 'pi_wallet_1', status: 'succeeded' },
 }));
@@ -26,7 +28,10 @@ const confirmPayment = vi.fn(async () => ({
 // Stands in for Stripe's Payment Element: the buttons let a test pick a wallet the way
 // a student would, which is what drives the pay button's wording.
 vi.mock('@stripe/react-stripe-js', () => ({
-  Elements: ({ children }: any) => <div>{children}</div>,
+  Elements: ({ children, options }: any) => {
+    elementsOptions.push(options);
+    return <div>{children}</div>;
+  },
   PaymentElement: ({ onChange }: any) => (
     <div data-testid="payment-element">
       <button type="button" onClick={() => onChange?.({ value: { type: 'wechat_pay' } })}>
@@ -63,23 +68,47 @@ describe('StudentBookingCheckout payment method tabs', () => {
     window.localStorage.clear();
   });
 
+  it('offers card alone on the card rail, with no other method to pick from', async () => {
+    // Elements runs in deferred mode, so the Payment Element takes its methods from
+    // the Stripe dashboard unless the rail names them. Unnamed, the card rail grew a
+    // Card / Cash App Pay picker, and the offered method could disagree with the
+    // payment_method_types on the intent created at confirm time.
+    elementsOptions.length = 0;
+    renderCheckout();
+
+    await screen.findByTestId('payment-element');
+
+    const card = elementsOptions.filter(Boolean).pop();
+    expect(card.paymentMethodTypes).toEqual(['card']);
+  });
+
+  it('names the wallet methods on the wallet rail', async () => {
+    elementsOptions.length = 0;
+    renderCheckout({ walletOption: { kind: 'charge', only: true } });
+
+    await screen.findByTestId('payment-element');
+
+    const wallet = elementsOptions.filter(Boolean).pop();
+    expect(wallet.paymentMethodTypes).toEqual(['alipay', 'wechat_pay']);
+  });
+
   it('shows no tabs when no wallet route is offered', async () => {
     renderCheckout();
     await screen.findByTestId('payment-element');
-    expect(screen.queryByRole('tab', { name: /pay with wallet/i })).toBeNull();
+    expect(screen.queryByRole('tab', { name: /wechat pay \/ alipay/i })).toBeNull();
   });
 
   it('hides the tabs for a free booking, where a wallet has nothing to charge', async () => {
     renderCheckout({ price: 0, walletOption: { kind: 'charge' } });
     await screen.findByTestId('payment-element');
-    expect(screen.queryByRole('tab', { name: /pay with wallet/i })).toBeNull();
+    expect(screen.queryByRole('tab', { name: /wechat pay \/ alipay/i })).toBeNull();
   });
 
   it('offers card and wallet tabs, with card selected first', async () => {
     renderCheckout({ walletOption: { kind: 'charge' } });
 
     const cardTab = await screen.findByRole('tab', { name: /pay with card/i });
-    const walletTab = screen.getByRole('tab', { name: /pay with wallet/i });
+    const walletTab = screen.getByRole('tab', { name: /wechat pay \/ alipay/i });
     expect(cardTab.getAttribute('aria-selected')).toBe('true');
     expect(walletTab.getAttribute('aria-selected')).toBe('false');
   });
@@ -87,7 +116,7 @@ describe('StudentBookingCheckout payment method tabs', () => {
   it('charges the wallet directly when a seat is free to take', async () => {
     renderCheckout({ walletOption: { kind: 'charge' } });
 
-    fireEvent.click(await screen.findByRole('tab', { name: /pay with wallet/i }));
+    fireEvent.click(await screen.findByRole('tab', { name: /wechat pay \/ alipay/i }));
 
     const payButton = await screen.findByRole('button', {
       name: /^pay \$25$/i,
@@ -105,7 +134,7 @@ describe('StudentBookingCheckout payment method tabs', () => {
     const onSubmit = vi.fn();
     renderCheckout({ isSeatRequest: true, walletOption: { kind: 'request', onSubmit } });
 
-    fireEvent.click(await screen.findByRole('tab', { name: /pay with wallet/i }));
+    fireEvent.click(await screen.findByRole('tab', { name: /wechat pay \/ alipay/i }));
 
     // No card fields on this panel — there is nothing to pay for yet.
     expect(screen.queryByTestId('payment-element')).toBeNull();
@@ -123,7 +152,7 @@ describe('StudentBookingCheckout payment method tabs', () => {
 
     expect(await screen.findByText(/your card is authorized but not charged/i)).toBeTruthy();
 
-    fireEvent.click(screen.getByRole('tab', { name: /pay with wallet/i }));
+    fireEvent.click(screen.getByRole('tab', { name: /wechat pay \/ alipay/i }));
     // The hold explanation is card-only; a wallet never holds.
     expect(screen.queryByText(/your card is authorized but not charged/i)).toBeNull();
   });
@@ -135,7 +164,7 @@ describe('StudentBookingCheckout payment method tabs', () => {
 
     await screen.findByTestId('payment-element');
     expect(screen.queryByRole('tab', { name: /pay with card/i })).toBeNull();
-    expect(screen.queryByRole('tab', { name: /pay with wallet/i })).toBeNull();
+    expect(screen.queryByRole('tab', { name: /wechat pay \/ alipay/i })).toBeNull();
     expect(screen.getByText(/paid the same way/i)).toBeTruthy();
   });
 
@@ -153,7 +182,7 @@ describe('StudentBookingCheckout payment method tabs', () => {
   it('records the chosen mode for recovery after a wallet redirect', async () => {
     renderCheckout({ walletOption: { kind: 'charge' } });
 
-    fireEvent.click(await screen.findByRole('tab', { name: /pay with wallet/i }));
+    fireEvent.click(await screen.findByRole('tab', { name: /wechat pay \/ alipay/i }));
     fireEvent.click(
       await screen.findByRole('button', { name: /^pay \$25$/i }),
     );

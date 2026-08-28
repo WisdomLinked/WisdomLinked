@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Loader2 } from 'lucide-react';
 import { doGetCustomerPaymentHistory } from '../../api/api';
+import StripeReference from './StripeReference';
 
 // Single source of truth for the student payment-history view.
 // Rendered both in the left-sidebar page (StudentPaymentHistory) and in the
@@ -15,6 +16,8 @@ export type PaymentRecord = {
   paymentKind: 'individual' | 'seminar' | 'other';
   createdAt: string;
   receiptUrl?: string | null;
+  paymentIntent?: string | null;
+  balanceTransaction?: string | null;
   receiptNumber?: string | null;
   expert?: { username: string; email: string };
   groupChat?: { name: string; type: string };
@@ -27,17 +30,21 @@ export function usePaymentHistory(enabled: boolean = true) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  useEffect(() => {
-    if (!enabled) return;
+  const load = useCallback(() => {
     setLoading(true);
     setError('');
-    doGetCustomerPaymentHistory()
+    return doGetCustomerPaymentHistory()
       .then((data: any) => setPayments(data?.result ?? []))
       .catch(() => setError('Failed to load payment history.'))
       .finally(() => setLoading(false));
-  }, [enabled]);
+  }, []);
 
-  return { payments, loading, error };
+  useEffect(() => {
+    if (!enabled) return;
+    void load();
+  }, [enabled, load]);
+
+  return { payments, loading, error, reload: load };
 }
 
 type TableProps = {
@@ -46,6 +53,8 @@ type TableProps = {
   error: string;
   /** Keeps the header visible while the body scrolls (used inside the modal). */
   stickyHeader?: boolean;
+  /** Drops the table's own padding when the surrounding card already provides it. */
+  flush?: boolean;
 };
 
 /** "Individual" / "Seminar" / "Other" label for the payment kind. */
@@ -59,45 +68,70 @@ function detailName(p: PaymentRecord): string {
   return p.expert?.username ?? p.groupChat?.name ?? p.event?.title ?? '';
 }
 
-const TH = 'px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500';
+const statusStyles: Record<string, string> = {
+  completed: 'bg-emerald-50 text-emerald-700 border-emerald-100',
+  pending: 'bg-amber-50 text-amber-700 border-amber-100',
+  failed: 'bg-red-50 text-red-700 border-red-100',
+  refunded: 'bg-slate-100 text-slate-600 border-slate-200',
+  withheld: 'bg-sky-50 text-sky-700 border-sky-100',
+  released: 'bg-slate-50 text-slate-600 border-slate-100',
+};
 
-export function PaymentHistoryTable({ payments, loading, error, stickyHeader = false }: TableProps) {
+export function PaymentHistoryTable({ payments, loading, error, stickyHeader = false, flush = false }: TableProps) {
+  const headRow = `border-b border-slate-200 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500${
+    stickyHeader ? ' sticky top-0 bg-white' : ''
+  }`;
+
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-left">
-        <thead className={`bg-slate-50 border-b border-[#e8e6e1]${stickyHeader ? ' sticky top-0' : ''}`}>
-          <tr>
-            <th className={TH}>Receipt</th>
-            <th className={TH}>Date</th>
-            <th className={TH}>Amount</th>
-            <th className={TH}>Purpose</th>
-            <th className={TH}>Session / Details</th>
-            <th className={TH}>Status</th>
+    <div className={`overflow-x-auto${flush ? '' : ' px-5 py-4 md:px-6'}`}>
+      <table className="w-full min-w-[720px] table-fixed border-collapse text-left text-[13px]">
+        <colgroup>
+          <col className="w-[6%]" />
+          <col className="w-[13%]" />
+          <col className="w-[19%]" />
+          <col className="w-[14%]" />
+          <col className="w-[15%]" />
+          <col className="w-[14%]" />
+          <col className="w-[9%]" />
+          <col className="w-[10%]" />
+        </colgroup>
+        <thead>
+          <tr className={headRow}>
+            <th className="pb-3 pr-4 font-semibold">Receipt</th>
+            <th className="pb-3 pr-4 font-semibold">Date</th>
+            <th className="pb-3 pr-4 font-semibold">Purpose</th>
+            <th className="pb-3 pr-4 font-semibold">Session / Details</th>
+            <th className="pb-3 pr-4 font-semibold">Transaction ID</th>
+            <th className="pb-3 pr-4 font-semibold">Balance transaction</th>
+            <th className="pb-3 pr-4 font-semibold">Status</th>
+            <th className="pb-3 text-right font-semibold">Amount</th>
           </tr>
         </thead>
-        <tbody className="divide-y divide-slate-100">
+        <tbody className="text-slate-800">
           {loading ? (
             <tr>
-              <td colSpan={6} className="px-4 py-12 text-center text-sm text-slate-400">
-                <Loader2 className="h-5 w-5 animate-spin mx-auto mb-2" />
+              <td colSpan={8} className="py-12 text-center text-sm text-slate-400">
+                <Loader2 className="mx-auto mb-2 h-5 w-5 animate-spin" />
                 Loading payment history…
               </td>
             </tr>
           ) : error ? (
             <tr>
-              <td colSpan={6} className="px-4 py-12 text-center text-sm text-red-500">{error}</td>
+              <td colSpan={8} className="py-12 text-center text-sm text-red-500">{error}</td>
             </tr>
           ) : payments.length === 0 ? (
             <tr>
-              <td colSpan={6} className="px-4 py-12 text-center text-sm text-slate-400">No payment history yet.</td>
+              <td colSpan={8} className="py-12 text-center text-sm text-slate-400">No payment history yet.</td>
             </tr>
           ) : (
             payments.map(p => {
-              const amountDollars = (p.amount / 100).toFixed(2);
               const detail = detailName(p);
+              const st = (p.status || 'completed').toLowerCase();
+              const badgeClass = statusStyles[st] || 'bg-slate-50 text-slate-700 border-slate-100';
+
               return (
-                <tr key={p._id} className="hover:bg-slate-50/50">
-                  <td className="px-4 py-3 text-sm font-medium text-slate-700">
+                <tr key={p._id} className="border-b border-slate-100 last:border-0">
+                  <td className="py-3 pr-4 align-top">
                     {p.receiptUrl ? (
                       <a
                         href={p.receiptUrl}
@@ -105,33 +139,42 @@ export function PaymentHistoryTable({ payments, loading, error, stickyHeader = f
                         rel="noopener noreferrer"
                         className="text-[#234C6A] hover:underline"
                       >
-                        View receipt
+                        View
                       </a>
                     ) : (
-                      '—'
+                      <span className="text-slate-400">—</span>
                     )}
                   </td>
-                  <td className="px-4 py-3 text-sm text-slate-600">{new Date(p.createdAt).toLocaleDateString()}</td>
-                  <td className="px-4 py-3 text-sm font-medium text-slate-800">
-                    {(p.currency ?? 'usd').toUpperCase()} {amountDollars}
+                  <td className="py-3 pr-4 align-top text-slate-600">
+                    {new Date(p.createdAt).toLocaleString(undefined, {
+                      dateStyle: 'medium',
+                      timeStyle: 'short',
+                    })}
                   </td>
-                  <td className="px-4 py-3 text-sm text-slate-600">{p.description ?? '—'}</td>
-                  <td className="px-4 py-3 text-sm text-slate-600">
-                    <span className="text-slate-500">{kindLabel(p)}</span>
-                    {detail && <span className="block text-slate-700">{detail}</span>}
-                  </td>
-                  <td className="px-4 py-3">
-                    <span
-                      className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${
-                        p.status === 'completed'
-                          ? 'bg-emerald-100 text-emerald-700'
-                          : p.status === 'pending'
-                            ? 'bg-amber-100 text-amber-700'
-                            : 'bg-slate-100 text-slate-600'
-                      }`}
-                    >
-                      {p.status}
+                  <td className="py-3 pr-4 align-top">
+                    <span className="block break-words text-slate-800" title={p.description ?? ''}>
+                      {p.description ?? '—'}
                     </span>
+                  </td>
+                  <td className="py-3 pr-4 align-top">
+                    <span className="text-slate-500">{kindLabel(p)}</span>
+                    {detail ? <span className="block break-words text-slate-700">{detail}</span> : null}
+                  </td>
+                  <td className="py-3 pr-4 align-top">
+                    <StripeReference value={p.paymentIntent} />
+                  </td>
+                  <td className="py-3 pr-4 align-top">
+                    <StripeReference value={p.balanceTransaction} />
+                  </td>
+                  <td className="py-3 pr-4 align-top">
+                    <span
+                      className={`inline-flex whitespace-nowrap rounded-full border px-2 py-0.5 text-[10px] font-semibold capitalize ${badgeClass}`}
+                    >
+                      {st}
+                    </span>
+                  </td>
+                  <td className="py-3 text-right align-top font-semibold tabular-nums text-slate-900">
+                    {(p.currency ?? 'usd').toUpperCase()} {(p.amount / 100).toFixed(2)}
                   </td>
                 </tr>
               );
@@ -143,7 +186,6 @@ export function PaymentHistoryTable({ payments, loading, error, stickyHeader = f
   );
 }
 
-/** Totals line shared by both payment-history views. */
 export function PaymentHistorySummary({ payments, loading }: { payments: PaymentRecord[]; loading: boolean }) {
   const totalSpentCents = payments
     .filter(p => p.status === 'completed')

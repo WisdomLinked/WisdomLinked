@@ -57,12 +57,13 @@ const {
     syncRocketGroupChannelMembers,
 } = require("../services/rocketchat.service");
 import { safeErrorMessage, safeHttp500Message } from '../utils/httpUserFacingCopy';
-import { computeBookingPriceCents, extractHourlyRate, dollarsToCents, assertPaymentMatchesExpected, assertIntentMatchesBooking, voluntaryCancellationRefundCents, capturedAmountCents } from '../utils/bookingPrice';
+import { computeBookingPriceCents, extractHourlyRate, dollarsToCents, assertPaymentMatchesExpected, assertIntentMatchesBooking, voluntaryCancellationRefundCents, capturedAmountCents, balanceTransactionId } from '../utils/bookingPrice';
 import { resolvePendingPayment, resolveOrphanedIntent } from '../utils/pendingPayment';
 import {
     BOOKING_PAYMENT_WRONG_BOOKING,
     BOOKING_PAYMENT_UNVERIFIED,
     BOOKING_CAPTURE_FAILED,
+    BOOKING_HOLD_GONE,
     BOOKING_CAPTURED_NOT_BOOKED,
     BOOKING_PAYMENT_ALREADY_USED,
     BOOKING_PAYMENT_AMOUNT_INVALID,
@@ -901,6 +902,7 @@ const createGroupChatByUser = async (req, res) => {
                 paymentIntent: payment_intent,
                 receiptUrl: charge.receiptUrl,
                 receiptNumber: charge.receiptNumber,
+                balanceTransaction: charge.balanceTransaction ?? null,
                 customer: userId.toString(),
                 expert: expert.toString(),
                 groupChat: chat._id.toString(),
@@ -915,6 +917,7 @@ const createGroupChatByUser = async (req, res) => {
                         currency: charge.currency,
                         receiptUrl: charge.receiptUrl,
                         receiptNumber: charge.receiptNumber,
+                        balanceTransaction: charge.balanceTransaction ?? null,
                         groupChat: chat._id,
                     });
                 } catch (historyErr) {
@@ -1349,6 +1352,7 @@ const joinGroupChat = async (req, res) => {
                     paymentIntent: payment_intent,
                     receiptUrl: charge.receiptUrl,
                     receiptNumber: charge.receiptNumber,
+                    balanceTransaction: charge.balanceTransaction ?? null,
                     customer: userId.toString(),
                     expert: groupChat.admin.toString(),
                     groupChat: groupChatId.toString(),
@@ -1834,6 +1838,7 @@ const enrollAndConfirmSeminar = async ({ groupChat, customer, expert, charge, pa
                 paymentIntent: payment_intent,
                 receiptUrl: charge.receiptUrl,
                 receiptNumber: charge.receiptNumber,
+                balanceTransaction: charge.balanceTransaction ?? null,
                 status: paymentStatus,
                 customer: customer._id.toString(),
                 expert: expert._id.toString(),
@@ -2138,6 +2143,7 @@ const registerForSeminar = async (req, res) => {
                 currency: captured.currency,
                 receiptUrl: chargeObj?.receipt_url ?? null,
                 receiptNumber: chargeObj?.receipt_number ?? null,
+                balanceTransaction: balanceTransactionId(chargeObj),
             };
             held = false;
         }
@@ -2161,6 +2167,7 @@ const registerForSeminar = async (req, res) => {
                     description: `${groupChat.name} — enrollment failed after capture`,
                     receiptUrl: charge.receiptUrl,
                     receiptNumber: charge.receiptNumber,
+                    balanceTransaction: charge.balanceTransaction ?? null,
                 }).catch(() => null);
             }
             return refundAndFail(
@@ -2178,6 +2185,7 @@ const registerForSeminar = async (req, res) => {
                     description: groupChat.name,
                     receiptUrl: charge.receiptUrl,
                     receiptNumber: charge.receiptNumber,
+                    balanceTransaction: charge.balanceTransaction ?? null,
                 });
             } catch (historyErr) {
                 console.error('[registerForSeminar] captured payment left pending — reconcile manually', payment_intent, historyErr);
@@ -2205,7 +2213,7 @@ const registerForSeminar = async (req, res) => {
     }
 };
 
-const sessionDeclinedEmail = ({ sessionName, expertName, start, timeZone, refunded, amountCents, currency, noteHtml }: any) => ({
+const sessionDeclinedEmail = ({ sessionName, expertName, start, timeZone, refunded, amountCents, currency, transactionId, noteHtml }: any) => ({
     heading: 'Your 1:1 session request was not approved',
     previewText: refunded ? 'Your payment has been refunded.' : 'No charge has been made.',
     blocks: [
@@ -2214,6 +2222,7 @@ const sessionDeclinedEmail = ({ sessionName, expertName, start, timeZone, refund
             ['Session', sessionName],
             ['Expert', expertName],
             ['Date & time', emailWhen(start, timeZone)],
+            ['Transaction ID', refunded ? transactionId : null],
         ]),
         refunded
             ? emailCallout(`Your payment of <strong>${emailMoneyFromCents(amountCents, currency)}</strong> has been refunded in full. It will appear on your original payment method within 5–10 business days.`, 'bad')
@@ -2247,7 +2256,7 @@ const sendSeminarEmail = async (to: string, subject: string, content: any) => {
     }
 };
 
-const buildBookingRefundEmail = (bookingName: string | null, amountCents: number, currency: string, reference?: string) => ({
+const buildBookingRefundEmail = (bookingName: string | null, amountCents: number, currency: string, transactionId?: string) => ({
     heading: 'Your payment has been refunded',
     previewText: 'You have not been enrolled.',
     blocks: [
@@ -2256,10 +2265,10 @@ const buildBookingRefundEmail = (bookingName: string | null, amountCents: number
             ['Booking', bookingName],
             ['Refunded', emailMoneyFromCents(amountCents, currency)],
             ['Date', new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })],
-            ['Reference', reference],
+            ['Transaction ID', transactionId],
         ]),
         emailCallout('The refund will be credited to your original payment method and may take 5–10 business days to appear, depending on your bank.', 'bad'),
-        emailParagraph('You are welcome to try again. If the refund has not reached you within 10 business days, contact the administrator through WisdomLinked quoting the reference above.'),
+        emailParagraph('You are welcome to try again. If the refund has not reached you within 10 business days, contact the administrator through WisdomLinked quoting the transaction ID above.'),
     ],
 });
 
@@ -2465,6 +2474,8 @@ const chargeReceiptUrl = (intent: any): string | null => expandedCharge(intent)?
 
 const chargeReceiptNumber = (intent: any): string | null => expandedCharge(intent)?.receipt_number ?? null;
 
+const chargeBalanceTransaction = (intent: any): string | null => balanceTransactionId(expandedCharge(intent));
+
 export type BookingPaymentResolution = {
     ok: boolean;
     charge?: any;
@@ -2612,6 +2623,7 @@ const captureBookingHold = async ({ payment_intent, charge, customer, expert, gr
             currency: captured.currency,
             receiptUrl: chargeObj?.receipt_url ?? null,
             receiptNumber: chargeObj?.receipt_number ?? null,
+            balanceTransaction: balanceTransactionId(chargeObj),
         },
     };
 };
@@ -2682,6 +2694,7 @@ const captureParkedHold = async ({ payment_intent, stripeMode }: any): Promise<
             currency: captured.currency,
             receiptUrl: chargeObj?.receipt_url ?? null,
             receiptNumber: chargeObj?.receipt_number ?? null,
+            balanceTransaction: balanceTransactionId(chargeObj),
         },
     };
 };
@@ -3173,6 +3186,7 @@ const approveSeminarSeatRequest = async (req, res) => {
                     currency: captured.currency,
                     receiptUrl: chargeObj?.receipt_url ?? null,
                     receiptNumber: chargeObj?.receipt_number ?? null,
+                    balanceTransaction: balanceTransactionId(chargeObj),
                 };
             }
         }
@@ -3219,6 +3233,7 @@ const approveSeminarSeatRequest = async (req, res) => {
                             ['Seminar', groupChat.name],
                             ['Date & time', emailWhen(groupChat.start, customer.timeZone)],
                             ['Reference', String(request._id)],
+                            ['Transaction ID', charge ? request.paymentIntent : null],
                         ]),
                         charge
                             ? emailCallout(`Your refund of <strong>${emailMoneyFromCents(charge.amount, charge.currency)}</strong> ${refunded ? 'has been issued' : 'is being processed'}. It will be credited to your original payment method and may take 5–10 business days to appear, depending on your bank.`, 'bad')
@@ -3247,6 +3262,7 @@ const approveSeminarSeatRequest = async (req, res) => {
                     currency: charge.currency,
                     receiptUrl: charge.receiptUrl,
                     receiptNumber: charge.receiptNumber,
+                    balanceTransaction: charge.balanceTransaction ?? null,
                 });
             } catch (historyErr) {
                 console.log('[approveSeminarSeatRequest] payment record update failed after enrollment', historyErr);
@@ -3268,6 +3284,8 @@ const approveSeminarSeatRequest = async (req, res) => {
                         ['Hosted by', expert.username],
                         ['Date & time', emailWhen(groupChat.start, customer.timeZone)],
                         ['Amount paid', charge ? emailMoneyFromCents(charge.amount, charge.currency) : 'Free seminar'],
+                        ['Transaction ID', charge ? request.paymentIntent : null],
+                        ['Balance transaction', charge ? charge.balanceTransaction : null],
                     ]),
                     charge
                         ? emailCallout(`Your payment of <strong>${emailMoneyFromCents(charge.amount, charge.currency)}</strong> has been processed. Your seat is reserved and no further action is needed.`, 'good')
@@ -3430,6 +3448,7 @@ const paySeminarSeatRequest = async (req, res) => {
                     paymentIntent: payment_intent,
                     receiptUrl: charge.receiptUrl,
                     receiptNumber: charge.receiptNumber,
+                    balanceTransaction: charge.balanceTransaction ?? null,
                     // Money still in flight is not revenue yet; the webhook settles it.
                     status: settling ? 'pending' : 'completed',
                     customer: customer._id,
@@ -4138,6 +4157,7 @@ const sweepPendingSeminarPayments = async () => {
                     currency: captured.currency,
                     receiptUrl: chargeObj?.receipt_url ?? null,
                     receiptNumber: chargeObj?.receipt_number ?? null,
+                    balanceTransaction: balanceTransactionId(chargeObj),
                 };
             } else if (action === 'refund') {
                 const refund: any = await refundPaymentIntent(row.paymentIntent, null, row.stripeMode);
@@ -4191,6 +4211,7 @@ const sweepPendingSeminarPayments = async () => {
                                     previewText: 'You were not enrolled.',
                                     blocks: [
                                         emailParagraph('We were unable to complete your seminar registration, so your payment has been refunded in full. You have <strong>not</strong> been enrolled.'),
+                                        emailFacts([['Transaction ID', row.paymentIntent]]),
                                         emailCallout('The refund will be credited to your original payment method and may take 5–10 business days to appear, depending on your bank.', 'bad'),
                                         emailParagraph('You are welcome to try again. If you need help, contact the administrator through WisdomLinked.'),
                                     ],
@@ -4340,6 +4361,7 @@ const sweepOrphanedBookingIntentsForMode = async (stripeMode: 'test' | 'live') =
                             previewText: 'You were not enrolled.',
                             blocks: [
                                 emailParagraph('A booking payment did not complete, so it has been refunded in full. You have <strong>not</strong> been enrolled.'),
+                                emailFacts([['Transaction ID', intent.id]]),
                                 emailCallout('The refund will be credited to your original payment method and may take 5–10 business days to appear, depending on your bank.', 'bad'),
                                 emailParagraph('You are welcome to try again. If you need help, contact the administrator through WisdomLinked.'),
                             ],
@@ -4417,15 +4439,21 @@ const handleBookingPaymentIntentEvent = async (event: any): Promise<string> => {
 
     if (event.type !== 'payment_intent.succeeded') return 'ignored';
 
+    // A webhook payload carries latest_charge as a bare id — Stripe does not expand it
+    // and there is no way to ask it to. Re-reading the intent is the only way to get the
+    // charge, and without it the receipt and ledger fields all settle as null.
+    const settledIntent = (await checkPaymentIntentSucceeded(String(intent.id), stripeMode).catch(() => null)) || intent;
+
     const settled = await PaymentHistory.findOneAndUpdate(
         { paymentIntent: String(intent.id), paymentType: 'charge', status: 'pending' },
         {
             $set: {
                 status: 'completed',
-                amount: capturedAmountCents(intent),
-                currency: intent.currency,
-                receiptUrl: chargeReceiptUrl(intent),
-                receiptNumber: chargeReceiptNumber(intent),
+                amount: capturedAmountCents(settledIntent),
+                currency: settledIntent.currency,
+                receiptUrl: chargeReceiptUrl(settledIntent),
+                receiptNumber: chargeReceiptNumber(settledIntent),
+                balanceTransaction: chargeBalanceTransaction(settledIntent),
             },
         },
     );
@@ -4450,6 +4478,8 @@ const handleBookingPaymentIntentEvent = async (event: any): Promise<string> => {
                                 [chat?.type === 'seminar' ? 'Seminar' : 'Session', chat?.name],
                                 ['Date & time', emailWhen(chat?.start, student?.timeZone)],
                                 ['Payment method', 'Alipay / WeChat Pay'],
+                                ['Transaction ID', String(intent.id)],
+                                ['Balance transaction', chargeBalanceTransaction(settledIntent)],
                             ]),
                             emailButton('View your booking'),
                             emailParagraph('You can open this booking at any time from your calendar or dashboard. Video and audio become available at the scheduled start time.', { muted: true }),
@@ -4469,6 +4499,8 @@ const handleBookingPaymentIntentEvent = async (event: any): Promise<string> => {
                         chat.duration,
                         capturedAmountCents(intent) / 100,
                         paidExpert.timeZone,
+                        String(intent.id),
+                        chargeBalanceTransaction(intent),
                     );
                 }
             }
@@ -4666,6 +4698,22 @@ const acceptIndividualAppointment = async (req, res) => {
                     paymentDeadline: deadline,
                 });
             }
+
+            // A card booking is confirmed by capturing the student's hold. If no hold is
+            // left to capture — the capture failed, or it lapsed or was released — there
+            // is nothing to collect, and activating anyway would confirm the session for
+            // free. A first attempt that fails marks its row 'failed', so without this
+            // guard simply pressing Accept a second time buys the session for nothing.
+            if (!parkedRow && dollarsToCents(groupChat.price) > 0) {
+                const securedPayment = await PaymentHistory.exists({
+                    groupChat: String(groupChat._id),
+                    paymentType: 'charge',
+                    status: { $in: ['completed', 'pending', 'withheld'] },
+                });
+                if (!securedPayment) {
+                    return res.status(409).send(BOOKING_HOLD_GONE);
+                }
+            }
         }
         if (role === 'customer') {
             payer = await User.findById(userId);
@@ -4804,6 +4852,7 @@ const acceptIndividualAppointment = async (req, res) => {
                     currency: charge.currency,
                     receiptUrl: charge.receiptUrl,
                     receiptNumber: charge.receiptNumber,
+                    balanceTransaction: charge.balanceTransaction ?? null,
                 }).catch((historyErr: any) => {
                     console.error('[acceptIndividualAppointment] captured payment left pending — reconcile manually', payment_intent, historyErr?.message);
                 });
@@ -4817,6 +4866,7 @@ const acceptIndividualAppointment = async (req, res) => {
                     paymentIntent: payment_intent,
                     receiptUrl: charge.receiptUrl,
                     receiptNumber: charge.receiptNumber,
+                    balanceTransaction: charge.balanceTransaction ?? null,
                     // Money still in flight is not revenue yet; the webhook settles it.
                     status: settling ? 'pending' : 'completed',
                     customer: String(userId),
@@ -4872,6 +4922,8 @@ const acceptIndividualAppointment = async (req, res) => {
                             groupChat.duration,
                             charge.amount / 100,
                             paidExpert.timeZone,
+                            String(payment_intent),
+                            charge?.balanceTransaction ?? null,
                         );
                     }
                 }
@@ -5326,6 +5378,7 @@ const cancelIndividualAppointment = async (req, res) => {
                         refunded: outcome === 'refunded',
                         amountCents: payment?.amount,
                         currency: payment?.currency,
+                        transactionId: parked?.paymentIntent || payment?.paymentIntent,
                         noteHtml: noteBlock,
                     }),
                 );
@@ -5371,6 +5424,7 @@ const cancelIndividualAppointment = async (req, res) => {
                                     ['Date & time', emailWhen(groupChat.start, student.timeZone)],
                                     ['Refunded', emailMoneyFromCents(payment.amount, payment.currency)],
                                     ['Reference', String(groupChat._id)],
+                                    ['Transaction ID', payment.paymentIntent],
                                 ]),
                                 emailCallout(`Your payment of <strong>${emailMoneyFromCents(payment.amount, payment.currency)}</strong> has been refunded in full. It will be credited to your original payment method and may take 5–10 business days to appear. No action is required from you.`, 'bad'),
                                 noteBlock || '',

@@ -17,6 +17,8 @@ export const BOOKING_PAYMENT_UNVERIFIED = 'Payment could not be verified, so you
 /** A hold could not be turned into a charge; the booking is rolled back. */
 export const BOOKING_CAPTURE_FAILED = "We couldn't complete your payment, so you have not been charged. Please try again.";
 
+export const BOOKING_HOLD_GONE = "The student's payment authorization is no longer available, so this session cannot be confirmed and no money can be collected. Ask them to book again.";
+
 /** Capture succeeded but the booking didn't; refund is in flight. */
 export const BOOKING_CAPTURED_NOT_BOOKED = "We couldn't complete your booking. Your payment has been refunded.";
 

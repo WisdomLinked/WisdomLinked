@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import StripeReference from '../../../components/dashboard/StripeReference';
 import { Wallet, Users, BookOpen, Receipt, RefreshCw } from 'lucide-react';
 import { doGetExpertPaymentHistory } from '../../../api/api';
 import StatCard from '../../../components/ui/StatCard';
@@ -48,6 +49,8 @@ type PaymentRow = {
   currency?: string;
   description?: string;
   status?: string;
+  paymentIntent?: string;
+  balanceTransaction?: string;
   paymentKind?: PaymentKind;
   createdAt?: string;
   customer?: { username?: string; email?: string };
@@ -283,13 +286,25 @@ export default function ExpertRevenue() {
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[640px] border-collapse text-left text-[13px]">
+              <table className="w-full min-w-[720px] table-fixed border-collapse text-left text-[13px]">
+                <colgroup>
+                  <col className="w-[12%]" />
+                  <col className="w-[10%]" />
+                  <col className="w-[19%]" />
+                  <col className="w-[12%]" />
+                  <col className="w-[15%]" />
+                  <col className="w-[14%]" />
+                  <col className="w-[8%]" />
+                  <col className="w-[10%]" />
+                </colgroup>
                 <thead>
                   <tr className="border-b border-slate-200 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
                     <th className="pb-3 pr-4 font-semibold">Date</th>
                     <th className="pb-3 pr-4 font-semibold">Type</th>
                     <th className="pb-3 pr-4 font-semibold">Description</th>
                     <th className="pb-3 pr-4 font-semibold">From</th>
+                    <th className="pb-3 pr-4 font-semibold">Transaction ID</th>
+                    <th className="pb-3 pr-4 font-semibold">Balance transaction</th>
                     <th className="pb-3 pr-4 font-semibold">Status</th>
                     <th className="pb-3 text-right font-semibold">Amount</th>
                   </tr>
@@ -321,25 +336,31 @@ export default function ExpertRevenue() {
                         key={r._id}
                         className="border-b border-slate-100 last:border-0"
                       >
-                        <td className="py-3 pr-4 align-top text-slate-600 whitespace-nowrap">
+                        <td className="py-3 pr-4 align-top text-slate-600">
                           {dateStr}
                         </td>
                         <td className="py-3 pr-4 align-top">
-                          <span className="inline-flex rounded-full bg-[#234C6A]/8 px-2.5 py-0.5 text-[11px] font-semibold text-[#234C6A]">
+                          <span className="inline-flex whitespace-nowrap rounded-full bg-[#234C6A]/8 px-2.5 py-0.5 text-[11px] font-semibold text-[#234C6A]">
                             {kindLabel(r.paymentKind)}
                           </span>
                         </td>
-                        <td className="py-3 pr-4 align-top max-w-[220px]">
-                          <span className="line-clamp-2 text-slate-800" title={desc}>
+                        <td className="py-3 pr-4 align-top">
+                          <span className="block break-words text-slate-800" title={desc}>
                             {desc}
                           </span>
                         </td>
-                        <td className="py-3 pr-4 align-top text-slate-600">
+                        <td className="py-3 pr-4 align-top break-words text-slate-600">
                           {payer}
                         </td>
                         <td className="py-3 pr-4 align-top">
+                          <StripeReference value={r.paymentIntent} />
+                        </td>
+                        <td className="py-3 pr-4 align-top">
+                          <StripeReference value={r.balanceTransaction} />
+                        </td>
+                        <td className="py-3 pr-4 align-top">
                           <span
-                            className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-semibold capitalize ${badgeClass}`}
+                            className={`inline-flex whitespace-nowrap rounded-full border px-2 py-0.5 text-[10px] font-semibold capitalize ${badgeClass}`}
                           >
                             {st}
                           </span>
