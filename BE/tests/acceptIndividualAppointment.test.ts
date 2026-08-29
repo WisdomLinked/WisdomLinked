@@ -248,14 +248,31 @@ test("an expert accepting takes no second payment", async () => {
   }
 });
 
-test("an expert can also accept an unpaid request", async () => {
+test("an expert can accept a free request, where there is nothing to collect", async () => {
   resetCalls();
-  const restore = withModels({ chat: studentRequest(), paid: false });
+  const restore = withModels({ chat: studentRequest({ price: 0 }), paid: false });
   try {
     const res = await acceptAs(EXPERT_ID, "expert");
 
     assert.equal(res.statusCode, 200);
     assert.equal(activatedStatus(), "active");
+  } finally {
+    restore();
+  }
+});
+
+test("a priced session with no hold left to capture is not confirmed for free", async () => {
+  // A failed capture marks its row 'failed', so the hold is no longer found. Pressing
+  // Accept again used to fall through and activate the session having collected
+  // nothing — the expert was owed money for a session the student never paid for.
+  resetCalls();
+  const restore = withModels({ chat: studentRequest(), paid: false, parked: null });
+  try {
+    const res = await acceptAs(EXPERT_ID, "expert");
+
+    assert.equal(res.statusCode, 409);
+    assert.match(String(res.body), /no longer available|book again/i);
+    assert.equal(activatedStatus(), undefined, "the session is left pending, not confirmed");
   } finally {
     restore();
   }
@@ -340,7 +357,7 @@ test("a paid accept sends one email: the note rides on the receipt", async () =>
 
 test("a free accept still gets its own acceptance email", async () => {
   resetCalls();
-  const restore = withModels({ chat: studentRequest(), paid: false, parked: null });
+  const restore = withModels({ chat: studentRequest({ price: 0 }), paid: false, parked: null });
   try {
     await acceptAs(EXPERT_ID, "expert", { note: "Looking forward to it." });
     await new Promise((resolve) => setTimeout(resolve, 0));

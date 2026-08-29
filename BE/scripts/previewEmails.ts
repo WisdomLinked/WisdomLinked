@@ -57,6 +57,8 @@ const EXPERT = 'Dr Bruce Wang';
 const STUDENT = 'Mei Chen';
 const SEMINAR = 'Applying to US Graduate Programs';
 const SESSION = 'PhD application strategy';
+const INTENT = 'pi_3U7IOaFzkCxWETvY1sQBz9Kd';
+const BALANCE_TXN = 'txn_3U7IOaFzkCxWETvY1LmPq4Rn';
 
 const run = async () => {
     // --- built for real out of notifications.ts -------------------------------
@@ -85,7 +87,7 @@ const run = async () => {
 
     await record('D4 · student accepted and paid → expert', () =>
         notifications.sendEmailSessionPaidToExpert(
-            'e@x.com', EXPERT, STUDENT, SESSION, IN_2_DAYS, 60, 120, 'UTC',
+            'e@x.com', EXPERT, STUDENT, SESSION, IN_2_DAYS, 60, 120, 'UTC', INTENT, BALANCE_TXN,
         ));
 
     await record('A2 · enrolled, card charged → student (receipt)', () =>
@@ -94,6 +96,7 @@ const run = async () => {
             expertName: EXPERT, studentName: STUDENT, start: IN_2_DAYS, duration: 90,
             amount: 4900, currency: 'usd', receiptUrl: 'https://example.com/receipt',
             receiptNumber: '2381-4471', paymentMethod: 'Credit card', timeZone: 'UTC',
+            transactionId: INTENT, balanceTransaction: BALANCE_TXN,
         }));
 
     await record('C4/D3 · 1:1 confirmed → student (receipt)', () =>
@@ -102,6 +105,7 @@ const run = async () => {
             expertName: EXPERT, studentName: STUDENT, start: IN_2_DAYS, duration: 60,
             amount: 12000, currency: 'usd', receiptUrl: 'https://example.com/receipt',
             receiptNumber: '2381-4472', paymentMethod: 'WeChat Pay', timeZone: 'UTC',
+            transactionId: INTENT, balanceTransaction: BALANCE_TXN,
         }));
 
     // --- representative of the controller-side messages ----------------------
@@ -145,7 +149,7 @@ const run = async () => {
         heading: "We couldn't complete your registration",
         blocks: [
             paragraph(`Your request to join <strong>${escapeHtml(SEMINAR)}</strong> was approved by ${escapeHtml(EXPERT)}, but a system issue stopped us completing your registration. You have <strong>not</strong> been enrolled.`),
-            facts([['Seminar', SEMINAR], ['Reference', 'a1b2c3d4e5f6']]),
+            facts([['Seminar', SEMINAR], ['Reference', 'a1b2c3d4e5f6'], ['Transaction ID', INTENT]]),
             callout(`Your refund of <strong>${money(49)}</strong> has been issued. It will be credited to your original payment method and may take 5–10 business days to appear, depending on your bank.`, 'bad'),
             paragraph('If you would still like to attend, please try again, or contact the administrator through WisdomLinked quoting the reference above.'),
         ],
@@ -165,7 +169,7 @@ const run = async () => {
         heading: 'Your session has been cancelled',
         blocks: [
             paragraph(`<strong>${escapeHtml(SESSION)}</strong> has been cancelled by the expert.`),
-            facts([['Session', SESSION], ['Expert', EXPERT], ['Refunded', money(120)], ['Reference', 'pi_3U7IOaFzkCxWETvY1s']]),
+            facts([['Session', SESSION], ['Expert', EXPERT], ['Refunded', money(120)], ['Reference', 'a1b2c3d4e5f6'], ['Transaction ID', INTENT]]),
             callout(`Your payment of <strong>${money(120)}</strong> has been refunded in full. It will be credited to your original payment method and may take 5–10 business days to appear. No action is required from you.`, 'bad'),
         ],
     });

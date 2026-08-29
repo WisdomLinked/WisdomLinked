@@ -104,3 +104,36 @@ describe('UpcomingSessionModal pending 1:1 copy for students', () => {
     expect(screen.getByText(/Some of these are waiting for your payment/i)).toBeInTheDocument();
   });
 });
+
+describe('UpcomingSessionModal ordering', () => {
+  it('lists sessions by when they happen, whatever order the caller passed', () => {
+    // Callers concatenate pending, awaiting-payment and booked groups, so the incoming
+    // order is whatever the API returned.
+    const hour = 60 * 60 * 1000;
+    const base = Date.now();
+
+    renderPending([
+      session({ id: 'c', title: 'Third', at: base + 72 * hour }),
+      session({ id: 'a', title: 'First', at: base + 2 * hour }),
+      session({ id: 'b', title: 'Second', at: base + 24 * hour }),
+    ]);
+
+    const order = screen
+      .getAllByText(/^(First|Second|Third)$/)
+      .map(el => el.textContent);
+
+    expect(order).toEqual(['First', 'Second', 'Third']);
+  });
+
+  it('keeps a stable order when two sessions start at the same moment', () => {
+    const at = Date.now() + 3 * 60 * 60 * 1000;
+
+    renderPending([
+      session({ id: 'z', title: 'Beta', at }),
+      session({ id: 'y', title: 'Alpha', at }),
+    ]);
+
+    const order = screen.getAllByText(/^(Alpha|Beta)$/).map(el => el.textContent);
+    expect(order).toEqual(['Alpha', 'Beta']);
+  });
+});

@@ -29,12 +29,13 @@ function shouldUseRichWire(html: string): boolean {
 
 function simulateOutgoingStorage(sanitizedHtml: string): string {
   if (!shouldUseRichWire(sanitizedHtml)) {
-    return sanitizedHtml
-      .replace(/<br\s*\/?>/gi, "\n")
-      .replace(/<\/p>/gi, "\n")
-      .replace(/<[^>]+>/g, "")
-      .replace(/&nbsp;/g, " ")
-      .trim();
+    let out = sanitizedHtml.replace(/<br\s*\/?>/gi, "\n").replace(/<\/p>/gi, "\n");
+    let previous: string;
+    do {
+      previous = out;
+      out = out.replace(/<[^<>]*>/g, "");
+    } while (out !== previous);
+    return out.replace(/&nbsp;/g, " ").trim();
   }
   return encodeRichHtmlWire(sanitizedHtml);
 }

@@ -20,6 +20,8 @@ import {
   seatRequestWindowShortLabel,
 } from '../../utils/seatRequestWindow';
 import { SetLoadingStatus } from '../../actions/appActions';
+import { showSuccessAlert } from '../../actions/alertActions';
+import { paymentBannerMessage, stripeTransactionId } from '../../utils/paymentBanner';
 import { updateMe } from '../../actions/authActions';
 import StudentBookingCheckout from './StudentBookingCheckout';
 import { usePeerProfileModal } from '../../hooks/usePeerProfileModal';
@@ -233,6 +235,15 @@ export default function StudentSeminars({
           return;
         }
         window.localStorage.removeItem('pendingDetails');
+        dispatch(
+          showSuccessAlert(
+            paymentBannerMessage({
+              kind: 'withheld',
+              amount: selectedSeminar.price,
+              deciderName: selectedSeminar.expertName,
+            }),
+          ),
+        );
         setCheckout(null);
         setSeatRequested(true);
         return;
@@ -246,6 +257,15 @@ export default function StudentSeminars({
         return;
       }
       window.localStorage.removeItem('pendingDetails');
+      dispatch(
+        showSuccessAlert(
+          paymentBannerMessage({
+            kind: 'paid',
+            forWhat: `you are registered for ${selectedSeminar.title}`,
+            transactionId: stripeTransactionId(paymentIntentId),
+          }),
+        ),
+      );
       dispatch(updateMe() as any);
       setCheckout(null);
       setBookingDone(true);
@@ -285,6 +305,15 @@ export default function StudentSeminars({
         return;
       }
       window.localStorage.removeItem('pendingDetails');
+      dispatch(
+        showSuccessAlert(
+          paymentBannerMessage({
+            kind: 'paid',
+            forWhat: 'your seat is confirmed',
+            transactionId: stripeTransactionId(paymentIntentId),
+          }),
+        ),
+      );
       dispatch(updateMe() as any);
       setCheckout(null);
       setBookingDone(true);
@@ -963,11 +992,19 @@ export default function StudentSeminars({
                 </dl>
                 <button
                   type="button"
-                  onClick={() => setCheckout('pay')}
+                  onClick={() => {
+                    // Nothing to collect on a free seminar, so the payment step would
+                    // only ask them to confirm a second time.
+                    if (s.price > 0) {
+                      setCheckout('pay');
+                      return;
+                    }
+                    void joinSeminar('0', { requiresApproval: isFull });
+                  }}
                   className="inline-flex w-full items-center justify-center rounded-[4px] bg-[#1A3A4A] px-4 py-3 text-[13px] font-semibold text-white hover:bg-[#122635]"
                 >
                   {isFull
-                    ? (s.price > 0 ? 'Continue to authorize' : 'Continue to join the waiting list')
+                    ? (s.price > 0 ? 'Continue to authorize' : 'Join the waiting list')
                     : s.price > 0 ? 'Continue to payment' : 'Confirm booking'}
                 </button>
               </div>

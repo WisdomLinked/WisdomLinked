@@ -24,6 +24,7 @@ import { isRcAuthError } from '../utils/rcSessionErrors';
 const User = require('../models/User');
 const GroupChat = require('../models/GroupChat');
 const Conversation = require('../models/Conversation');
+const crypto = require('crypto');
 
 const RC_URL = process.env.ROCKETCHAT_URL || 'https://chat.wisdomlinked.com';
 const RC_USER = process.env.ROCKETCHAT_ADMIN_USER || '';
@@ -114,13 +115,16 @@ const withAdminAuth = async <T>(fn: (headers: Record<string, string>) => Promise
     }
 };
 
+const generateRocketChatPassword = (): string =>
+    `${crypto.randomBytes(24).toString('base64url')}A1!`;
+
 /**
  * Rocket.Chat rejects display names as usernames (spaces, etc.).
  * Build a stable, valid username from the WisdomLinked email.
  */
 export const toRocketChatUsername = (email: string | undefined | null): string => {
     if (!email || typeof email !== 'string') {
-        return `wl_${Math.random().toString(36).slice(2, 12)}`;
+        return 'wl_user';
     }
     const trimmed = email.trim().toLowerCase();
     const at = trimmed.lastIndexOf('@');
@@ -191,7 +195,7 @@ export const syncUserToRocketChat = async (userData: { email: string; username: 
                 {
                     email: userData.email,
                     name: displayName,
-                    password: userData.password || Math.random().toString(36).slice(-10) + 'A1!',
+                    password: userData.password || generateRocketChatPassword(),
                     username: rcUsername,
                     verified: true,
                     joinDefaultChannels: true,

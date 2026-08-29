@@ -15,8 +15,10 @@ import sys
 
 from PIL import Image
 
-TARGET_WIDTH = 440
-MAX_HEIGHT = 150
+# 2x MAX_HEADER_DISPLAY_WIDTH in services/emailTemplate.ts. The asset was 4x the
+# display width, carrying four times the bytes for no visible gain.
+TARGET_WIDTH = 220
+MAX_HEIGHT = 75
 PAD_RATIO = 0.16
 
 
@@ -74,15 +76,15 @@ def main():
     os.makedirs(os.path.dirname(out), exist_ok=True)
     # A logo is a handful of flat colours, so a palette costs nothing visually and
     # roughly halves a file that rides along in every email we send.
-    final.convert("P", palette=Image.ADAPTIVE, colors=64).save(out, "PNG", optimize=True)
+    final.convert("P", palette=Image.ADAPTIVE, colors=16).save(out, "PNG", optimize=True)
 
     size_kb = os.path.getsize(out) / 1024
     print(f"background navy : #{background[0]:02X}{background[1]:02X}{background[2]:02X}")
     print(f"wrote           : {out} ({final.width}x{final.height}, {size_kb:.0f} KB)")
     print(f"displays at     : {final.width // 2}x{final.height // 2} in the email")
     print("This must live inside BE/ — the Docker build context is ./BE.")
-    if size_kb > 60:
-        print("WARNING: over 60 KB. It is embedded in every email — consider a tighter crop.")
+    if size_kb > 20:
+        print("WARNING: over 20 KB. It is embedded in every email — consider a tighter crop.")
     print("If the navy above does not match BRAND.banner in services/emailTemplate.ts, update it there.")
 
 

@@ -53,8 +53,8 @@ const {
     getChatBotAnswer
 } = require('../controllers/chatBotQA.controller')
 
-router.get("/csrf-token", (req: any, res: any) => res.status(200).json({ csrfToken: req.csrfToken() }));
-router.post("/logout", logout);
+router.get("/csrf-token", apiLimiter, (req: any, res: any) => res.status(200).json({ csrfToken: req.csrfToken() }));
+router.post("/logout", apiLimiter, logout);
 
 // Baseline rate limiting for every auth route below.
 router.use(apiLimiter);

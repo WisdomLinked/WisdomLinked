@@ -9,6 +9,8 @@ import {
   paymentWindowLapsed,
   walletChargeAllowed,
   pinnedSettlementMode,
+  CARD_PAYMENT_METHOD_TYPES,
+  WALLET_PAYMENT_METHOD_TYPES,
   DEFAULT_PAYMENT_WINDOW_HOURS,
   WALLET_PAYMENT_METHOD_TYPES,
 } from "../utils/walletPayment";
@@ -120,4 +122,17 @@ test("a booking with no recorded mode settles as card, never as wallet", () => {
   assert.equal(pinnedSettlementMode(null), "card");
   assert.equal(pinnedSettlementMode("WALLET"), "card");
   assert.equal(pinnedSettlementMode({}), "card");
+});
+
+test("a card booking offers card alone, with no other method to pick from", () => {
+  // Left on automatic_payment_methods, Stripe offered every method enabled in the
+  // dashboard, so the checkout grew a Card / Cash App Pay selector. Card bookings
+  // are also authorize-then-capture, which most of those methods cannot do.
+  assert.deepEqual(CARD_PAYMENT_METHOD_TYPES, ["card"]);
+  for (const wallet of WALLET_PAYMENT_METHOD_TYPES) {
+    assert.ok(
+      !CARD_PAYMENT_METHOD_TYPES.includes(wallet),
+      `${wallet} belongs to the wallet rail, not the card one`,
+    );
+  }
 });

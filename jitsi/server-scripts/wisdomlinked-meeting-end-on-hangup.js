@@ -47,7 +47,7 @@
   }
 
   function messengerOrigin() {
-    var fromHash = hashValue("config.wisdomlinkedMessengerOrigin") || "";
+    var fromHash = safeWlOrigin(hashValue("config.wisdomlinkedMessengerOrigin"));
     if (fromHash) {
       try {
         window.sessionStorage.setItem(STORAGE_MESSENGER, fromHash);
@@ -55,14 +55,47 @@
       return fromHash;
     }
     try {
-      return window.sessionStorage.getItem(STORAGE_MESSENGER) || "";
+      return safeWlOrigin(window.sessionStorage.getItem(STORAGE_MESSENGER));
+    } catch (e) {
+      return "";
+    }
+  }
+
+  function allowedWlHost(hostname) {
+    var host = String(hostname || "").toLowerCase();
+    return (
+      host === "wisdomlinked.com" ||
+      host === "localhost" ||
+      host === "127.0.0.1" ||
+      host.slice(-16) === ".wisdomlinked.com"
+    );
+  }
+
+  function safeWlOrigin(raw) {
+    var url = safeWlUrl(raw);
+    if (!url) return "";
+    try {
+      return new URL(url).origin;
+    } catch (e) {
+      return "";
+    }
+  }
+
+  function safeWlUrl(raw) {
+    var value = String(raw || "").trim();
+    if (!value) return "";
+    try {
+      var parsed = new URL(value, window.location.href);
+      if (parsed.protocol !== "https:" && parsed.protocol !== "http:") return "";
+      if (!allowedWlHost(parsed.hostname)) return "";
+      return parsed.href;
     } catch (e) {
       return "";
     }
   }
 
   function returnUrl() {
-    var fromHash = hashValue("config.wisdomlinkedReturnUrl") || "";
+    var fromHash = safeWlUrl(hashValue("config.wisdomlinkedReturnUrl"));
     if (fromHash) {
       try {
         window.sessionStorage.setItem(STORAGE_RETURN, fromHash);
@@ -70,7 +103,7 @@
       return fromHash;
     }
     try {
-      var cached = window.sessionStorage.getItem(STORAGE_RETURN) || "";
+      var cached = safeWlUrl(window.sessionStorage.getItem(STORAGE_RETURN));
       if (cached) return cached;
     } catch (e) {}
     return messengerOrigin();

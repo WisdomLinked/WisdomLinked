@@ -11,17 +11,23 @@ const HEADER_SOURCES = [
     path.join(__dirname, "..", "assets", "email-header.png"),
 ].filter(Boolean);
 
-let headerCache: { base64: string; width: number } | null = null;
+let headerCache: { base64: string; width: number; height: number } | null = null;
 let headerMissLogged = false;
 
 const MAX_HEADER_DISPLAY_WIDTH = 220;
 
-const pngDisplayWidth = (buffer: any): number => {
+// Both dimensions are stamped on the <img> so the client reserves the space before
+// the image decodes. Left to height:auto the banner reflows once it loads, which
+// reads as the logo arriving late even though it is attached to the message.
+const pngDisplaySize = (buffer: any): { width: number; height: number } => {
+    const fallback = { width: MAX_HEADER_DISPLAY_WIDTH, height: 0 };
     const isPng = buffer.length > 24 && buffer.toString("ascii", 1, 4) === "PNG";
-    if (!isPng) return MAX_HEADER_DISPLAY_WIDTH;
+    if (!isPng) return fallback;
     const pixelWidth = buffer.readUInt32BE(16);
-    if (!pixelWidth) return MAX_HEADER_DISPLAY_WIDTH;
-    return Math.min(MAX_HEADER_DISPLAY_WIDTH, Math.round(pixelWidth / 2));
+    const pixelHeight = buffer.readUInt32BE(20);
+    if (!pixelWidth || !pixelHeight) return fallback;
+    const width = Math.min(MAX_HEADER_DISPLAY_WIDTH, Math.round(pixelWidth / 2));
+    return { width, height: Math.round((pixelHeight / pixelWidth) * width) };
 };
 
 const headerImage = () => {
@@ -32,7 +38,8 @@ const headerImage = () => {
         try {
             if (candidate && fs.existsSync(candidate)) {
                 const buffer = fs.readFileSync(candidate);
-                headerCache = { base64: buffer.toString("base64"), width: pngDisplayWidth(buffer) };
+                const size = pngDisplaySize(buffer);
+                headerCache = { base64: buffer.toString("base64"), width: size.width, height: size.height };
                 return headerCache;
             }
         } catch (err: any) {
@@ -205,7 +212,7 @@ ${preview}
             <tr>
                 <td align="center" bgcolor="${BRAND.banner}" style="background:${BRAND.banner};padding:22px 24px;">
                     ${headerImage()
-                        ? `<img src="cid:${HEADER_CID}" alt="WisdomLinked" width="${headerImage().width}" style="display:block;width:${headerImage().width}px;max-width:70%;height:auto;border:0;" />`
+                        ? `<img src="cid:${HEADER_CID}" alt="WisdomLinked" width="${headerImage().width}" height="${headerImage().height}" style="display:block;width:${headerImage().width}px;height:${headerImage().height}px;border:0;" />`
                         : `<div style="font-family:Georgia,'Times New Roman',serif;font-size:23px;line-height:1;letter-spacing:0.5px;color:#FFFFFF;">Wisdom<span style="color:${BRAND.gold};">Linked</span></div>`}
                 </td>
             </tr>

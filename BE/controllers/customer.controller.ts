@@ -147,7 +147,7 @@ const filterSeminars = async (req, res) => {
             let _keywords = []
             for (let i = 0; i < keywords.length; i++) {
                 if (keywords[i].new) {
-                    const sameKeywordExist = await Keyword.find({ value: keywords[i].value })
+                    const sameKeywordExist = await Keyword.find({ value: String(keywords[i].value) })
                     if (sameKeywordExist.length) {
                         _keywords.push(sameKeywordExist[0]._id)
                     } else {

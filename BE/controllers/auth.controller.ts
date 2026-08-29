@@ -849,6 +849,15 @@ const updateMissedChats = async (req: any, res: Response) => {
     }
 }
 
+const withoutOperatorKeys = (source: Record<string, any>): Record<string, any> => {
+    const safe: Record<string, any> = {};
+    for (const key of Object.keys(source)) {
+        if (key.startsWith('$') || key.includes('.')) continue;
+        safe[key] = source[key];
+    }
+    return safe;
+};
+
 const updateProfile = async (req: any, res: Response) => {
     try {
         const { email } = req.user
@@ -1028,7 +1037,7 @@ const updateProfile = async (req: any, res: Response) => {
         }
 
         // [User Model] -- add more updating fields based on the user model
-        await User.findOneAndUpdate({ email: email }, updates, { new: true })
+        await User.findOneAndUpdate({ email: String(email) }, { $set: withoutOperatorKeys(updates) }, { new: true })
 
         const resultEmail = boundEmail || email;
         if (freshToken) {
@@ -1252,7 +1261,8 @@ const handleSubmit = async (req: Request, res: Response) => {
             // If the directory doesn't exist, create it
             fs.mkdirSync(directory, { recursive: true });
         }
-        const filePath = path.join(__dirname, '../uploads/docs', `${new Date().getTime()}_${file.originalname}`);
+        const safeName = path.basename(String(file.originalname || 'upload')).replace(/[^A-Za-z0-9._-]/g, '_');
+        const filePath = path.join(directory, `${new Date().getTime()}_${safeName}`);
         fs.writeFileSync(filePath, file.buffer);
 
         res.status(200).send('SUCCESS')

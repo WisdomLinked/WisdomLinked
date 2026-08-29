@@ -206,6 +206,7 @@ const appendEvent = async (req, res) => {
                     paymentIntent: payment_intent,
                     receiptUrl: charge.receiptUrl,
                     receiptNumber: charge.receiptNumber,
+                    balanceTransaction: charge.balanceTransaction ?? null,
                     customer: customerUser._id.toString(),
                     expert: expertUser._id.toString(),
                     event: eventExists._id.toString(),
@@ -280,6 +281,7 @@ const appendEvent = async (req, res) => {
                     paymentIntent: payment_intent,
                     receiptUrl: charge.receiptUrl,
                     receiptNumber: charge.receiptNumber,
+                    balanceTransaction: charge.balanceTransaction ?? null,
                     customer: customerUser._id.toString(),
                     expert: expertUser._id.toString(),
                     event: event._id.toString(),
@@ -533,7 +535,7 @@ const cancelInvitation = async (req, res) => {
     }
 }
 
-const notifyCancelledEventRefund = async ({ event, expert, customer, payment, reference }) => {
+const notifyCancelledEventRefund = async ({ event, expert, customer, payment, transactionId }) => {
     const amount = eventMoneyFromCents(payment.amount, payment.currency)
     const when = eventWhen(event.start, customer?.timeZone)
     const expertWhen = eventWhen(event.start, expert?.timeZone)
@@ -552,10 +554,10 @@ const notifyCancelledEventRefund = async ({ event, expert, customer, payment, re
                             ['Expert', expert?.username],
                             ['Date & time', when],
                             ['Refunded', amount],
-                            ['Reference', reference],
+                            ['Transaction ID', transactionId || payment?.paymentIntent],
                         ]),
                         eventCallout(`Your payment of <strong>${amount}</strong> has been refunded in full. It will be credited to your original payment method and may take 5–10 business days to appear, depending on your bank. No action is required from you.`, 'bad'),
-                        eventParagraph('If the refund has not reached you within 10 business days, contact the administrator through WisdomLinked quoting the reference above.', { muted: true }),
+                        eventParagraph('If the refund has not reached you within 10 business days, contact the administrator through WisdomLinked quoting the transaction ID above.', { muted: true }),
                     ],
                 }),
             )
@@ -572,6 +574,7 @@ const notifyCancelledEventRefund = async ({ event, expert, customer, payment, re
                             ['Session', event.title],
                             ['Student', customer?.username],
                             ['Date & time', expertWhen],
+                            ['Transaction ID', transactionId || payment?.paymentIntent],
                         ]),
                         eventCallout(`The student's payment of ${amount} has been refunded in full. No action is required from you.`),
                     ],
@@ -620,7 +623,7 @@ const cancelEvent = async (req, res) => {
                     paymentIntent: refund.payment_intent,
                 })
 
-                await notifyCancelledEventRefund({ event, expert, customer, payment, reference: refund.payment_intent })
+                await notifyCancelledEventRefund({ event, expert, customer, payment, transactionId: refund.payment_intent })
             } else {
                 console.error('[cancelEvent] refund failed — reconcile manually', payment.paymentIntent)
             }

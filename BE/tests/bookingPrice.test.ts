@@ -5,6 +5,7 @@ import {
   dollarsToCents,
   extractHourlyRate,
   assertPaymentMatchesExpected,
+  balanceTransactionId,
   expectedBookingIntentCents,
   assertIntentMatchesBooking,
   voluntaryCancellationRefundCents,
@@ -168,14 +169,14 @@ describe("assertPaymentMatchesExpected", () => {
     // No expanded latest_charge on okIntent, so receipt fields default to null.
     assert.deepEqual(
       assertPaymentMatchesExpected(7500, "pi_123", okIntent, false),
-      { paidBy: "test", amount: 7500, currency: "usd", receiptUrl: null, receiptNumber: null },
+      { paidBy: "test", amount: 7500, currency: "usd", receiptUrl: null, receiptNumber: null, balanceTransaction: null },
     );
   });
 
   it("paid path: returns verified live-mode charge details on a correct payment", () => {
     assert.deepEqual(
       assertPaymentMatchesExpected(7500, "pi_123", false, okIntent),
-      { paidBy: "live", amount: 7500, currency: "usd", receiptUrl: null, receiptNumber: null },
+      { paidBy: "live", amount: 7500, currency: "usd", receiptUrl: null, receiptNumber: null, balanceTransaction: null },
     );
   });
 
@@ -198,6 +199,7 @@ describe("assertPaymentMatchesExpected", () => {
         currency: "usd",
         receiptUrl: "https://pay.stripe.com/receipts/abc123",
         receiptNumber: "2net-1234",
+        balanceTransaction: null,
       },
     );
   });
@@ -207,7 +209,7 @@ describe("assertPaymentMatchesExpected", () => {
     const intentUnexpanded = { amount: 7500, currency: "usd", latest_charge: "ch_123" };
     assert.deepEqual(
       assertPaymentMatchesExpected(7500, "pi_123", intentUnexpanded, false),
-      { paidBy: "test", amount: 7500, currency: "usd", receiptUrl: null, receiptNumber: null },
+      { paidBy: "test", amount: 7500, currency: "usd", receiptUrl: null, receiptNumber: null, balanceTransaction: null },
     );
   });
 
@@ -226,6 +228,7 @@ describe("assertPaymentMatchesExpected", () => {
         currency: "usd",
         receiptUrl: "https://pay.stripe.com/receipts/only-url",
         receiptNumber: null,
+        balanceTransaction: null,
       },
     );
   });
@@ -294,5 +297,20 @@ describe("assertIntentMatchesBooking", () => {
       () => assertIntentMatchesBooking({ amount: 5000, currency: "usd" }, { userId: "stu_1", groupChatId: "sem_A" }),
       /not created for this booking/,
     );
+  });
+});
+
+describe("balanceTransactionId", () => {
+  it("reads the ledger reference whether Stripe expanded it or not", () => {
+    // A payout is made of balance transactions, so this is what finance reconciles
+    // against — and it is a different id from the payment intent.
+    assert.equal(balanceTransactionId({ balance_transaction: "txn_1ABC" }), "txn_1ABC");
+    assert.equal(balanceTransactionId({ balance_transaction: { id: "txn_1ABC" } }), "txn_1ABC");
+  });
+
+  it("is null while the money has not settled, rather than guessing", () => {
+    assert.equal(balanceTransactionId({ balance_transaction: null }), null);
+    assert.equal(balanceTransactionId({}), null);
+    assert.equal(balanceTransactionId(null), null);
   });
 });

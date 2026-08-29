@@ -244,6 +244,25 @@ export function peelWisdomLinkedReplyQuotes(html: string): {
   return { quotes, bodyHtml: remaining };
 }
 
+const REPLY_ENTITIES: Record<string, string> = { amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", "#39": "'", nbsp: " " };
+
+export function stripHtmlTags(value: string): string {
+  let out = String(value ?? "");
+  let previous: string;
+  do {
+    previous = out;
+    out = out.replace(/<[^<>]*>/g, " ");
+  } while (out !== previous);
+  return out;
+}
+
+export function decodeBasicEntities(value: string): string {
+  return String(value ?? "").replace(
+    /&(amp|lt|gt|quot|apos|#39|nbsp);/gi,
+    (match, name) => REPLY_ENTITIES[String(name).toLowerCase()] ?? match,
+  );
+}
+
 /** Fallback when `document` is unavailable (SSR / tests). */
 export function peelWisdomLinkedReplyQuotesRegex(html: string): {
   quotes: PeeledReplyQuote[];
@@ -252,7 +271,7 @@ export function peelWisdomLinkedReplyQuotesRegex(html: string): {
   const quotes: PeeledReplyQuote[] = [];
   let remaining = String(html ?? "").trim();
   const re =
-    /^<blockquote([^>]*)>\s*<strong>\s*Replying to\s+([^<]+)<\/strong>\s*<br\s*\/?>\s*([\s\S]*?)<\/blockquote>/i;
+    /^<blockquote([^>]*)>\s*<strong>\s*Replying to([^<]+)<\/strong>\s*<br\s*\/?>([\s\S]*?)<\/blockquote>/i;
 
   for (let i = 0; i < 12; i++) {
     const m = remaining.match(re);
@@ -260,12 +279,8 @@ export function peelWisdomLinkedReplyQuotesRegex(html: string): {
     const attrs = m[1] || "";
     const idMatch = /data-wl-reply-id\s*=\s*["']([^"']+)["']/i.exec(attrs);
     const messageId = idMatch ? idMatch[1].trim() : undefined;
-    const to = m[2].trim().replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">");
-    const excerpt = m[3]
-      .replace(/<[^>]+>/g, " ")
-      .replace(/&nbsp;/gi, " ")
-      .replace(/\s+/g, " ")
-      .trim();
+    const to = decodeBasicEntities(m[2].trim());
+    const excerpt = decodeBasicEntities(stripHtmlTags(m[3]).replace(/\s+/g, " ")).trim();
     quotes.push({ to, excerpt, messageId });
     remaining = remaining.slice(m[0].length).trim();
   }

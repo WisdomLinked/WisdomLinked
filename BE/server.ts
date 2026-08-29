@@ -24,7 +24,10 @@ const chatRoutes = require("./routes/chatRoutes");
 const meetingRoutes = require("./routes/meetingRoutes");
 
 const { appendDefaultServices, appendAdminUserAndGroupChat, initAppStates } = require('./initDB')
+const { apiLimiter } = require('./middlewares/rateLimit');
 
+
+const isProdEnv = process.env.NODE_ENV === 'production';
 
 const PORT = process.env.PORT || 5000;
 
@@ -46,8 +49,16 @@ const maxRequestBodySize = process.env.MAX_REQUEST_BODY_SIZE || '1mb';
 
 const jitHost = String(process.env.JITSI_DOMAIN || '').replace(/^https?:\/\//, '').replace(/\/$/, '');
 const jitOrigin = jitHost ? `https://${jitHost}` : null;
+const allowedOrigins = new Set(
+    [process.env.FE_URL, "https://www.wisdomlinked.com", "http://localhost:3000", jitOrigin]
+        .filter(Boolean)
+        .map((value) => String(value).replace(/\/$/, '')),
+);
 const corsOptions = {
-    origin: [process.env.FE_URL, "https://www.wisdomlinked.com", "http://localhost:3000", jitOrigin].filter(Boolean),
+    origin: (origin, callback) => {
+        if (!origin) return callback(null, false);
+        return callback(null, allowedOrigins.has(String(origin).replace(/\/$/, '')));
+    },
     methods: ['GET', 'POST', 'PUT', 'DELETE'],
     credentials: true,
     allowedHeaders: ['Content-Type', 'Authorization', 'X-CSRF-Token']
@@ -70,7 +81,7 @@ app.use(session({
     secret: process.env.JWT_SECRET || 'wisdomlinked-session-secret',
     resave: false,
     saveUninitialized: false,
-    cookie: { secure: false, maxAge: 60000 } // short-lived, just for OAuth handshake
+    cookie: { secure: isProdEnv, httpOnly: true, sameSite: 'lax' as const, maxAge: 60000 }
 }));
 app.use(passport.initialize());
 app.use(passport.session());
@@ -93,10 +104,15 @@ app.use("/api/meeting", meetingRoutes);
 
 app.use(csrfErrorHandler);
 
-app.use(express.static('./uploads'));
-app.get('/uploads/*', (req, res) => {
-    const fileName = path.basename(req.path);
-    res.sendFile(decodeURI(fileName), { root: path.join(__dirname, `.${req.path.replace(fileName, '')}`) });
+const uploadsRoot = path.join(__dirname, 'uploads');
+app.use(express.static(uploadsRoot));
+app.get('/uploads/*', apiLimiter, (req, res) => {
+    const requested = path.normalize(decodeURI(req.path.replace(/^\/uploads\/?/, '')));
+    const resolved = path.resolve(uploadsRoot, requested);
+    if (!resolved.startsWith(uploadsRoot + path.sep)) {
+        return res.status(404).send('Not found');
+    }
+    return res.sendFile(resolved);
 });
 
 // Wait for MongoDB before accepting traffic — avoids Mongoose "buffering timed out" on failed connects

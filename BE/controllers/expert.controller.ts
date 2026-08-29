@@ -103,7 +103,8 @@ const getDailyTimeSlots = async (req, res) => {
 const updateDailyTimeSlots = async (req, res) => {
     try {
         const { email } = req.user
-        const { newSlots, startTime, endTime } = req.body
+        const { startTime, endTime } = req.body
+        const newSlots = Array.isArray(req.body?.newSlots) ? req.body.newSlots.map(String) : []
         const user = await User.findOne({ email: email }).select('dailyTimeSlots')
         if (!user) {
             throw new Error("User not found")
@@ -116,7 +117,7 @@ const updateDailyTimeSlots = async (req, res) => {
                 slots.push(slot)
             }
         })
-        await User.findOneAndUpdate({ email: email }, { dailyTimeSlots: slots }, { new: true })
+        await User.findOneAndUpdate({ email: String(email) }, { $set: { dailyTimeSlots: slots.map(String) } }, { new: true })
 
         return res.status(200).json({
             dailyTimeSlots: slots

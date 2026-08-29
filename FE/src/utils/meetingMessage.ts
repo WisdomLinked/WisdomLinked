@@ -21,12 +21,15 @@ export type ParsedMeetingMessage =
       senderId?: string;
     };
 
-const stripHtml = (value: string): string =>
-  String(value || "")
-    .replace(/<br\s*\/?>/gi, "\n")
-    .replace(/<[^>]+>/g, "")
-    .replace(/&nbsp;/gi, " ")
-    .trim();
+const stripHtml = (value: string): string => {
+  let out = String(value || "").replace(/<br\s*\/?>/gi, "\n");
+  let previous: string;
+  do {
+    previous = out;
+    out = out.replace(/<[^<>]*>/g, "");
+  } while (out !== previous);
+  return out.replace(/&nbsp;/gi, " ").trim();
+};
 
 function decodeBase64UrlToUtf8(b64: string): string | null {
   try {

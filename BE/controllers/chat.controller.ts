@@ -266,7 +266,7 @@ const mapRCMessagesToWL = async (
 export const getOrCreateDM = async (req: any, res: Response) => {
     try {
         const { userId } = req.user;
-        const { otherUserId } = req.body;
+        const otherUserId = req.body?.otherUserId ? String(req.body.otherUserId) : '';
 
         if (!otherUserId) return res.status(400).json({ error: 'otherUserId is required' });
 
@@ -326,7 +326,8 @@ export const getOrCreateDM = async (req: any, res: Response) => {
 export const sendMessage = async (req: any, res: Response) => {
     try {
         const { userId } = req.user;
-        const { conversationId, content } = req.body;
+        const { content } = req.body;
+        const conversationId = req.body?.conversationId ? String(req.body.conversationId) : '';
 
         if (!conversationId || !content) {
             return res.status(400).json({ error: 'conversationId and content are required' });
@@ -401,7 +402,7 @@ export const sendMessage = async (req: any, res: Response) => {
 export const getDirectHistory = async (req: any, res: Response) => {
     try {
         const { userId } = req.user;
-        const { conversationId } = req.params;
+        const conversationId = String(req.params?.conversationId ?? '');
         const page = Math.max(parseInt(req.query.page as string) || 0, 0);
         const limit = Math.min(
             Math.max(parseInt(req.query.limit as string) || CHAT_HISTORY_PAGE_SIZE, 1),
@@ -468,7 +469,7 @@ export const getDirectHistory = async (req: any, res: Response) => {
 export const getDirectCallHistory = async (req: any, res: Response) => {
     try {
         const { userId } = req.user;
-        const { conversationId } = req.params;
+        const conversationId = String(req.params?.conversationId ?? '');
         const limit = Math.min(
             Math.max(parseInt(req.query.limit as string) || 30, 1),
             200,
@@ -603,7 +604,8 @@ export const getOnlineUsers = async (req: any, res: Response) => {
 export const sendGroupMessage = async (req: any, res: Response) => {
     try {
         const { userId } = req.user;
-        const { groupChatId, content } = req.body;
+        const { content } = req.body;
+        const groupChatId = req.body?.groupChatId ? String(req.body.groupChatId) : '';
 
         if (!groupChatId || !content) {
             return res.status(400).json({ error: 'groupChatId and content are required' });
@@ -666,7 +668,7 @@ export const sendGroupMessage = async (req: any, res: Response) => {
 export const getGroupHistory = async (req: any, res: Response) => {
     try {
         const { userId } = req.user;
-        const { groupChatId } = req.params;
+        const groupChatId = String(req.params?.groupChatId ?? '');
         const page = Math.max(parseInt(req.query.page as string) || 0, 0);
         const limit = Math.min(
             Math.max(parseInt(req.query.limit as string) || CHAT_HISTORY_PAGE_SIZE, 1),
@@ -826,7 +828,7 @@ const userCanAccessRocketRoom = async (
     if (!uid || !rid) return false;
 
     if (context.conversationId) {
-        const conv = await Conversation.findById(context.conversationId).select('participants rcChannelId').lean();
+        const conv = await Conversation.findById(String(context.conversationId)).select('participants rcChannelId').lean();
         return Boolean(
             conv
             && String(conv.rcChannelId || '') === rid
@@ -836,7 +838,7 @@ const userCanAccessRocketRoom = async (
     }
 
     if (context.groupChatId) {
-        const groupChat = await GroupChat.findById(context.groupChatId).select('admin participants coModerators rcChannelId').lean();
+        const groupChat = await GroupChat.findById(String(context.groupChatId)).select('admin participants coModerators rcChannelId').lean();
         return Boolean(
             groupChat
             && String(groupChat.rcChannelId || '') === rid
@@ -860,7 +862,9 @@ const userCanAccessRocketRoom = async (
 export const deleteChatMessage = async (req: any, res: Response) => {
     try {
         const { userId } = req.user;
-        const { roomId, messageId, conversationId, groupChatId, mode } = req.body || {};
+        const { roomId, messageId, mode } = req.body || {};
+        const conversationId = req.body?.conversationId ? String(req.body.conversationId) : '';
+        const groupChatId = req.body?.groupChatId ? String(req.body.groupChatId) : '';
         const deleteMode = String(mode || 'both');
         if (!messageId) {
             return res.status(400).json({ error: 'messageId is required' });
@@ -930,7 +934,7 @@ export const deleteChatMessage = async (req: any, res: Response) => {
 export const clearDmThread = async (req: any, res: Response) => {
     try {
         const { userId } = req.user;
-        const { conversationId } = req.body || {};
+        const conversationId = req.body?.conversationId ? String(req.body.conversationId) : '';
         if (!conversationId) return res.status(400).json({ error: 'conversationId is required' });
         const conv = await Conversation.findById(conversationId);
         if (!conv) return res.status(404).json({ error: 'Conversation not found' });
@@ -963,7 +967,7 @@ export const clearDmThread = async (req: any, res: Response) => {
 export const hideDmFromList = async (req: any, res: Response) => {
     try {
         const { userId } = req.user;
-        const { conversationId } = req.body || {};
+        const conversationId = req.body?.conversationId ? String(req.body.conversationId) : '';
         if (!conversationId) return res.status(400).json({ error: 'conversationId is required' });
         const conv = await Conversation.findById(conversationId);
         if (!conv) return res.status(404).json({ error: 'Conversation not found' });

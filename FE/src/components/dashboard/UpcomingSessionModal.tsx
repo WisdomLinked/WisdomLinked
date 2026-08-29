@@ -360,7 +360,16 @@ export default function UpcomingSessionModal({
     const lingering = Object.values(acceptedNotices)
       .filter(n => !present.has(n.session.id))
       .map(n => n.session);
-    return [...sessions, ...lingering];
+    // Callers build these lists by concatenating pending, awaiting-payment and booked
+    // groups, so the order is however the API happened to return them. Sorting here
+    // covers every caller at once: soonest first, and a just-accepted row keeps its
+    // place in time rather than jumping to the bottom.
+    return [...sessions, ...lingering].sort((a, b) => {
+      const at = Number.isFinite(a.at) ? a.at : Number.MAX_SAFE_INTEGER;
+      const bt = Number.isFinite(b.at) ? b.at : Number.MAX_SAFE_INTEGER;
+      if (at !== bt) return at - bt;
+      return String(a.title || '').localeCompare(String(b.title || ''));
+    });
   }, [sessions, acceptedNotices]);
 
   return (

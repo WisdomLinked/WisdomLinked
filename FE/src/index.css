@@ -467,6 +467,10 @@ code {
   color: #1a3a4a !important;
 }
 
+.studentBookingCalendar .rbc-button-link.studentBookingCalendar-day-past {
+  color: #54524c !important;
+}
+
 .studentBookingCalendar .rbc-date-cell {
   padding: 4px 6px;
   font-size: 13px;

@@ -1,10 +1,12 @@
 import { Request, Response } from 'express';
 const MeetingAnalytics = require("../models/MeetingAnalytics");
+import { safeErrorMessage } from '../utils/httpUserFacingCopy';
 
 // Create a new MeetingAnalytics document if it doesn't exist
 const createMeetingAnalytics = async (req, res) => {
     try {
-        const { type, _id, admin } = req.body;
+        const { type, admin } = req.body;
+        const _id = String(req.body?._id ?? '');
 
         // Check if a document with this ID already exists
         const alreadyExists = await MeetingAnalytics.findById(_id);
@@ -32,14 +34,15 @@ const createMeetingAnalytics = async (req, res) => {
         });
     } catch (err) {
         console.error(err);
-        return res.status(500).send(err.message);
+        return res.status(500).send(safeErrorMessage(err));
     }
 };
 
 // Update existing MeetingAnalytics with participant feedback or total time
 const updateMeetingAnalytics = async (req, res) => {
     try {
-        const { _id, userId, role, rating, feedback } = req.body; // Include `role` in destructuring
+        const { userId, role, rating, feedback } = req.body;
+        const _id = String(req.body?._id ?? '');
 
         const analyticsDoc = await MeetingAnalytics.findById(_id);
         if (!analyticsDoc) {
@@ -74,7 +77,7 @@ const updateMeetingAnalytics = async (req, res) => {
         });
     } catch (err) {
         console.error(err);
-        return res.status(500).send(err.message);
+        return res.status(500).send(safeErrorMessage(err));
     }
 };
 
@@ -82,7 +85,7 @@ const updateMeetingAnalytics = async (req, res) => {
 // Retrieve MeetingAnalytics by _id
 const getMeetingAnalytics = async (req, res) => {
     try {
-        const { _id } = req.body;
+        const _id = String(req.body?._id ?? '');
 
         const analyticsDoc = await MeetingAnalytics.findById(_id)
             .populate("admin", "email username")
@@ -98,7 +101,7 @@ const getMeetingAnalytics = async (req, res) => {
         });
     } catch (err) {
         console.error(err);
-        return res.status(500).send(err.message);
+        return res.status(500).send(safeErrorMessage(err));
     }
 };
 
