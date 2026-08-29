@@ -171,7 +171,10 @@ jobs:
     if: always() && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') && (needs.changes.outputs.backend == 'true' || needs.changes.outputs.frontend == 'true')
     runs-on: ubuntu-latest
     environment: production
-    
+    permissions:
+      contents: read
+      packages: read
+
     steps:
       - name: Deploy to DigitalOcean
         uses: appleboy/ssh-action@v1.0.3
