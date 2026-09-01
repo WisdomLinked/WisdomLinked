@@ -16,6 +16,7 @@ import { paymentWindowOpen } from '../utils/bookingLifecycle';
 import { displayRoomLabel, shouldNotifyRoom } from '../utils/chatRoomLabel';
 import { fetchDmUnreadSnapshot, fetchChatUserProfile } from '../api/chatApi';
 import ProfileModal from './Dashboard/Messenger/Messages/ProfileModal';
+import { seatWalletOption } from '../utils/seatCheckoutOptions';
 import { buildFallbackChatProfile, mergeChatProfile } from '../utils/chatProfileModal';
 import Sidebar from '../components/layout/Sidebar';
 import TopBar, { TopBarNotificationItem } from '../components/layout/TopBar';
@@ -50,6 +51,7 @@ import { patchDmUnreadRid, setDmUnreadByRidBulk } from '../actions/chatActions';
 import { canonicalLabelsFromMixedServiceEntries } from '../constants/serviceOptions';
 import { useEndMeetingOnReturn } from '../hooks/useEndMeetingOnReturn';
 import { pendingRequestIsLive } from '../utils/bookingLifecycle';
+import { recurrenceLabel } from '../utils/recurrenceLabel';
 
 function deriveSessionCounts(u: any) {
   if (!u) {
@@ -169,7 +171,7 @@ function deriveCalendarMeetings(u: any): CalendarMeeting[] {
           peerUserId: g?.admin?._id != null ? String(g.admin._id) : undefined,
           peerName: host,
           peerImage: g?.admin?.image ?? null,
-          recurrence: g?.isRecurring ? g?.recurrenceFrequency ?? null : null,
+          recurrence: recurrenceLabel(g) ?? null,
           seriesId: g?.seriesId ? String(g.seriesId) : null,
           details: meetingDetailsLine(g),
           raw: g,
@@ -262,6 +264,9 @@ function deriveModalSessions(
         type: g?.type,
         isRecurring: g?.isRecurring,
         recurrenceFrequency: g?.recurrenceFrequency,
+        recurrenceUnit: g?.recurrenceUnit,
+        recurrenceInterval: g?.recurrenceInterval,
+        recurrenceWeekdays: g?.recurrenceWeekdays,
       },
       briefLabel: 'Seminar details',
     };
@@ -353,6 +358,9 @@ function deriveModalSessions(
           type: g?.type,
           isRecurring: g?.isRecurring,
           recurrenceFrequency: g?.recurrenceFrequency,
+          recurrenceUnit: g?.recurrenceUnit,
+          recurrenceInterval: g?.recurrenceInterval,
+          recurrenceWeekdays: g?.recurrenceWeekdays,
         },
         briefLabel: 'Session details',
       };
@@ -783,6 +791,9 @@ export default function StudentDashboard() {
             type: seminar?.type,
             isRecurring: seminar?.isRecurring,
             recurrenceFrequency: seminar?.recurrenceFrequency,
+            recurrenceUnit: seminar?.recurrenceUnit,
+            recurrenceInterval: seminar?.recurrenceInterval,
+            recurrenceWeekdays: seminar?.recurrenceWeekdays,
           },
           briefLabel: 'Seminar details',
           metaLines,
@@ -803,6 +814,8 @@ export default function StudentDashboard() {
     groupChatId: string;
     price: number;
     name: string;
+    /** The host invited them, so no payment method was ever chosen for them. */
+    invited?: boolean;
   } | null>(null);
   const greeting = useMemo(() => {
     const hour = new Date().getHours();
@@ -845,7 +858,7 @@ export default function StudentDashboard() {
           value: pendingSeatRequests.length,
           icon: AlertCircle,
           color: 'neutral' as const,
-          tooltip: 'Seminar seat requests awaiting host approval',
+          tooltip: 'Seminar seats awaiting a host decision, or an invitation waiting on your payment',
           onClick: () => {
             void loadMySeatRequests();
             setUpcomingModal({ kind: 'seminar', status: 'pending' });
@@ -1404,6 +1417,9 @@ export default function StudentDashboard() {
                       groupChatId: String(notice.groupChatId ?? ''),
                       price: typeof notice.price === 'number' ? notice.price : 0,
                       name: notice.title,
+                      invited: String(
+                        mySeatRequests.find((r: any) => String(r?._id) === notice.id)?.origin || 'student',
+                      ) === 'host',
                     });
                     return;
                   }
@@ -1590,6 +1606,7 @@ export default function StudentDashboard() {
                   groupChatId: String(seat.groupChat?._id ?? seat.groupChat ?? ''),
                   price: typeof seat.amount === 'number' ? seat.amount / 100 : 0,
                   name: seat.groupChat?.name || session.title,
+                  invited: String(seat.origin || 'student') === 'host',
                 });
                 return;
               }
@@ -1680,8 +1697,9 @@ export default function StudentDashboard() {
                 type="Seminar seat"
                 price={seatPayTarget.price}
                 policyNotice={{
-                  message:
-                    'Paying claims your approved seat immediately. It cannot be cancelled and the payment is not refundable.',
+                  message: seatPayTarget.invited
+                    ? 'Paying accepts this invitation immediately. It cannot be cancelled and the payment is not refundable.'
+                    : 'Paying claims your approved seat immediately. It cannot be cancelled and the payment is not refundable.',
                   acknowledgeLabel: 'I understand this payment is non-refundable.',
                 }}
                 pendingDetails={{
@@ -1691,8 +1709,7 @@ export default function StudentDashboard() {
                   price: seatPayTarget.price,
                   name: seatPayTarget.name,
                 }}
-                // Approved without a hold, so it settles in the mode it was requested in.
-                walletOption={{ kind: 'charge', only: true }}
+                walletOption={seatWalletOption(seatPayTarget.invited ? 'host' : 'student')}
                 returnUrl={(() => {
                   try {
                     const url = new URL(window.location.href);

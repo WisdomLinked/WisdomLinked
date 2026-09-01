@@ -84,4 +84,18 @@ describe('indexSeatRequests', () => {
     const index = indexSeatRequests([row({ groupChat: 'sem-1' })], NOW);
     expect(seatRequestFor(index, { id: 'sem-1' })?.state).toBe('awaiting_host');
   });
+
+  it("carries who started the request, so the student is not told they asked", () => {
+    const index = indexSeatRequests(
+      [row({ _id: 'invited', status: 'awaiting_payment', paymentDeadline: inHours(20), origin: 'host' })],
+      NOW,
+    );
+    expect(seatRequestFor(index, { _id: 'sem-1' })?.origin).toBe('host');
+
+    const asked = indexSeatRequests(
+      [row({ _id: 'asked', status: 'awaiting_payment', paymentDeadline: inHours(20) })],
+      NOW,
+    );
+    expect(seatRequestFor(asked, { _id: 'sem-1' })?.origin).toBe('student');
+  });
 });

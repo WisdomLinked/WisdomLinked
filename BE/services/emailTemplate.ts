@@ -183,13 +183,17 @@ const callout = (html: string, tone: 'neutral' | 'good' | 'warn' | 'bad' = 'neut
     </table>`;
 };
 
-const expertNote = (note?: string, label = "Expert's note") => {
+const noteBlock = (note?: string, label = 'Note') => {
     const trimmed = String(note || '').trim();
     if (!trimmed) return '';
     return callout(
-        `<span style="display:block;font-size:12px;text-transform:uppercase;letter-spacing:1px;color:${BRAND.muted};margin-bottom:6px;">${escapeHtml(label)}</span>${escapeHtml(trimmed)}`,
+        `<span style="display:block;font-size:12px;text-transform:uppercase;letter-spacing:1px;color:${BRAND.muted};margin-bottom:6px;">${escapeHtml(label)}</span>${escapeHtml(trimmed).replace(/\r?\n/g, '<br />')}`,
     );
 };
+
+const expertNote = (note?: string, label = "Expert's note") => noteBlock(note, label);
+
+const studentNote = (note?: string, label = "Student's note") => noteBlock(note, label);
 
 const codeBlock = (code: any) => `
     <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin:4px 0 18px 0;background:${BRAND.page};border-radius:10px;">
@@ -255,5 +259,7 @@ module.exports = {
     button,
     codeBlock,
     callout,
+    noteBlock,
     expertNote,
+    studentNote,
 };

@@ -23,6 +23,7 @@ import { canonicalLabelsFromMixedServiceEntries } from "../../../constants/servi
 import { usePeerProfileModal } from "../../../hooks/usePeerProfileModal";
 import { eventIsUpcoming } from "../../../utils/eventTiming";
 import { sessionDurationLabel } from "../../../utils/sessionDuration";
+import { recurrenceLabel } from "../../../utils/recurrenceLabel";
 
 const pad2 = (n: number) => String(n).padStart(2, "0");
 
@@ -102,7 +103,7 @@ const ExpertCalendar: React.FC = () => {
           details: meetingDetailsLine(e),
           type: isSeminar ? "seminar" : "session",
           status,
-          recurrence: isSeminar && e.isRecurring ? e.recurrenceFrequency ?? null : null,
+          recurrence: isSeminar ? recurrenceLabel(e) ?? null : null,
           seriesId: isSeminar && e.seriesId ? String(e.seriesId) : null,
           peerUserId,
           peerName,

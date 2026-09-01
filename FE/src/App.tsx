@@ -34,6 +34,7 @@ const OAuthCallback = React.lazy(() => import('./pages/OAuthCallback'));
 const WLOAuthRolePicker = React.lazy(() => import('./pages/WLOAuthRolePicker'));
 const WLProfileCompletion = React.lazy(() => import('./pages/WLProfileCompletion'));
 const MeetingGuestInvite = React.lazy(() => import('./pages/MeetingGuestInvite'));
+const PaymentReceipt = React.lazy(() => import('./pages/PaymentReceipt'));
 
 // Heavy dashboard chunks — MUI, calendars, quill, etc. only load after login
 const LegacyExpertDashboard = React.lazy(() => import('./pages/Dashboard/_ExpertDashboard'));
@@ -123,6 +124,11 @@ const AuthenticatedRoutes = () => {
       <Route path={'admindashboard/*'} element={
         <PrivateRoute>
           <AdminDashboard />
+        </PrivateRoute>
+      } />
+      <Route path={'receipt/:paymentId'} element={
+        <PrivateRoute>
+          <PaymentReceipt />
         </PrivateRoute>
       } />
     </Routes>

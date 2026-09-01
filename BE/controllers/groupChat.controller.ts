@@ -169,6 +169,7 @@ const {
     button: emailButton,
     callout: emailCallout,
     expertNote: emailExpertNote,
+    studentNote: emailStudentNote,
     escapeHtml: emailEscape,
 } = require('../services/emailTemplate')
 const { scheduleEmailReminder, sendEmailMeetingRequestToCustomer, sendEmailMeetingRequestToExpert, sendEmailSessionPaidToExpert, sendEmailSessionOfferSentToExpert, sendEmailMeetingAcceptance, sendNotificationEmail } = require('../services/notifications')
@@ -178,6 +179,15 @@ import { buildRemovedUserNotice, normalizeModerationReason } from '../utils/vide
 import { sanitizeDecisionNote, decisionNoteEmailBlock } from '../utils/decisionNote';
 import { captureBeforeMs, decisionDeadlineFrom, holdHasLapsed } from '../utils/holdExpiry';
 import { describePastEditRejection } from '../utils/pastEventEdit';
+import {
+    buildRecurrenceStartDates,
+    normalizeRecurrence,
+    recurrenceFields,
+    recurrenceRuleChanged,
+    validateRecurrence,
+    RECURRING_RULE_LOCKED_MESSAGE,
+    RecurrenceRule,
+} from '../utils/recurrence';
 import {
     decisionNoticeCutoff,
     decisionNoticeIsVisible,
@@ -670,7 +680,8 @@ const createGroupChatByUser = async (req, res) => {
             throw new Error("Session title must be between 10 and 60 characters");
         }
 
-        const noteLength = typeof description === 'string' ? description.trim().length : 0;
+        const studentNote = typeof description === 'string' ? description.trim() : '';
+        const noteLength = studentNote.length;
         if (noteLength > 0 && (noteLength < 50 || noteLength > 500)) {
             await releaseOrphanBookingIntent(payment_intent, userId, "Invalid session note");
             throw new Error("Session note must be between 50 and 500 characters");
@@ -786,7 +797,7 @@ const createGroupChatByUser = async (req, res) => {
 
         if (walletRequest) {
             Promise.resolve(
-                sendEmailMeetingRequestToExpert(expertUser.email, expertUser.username, name, chat.start, duration, expectedCents / 100, true, expertUser.timeZone, 'wallet', { studentName: currentUser.username, decisionDeadline: chat.decisionDeadline }),
+                sendEmailMeetingRequestToExpert(expertUser.email, expertUser.username, name, chat.start, duration, expectedCents / 100, true, expertUser.timeZone, 'wallet', { studentName: currentUser.username, decisionDeadline: chat.decisionDeadline, studentNote }),
             ).catch((emailErr) => console.log('[createGroupChatByUser] expert notification failed', emailErr));
 
             if (currentUser?.email) {
@@ -805,6 +816,7 @@ const createGroupChatByUser = async (req, res) => {
                                     ['Duration', duration ? `${duration} minutes` : ''],
                                     ['Price', emailMoneyFromCents(expectedCents)],
                                 ]),
+                                emailStudentNote(studentNote, 'Your note'),
                                 emailCallout('<strong>Nothing has been charged.</strong> Alipay and WeChat Pay are paid in full at the moment of payment, so we ask the expert first.'),
                                 emailBullets([
                                     `If ${emailEscape(expertUser.username)} <strong>accepts</strong>, we email you a payment link and you have ${emailEscape(await walletWindowLabel())} to pay ${emailMoneyFromCents(expectedCents)}. Your session is confirmed only once that payment completes.`,
@@ -850,7 +862,7 @@ const createGroupChatByUser = async (req, res) => {
             chat.decisionDeadline = parked.decisionDeadline;
 
             Promise.resolve(
-                sendEmailMeetingRequestToExpert(expertUser.email, expertUser.username, name, chat.start, duration, expectedCents / 100, true, expertUser.timeZone, 'hold', { studentName: currentUser.username, decisionDeadline: parked.decisionDeadline }),
+                sendEmailMeetingRequestToExpert(expertUser.email, expertUser.username, name, chat.start, duration, expectedCents / 100, true, expertUser.timeZone, 'hold', { studentName: currentUser.username, decisionDeadline: parked.decisionDeadline, studentNote }),
             ).catch((emailErr) => console.log('[createGroupChatByUser] expert notification failed', emailErr));
 
             if (currentUser?.email) {
@@ -869,6 +881,7 @@ const createGroupChatByUser = async (req, res) => {
                                     ['Duration', duration ? `${duration} minutes` : ''],
                                     ['Respond by', emailWhen(parked.decisionDeadline, currentUser.timeZone)],
                                 ]),
+                                emailStudentNote(studentNote, 'Your note'),
                                 emailCallout(`<strong>No charge has been made.</strong> A temporary authorization of ${emailMoneyFromCents(charge.amount, charge.currency)} is held on your card.`),
                                 emailBullets([
                                     `If ${emailEscape(expertUser.username)} <strong>accepts</strong>, the ${emailMoneyFromCents(charge.amount, charge.currency)} is charged automatically and your session is confirmed.`,
@@ -945,6 +958,7 @@ const createGroupChatByUser = async (req, res) => {
                     start: chat.start,
                     duration,
                     timeZone: currentUser.timeZone,
+                    studentNote,
                 });
             } catch (emailErr) {
                 console.log('[createGroupChatByUser] booking receipt email failed', emailErr);
@@ -952,7 +966,7 @@ const createGroupChatByUser = async (req, res) => {
         }
 
         Promise.resolve(
-            sendEmailMeetingRequestToExpert(expertUser.email, expertUser.username, name, chat.start, duration, expectedCents / 100, true, expertUser.timeZone, charge ? 'paid' : undefined, { studentName: currentUser.username, decisionDeadline: chat.decisionDeadline }),
+            sendEmailMeetingRequestToExpert(expertUser.email, expertUser.username, name, chat.start, duration, expectedCents / 100, true, expertUser.timeZone, charge ? 'paid' : undefined, { studentName: currentUser.username, decisionDeadline: chat.decisionDeadline, studentNote }),
         ).catch((emailErr) => {
             console.log('[createGroupChatByUser] expert notification email failed', emailErr);
         });
@@ -1020,7 +1034,7 @@ const proposeIndividualAppointment = async (req, res) => {
         customerUser.groupChats.push(chat._id);
         await customerUser.save();
 
-        sendEmailMeetingRequestToCustomer(customerUser.email, name, customerUser.username, chat.start, duration, finalPrice, customerUser.timeZone, payBy, { expertName: expertUser.username });
+        sendEmailMeetingRequestToCustomer(customerUser.email, name, customerUser.username, chat.start, duration, finalPrice, customerUser.timeZone, payBy, { expertName: expertUser.username, note: typeof description === 'string' ? description.trim() : '' });
 
         if (expertUser?.email) {
             Promise.resolve(
@@ -1044,36 +1058,62 @@ const proposeIndividualAppointment = async (req, res) => {
     }
 };
 
-const RECURRENCE_FREQUENCIES = ['weekly', 'biweekly', 'monthly'];
+/**
+ * Writes every occurrence of a recurring seminar in one round trip and links them
+ * by seriesId. A flexible rule can produce hundreds of occurrences (daily for a
+ * year), so these must not be created one await at a time — the request would
+ * outlive its own timeout.
+ *
+ * `anchorId` reuses an existing doc as the first occurrence (the edit path, where
+ * the seminar already exists); when omitted every occurrence is created fresh and
+ * the first one anchors the series. Returns the created ids, first occurrence first.
+ */
+const createSeriesOccurrences = async ({
+    anchorId,
+    sharedFields,
+    startDates,
+    durationMs,
+    rule,
+}: {
+    anchorId?: string | null;
+    sharedFields: Record<string, any>;
+    startDates: Date[];
+    durationMs: number;
+    rule: RecurrenceRule;
+}): Promise<any[]> => {
+    const stored = recurrenceFields(rule);
+    const docs = startDates.map((occurrenceStart) => ({
+        ...sharedFields,
+        ...stored,
+        start: occurrenceStart,
+        end: new Date(occurrenceStart.getTime() + durationMs),
+    }));
 
-const buildRecurrenceStartDates = (start, frequency) => {
-    const base = new Date(start);
-    if (Number.isNaN(base.getTime())) return [base];
-    const horizon = new Date(base);
-    horizon.setFullYear(horizon.getFullYear() + 1);
-    const out = [];
-    if (frequency === 'monthly') {
-        for (let i = 0; ; i += 1) {
-            const d = new Date(base);
-            d.setMonth(base.getMonth() + i);
-            if (d >= horizon) break;
-            out.push(d);
-        }
-    } else {
-        const stepDays = frequency === 'biweekly' ? 14 : 7;
-        for (let i = 0; ; i += 1) {
-            const d = new Date(base.getTime() + i * stepDays * 24 * 60 * 60 * 1000);
-            if (d >= horizon) break;
-            out.push(d);
-        }
-    }
-    return out;
+    // The anchor already exists on the edit path, so it is updated in place and
+    // only the remaining occurrences are inserted.
+    const toInsert = anchorId ? docs.slice(1) : docs;
+    const inserted = toInsert.length ? await GroupChat.insertMany(toInsert) : [];
+    const ids = anchorId
+        ? [new mongoose.Types.ObjectId(String(anchorId)), ...inserted.map((d: any) => d._id)]
+        : inserted.map((d: any) => d._id);
+    const seriesId = ids[0];
+    await GroupChat.updateMany({ _id: { $in: ids } }, { $set: { seriesId, ...stored } });
+    return ids;
 };
 
 const createGroupChat = async (req, res) => {
     try {
         const { userId } = req.user;
-        const { name, description, image, services, keywords, tags, start, end, duration, price, type, status, customerId, maxAttendees, currency, timezone, isRecurring, recurrenceFrequency, purposeOther } = req.body;
+        const { name, description, image, services, keywords, tags, start, end, duration, price, type, status, customerId, maxAttendees, currency, timezone, purposeOther } = req.body;
+
+        // Validated before anything is written so a bad schedule can't half-create
+        // a series, and so the expert gets the reason instead of generic 500 copy.
+        const recurrence = type === 'seminar'
+            ? validateRecurrence(req.body, start)
+            : { rule: null as RecurrenceRule | null };
+        if (recurrence.error) {
+            return res.status(400).send(recurrence.error);
+        }
 
         if (checkTitleNameInvalid('Name', name)) {
             throw new Error(checkTitleNameInvalid('Name', name))
@@ -1109,42 +1149,25 @@ const createGroupChat = async (req, res) => {
             timezone: typeof timezone === 'string' ? timezone : undefined,
         };
 
-        const recurring =
-            type === 'seminar' &&
-            status === 'active' &&
-            isRecurring === true &&
-            RECURRENCE_FREQUENCIES.includes(recurrenceFrequency) &&
-            !!start &&
-            !!end;
+        const startDates = recurrence.rule && status === 'active' && !!start && !!end
+            ? buildRecurrenceStartDates(start, recurrence.rule, sharedFields.timezone)
+            : [];
+        // A draft, or a rule that expands to a single date, is just one seminar.
+        const recurring = startDates.length > 1;
 
         const currentUser = await User.findById(userId);
 
         if (recurring) {
-            const startDates = buildRecurrenceStartDates(start, recurrenceFrequency);
-            const durationMs = new Date(end).getTime() - new Date(start).getTime();
-            const created = [];
-            for (const occurrenceStart of startDates) {
-                const occurrenceEnd = new Date(occurrenceStart.getTime() + durationMs);
-                const occurrence = await GroupChat.create({
-                    ...sharedFields,
-                    start: occurrenceStart,
-                    end: occurrenceEnd,
-                    isRecurring: true,
-                    recurrenceFrequency,
-                });
-                created.push(occurrence);
-            }
-            const seriesId = created[0]._id;
-            await GroupChat.updateMany(
-                { _id: { $in: created.map((c) => c._id) } },
-                { seriesId },
-            );
-            currentUser.groupChats.push(...created.map((c) => c._id));
+            const created = await createSeriesOccurrences({
+                sharedFields,
+                startDates,
+                durationMs: new Date(end).getTime() - new Date(start).getTime(),
+                rule: recurrence.rule!,
+            });
+            currentUser.groupChats.push(...created);
             await currentUser.save();
 
-            if (status === 'active') {
-                await syncGroupRocketChannel(String(created[0]._id));
-            }
+            await syncGroupRocketChannel(String(created[0]));
 
             const recurringUserDetails = await getFullUserData(currentUser.email);
             recurringUserDetails.token = null;
@@ -1157,11 +1180,7 @@ const createGroupChat = async (req, res) => {
             ...sharedFields,
             start: start,
             end: end,
-            isRecurring: type === 'seminar' && isRecurring === true,
-            recurrenceFrequency:
-                type === 'seminar' && RECURRENCE_FREQUENCIES.includes(recurrenceFrequency)
-                    ? recurrenceFrequency
-                    : undefined,
+            ...(type === 'seminar' ? recurrenceFields(recurrence.rule) : {}),
         });
 
         currentUser.groupChats.push(chat._id);
@@ -1179,7 +1198,7 @@ const createGroupChat = async (req, res) => {
 
             // [REMOVED] updateUsersGroupChatList(customerId.toString());
 
-            sendEmailMeetingRequestToCustomer(customer.email, name, customer.username, start, duration, _price, customer.timeZone, null, { expertName: currentUser.username })
+            sendEmailMeetingRequestToCustomer(customer.email, name, customer.username, start, duration, _price, customer.timeZone, null, { expertName: currentUser.username, note: typeof description === 'string' ? description.trim() : '' })
 
         }
 
@@ -1422,7 +1441,7 @@ const notifySeminarChangeToStudents = async (before: any, changes: string[]) => 
 const updateGroupChat = async (req, res) => {
     try {
         const { userId } = req.user;
-        const { groupId, name, description, image, services, keywords, tags, start, end, duration, price, totalTimeSpent, type, status, maxAttendees, currency, timezone, isRecurring, recurrenceFrequency, purposeOther } = req.body;
+        const { groupId, name, description, image, services, keywords, tags, start, end, duration, price, totalTimeSpent, type, status, maxAttendees, currency, timezone, isRecurring, purposeOther } = req.body;
 
         if (!groupId) {
             throw new Error("Group ID is required");
@@ -1486,9 +1505,27 @@ const updateGroupChat = async (req, res) => {
         } else if (maxAttendees === null) updateFields.maxAttendees = null;
         if (typeof currency === 'string') updateFields.currency = currency;
         if (typeof timezone === 'string') updateFields.timezone = timezone;
+        // Only seminars repeat, so a stray isRecurring on a 1:1 or a community
+        // room is ignored rather than rejected.
+        const recurrence = groupChat.type === 'seminar'
+            ? validateRecurrence(req.body, start ?? groupChat.start)
+            : { rule: null as RecurrenceRule | null, error: undefined as string | undefined };
+        if (recurrence.error) {
+            return res.status(400).send(recurrence.error);
+        }
+        // Occurrences are already written and may already be paid for, so a live
+        // series cannot be re-spaced in place — that would move sessions under
+        // students who booked them. The host cancels and recreates instead.
+        if (
+            groupChat.type === 'seminar' &&
+            groupChat.seriesId &&
+            recurrenceRuleChanged(normalizeRecurrence(groupChat), recurrence.rule)
+        ) {
+            return res.status(409).send(RECURRING_RULE_LOCKED_MESSAGE);
+        }
         if (typeof isRecurring === 'boolean') updateFields.isRecurring = isRecurring;
-        if (isRecurring === true && RECURRENCE_FREQUENCIES.includes(recurrenceFrequency)) {
-            updateFields.recurrenceFrequency = recurrenceFrequency;
+        if (recurrence.rule) {
+            Object.assign(updateFields, recurrenceFields(recurrence.rule));
         }
         if (typeof type === 'string' && normalizeId(groupChat.admin) === String(userId)) updateFields.type = type;
         if (typeof totalTimeSpent === 'string' || typeof totalTimeSpent === 'number') {
@@ -1523,50 +1560,44 @@ const updateGroupChat = async (req, res) => {
             anchor &&
             anchor.type === 'seminar' &&
             anchor.status === 'active' &&
-            isRecurring === true &&
-            RECURRENCE_FREQUENCIES.includes(recurrenceFrequency) &&
+            !!recurrence.rule &&
             !anchor.seriesId &&
             anchor.start &&
             anchor.end;
 
         if (becomesRecurring) {
-            await GroupChat.findByIdAndUpdate(String(groupId), { seriesId: anchor._id });
-            const startDates = buildRecurrenceStartDates(anchor.start, recurrenceFrequency);
-            const durationMs = new Date(anchor.end).getTime() - new Date(anchor.start).getTime();
-            const created = [];
-            for (let i = 1; i < startDates.length; i += 1) {
-                const occurrenceStart = startDates[i];
-                const occurrenceEnd = new Date(occurrenceStart.getTime() + durationMs);
-                const occurrence = await GroupChat.create({
-                    name: anchor.name,
-                    description: anchor.description,
-                    image: anchor.image,
-                    services: anchor.services,
-                    keywords: anchor.keywords,
-                    customKeywords: anchor.customKeywords,
-                    tags: anchor.tags,
-                    duration: anchor.duration,
-                    price: anchor.price,
-                    participants: [anchor.admin],
-                    admin: anchor.admin,
-                    type: 'seminar',
-                    status: 'active',
-                    createdBy: anchor.createdBy,
-                    maxAttendees: anchor.maxAttendees,
-                    currency: anchor.currency,
-                    timezone: anchor.timezone,
-                    start: occurrenceStart,
-                    end: occurrenceEnd,
-                    isRecurring: true,
-                    recurrenceFrequency,
-                    seriesId: anchor._id,
+            const startDates = buildRecurrenceStartDates(anchor.start, recurrence.rule!, anchor.timezone);
+            if (startDates.length > 1) {
+                const created = await createSeriesOccurrences({
+                    anchorId: String(anchor._id),
+                    sharedFields: {
+                        name: anchor.name,
+                        description: anchor.description,
+                        image: anchor.image,
+                        services: anchor.services,
+                        keywords: anchor.keywords,
+                        customKeywords: anchor.customKeywords,
+                        tags: anchor.tags,
+                        purposeOther: anchor.purposeOther,
+                        duration: anchor.duration,
+                        price: anchor.price,
+                        participants: [anchor.admin],
+                        admin: anchor.admin,
+                        type: 'seminar',
+                        status: 'active',
+                        createdBy: anchor.createdBy,
+                        maxAttendees: anchor.maxAttendees,
+                        currency: anchor.currency,
+                        timezone: anchor.timezone,
+                    },
+                    startDates,
+                    durationMs: new Date(anchor.end).getTime() - new Date(anchor.start).getTime(),
+                    rule: recurrence.rule!,
                 });
-                created.push(occurrence._id);
-            }
-            if (created.length) {
                 const host = await User.findById(anchor.admin);
                 if (host) {
-                    host.groupChats.push(...created);
+                    // The anchor is already on the host's list; only the new ones are added.
+                    host.groupChats.push(...created.slice(1));
                     await host.save();
                 }
             }
@@ -1808,12 +1839,13 @@ const enrollAndConfirmSeminar = async ({ groupChat, customer, expert, charge, pa
 
     const occurrenceIds = occurrences.map((occ: any) => occ._id);
 
-    for (const occId of occurrenceIds) {
-        await GroupChat.updateOne(
-            { _id: occId },
-            { $addToSet: { participants: customer._id } },
-        );
-    }
+    // A flexible series can run to hundreds of occurrences, and this is the
+    // webhook path — one write for the whole series, not one per session, so a
+    // slow enrolment can't push Stripe into retrying.
+    await GroupChat.updateMany(
+        { _id: { $in: occurrenceIds } },
+        { $addToSet: { participants: customer._id } },
+    );
     await User.updateOne(
         { _id: customer._id },
         { $addToSet: { groupChats: { $each: occurrenceIds } } },
@@ -3551,6 +3583,182 @@ const settleSeatRequestPayment = async (request: any, outcome: string, note: str
     await PaymentHistory.findByIdAndUpdate(request.paymentHistory, update).catch(() => null);
 };
 
+const inviteToSeminar = async (req, res) => {
+    try {
+        const { userId } = req.user;
+        const { groupChatId, followerIds, emails } = req.body;
+
+        const ids = Array.from(new Set(
+            (Array.isArray(followerIds) ? followerIds : []).map((id: any) => String(id || '').trim()).filter(Boolean),
+        ));
+        const addresses = Array.from(new Set(
+            (Array.isArray(emails) ? emails : []).map((e: any) => String(e || '').trim().toLowerCase()).filter(Boolean),
+        ));
+        if (!ids.length && !addresses.length) {
+            return res.status(400).send("Pick someone to invite, or enter an email address.");
+        }
+        if (ids.length + addresses.length > 50) {
+            return res.status(400).send("You can invite up to 50 people at a time.");
+        }
+
+        const groupChat = await GroupChat.findById(String(groupChatId));
+        if (!groupChat || groupChat.type !== 'seminar') {
+            return res.status(404).send("Seminar not found.");
+        }
+        if (String(groupChat.admin) !== String(userId)) {
+            return res.status(403).send("Only the host of this seminar can invite people to it.");
+        }
+        if (groupChat.status === 'cancelled') {
+            return res.status(409).send("This seminar has been cancelled.");
+        }
+        const startMs = groupChat.start ? new Date(groupChat.start).getTime() : 0;
+        if (startMs && startMs <= Date.now()) {
+            return res.status(409).send("This seminar has already started, so it can no longer be shared.");
+        }
+
+        const expert = await User.findById(String(userId)).select('_id username email timeZone');
+        if (!expert) {
+            return res.status(404).send("Host not found.");
+        }
+        const priceCents = dollarsToCents(groupChat.price);
+        const appState = await AppState.findOne();
+        const payBy = priceCents > 0
+            ? paymentWindowDeadline({ sessionStartMs: startMs, windowHours: paymentWindowHours(appState) })
+            : null;
+
+        const results: any[] = [];
+        const invitees = [...ids];
+        for (const address of addresses) {
+            if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(address)) {
+                results.push({ userId: '', name: address, outcome: 'bad_email' });
+                continue;
+            }
+            const found = await User.findOne({ email: address }).select('_id');
+            if (!found) {
+                results.push({ userId: '', name: address, outcome: 'no_account' });
+                continue;
+            }
+            const foundId = String(found._id);
+            if (!invitees.includes(foundId)) invitees.push(foundId);
+        }
+
+        for (const id of invitees) {
+            const student = await User.findById(id);
+            const name = student?.username || 'Student';
+
+            if (!student || String(student.role || '').toLowerCase() !== 'customer') {
+                results.push({ userId: id, name, outcome: 'not_a_student' });
+                continue;
+            }
+            if (groupMemberIds(groupChat).includes(id)) {
+                results.push({ userId: id, name, outcome: 'already_enrolled' });
+                continue;
+            }
+
+            const open = await SeminarSeatRequest.findOne({
+                customer: id,
+                groupChat: groupChat._id,
+                status: { $in: ['pending', 'awaiting_payment'] },
+            });
+            if (open) {
+                results.push({ userId: id, name, outcome: 'already_invited' });
+                continue;
+            }
+
+            // A free seminar has nothing to accept, so the invitation is the enrolment.
+            if (priceCents <= 0) {
+                try {
+                    await enrollAndConfirmSeminar({
+                        groupChat,
+                        customer: student,
+                        expert,
+                        charge: null,
+                        payment_intent: null,
+                        recordPayment: false,
+                    });
+                    results.push({ userId: id, name, outcome: 'enrolled' });
+                    await sendSeminarEmail(
+                        student.email,
+                        `You have been added to ${groupChat.name}`,
+                        {
+                            heading: `${expert.username} has added you to ${groupChat.name}`,
+                            previewText: 'This seminar is free — nothing to pay.',
+                            blocks: [
+                                emailParagraph(`Dear ${emailEscape(name)}, ${emailEscape(expert.username)} has added you to their seminar. It is free to attend and there is nothing to pay.`),
+                                emailFacts([
+                                    ['Seminar', groupChat.name],
+                                    ['Hosted by', expert.username],
+                                    ['Date & time', emailWhen(groupChat.start, student.timeZone)],
+                                    ['Duration', groupChat.duration ? `${groupChat.duration} minutes` : ''],
+                                ]),
+                                emailParagraph('You can open the seminar chat at any time before it begins. Video and audio become available at the scheduled start time.', { muted: true }),
+                                emailButton('View the seminar'),
+                            ],
+                        },
+                    );
+                } catch (enrolErr: any) {
+                    console.log('[inviteToSeminar] enrolment failed', id, enrolErr?.message);
+                    results.push({ userId: id, name, outcome: 'failed' });
+                }
+                continue;
+            }
+
+            try {
+                const request = await SeminarSeatRequest.create({
+                    customer: student._id,
+                    groupChat: groupChat._id,
+                    expert: expert._id,
+                    amount: priceCents,
+                    currency: groupChat.currency || 'usd',
+                    status: 'awaiting_payment',
+                    origin: 'host',
+                    paymentDeadline: payBy,
+                });
+                results.push({ userId: id, name, outcome: 'invited', requestId: String(request._id) });
+
+                await sendSeminarEmail(
+                    student.email,
+                    `${expert.username} has invited you to ${groupChat.name}`,
+                    {
+                        heading: `${expert.username} has invited you to a seminar`,
+                        previewText: 'Nothing has been charged.',
+                        blocks: [
+                            emailParagraph(`Dear ${emailEscape(name)},`),
+                            emailFacts([
+                                ['Seminar', groupChat.name],
+                                ['Hosted by', expert.username],
+                                ['Date & time', emailWhen(groupChat.start, student.timeZone)],
+                                ['Duration', groupChat.duration ? `${groupChat.duration} minutes` : ''],
+                                ['Total charge if you accept', emailMoneyFromCents(priceCents, groupChat.currency)],
+                                ['Respond by', emailWhen(payBy, student.timeZone)],
+                            ]),
+                            emailCallout('<strong>Nothing has been charged.</strong> You are only charged when you accept this invitation and complete payment.'),
+                            emailBullets([
+                                `If you <strong>accept and pay</strong>${payBy ? ` by ${emailEscape(emailWhen(payBy, student.timeZone))}` : ''}, your place is confirmed.`,
+                                'If you <strong>decline</strong>, or the deadline passes, the invitation expires automatically and no charge is made.',
+                            ]),
+                            emailButton('View the invitation'),
+                        ],
+                    },
+                );
+            } catch (createErr: any) {
+                console.log('[inviteToSeminar] invitation failed', id, createErr?.message);
+                results.push({ userId: id, name, outcome: 'failed' });
+            }
+        }
+
+        return res.status(200).json({
+            success: true,
+            free: priceCents <= 0,
+            seminarFull: seminarIsFull(groupChat),
+            results,
+        });
+    } catch (err) {
+        console.log(err);
+        return res.status(500).send(safeErrorMessage(err));
+    }
+};
+
 const rejectSeminarSeatRequest = async (req, res) => {
     try {
         const { userId } = req.user;
@@ -3767,7 +3975,7 @@ const getMySeatRequests = async (req, res) => {
         await sweepExpiredWalletPayments();
         const { userId } = req.user;
         const requests = await SeminarSeatRequest.find({ customer: userId })
-            .select('groupChat status decisionDeadline paymentDeadline paymentMode amount currency')
+            .select('groupChat status decisionDeadline paymentDeadline paymentMode amount currency origin')
             .populate({
                 path: 'groupChat',
                 select: 'name start description duration price keywords services purposeOther type isRecurring recurrenceFrequency admin',
@@ -4462,7 +4670,7 @@ const handleBookingPaymentIntentEvent = async (event: any): Promise<string> => {
         // moment the student can be told their payment actually landed.
         try {
             const chat = settled.groupChat
-                ? await GroupChat.findById(String(settled.groupChat)).select('name admin start duration type')
+                ? await GroupChat.findById(String(settled.groupChat)).select('name admin start duration type description createdBy')
                 : null;
             const student = await User.findById(String(settled.customer));
             if (student?.email) {
@@ -4501,6 +4709,11 @@ const handleBookingPaymentIntentEvent = async (event: any): Promise<string> => {
                         paidExpert.timeZone,
                         String(intent.id),
                         chargeBalanceTransaction(intent),
+                        {
+                            studentNote: String(chat.createdBy) === String(chat.admin)
+                                ? ''
+                                : String(chat.description || '').trim(),
+                        },
                     );
                 }
             }
@@ -4574,6 +4787,10 @@ const acceptIndividualAppointment = async (req, res) => {
         if (role !== 'customer' && String(groupChat.createdBy) === String(userId)) {
             return res.status(403).send("The student must accept and pay for a session you proposed.");
         }
+
+        const bookingNote = String(groupChat.createdBy) === String(groupChat.admin)
+            ? ''
+            : String(groupChat.description || '').trim();
 
         // Only someone already on the session may accept it — otherwise any account
         // could pay to activate a stranger's proposed appointment.
@@ -4682,6 +4899,7 @@ const acceptIndividualAppointment = async (req, res) => {
                                         ['Payment deadline', emailWhen(deadline, student.timeZone)],
                                     ]),
                                     emailCallout(`Your session is confirmed only once payment completes. If it is not received by <strong>${emailEscape(emailWhen(deadline, student.timeZone))}</strong>, the approval expires automatically, the time slot is released and no charge is made.`, 'warn'),
+                                    emailStudentNote(bookingNote, 'Your note'),
                                     emailExpertNote(decisionNote),
                                     emailButton(`Pay ${emailMoney(groupChat.price)}`),
                                 ],
@@ -4889,6 +5107,7 @@ const acceptIndividualAppointment = async (req, res) => {
                     duration: groupChat.duration,
                     timeZone: payer?.timeZone,
                     noteHtml: decisionNoteEmailBlock(decisionNote),
+                    studentNote: bookingNote,
                 });
             }
         }
@@ -4908,6 +5127,7 @@ const acceptIndividualAppointment = async (req, res) => {
                         groupChat.duration,
                         customerUser.timeZone,
                         decisionNoteEmailBlock(decisionNote),
+                        { studentNote: bookingNote },
                     );
                 }
                 if (role === 'customer' && charge && !settling) {
@@ -5692,6 +5912,7 @@ module.exports = {
     requestSeminarSeat,
     approveSeminarSeatRequest,
     rejectSeminarSeatRequest,
+    inviteToSeminar,
     paySeminarSeatRequest,
     getSeminarSeatRequests,
     getMySeatRequests,

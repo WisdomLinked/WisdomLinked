@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { X, Users, Sparkles, Globe, Lock, Info } from "lucide-react";
 import { collectProfileOptionLabels } from "../../../../utils/chatProfileModal";
 import { canonicalLabelsFromMixedServiceEntries } from "../../../../constants/serviceOptions";
+import { OVERLAY_Z_PROFILE_CARD } from "../../../../utils/overlayLayers";
 
 interface CommunityProfileModalProps {
     isOpen: boolean;
@@ -59,7 +60,8 @@ const CommunityProfileModal: React.FC<CommunityProfileModalProps> = ({
 
     return createPortal(
         <div
-            className={`fixed inset-0 z-[1500] flex items-center justify-center p-4 ${
+            style={{ zIndex: OVERLAY_Z_PROFILE_CARD }}
+            className={`fixed inset-0 flex items-center justify-center p-4 ${
                 isLight ? "bg-slate-900/45 backdrop-blur-[6px]" : "bg-black/70 backdrop-blur-sm"
             }`}
         >

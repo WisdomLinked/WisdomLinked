@@ -1201,6 +1201,24 @@ export const getCustomerById = async (id: any) => {
     }
 };
 
+export const inviteToSeminar = async (data: { groupChatId: string; followerIds: string[]; emails?: string[] }) => {
+    try {
+        const res = await api.post("group-chat/invite-to-seminar", data);
+        return res.data;
+    } catch (err: any) {
+        return checkForAuthorization(err);
+    }
+};
+
+export const getPaymentReceipt = async (paymentId: string) => {
+    try {
+        const res = await api.get(`receipt/${encodeURIComponent(paymentId)}`);
+        return res.data;
+    } catch (err: any) {
+        return checkForAuthorization(err);
+    }
+};
+
 export const shareMeetingViaEmail = async (data: any) => {
     try {
         const res = await api.post("expert/shareMeetingViaEmail", data);

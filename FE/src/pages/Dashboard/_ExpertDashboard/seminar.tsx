@@ -23,15 +23,44 @@ import React, {
     detectUserTimeZone,
     getTimezoneOffsetHalfHours,
   } from '../../../utils/schedulingTimezone';
+  import {
+    MAX_RECURRENCE_INTERVAL,
+    MAX_RECURRENCE_OCCURRENCES,
+    previewRecurrence,
+    previewSummary,
+    type RecurrenceEndMode,
+    type RecurrenceUnit,
+  } from '../../../utils/recurrencePreview';
 
   type StepId = 1 | 2 | 3;
 
-  type RecurrenceFrequency = 'weekly' | 'biweekly' | 'monthly';
+  // Shortcuts onto the same unit/interval rule the controls above them edit —
+  // any interval works, these are just the common ones.
+  const RECURRENCE_PRESETS: { label: string; unit: RecurrenceUnit; interval: number }[] = [
+    { label: 'Daily', unit: 'day', interval: 1 },
+    { label: 'Every 2 days', unit: 'day', interval: 2 },
+    { label: 'Every 3 days', unit: 'day', interval: 3 },
+    { label: 'Every 10 days', unit: 'day', interval: 10 },
+    { label: 'Weekly', unit: 'week', interval: 1 },
+    { label: 'Biweekly', unit: 'week', interval: 2 },
+    { label: 'Monthly', unit: 'month', interval: 1 },
+    { label: 'Quarterly', unit: 'month', interval: 3 },
+  ];
 
-  const RECURRENCE_OPTIONS: { value: RecurrenceFrequency; label: string; hint: string }[] = [
-    { value: 'weekly', label: 'Weekly', hint: 'Every week on this weekday for a year' },
-    { value: 'biweekly', label: 'Biweekly', hint: 'Every two weeks for a year' },
-    { value: 'monthly', label: 'Monthly', hint: 'Every month on this date for a year' },
+  const WEEKDAY_CHIPS = [
+    { value: 0, label: 'Sun' },
+    { value: 1, label: 'Mon' },
+    { value: 2, label: 'Tue' },
+    { value: 3, label: 'Wed' },
+    { value: 4, label: 'Thu' },
+    { value: 5, label: 'Fri' },
+    { value: 6, label: 'Sat' },
+  ];
+
+  const RECURRENCE_UNIT_OPTIONS: { value: RecurrenceUnit; label: string }[] = [
+    { value: 'day', label: 'day(s)' },
+    { value: 'week', label: 'week(s)' },
+    { value: 'month', label: 'month(s)' },
   ];
 
   interface StepConfig {
@@ -53,7 +82,12 @@ import React, {
     endTime: string;
     timezone: string;
     isRecurring: boolean;
-    recurrenceFrequency: RecurrenceFrequency;
+    recurrenceUnit: RecurrenceUnit;
+    recurrenceInterval: number | '';
+    recurrenceWeekdays: number[];
+    recurrenceEndMode: RecurrenceEndMode;
+    recurrenceCount: number | '';
+    recurrenceUntil: string;
     price: number | '';
     isFree: boolean;
     maxAttendees: number | '';
@@ -77,7 +111,14 @@ import React, {
       image?: string | null;
       status?: string;
       isRecurring?: boolean;
-      recurrenceFrequency?: RecurrenceFrequency;
+      recurrenceFrequency?: string;
+      recurrenceUnit?: string;
+      recurrenceInterval?: number;
+      recurrenceWeekdays?: number[] | null;
+      recurrenceCount?: number | null;
+      recurrenceUntil?: string | Date | null;
+      /** Set once the series exists; its repeat schedule is then fixed. */
+      seriesId?: string | null;
     };
     /**
      * New expert shell: refresh user + switch tab without full page navigation.
@@ -93,6 +134,54 @@ import React, {
   type DropdownId = 'majors' | 'services' | null;
   
   type SeminarErrors = Partial<Record<keyof SeminarFormData, string>>;
+
+  // Seminars saved before flexible recurrence carry only the legacy enum, so the
+  // editor rebuilds a unit/interval rule from whichever shape the doc has.
+  const LEGACY_RULES: Record<string, { unit: RecurrenceUnit; interval: number }> = {
+    weekly: { unit: 'week', interval: 1 },
+    biweekly: { unit: 'week', interval: 2 },
+    monthly: { unit: 'month', interval: 1 },
+  };
+
+  const hydrateRecurrence = (s: {
+    recurrenceUnit?: string;
+    recurrenceInterval?: number;
+    recurrenceWeekdays?: number[] | null;
+    recurrenceCount?: number | null;
+    recurrenceUntil?: string | Date | null;
+    recurrenceFrequency?: string;
+  }): Pick<
+    SeminarFormData,
+    | 'recurrenceUnit'
+    | 'recurrenceInterval'
+    | 'recurrenceWeekdays'
+    | 'recurrenceEndMode'
+    | 'recurrenceCount'
+    | 'recurrenceUntil'
+  > => {
+    const legacy = s.recurrenceFrequency ? LEGACY_RULES[s.recurrenceFrequency] : undefined;
+    const unit = (['day', 'week', 'month'] as const).find((u) => u === s.recurrenceUnit)
+      ?? legacy?.unit
+      ?? 'week';
+    const interval = Number.isInteger(s.recurrenceInterval) && (s.recurrenceInterval as number) > 0
+      ? (s.recurrenceInterval as number)
+      : legacy?.interval ?? 1;
+    const until = s.recurrenceUntil ? new Date(s.recurrenceUntil) : null;
+    const hasUntil = until != null && !Number.isNaN(until.getTime());
+    const count = Number.isInteger(s.recurrenceCount) && (s.recurrenceCount as number) > 0
+      ? (s.recurrenceCount as number)
+      : null;
+    return {
+      recurrenceUnit: unit,
+      recurrenceInterval: interval,
+      recurrenceWeekdays: Array.isArray(s.recurrenceWeekdays)
+        ? s.recurrenceWeekdays.filter((d) => Number.isInteger(d) && d >= 0 && d <= 6)
+        : [],
+      recurrenceEndMode: count ? 'count' : hasUntil ? 'until' : 'horizon',
+      recurrenceCount: count ?? 12,
+      recurrenceUntil: hasUntil ? until!.toISOString().slice(0, 10) : '',
+    };
+  };
 
   const keywordServiceToStrings = (arr: unknown[] | undefined): string[] => {
     if (!arr?.length) return [];
@@ -118,7 +207,12 @@ import React, {
     endTime: '',
     timezone: '',
     isRecurring: false,
-    recurrenceFrequency: 'weekly',
+    recurrenceUnit: 'week',
+    recurrenceInterval: 1,
+    recurrenceWeekdays: [],
+    recurrenceEndMode: 'count',
+    recurrenceCount: 12,
+    recurrenceUntil: '',
     price: '',
     isFree: false,
     maxAttendees: '',
@@ -221,6 +315,36 @@ import React, {
     // For the chosen date/time: a hard conflict with an existing booking (blocks
     // creation) and a soft check against the expert's saved availability hours
     // (warns but still allows creating the seminar).
+    // The series the current rule would create — shown to the expert before saving,
+    // and used to catch a schedule that runs past the guard.
+    const recurrencePreview = useMemo(() => {
+      const start = formData.date && formData.startTime
+        ? new Date(`${formData.date}T${formData.startTime}:00`)
+        : null;
+      return previewRecurrence({
+        start,
+        unit: formData.recurrenceUnit,
+        interval: Number(formData.recurrenceInterval),
+        weekdays: formData.recurrenceWeekdays,
+        endMode: formData.recurrenceEndMode,
+        count: formData.recurrenceCount === '' ? null : Number(formData.recurrenceCount),
+        until: formData.recurrenceUntil,
+      });
+    }, [
+      formData.date,
+      formData.startTime,
+      formData.recurrenceUnit,
+      formData.recurrenceInterval,
+      formData.recurrenceWeekdays,
+      formData.recurrenceEndMode,
+      formData.recurrenceCount,
+      formData.recurrenceUntil,
+    ]);
+
+    // A live series is already booked, so its repeat schedule is fixed — the
+    // backend refuses a change and the controls say so rather than failing on save.
+    const recurrenceLocked = !!selectedSeminar?.seriesId;
+
     const scheduleCheck = useMemo<{
       conflict: { name: string } | null;
       outsideAvailability: boolean;
@@ -285,7 +409,7 @@ import React, {
         price: selectedSeminar.price ?? '',
         maxAttendees: typeof selectedSeminar.maxAttendees === 'number' ? selectedSeminar.maxAttendees : '',
         isRecurring: !!selectedSeminar.isRecurring,
-        recurrenceFrequency: selectedSeminar.recurrenceFrequency || 'weekly',
+        ...hydrateRecurrence(selectedSeminar),
       };
   
       if (start && end) {
@@ -393,6 +517,29 @@ import React, {
         }
         if (!formData.timezone) {
           newErrors.timezone = 'Timezone is required.';
+        }
+        if (formData.isRecurring) {
+          const interval = Number(formData.recurrenceInterval);
+          if (!Number.isInteger(interval) || interval < 1 || interval > MAX_RECURRENCE_INTERVAL) {
+            newErrors.recurrenceInterval = `Repeat every 1 to ${MAX_RECURRENCE_INTERVAL} ${formData.recurrenceUnit}s.`;
+          }
+          if (formData.recurrenceEndMode === 'count') {
+            const count = Number(formData.recurrenceCount);
+            if (!Number.isInteger(count) || count < 1) {
+              newErrors.recurrenceCount = 'Enter how many sessions this series runs for.';
+            } else if (count > MAX_RECURRENCE_OCCURRENCES) {
+              newErrors.recurrenceCount = `A series can run for at most ${MAX_RECURRENCE_OCCURRENCES} sessions.`;
+            }
+          }
+          if (formData.recurrenceEndMode === 'until') {
+            if (!formData.recurrenceUntil) {
+              newErrors.recurrenceUntil = 'Pick the date this series ends.';
+            } else if (formData.date && formData.recurrenceUntil < formData.date) {
+              newErrors.recurrenceUntil = 'The end date must be on or after the first session.';
+            } else if (recurrencePreview.overLimit) {
+              newErrors.recurrenceUntil = `That runs past ${MAX_RECURRENCE_OCCURRENCES} sessions. End it sooner or space the sessions further apart.`;
+            }
+          }
         }
       } else if (stepId === 3) {
         if (!formData.isFree) {
@@ -512,7 +659,20 @@ import React, {
           maxAttendees: formData.maxAttendees === '' ? null : Number(formData.maxAttendees),
           currency: formData.currency,
           isRecurring: formData.isRecurring,
-          recurrenceFrequency: formData.isRecurring ? formData.recurrenceFrequency : undefined,
+          ...(formData.isRecurring
+            ? {
+                recurrenceUnit: formData.recurrenceUnit,
+                recurrenceInterval: Number(formData.recurrenceInterval || 1),
+                recurrenceWeekdays:
+                  formData.recurrenceUnit === 'week' ? formData.recurrenceWeekdays : [],
+                recurrenceCount:
+                  formData.recurrenceEndMode === 'count' ? Number(formData.recurrenceCount || 0) : undefined,
+                recurrenceUntil:
+                  formData.recurrenceEndMode === 'until' && formData.recurrenceUntil
+                    ? `${formData.recurrenceUntil}T23:59:59`
+                    : undefined,
+              }
+            : {}),
           timezone: formData.timezone,
         };
 
@@ -923,10 +1083,12 @@ import React, {
           </div>
         <button
           type="button"
+          disabled={recurrenceLocked}
           onClick={() => updateFormField('isRecurring', !formData.isRecurring)}
           className={[
             'relative inline-flex h-6 w-11 items-center rounded-full transition-colors',
             formData.isRecurring ? 'bg-[#234C6A]' : 'bg-gray-200',
+            recurrenceLocked ? 'cursor-not-allowed opacity-60' : '',
           ].join(' ')}
         >
             <span
@@ -939,40 +1101,219 @@ import React, {
         </div>
 
         {formData.isRecurring && (
-          <div>
-            <label className="mb-1.5 block text-sm font-medium text-gray-700">
-              Repeats
-            </label>
-            <div className="grid gap-3 sm:grid-cols-3">
-              {RECURRENCE_OPTIONS.map((option) => {
-                const active = formData.recurrenceFrequency === option.value;
-                return (
-                  <button
-                    key={option.value}
-                    type="button"
-                    onClick={() => updateFormField('recurrenceFrequency', option.value)}
-                    className={[
-                      'rounded-lg border px-4 py-3 text-left transition-colors',
-                      active
-                        ? 'border-[#234C6A] bg-[#e8f0f8]'
-                        : 'border-gray-200 bg-white hover:border-[#234C6A]/40',
-                    ].join(' ')}
-                  >
-                    <span
+          <div className="space-y-4 rounded-lg border border-gray-100 bg-gray-50/60 p-4">
+            {recurrenceLocked && (
+              <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                This series already exists, so its repeat schedule is fixed. To use a
+                different schedule, cancel this series and create a new one.
+              </p>
+            )}
+
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-gray-700">
+                Repeats
+              </label>
+              <div className="flex flex-wrap items-center gap-2 text-sm text-gray-600">
+                <span>Every</span>
+                <input
+                  type="number"
+                  min={1}
+                  max={MAX_RECURRENCE_INTERVAL}
+                  disabled={recurrenceLocked}
+                  value={formData.recurrenceInterval}
+                  onChange={(e) =>
+                    updateFormField(
+                      'recurrenceInterval',
+                      e.target.value === '' ? '' : Number(e.target.value),
+                    )
+                  }
+                  className="w-20 rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-[#234C6A] focus:outline-none disabled:bg-gray-100"
+                />
+                <div className="w-36">
+                  <SelectField
+                    id="seminar-recurrence-unit"
+                    value={formData.recurrenceUnit}
+                    disabled={recurrenceLocked}
+                    onChange={(v) => updateFormField('recurrenceUnit', v as RecurrenceUnit)}
+                    options={RECURRENCE_UNIT_OPTIONS}
+                  />
+                </div>
+              </div>
+              <p className="mt-1.5 text-xs text-gray-400">
+                Any number from 1 to {MAX_RECURRENCE_INTERVAL} — every 4 days, every
+                5 weeks, every 2 months, whatever suits the seminar.
+              </p>
+              {errors.recurrenceInterval && (
+                <p className="mt-1 text-xs text-red-500">{errors.recurrenceInterval}</p>
+              )}
+            </div>
+
+            {formData.recurrenceUnit === 'week' && (
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-gray-700">
+                  On these days
+                </label>
+                <div className="flex flex-wrap gap-2">
+                  {WEEKDAY_CHIPS.map((day) => {
+                    const active = formData.recurrenceWeekdays.includes(day.value);
+                    return (
+                      <button
+                        key={day.value}
+                        type="button"
+                        aria-pressed={active}
+                        disabled={recurrenceLocked}
+                        onClick={() =>
+                          updateFormField(
+                            'recurrenceWeekdays',
+                            active
+                              ? formData.recurrenceWeekdays.filter((d) => d !== day.value)
+                              : [...formData.recurrenceWeekdays, day.value].sort((a, b) => a - b),
+                          )
+                        }
+                        className={[
+                          'h-9 w-12 rounded-lg border text-xs font-medium transition-colors',
+                          active
+                            ? 'border-[#234C6A] bg-[#234C6A] text-white'
+                            : 'border-gray-200 bg-white text-gray-600 hover:border-[#234C6A]/40',
+                          recurrenceLocked ? 'cursor-not-allowed opacity-60' : '',
+                        ].join(' ')}
+                      >
+                        {day.label}
+                      </button>
+                    );
+                  })}
+                </div>
+                <p className="mt-1.5 text-xs text-gray-400">
+                  Pick two or more to run several sessions a week — Mondays and
+                  Fridays, say. Leave them all off to repeat on the same weekday as
+                  the first session.
+                </p>
+              </div>
+            )}
+
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-gray-700">
+                Quick picks
+              </label>
+              <div className="flex flex-wrap gap-2">
+                {RECURRENCE_PRESETS.map((preset) => {
+                  const active =
+                    formData.recurrenceUnit === preset.unit &&
+                    Number(formData.recurrenceInterval) === preset.interval &&
+                    formData.recurrenceWeekdays.length < 2;
+                  return (
+                    <button
+                      key={preset.label}
+                      type="button"
+                      disabled={recurrenceLocked}
+                      onClick={() => {
+                        updateFormField('recurrenceUnit', preset.unit);
+                        updateFormField('recurrenceInterval', preset.interval);
+                        updateFormField('recurrenceWeekdays', []);
+                      }}
                       className={[
-                        'block text-sm font-medium',
-                        active ? 'text-[#234C6A]' : 'text-gray-700',
+                        'rounded-full border px-3.5 py-1.5 text-xs font-medium transition-colors',
+                        active
+                          ? 'border-[#234C6A] bg-[#e8f0f8] text-[#234C6A]'
+                          : 'border-gray-200 bg-white text-gray-600 hover:border-[#234C6A]/40',
+                        recurrenceLocked ? 'cursor-not-allowed opacity-60' : '',
                       ].join(' ')}
                     >
-                      {option.label}
-                    </span>
-                    <span className="mt-1 block text-xs text-gray-400">
-                      {option.hint}
-                    </span>
-                  </button>
-                );
-              })}
+                      {preset.label}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
+
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-gray-700">
+                Ends
+              </label>
+              <div className="space-y-2">
+                <label className="flex flex-wrap items-center gap-2 text-sm text-gray-600">
+                  <input
+                    type="radio"
+                    name="recurrence-end"
+                    checked={formData.recurrenceEndMode === 'count'}
+                    disabled={recurrenceLocked}
+                    onChange={() => updateFormField('recurrenceEndMode', 'count')}
+                    className="accent-[#234C6A]"
+                  />
+                  <span>After</span>
+                  <input
+                    type="number"
+                    min={1}
+                    max={MAX_RECURRENCE_OCCURRENCES}
+                    disabled={recurrenceLocked || formData.recurrenceEndMode !== 'count'}
+                    value={formData.recurrenceCount}
+                    onChange={(e) =>
+                      updateFormField(
+                        'recurrenceCount',
+                        e.target.value === '' ? '' : Number(e.target.value),
+                      )
+                    }
+                    className="w-24 rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-[#234C6A] focus:outline-none disabled:bg-gray-100"
+                  />
+                  <span>sessions</span>
+                </label>
+                {errors.recurrenceCount && (
+                  <p className="text-xs text-red-500">{errors.recurrenceCount}</p>
+                )}
+
+                <label className="flex flex-wrap items-center gap-2 text-sm text-gray-600">
+                  <input
+                    type="radio"
+                    name="recurrence-end"
+                    checked={formData.recurrenceEndMode === 'until'}
+                    disabled={recurrenceLocked}
+                    onChange={() => updateFormField('recurrenceEndMode', 'until')}
+                    className="accent-[#234C6A]"
+                  />
+                  <span>On</span>
+                  <input
+                    type="date"
+                    min={formData.date || undefined}
+                    disabled={recurrenceLocked || formData.recurrenceEndMode !== 'until'}
+                    value={formData.recurrenceUntil}
+                    onChange={(e) => updateFormField('recurrenceUntil', e.target.value)}
+                    className="rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-[#234C6A] focus:outline-none disabled:bg-gray-100"
+                  />
+                </label>
+                {errors.recurrenceUntil && (
+                  <p className="text-xs text-red-500">{errors.recurrenceUntil}</p>
+                )}
+
+                <label className="flex items-center gap-2 text-sm text-gray-600">
+                  <input
+                    type="radio"
+                    name="recurrence-end"
+                    checked={formData.recurrenceEndMode === 'horizon'}
+                    disabled={recurrenceLocked}
+                    onChange={() => updateFormField('recurrenceEndMode', 'horizon')}
+                    className="accent-[#234C6A]"
+                  />
+                  <span>Keep going for a year</span>
+                </label>
+              </div>
+            </div>
+
+            {previewSummary(recurrencePreview) && (
+              <div className="rounded-lg border border-gray-200 bg-white px-3 py-2.5">
+                <p className="text-xs font-medium text-[#234C6A]">
+                  {previewSummary(recurrencePreview)}
+                </p>
+                <p className="mt-1 text-[11px] text-gray-400">
+                  Students who register are enrolled in every session.
+                </p>
+                {recurrencePreview.dates.length > 60 && (
+                  <p className="mt-1 text-[11px] text-amber-700">
+                    That's a long series — every session is created up front and
+                    can't be re-spaced afterwards.
+                  </p>
+                )}
+              </div>
+            )}
           </div>
         )}
       </div>

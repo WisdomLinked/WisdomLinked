@@ -24,6 +24,11 @@ const CONTENT_FIELDS = [
     'timezone',
     'isRecurring',
     'recurrenceFrequency',
+    'recurrenceUnit',
+    'recurrenceInterval',
+    'recurrenceWeekdays',
+    'recurrenceCount',
+    'recurrenceUntil',
     'type',
     'status',
 ];

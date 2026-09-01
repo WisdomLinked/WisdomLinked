@@ -13,6 +13,7 @@ const {
     requestSeminarSeat,
     approveSeminarSeatRequest,
     rejectSeminarSeatRequest,
+    inviteToSeminar,
     paySeminarSeatRequest,
     getSeminarSeatRequests,
     getMySeatRequests,
@@ -160,6 +161,13 @@ router.post(
     "/reject-seat-request",
     expertAuth(true),
     rejectSeminarSeatRequest
+);
+
+// host invites students — followers or by email — to one of their seminars
+router.post(
+    "/invite-to-seminar",
+    expertAuth(true),
+    inviteToSeminar
 );
 
 // student settles an approved wallet seat within their payment window

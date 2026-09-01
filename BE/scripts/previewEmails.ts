@@ -57,6 +57,7 @@ const EXPERT = 'Dr Bruce Wang';
 const STUDENT = 'Mei Chen';
 const SEMINAR = 'Applying to US Graduate Programs';
 const SESSION = 'PhD application strategy';
+const STUDENT_NOTE = 'I am applying to five US PhD programmes this cycle and would like to go through my statement of purpose and shortlist before the December deadlines.';
 const INTENT = 'pi_3U7IOaFzkCxWETvY1sQBz9Kd';
 const BALANCE_TXN = 'txn_3U7IOaFzkCxWETvY1LmPq4Rn';
 
@@ -65,19 +66,19 @@ const run = async () => {
     await record('C3 · new 1:1 request → expert (card hold)', () =>
         notifications.sendEmailMeetingRequestToExpert(
             'e@x.com', EXPERT, SESSION, IN_2_DAYS, 60, 120, true, 'UTC', 'hold',
-            { studentName: STUDENT, decisionDeadline: IN_1_DAY },
+            { studentName: STUDENT, decisionDeadline: IN_1_DAY, studentNote: STUDENT_NOTE },
         ));
 
     await record('C3 · new 1:1 request → expert (wallet)', () =>
         notifications.sendEmailMeetingRequestToExpert(
             'e@x.com', EXPERT, SESSION, IN_2_DAYS, 60, 120, true, 'UTC', 'wallet',
-            { studentName: STUDENT, decisionDeadline: IN_1_DAY },
+            { studentName: STUDENT, decisionDeadline: IN_1_DAY, studentNote: STUDENT_NOTE },
         ));
 
     await record('D1 · expert offers a session → student', () =>
         notifications.sendEmailMeetingRequestToCustomer(
             's@x.com', SESSION, STUDENT, IN_2_DAYS, 60, 120, 'UTC', IN_1_DAY,
-            { expertName: EXPERT },
+            { expertName: EXPERT, note: 'Bring the draft of your statement of purpose and the programme list you have so far.' },
         ));
 
     await record('D2 · offer sent → expert', () =>
@@ -88,6 +89,7 @@ const run = async () => {
     await record('D4 · student accepted and paid → expert', () =>
         notifications.sendEmailSessionPaidToExpert(
             'e@x.com', EXPERT, STUDENT, SESSION, IN_2_DAYS, 60, 120, 'UTC', INTENT, BALANCE_TXN,
+            { studentNote: STUDENT_NOTE },
         ));
 
     await record('A2 · enrolled, card charged → student (receipt)', () =>
@@ -105,7 +107,7 @@ const run = async () => {
             expertName: EXPERT, studentName: STUDENT, start: IN_2_DAYS, duration: 60,
             amount: 12000, currency: 'usd', receiptUrl: 'https://example.com/receipt',
             receiptNumber: '2381-4472', paymentMethod: 'WeChat Pay', timeZone: 'UTC',
-            transactionId: INTENT, balanceTransaction: BALANCE_TXN,
+            transactionId: INTENT, balanceTransaction: BALANCE_TXN, studentNote: STUDENT_NOTE,
         }));
 
     // --- representative of the controller-side messages ----------------------

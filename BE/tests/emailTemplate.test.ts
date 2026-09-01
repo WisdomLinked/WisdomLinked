@@ -241,3 +241,53 @@ test("an expert learns their offer was sent and what happens if it is ignored", 
   assert.match(body, /removed automatically/i);
   assert.doesNotMatch(body, /receipt/i);
 });
+
+test("the note a student wrote when booking reaches the expert's request email", async () => {
+  reset();
+  await notifications.sendEmailMeetingRequestToExpert(
+    "e@x.com", "Dr Wang", "Strategy call", IN_2_DAYS, 60, 120, true, "UTC", "hold",
+    {
+      studentName: "Mei",
+      decisionDeadline: IN_1_DAY,
+      studentNote: "I am applying to PhD programmes and would like to review my statement of purpose.",
+    },
+  );
+
+  const body = text(last().html);
+  assert.match(body, /Student(&#39;|')s note/i, "the note is labelled so it is not read as our copy");
+  assert.match(body, /statement of purpose/, "the student's words are carried through");
+});
+
+test("the student sees their own note echoed on the confirmation", async () => {
+  reset();
+  await notifications.sendPaymentConfirmationEmail({
+    to: "s@x.com",
+    sessionType: "1:1 Session",
+    sessionName: "Strategy call",
+    expertName: "Dr Wang",
+    studentName: "Mei",
+    start: IN_2_DAYS,
+    duration: 60,
+    amount: 12000,
+    currency: "usd",
+    timeZone: "UTC",
+    studentNote: "I would like to review my statement of purpose.",
+  });
+
+  const body = text(last().html);
+  assert.match(body, /Your note/i);
+  assert.match(body, /statement of purpose/);
+});
+
+test("a note is escaped and its line breaks survive", () => {
+  const html = template.studentNote("First line\nSecond <b>line</b>");
+
+  assert.match(html, /First line<br \/>Second/, "the student's paragraphing is preserved");
+  assert.doesNotMatch(html.toLowerCase(), /<b>/, "markup in a note is never executed");
+});
+
+test("no note means no empty note block", () => {
+  assert.equal(template.studentNote(""), "");
+  assert.equal(template.studentNote("   "), "");
+  assert.equal(template.studentNote(undefined), "");
+});
