@@ -12,9 +12,9 @@ import {
   shouldBlockStudentResumeByExtension,
   shouldSendResumeFormatNotifyOnce,
 } from "../../utils/resumePreviewHelpers";
+import { OVERLAY_Z_DOCUMENT_PREVIEW } from "../../utils/overlayLayers";
 
-/** Above `ProfileModal` and similar overlays that use z-[200]. */
-const PREVIEW_OVERLAY_Z = 500;
+const PREVIEW_OVERLAY_Z = OVERLAY_Z_DOCUMENT_PREVIEW;
 
 export interface DocumentPreviewModalProps {
   /** When `false`, the modal renders nothing. Omit or `true` when parent mounts conditionally. */

@@ -4,6 +4,7 @@ import { X } from "lucide-react";
 import FilePreviewModal from "../../FilePreviewModal";
 import { hasResumeForPreview, resolveResumePublicUrl } from "../../../../utils/resumeUrl";
 import ProfileCard from "../../../../components/profile/ProfileCard";
+import { OVERLAY_Z_PROFILE_CARD } from "../../../../utils/overlayLayers";
 
 interface ProfileModalProps {
     isOpen: boolean;
@@ -59,7 +60,8 @@ const ProfileModal: React.FC<ProfileModalProps> = ({
 
     const overlay = (
         <div
-            className={`fixed inset-0 z-[1500] flex items-center justify-center p-4 ${
+            style={{ zIndex: OVERLAY_Z_PROFILE_CARD }}
+            className={`fixed inset-0 flex items-center justify-center p-4 ${
                 isLight ? "bg-slate-900/45 backdrop-blur-[6px]" : "bg-black/70 backdrop-blur-sm"
             }`}
             role="presentation"

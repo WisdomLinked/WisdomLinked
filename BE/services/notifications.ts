@@ -6,6 +6,7 @@ sgClient.setApiKey(process.env.SENDGRID_API_KEY);
 
 const { resolveAppBaseUrl, appAssetUrl } = require("../utils/appBaseUrl");
 const {
+    BRAND,
     renderEmail,
     emailAttachments,
     money: emailMoney,
@@ -17,6 +18,7 @@ const {
     button: emailButton,
     callout: emailCallout,
     expertNote: emailExpertNote,
+    studentNote: emailStudentNote,
     escapeHtml: emailEscape,
 } = require("./emailTemplate");
 
@@ -82,7 +84,7 @@ scheduleEmailReminder = async (targetEmail, userName, title,start, duration, tim
     }
 }
 
-sendEmailMeetingAcceptance = async (targetEmail, userName, title,start, duration, timeZone, noteHtml = '') => {
+sendEmailMeetingAcceptance = async (targetEmail, userName, title,start, duration, timeZone, noteHtml = '', options: any = {}) => {
     subject = `Your session request was accepted — ${title}`;
     html = renderEmail({
         heading: 'Your session request was accepted',
@@ -93,6 +95,7 @@ sendEmailMeetingAcceptance = async (targetEmail, userName, title,start, duration
                 ['Date & time', emailWhen(start, timeZone)],
                 ['Duration', duration ? `${duration} minutes` : ''],
             ]),
+            emailStudentNote(options.studentNote, 'Your note'),
             noteHtml || '',
             emailButton('View the session'),
         ],
@@ -156,6 +159,7 @@ sendEmailMeetingRequestToExpert = (targetEmail, expertName, name, start, duratio
                 ['Total charge', amount],
                 ['Respond by', deadline],
             ]),
+            emailStudentNote(options.studentNote),
             moneyLine,
             paymentState === 'paid'
                 ? ''
@@ -168,7 +172,7 @@ sendEmailMeetingRequestToExpert = (targetEmail, expertName, name, start, duratio
     return deliver(targetEmail, subject, html);
 }
 
-sendEmailSessionPaidToExpert = (targetEmail, expertName, studentName, name, start, duration, price, timeZone, transactionId, balanceTransaction) => {
+sendEmailSessionPaidToExpert = (targetEmail, expertName, studentName, name, start, duration, price, timeZone, transactionId, balanceTransaction, options: any = {}) => {
     const who = studentName || 'The student';
     subject = `Your session offer was accepted — payment received`;
     html = renderEmail({
@@ -184,6 +188,7 @@ sendEmailSessionPaidToExpert = (targetEmail, expertName, studentName, name, star
                 ['Transaction ID', transactionId],
                 ['Balance transaction', balanceTransaction],
             ]),
+            emailStudentNote(options.studentNote),
             emailParagraph('We will send you reminders before the session begins. You can open the session chat at any time beforehand to share preparation notes or documents.'),
             emailParagraph('The chat is a convenience only — neither side is required to read or reply before the session, and video and audio become available at the scheduled start time.', { muted: true }),
             emailButton('View the session'),
@@ -236,6 +241,7 @@ sendEmailMeetingRequestToCustomer = (targetEmail, name, customerName, start, dur
                 ['Total charge if you accept', emailMoney(price)],
                 ['Respond by', deadline],
             ]),
+            emailExpertNote(options.note),
             emailCallout('<strong>Nothing has been charged.</strong> You are only charged when you accept this offer and complete payment.'),
             emailParagraph('To reserve this session, accept the offer and complete payment from your dashboard.'),
             emailBullets([
@@ -275,7 +281,7 @@ shareMeetingId = (targetEmail, name, meetingId, title) =>{
     return deliver(targetEmail, subject, html);
 }
 
-sendPaymentConfirmationEmail = async ({ to, sessionType, sessionName, expertName, studentName, start, duration, amount, currency, receiptUrl, receiptNumber, timeZone, paymentMethod, transactionId, balanceTransaction, noteHtml = '', noteText = '' }) => {
+sendPaymentConfirmationEmail = async ({ to, sessionType, sessionName, expertName, studentName, start, duration, amount, currency, receiptUrl, receiptNumber, timeZone, paymentMethod, transactionId, balanceTransaction, noteHtml = '', noteText = '', studentNote = '', receiptPageUrl = '' }) => {
     const isSeminar = String(sessionType || '').toLowerCase().includes('seminar');
     const amountStr = emailMoneyFromCents(amount, currency);
     const subjectLine = isSeminar
@@ -303,8 +309,16 @@ sendPaymentConfirmationEmail = async ({ to, sessionType, sessionName, expertName
                 ['Transaction ID', transactionId],
                 ['Balance transaction', balanceTransaction],
             ]),
+            emailStudentNote(studentNote, 'Your note'),
             noteHtml || emailExpertNote(noteText),
-            receiptUrl ? emailButton('View your receipt', receiptUrl) : emailButton(`View the ${chatWord}`),
+            receiptPageUrl
+                ? emailButton('View your receipt', receiptPageUrl)
+                : receiptUrl
+                    ? emailButton('View your receipt', receiptUrl)
+                    : emailButton(`View the ${chatWord}`),
+            receiptPageUrl && receiptUrl
+                ? emailParagraph(`You can also open the <a href="${receiptUrl}" style="color:${BRAND.accent};">payment record from Stripe</a>, our payment processor.`, { muted: true })
+                : '',
             emailParagraph(`<strong>${beforeHeading}</strong>`),
             emailParagraph(`You can open this ${chatWord} at any time from your calendar or dashboard. Before the start time you can use the ${chatWord} chat to ask questions, share information or upload documents.`),
             emailParagraph(`The chat is provided for convenience only — participants are not required to read or reply to messages before the ${chatWord} begins. Video and audio become available at the scheduled start time.`, { muted: true }),

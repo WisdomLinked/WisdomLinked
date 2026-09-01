@@ -25,11 +25,27 @@ const groupChatSchema = new mongoose.Schema(
         currency: { type: String, default: "USD" },
         timezone: { type: String },
         isRecurring: { type: Boolean, default: false },
+        // Legacy label, still written whenever the rule matches one of these
+        // shapes so surfaces reading it keep rendering. The rule itself lives in
+        // recurrenceUnit/recurrenceInterval below.
         recurrenceFrequency: {
             type: String,
             enum: ["weekly", "biweekly", "monthly"],
             default: undefined,
         },
+        recurrenceUnit: {
+            type: String,
+            enum: ["day", "week", "month"],
+            default: undefined,
+        },
+        recurrenceInterval: { type: Number, default: undefined },
+        // Weekly rules only: the days of the week the seminar runs on, 0 = Sunday.
+        // Empty means "the same weekday as the first session".
+        recurrenceWeekdays: [{ type: Number }],
+        // How the expert bounded the series: a number of sessions, an end date,
+        // or neither (which falls back to a one-year horizon).
+        recurrenceCount: { type: Number, default: undefined },
+        recurrenceUntil: { type: Date, default: undefined },
         seriesId: {
             type: mongoose.Schema.Types.ObjectId,
             ref: "GroupChat",

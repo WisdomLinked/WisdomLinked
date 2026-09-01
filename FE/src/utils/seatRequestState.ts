@@ -14,6 +14,8 @@ export type SeatRequestEntry = {
   /** Dollars owed, from the amount snapshotted when the host approved. */
   price: number;
   payBy: string | null;
+  /** 'host' when the host invited this student, rather than the student asking. */
+  origin: 'student' | 'host';
 };
 
 export type SeatRequestIndex = {
@@ -62,6 +64,7 @@ export const indexSeatRequests = (
       state,
       price: typeof row?.amount === 'number' ? row.amount / 100 : 0,
       payBy: row?.paymentDeadline ?? null,
+      origin: String(row?.origin || 'student') === 'host' ? 'host' : 'student',
     };
 
     // An unpaid approval outranks a pending request for the same seminar: it is the one

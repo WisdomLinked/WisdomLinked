@@ -28,6 +28,7 @@ const seminarSeatRequestSchema = new mongoose.Schema(
             default: 'pending',
         },
         paymentMode: { type: String, enum: ['card', 'wallet'], default: 'card' },
+        origin: { type: String, enum: ['student', 'host'], default: 'student' },
         paymentDeadline: { type: Date },
         decisionDeadline: { type: Date },
         decisionNote: { type: String, default: '' },

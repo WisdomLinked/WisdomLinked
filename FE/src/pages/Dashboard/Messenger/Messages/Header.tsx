@@ -27,7 +27,7 @@ import CloseIcon from '@mui/icons-material/Close';
 import EditIcon from '@mui/icons-material/Edit';
 import { fetchDirectCallHistory, startMeeting } from "../../../../api/chatApi";
 import { fetchChatUserProfile } from "../../../../api/chatApi";
-import {doLeftSeminar, doUpdateProfile, proposeIndividualAppointment, shareMeetingViaEmail} from "../../../../api/api";
+import {doLeftSeminar, doUpdateProfile, proposeIndividualAppointment} from "../../../../api/api";
 import { proposedTimeNeedsOverride, hasBookingConflict, presetAvailabilityRanges } from "../../../../utils/proposeAvailability";
 import { normalizeExpertPrice } from "../../../../utils/schedulingSlots";
 import {SetLoadingStatus, SetTotalTimeSpent} from "../../../../actions/appActions";
@@ -37,7 +37,8 @@ import { addNewMessage, resetChatAction, setChosenGroupChatDetails } from "../..
 import ProfileModal from "./ProfileModal";
 import CommunityProfileModal from "./CommunityProfileModal";
 import ChatHeader from "./ChatHeader";
-import { History, ShareIcon, Video } from "lucide-react";
+import InviteToSeminarDialog from "./InviteToSeminarDialog";
+import { History, Video } from "lucide-react";
 import { buildFallbackChatProfile, mergeChatProfile } from "../../../../utils/chatProfileModal";
 import { buildOnlineUserIdSet, hasOnlineUserId } from "../../../../utils/onlinePresence";
 import { trackMeetingJoin } from "../../../../utils/meetingSession";
@@ -81,11 +82,7 @@ const MessagesHeader = ({ events, openCalendarModal, openSeminarModal, openEditS
     const [joinPopupBlocked, set_joinPopupBlocked] = useState(userDetails.joinPopupBlocked)
     const [joinPopupShow, set_joinPopupShow] = useState(false)
     const [kickedFromSeminar, set_kickedFromSeminar] = useState(false)
-    const [show_meeting_id, set_show_meeting_id] = useState(false);
-    const [copied, setCopied] = useState(false);
-    const [showEmailInput, setShowEmailInput] = useState(false);
-    const [emailAddress, setEmailAddress] = useState('');
-    const [emailError, setEmailError] = useState('');
+    const [inviteToSeminarOpen, setInviteToSeminarOpen] = useState(false);
     const [manageCommunityMembersOpen, setManageCommunityMembersOpen] = useState(false);
     const [headerLeaveCommunityOpen, setHeaderLeaveCommunityOpen] = useState(false);
     const [deleteCommunityConfirmOpen, setDeleteCommunityConfirmOpen] = useState(false);
@@ -252,11 +249,6 @@ const MessagesHeader = ({ events, openCalendarModal, openSeminarModal, openEditS
         }
     }
 
-    const handleShareViaEmail = async (email: string, groupChatId: string) => {
-        SetLoadingStatus(true)
-        await shareMeetingViaEmail({email:email, groupchatId:groupChatId})
-        SetLoadingStatus(false)
-    }
 
     useEffect(() => {
         let temp: any = []
@@ -342,6 +334,11 @@ const MessagesHeader = ({ events, openCalendarModal, openSeminarModal, openEditS
 
     const peerRoleLower = String(chosenChatDetails?.peerRole || "").toLowerCase();
     const viewerIsStudent = String(userDetails?.role || "").toLowerCase() === "customer";
+    const isCommunityChat = chosenGroupChatDetails?.type === "community";
+    const canInviteToSeminar = !isCommunityChat
+        && !!chosenGroupChatDetails
+        && chosenGroupChatDetails?.type !== 'individual'
+        && isGroupAdmin;
 
     // Ticks every 30s so the call window opens/closes without needing a refresh.
     const [nowTick, setNowTick] = useState(Date.now());
@@ -806,25 +803,25 @@ const MessagesHeader = ({ events, openCalendarModal, openSeminarModal, openEditS
                                             <span>Show Details</span>
                                             <CastForEducationIcon fontSize="small" className="shrink-0 opacity-70" />
                                         </button>
+                                        {canInviteToSeminar ? (
+                                            <button
+                                                type="button"
+                                                className={`mt-0.5 flex w-full items-center justify-between gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-medium ${
+                                                    theme === "light" ? "text-slate-800 hover:bg-slate-50" : "hover:bg-white/10"
+                                                }`}
+                                                onClick={() => {
+                                                    set_buttonsModalShow(false)
+                                                    setInviteToSeminarOpen(true)
+                                                }}
+                                            >
+                                                <span>Invite people</span>
+                                                <PersonAddIcon fontSize="small" className="shrink-0 opacity-70" />
+                                            </button>
+                                        ) : null}
                                         {
                                             (isGroupAdmin || isCommunityModerator) ?
-                                                (() => {
-                                                    const isCommunityChat = chosenGroupChatDetails?.type === "community";
-                                                    return (
-                                                        <>
-                                                            <button
-                                                                type="button"
-                                                                className={`mt-0.5 flex w-full items-center justify-between gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-medium ${
-                                                                    theme === "light" ? "text-slate-800 hover:bg-slate-50" : "hover:bg-white/10"
-                                                                }`}
-                                                                onClick={() => {
-                                                                    set_buttonsModalShow(false)
-                                                                    set_show_meeting_id(true)
-                                                                }}
-                                                            >
-                                                                <span>Share Meeting ID</span>
-                                                                <ShareIcon className="h-4 w-4 shrink-0 opacity-70" />
-                                                            </button>
+                                                (
+                                                    <>
                                                             {!isCommunityChat && (
                                                                 <button
                                                                     type="button"
@@ -919,9 +916,8 @@ const MessagesHeader = ({ events, openCalendarModal, openSeminarModal, openEditS
                                                                     <ClearIcon fontSize="small" className="shrink-0 opacity-90" />
                                                                 </button>
                                                             )}
-                                                        </>
-                                                    );
-                                                })() :
+                                                    </>
+                                                ) :
                                                 <button
                                                     type="button"
                                                     className={`mt-0.5 flex w-full items-center justify-between gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-semibold ${
@@ -1282,128 +1278,12 @@ const MessagesHeader = ({ events, openCalendarModal, openSeminarModal, openEditS
                     </div> :
                     null
             }
-            {
-    show_meeting_id ?
-        <OverlayPortal closeModal={() => set_show_meeting_id(false)}>
-            <div className={`fixed inset-0 flex items-center justify-center z-50 ${theme === "light" ? "bg-black/30 backdrop-blur-sm" : "bg-black bg-opacity-50"}`}>
-                <div className={`${theme === "light" ? "bg-white text-slate-900 border border-slate-200" : "bg-black text-white"} rounded-2xl shadow-md p-6 max-w-sm w-full mx-4 relative`}>
-                    {/* Close button at top right */}
-                    <button
-                        className={theme === "light"
-                            ? "absolute top-4 right-4 bg-slate-100 hover:bg-slate-200 p-2 rounded-full transition-colors flex items-center justify-center"
-                            : "absolute top-4 right-4 bg-gray-600 hover:bg-gray-700 p-2 rounded-full transition-colors flex items-center justify-center"}
-                        onClick={() => set_show_meeting_id(false)}
-                    >
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                        </svg>
-                    </button>
-
-                    <div className={`text-lg mb-4 text-center ${theme === "light" ? "text-slate-600" : ""}`}>Meeting ID:</div>
-                    <div className="text-xl font-bold text-center mb-4">{chosenGroupChatDetails?.groupId}</div>
-                    
-                    {!showEmailInput ? (
-                        <div className="flex space-x-3">
-                            <button
-                                className="flex-1 bg-sky-600 hover:bg-sky-700 px-4 py-2 rounded-xl transition-colors flex items-center justify-center space-x-2 text-white"
-                                onClick={() => {
-                                    navigator.clipboard.writeText(chosenGroupChatDetails?.groupId);
-                                    setCopied(true);
-                                    setTimeout(() => setCopied(false), 1000);
-                                }}
-                            >
-                                {copied ? (
-                                    <>
-                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                                        </svg>
-                                        <span>Copied!</span>
-                                    </>
-                                ) : (
-                                    <>
-                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                                        </svg>
-                                        <span>Copy</span>
-                                    </>
-                                )}
-                            </button>
-
-                            <button
-                                className="flex-1 bg-emerald-600 hover:bg-emerald-700 px-4 py-2 rounded-xl transition-colors flex items-center justify-center space-x-2 text-white"
-                                onClick={() => setShowEmailInput(true)}
-                            >
-                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 4.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                                </svg>
-                                <span>Share via Email</span>
-                            </button>
-                        </div>
-                    ) : (
-                        <div className="space-y-4">
-                            <div>
-                                <input
-                                    type="email"
-                                    placeholder="Enter email address"
-                                    value={emailAddress}
-                                    onChange={(e) => {
-                                        setEmailAddress(e.target.value);
-                                        if (emailError) setEmailError('');
-                                    }}
-                                    className={`w-full px-4 py-2 rounded-xl border focus:outline-none focus:ring-2 ${
-                                        theme === "light"
-                                            ? "bg-white text-slate-900 border-slate-200 focus:ring-sky-500/30 focus:border-sky-500"
-                                            : `bg-gray-700 text-white ${emailError ? 'border-red-500' : 'border-gray-600'} focus:border-blue-500`
-                                    }`}
-                                />
-                                {emailError && (
-                                    <div className="text-red-400 text-sm mt-1">{emailError}</div>
-                                )}
-                            </div>
-                            <div className="flex space-x-3">
-                                <button
-                                    className="flex-1 bg-emerald-600 hover:bg-emerald-700 px-4 py-2 rounded-xl transition-colors flex items-center justify-center space-x-2 text-white"
-                                    onClick={() => {
-                                        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-                                        if (!emailAddress.trim()) {
-                                            setEmailError('Please enter an email address');
-                                            return;
-                                        }
-                                        if (!emailRegex.test(emailAddress.trim())) {
-                                            setEmailError('Please enter a valid email address');
-                                            return;
-                                        }
-                                        handleShareViaEmail(emailAddress.trim(), chosenGroupChatDetails?.groupId);
-                                        setShowEmailInput(false);
-                                        setEmailAddress('');
-                                        setEmailError('');
-                                    }}
-                                >
-                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
-                                    </svg>
-                                    <span>Share</span>
-                                </button>
-                                <button
-                                    className={theme === "light"
-                                        ? "flex-1 bg-slate-100 hover:bg-slate-200 px-4 py-2 rounded-xl transition-colors text-slate-900"
-                                        : "flex-1 bg-gray-600 hover:bg-gray-700 px-4 py-2 rounded-lg transition-colors"}
-                                    onClick={() => {
-                                        setShowEmailInput(false);
-                                        setEmailAddress('');
-                                        setEmailError('');
-                                    }}
-                                >
-                                    Cancel
-                                </button>
-                            </div>
-                        </div>
-                    )}
-                </div>
-            </div>
-        </OverlayPortal> :
-        null
-}
+            <InviteToSeminarDialog
+                open={inviteToSeminarOpen}
+                onClose={() => setInviteToSeminarOpen(false)}
+                groupDetails={chosenGroupChatDetails}
+                theme={theme === "light" ? "light" : "dark"}
+            />
         </div>
     );
 };

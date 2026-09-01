@@ -10,6 +10,7 @@ import {
   seatRequestFor,
   type SeatRequestIndex,
 } from '../../utils/seatRequestState';
+import { seatWalletOption } from '../../utils/seatCheckoutOptions';
 import { canonicalLabelsFromMixedServiceEntries } from '../../constants/serviceOptions';
 import { resolveProfileImageSrc } from '../../utils/profileImage';
 import { seminarCapacityLabel } from '../../utils/seminarCapacityLabel';
@@ -26,9 +27,9 @@ import { updateMe } from '../../actions/authActions';
 import StudentBookingCheckout from './StudentBookingCheckout';
 import { usePeerProfileModal } from '../../hooks/usePeerProfileModal';
 import seminarFallbackImg from '../../assets/images/dashboard_img1.png';
+import { recurrenceLabel } from '../../utils/recurrenceLabel';
 
 
-type RecurrenceFrequency = 'weekly' | 'biweekly' | 'monthly';
 
 type Seminar = {
   id: string;
@@ -53,14 +54,8 @@ type Seminar = {
   isFull: boolean;
   price: number;
   seriesId: string | null;
-  recurrenceFrequency: RecurrenceFrequency | null;
+  recurrenceLabel: string | undefined;
   occurrenceCount: number;
-};
-
-const RECURRENCE_LABEL: Record<RecurrenceFrequency, string> = {
-  weekly: 'Weekly',
-  biweekly: 'Biweekly',
-  monthly: 'Monthly',
 };
 
 const pad2 = (n: number) => String(n).padStart(2, '0');
@@ -114,7 +109,6 @@ async function mapSeminar(g: any): Promise<Seminar> {
   const image = g?.image
     ? String(g.image)
     : await resolveProfileImageSrc(g?.admin?.image, 'small', profileImageFetch);
-  const freq = g?.recurrenceFrequency;
   // Enrolled students exclude the host (the admin is always a participant).
   const participantCount = Array.isArray(g?.participants) ? g.participants.length : 0;
   const enrolled = Math.max(0, participantCount - 1);
@@ -143,10 +137,7 @@ async function mapSeminar(g: any): Promise<Seminar> {
     isFull: maxAttendees != null && (maxAttendees <= 0 || enrolled >= maxAttendees),
     price: typeof g?.price === 'number' ? g.price : 0,
     seriesId: g?.seriesId ? String(g.seriesId) : null,
-    recurrenceFrequency:
-      g?.isRecurring && (freq === 'weekly' || freq === 'biweekly' || freq === 'monthly')
-        ? freq
-        : null,
+    recurrenceLabel: recurrenceLabel(g),
     occurrenceCount: 1,
   };
 }
@@ -561,10 +552,10 @@ export default function StudentSeminars({
             <span>{s.level}</span>
           </div>
         )}
-        {s.recurrenceFrequency && (
+        {s.recurrenceLabel && (
           <div className="absolute right-3 top-3 inline-flex items-center gap-1 rounded-full bg-[#234C6A]/90 px-2.5 py-0.5 text-[10px] font-medium text-white backdrop-blur">
             <Repeat className="h-3 w-3" aria-hidden />
-            <span>{RECURRENCE_LABEL[s.recurrenceFrequency]}</span>
+            <span>{s.recurrenceLabel}</span>
           </div>
         )}
         {seminarRegistered(s) && (
@@ -604,17 +595,17 @@ export default function StudentSeminars({
           <span className="inline-flex items-center gap-1 rounded-full bg-slate-50 px-2 py-1">
             <Clock className="h-3 w-3 text-[#234C6A]" aria-hidden />
             <span>
-              {s.recurrenceFrequency ? 'Next: ' : ''}{s.date} · {s.time}
+              {s.recurrenceLabel ? 'Next: ' : ''}{s.date} · {s.time}
             </span>
           </span>
           <span className="inline-flex items-center gap-1 rounded-full bg-slate-50 px-2 py-1">
             <User className="h-3 w-3 text-[#234C6A]" aria-hidden />
             <span>{s.expertName}</span>
           </span>
-          {s.recurrenceFrequency && s.occurrenceCount > 1 && (
+          {s.recurrenceLabel && s.occurrenceCount > 1 && (
             <span className="inline-flex items-center gap-1 rounded-full bg-[#E8EEF4] px-2 py-1 text-[#234C6A]">
               <Repeat className="h-3 w-3" aria-hidden />
-              <span>{RECURRENCE_LABEL[s.recurrenceFrequency]} · {s.occurrenceCount} sessions</span>
+              <span>{s.recurrenceLabel} · {s.occurrenceCount} sessions</span>
             </span>
           )}
         </div>
@@ -691,6 +682,7 @@ export default function StudentSeminars({
     // there is nothing to ask for again.
     const openSeatRequest = alreadyRegistered ? null : seatRequestFor(seatRequestIndex, s);
     const seatAwaitingPayment = openSeatRequest?.state === 'awaiting_payment';
+    const seatWasInvited = seatAwaitingPayment && openSeatRequest?.origin === 'host';
     const onWaitingList = seatRequested || openSeatRequest?.state === 'awaiting_host';
     const canRequestSeat = isFull && waitingListOpen && !openSeatRequest && !seatRequested;
 
@@ -719,10 +711,10 @@ export default function StudentSeminars({
               <h1 className="mt-2 font-serif text-[1.8rem] leading-tight text-[#1A3A4A]">
                 {s.title}
               </h1>
-              {s.recurrenceFrequency && (
+              {s.recurrenceLabel && (
                 <span className="mt-2 inline-flex items-center gap-1 rounded-full bg-[#E8EEF4] px-3 py-1 text-[12px] font-medium text-[#234C6A]">
                   <Repeat className="h-3.5 w-3.5" aria-hidden />
-                  Repeats {RECURRENCE_LABEL[s.recurrenceFrequency].toLowerCase()}
+                  Repeats {s.recurrenceLabel.toLowerCase()}
                 </span>
               )}
               <div className="mt-3 rounded-xl border border-[#E5E2DB] bg-[#F5F3EF] px-4 py-3">
@@ -843,7 +835,7 @@ export default function StudentSeminars({
             </p>
             <h2 className="mt-2 font-serif text-xl text-[#1A3A4A]">Booking flow</h2>
 
-            {s.recurrenceFrequency && (
+            {s.recurrenceLabel && (
               <p className="mt-2 text-xs text-[#7A7A72]">
                 Registering enrolls you in every session of this recurring series.
               </p>
@@ -852,14 +844,16 @@ export default function StudentSeminars({
             {seatAwaitingPayment ? (
               <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-3">
                 <p className="text-sm font-semibold text-emerald-900">
-                  Your seat was approved.
+                  {seatWasInvited
+                    ? `${s.expertName || 'The host'} invited you to this seminar.`
+                    : 'Your seat was approved.'}
                 </p>
                 <p className="mt-1 text-xs text-emerald-800">
-                  Pay ${openSeatRequest!.price} to claim it
+                  Pay ${openSeatRequest!.price} to {seatWasInvited ? 'accept' : 'claim it'}
                   {openSeatRequest!.payBy
                     ? ` by ${new Date(openSeatRequest!.payBy).toLocaleString()}`
                     : ''}
-                  . The seat is released if payment isn't completed in time.
+                  . The {seatWasInvited ? 'invitation expires' : 'seat is released'} if payment isn't completed in time.
                 </p>
                 <button
                   type="button"
@@ -1032,8 +1026,7 @@ export default function StudentSeminars({
                     price: openSeatRequest!.price,
                     name: s.title,
                   }}
-                  // Approved without a hold, so it settles in the mode it was asked in.
-                  walletOption={{ kind: 'charge', only: true }}
+                  walletOption={seatWalletOption(openSeatRequest!.origin)}
                   onPaymentSuccess={paySeat}
                   onCancel={() => setCheckout('review')}
                   cancelLabel="Back"

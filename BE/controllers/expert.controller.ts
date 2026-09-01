@@ -228,15 +228,53 @@ const filterCustomers = async (req, res) => {
     }
 }
 
+const chatMemberIds = (groupChat: any): string[] => {
+    const id = (v: any) => String(v?._id ?? v?.id ?? v ?? "").trim();
+    return [
+        id(groupChat?.admin),
+        ...(Array.isArray(groupChat?.participants) ? groupChat.participants.map(id) : []),
+        ...(Array.isArray(groupChat?.coModerators) ? groupChat.coModerators.map(id) : []),
+    ].filter(Boolean);
+};
+
+const canShareChatInvite = (groupChat: any, userId: string): boolean => {
+    const me = String(userId || "");
+    if (!groupChat || !me) return false;
+    const isAdmin = String(groupChat?.admin?._id ?? groupChat?.admin ?? "") === me;
+    const isCoModerator = (Array.isArray(groupChat?.coModerators) ? groupChat.coModerators : [])
+        .some((c: any) => String(c?._id ?? c?.id ?? c) === me);
+    if (groupChat.type === "seminar") return chatMemberIds(groupChat).includes(me);
+    return isAdmin || isCoModerator;
+};
+
 const shareMeetingViaEmail = async (req, res) => {
     try {
+        const { userId } = req.user;
         const { email, groupchatId } = req.body;
-        const groupChat = await GroupChat.findById(String(groupchatId));
 
-        const user = await User.findOne({ email: email.toLowerCase() })
+        const recipient = String(email || "").trim().toLowerCase();
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(recipient)) {
+            return res.status(400).send("Please enter a valid email address.");
+        }
+
+        const chatId = String(groupchatId || "");
+        if (chatId.length !== 24) {
+            return res.status(400).send("Sorry, invalid meeting ID");
+        }
+
+        const groupChat = await GroupChat.findById(chatId);
+        if (!groupChat) {
+            return res.status(404).send("Sorry, invalid meeting ID");
+        }
+
+        if (!canShareChatInvite(groupChat, userId)) {
+            return res.status(403).send("Only people in this chat can share it.");
+        }
+
+        const user = await User.findOne({ email: recipient })
         const name = user?.username ?? "Guest"
 
-        shareMeetingId(email, name, groupchatId, groupChat.name)
+        shareMeetingId(recipient, name, chatId, groupChat.name)
 
         return res.status(200).send("Shared meeting Id via email successfully!");
 

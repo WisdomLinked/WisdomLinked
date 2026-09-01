@@ -23,6 +23,7 @@ const User = require("../models/User");
 const GroupChat = require("../models/GroupChat");
 const PaymentHistory = require("../models/PaymentHistory");
 const { assertBookingLeadTime } = require("../utils/bookingLeadTime");
+const { resolveAppBaseUrl } = require("../utils/appBaseUrl");
 
 const stripePay = async (req, res) => {
     try {
@@ -78,9 +79,12 @@ const createStripePaymentIntent = async (req, res) => {
             }
             // This seat was requested without a hold, so it settles in the mode it was
             // requested under — paying by card here would be an opt-out of the deposit
-            // every other student going through the card path has to make.
-            paymentMode = pinnedSettlementMode(request.paymentMode);
-            wallet = paymentMode === 'wallet';
+            // every other student going through the card path has to make. A host's
+            // invitation carries no such commitment, so the student picks freely.
+            if (String(request.origin || 'student') !== 'host') {
+                paymentMode = pinnedSettlementMode(request.paymentMode);
+                wallet = paymentMode === 'wallet';
+            }
             expectedCents = Number(request.amount) || 0;
             metadata = {
                 bookingType: 'groupChat',
@@ -539,7 +543,7 @@ const buildRefundEmail = ({ customerName, amountCents, currency, isFullRefund, r
     ],
 });
 
-const sendBookingReceiptAndConfirmation = async ({ payment_intent, charge, sessionType, sessionName, expertName, studentName, studentEmail, start, duration, timeZone, noteHtml = '' }) => {
+const sendBookingReceiptAndConfirmation = async ({ payment_intent, charge, sessionType, sessionName, expertName, studentName, studentEmail, start, duration, timeZone, noteHtml = '', studentNote = '' }) => {
     try {
         if (!charge || !studentEmail) return;
         if (!payment_intent) return;
@@ -569,6 +573,18 @@ const sendBookingReceiptAndConfirmation = async ({ payment_intent, charge, sessi
             metadata,
             receiptEmail: studentEmail,
         });
+        // Our own branded receipt is the link we send; Stripe's stays as the official
+        // record underneath it. A row we cannot find just falls back to Stripe's.
+        let receiptPageUrl = '';
+        try {
+            const row = await PaymentHistory.findOne({ paymentIntent: String(payment_intent), paymentType: 'charge' })
+                .select('_id')
+                .lean();
+            if (row?._id) receiptPageUrl = `${resolveAppBaseUrl()}/user/receipt/${row._id}`;
+        } catch (lookupErr: any) {
+            console.log('[sendBookingReceiptAndConfirmation] receipt page lookup failed', lookupErr?.message);
+        }
+
         await sendPaymentConfirmationEmail({
             to: studentEmail,
             sessionType,
@@ -586,6 +602,8 @@ const sendBookingReceiptAndConfirmation = async ({ payment_intent, charge, sessi
             balanceTransaction: balanceTransactionId(settled?.latest_charge),
             timeZone,
             noteHtml,
+            studentNote,
+            receiptPageUrl,
         });
     } catch (err) {
         console.error('[sendBookingReceiptAndConfirmation]', err.message);

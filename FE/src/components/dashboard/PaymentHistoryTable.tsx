@@ -132,18 +132,14 @@ export function PaymentHistoryTable({ payments, loading, error, stickyHeader = f
               return (
                 <tr key={p._id} className="border-b border-slate-100 last:border-0">
                   <td className="py-3 pr-4 align-top">
-                    {p.receiptUrl ? (
-                      <a
-                        href={p.receiptUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-[#234C6A] hover:underline"
-                      >
-                        View
-                      </a>
-                    ) : (
-                      <span className="text-slate-400">—</span>
-                    )}
+                    <a
+                      href={`/user/receipt/${p._id}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-[#234C6A] underline underline-offset-2"
+                    >
+                      View
+                    </a>
                   </td>
                   <td className="py-3 pr-4 align-top text-slate-600">
                     {new Date(p.createdAt).toLocaleString(undefined, {

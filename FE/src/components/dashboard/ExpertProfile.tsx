@@ -26,6 +26,7 @@ import {
   seatRequestFor,
   type SeatRequestIndex,
 } from '../../utils/seatRequestState';
+import { seatWalletOption } from '../../utils/seatCheckoutOptions';
 import { resolveProfileImageSrc } from '../../utils/profileImage';
 import { seminarCapacityLabel } from '../../utils/seminarCapacityLabel';
 import {
@@ -184,9 +185,9 @@ export default function ExpertProfile({
   const [seminarCheckout, setSeminarCheckout] = useState<
     { id: string; price: number; name: string; isSeatRequest?: boolean } | null
   >(null);
-  /** Settling an overflow seat the host approved (wallet-pinned). */
+  /** Settling a seat the host approved or invited the student to. */
   const [seatPayTarget, setSeatPayTarget] = useState<
-    { requestId: string; groupChatId: string; price: number; name: string } | null
+    { requestId: string; groupChatId: string; price: number; name: string; invited?: boolean } | null
   >(null);
   const [resumePreviewOpen, setResumePreviewOpen] = useState(false);
 
@@ -828,6 +829,7 @@ export default function ExpertProfile({
                             groupChatId: item.id,
                             price: item.seatRequest!.price,
                             name: item.title,
+                            invited: item.seatRequest!.origin === 'host',
                           })}
                           className="inline-flex w-full items-center justify-center rounded-[4px] bg-[#1A3A4A] px-3 py-1.5 text-[11px] font-semibold text-white hover:bg-[#122635]"
                         >
@@ -1381,8 +1383,7 @@ export default function ExpertProfile({
               name: seatPayTarget.name,
             }}
             returnUrl={studentBookingReturnUrl}
-            // Approved without a hold, so it settles in the mode it was requested in.
-            walletOption={{ kind: 'charge', only: true }}
+            walletOption={seatWalletOption(seatPayTarget.invited ? 'host' : 'student')}
             onPaymentSuccess={paySeatRequest}
             onCancel={() => setSeatPayTarget(null)}
             cancelLabel="Back"

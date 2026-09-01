@@ -28,19 +28,11 @@ import Avatar from '../../../components/Avatar';
 import DecisionNoteField from '../../../components/dashboard/DecisionNoteField';
 import GroupParticipantsDialog from '../Messenger/Messages/GroupParticipantsDialog';
 import ExpertSeminar from './seminar';
+import { recurrenceLabel } from '../../../utils/recurrenceLabel';
 
 type HubScreen = 'list' | 'create' | 'edit' | 'detail';
 
-const RECURRENCE_LABEL: Record<string, string> = {
-  weekly: 'Weekly',
-  biweekly: 'Biweekly',
-  monthly: 'Monthly',
-};
-
-function recurrenceLabelOf(g: any): string | undefined {
-  const f = g?.recurrenceFrequency;
-  return g?.isRecurring && RECURRENCE_LABEL[f] ? RECURRENCE_LABEL[f] : undefined;
-}
+const recurrenceLabelOf = (g: any): string | undefined => recurrenceLabel(g);
 
 function groupSeminarSeries(list: any[]): { seminar: any; occurrenceCount: number }[] {
   const now = Date.now();
@@ -106,6 +98,12 @@ function mapGroupChatToExpertSeminar(g: any) {
     status: g.status,
     isRecurring: !!g.isRecurring,
     recurrenceFrequency: g.recurrenceFrequency,
+    recurrenceUnit: g.recurrenceUnit,
+    recurrenceInterval: g.recurrenceInterval,
+    recurrenceWeekdays: Array.isArray(g.recurrenceWeekdays) ? g.recurrenceWeekdays : [],
+    recurrenceCount: g.recurrenceCount ?? null,
+    recurrenceUntil: g.recurrenceUntil ?? null,
+    seriesId: g.seriesId ? String(g.seriesId) : null,
   };
 }
 

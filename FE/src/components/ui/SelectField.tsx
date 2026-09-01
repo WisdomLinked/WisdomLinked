@@ -9,6 +9,7 @@ type Props = {
   options: SelectOption[];
   id?: string;
   placeholder?: string;
+  disabled?: boolean;
   footerAction?: { label: string; onSelect: () => void };
 };
 
@@ -23,6 +24,7 @@ export default function SelectField({
   options,
   id,
   placeholder = 'Select…',
+  disabled = false,
   footerAction,
 }: Props) {
   const [open, setOpen] = useState(false);
@@ -62,8 +64,9 @@ export default function SelectField({
       <button
         type="button"
         id={id}
+        disabled={disabled}
         onClick={() => setOpen(v => !v)}
-        className="flex w-full items-center justify-between gap-2 rounded-lg border border-gray-200 px-4 py-2.5 text-sm text-gray-800 focus:border-transparent focus:outline-none focus:ring-2 focus:ring-[#234C6A]"
+        className="flex w-full items-center justify-between gap-2 rounded-lg border border-gray-200 px-4 py-2.5 text-sm text-gray-800 focus:border-transparent focus:outline-none focus:ring-2 focus:ring-[#234C6A] disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-400"
       >
         <span className={`min-w-0 truncate ${selected ? 'text-gray-800' : 'text-gray-400'}`}>
           {selected ? selected.label : placeholder}

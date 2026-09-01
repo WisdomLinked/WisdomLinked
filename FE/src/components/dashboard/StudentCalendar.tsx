@@ -4,12 +4,6 @@ import { toYMDLocal } from '../../utils/schedulingTimezone';
 import SeminarDetails from '../../pages/Dashboard/seminarDetails';
 import { sessionEndMs } from '../../utils/sessionDuration';
 
-const RECUR_LABEL: Record<string, string> = {
-  weekly: 'Weekly',
-  biweekly: 'Biweekly',
-  monthly: 'Monthly',
-};
-
 export type Meeting = {
   id: string;
   title: string;
@@ -20,7 +14,8 @@ export type Meeting = {
   /** Short "duration · purpose" line shown on the meeting card. */
   details?: string;
   type: 'seminar' | 'session';
-  recurrence?: 'weekly' | 'biweekly' | 'monthly' | null;
+  /** How the seminar repeats, already rendered ("Weekly", "Every 3 days"). Null when it doesn't. */
+  recurrence?: string | null;
   seriesId?: string | null;
   /** 1:1 sessions can be awaiting expert approval. Seminars are always confirmed. */
   status?: 'pending' | 'confirmed' | 'draft' | 'declined' | 'accepted';
@@ -426,7 +421,7 @@ export default function StudentCalendar({
             <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
               {upcomingMeetings
                 .map(m => {
-                  const recurLabel = m.type === 'seminar' && m.recurrence ? RECUR_LABEL[m.recurrence] : null;
+                  const recurLabel = m.type === 'seminar' ? m.recurrence ?? null : null;
                   const chip = m.status === 'draft'
                     ? { cls: 'bg-amber-100 text-amber-700', text: 'Draft' }
                     : isPendingMeeting(m)
@@ -669,7 +664,7 @@ export default function StudentCalendar({
                             {m.type === 'seminar' && m.recurrence ? (
                               <span className="mt-1 inline-flex items-center gap-1 rounded-full bg-[#E8EEF4] px-2 py-0.5 text-[10px] font-semibold text-[#234C6A]">
                                 <Repeat className="h-2.5 w-2.5" aria-hidden />
-                                {RECUR_LABEL[m.recurrence]}
+                                {m.recurrence}
                               </span>
                             ) : null}
                             <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-slate-600">
@@ -792,6 +787,9 @@ export default function StudentCalendar({
                 type={detailMeeting.raw.type}
                 isRecurring={detailMeeting.raw.isRecurring}
                 recurrenceFrequency={detailMeeting.raw.recurrenceFrequency}
+                recurrenceUnit={detailMeeting.raw.recurrenceUnit}
+                recurrenceInterval={detailMeeting.raw.recurrenceInterval}
+                recurrenceWeekdays={detailMeeting.raw.recurrenceWeekdays}
                 theme="light"
               />
             ) : (

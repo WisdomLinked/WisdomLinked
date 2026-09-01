@@ -47,6 +47,9 @@ export type UpcomingModalSession = {
     type?: string;
     isRecurring?: boolean;
     recurrenceFrequency?: string;
+    recurrenceUnit?: string;
+    recurrenceInterval?: number;
+    recurrenceWeekdays?: number[] | null;
   };
   /** Set for overflow seminar seat requests the expert can approve/decline. */
   seatRequestId?: string;

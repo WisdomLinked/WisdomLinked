@@ -8,12 +8,7 @@ import { SERVICE_OPTIONS, matchesServiceOption } from "../../constants/serviceOp
 import { resolveProfileImageSrc } from "../../utils/profileImage";
 import { profileImageFetch } from "../../api/api";
 import { sessionDurationLabel } from "../../utils/sessionDuration";
-
-const RECURRENCE_LABEL: Record<string, string> = {
-    weekly: "Weekly",
-    biweekly: "Biweekly",
-    monthly: "Monthly",
-};
+import { recurrenceLabel as describeRecurrence, type RecurrenceFields } from "../../utils/recurrenceLabel";
 
 interface SeminarDetailsProps {
     title: string;
@@ -31,6 +26,9 @@ interface SeminarDetailsProps {
     createdAt?: string;
     isRecurring?: boolean;
     recurrenceFrequency?: string;
+    recurrenceUnit?: string;
+    recurrenceInterval?: number;
+    recurrenceWeekdays?: number[] | null;
     canDeleteCommunityChat?: boolean;
     onDeleteCommunityChat?: () => void;
     theme?: "light" | "dark";
@@ -53,13 +51,21 @@ const SeminarDetails = ({
     createdAt,
     isRecurring,
     recurrenceFrequency,
+    recurrenceUnit,
+    recurrenceInterval,
+    recurrenceWeekdays,
     canDeleteCommunityChat = false,
     onDeleteCommunityChat,
     theme = "dark",
     hideParticipants = false,
 }: SeminarDetailsProps) => {
-    const recurrenceLabel =
-        isRecurring && recurrenceFrequency ? RECURRENCE_LABEL[recurrenceFrequency] : undefined;
+    const recurrenceLabel = describeRecurrence({
+        isRecurring,
+        recurrenceFrequency,
+        recurrenceUnit,
+        recurrenceInterval,
+        recurrenceWeekdays,
+    } as RecurrenceFields);
 
     const serviceChipLabel = (service: any): string => {
         const doc = { value: service?.value, name: service?.name, label: service?.label };
