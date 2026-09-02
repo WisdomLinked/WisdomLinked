@@ -19,7 +19,7 @@ CREATE_TOKENS_FOR_USERS_SECRET=$(openssl rand -hex 32)
 # paste into GitHub staging ROCKETCHAT_CREATE_TOKENS_SECRET
 ```
 
-Update `docker-compose.yml` `CREATE_TOKENS_FOR_USERS_SECRET` or use env_file.
+Docker Compose loads `.env` from the project directory automatically — no need to edit `docker-compose.yml` for the secret.
 
 ## 3. Start stack
 

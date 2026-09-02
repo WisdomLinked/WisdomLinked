@@ -17,6 +17,29 @@
   var seenMessageIds = Object.create(null);
   var baselineDone = false;
 
+  function allowedWlHost(hostname) {
+    var host = String(hostname || "").toLowerCase();
+    return (
+      host === "wisdomlinked.com" ||
+      host === "localhost" ||
+      host === "127.0.0.1" ||
+      host.slice(-16) === ".wisdomlinked.com"
+    );
+  }
+
+  function safeWlApiBase(raw) {
+    var value = String(raw || "").trim();
+    if (!value) return "";
+    try {
+      var parsed = new URL(value, window.location.href);
+      if (parsed.protocol !== "https:" && parsed.protocol !== "http:") return "";
+      if (!allowedWlHost(parsed.hostname)) return "";
+      return parsed.origin;
+    } catch (e) {
+      return "";
+    }
+  }
+
   function hashValue(name) {
     var raw = window.location.hash ? window.location.hash.slice(1) : "";
     if (!raw) return "";
@@ -48,6 +71,7 @@
         window.sessionStorage.setItem(STORAGE_TOKEN, tok);
       } catch (e) {}
     }
+    api = safeWlApiBase(api);
     if (api) {
       try {
         window.sessionStorage.setItem(STORAGE_API, api);
@@ -74,7 +98,7 @@
       })(),
       apiBase: (function () {
         try {
-          return window.sessionStorage.getItem(STORAGE_API) || "";
+          return safeWlApiBase(window.sessionStorage.getItem(STORAGE_API) || "");
         } catch (e) {
           return "";
         }
@@ -133,8 +157,9 @@
 
   function postSync(content) {
     var cfg = readConfig();
-    if (!cfg.meetingThreadId || !cfg.token || !cfg.apiBase || !content) return;
-    var url = String(cfg.apiBase).replace(/\/$/, "") + "/api/meeting/chat-sync";
+    var apiBase = safeWlApiBase(cfg.apiBase);
+    if (!cfg.meetingThreadId || !cfg.token || !apiBase || !content) return;
+    var url = apiBase + "/api/meeting/chat-sync";
     fetch(url, {
       method: "POST",
       headers: {
