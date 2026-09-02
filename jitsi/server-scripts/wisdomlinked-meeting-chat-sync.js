@@ -32,8 +32,14 @@
     if (!value) return "";
     try {
       var parsed = new URL(value, window.location.href);
-      if (parsed.protocol !== "https:" && parsed.protocol !== "http:") return "";
-      if (!allowedWlHost(parsed.hostname)) return "";
+      var host = String(parsed.hostname || "").toLowerCase();
+      if (!allowedWlHost(host)) return "";
+      var isLocal = host === "localhost" || host === "127.0.0.1";
+      if (isLocal) {
+        if (parsed.protocol !== "https:" && parsed.protocol !== "http:") return "";
+      } else if (parsed.protocol !== "https:") {
+        return "";
+      }
       return parsed.origin;
     } catch (e) {
       return "";

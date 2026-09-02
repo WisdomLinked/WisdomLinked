@@ -10,7 +10,7 @@ ssh -i ~/.ssh/github_actions_do_key root@64.225.13.232
 # As mongo admin — connect with authSource=WisdomLinked (same as appuser / staging):
 mongosh "mongodb://ADMIN_USER:ADMIN_PASS@127.0.0.1:27017/WisdomLinked?authSource=WisdomLinked" --eval '
   db.getSiblingDB("WisdomLinked_Production").createCollection("_init");
-  db.grantRolesToUser("appuser", [
+  db.getSiblingDB("WisdomLinked").grantRolesToUser("appuser", [
     { role: "readWrite", db: "WisdomLinked_Production" }
   ]);
 '
