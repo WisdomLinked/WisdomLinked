@@ -221,6 +221,8 @@ jobs:
               -e SENDGRID_API_KEY="${{ secrets.SENDGRID_API_KEY }}" \
               -e GOOGLE_EMAIL="${{ secrets.GOOGLE_EMAIL }}" \
               -e GOOGLE_PASSWORD="${{ secrets.GOOGLE_PASSWORD }}" \
+              -e GOOGLE_CLIENT_ID="${{ secrets.GOOGLE_CLIENT_ID }}" \
+              -e GOOGLE_CLIENT_SECRET="${{ secrets.GOOGLE_CLIENT_SECRET }}" \
               -e ZOHONOREPLY_USER="${{ secrets.ZOHONOREPLY_USER }}" \
               -e ZOHONOREPLY_PASS="${{ secrets.ZOHONOREPLY_PASS }}" \
               -e ZOHOADMIN_USER="${{ secrets.ZOHOADMIN_USER }}" \

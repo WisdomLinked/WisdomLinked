@@ -2,3 +2,8 @@
 .DS_Store
 **/.DS_Store
 docs/
+
+# Multi-agent system — local only, not shared via git
+AGENTS.md
+.cursor/
+.cursor/tickets/
