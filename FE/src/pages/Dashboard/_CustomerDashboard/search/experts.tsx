@@ -1,5 +1,11 @@
 import React, { useEffect, useState } from "react";
-import {doFilterExperts, doGetKeywordsAndServices, joinGeneralChat, profileImageFetch} from "../../../../api/api";
+import {
+    doFilterExperts,
+    doGetKeywordsAndServices,
+    joinGeneralChat,
+    profileImageFetch,
+} from "../../../../api/api";
+import { filterApiServicesToCanonical } from "../../../../constants/serviceOptions";
 import { getAvatarTitle } from "../../../../actions/common";
 import { Rating } from "@mui/material";
 import FilterListIcon from '@mui/icons-material/FilterList';
@@ -9,6 +15,7 @@ import { useAppSelector } from "../../../../store";
 import OverlayPortal from "../../../../components/OverayPortal";
 import { SetLoadingStatus } from "../../../../actions/appActions";
 import FilePreviewModal from "../../FilePreviewModal";
+import { hasResumeForPreview, resolveResumePublicUrl } from "../../../../utils/resumeUrl";
 import { useDispatch } from "react-redux";
 import { setChosenGroupChatDetails } from "../../../../actions/chatActions";
 import { useNavigate } from "react-router-dom";
@@ -50,14 +57,13 @@ const Experts = ({
     const [filterModalShow, set_filterModalShow] = useState(false)
     const [mobileView, set_mobileView] = useState(window.innerWidth <= 768)
     const [expertsImage,set_experts_image]= useState<Array<any>>([])
-    const [showPreview, setShowPreview] = useState(false);
-    const [previewResumeUrl, setPreviewResumeUrl] = useState("");
+    const [resumePreview, setResumePreview] = useState<null | { url: string; expertId: string }>(null);
 
     const getKeywordsAndServices = async () => {
         const response: any = await doGetKeywordsAndServices();
         if (response) {
             set_keywords(response.keywords || [])
-            set_services(response.services || [])
+            set_services(filterApiServicesToCanonical(response.services || []))
         }
     }
 
@@ -228,20 +234,15 @@ const Experts = ({
                                 <div className="text-md text-center text-lightgrey">${expert.price} / hour</div>
                                 <Rating name="read-only" className="mt-2" value={expert.rating || 0} readOnly />
                                 <button
+                                type="button"
+                                disabled={!hasResumeForPreview(expert.resume)}
                                 onClick={() => {
-                                    setShowPreview(true)
-                                    setPreviewResumeUrl(expert.resume);
-                                    }
-                                }
+                                    const url = resolveResumePublicUrl(expert.resume);
+                                    if (!url || !expert._id) return;
+                                    setResumePreview({ url, expertId: String(expert._id) });
+                                }}
                                 className="resume-link"
                                 >View Resume</button>
-                                {showPreview && (
-                                        <FilePreviewModal
-                                        fileUrl={previewResumeUrl}
-                                        fileName="Resume"
-                                        onClose={() => setShowPreview(false)}
-                                        />
-                                )}
                                 <div className="w-full flex space-x-4 mt-4">
                                     <button
                                         className="w-[calc(50%-8px)] rounded-lg border text-lightgrey border-lightgrey flex items-center justify-center"
@@ -262,6 +263,15 @@ const Experts = ({
                     ))
                 }
             </div>
+            {resumePreview ? (
+                <FilePreviewModal
+                    fileUrl={resumePreview.url}
+                    fileName="Resume"
+                    documentType="Resume"
+                    onClose={() => setResumePreview(null)}
+                    resumeStudentViewContext={{ expertId: resumePreview.expertId }}
+                />
+            ) : null}
             <button
                 className={`fixed bottom-4 right-4 w-14 h-14 rounded-full bg-grey shadow-md text-white md:hidden flex items-center justify-center ${qExpertId ? 'hidden' : ''}`}
                 onClick={() => set_filterModalShow(true)}

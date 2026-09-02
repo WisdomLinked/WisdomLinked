@@ -1,0 +1,166 @@
+import { Request, Response } from 'express';
+import { HTTP_GENERIC_ERROR, safeErrorMessage } from '../utils/httpUserFacingCopy';
+const FriendInvitation = require("../models/FriendInvitation");
+const User = require("../models/User");
+
+const inviteFriend = async (req, res) => {
+    const { email: senderEmailAddress, userId } = req.user;
+    const receiverEmailAddress = String(req.body?.email ?? '');
+
+    // check if user is inviting himself
+    if (senderEmailAddress === receiverEmailAddress) {
+        return res.status(400).send("Sorry, you can't invite yourself");
+    }
+
+    // check if the invited user exists in the database
+    const targetUser = await User.findOne({ email: receiverEmailAddress });
+
+    if (!targetUser) {
+        return res
+            .status(404)
+            .send(
+                "Sorry, the user you are trying to invite doesn't exist. Please check the email address"
+            );
+    }
+
+    // check if invitation has already been sent
+    const invitationAlreadyExists = await FriendInvitation.findOne({
+        senderId: userId,
+        receiverId: targetUser._id,
+    });
+
+    if (invitationAlreadyExists) {
+        return res
+            .status(409)
+            .send("You have already sent an invitation to this user");
+    }
+
+    // check if the invited user is already a friend of the sender
+    const isAlreadyFriend = targetUser.friends.some(
+        (friend) => friend.toString() === userId.toString()
+    );
+
+    if (isAlreadyFriend) {
+        return res
+            .status(409)
+            .send(
+                "You are already friends with this user. Please check your friend first"
+            );
+    }
+
+    // create invitation
+
+    await FriendInvitation.create({
+        senderId: userId,
+        receiverId: targetUser._id,
+    });
+
+
+    return res.status(201).send("Invitation has been sent successfully");
+};
+
+const acceptInvitation = async (req, res) => {
+
+    try {
+
+        const invitationId = String(req.body?.invitationId ?? '');
+
+        // check if invitation exists
+        const invitation = await FriendInvitation.exists({ _id: invitationId });
+
+        if (!invitation) {
+            return res
+                .status(404)
+                .send(
+                    "Sorry, the invitation you are trying to accept doesn't exist"
+                );
+        }
+
+        // accept the invitation
+
+        const deletedInvitation = await FriendInvitation.findByIdAndDelete(
+            invitationId
+        );
+
+        // update friends list of both users in the database
+        const sender = await User.findById(deletedInvitation.senderId);
+        const receiver = await User.findById(req.user.userId);
+
+        sender.friends.push(receiver._id);
+        receiver.friends.push(sender._id);
+
+        await sender.save();
+        await receiver.save();
+
+
+
+        return res.status(200).send("Invitation accepted successfully!");
+    } catch (err) {
+        return res.status(500).send(HTTP_GENERIC_ERROR);
+    }
+};
+
+const rejectInvitation = async (req, res) => {
+    try {
+        const invitationId = String(req.body?.invitationId ?? '');
+
+        // check if invitation exists
+        const invitation = await FriendInvitation.exists({ _id: invitationId });
+
+        if (!invitation) {
+            return res
+                .status(404)
+                .send(
+                    "Sorry, the invitation you are trying to reject doesn't exist"
+                );
+        }
+
+        // reject the invitation
+        await FriendInvitation.findByIdAndDelete(invitationId);
+
+
+        return res.status(200).send("Invitation rejected successfully!");
+    } catch (err) {
+        res.status(500).send(safeErrorMessage(err));
+    }
+};
+
+const removeFriend = async (req, res) => {
+    try {
+        const { userId } = req.user;
+        const friendId = String(req.body?.friendId ?? '');
+
+        // check if friend exists
+        const friend = await User.findOne({ _id: friendId });
+
+        if (!friend) {
+            return res
+                .status(404)
+                .send(
+                    "Sorry, the user you are trying to unfriend doesn't exist"
+                );
+        }
+
+        const currentUser = await User.findById(userId);
+
+        // update friends list of both users in the database
+
+        friend.friends = friend.friends.filter((f) => f.toString() !== currentUser._id.toString())
+        currentUser.friends = currentUser.friends.filter((f) => f.toString() !== friend._id.toString());
+
+        await friend.save();
+        await currentUser.save();
+
+
+        return res.status(200).send("Friend removed successfully!");
+    } catch (err) {
+        return res.status(500).send(safeErrorMessage(err));
+    }
+};
+
+module.exports = {
+    inviteFriend,
+    acceptInvitation,
+    rejectInvitation,
+    removeFriend
+};

@@ -48,7 +48,7 @@ const InputOption = ({
             innerProps={props}
         >
             <input type="checkbox" className="mr-2" defaultChecked={isSelected} />
-            <span className="text-darkgrey">{children}</span>
+            <span className="text-wl-ink">{children}</span>
         </components.Option>
     );
 };
@@ -73,9 +73,10 @@ const CountrySelect = ({
 
     return (
         <>
-            <div className="mt-8 text-grey text-[12px] leading-[19px]">Country *</div>
+            <div className="mt-8 text-wl-muted text-[12px] leading-[19px]">Country *</div>
             <Select
-                className="w-full rounded-[15px] min-h-[50px] mt-0.5 border text-inherit text-[14px] leading-[21px] py-[5px] border-lightgrey MultiSelection flex flex-col justify-center"
+                className="MultiSelection mt-0.5 flex w-full min-h-[50px] flex-col justify-center rounded-[15px] border-0 py-[5px] text-[14px] leading-[21px] text-wl-ink"
+                classNamePrefix="wl-select"
                 placeholder='Select country'
                 options={Country.getAllCountries()}
                 getOptionLabel={(options) => {
@@ -102,9 +103,10 @@ const CountrySelect = ({
             {
                 stateAvailable ?
                     <>
-                        <div className="mt-8 text-grey text-[12px] leading-[19px]">State *</div>
+                        <div className="mt-8 text-wl-muted text-[12px] leading-[19px]">State *</div>
                         <Select
-                            className="w-full rounded-[15px] min-h-[50px] mt-0.5 border text-inherit text-[14px] leading-[21px] py-[5px] border-lightgrey MultiSelection flex flex-col justify-center"
+                            className="MultiSelection mt-0.5 flex w-full min-h-[50px] flex-col justify-center rounded-[15px] border-0 py-[5px] text-[14px] leading-[21px] text-wl-ink"
+                            classNamePrefix="wl-select"
                             placeholder='Select state'
                             options={State?.getStatesOfCountry(selectedCountry?.isoCode)}
                             getOptionLabel={(options) => {
@@ -133,9 +135,10 @@ const CountrySelect = ({
             {
                 cityAvailable ?
                     <>
-                        <div className="mt-8 text-grey text-[12px] leading-[19px]">City *</div>
+                        <div className="mt-8 text-wl-muted text-[12px] leading-[19px]">City *</div>
                         <Select
-                            className="w-full rounded-[15px] min-h-[50px] mt-0.5 border text-inherit text-[14px] leading-[21px] py-[5px] border-lightgrey MultiSelection flex flex-col justify-center"
+                            className="MultiSelection mt-0.5 flex w-full min-h-[50px] flex-col justify-center rounded-[15px] border-0 py-[5px] text-[14px] leading-[21px] text-wl-ink"
+                            classNamePrefix="wl-select"
                             placeholder='Select city'
                             options={City.getCitiesOfState(
                                 selectedState?.countryCode,

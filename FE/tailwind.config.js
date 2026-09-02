@@ -5,7 +5,26 @@ module.exports = {
   darkMode: ["class", '[data-theme="dark"]'],
   theme: {
     extend: {
+      fontFamily: {
+        serif: ['"Playfair Display"', 'Georgia', 'serif'],
+        sans: ['"DM Sans"', 'system-ui', 'sans-serif'],
+        'cormorant': ['"Cormorant Garamond"', 'Georgia', 'serif'],
+        'crimson': ['"Crimson Pro"', 'Georgia', 'serif'],
+      },
       colors: {
+        /* WisdomLinked dashboard palette (student / expert / admin) */
+        wl: {
+          brand: "#234C6A",
+          brandSoft: "#E8EEF4",
+          page: "#F5F3EF",
+          /** Chat route canvas — same warm off-white as dashboard page */
+          chatGold: "#F5F3EF",
+          pageAlt: "#f8f7f4",
+          card: "#ffffff",
+          line: "#e8e6e1",
+          ink: "#1a2d3a",
+          muted: "#6C7278",
+        },
         "green": "#31B099",
         "blue": "#03a9f4",
         "darkgrey": "#141414",

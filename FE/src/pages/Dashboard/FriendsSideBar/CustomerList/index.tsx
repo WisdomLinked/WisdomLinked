@@ -4,7 +4,7 @@ import { doFilterCustomers, profileImageFetch, joinPrivateChat } from "../../../
 import { SetLoadingStatus } from "../../../../actions/appActions";
 import { useNavigate } from "react-router-dom";
 import { useDispatch } from "react-redux";
-import { setChosenGroupChatDetails } from "../../../../actions/chatActions";
+import { setChosenChatDetails } from "../../../../actions/chatActions";
 import { useAppSelector } from "../../../../store";
 
 const MainContainer = styled("div")({
@@ -85,51 +85,30 @@ const CustomerList: React.FC = () => {
       // Call API wrapper with the string id (match its TypeScript signature)
       const response: any = await joinPrivateChat(otherUserId);
 
-      // Normalize axios/other shapes: response.data vs direct
       const payload = response?.data ?? response;
       const user = payload?.user ?? payload;
-      // Chat might be returned directly as payload.chat or be present inside user.generalChats
-      const chat = payload?.chat ?? user?.generalChats?.find((g: any) => {
-        const adminIdInChat = g?.admin?._id ?? g?.admin;
-        return String(adminIdInChat) === String(otherUserId);
-      });
+      const otherUser = payload?.otherUser;
 
       if (!user) {
         console.warn("joinPrivateChat: no user returned from API", payload);
         return;
       }
 
-      // Update redux user details
       dispatch({
         type: "updateUserDetails",
         payload: user,
       });
 
-      if (chat) {
-        // Normalize chosen chat object to shape expected by setChosenGroupChatDetails
-        const chosen = {
-          ...chat,
-          groupId: chat._id ?? chat.groupId,
-          groupName: chat.name ?? chat.groupName,
-        };
-
-        dispatch(setChosenGroupChatDetails(chosen));
-      } else {
-        // Defensive fallback: search user's generalChats again
-        const fallbackChat = (user.generalChats || []).find((g: any) => {
-          const adminIdInChat = g?.admin?._id ?? g?.admin;
-          return String(adminIdInChat) === String(otherUserId);
-        });
-        if (fallbackChat) {
-          dispatch(setChosenGroupChatDetails({
-            ...fallbackChat,
-            groupId: fallbackChat._id ?? fallbackChat.groupId,
-            groupName: fallbackChat.name ?? fallbackChat.groupName,
-          }));
-        } else {
-          console.warn("joinGeneralChat: could not find chat for chosen person in returned user.generalChats");
-        }
-      }
+      dispatch(
+        setChosenChatDetails({
+          userId: otherUserId,
+          username: otherUser?.username,
+          image: otherUser?.image,
+          peerRole: String(otherUser?.role || '')
+            .toLowerCase()
+            .trim() || undefined,
+        }),
+      );
 
       navigate(`${process.env.REACT_APP_AUTH_URL}expertdashboard/chat`);
     } catch (err) {

@@ -7,7 +7,7 @@ import PersonAddIcon from "@mui/icons-material/PersonAdd";
 import GroupAddIcon from "@mui/icons-material/GroupAdd";
 import { Button, Dialog, DialogTitle, DialogContent, DialogActions, TextField, FormControl, InputLabel, Select, MenuItem, Checkbox, ListItemText, OutlinedInput } from "@mui/material";
 import { createCommunityChat, addParticipantsToCommunityChat, doFilterCustomers, getAllCommunityChats, joinCommunityChat } from "../../../../api/api";
-import { showAlert } from "../../../../actions/alertActions";
+import { showErrorAlert, showSuccessAlert, showWarningAlert } from '../../../../actions/alertActions';
 import { updateMe } from "../../../../actions/authActions";
 
 const MainContainer = styled("div")({
@@ -74,8 +74,34 @@ const CommunityChatList = () => {
     const [loadingChats, setLoadingChats] = useState(false);
     const [joiningChatId, setJoiningChatId] = useState<string | null>(null);
 
+    const mapChatsWithMissed = (chats: any[]) =>
+        chats.map((chat: any) => ({
+            ...chat,
+            missedChats: userDetails?.missedChats?.[chat._id] || 0,
+            type: 'community',
+        }));
+
     const isExpert = userDetails?.role === 'expert';
     const isCustomer = userDetails?.role === 'customer';
+
+    const fetchAllCommunityChats = async () => {
+        if (!userDetails?.userId) return;
+        setLoadingChats(true);
+        try {
+            const response = await getAllCommunityChats();
+            if (response === false) return;
+            if (response && response.status === 'SUCCESS' && response.chats) {
+                setCommunityChats(mapChatsWithMissed(response.chats));
+            } else {
+                const errorMsg = response?.error || response?.message || "Failed to fetch community chats";
+                dispatch(showErrorAlert(errorMsg));
+            }
+        } catch (error: any) {
+            dispatch(showErrorAlert(error?.message || "Failed to fetch community chats"));
+        } finally {
+            setLoadingChats(false);
+        }
+    };
 
     // Fetch available users for participant selection (experts only)
     useEffect(() => {
@@ -96,7 +122,7 @@ const CommunityChatList = () => {
                 services: [],
                 sortBy: 'Name in ASC'
             });
-
+            
             if (response && response.result) {
                 // Map to user format with id
                 const users = response.result.map((customer: any) => ({
@@ -120,44 +146,15 @@ const CommunityChatList = () => {
 
     // Fetch all community chats
     useEffect(() => {
-        const fetchAllCommunityChats = async () => {
-            if (!userDetails?.userId && !userDetails?._id) return;
+        void fetchAllCommunityChats();
+    }, [userDetails?.userId, userDetails?.missedChats]);
 
-            setLoadingChats(true);
-            try {
-                const response = await getAllCommunityChats();
-                // Handle case where checkForAuthorization returns false
-                if (response === false) {
-                    console.error('Authorization failed or error occurred');
-                    return;
-                }
-                if (response && response.status === 'SUCCESS' && response.chats) {
-                    // Add missedChats from userDetails for chats user has joined
-                    const chatsWithMissed = response.chats.map((chat: any) => {
-                        const missedChats = userDetails?.missedChats?.[chat._id] || 0;
-                        return {
-                            ...chat,
-                            missedChats,
-                            type: 'community'
-                        };
-                    });
-
-                    setCommunityChats(chatsWithMissed);
-                } else {
-                    const errorMsg = response?.error || response?.message || "Failed to fetch community chats";
-                    console.error('Failed to fetch community chats:', response);
-                    dispatch(showAlert(errorMsg));
-                }
-            } catch (error: any) {
-                console.error('Error fetching community chats:', error);
-                dispatch(showAlert(error?.message || "Failed to fetch community chats"));
-            } finally {
-                setLoadingChats(false);
-            }
-        };
-
-        fetchAllCommunityChats();
-    }, [userDetails?.userId, userDetails?.missedChats, dispatch]);
+    useEffect(() => {
+        const timer = setInterval(() => {
+            void fetchAllCommunityChats();
+        }, 10000);
+        return () => clearInterval(timer);
+    }, [userDetails?.userId, userDetails?.missedChats]);
 
     // Search filter
     const filteredChats = communityChats.filter((chat: any) =>
@@ -167,7 +164,7 @@ const CommunityChatList = () => {
     // Handle create community chat
     const handleCreateChat = async () => {
         if (!newChatName.trim()) {
-            dispatch(showAlert("Community chat name is required"));
+            dispatch(showErrorAlert("Community chat name is required"));
             return;
         }
 
@@ -180,33 +177,26 @@ const CommunityChatList = () => {
                 isOpenToAll: isOpenToAll
             });
 
-            if (response.status === 'SUCCESS') {
-                dispatch(showAlert("Community chat created successfully!"));
+            if (response === false) return;
+            if (response?.status === 'SUCCESS') {
+                dispatch(showSuccessAlert("Community chat created successfully!"));
                 // Update user details to refresh the list
                 dispatch(updateMe());
                 // Refresh the community chats list
-                const refreshResponse = await getAllCommunityChats();
-                if (refreshResponse.status === 'SUCCESS' && refreshResponse.chats) {
-                    const chatsWithMissed = refreshResponse.chats.map((c: any) => {
-                        const missedChats = userDetails?.missedChats?.[c._id] || 0;
-                        return {
-                            ...c,
-                            missedChats,
-                            type: 'community'
-                        };
-                    });
-                    setCommunityChats(chatsWithMissed);
-                }
+                await fetchAllCommunityChats();
                 setNewChatName("");
                 setNewChatDescription("");
                 setIsOpenToAll(false);
                 setSelectedParticipants([]);
                 setOpenDialog(false);
             } else {
-                dispatch(showAlert(response.error || "Failed to create community chat"));
+                const backendError = String(response?.error || response?.message || "");
+                dispatch(showErrorAlert(backendError || "Failed to create community chat"));
             }
         } catch (error: any) {
-            dispatch(showAlert(error?.message || "Failed to create community chat"));
+            const details = error?.response?.data;
+            const backendError = typeof details === "string" ? details : details?.error || details?.message;
+            dispatch(showErrorAlert(backendError || error?.message || "Failed to create community chat"));
         } finally {
             setIsCreating(false);
         }
@@ -215,7 +205,7 @@ const CommunityChatList = () => {
     // Handle add participants to existing chat
     const handleAddParticipants = async () => {
         if (!selectedChatForAddParticipants || selectedParticipantsForAdd.length === 0) {
-            dispatch(showAlert("Please select at least one participant"));
+            dispatch(showErrorAlert("Please select at least one participant"));
             return;
         }
 
@@ -227,29 +217,18 @@ const CommunityChatList = () => {
             });
 
             if (response.status === 'SUCCESS') {
-                dispatch(showAlert("Participants added successfully!"));
+                dispatch(showSuccessAlert("Participants added successfully!"));
                 dispatch(updateMe());
                 // Refresh the community chats list
-                const refreshResponse = await getAllCommunityChats();
-                if (refreshResponse.status === 'SUCCESS' && refreshResponse.chats) {
-                    const chatsWithMissed = refreshResponse.chats.map((c: any) => {
-                        const missedChats = userDetails?.missedChats?.[c._id] || 0;
-                        return {
-                            ...c,
-                            missedChats,
-                            type: 'community'
-                        };
-                    });
-                    setCommunityChats(chatsWithMissed);
-                }
+                await fetchAllCommunityChats();
                 setSelectedParticipantsForAdd([]);
                 setSelectedChatForAddParticipants(null);
                 setOpenAddParticipantsDialog(false);
             } else {
-                dispatch(showAlert(response.error || "Failed to add participants"));
+                dispatch(showErrorAlert(response.error || "Failed to add participants"));
             }
         } catch (error: any) {
-            dispatch(showAlert(error?.message || "Failed to add participants"));
+            dispatch(showErrorAlert(error?.message || "Failed to add participants"));
         } finally {
             setIsAddingParticipants(false);
         }
@@ -261,27 +240,16 @@ const CommunityChatList = () => {
         try {
             const response = await joinCommunityChat(chat._id);
             if (response.status === 'SUCCESS') {
-                dispatch(showAlert("Successfully joined the community chat!"));
+                dispatch(showSuccessAlert("Successfully joined the community chat!"));
                 // Update user details to refresh the list
                 dispatch(updateMe());
                 // Refresh the community chats list
-                const refreshResponse = await getAllCommunityChats();
-                if (refreshResponse.status === 'SUCCESS' && refreshResponse.chats) {
-                    const chatsWithMissed = refreshResponse.chats.map((c: any) => {
-                        const missedChats = userDetails?.missedChats?.[c._id] || 0;
-                        return {
-                            ...c,
-                            missedChats,
-                            type: 'community'
-                        };
-                    });
-                    setCommunityChats(chatsWithMissed);
-                }
+                await fetchAllCommunityChats();
             } else {
-                dispatch(showAlert(response.error || "Failed to join community chat"));
+                dispatch(showErrorAlert(response.error || "Failed to join community chat"));
             }
         } catch (error: any) {
-            dispatch(showAlert(error?.message || "Failed to join community chat"));
+            dispatch(showErrorAlert(error?.message || "Failed to join community chat"));
         } finally {
             setJoiningChatId(null);
         }
@@ -290,7 +258,7 @@ const CommunityChatList = () => {
     const handleOpenAddParticipants = async (chat: any) => {
         setSelectedChatForAddParticipants(chat);
         setSelectedParticipantsForAdd([]);
-
+        
         // Fetch all users first, then filter out existing participants
         setLoadingUsers(true);
         try {
@@ -300,7 +268,7 @@ const CommunityChatList = () => {
                 services: [],
                 sortBy: 'Name in ASC'
             });
-
+            
             if (response && response.result) {
                 const allUsers = response.result.map((customer: any) => ({
                     id: customer._id,
@@ -308,7 +276,7 @@ const CommunityChatList = () => {
                     email: customer.email,
                     image: customer.image
                 }));
-
+                
                 // Filter out existing participants
                 const existingParticipantIds = ((chat.participants as any[]) || [])
                     .map((p: any) => {
@@ -318,11 +286,11 @@ const CommunityChatList = () => {
                         return null;
                     })
                     .filter(Boolean) as string[];
-
-                const availableForAdd = allUsers.filter((user: any) =>
+                
+                const availableForAdd = allUsers.filter((user: any) => 
                     !existingParticipantIds.includes((user.id || "").toString())
                 );
-
+                
                 setAvailableUsers(availableForAdd);
             }
         } catch (error) {
@@ -336,8 +304,8 @@ const CommunityChatList = () => {
                         return null;
                     })
                     .filter(Boolean) as string[];
-
-                const availableForAdd = friends.filter((user: any) =>
+                
+                const availableForAdd = friends.filter((user: any) => 
                     !existingParticipantIds.includes((user.id || "").toString())
                 );
                 setAvailableUsers(availableForAdd);
@@ -345,7 +313,7 @@ const CommunityChatList = () => {
         } finally {
             setLoadingUsers(false);
         }
-
+        
         setOpenAddParticipantsDialog(true);
     };
 
@@ -369,8 +337,8 @@ const CommunityChatList = () => {
                             textTransform: "none",
                             fontSize: "12px",
                             padding: "4px 12px",
-                            "&:hover": {
-                                borderColor: "#00cccc",
+                            "&:hover": { 
+                                borderColor: "#00cccc", 
                                 color: "#00cccc",
                                 backgroundColor: "rgba(0, 255, 255, 0.1)"
                             },
@@ -400,18 +368,18 @@ const CommunityChatList = () => {
                 filteredChats.map((chat: any) => {
                     const isJoined = chat.isJoined || false;
                     // Handle both populated and unpopulated admin field
-                    const adminId = typeof chat.admin === 'string'
-                        ? chat.admin
+                    const adminId = typeof chat.admin === 'string' 
+                        ? chat.admin 
                         : chat.admin?._id || chat.admin?.id;
                     const isAdmin = adminId && adminId.toString() === userDetails.userId?.toString();
                     const rightOffset = isExpert && isAdmin ? '60px' : '8px';
-
+                    
                     return (
                         <div key={chat._id} className="relative group">
                             <GeneralChatListItem
                                 chat={chat}
                                 missedChats={chat.missedChats}
-                                lastChatDate={chat.updatedAt}
+                                lastChatDate={chat.lastMessageAt || chat.updatedAt}
                             />
                             {/* Join button - show for users who haven't joined */}
                             {!isJoined && (
@@ -487,10 +455,10 @@ const CommunityChatList = () => {
             )}
 
             {/* Dialog for creating new community chat */}
-            <Dialog
-                open={openDialog}
-                onClose={() => !isCreating && setOpenDialog(false)}
-                maxWidth="sm"
+            <Dialog 
+                open={openDialog} 
+                onClose={() => !isCreating && setOpenDialog(false)} 
+                maxWidth="sm" 
                 fullWidth
             >
                 <DialogTitle>Create New Community Chat</DialogTitle>
@@ -522,7 +490,7 @@ const CommunityChatList = () => {
                         helperText="Describe what this community chat is about"
                         sx={{ mb: 2 }}
                     />
-
+                    
                     {/* Available to All option (experts only) */}
                     {isExpert && (
                         <FormControl fullWidth sx={{ mt: 2, mb: 2 }}>
@@ -542,7 +510,7 @@ const CommunityChatList = () => {
                             </label>
                         </FormControl>
                     )}
-
+                    
                     {/* Participant selection (experts only) */}
                     {isExpert && (
                         <FormControl fullWidth sx={{ mt: 2 }}>
@@ -553,14 +521,14 @@ const CommunityChatList = () => {
                                 multiple
                                 value={selectedParticipants}
                                 onChange={(e) => {
-                                    const value = typeof e.target.value === 'string'
-                                        ? e.target.value.split(',')
+                                    const value = typeof e.target.value === 'string' 
+                                        ? e.target.value.split(',') 
                                         : e.target.value;
                                     setSelectedParticipants(value);
                                 }}
                                 input={<OutlinedInput label="Select Participants (Optional)" />}
                                 renderValue={(selected) => {
-                                    const selectedUsers = availableUsers.filter(u =>
+                                    const selectedUsers = availableUsers.filter(u => 
                                         selected.includes(u.id)
                                     );
                                     return selectedUsers.map(u => u.username).join(', ');
@@ -578,7 +546,7 @@ const CommunityChatList = () => {
                                             onClick={(e) => {
                                                 e.preventDefault();
                                                 e.stopPropagation();
-                                                const allSelected = availableUsers.length > 0 &&
+                                                const allSelected = availableUsers.length > 0 && 
                                                     availableUsers.every(user => selectedParticipants.includes(user.id));
                                                 if (allSelected) {
                                                     setSelectedParticipants([]);
@@ -588,10 +556,10 @@ const CommunityChatList = () => {
                                             }}
                                         >
                                             <Checkbox
-                                                checked={availableUsers.length > 0 &&
+                                                checked={availableUsers.length > 0 && 
                                                     availableUsers.every(user => selectedParticipants.includes(user.id))}
                                                 indeterminate={
-                                                    selectedParticipants.length > 0 &&
+                                                    selectedParticipants.length > 0 && 
                                                     selectedParticipants.length < availableUsers.length
                                                 }
                                             />
@@ -600,8 +568,8 @@ const CommunityChatList = () => {
                                         {availableUsers.map((user) => {
                                             const isSelected = selectedParticipants.includes(user.id);
                                             return (
-                                                <MenuItem
-                                                    key={user.id}
+                                                <MenuItem 
+                                                    key={user.id} 
                                                     value={user.id}
                                                     onClick={(e) => {
                                                         e.preventDefault();
@@ -656,10 +624,10 @@ const CommunityChatList = () => {
             </Dialog>
 
             {/* Dialog for adding participants to existing chat */}
-            <Dialog
-                open={openAddParticipantsDialog}
-                onClose={() => !isAddingParticipants && setOpenAddParticipantsDialog(false)}
-                maxWidth="sm"
+            <Dialog 
+                open={openAddParticipantsDialog} 
+                onClose={() => !isAddingParticipants && setOpenAddParticipantsDialog(false)} 
+                maxWidth="sm" 
                 fullWidth
             >
                 <DialogTitle>Add Participants to "{selectedChatForAddParticipants?.name}"</DialogTitle>
@@ -672,14 +640,14 @@ const CommunityChatList = () => {
                             multiple
                             value={selectedParticipantsForAdd}
                             onChange={(e) => {
-                                const value = typeof e.target.value === 'string'
-                                    ? e.target.value.split(',')
+                                const value = typeof e.target.value === 'string' 
+                                    ? e.target.value.split(',') 
                                     : e.target.value;
                                 setSelectedParticipantsForAdd(value);
                             }}
                             input={<OutlinedInput label="Select Participants" />}
                             renderValue={(selected) => {
-                                const selectedUsers = availableUsers.filter(u =>
+                                const selectedUsers = availableUsers.filter(u => 
                                     selected.includes(u.id)
                                 );
                                 return selectedUsers.map(u => u.username).join(', ');
@@ -697,7 +665,7 @@ const CommunityChatList = () => {
                                         onClick={(e) => {
                                             e.preventDefault();
                                             e.stopPropagation();
-                                            const allSelected = availableUsers.length > 0 &&
+                                            const allSelected = availableUsers.length > 0 && 
                                                 availableUsers.every(user => selectedParticipantsForAdd.includes(user.id));
                                             if (allSelected) {
                                                 setSelectedParticipantsForAdd([]);
@@ -707,10 +675,10 @@ const CommunityChatList = () => {
                                         }}
                                     >
                                         <Checkbox
-                                            checked={availableUsers.length > 0 &&
+                                            checked={availableUsers.length > 0 && 
                                                 availableUsers.every(user => selectedParticipantsForAdd.includes(user.id))}
                                             indeterminate={
-                                                selectedParticipantsForAdd.length > 0 &&
+                                                selectedParticipantsForAdd.length > 0 && 
                                                 selectedParticipantsForAdd.length < availableUsers.length
                                             }
                                         />
@@ -719,8 +687,8 @@ const CommunityChatList = () => {
                                     {availableUsers.map((user) => {
                                         const isSelected = selectedParticipantsForAdd.includes(user.id);
                                         return (
-                                            <MenuItem
-                                                key={user.id}
+                                            <MenuItem 
+                                                key={user.id} 
                                                 value={user.id}
                                                 onClick={(e) => {
                                                     e.preventDefault();

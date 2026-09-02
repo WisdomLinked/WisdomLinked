@@ -5,22 +5,28 @@ import ShowFieldError from "../components/ShowFieldError";
 import { validateEmail } from "../actions/common";
 import {doContactUs, sendEmailToAdmin} from "../api/api"; // Import the new function
 import { SetLoadingStatus } from "../actions/appActions";
+import { useDispatch } from "react-redux";
+import { showErrorAlert, showSuccessAlert } from "../actions/alertActions";
 
 const ContactUS = () => {
+    const dispatch = useDispatch();
+    const CONTACT_MESSAGE_MAX_LENGTH = 100;
     const navigate = useNavigate(); // For programmatic navigation
 
     // State Variables
     const [name, set_name] = useState("");
     const [email, set_email] = useState("");
     const [isValidEmail, set_isValidEmail] = useState(false);
+    const [subject, set_subject] = useState("");
     const [issue, set_issue] = useState("");
     const [countryCode, set_countryCode] = useState("");
     const [contactNumber, set_contactNumber] = useState("");
     const [showError, set_showError] = useState(false);
     const [issueError, set_issueError] = useState(false);
+    const [subjectError, set_subjectError] = useState(false);
     const [enableToSubmit, set_enableToSubmit] = useState(false);
 
-    const createEmailTemplate = (name: string, email: string, countryCode:string, contactNumber: string, issue: string) => {
+    const createEmailTemplate = (name: string, email: string, countryCode:string, contactNumber: string, subject: string, issue: string) => {
         return `
 Someone just reached us at WisdomLinked.com,
 
@@ -30,7 +36,8 @@ Name: ${name}
 Email: ${email}
 Country Code: ${countryCode}
 Contact Number: ${contactNumber}
-Reason: ${issue} 
+Subject: ${subject}
+Main message: ${issue}
 
 Warm Regards,
 The WisdomLinked.com Team
@@ -55,10 +62,18 @@ The WisdomLinked.com Team
 
     // Submit Function
     const submit = async () => {
-        // Validate Reason Field (Issue)
+        if (!subject.trim()) {
+            set_subjectError(true);
+            return;
+        }
+        set_subjectError(false);
         if (!issue.trim()) {
             set_issueError(true);
-            return; // Stop submission if Reason is empty
+            return;
+        }
+        if (issue.trim().length > CONTACT_MESSAGE_MAX_LENGTH) {
+            set_issueError(true);
+            return;
         }
         set_issueError(false);
 
@@ -75,18 +90,25 @@ The WisdomLinked.com Team
                     email,
                     countryCode,
                     contactNumber,
+                    subject,
                     issue
                 });
 
+                if (response === false) return;
+                if (response?.status === 'FAIL' || response?.error) {
+                    dispatch(showErrorAlert(response?.error || 'Failed to submit contact details. Please try again later.'));
+                    return;
+                }
                 if (response) {
 
-                    const finalMessage = createEmailTemplate(name, email, countryCode, contactNumber, issue);
+                    const finalMessage = createEmailTemplate(name, email, countryCode, contactNumber, subject, issue);
                     await handleSendEmail(finalMessage);
-                    alert("Thank you for contacting us. Your query has been submitted successfully.");
+                    dispatch(showSuccessAlert('Thank you for contacting us. Your query has been submitted successfully.'));
 
                     // Clear input fields
                     set_name("");
                     set_email("");
+                    set_subject("");
                     set_issue("");
                     set_countryCode("");
                     set_contactNumber("");
@@ -99,11 +121,11 @@ The WisdomLinked.com Team
                         window.scrollTo(0, 0);
                     }, 0);
                 } else {
-                    alert("Failed to submit contact details. Please try again later.");
+                    dispatch(showErrorAlert('Failed to submit contact details. Please try again later.'));
                 }
             } catch (error) {
                 console.error("Error submitting contact:", error);
-                alert("An error occurred. Please try again.");
+                dispatch(showErrorAlert('An error occurred. Please try again.'));
             } finally {
                 SetLoadingStatus(false);
             }
@@ -117,13 +139,13 @@ The WisdomLinked.com Team
 
     // Enable Submit Button Only If Valid
     useEffect(() => {
-        if (name.length >= 3 && isValidEmail && issue.trim().length > 0) {
+        if (name.length >= 3 && isValidEmail && subject.trim().length > 0 && issue.trim().length > 0 && issue.trim().length <= CONTACT_MESSAGE_MAX_LENGTH) {
             set_enableToSubmit(true);
             set_showError(false);
         } else {
             set_enableToSubmit(false);
         }
-    }, [name, isValidEmail, issue]);
+    }, [name, isValidEmail, subject, issue]);
 
     return (
         <div className="w-full main_container py-[40px] lg:py-[60px]">
@@ -183,27 +205,45 @@ The WisdomLinked.com Team
                     onChange={(e) => set_contactNumber(e.target.value)}
                 />
 
-                {/* Reason Field (Mandatory) */}
-                <div className="mt-8 lg:mt-12 text-lightgrey text-[12px] leading-[19px]">Reason *</div>
-                <textarea
-                    className="w-full bg-black rounded-[15px] h-[200px] mt-0.5 border text-white text-[14px] leading-[21px] p-[24px]"
-                    placeholder="Input your reason in detail"
-                    value={issue}
-                    onChange={(e) => set_issue(e.target.value)}
+                {/* Subject Field */}
+                <div className="mt-6 text-white text-[12px] leading-[19px]">Subject *</div>
+                <input
+                    className="w-full bg-black text-white rounded-[15px] h-[50px] mt-0.5 border text-[14px] leading-[21px] px-[24px]"
+                    placeholder="e.g. Graduate school application"
+                    type="text"
+                    value={subject}
+                    onChange={(e) => { set_subject(e.target.value); set_subjectError(false); }}
                 />
                 <ShowFieldError
-                    show={issueError || (showError && issue.trim().length === 0)}
-                    label="Reason is required."
+                    show={subjectError || (showError && !subject.trim())}
+                    label="Subject is required."
                 />
 
-                {/* Submit Button */}
+                {/* Main message Field */}
+                <div className="mt-6 text-lightgrey text-[12px] leading-[19px]">Main message *</div>
+                <textarea
+                    className="w-full bg-black rounded-[15px] h-[120px] mt-0.5 border text-white text-[14px] leading-[21px] p-[24px] resize-none"
+                    placeholder={`Brief message (max ${CONTACT_MESSAGE_MAX_LENGTH} characters)`}
+                    value={issue}
+                    maxLength={CONTACT_MESSAGE_MAX_LENGTH}
+                    onChange={(e) => { set_issue(e.target.value); set_issueError(false); }}
+                />
+                <div className="flex items-center justify-between mt-1">
+                    <ShowFieldError
+                        show={issueError || (showError && issue.trim().length === 0)}
+                        label={issue.trim().length > CONTACT_MESSAGE_MAX_LENGTH ? `Main message must be ${CONTACT_MESSAGE_MAX_LENGTH} characters or less.` : "Main message is required."}
+                    />
+                    <span className={`text-[12px] ml-auto ${issue.length >= CONTACT_MESSAGE_MAX_LENGTH ? "text-red-500" : "text-lightgrey"}`}>{issue.length} / {CONTACT_MESSAGE_MAX_LENGTH}</span>
+                </div>
+
+                {/* Send Button */}
                 <div className="flex flex-row-reverse mt-[54px]">
                     <button
                         className="px-[48px] py-[15px] rounded-[14px] bg-green text-white text-[16px] leading-[24px] font-[600] disabled:opacity-50"
                         disabled={showError}
                         onClick={submit}
                     >
-                        Submit
+                        Send
                     </button>
                 </div>
             </div>

@@ -112,11 +112,18 @@ export default function AdminDrawer(props: Props) {
                     <GeneralChatList />
                 </div>
             </div>
-            <div className={`w-full ${location === 'adminchat' ? 'lg:w-[calc(100%-370px)]' : 'lg:w-[calc(100%-70px)]'} h-full`}>
+            <div className={`w-full ${location === 'adminchat' ? 'lg:w-[calc(100%-370px)]' : 'lg:w-[calc(100%-70px)]'} h-full min-h-0 flex flex-col`}>
                 <Routes>
                     <Route path="/usermgmt" element={<UserMgmt />} />
                     <Route path="/payment" element={<Payment />} />
-                    <Route path="/chat" element={<Messenger />} />
+                    <Route
+                        path="/chat"
+                        element={
+                            <div className="flex h-full min-h-0 flex-1 flex-col">
+                                <Messenger />
+                            </div>
+                        }
+                    />
                     <Route path="/feedbacks" element={<Feedback />} />
                     <Route path="/contactedus" element={<GetContactedUs />} />
                     <Route path="/registerUser" element={<RegisterUserByAdmin />} />

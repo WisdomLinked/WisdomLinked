@@ -1,9 +1,12 @@
 import React, { useEffect, useState } from "react";
 import { doGetContactedUs, sendEmailToUser, toggleActionedStatus } from "../api/api";
 import { DateRangePicker, createStaticRanges } from "react-date-range";
+import SelectionWithCheckBox from "./SelectionWithCheckBox";
 
 import "react-date-range/dist/styles.css";
 import "react-date-range/dist/theme/default.css";
+import { store } from '../store';
+import { showErrorAlert, showSuccessAlert } from '../actions/alertActions';
 
 interface ContactedUsItem {
     _id: string;
@@ -57,6 +60,22 @@ const customStaticRanges = createStaticRanges([
         }),
     },
 ]);
+
+const actionedOptions = [
+    { value: "", label: "All" },
+    { value: "Yes", label: "Yes" },
+    { value: "No", label: "No" },
+];
+
+const sortByOptions = [
+    { value: "name", label: "Name" },
+    { value: "createdAt", label: "Created at" },
+];
+
+const sortOrderOptions = [
+    { value: "asc", label: "Ascending" },
+    { value: "desc", label: "Descending" },
+];
 
 export default function GetContactedUs() {
     const [contactedUsList, setContactedUsList] = useState<ContactedUsItem[]>([]);
@@ -163,143 +182,141 @@ export default function GetContactedUs() {
             const adminRawMessage = adminMessages[id] || "";
 
             if (!adminRawMessage.trim()) {
-                alert("Please enter a message before sending.");
+                store.dispatch(showErrorAlert('Please enter a message before sending.'));
                 return;
             }
 
             const res = await sendEmailToUser(email, adminRawMessage);
             if (res && res.status === "SUCCESS") {
-                alert("Email sent successfully!");
+                store.dispatch(showSuccessAlert('Email sent successfully!'));
                 setAdminMessages((prev) => ({ ...prev, [id]: "" }));
             } else {
-                alert("Failed to send email.");
+                store.dispatch(showErrorAlert('Failed to send email.'));
             }
         } catch (error) {
             console.error("Error sending email:", error);
-            alert("An error occurred while sending email.");
+            store.dispatch(showErrorAlert('An error occurred while sending email.'));
         }
     };
 
     return (
-        <div className="min-h-screen p-6 bg-[#181818] text-white">
-            {/* Inline style overrides for react-date-range */}
+        <div className="w-full min-h-full pt-10 overflow-y-auto bg-wl-page text-wl-ink px-[18px] pb-10">
             <style>{`
                 .rdrCalendarWrapper,
                 .rdrDateRangeWrapper {
-                    background-color: #252525 !important;
-                    color: #ffffff !important;
+                    background-color: #ffffff !important;
+                    color: #1a2d3a !important;
                 }
                 .rdrDefinedRangesWrapper,
                 .rdrStaticRangeLabel {
-                    background-color: #252525 !important;
-                    color: #ffffff !important;
+                    background-color: #f8f7f4 !important;
+                    color: #234c6a !important;
                 }
                 .rdrStaticRangeLabel:hover {
-                    background-color: #333333 !important;
+                    background-color: #E8EEF4 !important;
                 }
                 .rdrMonthAndYearWrapper,
                 .rdrMonthAndYearPickers select {
-                    background-color: #252525 !important;
-                    color: #ffffff !important;
+                    background-color: #ffffff !important;
+                    color: #1a2d3a !important;
                 }
                 .rdrWeekDay {
-                    color: #bbbbbb !important;
+                    color: #6C7278 !important;
                 }
                 .rdrSelected,
                 .rdrInRange,
                 .rdrStartEdge,
                 .rdrEndEdge {
-                    opacity: 0.9;
+                    opacity: 0.95;
                 }
                 .rdrDayNumber span {
-                    color: #ffffff !important;
+                    color: #1a2d3a !important;
                 }
                 .rdrDayPassive .rdrDayNumber span {
-                    color: #555555 !important;
+                    color: #9ca3af !important;
                 }
             `}</style>
 
-            <h2 className="text-2xl font-semibold text-[#31B099] mb-6">
+            <div className="w-full max-w-[1200px] mx-auto">
+            <h2 className="text-center text-2xl font-semibold text-wl-brand mb-8">
                 Contacted Us Records (Admin View)
             </h2>
 
-            {/* Filters & Sorting */}
-            <div className="flex flex-col lg:flex-row lg:space-x-4 space-y-4 lg:space-y-0 mb-4">
-                {/* Filter by Name */}
-                <div className="flex flex-col">
-                    <label className="text-gray-300 mb-1">Search by Name:</label>
+            {/* Filters & Sorting — centered */}
+            <div className="flex flex-wrap justify-center items-end gap-x-4 gap-y-5 mb-8">
+                <div className="flex flex-col w-full min-w-[200px] max-w-[280px]">
+                    <label className="text-wl-muted mb-1 text-sm text-center">Search by name</label>
                     <input
-                        className="bg-[#252525] text-white px-3 py-2 rounded-md border border-gray-700 focus:outline-none focus:ring-2 focus:ring-[#31B099]"
+                        className="bg-white text-wl-ink h-[50px] px-4 rounded-[15px] border border-lightgrey focus:outline-none focus:ring-2 focus:ring-wl-brand/30 placeholder:text-grey text-[14px]"
                         placeholder="Type a name"
                         value={filterName}
                         onChange={(e) => setFilterName(e.target.value)}
                     />
                 </div>
 
-                {/* Filter by Email */}
-                <div className="flex flex-col">
-                    <label className="text-gray-300 mb-1">Search by Email:</label>
+                <div className="flex flex-col w-full min-w-[200px] max-w-[280px]">
+                    <label className="text-wl-muted mb-1 text-sm text-center">Search by email</label>
                     <input
-                        className="bg-[#252525] text-white px-3 py-2 rounded-md border border-gray-700 focus:outline-none focus:ring-2 focus:ring-[#31B099]"
+                        className="bg-white text-wl-ink h-[50px] px-4 rounded-[15px] border border-lightgrey focus:outline-none focus:ring-2 focus:ring-wl-brand/30 placeholder:text-grey text-[14px]"
                         placeholder="Type an email"
                         value={filterEmail}
                         onChange={(e) => setFilterEmail(e.target.value)}
                     />
                 </div>
 
-                {/* Filter by Actioned (Yes/No/All) */}
-                <div className="flex flex-col">
-                    <label className="text-gray-300 mb-1">Filter by Actioned:</label>
-                    <select
-                        className="bg-[#252525] text-white px-3 py-2 rounded-md border border-gray-700"
-                        value={filterActioned}
-                        onChange={(e) => setFilterActioned(e.target.value)}
-                    >
-                        <option value="">All</option>
-                        <option value="Yes">Yes</option>
-                        <option value="No">No</option>
-                    </select>
+                <div className="flex flex-col w-full min-w-[200px] max-w-[260px]">
+                    <label className="text-wl-muted mb-1 text-sm text-center">Filter by actioned</label>
+                    <SelectionWithCheckBox
+                        options={actionedOptions}
+                        selectedOptions={
+                            actionedOptions.find((o) => o.value === filterActioned) ?? actionedOptions[0]
+                        }
+                        set_selectedOptions={(opt: { value: string }) => setFilterActioned(opt.value)}
+                        placeholder="Actioned status"
+                        isMulti={false}
+                    />
                 </div>
 
-                {/* Date Range Picker */}
-                <div className="flex flex-col relative">
-                    <label className="text-gray-300 mb-1">Date Range:</label>
+                <div className="flex flex-col relative w-full min-w-[220px] max-w-[320px]">
+                    <label className="text-wl-muted mb-1 text-sm text-center">Date range</label>
                     <div
-                        className="bg-[#252525] text-white px-3 py-2 rounded-md border border-gray-700 focus:outline-none
-                                   focus:ring-2 focus:ring-[#31B099] flex items-center justify-between cursor-pointer"
+                        className="bg-white text-wl-ink h-[50px] px-4 rounded-[15px] border border-lightgrey flex items-center justify-between cursor-pointer gap-2"
                         onClick={() => setDatePickerShow(!datePickerShow)}
                     >
                         {dateFrom && dateTo ? (
-                            <span className="text-sm mr-2">
+                            <span className="text-sm text-wl-ink truncate">
                                 {dateFrom} ~ {dateTo}
                             </span>
                         ) : (
-                            <span className="text-gray-400 text-sm mr-2">Select Range</span>
+                            <span className="text-wl-muted text-sm">Select range</span>
                         )}
-                        {dateFrom && dateTo && (
-                            <button
-                                className="bg-[#31B099] text-black px-2 py-1 rounded mr-2 hover:bg-[#28a286] transition-colors"
-                                onClick={(e) => {
-                                    e.stopPropagation();
-                                    clearDateRange();
-                                }}
+                        <div className="flex items-center shrink-0 gap-2">
+                            {dateFrom && dateTo && (
+                                <button
+                                    type="button"
+                                    className="bg-wl-brand text-white px-2 py-1 rounded-lg text-xs font-medium hover:brightness-95 transition-colors"
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        clearDateRange();
+                                    }}
+                                >
+                                    Clear
+                                </button>
+                            )}
+                            <svg
+                                className={`${datePickerShow ? "rotate-180" : ""} transition-all text-wl-brand`}
+                                width="14"
+                                height="9"
+                                viewBox="0 0 14 9"
+                                fill="none"
+                                xmlns="http://www.w3.org/2000/svg"
                             >
-                                Clear
-                            </button>
-                        )}
-                        <svg
-                            className={`${datePickerShow ? "rotate-180" : ""} transition-all`}
-                            width="14"
-                            height="9"
-                            viewBox="0 0 14 9"
-                            fill="none"
-                            xmlns="http://www.w3.org/2000/svg"
-                        >
-                            <path
-                                d="M13.7812 1.46094C13.9375 1.58594 13.9375 1.83594 13.7812 1.99219L7.25 8.52344C7.09375 8.67969 6.875 8.67969 6.71875 8.52344L0.1875 1.99219C0.03125 1.83594 0.03125 1.58594 0.1875 1.46094L0.78125 0.835938C0.9375 0.679688 1.1875 0.679688 1.3125 0.835938L7 6.49219L12.6562 0.835938C12.7812 0.679688 13.0312 0.679688 13.1875 0.835938L13.7812 1.46094Z"
-                                fill="currentColor"
-                            />
-                        </svg>
+                                <path
+                                    d="M13.7812 1.46094C13.9375 1.58594 13.9375 1.83594 13.7812 1.99219L7.25 8.52344C7.09375 8.67969 6.875 8.67969 6.71875 8.52344L0.1875 1.99219C0.03125 1.83594 0.03125 1.58594 0.1875 1.46094L0.78125 0.835938C0.9375 0.679688 1.1875 0.679688 1.3125 0.835938L7 6.49219L12.6562 0.835938C12.7812 0.679688 13.0312 0.679688 13.1875 0.835938L13.7812 1.46094Z"
+                                    fill="currentColor"
+                                />
+                            </svg>
+                        </div>
                     </div>
                     {datePickerShow && (
                         <>
@@ -308,8 +325,8 @@ export default function GetContactedUs() {
                                 onClick={() => setDatePickerShow(false)}
                             />
                             <div
-                                className="absolute z-20 top-[65px] lg:top-[60px] left-0 border border-gray-700"
-                                style={{ minWidth: "300px", background: "#252525" }}
+                                className="absolute z-20 top-[58px] left-1/2 -translate-x-1/2 sm:left-0 sm:translate-x-0 border border-lightgrey rounded-xl shadow-lg bg-white overflow-hidden"
+                                style={{ minWidth: "300px" }}
                             >
                                 <DateRangePicker
                                     onChange={handleSelect}
@@ -317,115 +334,109 @@ export default function GetContactedUs() {
                                     staticRanges={customStaticRanges}
                                     inputRanges={[]}
                                     direction="vertical"
-                                    rangeColors={["#31B099"]}
+                                    rangeColors={["#234C6A"]}
                                 />
                             </div>
                         </>
                     )}
                 </div>
 
-                {/* Sort By */}
-                <div className="flex flex-col">
-                    <label className="text-gray-300 mb-1">Sort By:</label>
-                    <select
-                        className="bg-[#252525] text-white px-3 py-2 rounded-md border border-gray-700"
-                        value={sortBy}
-                        onChange={(e) => setSortBy(e.target.value)}
-                    >
-                        <option value="name">Name</option>
-                        <option value="createdAt">Created At</option>
-                    </select>
+                <div className="flex flex-col w-full min-w-[200px] max-w-[260px]">
+                    <label className="text-wl-muted mb-1 text-sm text-center">Sort by</label>
+                    <SelectionWithCheckBox
+                        options={sortByOptions}
+                        selectedOptions={sortByOptions.find((o) => o.value === sortBy) ?? sortByOptions[0]}
+                        set_selectedOptions={(opt: { value: string }) => setSortBy(opt.value)}
+                        placeholder="Sort field"
+                        isMulti={false}
+                    />
                 </div>
 
-                {/* Sort Order */}
-                <div className="flex flex-col">
-                    <label className="text-gray-300 mb-1">Order:</label>
-                    <select
-                        className="bg-[#252525] text-white px-3 py-2 rounded-md border border-gray-700"
-                        value={sortOrder}
-                        onChange={(e) => setSortOrder(e.target.value)}
-                    >
-                        <option value="asc">ASC</option>
-                        <option value="desc">DESC</option>
-                    </select>
+                <div className="flex flex-col w-full min-w-[180px] max-w-[260px]">
+                    <label className="text-wl-muted mb-1 text-sm text-center">Order</label>
+                    <SelectionWithCheckBox
+                        options={sortOrderOptions}
+                        selectedOptions={
+                            sortOrderOptions.find((o) => o.value === sortOrder) ?? sortOrderOptions[0]
+                        }
+                        set_selectedOptions={(opt: { value: string }) => setSortOrder(opt.value)}
+                        placeholder="Order"
+                        isMulti={false}
+                    />
                 </div>
             </div>
 
             {/* Data Display */}
             {isLoading ? (
-                <p className="text-gray-400">Loading ContactedUs entries...</p>
+                <p className="text-wl-muted text-center">Loading ContactedUs entries...</p>
             ) : contactedUsList.length === 0 ? (
-                <p className="text-gray-400">No records found.</p>
+                <p className="text-wl-muted text-center">No records found.</p>
             ) : (
-                <div className="space-y-4">
+                <div className="space-y-4 max-w-4xl mx-auto">
                     {contactedUsList.map((item) => {
                         const isActionedYes = item.actioned === "No";
                         return (
                             <div
                                 key={item._id}
-                                className={`p-4 rounded-lg border border-gray-700 shadow-lg hover:shadow-[0_0_10px_2px_rgba(49,176,153,0.5)] transition-shadow ${
-                                    isActionedYes ? "bg-[#333333]" : "bg-[#252525]"
+                                className={`p-4 rounded-2xl border border-wl-line shadow-sm transition-shadow ${
+                                    isActionedYes ? "bg-emerald-50/80" : "bg-wl-card"
                                 }`}
                             >
-                                <p className="text-gray-300">
-                                    <strong className="text-white">Name:</strong> {item.name}
+                                <p className="text-wl-ink/90">
+                                    <strong className="text-wl-brand">Name:</strong> {item.name}
                                 </p>
-                                <p className="text-gray-300">
-                                    <strong className="text-white">Email:</strong> {item.email}
+                                <p className="text-wl-ink/90">
+                                    <strong className="text-wl-brand">Email:</strong> {item.email}
                                 </p>
-                                <p className="text-gray-300">
-                                    <strong className="text-white">Contact Number:</strong>{" "}
+                                <p className="text-wl-ink/90">
+                                    <strong className="text-wl-brand">Contact Number:</strong>{" "}
                                     {(item.countryCode || "") + " " + (item.contactNumber || "")}
                                 </p>
                                 {/* Reason row, highlighted green if Actioned: Yes */}
-                                <p className="text-gray-300">
+                                <p className="text-wl-ink/90">
                                     <strong
                                         className={`mr-1 ${
-                                            isActionedYes ? "text-[#31B099]" : "text-white"
+                                            isActionedYes ? "text-green" : "text-wl-brand"
                                         }`}
                                     >
                                         Reason:
                                     </strong>
                                     <span
-                                        className={`${isActionedYes ? "text-[#31B099]" : ""}`}
+                                        className={`${isActionedYes ? "text-green" : ""}`}
                                     >
                                         {item.issue}
                                     </span>
                                 </p>
-                                <p className="text-gray-300">
-                                    <strong className="text-white">Created At:</strong>{" "}
+                                <p className="text-wl-ink/90">
+                                    <strong className="text-wl-brand">Created At:</strong>{" "}
                                     {new Date(item.createdAt).toLocaleString()}
                                 </p>
-                                {/* Actioned row, highlighted green if Actioned: Yes */}
-                                <p className="text-gray-300">
+                                <p className="text-wl-ink/90">
                                     <strong
                                         className={`mr-1 ${
-                                            isActionedYes ? "text-[#31B099]" : "text-white"
+                                            isActionedYes ? "text-green" : "text-wl-brand"
                                         }`}
                                     >
                                         Actioned:
                                     </strong>
                                     <span
-                                        className={`${isActionedYes ? "text-[#31B099]" : ""}`}
+                                        className={`${isActionedYes ? "text-green" : ""}`}
                                     >
                                         {item.actioned}
                                     </span>
                                 </p>
 
-                                {/* Toggle Actioned Button */}
                                 <button
                                     onClick={() => handleToggleActioned(item._id)}
-                                    className="mt-2 bg-[#31B099] text-black px-2 py-1 rounded font-semibold
-                                               hover:bg-[#28a286] transition-colors"
+                                    className="mt-2 bg-green text-white px-2 py-1 rounded font-semibold hover:brightness-95 transition-colors"
                                 >
                                     Toggle Actioned
                                 </button>
 
-                                {/* Textbox and Send Email Button for admin to contact user */}
                                 <div className="mt-4">
-                                    <label className="text-gray-300">Message to User:</label>
+                                    <label className="text-wl-muted text-sm">Message to User:</label>
                                     <textarea
-                                        className="block w-full mt-1 bg-[#1f1f1f] text-white p-2 rounded border border-gray-700 focus:outline-none focus:ring-2 focus:ring-[#31B099]"
+                                        className="block w-full mt-1 bg-wl-card text-wl-ink p-2 rounded-lg border border-wl-line focus:outline-none focus:ring-2 focus:ring-green/40"
                                         rows={3}
                                         value={adminMessages[item._id] || ""}
                                         onChange={(e) =>
@@ -437,8 +448,7 @@ export default function GetContactedUs() {
                                     />
                                     <button
                                         onClick={() => handleSendEmail(item._id, item.email)}
-                                        className="mt-2 bg-[#31B099] text-black px-3 py-2 rounded font-semibold
-                                                   hover:bg-[#28a286] transition-colors"
+                                        className="mt-2 bg-green text-white px-3 py-2 rounded font-semibold hover:brightness-95 transition-colors"
                                     >
                                         Send Email
                                     </button>
@@ -448,6 +458,7 @@ export default function GetContactedUs() {
                     })}
                 </div>
             )}
+            </div>
         </div>
     );
 }

@@ -1,4 +1,3 @@
-import axios from "axios";
 import { Method } from "axios";
 
 import {
@@ -6,28 +5,55 @@ import {
     AuthResponse,
     InviteFriendArgs,
     GetMeResponse,
-    AddMembersToGroupArgs,
     LeaveGroupArgs,
     RemoveFriendArgs,
     DeleteGroupArgs,
 } from "./types";
 
 import { store } from "../store";
-import { actionTypes } from "../actions/types";
-import { showAlert } from "../actions/alertActions";
+import {
+    checkForAuthorization,
+    handleApiFailure,
+    handleAuthApiFailure,
+} from "./apiErrorHandling";
+import { resolveUserFacingError } from "../utils/resolveUserFacingError";
+import { ensureCsrfToken, needsCsrf, isCsrfError } from "./csrf";
 import { logoutUser } from "../actions/authActions";
 import { SetLoadingStatus } from "../actions/appActions";
-import { group } from "console";
+import { apiClient, BASE_URL } from "./apiClient";
 
-let BASE_URL = process.env.REACT_APP_API_BASE_URL || '';
-if (BASE_URL && !BASE_URL.endsWith('/')) {
-    BASE_URL += '/';
-}
+const api = apiClient;
 
-const api = axios.create({
-    withCredentials: true,
-    baseURL: BASE_URL
+export { apiClient };
+
+api.interceptors.request.use(async (config) => {
+    if (needsCsrf(config.method)) {
+        const t = await ensureCsrfToken();
+        if (t) {
+            config.headers = config.headers || {};
+            (config.headers as any)['X-CSRF-Token'] = t;
+        }
+    }
+    return config;
 });
+
+api.interceptors.response.use(
+    (res) => res,
+    async (error) => {
+        const cfg = error?.config;
+        const resp = error?.response;
+        if (cfg && !cfg.__csrfRetried && isCsrfError(resp?.data, resp?.status)) {
+            cfg.__csrfRetried = true;
+            const t = await ensureCsrfToken({ force: true });
+            if (t) {
+                cfg.headers = cfg.headers || {};
+                cfg.headers['X-CSRF-Token'] = t;
+                return api.request(cfg);
+            }
+        }
+        return Promise.reject(error);
+    }
+);
 
 // api.interceptors.request.use(
 //     (config) => {
@@ -53,24 +79,12 @@ const logOut = () => {
     store.dispatch(logoutUser())
 };
 
-const checkForAuthorization = (error: any) => {
-    const responseCode = error?.response?.status;
-
-    if (responseCode === 401 || responseCode === 403) {
-        logOut();
-        return false
+export const callLogout = async () => {
+    try {
+        await api.post("auth/logout");
+    } catch (err) {
+        console.error("Logout API failed", err);
     }
-    store.dispatch({
-        type: actionTypes.authError,
-        payload: error.message
-    })
-    if (responseCode == 413) {
-        store.dispatch(showAlert('payload size too large'));
-    }
-    else
-        store.dispatch(showAlert(error.response?.data || error.message));
-    SetLoadingStatus(false)
-    return false
 };
 
 export const login = async ({ email, password }: LoginArgs) => {
@@ -83,7 +97,7 @@ export const login = async ({ email, password }: LoginArgs) => {
         return res.data;
     } catch (err: any) {
         console.error('Login error:', err);
-        return checkForAuthorization(err);
+        return handleAuthApiFailure(err);
     }
 };
 
@@ -93,7 +107,7 @@ export const register = async (userdata: any) => {
 
         return res.data;
     } catch (err: any) {
-        return checkForAuthorization(err);
+        return handleAuthApiFailure(err);
     }
 };
 
@@ -103,17 +117,17 @@ export const resendConfirmEmail = async ({ email }: any) => {
 
         return res.data;
     } catch (err: any) {
-        return checkForAuthorization(err);
+        return handleAuthApiFailure(err);
     }
 };
 
-export const confirmLoginByCode = async ({ email, password, code, timeZone }: any) => {
+export const confirmLoginByCode = async ({ email, password, code }: any) => {
     try {
-        const res = await api.post<any>("auth/confirmLoginByCode", { email, password, code, timeZone });
+        const res = await api.post<any>("auth/confirmLoginByCode", { email, password, code});
 
         return res.data;
     } catch (err: any) {
-        return checkForAuthorization(err);
+        return handleAuthApiFailure(err);
     }
 };
 
@@ -123,20 +137,46 @@ export const confirmPasswordResetByCode = async ({ email, password, code }: any)
 
         return res.data;
     } catch (err: any) {
-        return checkForAuthorization(err);
+        return handleAuthApiFailure(err);
     }
 };
+
+export const verifyPasswordResetOTP = async ({ email, code }: any) => {
+    try {
+        const res = await api.post<any>("auth/verifyPasswordResetOTP", { email, code });
+
+        return res.data;
+    } catch (err: any) {
+        return handleAuthApiFailure(err);
+    }
+};
+
+export const confirmEmailChange = async ({ confirmCode }: any) => {
+    try {
+        const res = await api.post<any>("auth/confirmEmailChange", { confirmCode });
+        return res.data;
+    } catch (error) {
+        return { status: "FAIL", error: resolveUserFacingError(error) };
+    }
+}
 
 export const verifyRegistration = async ({ email, confirmCode }: any) => {
     try {
         const res = await api.post<any>("auth/verifyRegistration", { email, confirmCode });
-
         return res.data;
-    } catch (err: any) {
-        console.log(err, '////')
-        return checkForAuthorization(err);
+    } catch (error) {
+        return { status: "FAIL", error: resolveUserFacingError(error) };
     }
-};
+}
+
+export const checkVerificationStatus = async (email: string) => {
+    try {
+        const res = await api.get<any>(`auth/checkVerification?email=${encodeURIComponent(email)}`);
+        return res.data;
+    } catch (error) {
+        return { status: "FAIL", error: resolveUserFacingError(error) };
+    }
+}
 
 export const passwordResetRequest = async ({ email, password }: any) => {
     try {
@@ -144,7 +184,7 @@ export const passwordResetRequest = async ({ email, password }: any) => {
 
         return res.data;
     } catch (err: any) {
-        return checkForAuthorization(err);
+        return handleAuthApiFailure(err);
     }
 };
 
@@ -161,9 +201,13 @@ export const getTimezone = async ({ lat, lng }: { lat: number; lng: number }) =>
 
 // protected routes
 
-export const getMe = async () => {
+export const getMe = async (accessToken?: string, options?: { logoutOnAuth?: boolean }) => {
     try {
-        const res = await api.get<GetMeResponse>("auth/me");
+        const headers: Record<string, string> = {};
+        if (accessToken) {
+            headers.Authorization = `Bearer ${accessToken}`;
+        }
+        const res = await api.get<GetMeResponse>("auth/me", { headers });
 
         return {
             me: res.data.me,
@@ -171,7 +215,10 @@ export const getMe = async () => {
         };
 
     } catch (err: any) {
-        return checkForAuthorization(err);
+        return handleApiFailure(err, {
+            notify: false,
+            logoutOnAuth: options?.logoutOnAuth !== false,
+        });
     }
 };
 
@@ -258,7 +305,15 @@ export const createCommunityChat = async (data: { name: string; description?: st
         const res = await api.post("group-chat/create-community-chat", data);
         return res.data;
     } catch (err: any) {
-        return checkForAuthorization(err);
+        const status = err?.response?.status;
+        if (status === 401 || status === 403) {
+            return checkForAuthorization(err);
+        }
+        const payload = err?.response?.data;
+        return {
+            status: 'FAILED',
+            error: typeof payload === 'string' ? payload : payload?.error || payload?.message || err?.message || 'Failed to create community chat',
+        };
     }
 };
 
@@ -299,9 +354,41 @@ export const createGroupChat = async (details: any) => {
     }
 };
 
+/** Lazily ensure a seminar's group chat channel exists; returns { rcChannelId }. */
+export const ensureSeminarChannel = async (groupChatId: string) => {
+    try {
+        const res = await api.post("group-chat/ensure-seminar-channel", { groupChatId });
+        return res.data;
+    } catch (err: any) {
+        return checkForAuthorization(err);
+    }
+};
+
+export const uploadSeminarCover = async (file: File): Promise<string | null> => {
+    try {
+        const formData = new FormData();
+        formData.append("media", file, file.name);
+        const res = await api.post("auth/uploadChatFile", formData);
+        return res.data?.chatFile || null;
+    } catch (err: any) {
+        checkForAuthorization(err);
+        return null;
+    }
+};
+
 export const createGroupChatByUser = async (details: any) => {
     try {
         const res = await api.post("group-chat/create-by-user", details);
+
+        return res.data;
+    } catch (err: any) {
+        return checkForAuthorization(err);
+    }
+};
+
+export const proposeIndividualAppointment = async (details: any) => {
+    try {
+        const res = await api.post("group-chat/propose-individual-appointment", details);
 
         return res.data;
     } catch (err: any) {
@@ -339,9 +426,9 @@ export const updateGroupChat = async (details: any) => {
     }
 };
 
-export const cancelIndividualAppointment = async (groupChatId: any) => {
+export const cancelIndividualAppointment = async (groupChatId: any, note?: string) => {
     try {
-        const res = await api.post("group-chat/cancel-individual-appointment", { groupChatId });
+        const res = await api.post("group-chat/cancel-individual-appointment", { groupChatId, note });
         return res.data;
     } catch (err: any) {
         return checkForAuthorization(err);
@@ -366,24 +453,12 @@ export const doUpdateEvent = async (eventId: any, updates: any) => {
     }
 }
 
-export const addMemberToGroup = async (data: any) => {
-    try {
-        const res = await api.post("group-chat/add", {
-            _id: data._id,
-            friendId: data.friendId,
-            groupChatId: data.groupChatId
-        });
-
-        return res.data;
-    } catch (err: any) {
-        return checkForAuthorization(err);
-    }
-};
-
 export const acceptIndividualAppointment = async (data: any) => {
     try {
         const res = await api.post("group-chat/accept-individual-appointment", {
             groupChatId: data.groupChatId,
+            payment_intent: data.payment_intent,
+            note: data.note,
         });
 
         return res.data;
@@ -392,14 +467,104 @@ export const acceptIndividualAppointment = async (data: any) => {
     }
 };
 
-export const addMemberToPendingGroup = async (data: any) => {
+export const registerForSeminar = async (data: any) => {
     try {
-        const res = await api.post("group-chat/add-to-pending", {
+        const res = await api.post("group-chat/register-seminar", {
             groupChatId: data.groupChatId,
             payment_intent: data.payment_intent,
-            price: data.price
         });
 
+        return res.data;
+    } catch (err: any) {
+        return checkForAuthorization(err);
+    }
+};
+
+export const requestSeminarSeat = async (data: any) => {
+    try {
+        const res = await api.post("group-chat/request-seminar-seat", {
+            groupChatId: data.groupChatId,
+            payment_intent: data.payment_intent,
+            paymentMode: data.paymentMode,
+        });
+
+        return res.data;
+    } catch (err: any) {
+        return checkForAuthorization(err);
+    }
+};
+
+/** Settle an overflow seat the host approved, paid by WeChat Pay / Alipay. */
+export const paySeminarSeatRequest = async (data: any) => {
+    try {
+        const res = await api.post("group-chat/pay-seat-request", {
+            requestId: data.requestId,
+            payment_intent: data.payment_intent,
+        });
+
+        return res.data;
+    } catch (err: any) {
+        return checkForAuthorization(err);
+    }
+};
+
+export const getSeminarSeatRequests = async () => {
+    try {
+        const res = await api.get("group-chat/seat-requests");
+        return res.data;
+    } catch (err: any) {
+        return checkForAuthorization(err);
+    }
+};
+
+export const getMyFollowers = async () => {
+    try {
+        const res = await api.get("expert/followers");
+        return res.data;
+    } catch (err: any) {
+        return checkForAuthorization(err);
+    }
+};
+
+export const getMySeatRequests = async () => {
+    try {
+        const res = await api.get("group-chat/my-seat-requests");
+        return res.data;
+    } catch (err: any) {
+        return checkForAuthorization(err);
+    }
+};
+
+export const getMyDecisionNotices = async () => {
+    try {
+        const res = await api.get("group-chat/decision-notices");
+        return res.data;
+    } catch (err: any) {
+        return checkForAuthorization(err);
+    }
+};
+
+export const markDecisionNoticeRead = async (noticeId: string, kind: 'session' | 'seat') => {
+    try {
+        const res = await api.post("group-chat/decision-notices/read", { noticeId, kind });
+        return res.data;
+    } catch (err: any) {
+        return checkForAuthorization(err);
+    }
+};
+
+export const approveSeminarSeatRequest = async (requestId: string, note?: string) => {
+    try {
+        const res = await api.post("group-chat/approve-seat-request", { requestId, note });
+        return res.data;
+    } catch (err: any) {
+        return checkForAuthorization(err);
+    }
+};
+
+export const rejectSeminarSeatRequest = async (requestId: string, note?: string) => {
+    try {
+        const res = await api.post("group-chat/reject-seat-request", { requestId, note });
         return res.data;
     } catch (err: any) {
         return checkForAuthorization(err);
@@ -430,10 +595,45 @@ export const removeFriend = async (data: RemoveFriendArgs) => {
     }
 };
 
+export const removeCommunityMember = async (
+    groupChatId: string,
+    memberUserId: string,
+    reason: string = '',
+) => {
+    try {
+        const res = await api.post('group-chat/remove-community-member', {
+            groupChatId,
+            memberUserId,
+            reason,
+        });
+        return res.data;
+    } catch (err: any) {
+        return checkForAuthorization(err);
+    }
+};
+
+export const setCommunityCoModerator = async (
+    groupChatId: string,
+    memberUserId: string,
+    isCoModerator: boolean,
+) => {
+    try {
+        const res = await api.post('group-chat/set-community-co-moderator', {
+            groupChatId,
+            memberUserId,
+            isCoModerator,
+        });
+        return res.data;
+    } catch (err: any) {
+        return checkForAuthorization(err);
+    }
+};
+
 export const deleteGroup = async (data: DeleteGroupArgs) => {
     try {
         const res = await api.post("group-chat/delete", {
             groupChatId: data.groupChatId,
+            scope: data.scope,
         });
 
         return res.data;
@@ -460,17 +660,49 @@ export const doGetKeywordsAndServices = async () => {
     }
 }
 
-export const callApi = async (method: string, url: string, data: any, file?: any) => {
+export const doGetCustomMajors = async () => {
     try {
+        const res = await api.get("admin/getCustomMajors");
+        return res.data?.result || [];
+    } catch (err: any) {
+        return checkForAuthorization(err);
+    }
+}
 
-        const formData = new FormData()
+export const doConsolidateMajors = async (data: { sources: string[]; target: string }) => {
+    try {
+        const res = await api.post("admin/consolidateMajors", data);
+        return res.data?.result;
+    } catch (err: any) {
+        return checkForAuthorization(err);
+    }
+}
+
+export const doGetMajorConsolidations = async () => {
+    try {
+        const res = await api.get("admin/getMajorConsolidations");
+        return res.data?.result || [];
+    } catch (err: any) {
+        return checkForAuthorization(err);
+    }
+}
+
+export const callApi = async (
+    method: string,
+    url: string,
+    data: any,
+    file?: any,
+    options?: { notify?: boolean; logoutOnAuth?: boolean },
+) => {
+    const callOptions = options || {};
+
+    const runRequest = async (csrfRetried = false): Promise<unknown> => {
+        const formData = new FormData();
         for (const x in data) {
-            // Only stringify if the target is an object/array (like keywords or services)
-            // Otherwise, append primitive strings, booleans, and numbers directly
             if (typeof data[x] === 'object' && data[x] !== null) {
-                formData.append(x, JSON.stringify(data[x]))
+                formData.append(x, JSON.stringify(data[x]));
             } else {
-                formData.append(x, data[x])
+                formData.append(x, data[x]);
             }
         }
 
@@ -478,55 +710,61 @@ export const callApi = async (method: string, url: string, data: any, file?: any
             formData.append("media", file, file.name);
         }
 
-        console.log("Making API Call:", {
-            method,
-            url: BASE_URL + url,
-            data,
-        });
-
-
-        let options = {
-            method: method,
-            body: formData
+        const headers: Record<string, string> = {};
+        if (needsCsrf(method)) {
+            const t = await ensureCsrfToken();
+            if (t) headers['X-CSRF-Token'] = t;
         }
-        return fetch(BASE_URL + url, options)
-            .then((response: any) => {
-                console.log("API Response:", {
-                    status: response.status,
-                    statusText: response.statusText,
-                    headers: response.headers,
-                });
 
-                if (!response.ok) {
-                    const error = Object.assign({}, response, {
-                        status: response.status,
-                        statusText: response.statusText,
-                    });
+        const fetchInit: RequestInit = {
+            method: method,
+            body: formData,
+            credentials: 'include',
+            headers,
+        };
 
-                    return Promise.reject(error);
+        const response = await fetch(BASE_URL + url, fetchInit);
+        const contentType = response.headers.get('content-type');
+        const isJson = contentType && contentType.indexOf('application/json') > -1;
+
+        if (!response.ok) {
+            let parsedBody: unknown = null;
+            if (isJson) {
+                try {
+                    parsedBody = await response.json();
+                } catch {
+                    parsedBody = null;
                 }
-                const contentType = response.headers.get('content-type');
-                if (contentType && contentType.indexOf('application/json') > -1) {
-                    return response
-                        .json()
-                        .then((json: any) => {
-                            if (Array.isArray(json))
-                                return [...json];
-                            else
-                                return { ...json };
-                        })
-                        .catch(() => {
-                            throw new Error(response.status);
-                        });
-                } else {
-                    return {};
-                }
-            })
-            .catch((err) => {
-                return checkForAuthorization(err);
-            });
+            }
+            if (!csrfRetried && isCsrfError(parsedBody, response.status)) {
+                await ensureCsrfToken({ force: true });
+                return runRequest(true);
+            }
+            throw {
+                status: response.status,
+                statusText: response.statusText,
+                parsedBody,
+            };
+        }
+
+        if (isJson) {
+            try {
+                const json = await response.json();
+                if (Array.isArray(json)) return [...json];
+                return { ...json };
+            } catch {
+                throw { status: response.status, statusText: response.statusText };
+            }
+        }
+        return {};
+    };
+
+    try {
+        return await runRequest();
     } catch (err: any) {
-        return checkForAuthorization(err);
+        return callOptions.notify === false
+            ? handleAuthApiFailure(err, { logoutOnAuth: callOptions.logoutOnAuth })
+            : handleApiFailure(err, { logoutOnAuth: callOptions.logoutOnAuth });
     }
 }
 
@@ -553,7 +791,7 @@ export const createStripePaymentIntent = async (data: any) => {
         const res = await api.post("auth/createStripePaymentIntent", data);
         return res.data;
     } catch (err: any) {
-        return checkForAuthorization(err);
+        return handleAuthApiFailure(err);
     }
 }
 
@@ -569,6 +807,24 @@ export const getStripeMode = async () => {
 export const setStripeMode = async ({ stripeMode }: any) => {
     try {
         const res = await api.post("admin/setStripeMode", { stripeMode });
+        return res.data;
+    } catch (err: any) {
+        return checkForAuthorization(err);
+    }
+}
+
+export const setSeminarApprovalDeadline = async (seminarApprovalDeadlineHours: number) => {
+    try {
+        const res = await api.post("admin/setSeminarApprovalDeadline", { seminarApprovalDeadlineHours });
+        return res.data;
+    } catch (err: any) {
+        return checkForAuthorization(err);
+    }
+}
+
+export const setPaymentWindow = async (paymentWindowHours: number) => {
+    try {
+        const res = await api.post("admin/setPaymentWindow", { paymentWindowHours });
         return res.data;
     } catch (err: any) {
         return checkForAuthorization(err);
@@ -647,6 +903,31 @@ export async function profileImageUpload(formData: FormData): Promise<any> {
     }
 }
 
+/** Upload profile photo and persist on the authenticated user (updates Redux userDetails). */
+export const saveProfilePhoto = async (file: File): Promise<{ result: any; filename?: string }> => {
+    const formData = new FormData();
+    formData.append('image', file);
+    try {
+        const res = await api.post('auth/profilePhoto', formData, {
+            headers: { 'Content-Type': 'multipart/form-data' },
+        });
+        if (res.data?.result) {
+            store.dispatch({
+                type: 'updateUserDetails',
+                payload: res.data.result,
+            });
+        }
+        return res.data;
+    } catch (err: any) {
+        const msg =
+            err?.response?.data?.error ||
+            err?.response?.data?.message ||
+            err?.message ||
+            'Failed to upload profile photo';
+        throw new Error(typeof msg === 'string' ? msg : 'Failed to upload profile photo');
+    }
+};
+
 
 export const profileImageFetch = async (url: string, size: string) => {
     try {
@@ -662,9 +943,12 @@ export const profileImageFetch = async (url: string, size: string) => {
             reader.readAsDataURL(blob);
         });
 
-        return base64Data;
+        return typeof base64Data === 'string' ? base64Data : null;
     } catch (err) {
-        return err;
+        if (process.env.NODE_ENV === 'development') {
+            console.warn('profileImageFetch failed', err);
+        }
+        return null;
     }
 };
 
@@ -690,6 +974,17 @@ export const doFilterSeminars = async (filter: any) => {
     }
 };
 
+/** Same seminar discovery as customer flow; use while logged in as expert */
+export const doExpertFilterSeminars = async (filter: any) => {
+    try {
+        const res = await api.post("expert/filterSeminars", filter);
+        return res.data;
+    } catch (err: any) {
+        return checkForAuthorization(err);
+    }
+};
+
+/** @deprecated Use createGroupChatByUser for new 1:1 bookings. Legacy Event path only. */
 export const doAppendEvent = async ({ title, start, end, duration, price, paidBy, expert, customer, payment_intent, eventId, createdBy }: any) => {
     try {
         const res = await api.post("customer/appendEvent", { title, start, end, duration, price, paidBy, expert, customer, payment_intent, eventId, createdBy });
@@ -702,15 +997,6 @@ export const doAppendEvent = async ({ title, start, end, duration, price, paidBy
 export const doCancelEvent = async (eventId: any) => {
     try {
         const res = await api.post("customer/cancelEvent", { eventId });
-        return res.data;
-    } catch (err: any) {
-        return checkForAuthorization(err);
-    }
-}
-
-export const doCancelPendingSeminar = async (pendingSeminarId: any) => {
-    try {
-        const res = await api.post("customer/cancelPendingSeminar", { pendingSeminarId });
         return res.data;
     } catch (err: any) {
         return checkForAuthorization(err);
@@ -745,6 +1031,26 @@ export const getExpertById = async (id: any) => {
     }
 };
 
+// Follow / unfollow an expert. Returns { following, followerCount } from the
+// server (the source of truth) so the caller can reconcile optimistic UI.
+export const doFollowExpert = async (expertId: string) => {
+    try {
+        const res = await api.post(`customer/follow/${expertId}`);
+        return res.data as { following: boolean; followerCount: number };
+    } catch (err: any) {
+        return checkForAuthorization(err);
+    }
+};
+
+export const doUnfollowExpert = async (expertId: string) => {
+    try {
+        const res = await api.post(`customer/unfollow/${expertId}`);
+        return res.data as { following: boolean; followerCount: number };
+    } catch (err: any) {
+        return checkForAuthorization(err);
+    }
+};
+
 // EXPERT APIS ------------------
 export const getDailyTimeSlots = async (startTime: number, endTime: number, userId: string) => {
     try {
@@ -768,12 +1074,54 @@ export const doUpdateDailyTimeSlots = async (newSlots: Array<any>, startTime: nu
     }
 }
 
-export const doUpdateTimeSlots = async (timeSlots: any) => {
+export const doUpdateTimeSlots = async (
+    timeSlots: any,
+    options?: {
+        availabilityMode?: 'common' | 'daily';
+        weeklyTimeSlots?: Record<string, number[]>;
+    }
+) => {
     try {
         const res = await api.post("expert/updateTimeSlots", {
-            timeSlots
+            timeSlots,
+            ...(options?.availabilityMode ? { availabilityMode: options.availabilityMode } : {}),
+            ...(options?.weeklyTimeSlots ? { weeklyTimeSlots: options.weeklyTimeSlots } : {}),
         });
 
+        return res.data;
+    } catch (err: any) {
+        return checkForAuthorization(err);
+    }
+};
+
+/** Expert-only: replace list of YYYY-MM-DD dates when no new bookings should be accepted. */
+export const doSetExpertBlockedBookingDates = async (dates: string[]) => {
+    try {
+        const res = await api.post("expert/blockedBookingDates", { dates });
+        return res.data;
+    } catch (err: any) {
+        return checkForAuthorization(err);
+    }
+};
+
+/** Expert-only: replace per-date blocked time slots ({ "YYYY-MM-DD": [halfHourIndex, ...] }). */
+export const doSetExpertBlockedBookingSlots = async (
+    slots: Record<string, number[]>,
+) => {
+    try {
+        const res = await api.post("expert/blockedBookingSlots", { slots });
+        return res.data;
+    } catch (err: any) {
+        return checkForAuthorization(err);
+    }
+};
+
+/** Expert-only: minimum advance booking window for students (24, 48, or 72 hours). */
+export const doSetExpertBookingNoticeHours = async (bookingNoticeHours: number) => {
+    try {
+        const res = await api.post("expert/bookingNoticeHours", {
+            bookingNoticeHours,
+        });
         return res.data;
     } catch (err: any) {
         return checkForAuthorization(err);
@@ -834,10 +1182,37 @@ export const doFilterCustomers = async (filter: any) => {
     }
 };
 
+export const searchPrivateChatUsers = async (q: string) => {
+    try {
+        const res = await api.get(`chat/search-users?q=${encodeURIComponent(String(q || ''))}`);
+        return res.data;
+    } catch (err: any) {
+        return checkForAuthorization(err);
+    }
+};
+
 export const getCustomerById = async (id: any) => {
     try {
         const res = await api.get(`expert/getUser/${id}`);
 
+        return res.data;
+    } catch (err: any) {
+        return checkForAuthorization(err);
+    }
+};
+
+export const inviteToSeminar = async (data: { groupChatId: string; followerIds: string[]; emails?: string[] }) => {
+    try {
+        const res = await api.post("group-chat/invite-to-seminar", data);
+        return res.data;
+    } catch (err: any) {
+        return checkForAuthorization(err);
+    }
+};
+
+export const getPaymentReceipt = async (paymentId: string) => {
+    try {
+        const res = await api.get(`receipt/${encodeURIComponent(paymentId)}`);
         return res.data;
     } catch (err: any) {
         return checkForAuthorization(err);
@@ -853,7 +1228,79 @@ export const shareMeetingViaEmail = async (data: any) => {
     }
 };
 
+export const doGetExpertPaymentHistory = async () => {
+    try {
+        const res = await api.post("expert/getMyPaymentHistory", {});
+        return res.data;
+    } catch (err: any) {
+        return checkForAuthorization(err);
+    }
+};
+
+export const doGetCustomerPaymentHistory = async () => {
+    try {
+        const res = await api.post("customer/getMyPaymentHistory", {});
+        return res.data;
+    } catch (err: any) {
+        return checkForAuthorization(err);
+    }
+};
+
 // ADMIN APIS ------------------
+
+export type AdminDashboardStatsData = {
+    pendingApprovals: number;
+    newContactMessages: number;
+    unansweredChatbotQuestions: number;
+    expertCount: number;
+    customerCount: number;
+    oneOnOneSessions: number;
+    seminarsHeld: number;
+    totalPayments: number;
+    refundCount: number;
+    todayUpcomingEvents: number;
+};
+
+export type AdminPlatformEventItem = {
+    kind: "booking" | "seminar" | "groupOneToOne";
+    id: string;
+    title: string;
+    start: string;
+    end: string;
+    status?: string;
+    expert: { username?: string; email?: string } | null;
+    customer: { username?: string; email?: string } | null;
+    groupChatType?: string;
+};
+
+export const doGetAdminDashboardStats = async (): Promise<{
+    status: string;
+    data?: AdminDashboardStatsData;
+} | null> => {
+    try {
+        const res = await api.get("admin/dashboardStats");
+        return res.data;
+    } catch (err: any) {
+        return checkForAuthorization(err);
+    }
+};
+
+export const doGetAdminPlatformEvents = async (params: {
+    scope?: "today" | "upcoming" | "past" | "all";
+    types?: string[];
+}) => {
+    try {
+        const search = new URLSearchParams();
+        if (params.scope) search.set("scope", params.scope);
+        if (params.types?.length) search.set("types", params.types.join(","));
+        const q = search.toString();
+        const res = await api.get(`admin/platformEvents${q ? `?${q}` : ""}`);
+        return res.data as { status: string; items: AdminPlatformEventItem[] };
+    } catch (err: any) {
+        return checkForAuthorization(err);
+    }
+};
+
 export const doFilterUsers = async (filter: any) => {
     try {
         const res = await api.post("admin/filterUsers", filter);
@@ -913,6 +1360,7 @@ export const doContactUs = async (data: {
     email: string;
     countryCode?: string;
     contactNumber?: string;
+    subject?: string;
     issue?: string;
 }) => {
     try {

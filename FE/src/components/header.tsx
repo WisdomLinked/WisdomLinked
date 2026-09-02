@@ -1,6 +1,5 @@
 import React from "react";
 import { Link } from "react-router-dom";
-import logo from '../assets/images/logo.png'
 
 const Header = () => {
 
@@ -18,9 +17,11 @@ const Header = () => {
         <div className={`sticky top-0 left-0 main_container py-[20px] text-white bg-black bg-opacity-50 backdrop-blur-sm z-20`}>
             {/* MOBILE VIEW */}
             <div className="w-full flex lg:hidden justify-between items-center">
-                <Link to='/' className={`w-fit flex items-center space-x-[2px] font-black text-4xl`}>
-                    <img src={logo} className="w-10 h-10"/>
-                    <span>OE</span>
+                <Link to='/' className={`w-fit flex items-center space-x-[8px] font-black text-2xl`}>
+                    <div className="h-11 max-w-[200px] rounded-2xl bg-white flex items-center justify-center overflow-hidden px-2">
+                        <img src="/logos/main_gold_blue.svg" className="h-9 w-auto max-w-[160px] object-contain object-left" alt="" />
+                    </div>
+                    <span className="tracking-[0.08em] uppercase">WisdomLinked</span>
                 </Link>
                 <button 
                     className="w-6 h-6 flex justify-center items-center"
@@ -61,9 +62,11 @@ const Header = () => {
             </div>
             {/* DESKTOP VIEW */}
             <div className="w-full hidden lg:flex justify-between items-center text-[16px] leading-[24px]">
-                    <Link to='/' className={`w-fit flex items-center space-x-[2px] font-black text-4xl`}>
-                        <img src={logo} className="w-10 h-10"/>
-                        <span>OE</span>
+                    <Link to='/' className={`w-fit flex items-center space-x-[10px] font-black text-2xl`}>
+                        <div className="h-12 max-w-[220px] rounded-2xl bg-white flex items-center justify-center overflow-hidden px-2">
+                            <img src="/logos/main_gold_blue.svg" className="h-10 w-auto max-w-[180px] object-contain object-left" alt="" />
+                        </div>
+                        <span className="tracking-[0.12em] uppercase text-white">WisdomLinked</span>
                     </Link>
                     {/* <button 
                         className="flex space-x-[10px] items-center ml-14 xl:ml-[72px]"

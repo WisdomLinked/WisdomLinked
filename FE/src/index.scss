@@ -299,6 +299,13 @@ code {
   max-height: none !important;
 }
 
+/* Expert profile avatar: collapse the library's size caption and (config-hidden)
+   editing bar so the framed box hugs the image instead of leaving white space. */
+.wl-photo-picker .ReactImagePickerEditor .place-image .caption,
+.wl-photo-picker .ReactImagePickerEditor .place-image .editing-bar-btn {
+  display: none !important;
+}
+
 .MultiSelection>div {
   background: transparent !important;
   border: 0px;
@@ -322,6 +329,25 @@ code {
   box-shadow: 0px 0px 0px transparent;
 }
 
+/* react-select (SelectionWithCheckBox): white field + menu — overrides transparent rule above */
+.MultiSelection .wl-select__control {
+  background-color: #ffffff !important;
+}
+.MultiSelection .wl-select__menu,
+.MultiSelection .wl-select__menu-list {
+  background-color: #ffffff !important;
+}
+
+/* Admin register forms: fields on white card — muted surface + border for react-select */
+.admin-register-form .MultiSelection .wl-select__control {
+  background-color: #f8f7f4 !important;
+  border-color: #e8e6e1 !important;
+  box-shadow: inset 0 1px 2px rgba(35, 76, 106, 0.06);
+}
+.admin-register-form .MultiSelection .wl-select__control:hover {
+  border-color: rgba(35, 76, 106, 0.2) !important;
+}
+
 .react-tel-input .form-control {
   overflow: hidden;
   border-radius: 15px !important;
@@ -335,6 +361,16 @@ code {
   background-color: transparent !important;
   border: 1px solid #dce4e8 !important;
   border-radius: 15px 0 0 15px !important;
+}
+
+.admin-register-form .react-tel-input .form-control {
+  background-color: #f8f7f4 !important;
+  border-color: #e8e6e1 !important;
+  box-shadow: inset 0 1px 2px rgba(35, 76, 106, 0.06);
+}
+.admin-register-form .react-tel-input .flag-dropdown {
+  background-color: #f8f7f4 !important;
+  border-color: #e8e6e1 !important;
 }
 
 .react-tel-input .selected-flag {

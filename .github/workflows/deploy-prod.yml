@@ -1,3 +1,4 @@
+# Deploy to Production - v3 (Optimized)
 name: Deploy to Production
 
 on:
@@ -8,34 +9,89 @@ env:
   REGISTRY: ghcr.io
   BACKEND_IMAGE: wisdomlinked/wisdomlinked/chat-backend
   FRONTEND_IMAGE: wisdomlinked/wisdomlinked/chat-frontend
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+permissions:
+  contents: read
 
 jobs:
-  build-and-push-images:
+  # Detect which directories changed
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      backend: ${{ steps.filter.outputs.backend }}
+      frontend: ${{ steps.filter.outputs.frontend }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            backend:
+              - 'BE/**'
+            frontend:
+              - 'FE/**'
+
+  backend-tests:
+    needs: changes
+    if: needs.changes.outputs.backend == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: BE/package-lock.json
+
+      - name: Install backend dependencies
+        working-directory: ./BE
+        run: npm ci
+
+      - name: Run backend coverage gate
+        working-directory: ./BE
+        run: npm run test:coverage
+
+  frontend-tests:
+    needs: changes
+    if: needs.changes.outputs.frontend == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: FE/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: ./FE
+        run: npm ci --legacy-peer-deps
+
+      - name: Run frontend coverage gate
+        working-directory: ./FE
+        run: npm run test:coverage
+
+  build-and-push-backend:
+    needs: [changes, backend-tests]
+    if: needs.changes.outputs.backend == 'true' && needs.backend-tests.result == 'success'
     runs-on: ubuntu-latest
     environment: production
     permissions:
       contents: read
       packages: write
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Generate Frontend .env file from secrets
-        run: |
-          cat << EOF > ./FE/.env.production
-          REACT_APP_SERVER_URL=https://api.wisdomlinked.com
-          REACT_APP_API_BASE_URL=https://api.wisdomlinked.com/api
-          REACT_APP_HOST_URL=https://wisdomlinked.com
-          REACT_APP_TURN_URL=${{ secrets.REACT_APP_TURN_URL }}
-          REACT_APP_TURN_USERNAME=${{ secrets.REACT_APP_TURN_USERNAME }}
-          REACT_APP_TURN_PASSWORD=${{ secrets.REACT_APP_TURN_PASSWORD }}
-          REACT_APP_BASE_URL=/
-          REACT_APP_AUTH_URL=/user/
-          REACT_APP_PAYPAL_REAL_CLIENT_ID=${{ secrets.REACT_APP_PAYPAL_REAL_CLIENT_ID }}
-          REACT_APP_STRIPE_PUBLISHABLE_KEY_LIVE=${{ secrets.REACT_APP_STRIPE_PUBLISHABLE_KEY_LIVE }}
-          REACT_APP_STRIPE_PUBLISHABLE_KEY_TEST=${{ secrets.REACT_APP_STRIPE_PUBLISHABLE_KEY_TEST }}
-          EOF
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
       - name: Log in to the Container registry
         uses: docker/login-action@v3
@@ -50,32 +106,75 @@ jobs:
           context: ./BE
           push: true
           tags: ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  build-and-push-frontend:
+    needs: [changes, frontend-tests]
+    if: needs.changes.outputs.frontend == 'true' && needs.frontend-tests.result == 'success'
+    runs-on: ubuntu-latest
+    environment: production
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Generate Frontend .env file from secrets
+        run: |
+          cat << EOF > ./FE/.env.production
+          REACT_APP_SERVER_URL=https://api.wisdomlinked.com
+          REACT_APP_API_BASE_URL=https://api.wisdomlinked.com/api
+          REACT_APP_HOST_URL=https://wisdomlinked.com
+          REACT_APP_BASE_URL=/
+          REACT_APP_AUTH_URL=/user/
+          REACT_APP_PAYPAL_REAL_CLIENT_ID=${{ secrets.REACT_APP_PAYPAL_REAL_CLIENT_ID }}
+          REACT_APP_STRIPE_PUBLISHABLE_KEY_LIVE=${{ secrets.REACT_APP_STRIPE_PUBLISHABLE_KEY_LIVE }}
+          REACT_APP_STRIPE_PUBLISHABLE_KEY_TEST=${{ secrets.REACT_APP_STRIPE_PUBLISHABLE_KEY_TEST }}
+          REACT_APP_ROCKETCHAT_URL=${{ secrets.ROCKETCHAT_URL }}
+          REACT_APP_JITSI_DOMAIN=${{ secrets.JITSI_DOMAIN }}
+          EOF
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to the Container registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build and push Frontend Image
         uses: docker/build-push-action@v5
         with:
           context: ./FE
           push: true
-          no-cache: true
           tags: ${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
           build-args: |
             REACT_APP_SERVER_URL=${{ secrets.REACT_APP_SERVER_URL }}
             REACT_APP_API_BASE_URL=${{ secrets.REACT_APP_API_BASE_URL }}
             REACT_APP_HOST_URL=${{ secrets.REACT_APP_HOST_URL }}
-            REACT_APP_TURN_URL=${{ secrets.REACT_APP_TURN_URL }}
-            REACT_APP_TURN_USERNAME=${{ secrets.REACT_APP_TURN_USERNAME }}
-            REACT_APP_TURN_PASSWORD=${{ secrets.REACT_APP_TURN_PASSWORD }}
             REACT_APP_BASE_URL=${{ secrets.REACT_APP_BASE_URL }}
             REACT_APP_AUTH_URL=${{ secrets.REACT_APP_AUTH_URL }}
             REACT_APP_PAYPAL_REAL_CLIENT_ID=${{ secrets.REACT_APP_PAYPAL_REAL_CLIENT_ID }}
             REACT_APP_STRIPE_PUBLISHABLE_KEY_LIVE=${{ secrets.REACT_APP_STRIPE_PUBLISHABLE_KEY_LIVE }}
             REACT_APP_STRIPE_PUBLISHABLE_KEY_TEST=${{ secrets.REACT_APP_STRIPE_PUBLISHABLE_KEY_TEST }}
+            REACT_APP_ROCKETCHAT_URL=${{ secrets.ROCKETCHAT_URL }}
+            REACT_APP_JITSI_DOMAIN=${{ secrets.JITSI_DOMAIN }}
 
   deploy:
-    needs: build-and-push-images
+    needs: [changes, backend-tests, frontend-tests, build-and-push-backend, build-and-push-frontend]
+    if: always() && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') && (needs.changes.outputs.backend == 'true' || needs.changes.outputs.frontend == 'true')
     runs-on: ubuntu-latest
     environment: production
-    
+    permissions:
+      contents: read
+      packages: read
+
     steps:
       - name: Deploy to DigitalOcean
         uses: appleboy/ssh-action@v1.0.3
@@ -101,6 +200,7 @@ jobs:
             docker network create chat_custom_network || true
             
             # Run the Backend Production Container
+            # Optional GitHub secrets: MEETING_CHAT_SYNC_PUBLIC_API_BASE (else BE uses FE_URL), MEETING_CHAT_SYNC_SECRET (else JWT_SECRET).
             docker run -d \
               --name wisdomlinked_backend_prod \
               --restart unless-stopped \
@@ -121,12 +221,25 @@ jobs:
               -e SENDGRID_API_KEY="${{ secrets.SENDGRID_API_KEY }}" \
               -e GOOGLE_EMAIL="${{ secrets.GOOGLE_EMAIL }}" \
               -e GOOGLE_PASSWORD="${{ secrets.GOOGLE_PASSWORD }}" \
+              -e GOOGLE_CLIENT_ID="${{ secrets.GOOGLE_CLIENT_ID }}" \
+              -e GOOGLE_CLIENT_SECRET="${{ secrets.GOOGLE_CLIENT_SECRET }}" \
               -e ZOHONOREPLY_USER="${{ secrets.ZOHONOREPLY_USER }}" \
               -e ZOHONOREPLY_PASS="${{ secrets.ZOHONOREPLY_PASS }}" \
               -e ZOHOADMIN_USER="${{ secrets.ZOHOADMIN_USER }}" \
               -e ZOHOADMIN_PASS="${{ secrets.ZOHOADMIN_PASS }}" \
-              -e TURN_USERNAME="${{ secrets.REACT_APP_TURN_USERNAME }}" \
-              -e TURN_PASSWORD="${{ secrets.REACT_APP_TURN_PASSWORD }}" \
+              -e WECHAT_APP_ID="${{ secrets.WECHAT_APP_ID }}" \
+              -e WECHAT_APP_SECRET="${{ secrets.WECHAT_APP_SECRET }}" \
+              -e ROCKETCHAT_URL="${{ secrets.ROCKETCHAT_URL }}" \
+              -e ROCKETCHAT_ADMIN_USER="${{ secrets.ROCKETCHAT_ADMIN_USER }}" \
+              -e ROCKETCHAT_ADMIN_PASS="${{ secrets.ROCKETCHAT_ADMIN_PASS }}" \
+              -e ROCKETCHAT_CREATE_TOKENS_SECRET="${{ secrets.ROCKETCHAT_CREATE_TOKENS_SECRET }}" \
+              -e JITSI_DOMAIN="${{ secrets.JITSI_DOMAIN }}" \
+              -e JITSI_JWT_SECRET="${{ secrets.JITSI_JWT_SECRET }}" \
+              -e JITSI_APP_ID="${{ secrets.JITSI_APP_ID }}" \
+              -e JITSI_AUD="${{ secrets.JITSI_AUD }}" \
+              -e JITSI_ISS="${{ secrets.JITSI_ISS }}" \
+              -e MEETING_CHAT_SYNC_PUBLIC_API_BASE="${{ secrets.MEETING_CHAT_SYNC_PUBLIC_API_BASE }}" \
+              -e MEETING_CHAT_SYNC_SECRET="${{ secrets.MEETING_CHAT_SYNC_SECRET }}" \
               ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE }}:latest
 
             # Run the Frontend Production Container

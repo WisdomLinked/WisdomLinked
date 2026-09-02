@@ -1,0 +1,1354 @@
+import { Request, Response } from 'express';
+import { BOOKING_PAYMENT_AMOUNT_INVALID } from '../utils/bookingUserFacingCopy';
+import { HTTP_GENERIC_ERROR, safeErrorMessage } from '../utils/httpUserFacingCopy';
+import { expectedBookingIntentCents, extractHourlyRate, balanceTransactionId } from '../utils/bookingPrice';
+import { seminarIsFull, firstFullFutureOccurrence, seatRequestUnavailableMessage } from '../utils/seminarCapacity';
+import {
+    normalizePaymentMode,
+    isWallet,
+    pinnedSettlementMode,
+    walletChargeAllowed,
+    paymentWindowLapsed,
+    WALLET_PAYMENT_METHOD_TYPES,
+    CARD_PAYMENT_METHOD_TYPES,
+    WALLET_NEEDS_APPROVAL_MESSAGE,
+    WALLET_NOT_YET_PAYABLE,
+    paymentWindowHours,
+} from '../utils/walletPayment';
+
+const stripeTest = require('stripe')(process.env.STRIPE_SECRET_KEY_TEST);
+const stripeLive = require('stripe')(process.env.STRIPE_SECRET_KEY_LIVE);
+const AppState = require("../models/AppState");
+const User = require("../models/User");
+const GroupChat = require("../models/GroupChat");
+const PaymentHistory = require("../models/PaymentHistory");
+const { assertBookingLeadTime } = require("../utils/bookingLeadTime");
+const { resolveAppBaseUrl } = require("../utils/appBaseUrl");
+
+const stripePay = async (req, res) => {
+    try {
+        const charge = await stripeTest.charges.create({
+            amount: req.body.amount,
+            source: `${req.body.token}`,
+            currency: 'USD',
+            description: "First Test Charge"
+        });
+        console.log(charge);
+        if (charge.status == "succeeded") {
+            return res.status(200).send({
+                Message: "Successfully Purchased",
+            });
+        } else {
+            throw new Error("Failed to purchase")
+        }
+    } catch (err) {
+        console.log(err);
+        return res.status(500).send(HTTP_GENERIC_ERROR);
+    }
+
+};
+
+const createStripePaymentIntent = async (req, res) => {
+    try {
+        const { groupChatId, expertId, duration, seatRequestId } = req.body
+        const payerId = req.user?.userId ? String(req.user.userId) : '';
+        const appState = await AppState.findOne();
+        const stripeMode = appState?.stripeMode === 'live' ? 'live' : 'test';
+        // The client's choice is only a request: for a booking already taken through the
+        // wallet path, the stored mode is pinned over it (see pinnedSettlementMode).
+        let paymentMode = normalizePaymentMode(req.body.paymentMethod);
+        let wallet = paymentMode === 'wallet';
+
+        let expectedCents: number;
+        let metadata: Record<string, string>;
+        let manualCapture = false;
+        let requiresApproval = false;
+        if (seatRequestId) {
+            // Paying for an overflow seat the host already approved. Nothing was ever
+            // held here, so the amount comes from the snapshot taken at approval.
+            const SeminarSeatRequest = require("../models/SeminarSeatRequest");
+            const request = await SeminarSeatRequest.findById(String(seatRequestId));
+            if (!request || String(request.customer) !== payerId) {
+                return res.status(404).send({ error: 'Seat request not found.' });
+            }
+            if (request.status !== 'awaiting_payment') {
+                return res.status(409).send({ error: WALLET_NOT_YET_PAYABLE });
+            }
+            if (paymentWindowLapsed(request.paymentDeadline)) {
+                return res.status(410).send({ error: 'The payment window for this seat has closed.' });
+            }
+            // This seat was requested without a hold, so it settles in the mode it was
+            // requested under — paying by card here would be an opt-out of the deposit
+            // every other student going through the card path has to make. A host's
+            // invitation carries no such commitment, so the student picks freely.
+            if (String(request.origin || 'student') !== 'host') {
+                paymentMode = pinnedSettlementMode(request.paymentMode);
+                wallet = paymentMode === 'wallet';
+            }
+            expectedCents = Number(request.amount) || 0;
+            metadata = {
+                bookingType: 'groupChat',
+                groupChatId: String(request.groupChat),
+                seatRequestId: String(request._id),
+                userId: payerId,
+            };
+        } else if (groupChatId) {
+            const groupChat = await GroupChat.findById(String(groupChatId));
+            if (!groupChat) {
+                return res.status(404).send(BOOKING_PAYMENT_AMOUNT_INVALID);
+            }
+            expectedCents = expectedBookingIntentCents({ kind: 'groupChat', priceDollars: groupChat.price });
+            metadata = { bookingType: 'groupChat', groupChatId: String(groupChat._id), userId: payerId };
+
+            if (groupChat.type !== 'seminar') {
+                const onSession = (groupChat.participants || []).some(
+                    (p) => p.toString() === String(payerId),
+                );
+                if (!onSession) {
+                    return res.status(403).send({ error: 'This session is not yours to pay for.' });
+                }
+                if (groupChat.status === 'cancelled') {
+                    return res.status(400).send({ error: 'This session is no longer available.' });
+                }
+                const alreadyPaid = await PaymentHistory.exists({
+                    groupChat: String(groupChat._id),
+                    paymentType: 'charge',
+                    status: { $in: ['completed', 'pending', 'withheld'] },
+                });
+                if (groupChat.status === 'active' || alreadyPaid) {
+                    return res.status(409).send({ error: 'This session has already been paid for.' });
+                }
+                const startMs = groupChat.start ? new Date(groupChat.start).getTime() : 0;
+                if (startMs && startMs <= Date.now()) {
+                    return res.status(400).send({ error: "This session's start time has already passed." });
+                }
+                // A session requested via the wallet path carries no hold, so it settles
+                // in that same mode — otherwise the wallet tab is just a way to book an
+                // expert's time without committing anything.
+                if (isWallet(groupChat.paymentMode)) {
+                    paymentMode = 'wallet';
+                    wallet = true;
+                }
+
+                if (wallet) {
+                    const expertProposed = String(groupChat.createdBy) === String(groupChat.admin);
+                    const accepted = !!groupChat.paymentDeadline || expertProposed;
+                    if (!walletChargeAllowed({ flow: 'oneToOne', approved: accepted })) {
+                        return res.status(409).send({ error: WALLET_NOT_YET_PAYABLE });
+                    }
+                } else {
+                    // Hold the funds; they are captured only once the session is active.
+                    manualCapture = true;
+                }
+                // An expert's offer expires whether or not it was going to settle by
+                // wallet, so the window is checked on both rails before an intent exists.
+                if (paymentWindowLapsed(groupChat.paymentDeadline)) {
+                    return res.status(410).send({ error: 'The payment window for this session has closed.' });
+                }
+            }
+
+            if (groupChat.type === 'seminar') {
+                const userId = req.user?.userId;
+
+                if (userId && groupChat.admin && groupChat.admin.toString() === String(userId)) {
+                    return res.status(403).send({ error: "Hosts can't register for their own seminar." });
+                }
+                if (groupChat.status !== 'active') {
+                    return res.status(400).send({ error: 'This seminar is not open for registration.' });
+                }
+                const alreadyParticipant = (groupChat.participants || []).some(
+                    (p) => p.toString() === String(userId),
+                );
+                if (alreadyParticipant) {
+                    return res.status(409).send({ error: "You're already registered for this seminar." });
+                }
+
+                if (seminarIsFull(groupChat)) {
+                    const startMs = groupChat.start ? new Date(groupChat.start).getTime() : 0;
+                    const unavailable = seatRequestUnavailableMessage(startMs);
+                    if (unavailable) {
+                        return res.status(400).send({ error: unavailable });
+                    }
+                    if (wallet) {
+                        return res.status(409).send({ error: WALLET_NEEDS_APPROVAL_MESSAGE });
+                    }
+                    manualCapture = true;
+                    requiresApproval = true;
+                    metadata.seatRequest = 'true';
+                } else {
+                    if (groupChat.seriesId) {
+                        const siblings = await GroupChat.find({
+                            seriesId: groupChat.seriesId,
+                            type: 'seminar',
+                            _id: { $ne: groupChat._id },
+                        });
+                        if (firstFullFutureOccurrence(siblings)) {
+                            return res.status(400).send({ error: 'A later session in this seminar series is full, so registration is closed.' });
+                        }
+                    }
+                    const expert = await User.findById(groupChat.admin.toString());
+                    try {
+                        assertBookingLeadTime(expert, groupChat.start, 'Seminar registrations');
+                    } catch (leadErr) {
+                        return res.status(400).send({ error: leadErr.message || 'This seminar can no longer be booked.' });
+                    }
+                    if (!wallet) manualCapture = true;
+                }
+            }
+        } else {
+            const expertUser = await User.findById(String(expertId));
+            if (!expertUser) {
+                return res.status(404).send(BOOKING_PAYMENT_AMOUNT_INVALID);
+            }
+            // A brand-new 1:1 still needs the expert's yes, which a wallet cannot wait on.
+            if (wallet) {
+                return res.status(409).send({ error: WALLET_NEEDS_APPROVAL_MESSAGE });
+            }
+            expectedCents = expectedBookingIntentCents({ kind: 'oneToOne', durationMinutes: Number(duration), hourlyRateDollars: extractHourlyRate(expertUser.price) });
+            metadata = { bookingType: 'oneToOne', expertId: String(expertUser._id), duration: String(duration), userId: payerId };
+            manualCapture = true;
+        }
+
+        if (!(expectedCents > 0)) {
+            return res.status(400).send(BOOKING_PAYMENT_AMOUNT_INVALID);
+        }
+
+        const stripe = require('stripe')(stripeMode === 'test' ? process.env.STRIPE_SECRET_KEY_TEST : process.env.STRIPE_SECRET_KEY_LIVE);
+        const paymentIntent = await stripe.paymentIntents.create({
+            amount: expectedCents,
+            currency: 'usd',
+            ...(wallet
+                ? {
+                    payment_method_types: WALLET_PAYMENT_METHOD_TYPES,
+                    payment_method_options: { wechat_pay: { client: 'web' } },
+                }
+                : { payment_method_types: CARD_PAYMENT_METHOD_TYPES }),
+            ...(manualCapture ? { capture_method: 'manual' } : {}),
+            metadata: { ...metadata, paymentMode },
+        });
+        res.send({
+            client_secret: paymentIntent.client_secret,
+            requiresApproval,
+            holdsFunds: manualCapture,
+            paymentMode,
+        });
+    } catch (err) {
+        console.log(err);
+        return res.status(500).send(HTTP_GENERIC_ERROR);
+    }
+
+};
+
+const setStripeMode = async (req, res) => {
+    try {
+        const { stripeMode } = req.body
+        const appState = await AppState.findOne()
+        if (!appState) {
+            await AppState.create({
+                stripeMode: stripeMode
+            })
+        } else {
+            appState.stripeMode = stripeMode
+            await appState.save()
+        }
+        res.send({
+            result: 'SUCCESS',
+        });
+    } catch (err) {
+        console.log(err);
+        return res.status(500).send(HTTP_GENERIC_ERROR);
+    }
+};
+
+const getStripeMode = async (req, res) => {
+    try {
+        let appState = await AppState.findOne()
+        if (!appState) {
+            appState = await AppState.create({
+                stripeMode: "test"
+            })
+        }
+        res.send({
+            stripeMode: appState.stripeMode,
+            seminarApprovalDeadlineHours: appState.seminarApprovalDeadlineHours ?? 24,
+            paymentWindowHours: paymentWindowHours(appState),
+        });
+    } catch (err) {
+        console.log(err);
+        return res.status(500).send(HTTP_GENERIC_ERROR);
+    }
+};
+
+const setSeminarApprovalDeadline = async (req, res) => {
+    try {
+        const hours = Number(req.body.seminarApprovalDeadlineHours);
+        if (!Number.isFinite(hours) || hours < 0 || hours > 168) {
+            return res.status(400).send({ error: 'Deadline must be between 0 and 168 hours.' });
+        }
+        let appState = await AppState.findOne();
+        if (!appState) {
+            appState = await AppState.create({ seminarApprovalDeadlineHours: hours });
+        } else {
+            appState.seminarApprovalDeadlineHours = hours;
+            await appState.save();
+        }
+        res.send({ result: 'SUCCESS', seminarApprovalDeadlineHours: appState.seminarApprovalDeadlineHours });
+    } catch (err) {
+        console.log(err);
+        return res.status(500).send(HTTP_GENERIC_ERROR);
+    }
+};
+
+const setPaymentWindow = async (req, res) => {
+    try {
+        const hours = Number(req.body.paymentWindowHours);
+        if (!Number.isFinite(hours) || hours <= 0 || hours > 168) {
+            return res.status(400).send({ error: 'The payment window must be between 1 and 168 hours.' });
+        }
+        let appState = await AppState.findOne();
+        if (!appState) {
+            appState = await AppState.create({ paymentWindowHours: hours });
+        } else {
+            appState.paymentWindowHours = hours;
+            await appState.save();
+        }
+        res.send({ result: 'SUCCESS', paymentWindowHours: appState.paymentWindowHours });
+    } catch (err) {
+        console.log(err);
+        return res.status(500).send(HTTP_GENERIC_ERROR);
+    }
+};
+
+const checkPaymentIntentSucceeded = async (payment_intent, stripeMode) => {
+    // Checking The Payment Intent In Test Mode
+    try {
+        const stripe = require('stripe')(stripeMode === 'test' ? process.env.STRIPE_SECRET_KEY_TEST : process.env.STRIPE_SECRET_KEY_LIVE);
+        const paymentIntent = await stripe.paymentIntents.retrieve(payment_intent, { expand: ['latest_charge'] });
+        if (paymentIntent?.status === 'succeeded') {
+            console.log('Test Payment succeeded');
+            return paymentIntent
+        } else {
+            console.log('Test Payment not succeeded');
+            return false
+        }
+    } catch (err) {
+        console.log('[checkPaymentIntentSucceeded]', err.message)
+        return false
+    }
+}
+
+const checkPaymentIntentAuthorized = async (payment_intent, stripeMode) => {
+    try {
+        const stripe = require('stripe')(stripeMode === 'test' ? process.env.STRIPE_SECRET_KEY_TEST : process.env.STRIPE_SECRET_KEY_LIVE);
+        const paymentIntent = await stripe.paymentIntents.retrieve(payment_intent, { expand: ['latest_charge'] });
+        if (paymentIntent?.status === 'requires_capture') {
+            return paymentIntent;
+        }
+        return false;
+    } catch (err) {
+        console.log('[checkPaymentIntentAuthorized]', err.message);
+        return false;
+    }
+};
+
+const checkPaymentIntentProcessing = async (payment_intent, stripeMode) => {
+    try {
+        const stripe = require('stripe')(stripeMode === 'test' ? process.env.STRIPE_SECRET_KEY_TEST : process.env.STRIPE_SECRET_KEY_LIVE);
+        const paymentIntent = await stripe.paymentIntents.retrieve(payment_intent, { expand: ['latest_charge'] });
+        if (paymentIntent?.status === 'processing') {
+            return paymentIntent;
+        }
+        return false;
+    } catch (err) {
+        console.log('[checkPaymentIntentProcessing]', err.message);
+        return false;
+    }
+};
+
+const capturePaymentIntent = async (payment_intent, stripeMode, amountToCaptureCents?: number) => {
+    try {
+        const stripe = require('stripe')(stripeMode === 'test' ? process.env.STRIPE_SECRET_KEY_TEST : process.env.STRIPE_SECRET_KEY_LIVE);
+        const options: Record<string, any> = { expand: ['latest_charge'] };
+        if (typeof amountToCaptureCents === 'number' && amountToCaptureCents > 0) {
+            options.amount_to_capture = Math.round(amountToCaptureCents);
+        }
+        const captured = await stripe.paymentIntents.capture(payment_intent, options);
+        return captured?.status === 'succeeded' ? captured : false;
+    } catch (err) {
+        console.log('[capturePaymentIntent]', err.message);
+        return false;
+    }
+};
+
+const cancelPaymentIntent = async (payment_intent, stripeMode) => {
+    try {
+        const stripe = require('stripe')(stripeMode === 'test' ? process.env.STRIPE_SECRET_KEY_TEST : process.env.STRIPE_SECRET_KEY_LIVE);
+        const cancelled = await stripe.paymentIntents.cancel(payment_intent);
+        return cancelled?.status === 'canceled' ? cancelled : false;
+    } catch (err) {
+        console.log('[cancelPaymentIntent]', err.message);
+        return false;
+    }
+};
+
+const refundPaymentIntent = async (payment_intent, amountCents, stripeMode) => {
+    try {
+        const stripe = require('stripe')(stripeMode === 'test' ? process.env.STRIPE_SECRET_KEY_TEST : process.env.STRIPE_SECRET_KEY_LIVE);
+
+        const refundData: Record<string, any> = {
+            payment_intent: payment_intent,
+        };
+
+        if (amountCents !== null && amountCents !== undefined && amountCents !== '') {
+            const cents = Math.round(Math.abs(Number(amountCents)));
+            if (!Number.isFinite(cents) || cents < 1) {
+                console.log('[refundPaymentIntent] nothing to refund on', payment_intent, '— requested amount rounds to zero');
+                return false;
+            }
+            refundData.amount = cents;
+        }
+
+        const refund = await stripe.refunds.create(refundData);
+        console.log('Refund succeeded', refund);
+        return refund
+    } catch (err) {
+        const existing = await settledRefundForIntent(payment_intent, stripeMode);
+        if (existing) {
+            console.log('[refundPaymentIntent] already refunded at Stripe, reusing', existing.id);
+            return { ...existing, alreadyRefunded: true };
+        }
+        console.log('[refundPaymentIntent]', err.message)
+        return false
+    }
+}
+const settledRefundForIntent = async (payment_intent: string, stripeMode: string) => {
+    try {
+        const stripe = require('stripe')(stripeMode === 'test' ? process.env.STRIPE_SECRET_KEY_TEST : process.env.STRIPE_SECRET_KEY_LIVE);
+        const intent = await stripe.paymentIntents.retrieve(payment_intent, { expand: ['latest_charge'] });
+        const charge = intent?.latest_charge && typeof intent.latest_charge === 'object'
+            ? intent.latest_charge
+            : null;
+        if (!charge) return null;
+
+        const paid = Number(charge.amount_captured ?? charge.amount ?? 0);
+        const refunded = Number(charge.amount_refunded ?? 0);
+        if (!(refunded > 0) || refunded < paid) return null;
+
+        const refunds = await stripe.refunds.list({ payment_intent, limit: 1 });
+        return refunds?.data?.[0] || null;
+    } catch (err: any) {
+        console.log('[settledRefundForIntent]', err.message);
+        return null;
+    }
+};
+
+const listReconcilableBookingIntents = async (
+    stripeMode: string,
+    { sinceMs, untilMs, maxPages = 20 }: { sinceMs: number; untilMs: number; maxPages?: number },
+): Promise<Array<{ id: string; status: string; amount: number; currency: string; createdMs: number; metadata: Record<string, any> }>> => {
+    try {
+        const stripe = require('stripe')(stripeMode === 'test' ? process.env.STRIPE_SECRET_KEY_TEST : process.env.STRIPE_SECRET_KEY_LIVE);
+        const created = { gte: Math.floor(sinceMs / 1000), lte: Math.floor(untilMs / 1000) };
+        const out: Array<{ id: string; status: string; amount: number; currency: string; createdMs: number; metadata: Record<string, any> }> = [];
+        let startingAfter: string | undefined;
+        for (let page = 0; page < maxPages; page += 1) {
+            const batch = await stripe.paymentIntents.list({
+                limit: 100,
+                created,
+                ...(startingAfter ? { starting_after: startingAfter } : {}),
+            });
+            const data = batch?.data || [];
+            for (const pi of data) {
+                const bt = pi.metadata?.bookingType;
+                if (bt !== 'groupChat' && bt !== 'oneToOne') continue;
+                if (pi.status !== 'requires_capture' && pi.status !== 'succeeded') continue;
+                out.push({ id: pi.id, status: pi.status, amount: pi.amount, currency: pi.currency, createdMs: Number(pi.created || 0) * 1000, metadata: pi.metadata || {} });
+            }
+            if (!batch?.has_more || !data.length) break;
+            startingAfter = data[data.length - 1].id;
+        }
+        return out;
+    } catch (err: any) {
+        console.log('[listReconcilableBookingIntents]', err.message);
+        return [];
+    }
+};
+
+const enrichPaymentIntentReceipt = async ({ payment_intent, stripeMode, description, metadata, receiptEmail }) => {
+    try {
+        if (!payment_intent) return;
+        const stripe = require('stripe')(stripeMode === 'test' ? process.env.STRIPE_SECRET_KEY_TEST : process.env.STRIPE_SECRET_KEY_LIVE);
+        await stripe.paymentIntents.update(payment_intent, {
+            description,
+            metadata,
+            receipt_email: receiptEmail,
+        });
+    } catch (err) {
+        console.error('[enrichPaymentIntentReceipt]', err.message);
+    }
+};
+
+const describePaymentMethod = (intent: any): string => {
+    const types: string[] = Array.isArray(intent?.payment_method_types) ? intent.payment_method_types : [];
+    if (types.includes('wechat_pay')) return 'WeChat Pay';
+    if (types.includes('alipay')) return 'Alipay';
+    if (types.includes('card')) return 'Credit card';
+    return '';
+};
+
+const {
+    renderEmail: renderStripeEmail,
+    emailAttachments: stripeAttachments,
+    moneyFromCents: stripeMoneyFromCents,
+    paragraph: stripeParagraph,
+    facts: stripeFacts,
+    button: stripeButton,
+    callout: stripeCallout,
+    escapeHtml: stripeEscape,
+} = require("../services/emailTemplate");
+
+const buildPaymentRequestEmail = ({ customerName, amountCents, description, url }: any) => renderStripeEmail({
+    heading: 'Payment requested',
+    previewText: `${stripeMoneyFromCents(amountCents)} due.`,
+    blocks: [
+        stripeParagraph(`Hello ${stripeEscape(customerName || 'there')},`),
+        stripeFacts([
+            ['Amount', stripeMoneyFromCents(amountCents)],
+            ['For', description],
+        ]),
+        stripeButton(`Pay ${stripeMoneyFromCents(amountCents)}`, url),
+        stripeParagraph('Payment is handled securely by Stripe. You will receive a confirmation email once it has been processed.', { muted: true }),
+    ],
+});
+
+const buildRefundEmail = ({ customerName, amountCents, currency, isFullRefund, retainedCents, description, expertName, start, reference, transactionId }: any) => renderStripeEmail({
+    heading: 'Your refund has been processed',
+    previewText: `${stripeMoneyFromCents(amountCents, currency)} refunded.`,
+    blocks: [
+        stripeParagraph(`Dear ${stripeEscape(customerName || 'there')}, your refund has been processed.`),
+        stripeFacts([
+            ['Booking', description],
+            ['Expert', expertName],
+            ['Scheduled for', start],
+            ['Refund amount', stripeMoneyFromCents(amountCents, currency)],
+            ['Refund date', new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })],
+            ['Reference', reference],
+            ['Transaction ID', transactionId],
+        ]),
+        isFullRefund
+            ? ''
+            : stripeCallout(`${stripeMoneyFromCents(retainedCents, currency)} of your original payment has been retained in accordance with the applicable cancellation and refund policy.`),
+        stripeCallout('The refund will be credited to your original payment method and may take 5–10 business days to appear, depending on your bank. Your card issuer may notify you separately when it posts.', 'bad'),
+        stripeParagraph('If the refund has not reached you within 10 business days, contact the administrator through WisdomLinked quoting the reference above.', { muted: true }),
+    ],
+});
+
+const sendBookingReceiptAndConfirmation = async ({ payment_intent, charge, sessionType, sessionName, expertName, studentName, studentEmail, start, duration, timeZone, noteHtml = '', studentNote = '' }) => {
+    try {
+        if (!charge || !studentEmail) return;
+        if (!payment_intent) return;
+
+        const settled = await checkPaymentIntentSucceeded(payment_intent, charge.paidBy);
+        if (!settled) {
+            console.log('[sendBookingReceiptAndConfirmation] no receipt for uncaptured payment', payment_intent);
+            return;
+        }
+
+        const { sendPaymentConfirmationEmail } = require("../services/notifications");
+        const paymentMethodLabel = describePaymentMethod(settled);
+        const dateStr = new Date(start).toLocaleString("en-US", { timeZone: timeZone || "UTC" });
+        const description = `WisdomLinked ${sessionType} — "${sessionName}" with ${expertName} · ${dateStr}`;
+        const metadata = {
+            sessionType: String(sessionType),
+            sessionName: String(sessionName),
+            expert: String(expertName),
+            student: String(studentName),
+            start: new Date(start).toISOString(),
+            durationMin: String(duration),
+        };
+        await enrichPaymentIntentReceipt({
+            payment_intent,
+            stripeMode: charge.paidBy,
+            description,
+            metadata,
+            receiptEmail: studentEmail,
+        });
+        // Our own branded receipt is the link we send; Stripe's stays as the official
+        // record underneath it. A row we cannot find just falls back to Stripe's.
+        let receiptPageUrl = '';
+        try {
+            const row = await PaymentHistory.findOne({ paymentIntent: String(payment_intent), paymentType: 'charge' })
+                .select('_id')
+                .lean();
+            if (row?._id) receiptPageUrl = `${resolveAppBaseUrl()}/user/receipt/${row._id}`;
+        } catch (lookupErr: any) {
+            console.log('[sendBookingReceiptAndConfirmation] receipt page lookup failed', lookupErr?.message);
+        }
+
+        await sendPaymentConfirmationEmail({
+            to: studentEmail,
+            sessionType,
+            sessionName,
+            expertName,
+            studentName,
+            start,
+            duration,
+            amount: charge.amount,
+            currency: charge.currency,
+            receiptUrl: charge.receiptUrl,
+            receiptNumber: charge.receiptNumber,
+            paymentMethod: paymentMethodLabel,
+            transactionId: payment_intent,
+            balanceTransaction: balanceTransactionId(settled?.latest_charge),
+            timeZone,
+            noteHtml,
+            studentNote,
+            receiptPageUrl,
+        });
+    } catch (err) {
+        console.error('[sendBookingReceiptAndConfirmation]', err.message);
+    }
+};
+
+const sendPaymentLinkToUser = async (req, res) => {
+    try {
+        const { paymentHistoryId, customerEmail, customAmount, customDescription } = req.body;
+
+        if (!paymentHistoryId || !customerEmail) {
+            return res.status(400).json({
+                status: 'FAILED',
+                message: 'Payment history ID and customer email are required.'
+            });
+        }
+
+        const PaymentHistory = require("../models/PaymentHistory");
+        const sgMail = require("@sendgrid/mail");
+        const adminEmail = "noreply@wisdomlinked.com";
+        sgMail.setApiKey(process.env.SENDGRID_API_KEY);
+
+        const paymentHistory = await PaymentHistory.findById(String(paymentHistoryId));
+        if (!paymentHistory) {
+            return res.status(404).json({
+                status: 'FAILED',
+                message: 'Payment history not found.'
+            });
+        }
+
+        const appState = await AppState.findOne();
+        const currentStripeMode = appState?.stripeMode || 'test';
+
+        const stripe = require('stripe')(currentStripeMode === 'test' ? process.env.STRIPE_SECRET_KEY_TEST : process.env.STRIPE_SECRET_KEY_LIVE);
+
+        const finalAmount = customAmount || paymentHistory.amount;
+        const finalDescription = customDescription || paymentHistory.description || 'Service Payment';
+
+        const paymentLink = await stripe.paymentLinks.create({
+            line_items: [
+                {
+                    price_data: {
+                        currency: paymentHistory.currency || 'usd',
+                        product_data: {
+                            name: finalDescription,
+                        },
+                        unit_amount: finalAmount,
+                    },
+                    quantity: 1,
+                },
+            ],
+            allow_promotion_codes: false,
+            billing_address_collection: 'required',
+            phone_number_collection: {
+                enabled: true,
+            },
+            after_completion: {
+                type: 'hosted_confirmation',
+                hosted_confirmation: {
+                    custom_message: 'Thank you for your payment! You will receive a confirmation email and receipt shortly.',
+                },
+            },
+            metadata: {
+                originalPaymentHistoryId: paymentHistoryId,
+                paymentType: 'retry',
+                stripeMode: currentStripeMode,
+                authorizedCustomerEmail: customerEmail,
+                originalAmount: paymentHistory.amount.toString(),
+                customAmount: finalAmount.toString(),
+                customDescription: finalDescription,
+                createdAt: new Date().toISOString()
+            }
+        });
+
+        // Create immediate payment record with pending status
+        const immediatePaymentHistory = new PaymentHistory({
+            stripeMode: currentStripeMode,
+            paymentType: 'retry',
+            amount: finalAmount,
+            currency: paymentHistory.currency || 'usd',
+            description: finalDescription,
+            status: 'pending',
+            customer: paymentHistory.customer,
+            expert: paymentHistory.expert,
+            pendingAppointmentToGroup: paymentHistory.pendingAppointmentToGroup,
+            groupChat: paymentHistory.groupChat,
+            event: paymentHistory.event,
+        });
+
+        await immediatePaymentHistory.save();
+        console.log('Created pending payment record:', immediatePaymentHistory._id);
+
+        const html = buildPaymentRequestEmail({
+            customerName: paymentHistory?.customer?.username,
+            amountCents: finalAmount,
+            description: finalDescription,
+            url: paymentLink.url,
+        });
+
+        const msg = {
+            to: customerEmail,
+            from: {
+                name: "WisdomLinked",
+                email: adminEmail,
+            },
+            subject: `Payment requested — ${stripeMoneyFromCents(finalAmount)} due`,
+            html,
+        };
+
+        const inline_msg = stripeAttachments();
+        if (inline_msg.length) (msg as any).attachments = inline_msg;
+        await sgMail.send(msg);
+
+        res.status(200).json({
+            status: 'SUCCESS',
+            message: 'Payment link sent successfully to the customer.',
+            paymentLinkUrl: paymentLink.url
+        });
+
+    } catch (err) {
+        console.log('[sendPaymentLinkToUser]', err);
+        return res.status(500).json({
+            status: 'FAILED',
+            message: 'Failed to send payment link: ' + err.message
+        });
+    }
+};
+
+const handleStripeWebhook = async (req, res) => {
+    const stripe = require('stripe');
+    const PaymentHistory = require("../models/PaymentHistory");
+    const StripeWebhookEvent = require("../models/StripeWebhookEvent");
+    // Released whenever processing fails, so Stripe's retry is not swallowed as a duplicate.
+    let claimId: any = null;
+
+    try {
+        const sig = req.headers['stripe-signature'];
+        const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET;
+
+        let event;
+
+        try {
+            event = stripe.webhooks.constructEvent(req.body, sig, endpointSecret);
+        } catch (err) {
+            console.log(`Webhook signature verification failed.`, err.message);
+            return res.status(400).send('Webhook signature verification failed');
+        }
+
+        console.log('Received Stripe webhook event:', event.type);
+
+        try {
+            const claim = await StripeWebhookEvent.create({ eventId: String(event.id), type: String(event.type) });
+            claimId = claim._id;
+        } catch (claimErr: any) {
+            if (claimErr?.code === 11000) {
+                console.log('[handleStripeWebhook] duplicate event ignored', event.id);
+                return res.json({ received: true, duplicate: true });
+            }
+            console.log('[handleStripeWebhook] could not claim event', claimErr?.message);
+        }
+
+        try {
+            if (
+                event.type === 'payment_intent.succeeded' ||
+                event.type === 'payment_intent.payment_failed' ||
+                event.type === 'payment_intent.canceled'
+            ) {
+                // Deferred require: groupChat.controller depends on this module.
+                const { handleBookingPaymentIntentEvent } = require("./groupChat.controller");
+                const outcome = await handleBookingPaymentIntentEvent(event);
+                console.log('[handleStripeWebhook]', event.type, event.id, outcome);
+                return res.json({ received: true, outcome });
+            }
+        } catch (bookingErr: any) {
+            console.error('[handleStripeWebhook] booking event failed', event.id, bookingErr?.message);
+            if (claimId) await StripeWebhookEvent.deleteOne({ _id: claimId }).catch(() => null);
+            return res.status(500).json({ status: 'FAILED', message: safeErrorMessage(bookingErr) });
+        }
+
+        if (event.type === 'checkout.session.completed') {
+            const session = event.data.object;
+
+            if (session.payment_link) {
+                const appState = await AppState.findOne();
+                const currentStripeMode = appState?.stripeMode || 'test';
+                const stripeInstance = require('stripe')(currentStripeMode === 'test' ? process.env.STRIPE_SECRET_KEY_TEST : process.env.STRIPE_SECRET_KEY_LIVE);
+
+                const paymentLink = await stripeInstance.paymentLinks.retrieve(session.payment_link);
+
+                if (paymentLink.metadata && paymentLink.metadata.originalPaymentHistoryId) {
+                    // Security validations
+                    const authorizedEmail = paymentLink.metadata.authorizedCustomerEmail;
+                    const originalAmount = parseInt(paymentLink.metadata.originalAmount);
+
+                    // Validate payment amount matches expected (original or custom)
+                    const expectedAmount = parseInt(paymentLink.metadata.customAmount) || originalAmount;
+                    if (session.amount_total !== expectedAmount) {
+                        console.error('Security Alert: Payment amount mismatch!', {
+                            expected: expectedAmount,
+                            received: session.amount_total,
+                            sessionId: session.id
+                        });
+                        return res.status(400).json({ error: BOOKING_PAYMENT_AMOUNT_INVALID });
+                    }
+
+                    // Validate customer email matches (if available in session)
+                    if (session.customer_details && session.customer_details.email) {
+                        if (session.customer_details.email.toLowerCase() !== authorizedEmail.toLowerCase()) {
+                            console.error('Security Alert: Unauthorized email used for payment!', {
+                                authorized: authorizedEmail,
+                                used: session.customer_details.email,
+                                sessionId: session.id
+                            });
+                        }
+                    }
+
+                    //Log the payment attempt
+                    console.log('Processing retry payment:', {
+                        sessionId: session.id,
+                        authorizedEmail: authorizedEmail,
+                        amount: session.amount_total,
+                        paymentHistoryId: paymentLink.metadata.originalPaymentHistoryId
+                    });
+
+                    const originalPaymentHistory = await PaymentHistory.findById(String(paymentLink.metadata.originalPaymentHistoryId));
+
+                    if (originalPaymentHistory) {
+                        // Find the pending payment record we created when the link was sent
+                        const pendingPayment = await PaymentHistory.findOne({
+                            customer: originalPaymentHistory.customer,
+                            expert: originalPaymentHistory.expert,
+                            paymentType: 'retry',
+                            status: 'pending',
+                            amount: session.amount_total,
+                            description: paymentLink.metadata.customDescription || `Retry payment for: ${originalPaymentHistory.description}`
+                        }).sort({ createdAt: -1 });
+
+                        if (pendingPayment) {
+                            // Update the existing pending payment record
+                            pendingPayment.status = 'completed';
+                            pendingPayment.paymentIntent = session.payment_intent;
+                            await pendingPayment.save();
+                            console.log('Updated pending payment to completed:', pendingPayment._id);
+
+                            // Update payment intent to send receipt
+                            try {
+                                const stripe = require('stripe')(paymentLink.metadata.stripeMode === 'test' ? process.env.STRIPE_SECRET_KEY_TEST : process.env.STRIPE_SECRET_KEY_LIVE);
+                                await stripe.paymentIntents.update(session.payment_intent, {
+                                    receipt_email: authorizedEmail,
+                                });
+                                console.log('Updated payment intent with receipt email:', authorizedEmail);
+                            } catch (receiptError) {
+                                console.error('Failed to update payment intent with receipt email:', receiptError);
+                                // Don't fail the payment if receipt email update fails
+                            }
+                        } else {
+                            // Fallback: create new payment record if pending not found
+                            const newPaymentHistory = new PaymentHistory({
+                                stripeMode: paymentLink.metadata.stripeMode || currentStripeMode,
+                                paymentType: 'retry',
+                                amount: session.amount_total,
+                                currency: session.currency,
+                                description: paymentLink.metadata.customDescription || `Retry payment for: ${originalPaymentHistory.description}`,
+                                paymentIntent: session.payment_intent,
+                                status: 'completed',
+                                customer: originalPaymentHistory.customer,
+                                expert: originalPaymentHistory.expert,
+                                pendingAppointmentToGroup: originalPaymentHistory.pendingAppointmentToGroup,
+                                groupChat: originalPaymentHistory.groupChat,
+                                event: originalPaymentHistory.event,
+                            });
+
+                            await newPaymentHistory.save();
+                            console.log('Created retry payment history (fallback):', newPaymentHistory._id);
+
+                            // Update payment intent to send receipt
+                            try {
+                                const stripe = require('stripe')(paymentLink.metadata.stripeMode === 'test' ? process.env.STRIPE_SECRET_KEY_TEST : process.env.STRIPE_SECRET_KEY_LIVE);
+                                await stripe.paymentIntents.update(session.payment_intent, {
+                                    receipt_email: authorizedEmail,
+                                });
+                                console.log('Updated payment intent with receipt email (fallback):', authorizedEmail);
+                            } catch (receiptError) {
+                                console.error('Failed to update payment intent with receipt email (fallback):', receiptError);
+                                // Don't fail the payment if receipt email update fails
+                            }
+
+                            // Log successful security validation
+                            console.log('Payment security validation passed:', {
+                                paymentHistoryId: newPaymentHistory._id,
+                                sessionId: session.id,
+                                authorizedEmail: authorizedEmail,
+                                amount: session.amount_total
+                            });
+                        }
+
+                        // Log successful security validation (if pending payment was found)
+                        if (pendingPayment) {
+                            console.log('Payment security validation passed:', {
+                                paymentHistoryId: pendingPayment._id,
+                                sessionId: session.id,
+                                authorizedEmail: authorizedEmail,
+                                amount: session.amount_total
+                            });
+                        }
+                    }
+                } else if (paymentLink.metadata.paymentType === 'adhoc') {
+                    // Handle ad-hoc payment completion
+                    console.log('Processing ad-hoc payment completion');
+
+                    // Find the pending ad-hoc payment record
+                    const pendingAdHocPayment = await PaymentHistory.findOne({
+                        customer: paymentLink.metadata.customerId,
+                        paymentType: 'adhoc',
+                        status: 'pending',
+                        amount: session.amount_total,
+                        description: paymentLink.metadata.customDescription
+                    }).sort({ createdAt: -1 });
+
+                    if (pendingAdHocPayment) {
+                        // Update the existing pending payment record
+                        pendingAdHocPayment.status = 'completed';
+                        pendingAdHocPayment.paymentIntent = session.payment_intent;
+                        await pendingAdHocPayment.save();
+                        console.log('Updated pending ad-hoc payment to completed:', pendingAdHocPayment._id);
+
+                        // Update payment intent to send receipt
+                        try {
+                            const stripe = require('stripe')(paymentLink.metadata.stripeMode === 'test' ? process.env.STRIPE_SECRET_KEY_TEST : process.env.STRIPE_SECRET_KEY_LIVE);
+                            await stripe.paymentIntents.update(session.payment_intent, {
+                                receipt_email: paymentLink.metadata.authorizedCustomerEmail,
+                            });
+                            console.log('Updated ad-hoc payment intent with receipt email:', paymentLink.metadata.authorizedCustomerEmail);
+                        } catch (receiptError) {
+                            console.error('Failed to update ad-hoc payment intent with receipt email:', receiptError);
+                        }
+
+                        // Log successful validation
+                        console.log('Ad-hoc payment security validation passed:', {
+                            paymentHistoryId: pendingAdHocPayment._id,
+                            sessionId: session.id,
+                            authorizedEmail: paymentLink.metadata.authorizedCustomerEmail,
+                            amount: session.amount_total
+                        });
+                    }
+                }
+            }
+        }
+
+        res.json({ received: true });
+
+    } catch (err) {
+        console.log('[handleStripeWebhook]', err);
+        if (claimId) await StripeWebhookEvent.deleteOne({ _id: claimId }).catch(() => null);
+        return res.status(500).json({
+            status: 'FAILED',
+            message: safeErrorMessage(err)
+        });
+    }
+};
+
+const processRefund = async (req, res) => {
+    try {
+        const { paymentHistoryId, refundReason } = req.body;
+        const refundAmount = Number(req.body.refundAmount);
+
+        if (!paymentHistoryId) {
+            return res.status(400).json({
+                status: 'FAILED',
+                message: 'Payment history ID is required.'
+            });
+        }
+
+        if (!Number.isFinite(refundAmount) || refundAmount <= 0) {
+            return res.status(400).json({
+                status: 'FAILED',
+                message: 'Valid refund amount is required.'
+            });
+        }
+
+        if (!refundReason || !refundReason.trim()) {
+            return res.status(400).json({
+                status: 'FAILED',
+                message: 'Refund reason is required.'
+            });
+        }
+
+        const PaymentHistory = require("../models/PaymentHistory");
+        const AppState = require("../models/AppState");
+
+        // Get the payment history record
+        const paymentHistory = await PaymentHistory.findById(String(paymentHistoryId)).populate(['customer', 'expert']);
+        if (!paymentHistory) {
+            return res.status(404).json({
+                status: 'FAILED',
+                message: 'Payment history not found.'
+            });
+        }
+
+        // Check if payment can be refunded
+        if (paymentHistory.status === 'refunded') {
+            return res.status(400).json({
+                status: 'FAILED',
+                message: 'This payment has already been refunded.'
+            });
+        }
+
+        if (paymentHistory.status === 'pending') {
+            return res.status(400).json({
+                status: 'FAILED',
+                message: 'Cannot refund a pending payment.'
+            });
+        }
+
+        if (paymentHistory.status === 'withheld') {
+            return res.status(400).json({
+                status: 'FAILED',
+                message: 'This payment is authorized but not captured, so there is nothing to refund. Decline the request to release the authorization instead.'
+            });
+        }
+
+        if (paymentHistory.status === 'released') {
+            return res.status(400).json({
+                status: 'FAILED',
+                message: 'This authorization was already released and never charged, so there is nothing to refund.'
+            });
+        }
+
+        if (!paymentHistory.paymentIntent) {
+            return res.status(400).json({
+                status: 'FAILED',
+                message: 'No payment intent found for this payment.'
+            });
+        }
+
+        // Validate refund amount doesn't exceed original payment
+        const maxRefundAmount = paymentHistory.amount / 100;
+        if (refundAmount > maxRefundAmount) {
+            return res.status(400).json({
+                status: 'FAILED',
+                message: `Refund amount cannot exceed original payment amount of $${maxRefundAmount.toFixed(2)}`
+            });
+        }
+
+        // Get current stripe mode
+        const appState = await AppState.findOne();
+        const currentStripeMode = paymentHistory.stripeMode || appState?.stripeMode || 'test';
+
+        // Process the refund with Stripe
+        const refundResult = await refundPaymentIntent(
+            paymentHistory.paymentIntent,
+            Math.round(refundAmount * 100),
+            currentStripeMode
+        );
+
+        if (!refundResult) {
+            return res.status(500).json({
+                status: 'FAILED',
+                message: 'Failed to process refund with Stripe.'
+            });
+        }
+
+        if ((refundResult as any).alreadyRefunded) {
+            await PaymentHistory.findByIdAndUpdate(paymentHistory._id, { status: 'refunded' }).catch(() => null);
+            return res.status(409).json({
+                status: 'FAILED',
+                message: 'This charge was already fully refunded at Stripe. No further refund was made; the payment record has been corrected.'
+            });
+        }
+
+        const isFullRefund = refundAmount === maxRefundAmount;
+
+        // Create a refund record
+        const refundHistory = new PaymentHistory({
+            stripeMode: currentStripeMode,
+            paymentType: 'refund',
+            amount: Math.round(refundAmount * 100),
+            currency: paymentHistory.currency,
+            description: `Refund: ${refundReason}`,
+            paymentIntent: refundResult.payment_intent,
+            status: isFullRefund ? 'refunded' : 'completed',
+            customer: paymentHistory.customer,
+            expert: paymentHistory.expert,
+            pendingAppointmentToGroup: paymentHistory.pendingAppointmentToGroup,
+            groupChat: paymentHistory.groupChat,
+            event: paymentHistory.event,
+        });
+
+        await refundHistory.save();
+
+        // Update the original payment status if it's a full refund
+        if (isFullRefund) {
+            paymentHistory.status = 'refunded';
+            await paymentHistory.save();
+        }
+
+        // Send refund notification email to customer
+        if (paymentHistory.customer?.email) {
+            const sgMail = require("@sendgrid/mail");
+            const adminEmail = "noreply@wisdomlinked.com";
+            sgMail.setApiKey(process.env.SENDGRID_API_KEY);
+
+            const refundType = isFullRefund ? 'Full Refund' : 'Partial Refund';
+
+            const refundEmailHtml = buildRefundEmail({
+                customerName: paymentHistory.customer?.username,
+                amountCents: Math.round(refundAmount * 100),
+                currency: paymentHistory.currency,
+                isFullRefund,
+                retainedCents: Math.round((maxRefundAmount - refundAmount) * 100),
+                description: paymentHistory.description,
+                expertName: paymentHistory.expert?.username,
+                start: paymentHistory.groupChat?.start
+                    ? new Date(paymentHistory.groupChat.start).toLocaleString()
+                    : '',
+                reference: refundHistory?._id ? String(refundHistory._id) : paymentHistory.paymentIntent,
+                transactionId: paymentHistory.paymentIntent,
+            });
+
+            const refundEmailMsg = {
+                to: paymentHistory.customer.email,
+                from: {
+                    name: "WisdomLinked",
+                    email: adminEmail,
+                },
+                subject: `${stripeMoneyFromCents(Math.round(refundAmount * 100), paymentHistory.currency)} refund processed`,
+                html: refundEmailHtml,
+            };
+
+            try {
+                const inline_refundEmailMsg = stripeAttachments();
+                if (inline_refundEmailMsg.length) (refundEmailMsg as any).attachments = inline_refundEmailMsg;
+                await sgMail.send(refundEmailMsg);
+                console.log('Refund notification email sent to:', paymentHistory.customer.email);
+            } catch (emailError) {
+                console.error('Failed to send refund notification email:', emailError);
+                // Don't fail the refund if email fails
+            }
+        }
+
+        console.log('Refund processed successfully:', {
+            refundId: refundResult.id,
+            paymentHistoryId: refundHistory._id,
+            amount: refundAmount
+        });
+
+        res.status(200).json({
+            status: 'SUCCESS',
+            message: 'Refund processed successfully.',
+            refund: {
+                id: refundResult.id,
+                amount: refundAmount,
+                currency: paymentHistory.currency,
+                reason: refundReason
+            }
+        });
+
+    } catch (err) {
+        console.log('[processRefund]', err);
+        return res.status(500).json({
+            status: 'FAILED',
+            message: 'Failed to process refund: ' + err.message
+        });
+    }
+};
+
+const sendAdHocPaymentLink = async (req, res) => {
+    try {
+        const { amount, description, customerEmail, customerName } = req.body;
+
+        // Validation
+        if (!amount || amount <= 0) {
+            return res.status(400).json({
+                status: 'FAILED',
+                message: 'Valid payment amount is required.'
+            });
+        }
+
+        if (!description || !description.trim()) {
+            return res.status(400).json({
+                status: 'FAILED',
+                message: 'Payment description is required.'
+            });
+        }
+
+        if (!customerEmail || !customerEmail.trim()) {
+            return res.status(400).json({
+                status: 'FAILED',
+                message: 'Customer email is required.'
+            });
+        }
+
+        // Basic email validation (length-capped to avoid ReDoS on the regex)
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        const trimmedEmail = customerEmail.trim();
+        if (trimmedEmail.length > 254 || !emailRegex.test(trimmedEmail)) {
+            return res.status(400).json({
+                status: 'FAILED',
+                message: 'Valid customer email is required.'
+            });
+        }
+
+        const PaymentHistory = require("../models/PaymentHistory");
+        const User = require("../models/User");
+        const AppState = require("../models/AppState");
+
+        // Get current stripe mode
+        const appState = await AppState.findOne();
+        const currentStripeMode = appState?.stripeMode || 'test';
+
+        // Check if customer exists, create if needed
+        let customer = await User.findOne({ email: customerEmail.trim() });
+        if (!customer) {
+            // Create basic customer record for payment tracking
+            customer = new User({
+                email: customerEmail.trim(),
+                name: customerName?.trim() || 'Ad-hoc Customer',
+                role: 'customer',
+                isActive: false, // Mark as inactive since it's just for payment
+                isAdHocCustomer: true, // Flag to identify ad-hoc customers
+            });
+            await customer.save();
+            console.log('Created ad-hoc customer record:', customer._id);
+        }
+
+        // Create Stripe payment link
+        const stripe = require('stripe')(currentStripeMode === 'test' ? process.env.STRIPE_SECRET_KEY_TEST : process.env.STRIPE_SECRET_KEY_LIVE);
+
+        const finalAmount = Math.round(amount * 100); // Convert to cents
+        const finalDescription = description.trim();
+
+        const paymentLink = await stripe.paymentLinks.create({
+            line_items: [
+                {
+                    price_data: {
+                        currency: 'usd',
+                        product_data: {
+                            name: finalDescription,
+                        },
+                        unit_amount: finalAmount,
+                    },
+                    quantity: 1,
+                },
+            ],
+            allow_promotion_codes: false,
+            billing_address_collection: 'required',
+            phone_number_collection: {
+                enabled: true,
+            },
+            after_completion: {
+                type: 'hosted_confirmation',
+                hosted_confirmation: {
+                    custom_message: 'Thank you for your payment! You will receive a confirmation email and receipt shortly.',
+                },
+            },
+            metadata: {
+                paymentType: 'adhoc',
+                stripeMode: currentStripeMode,
+                authorizedCustomerEmail: customerEmail.trim(),
+                customAmount: finalAmount.toString(),
+                customDescription: finalDescription,
+                createdAt: new Date().toISOString(),
+                customerId: customer._id.toString(),
+            }
+        });
+
+        // Create immediate payment record with pending status
+        const immediatePaymentHistory = new PaymentHistory({
+            stripeMode: currentStripeMode,
+            paymentType: 'adhoc',
+            amount: finalAmount,
+            currency: 'usd',
+            description: finalDescription,
+            status: 'pending',
+            customer: customer._id,
+        });
+
+        await immediatePaymentHistory.save();
+        console.log('Created pending ad-hoc payment record:', immediatePaymentHistory._id);
+
+        // Send payment link email
+        const sgMail = require("@sendgrid/mail");
+        const adminEmail = "noreply@wisdomlinked.com";
+        sgMail.setApiKey(process.env.SENDGRID_API_KEY);
+
+        const html = buildPaymentRequestEmail({
+            customerName: customerName || (customerEmail || '').split('@')[0],
+            amountCents: finalAmount,
+            description: finalDescription,
+            url: paymentLink.url,
+        });
+
+        const emailMsg = {
+            to: customerEmail.trim(),
+            from: {
+                name: "WisdomLinked",
+                email: adminEmail,
+            },
+            subject: `Payment requested — ${stripeMoneyFromCents(finalAmount)} due`,
+            html: html,
+        };
+
+        const inline_emailMsg = stripeAttachments();
+        if (inline_emailMsg.length) (emailMsg as any).attachments = inline_emailMsg;
+        await sgMail.send(emailMsg);
+        console.log('Ad-hoc payment link email sent to:', customerEmail.trim());
+
+        res.status(200).json({
+            status: 'SUCCESS',
+            message: 'Payment link sent successfully.',
+            paymentHistory: {
+                id: immediatePaymentHistory._id,
+                amount: finalAmount,
+                description: finalDescription,
+                customerEmail: customerEmail.trim(),
+                status: 'pending'
+            }
+        });
+
+    } catch (err) {
+        console.log('[sendAdHocPaymentLink]', err);
+        return res.status(500).json({
+            status: 'FAILED',
+            message: 'Failed to send payment link: ' + err.message
+        });
+    }
+};
+
+module.exports = {
+    stripePay,
+    createStripePaymentIntent,
+    getStripeMode,
+    checkPaymentIntentSucceeded,
+    checkPaymentIntentAuthorized,
+    checkPaymentIntentProcessing,
+    capturePaymentIntent,
+    cancelPaymentIntent,
+    setStripeMode,
+    setSeminarApprovalDeadline,
+    setPaymentWindow,
+    refundPaymentIntent,
+    listReconcilableBookingIntents,
+    sendPaymentLinkToUser,
+    handleStripeWebhook,
+    processRefund,
+    sendAdHocPaymentLink,
+    sendBookingReceiptAndConfirmation
+}

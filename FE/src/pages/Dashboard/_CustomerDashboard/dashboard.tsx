@@ -1,28 +1,26 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, {useEffect, useRef, useState} from "react";
 import { useAppSelector } from "../../../store";
 import queryString from "query-string";
 import Avatar from "../../../components/Avatar";
 import Payment from "./payment";
 import { formatDateYYYY_MM_DD_h_m } from "../../../actions/common";
-import { doCancelEvent, cancelIndividualAppointment, doCancelPendingSeminar, doUpdateEvent, profileImageFetch, acceptIndividualAppointment } from "../../../api/api";
+import {doCancelEvent,cancelIndividualAppointment, doUpdateEvent, profileImageFetch,acceptIndividualAppointment} from "../../../api/api";
 import { updateMe } from "../../../actions/authActions";
 import { useDispatch } from "react-redux";
 import { SetLoadingStatus } from "../../../actions/appActions";
 import { useLocation, useNavigate } from "react-router-dom";
 import CloseIcon from '@mui/icons-material/Close';
 import SelectDateTime from "../selectDateTime";
-import { showAlert } from "../../../actions/alertActions";
-import { setChosenChatDetails, setChosenGroupChatDetails } from "../../../actions/chatActions";
-import Chatbot from "../../../components/chatbot";
+import { showErrorAlert, showSuccessAlert, showWarningAlert } from '../../../actions/alertActions';
+import {setChosenChatDetails, setChosenGroupChatDetails} from "../../../actions/chatActions";
 
 const Dashboard = () => {
 
-    const { auth: { userDetails: { pendingGroupChats, events, groupChats: groupChat, status, _id: userId } }, friends: { groupChatList } } = useAppSelector(state => state)
+    const { auth: { userDetails: { events, groupChats:groupChat, status,_id:userId } }, friends: { groupChatList }} = useAppSelector(state => state)
     const dispatch = useDispatch()
     const navigate = useNavigate()
     const location = useLocation()
 
-    const [groupChats, set_groupChats] = useState<any>([])
     const [sessions, set_sessions] = useState<any>([])
     const [pendingSessions, set_pendingSessions] = useState<any>([])
     const [acceptedSeminars, set_acceptedSeminars] = useState<any>([])
@@ -33,22 +31,12 @@ const Dashboard = () => {
     const [showPayment, set_showPayment] = useState(false);
     const [item, set_item] = useState<any>(null);
 
-    const cancelSeminarAppointment = async (data: any) => {
-        SetLoadingStatus(true)
-        const response = await doCancelPendingSeminar(data._id)
-        if (response) {
-            dispatch(updateMe())
-            dispatch(showAlert('Seminar Appointment Cancelled and your money refunded'))
-        }
-        SetLoadingStatus(false)
-    }
-
     const cancelAppointment = async (data: any) => {
         SetLoadingStatus(true)
         const response = await cancelIndividualAppointment(data._id)
         if (response) {
             dispatch(updateMe())
-            dispatch(showAlert('Appointment Cancelled and your money refunded'))
+            dispatch(showSuccessAlert('Appointment Cancelled and your money refunded'))
         }
         SetLoadingStatus(false)
     }
@@ -67,7 +55,7 @@ const Dashboard = () => {
         console.log(response)
         if (response) {
             dispatch(updateMe())
-            dispatch(showAlert('Event Appointment Cancelled and your money refunded'))
+            dispatch(showSuccessAlert('Event Appointment Cancelled and your money refunded'))
         }
         SetLoadingStatus(false)
     }
@@ -109,47 +97,44 @@ const Dashboard = () => {
         console.log("navigate events", item); // Use item here instead of event
         navigate(`${process.env.REACT_APP_AUTH_URL}customerdashboard/chat`);
         // Assuming item contains customer details, you can use item directly
-        dispatch(setChosenChatDetails({ userId: item._id, username: item.username, image: item.image }));
+        dispatch(
+            setChosenChatDetails({
+                userId: item._id,
+                username: item.username,
+                image: item.image,
+                peerRole: String(item.role || '')
+                    .toLowerCase()
+                    .trim() || undefined,
+            }),
+        );
     };
 
     const navigateSeminar = (item: any) => {
-        let selectedGroupChat: any = groupChatList.find((x: any) => x.groupId === item._id);
-        if (!selectedGroupChat) {
-            selectedGroupChat = {
-                ...item,
-                groupId: item._id,
-                groupName: item.customerId?.username ?? item.customer?.username ?? item.admin?.username ?? item.name,
-            };
-        }
+        const selectedGroupChat:any = groupChatList.find((x: any) => x.groupId === item._id)
         console.log("navigate events", item);
         navigate(`${process.env.REACT_APP_AUTH_URL}customerdashboard/chat`);
-        dispatch(setChosenGroupChatDetails(selectedGroupChat));
+        dispatch(setChosenGroupChatDetails( selectedGroupChat ));
     };
 
-    // Batch state updates for sessions and groupChats
+    // Batch state updates for sessions and seminars
     useEffect(() => {
         const now = new Date().getTime();
-        console.log("Pending Group Chats:", pendingGroupChats);
 
         const updatedSessions = groupChat.filter((item: any) => new Date(item.end).getTime() >= now && item.type === 'individual' && item.status === 'active');
-        // const pendingSessions = pendingGroupChats.filter((item: any) => new Date(item.groupChatId.end).getTime() >= now && item.groupChatId.type === 'individual');
         const pendingSessions = groupChat.filter((item: any) => new Date(item.end).getTime() >= now && item.type === 'individual' && item.status === 'pending');
-        // pendingSessions.push(...otherpendingSessions);
-        const updatedGroupChats = pendingGroupChats.filter((item: any) => new Date(item.groupChatId.end).getTime() >= now);
         const updatedSeminars = groupChat.filter((item: any) => new Date(item.end).getTime() >= now && item.type === 'seminar');
 
         set_sessions(updatedSessions);
-        set_groupChats(updatedGroupChats);
         set_acceptedSeminars(updatedSeminars);
         set_pendingSessions(pendingSessions);
 
         // Trigger image fetch only once
         if (!fetchImagesRef.current) {
             fetchImagesRef.current = true;
-            const allExperts = [...updatedSessions, ...groupChats, ...updatedSeminars];
+            const allExperts = [...updatedSessions, ...updatedSeminars];
             fetchImages(allExperts);
         }
-    }, [events, pendingGroupChats, groupChat]);
+    }, [events, groupChat]);
 
     const fetchImages = async (sessionList: any[]) => {
         const uniqueExperts = new Map<string, string>();
@@ -191,28 +176,28 @@ const Dashboard = () => {
     // Dispatch `updateMe` only once when the component mounts
     useEffect(() => {
         dispatch(updateMe());
-    }, [dispatch]);
+        }, [dispatch]);
 
-    useEffect(() => {
-        let { redirect_status, payment_intent, price } = queryString.parse(location.search);
-        if (redirect_status === 'succeeded') {
-            const pendingDetails = window.localStorage.getItem('pendingDetails')
-            if (pendingDetails) {
-                SetLoadingStatus(true)
-                const details = JSON.parse(pendingDetails)
+     useEffect(() => {
+            let { redirect_status, payment_intent, price } = queryString.parse(location.search);
+            if (redirect_status === 'succeeded') {
+                const pendingDetails = window.localStorage.getItem('pendingDetails')
+                if (pendingDetails) {
+                    SetLoadingStatus(true)
+                    const details = JSON.parse(pendingDetails)
+                    window.localStorage.removeItem('pendingDetails')
+                    SetLoadingStatus(false)
+                    acceptAppointment({
+                        groupChatId: details.groupChatId,
+                        payment_intent: payment_intent,
+                    })
+                }
+            } else {
                 window.localStorage.removeItem('pendingDetails')
-                SetLoadingStatus(false)
-                acceptAppointment({
-                    groupChatId: details.groupChatId,
-                    payment_intent: payment_intent,
-                })
+                if (redirect_status) {
+                    set_showPayment(false);
+                }
             }
-        } else {
-            window.localStorage.removeItem('pendingDetails')
-            if (redirect_status) {
-                set_showPayment(false);
-            }
-        }
     }, [])
 
     return (
@@ -224,7 +209,7 @@ const Dashboard = () => {
                         {
                             acceptedSeminars.map((item: any, index: number) => (
                                 // <div key={index} className="w-fit p-4 bg-darkgrey">
-                                <div key={index} className="w-fit p-4 bg-darkgrey rounded-lg shadow-md transform transition-all duration-300 hover:scale-105 hover:shadow-lg overflow-hidden">
+                                    <div key={index} className="w-fit p-4 bg-darkgrey rounded-lg shadow-md transform transition-all duration-300 hover:scale-105 hover:shadow-lg overflow-hidden">
                                     <div className="flex space-x-3 items-center">
                                         <Avatar
                                             username={item.admin.username}
@@ -236,7 +221,7 @@ const Dashboard = () => {
                                             <div className="text-sm">{item.admin.email}</div>
                                         </div>
                                     </div>
-                                    <hr className="my-2" />
+                                    <hr className="my-2"/>
                                     <div><span className="font-bold">Title  : </span> {item.name}</div>
                                     <div><span className="font-bold">Description  : </span> {item.description}</div>
                                     <div><span
@@ -245,7 +230,7 @@ const Dashboard = () => {
                                     <div><span className="font-bold">Duration  : </span> {item.duration} min
                                     </div>
                                     <div><span className="font-bold">Price  : </span> ${item.price}</div>
-                                    <hr className="my-2" />
+                                    <hr className="my-2"/>
                                     <button
                                         className="py-1 w-full bg-green rounded-lg flex items-center justify-center disabled:opacity-50"
                                         onClick={() => navigateSeminar(item)}
@@ -260,49 +245,6 @@ const Dashboard = () => {
             }
 
 
-            <div className="text-center text-2xl my-6">Pending Seminar Sessions</div>
-            {
-                groupChats.length ?
-                    <div className="flex flex-wrap justify-center gap-6">
-                        {
-                            groupChats.map((item: any, index: number) => (
-                                // <div key={index} className="w-fit p-4 bg-darkgrey">
-                                <div key={index} className="w-fit p-4 bg-darkgrey rounded-lg shadow-md transform transition-all duration-300 hover:scale-105 hover:shadow-lg overflow-hidden">
-                                    <div className="flex space-x-3 items-center">
-                                        <Avatar
-                                            username={item.groupChatId.admin.username}
-                                            //image={item.groupChatId.admin.image}
-                                            image={base64Images.get(item.groupChatId.admin._id)}
-                                        />
-                                        <div>
-                                            <div className="text-lg">{item.groupChatId.admin.username}</div>
-                                            <div className="text-sm">{item.groupChatId.admin.email}</div>
-                                        </div>
-                                    </div>
-                                    <hr className="my-2" />
-                                    <div><span className="font-bold">Title  : </span> {item.groupChatId.name}</div>
-                                    <div><span
-                                        className="font-bold">Description  : </span> {item.groupChatId.description}
-                                    </div>
-                                    <div><span
-                                        className="font-bold">Starts at : </span> {formatDateYYYY_MM_DD_h_m(item.groupChatId.start)}
-                                    </div>
-                                    <div><span className="font-bold">Duration  : </span> {item.groupChatId.duration} min
-                                    </div>
-                                    <div><span className="font-bold">Price  : </span> ${item.groupChatId.price}</div>
-                                    <hr className="my-3" />
-                                    <button
-                                        className="py-1 w-full bg-green rounded-lg flex items-center justify-center disabled:opacity-50"
-                                        onClick={() => cancelSeminarAppointment(item)}
-                                    >
-                                        Cancel
-                                    </button>
-                                </div>
-                            ))
-                        }
-                    </div> :
-                    <div className="text-center text-lightgrey my-10">No pending seminar sessions</div>
-            }
             <div className="text-center text-2xl mb-6">Booked Individual Sessions</div>
             {
                 sessions.length ?
@@ -310,7 +252,7 @@ const Dashboard = () => {
                         {
                             sessions.map((item: any, index: number) => (
                                 // <div key={index} className="w-fit p-4 bg-darkgrey">
-                                <div key={index} className="w-fit p-4 bg-darkgrey rounded-lg shadow-md transform transition-all duration-300 hover:scale-105 hover:shadow-lg overflow-hidden">
+                                    <div key={index} className="w-fit p-4 bg-darkgrey rounded-lg shadow-md transform transition-all duration-300 hover:scale-105 hover:shadow-lg overflow-hidden">
                                     <div className="flex space-x-3 items-center">
                                         <Avatar
                                             username={item.admin.username}
@@ -321,7 +263,7 @@ const Dashboard = () => {
                                             <div className="text-lg">{item.name}</div>
                                         </div>
                                     </div>
-                                    <hr className="my-2" />
+                                    <hr className="my-2"/>
                                     {/* <div><span className="font-bold">Title  : </span> {item.name}</div> */}
                                     {/* <div><span className="font-bold">Description  : </span> {item.description}</div> */}
                                     <div><span
@@ -330,7 +272,7 @@ const Dashboard = () => {
                                     <div><span className="font-bold">Duration  : </span> {item.duration} min
                                     </div>
                                     <div><span className="font-bold">Price  : </span> ${item.price}</div>
-                                    <hr className="my-2" />
+                                    <hr className="my-2"/>
                                     <button
                                         className="py-1 w-full bg-green rounded-lg flex items-center justify-center disabled:opacity-50"
                                         onClick={() => navigateSeminar(item)}
@@ -364,7 +306,7 @@ const Dashboard = () => {
                                             <div className="text-sm">{item.admin.email}</div>
                                         </div>
                                     </div>
-                                    <hr className="my-2" />
+                                    <hr className="my-2"/>
                                     <div><span className="font-bold">Title  : </span> {item.name}</div>
                                     <div><span
                                         className="font-bold">Description  : </span> {item.description}
@@ -375,7 +317,7 @@ const Dashboard = () => {
                                     <div><span className="font-bold">Duration  : </span> {item.duration} min
                                     </div>
                                     <div><span className="font-bold">Price  : </span> ${item.price}</div>
-                                    <hr className="my-3" />
+                                    <hr className="my-3"/>
                                     {item.createdBy._id === userId ?
                                         <button
                                             className="py-1 w-full border border-lightgrey rounded-lg flex items-center justify-center disabled:opacity-50"
@@ -429,44 +371,35 @@ const Dashboard = () => {
                     null
             }
             {showPayment && (
-                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-                    <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4 relative">
-                        {/* Close button */}
-                        <button
-                            onClick={() => set_showPayment(false)}
-                            className="absolute top-4 right-4 text-gray-500 hover:text-gray-700 text-xl font-bold"
-                        >
-                            ×
-                        </button>
+                                        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                                            <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4 relative">
+                                                {/* Close button */}
+                                                <button
+                                                    onClick={() => set_showPayment(false)}
+                                                    className="absolute top-4 right-4 text-gray-500 hover:text-gray-700 text-xl font-bold"
+                                                >
+                                                    ×
+                                                </button>
 
-                        {/* Payment Component */}
-                        <Payment
-                            type="Session"
-                            price={item.price}
-                            pendingDetails={{
-                                name: item.name,
-                                start: item.startTime,
-                                end: item.endTime,
-                                duration: item.duration,
-                                price: item.price,
-                                expert: item.admin,
-                                groupChatId: item._id,
-                            }}
-                            onClose={() => set_showPayment(true)} // Pass close function to Payment component if needed
-                        />
-                    </div>
-                </div>
+                                                {/* Payment Component */}
+                                                <Payment
+                                                    type="Session"
+                                                    price={item.price}
+                                                    pendingDetails={{
+                                                        name: item.name,
+                                                        start: item.startTime,
+                                                        end: item.endTime,
+                                                        duration: item.duration,
+                                                        price: item.price,
+                                                        expert: item.admin,
+                                                        groupChatId: item._id,
+                                                    }}
+                                                    onClose={() => set_showPayment(true)} // Pass close function to Payment component if needed
+                                                />
+                                            </div>
+                                        </div>
             )}
-            <div
-                style={{
-                    position: "fixed",
-                    bottom: "20px",
-                    right: "20px",
-                    zIndex: 1000,
-                }}
-            >
-                <Chatbot />
-            </div>
+            {null}
         </div>
     );
 };

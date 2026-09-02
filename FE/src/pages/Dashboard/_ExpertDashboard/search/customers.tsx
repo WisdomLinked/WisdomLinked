@@ -1,17 +1,32 @@
-import React, { useEffect, useState } from "react";
-import {doFilterCustomers, doGetKeywordsAndServices, joinGeneralChat, joinPrivateChat, profileImageFetch} from "../../../../api/api";
+import React, { useEffect, useMemo, useState } from "react";
+import {
+    doFilterCustomers,
+    doGetKeywordsAndServices,
+    joinGeneralChat,
+    joinPrivateChat,
+    profileImageFetch,
+} from "../../../../api/api";
 import { getAvatarTitle } from "../../../../actions/common";
 import { Rating } from "@mui/material";
-import FilterListIcon from '@mui/icons-material/FilterList';
-import CloseIcon from '@mui/icons-material/Close';
-import SelectionWithCheckBox from "../../../../components/SelectionWithCheckBox";
-import { useAppSelector } from "../../../../store";
+import { Search as SearchIcon } from "lucide-react";
+import CloseIcon from "@mui/icons-material/Close";
 import OverlayPortal from "../../../../components/OverayPortal";
+import DatePickerField from "../../../../components/ui/DatePickerField";
+import TimePickerField from "../../../../components/ui/TimePickerField";
+import FilterDropdown, { type FilterOption } from "../../../../components/ui/FilterDropdown";
 import { SetLoadingStatus } from "../../../../actions/appActions";
-import { updateMe } from "../../../../actions/authActions";
+import { serviceDropdownRowsFromApi } from "../../../../constants/serviceOptions";
 import { useDispatch } from "react-redux";
-import { setChosenGroupChatDetails } from "../../../../actions/chatActions";
+import { setChosenChatDetails, setChosenGroupChatDetails } from "../../../../actions/chatActions";
 import { useNavigate } from "react-router-dom";
+import { useAppSelector } from "../../../../store";
+import { fetchChatUserProfile } from "../../../../api/chatApi";
+import ProfileModal from "../../Messenger/Messages/ProfileModal";
+import { proposeIndividualAppointment } from "../../../../api/api";
+import { proposedTimeNeedsOverride, hasBookingConflict, presetAvailabilityRanges } from "../../../../utils/proposeAvailability";
+import { normalizeExpertPrice } from "../../../../utils/schedulingSlots";
+import { updateMe } from "../../../../actions/authActions";
+import { showErrorAlert, showSuccessAlert, showWarningAlert } from "../../../../actions/alertActions";
 
 const Customers = ({
     qCustomerId,
@@ -21,33 +36,54 @@ const Customers = ({
 
     const dispatch = useDispatch()
     const navigate = useNavigate()
-    const { auth: { userDetails } } = useAppSelector((state) => state);
-    const [keywords, set_keywords] = useState([])
-    const [services, set_services] = useState([])
-    const sorts = [
-        {
-            value: "Name in ASC",
-            label: "Name in ASC"
-        },
-        {
-            value: "Name in DESC",
-            label: "Name in DESC"
-        }
+    const { userDetails } = useAppSelector((state: any) => state.auth)
+    const [proposeFor, setProposeFor] = useState<any>(null)
+    const [proposeBusy, setProposeBusy] = useState(false)
+    const [proposeTitle, setProposeTitle] = useState('')
+    const [proposeDate, setProposeDate] = useState('')
+    const [proposeStart, setProposeStart] = useState('')
+    const [proposeDuration, setProposeDuration] = useState(30)
+    const [proposePrice, setProposePrice] = useState('')
+    const [proposePriceEdited, setProposePriceEdited] = useState(false)
+    const [proposeCustomerEmail, setProposeCustomerEmail] = useState<string | null>(null)
+    const [outsideConfirm, setOutsideConfirm] = useState(false)
+    const [profileFor, setProfileFor] = useState<any>(null)
+    const [profilePreview, setProfilePreview] = useState<string | null>(null)
+    const [keywords, set_keywords] = useState<Array<any>>([])
+    const [services, set_services] = useState<Array<any>>([])
+    const sorts: FilterOption[] = [
+        { value: "Name in ASC", label: "Name in ASC" },
+        { value: "Name in DESC", label: "Name in DESC" },
     ]
-    const [selectedKeywords, set_selectedKeywords] = useState<Array<any>>(userDetails.keywords || [])
-    const [selectedServices, set_selectedServices] = useState<Array<any>>(userDetails.services || [])
-    const [sortBy, set_sortBy] = useState(sorts[0])
+    const [selectedMajor, set_selectedMajor] = useState('all')
+    const [selectedService, set_selectedService] = useState('all')
+    const [sortBy, set_sortBy] = useState(sorts[0].value)
     const [nameFilter, set_nameFilter] = useState('')
     const [customers, set_customers] = useState<Array<any>>([])
-    const [filterModalShow, set_filterModalShow] = useState(false)
-    const [mobileView, set_mobileView] = useState(window.innerWidth <= 768)
     const [customersImage,set_customers_image]= useState<Array<any>>([])
+
+    const majorOptions = useMemo<FilterOption[]>(
+        () => [
+            { value: 'all', label: 'All majors' },
+            ...keywords.map((k: any) => ({ value: String(k._id), label: k.value || '' })),
+        ],
+        [keywords],
+    )
+    const serviceOptions = useMemo<FilterOption[]>(
+        () => [
+            { value: 'all', label: 'All services' },
+            ...services.map((s: any) => ({ value: String(s._id), label: s.value || '' })),
+        ],
+        [services],
+    )
 
     const getKeywordsAndServices = async () => {
         const response: any = await doGetKeywordsAndServices();
         if (response) {
-            set_keywords(response.keywords || [])
-            set_services(response.services || [])
+            set_keywords(
+                (response.keywords || []).map((k: any) => ({ _id: String(k._id), value: k.value || '' })),
+            )
+            set_services(serviceDropdownRowsFromApi(response.services || []))
         }
     }
 
@@ -55,10 +91,10 @@ const Customers = ({
         SetLoadingStatus(true)
         const response = await doFilterCustomers({
             _id: qCustomerId,
-            username: nameFilter,
-            keywords: selectedKeywords,
-            services: selectedServices,
-            sortBy: sortBy.value
+            username: nameFilter.trim(),
+            keywords: selectedMajor !== 'all' ? [{ _id: selectedMajor }] : [],
+            services: selectedService !== 'all' ? [{ _id: selectedService }] : [],
+            sortBy
         });
 
         if (response) {
@@ -111,156 +147,279 @@ const Customers = ({
         SetLoadingStatus(false)
     }
 
-    const joinPrivateChatOfCustomer = async (customerId: string) => {
+    const openPrivateChatWithCustomer = async (customerId: string) => {
         SetLoadingStatus(true);
         try {
           const response = await joinPrivateChat(customerId);
-      
+
           if (response) {
-            const { user, chat } = response;
-      
-            // Update logged-in expert's details (includes new chat)
+            const { user, otherUser } = response as any;
+
             dispatch({
               type: "updateUserDetails",
               payload: user,
             });
-      
-            // Prepare chat details for opening
+
             dispatch(
-              setChosenGroupChatDetails({
-                ...chat,
-                groupId: chat._id,
-                groupName: chat.name,
+              setChosenChatDetails({
+                userId: customerId,
+                username: otherUser?.username,
+                image: otherUser?.image,
+                peerRole: String(otherUser?.role || '')
+                  .toLowerCase()
+                  .trim() || undefined,
               })
             );
-      
-            // Navigate to expert's chat page
+
             navigate(`${process.env.REACT_APP_AUTH_URL}expertdashboard/chat`);
+            window.dispatchEvent(new Event("wl-open-chat-nav"));
           }
         } catch (err) {
-          console.error("joinPrivateChatOfCustomer error:", err);
+          console.error("openPrivateChatWithCustomer error:", err);
         }
         SetLoadingStatus(false);
       };
-      
-      
+
+    const proposeSuggestedPrice = (durationMin: number) => {
+        const rate = normalizeExpertPrice((userDetails as any)?.price) ?? 0;
+        return Math.round(((rate * durationMin) / 60) * 100) / 100;
+    };
+
+    const openClientProfile = (customer: any, index: number) => {
+        setProfilePreview(customersImage[index] || null);
+        setProfileFor(customer);
+        void fetchChatUserProfile(String(customer._id)).then((r: any) => {
+            if (r?.success && r?.result) {
+                setProfileFor((prev: any) =>
+                    prev && prev._id === customer._id ? { ...customer, ...r.result } : prev
+                );
+            }
+        });
+    };
+
+    const openProposeModal = (customer: any) => {
+        setProposeFor(customer);
+        setProposeTitle(`${customer?.username || "Student"} & ${userDetails?.username || "Expert"}`);
+        setProposeDate("");
+        setProposeStart("");
+        setProposeDuration(30);
+        setProposePrice(String(proposeSuggestedPrice(30)));
+        setProposePriceEdited(false);
+        setProposeCustomerEmail(null);
+        setOutsideConfirm(false);
+        void fetchChatUserProfile(String(customer._id)).then((r: any) => {
+            if (r?.success && r?.result?.email) setProposeCustomerEmail(String(r.result.email));
+        });
+    };
+
+    const submitPropose = async (override = false) => {
+        if (!proposeTitle.trim()) {
+            dispatch(showWarningAlert("Add a title for the session."));
+            return;
+        }
+        if (!proposeDate || !proposeStart) {
+            dispatch(showWarningAlert("Pick a date and start time."));
+            return;
+        }
+        if (!proposeCustomerEmail) {
+            dispatch(showErrorAlert("Still resolving the student — try again in a moment."));
+            return;
+        }
+        const start = new Date(`${proposeDate}T${proposeStart}:00`);
+        if (Number.isNaN(start.getTime())) {
+            dispatch(showErrorAlert("That date/time isn't valid."));
+            return;
+        }
+        if (start.getTime() <= Date.now()) {
+            dispatch(showWarningAlert("Pick a time in the future."));
+            return;
+        }
+        const end = new Date(start.getTime() + proposeDuration * 60000);
+        const price = Math.round(Number(proposePrice) * 100) / 100;
+        if (Number.isNaN(price) || price < 0) {
+            dispatch(showWarningAlert("Enter a valid price for the session."));
+            return;
+        }
+
+        if (hasBookingConflict(userDetails, start, end)) {
+            setOutsideConfirm(false);
+            dispatch(showWarningAlert("You already have a session at this time. Pick another time."));
+            return;
+        }
+
+        const needsOverride = proposedTimeNeedsOverride(userDetails, start, end);
+        if (needsOverride && !override) {
+            setOutsideConfirm(true);
+            return;
+        }
+        setOutsideConfirm(false);
+
+        setProposeBusy(true);
+        SetLoadingStatus(true);
+        const res: any = await proposeIndividualAppointment({
+            name: proposeTitle.trim(),
+            start,
+            end,
+            duration: proposeDuration,
+            price,
+            customer: proposeCustomerEmail,
+            overrideAvailability: needsOverride,
+        });
+        SetLoadingStatus(false);
+        setProposeBusy(false);
+        if (res && res !== false) {
+            if (res.userDetails) {
+                dispatch({ type: "updateUserDetails", payload: res.userDetails });
+            } else {
+                dispatch(updateMe() as any);
+            }
+            dispatch(showSuccessAlert("Session proposed — the student will be notified to accept."));
+            setProposeFor(null);
+        }
+    };
+
     useEffect(() => {
         let timer = setTimeout(() => {
             filterCustomers()
         }, 500)
         return (() => clearTimeout(timer))
-    }, [qCustomerId, nameFilter, selectedKeywords, selectedServices, sortBy])
+    }, [qCustomerId, nameFilter, selectedMajor, selectedService, sortBy])
 
     useEffect(() => {
-        getKeywordsAndServices()
-        window.addEventListener('resize', () => {
-            set_mobileView(window.innerWidth <= 768)
-        })
-        return () => {
-            window.removeEventListener('resize', () => {
-                set_mobileView(window.innerWidth <= 768)
-            })
-        }
-    }, [])
+        getKeywordsAndServices();
+    }, []);
 
     return (
-        <div className="w-full h-full relative text-white">
-            <div className={`hidden w-full py-1 bg-darkgrey-1 md:grid grid-cols-1 md:grid-cols-2 gap-4 ${qCustomerId ? 'md:hidden' : ''}`}>
-                <div>
-                    <div className="text-grey mb-0.5 text-[12px] leading-[19px]">Filter by name</div>
-                    <input
-                        className="w-full rounded-[15px] h-[50px] bg-transparent border border-lightgrey text-[14px] leading-[21px] px-[24px]"
-                        placeholder="Input name"
-                        value={nameFilter}
-                        onChange={(e) => set_nameFilter(e.target.value)}
-                    />
+        <div className="w-full min-h-full relative bg-[#F5F3EF] px-6 py-8 text-[#1A3A4A]">
+            <header className="mb-6 border-b border-[#E5E2DB] pb-5">
+                <h1 className="font-serif text-[2.5rem] font-medium leading-tight text-[#1A3A4A]">
+                    Find Clients
+                </h1>
+                <p className="mt-2 max-w-xl text-sm font-sans text-[#7A7A72]">
+                    Browse students looking for Study Abroad, Work Abroad, and Research Guidance.
+                </p>
+            </header>
+
+            <section className="mb-8 border-b border-[#E5E2DB] pb-4">
+                <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                    <div className="flex-1">
+                        <div className="flex items-center gap-2 border-b border-[#E5E2DB] pb-2">
+                            <SearchIcon className="h-4 w-4 text-[#7A7A72]" aria-hidden />
+                            <input
+                                type="text"
+                                value={nameFilter}
+                                onChange={(e) => set_nameFilter(e.target.value)}
+                                placeholder="Search by name, institution, or field..."
+                                className="w-full bg-transparent text-sm font-sans text-[#1A3A4A] placeholder:text-[#B2AEA2] outline-none"
+                            />
+                        </div>
+                    </div>
+
+                    <div className="flex flex-1 flex-col gap-3 md:flex-row md:justify-end md:gap-4">
+                        <FilterDropdown
+                            label="Filter by major"
+                            value={selectedMajor}
+                            options={majorOptions}
+                            onChange={set_selectedMajor}
+                            widthClass="md:w-44"
+                        />
+
+                        <FilterDropdown
+                            label="Filter by service"
+                            value={selectedService}
+                            options={serviceOptions}
+                            onChange={set_selectedService}
+                            widthClass="md:w-44"
+                        />
+
+                        <FilterDropdown
+                            label="Sort by"
+                            value={sortBy}
+                            options={sorts}
+                            onChange={set_sortBy}
+                            widthClass="md:w-44"
+                        />
+                    </div>
                 </div>
-                <div>
-                    <div className="text-grey mb-0.5 text-[12px] leading-[19px]">Sort by</div>
-                    <SelectionWithCheckBox
-                        options={sorts}
-                        selectedOptions={sortBy}
-                        set_selectedOptions={set_sortBy}
-                        placeholder="Sort by"
-                        isMulti={false}
-                    />
-                </div>
-                <div>
-                    <div className="text-grey mb-0.5 text-[12px] leading-[19px]">Filter by majors</div>
-                    <SelectionWithCheckBox
-                        options={keywords}
-                        selectedOptions={selectedKeywords}
-                        set_selectedOptions={set_selectedKeywords}
-                        placeholder="Select majors"
-                        isMulti={true}
-                    />
-                </div>
-                <div>
-                    <div className="text-grey mb-0.5 text-[12px] leading-[19px]">Filter by services</div>
-                    <SelectionWithCheckBox
-                        options={services}
-                        selectedOptions={selectedServices}
-                        set_selectedOptions={set_selectedServices}
-                        placeholder="Select services"
-                        isMulti={true}
-                    />
-                </div>
-            </div>
-            <div className="w-full flex flex-wrap justify-center mt-6 gap-6 pb-6">
+            </section>
+
+            {customers.length === 0 && (
+                <section className="mt-16 flex flex-col items-center justify-center text-center text-[#7A7A72]">
+                    <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-full border border-dashed border-[#E5E2DB]">
+                        <SearchIcon className="h-5 w-5" aria-hidden />
+                    </div>
+                    <h2 className="font-serif text-lg text-[#1A3A4A]">No clients found</h2>
+                    <p className="mt-1 max-w-sm text-xs font-sans text-[#7A7A72]">
+                        Try adjusting your search, clearing a filter, or exploring a different field or service.
+                    </p>
+                </section>
+            )}
+
+            {/* Customers grid */}
+            <div className="w-full flex flex-wrap justify-center gap-4 pb-6">
                 {
                     customers.map((customer,i) => (
                         <div
                             key={`customer_${customer._id}`}
-                            className={`w-[250px] rounded-md bg-darkgrey overflow-clip hoverBox relative ${selectedCustomer?._id === customer._id ? 'border-[2px] border-green' : ''}`}
+                            role="button"
+                            tabIndex={0}
+                            onClick={() => openClientProfile(customer, i)}
+                            onKeyDown={(e) => {
+                                if (e.key === 'Enter' || e.key === ' ') {
+                                    e.preventDefault();
+                                    openClientProfile(customer, i);
+                                }
+                            }}
+                            className={`w-full max-w-[260px] flex flex-col rounded-2xl border bg-white overflow-hidden shadow-sm hover:shadow-md transition-shadow relative cursor-pointer ${
+                                selectedCustomer?._id === customer._id ? 'ring-2 ring-[#234C6A]' : ''
+                            }`}
                         >
-                            <div className="absolute top-0 left-0 w-full h-[250px] bg-black bg-opacity-10 backdrop-blur-sm hidden">
-                                <div className="w-full max-h-full overflow-y-auto">
-                                    <div className="w-full h-fit m-auto overflow-y-auto !flex flex-col justify-center items-center text-base space-y-2 p-4 text-white">
-                                        <div className="w-full">
-                                            <span className="text-green font-bold">Bio : </span>
-                                            {customer.description || 'Customer has no bio'}
-                                        </div>
-                                        <div className="flex flex-wrap gap-1">
-                                            <span className="text-green font-bold">Majors : </span>
-                                            {
-                                                customer.keywords?.map((keyword: any) => <span className="bg-grey text-lightgrey rounded-sm py-0.5 px-1" key={keyword._id}>{keyword.value}</span>)
-                                            }
-                                        </div>
-                                        <div className="flex flex-wrap gap-1">
-                                            <span className="text-green font-bold">Services : </span>
-                                            {
-                                                customer.services?.map((service: any) => <span className="bg-grey text-lightgrey rounded-sm py-0.5 px-1" key={service._id}>{service.value}</span>)
-                                            }
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                            <div className="w-full h-[250px] bg-midgrey !flex items-center justify-center">
+                            <div className="w-full h-[180px] shrink-0 bg-slate-200 flex items-center justify-center overflow-hidden">
                                 {
                                     customer.image ?
                                         <img src={customersImage[i]} className="w-full h-full object-cover object-center" /> :
-                                        <div className="w-[100px] h-[100px] rounded-full border-2 border-lightgrey text-4xl text-white font-bold !flex items-center justify-center">
+                                        <div className="w-[80px] h-[80px] rounded-full border-2 border-white text-2xl text-white font-bold flex items-center justify-center bg-slate-500/60">
                                             {getAvatarTitle(customer.username)}
                                         </div>
                                 }
                             </div>
-                            <div className="w-full p-2 pb-3 !flex flex-col items-center justify-center">
-                                <div className="text-2xl text-center text-white font-bold">{customer.username}</div>
-                                <div className="text-md text-center text-lightgrey">{customer.title}</div>
-                                <Rating name="read-only" className="mt-2" value={customer.rating || 0} readOnly />
-                                <div className="w-full flex space-x-4 mt-4">
+                            <div className="w-full flex-1 p-3 flex flex-col items-stretch">
+                                <div className="text-[15px] text-slate-900 font-semibold text-center">
+                                    {customer.username}
+                                </div>
+                                <div className="text-[12px] text-slate-500 text-center">
+                                    {customer.title}
+                                </div>
+                                <div className="mt-2 flex items-center justify-center">
+                                    <Rating name="read-only" size="small" value={customer.rating || 0} readOnly />
+                                </div>
+                                <div className="mt-2 min-h-[40px] flex flex-wrap gap-1 justify-center content-start">
+                                    {customer.keywords?.slice(0, 3).map((k: any) => (
+                                        <span
+                                            key={k._id}
+                                            className="inline-flex items-center h-[18px] rounded-full bg-slate-100 px-2 text-[10px] text-slate-700"
+                                        >
+                                            {k.value}
+                                        </span>
+                                    ))}
+                                </div>
+                                <div className="w-full flex gap-2 mt-auto pt-4">
                                     <button
-                                    onClick={() => joinPrivateChatOfCustomer(customer._id)}
-                                    className="w-[calc(50%-8px)] rounded-lg border text-lightgrey border-lightgrey flex items-center justify-center"
+                                    onClick={(e) => { e.stopPropagation(); openPrivateChatWithCustomer(customer._id); }}
+                                    className="w-1/2 px-3 py-2 rounded-full border border-slate-200 text-[12px] text-slate-700 flex items-center justify-center hover:bg-slate-50"
                                     >
                                     Private Chat
                                     </button>
                                     <button
-                                        className="w-[calc(50%-8px)] p-2 mx-auto rounded-[14px] flex items-center justify-center bg-green text-white text-[16px] leading-[24px] disabled:opacity-50"
+                                        className="w-1/2 px-3 py-2 rounded-full flex items-center justify-center bg-[#234C6A] text-white text-[12px] font-semibold disabled:opacity-50"
                                         disabled={customer.status === 'review'}
-                                        onClick={() => selectCustomer(customer)}
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            selectCustomer(customer);
+                                            openProposeModal(customer);
+                                        }}
                                     >
-                                        Select
+                                        Propose a session
                                     </button>
                                 </div>
                             </div>
@@ -268,69 +427,159 @@ const Customers = ({
                     ))
                 }
             </div>
-            <button
-                className={`fixed bottom-4 right-4 w-14 h-14 rounded-full bg-grey shadow-md text-white md:hidden flex items-center justify-center ${qCustomerId ? 'hidden' : ''}`}
-                onClick={() => set_filterModalShow(true)}
-            >
-                <FilterListIcon fontSize="large" />
-            </button>
+
             {
-                filterModalShow && mobileView && !qCustomerId ?
-                    <OverlayPortal closeModal={() => set_filterModalShow(false)}>
-                        <div className="absolute bottom-0 left-0 w-full h-full bg-black bg-opacity-50 backdrop-blur-sm z-50 flex items-end">
-                            <div className="absolute top-0 left-0 w-full h-full" onClick={() => set_filterModalShow(false)}></div>
-                            <div className="relative z-10 px-6 py-10 bg-darkgrey-1 text-white w-full h-max max-h-[90vh] overflow-y-auto">
+                proposeFor ?
+                    <OverlayPortal closeModal={() => { if (!proposeBusy) setProposeFor(null); }}>
+                        <div
+                            className="fixed inset-0 z-[1100] flex items-center justify-center bg-black/30 backdrop-blur-sm p-4"
+                            onClick={() => { if (!proposeBusy) setProposeFor(null); }}
+                        >
+                            <div
+                                className="w-full max-w-sm rounded-2xl p-5 relative shadow-xl border bg-white text-slate-900 border-slate-200"
+                                onClick={(e) => e.stopPropagation()}
+                            >
                                 <button
-                                    className="absolute right-2 top-2 rounded-md hover:bg-grey"
-                                    onClick={() => set_filterModalShow(false)}
+                                    className="absolute right-3 top-3 rounded-md hover:bg-slate-100 p-1"
+                                    onClick={() => { if (!proposeBusy) setProposeFor(null); }}
                                 >
-                                    <CloseIcon />
+                                    <CloseIcon fontSize="small" />
                                 </button>
-                                <div>
-                                    <div className="text-grey mb-0.5 text-[12px] leading-[19px]">Filter by name</div>
-                                    <input
-                                        className="w-full rounded-[15px] h-[50px] bg-transparent border border-lightgrey text-[14px] leading-[21px] px-[24px]"
-                                        placeholder="Input name"
-                                        value={nameFilter}
-                                        onChange={(e) => set_nameFilter(e.target.value)}
-                                    />
+                                <h3 className="text-lg font-semibold">Propose a session</h3>
+                                <p className="mt-1 text-xs text-slate-500">
+                                    {proposeFor?.username
+                                        ? `${proposeFor.username} will get an invitation to accept or decline.`
+                                        : "The student will get an invitation to accept or decline."}
+                                </p>
+
+                                <div className="mt-4 space-y-3">
+                                    <div>
+                                        <label className="mb-1 block text-xs font-semibold">Title</label>
+                                        <input
+                                            type="text"
+                                            value={proposeTitle}
+                                            maxLength={100}
+                                            onChange={(e) => setProposeTitle(e.target.value)}
+                                            className="w-full rounded-lg border px-3 py-2 text-sm outline-none border-slate-200 bg-white text-slate-900 focus:ring-2 focus:ring-[#234C6A]"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="mb-1 block text-xs font-semibold">Date</label>
+                                        <DatePickerField
+                                            id="propose-date"
+                                            value={proposeDate}
+                                            onChange={(v: string) => { setProposeDate(v); setOutsideConfirm(false); }}
+                                            min={new Date().toLocaleDateString("en-CA")}
+                                            placeholder="Select a date"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="mb-1 block text-xs font-semibold">Start time</label>
+                                        <TimePickerField
+                                            id="propose-start-time"
+                                            value={proposeStart}
+                                            onChange={(v: string) => { setProposeStart(v); setOutsideConfirm(false); }}
+                                            placeholder="Select start time"
+                                        />
+                                    </div>
+                                    {proposeDate ? (
+                                        <div className="rounded-lg bg-slate-50 px-3 py-2 text-[11px] text-slate-600">
+                                            {(() => {
+                                                const ranges = presetAvailabilityRanges(userDetails, proposeDate);
+                                                return ranges.length ? (
+                                                    <>
+                                                        <span className="font-semibold">Your preset availability this day:</span>{" "}
+                                                        {ranges.join(", ")}
+                                                    </>
+                                                ) : (
+                                                    <span>You have no preset availability on this day.</span>
+                                                );
+                                            })()}
+                                        </div>
+                                    ) : null}
+                                    <div>
+                                        <label className="mb-1 block text-xs font-semibold">Duration</label>
+                                        <select
+                                            value={proposeDuration}
+                                            onChange={(e) => {
+                                                const next = Number(e.target.value);
+                                                setProposeDuration(next);
+                                                setOutsideConfirm(false);
+                                                if (!proposePriceEdited) setProposePrice(String(proposeSuggestedPrice(next)));
+                                            }}
+                                            className="w-full rounded-lg border px-3 py-2 text-sm outline-none border-slate-200 bg-white text-slate-900 focus:ring-2 focus:ring-[#234C6A]"
+                                        >
+                                            <option value={30}>30 min</option>
+                                            <option value={60}>60 min</option>
+                                            <option value={90}>90 min</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className="mb-1 block text-xs font-semibold">Price (USD)</label>
+                                        <div className="relative">
+                                            <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-slate-500">$</span>
+                                            <input
+                                                type="number"
+                                                min={0}
+                                                step="0.01"
+                                                value={proposePrice}
+                                                onChange={(e) => { setProposePrice(e.target.value); setProposePriceEdited(true); }}
+                                                className="w-full rounded-lg border pl-6 pr-3 py-2 text-sm outline-none border-slate-200 bg-white text-slate-900 focus:ring-2 focus:ring-[#234C6A]"
+                                            />
+                                        </div>
+                                        <p className="mt-1 text-[11px] text-slate-500">
+                                            Prefilled from your rate for this duration — edit to set the final price the student will pay.
+                                        </p>
+                                    </div>
                                 </div>
-                                <div>
-                                    <div className="text-grey mb-0.5 text-[12px] leading-[19px]">Sort by</div>
-                                    <SelectionWithCheckBox
-                                        options={sorts}
-                                        selectedOptions={sortBy}
-                                        set_selectedOptions={set_sortBy}
-                                        placeholder="Sort by"
-                                        isMulti={false}
-                                    />
-                                </div>
-                                <div>
-                                    <div className="text-grey mb-0.5 text-[12px] leading-[19px]">Filter by majors</div>
-                                    <SelectionWithCheckBox
-                                        options={keywords}
-                                        selectedOptions={selectedKeywords}
-                                        set_selectedOptions={set_selectedKeywords}
-                                        placeholder="Select majors"
-                                        isMulti={true}
-                                    />
-                                </div>
-                                <div>
-                                    <div className="text-grey mb-0.5 text-[12px] leading-[19px]">Filter by services</div>
-                                    <SelectionWithCheckBox
-                                        options={services}
-                                        selectedOptions={selectedServices}
-                                        set_selectedOptions={set_selectedServices}
-                                        placeholder="Select services"
-                                        isMulti={true}
-                                    />
-                                </div>
+
+                                {outsideConfirm ? (
+                                    <div className="mt-5 rounded-lg border border-amber-300 bg-amber-50 p-3">
+                                        <p className="text-xs text-amber-800">
+                                            Your chosen time is outside your preset availability. Click <span className="font-semibold">Yes</span> to continue, or <span className="font-semibold">No</span> to re-select your time slot.
+                                        </p>
+                                        <div className="mt-3 flex gap-2">
+                                            <button
+                                                type="button"
+                                                disabled={proposeBusy}
+                                                onClick={() => setOutsideConfirm(false)}
+                                                className="flex-1 rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-60"
+                                            >
+                                                No, re-select
+                                            </button>
+                                            <button
+                                                type="button"
+                                                disabled={proposeBusy}
+                                                onClick={() => submitPropose(true)}
+                                                className="flex-1 rounded-lg bg-[#234C6A] px-4 py-2 text-sm font-semibold text-white hover:bg-[#1b3c53] disabled:opacity-60"
+                                            >
+                                                {proposeBusy ? "Sending…" : "Yes, continue"}
+                                            </button>
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <button
+                                        type="button"
+                                        disabled={proposeBusy}
+                                        onClick={() => submitPropose()}
+                                        className="mt-5 w-full rounded-lg bg-[#234C6A] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#1b3c53] disabled:opacity-60"
+                                    >
+                                        {proposeBusy ? "Sending…" : "Send proposal"}
+                                    </button>
+                                )}
                             </div>
                         </div>
                     </OverlayPortal> :
                     null
             }
 
+            <ProfileModal
+                isOpen={!!profileFor}
+                onClose={() => setProfileFor(null)}
+                userDetails={profileFor || {}}
+                viewerRole={(userDetails as any)?.role}
+                previewImage={profilePreview}
+            />
         </div>
     );
 };

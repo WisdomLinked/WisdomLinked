@@ -83,16 +83,16 @@ const ChatBotQA = () => {
     }
 
     return (
-        <div className="w-full h-full pt-10 overflow-y-auto text-white px-[18px]">
-            <div className="w-full max-w-[1500px] mx-auto text-white">
-                <div className="text-center text-3xl font-bold mb-8">Chat Bot Q&A Management</div>
+        <div className="w-full h-full pt-10 overflow-y-auto text-wl-ink px-[18px]">
+            <div className="w-full max-w-[1500px] mx-auto text-wl-ink">
+                <div className="text-center text-3xl font-semibold text-wl-brand mb-8">Chat Bot Q&A Management</div>
                 
-                <div className="w-full bg-gray-800 rounded-[16px] shadow-lg">
+                <div className="w-full bg-wl-card rounded-2xl border border-wl-line shadow-[0_10px_30px_rgba(35,76,106,0.08)] overflow-hidden">
                     {/* Header Section */}
-                    <div className="w-full flex flex-col lg:flex-row lg:justify-between lg:items-center p-6 gap-4 border-b border-gray-700">
+                    <div className="w-full flex flex-col lg:flex-row lg:justify-between lg:items-center p-6 gap-4 border-b border-wl-line bg-wl-pageAlt/40">
                         <div className="flex flex-col sm:flex-row sm:items-center gap-4">
-                            <div className="text-lg font-medium">
-                                Total of <span className="text-blue-400 font-bold">{totalCount}</span> questions
+                            <div className="text-lg font-medium text-wl-ink">
+                                Total of <span className="text-wl-brand font-bold">{totalCount}</span> questions
                             </div>
                             
                             {/* Search Bar */}
@@ -110,8 +110,9 @@ const ChatBotQA = () => {
 
                         {/* Add New Button */}
                         <button
+                            type="button"
                             onClick={() => setShowCreateModal(true)}
-                            className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+                            className="flex items-center gap-2 rounded-xl border border-wl-brand bg-wl-brand px-4 py-2 text-sm font-medium text-white shadow-sm transition-colors hover:brightness-95"
                         >
                             <Plus size={20} />
                             Add New Q&A
@@ -119,7 +120,7 @@ const ChatBotQA = () => {
                     </div>
 
                     {/* Pagination Top */}
-                    <div className="flex justify-end p-4 border-b border-gray-700">
+                    <div className="flex justify-end p-4 border-b border-wl-line">
                         <Pagination
                             currentPage={currentPage}
                             totalPage={totalPage}
@@ -133,7 +134,7 @@ const ChatBotQA = () => {
                     {/* Table */}
                     <div className="relative overflow-x-auto">
                         <table className="w-full text-sm text-left">
-                            <thead className="text-xs uppercase bg-gray-900 text-gray-300">
+                            <thead className="text-xs uppercase bg-wl-brandSoft text-wl-brand">
                                 <tr>
                                     <th scope="col" className="px-6 py-4 text-center w-16">
                                         No
@@ -155,15 +156,15 @@ const ChatBotQA = () => {
                             <tbody>
                                 {qAndA ? (
                                     qAndA.map((item, index) => (
-                                        <tr key={index} className="border-b border-gray-700 hover:bg-gray-750 transition-colors">
-                                            <td className="py-4 px-6 text-center font-medium text-gray-300">
+                                        <tr key={index} className="border-b border-wl-line hover:bg-wl-pageAlt transition-colors">
+                                            <td className="py-4 px-6 text-center font-medium text-wl-ink">
                                                 {numPerPage * currentPage + index + 1}
                                             </td>
                                             <td className="px-6 py-4 text-center">
                                                 <span className={`px-2 py-1 rounded-full text-xs font-medium ${
                                                     item.role === 'user' 
-                                                        ? 'bg-blue-600 text-blue-100' 
-                                                        : 'bg-purple-600 text-purple-100'
+                                                        ? 'bg-wl-brandSoft text-wl-brand' 
+                                                        : 'bg-emerald-50 text-green'
                                                 }`}>
                                                     {item.role}
                                                 </span>
@@ -182,7 +183,7 @@ const ChatBotQA = () => {
                                                 <div className="flex items-center justify-center gap-2">
                                                     <button
                                                         onClick={() => handleEdit(item)}
-                                                        className="p-2 text-blue-400 hover:text-blue-300 hover:bg-blue-600/20 rounded-lg transition-colors"
+                                                        className="p-2 text-wl-brand hover:bg-wl-brandSoft rounded-lg transition-colors"
                                                         title="Edit"
                                                     >
                                                         <Edit size={16} />
@@ -200,7 +201,7 @@ const ChatBotQA = () => {
                                     ))
                                 ) : (
                                     <tr>
-                                        <td colSpan={5} className="px-6 py-12 text-center text-gray-400">
+                                        <td colSpan={5} className="px-6 py-12 text-center text-wl-muted">
                                             {'No Q&A items found.'}
                                         </td>
                                     </tr>
@@ -210,11 +211,11 @@ const ChatBotQA = () => {
                     </div>
 
                     {/* Bottom Controls */}
-                    <div className="w-full flex flex-col sm:flex-row sm:justify-between sm:items-center p-6 gap-4 border-t border-gray-700">
+                    <div className="w-full flex flex-col sm:flex-row sm:justify-between sm:items-center p-6 gap-4 border-t border-wl-line">
                         <div className="flex items-center gap-4">
-                            <label className="text-sm text-gray-300">Show rows:</label>
+                            <label className="text-sm text-wl-muted">Show rows:</label>
                             <select
-                                className="bg-gray-700 text-white border border-gray-600 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500"
+                                className="bg-wl-card text-wl-ink border border-wl-line rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-wl-brand/30"
                                 value={numPerPage}
                                 onChange={(e) => {
                                     setNumPerPage(parseInt(e.target.value))
@@ -241,16 +242,16 @@ const ChatBotQA = () => {
 
             {/* Create Modal */}
             {showCreateModal && (
-                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-                    <div className="bg-gray-800 rounded-lg p-6 w-full max-w-2xl mx-4 max-h-[90vh] overflow-y-auto">
+                <div className="fixed inset-0 bg-slate-900/40 flex items-center justify-center z-50">
+                    <div className="bg-wl-card border border-wl-line rounded-2xl p-6 w-full max-w-2xl mx-4 max-h-[90vh] overflow-y-auto shadow-xl">
                         <div className="flex justify-between items-center mb-4">
-                            <h3 className="text-xl font-bold text-white">Create New Q&A</h3>
+                            <h3 className="text-xl font-bold text-wl-brand">Create New Q&A</h3>
                             <button 
                                 onClick={() => {
                                     setShowCreateModal(false);
                                     setFormData({ role: 'user', question: '', answer: '' });
                                 }} 
-                                className="text-gray-400 hover:text-white"
+                                className="text-wl-muted hover:text-wl-ink"
                             >
                                 <X size={24} />
                             </button>
@@ -258,11 +259,11 @@ const ChatBotQA = () => {
                         
                         <div className="space-y-4">
                             <div>
-                                <label className="block text-sm font-medium text-gray-300 mb-2">Role</label>
+                                <label className="block text-sm font-medium text-wl-muted mb-2">Role</label>
                                 <select
                                     value={formData.role}
                                     onChange={(e) => setFormData({ ...formData, role: e.target.value })}
-                                    className="w-full p-3 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                    className="w-full p-3 bg-wl-card border border-wl-line rounded-lg text-wl-ink focus:outline-none focus:ring-2 focus:ring-wl-brand/30"
                                 >
                                     <option value="user">User</option>
                                     <option value="expert">Expert</option>
@@ -270,21 +271,21 @@ const ChatBotQA = () => {
                                 </select>
                             </div>
                             <div>
-                                <label className="block text-sm font-medium text-gray-300 mb-2">Question</label>
+                                <label className="block text-sm font-medium text-wl-muted mb-2">Question</label>
                                 <textarea
                                     value={formData.question}
                                     onChange={(e) => setFormData({ ...formData, question: e.target.value })}
-                                    className="w-full p-3 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                    className="w-full p-3 bg-wl-card border border-wl-line rounded-lg text-wl-ink focus:outline-none focus:ring-2 focus:ring-wl-brand/30"
                                     rows={3}
                                     placeholder="Enter the question..."
                                 />
                             </div>
                             <div>
-                                <label className="block text-sm font-medium text-gray-300 mb-2">Answer</label>
+                                <label className="block text-sm font-medium text-wl-muted mb-2">Answer</label>
                                 <textarea
                                     value={formData.answer}
                                     onChange={(e) => setFormData({ ...formData, answer: e.target.value })}
-                                    className="w-full p-3 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                    className="w-full p-3 bg-wl-card border border-wl-line rounded-lg text-wl-ink focus:outline-none focus:ring-2 focus:ring-wl-brand/30"
                                     rows={4}
                                     placeholder="Enter the answer..."
                                 />
@@ -292,7 +293,7 @@ const ChatBotQA = () => {
                             <div className="flex gap-3 pt-4">
                                 <button
                                     onClick={handleCreate}
-                                    className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
+                                    className="flex items-center gap-2 px-4 py-2 bg-wl-brand text-white rounded-lg hover:brightness-95 transition-colors disabled:opacity-50"
                                 >
                                     <Save size={16} />
                                     Create
@@ -302,7 +303,7 @@ const ChatBotQA = () => {
                                         setShowCreateModal(false);
                                         setFormData({ role: 'user', question: '', answer: '' });
                                     }}
-                                    className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors"
+                                    className="px-4 py-2 border border-wl-line bg-wl-pageAlt text-wl-ink rounded-lg hover:bg-wl-page transition-colors"
                                 >
                                     Cancel
                                 </button>
@@ -314,16 +315,16 @@ const ChatBotQA = () => {
 
             {/* Edit Modal */}
             {showEditModal && (
-                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-                    <div className="bg-gray-800 rounded-lg p-6 w-full max-w-2xl mx-4 max-h-[90vh] overflow-y-auto">
+                <div className="fixed inset-0 bg-slate-900/40 flex items-center justify-center z-50">
+                    <div className="bg-wl-card border border-wl-line rounded-2xl p-6 w-full max-w-2xl mx-4 max-h-[90vh] overflow-y-auto shadow-xl">
                         <div className="flex justify-between items-center mb-4">
-                            <h3 className="text-xl font-bold text-white">Edit Q&A</h3>
+                            <h3 className="text-xl font-bold text-wl-brand">Edit Q&A</h3>
                             <button 
                                 onClick={() => {
                                     setShowEditModal(false);
                                     setFormData({ role: 'user', question: '', answer: '' });
                                 }} 
-                                className="text-gray-400 hover:text-white"
+                                className="text-wl-muted hover:text-wl-ink"
                             >
                                 <X size={24} />
                             </button>
@@ -331,11 +332,11 @@ const ChatBotQA = () => {
                         
                         <div className="space-y-4">
                             <div>
-                                <label className="block text-sm font-medium text-gray-300 mb-2">Role</label>
+                                <label className="block text-sm font-medium text-wl-muted mb-2">Role</label>
                                 <select
                                     value={formData.role}
                                     onChange={(e) => setFormData({ ...formData, role: e.target.value })}
-                                    className="w-full p-3 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                    className="w-full p-3 bg-wl-card border border-wl-line rounded-lg text-wl-ink focus:outline-none focus:ring-2 focus:ring-wl-brand/30"
                                 >
                                     <option value="user">User</option>
                                     <option value="expert">Expert</option>
@@ -343,21 +344,21 @@ const ChatBotQA = () => {
                                 </select>
                             </div>
                             <div>
-                                <label className="block text-sm font-medium text-gray-300 mb-2">Question</label>
+                                <label className="block text-sm font-medium text-wl-muted mb-2">Question</label>
                                 <textarea
                                     value={formData.question}
                                     onChange={(e) => setFormData({ ...formData, question: e.target.value })}
-                                    className="w-full p-3 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                    className="w-full p-3 bg-wl-card border border-wl-line rounded-lg text-wl-ink focus:outline-none focus:ring-2 focus:ring-wl-brand/30"
                                     rows={3}
                                     placeholder="Enter the question..."
                                 />
                             </div>
                             <div>
-                                <label className="block text-sm font-medium text-gray-300 mb-2">Answer</label>
+                                <label className="block text-sm font-medium text-wl-muted mb-2">Answer</label>
                                 <textarea
                                     value={formData.answer}
                                     onChange={(e) => setFormData({ ...formData, answer: e.target.value })}
-                                    className="w-full p-3 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                    className="w-full p-3 bg-wl-card border border-wl-line rounded-lg text-wl-ink focus:outline-none focus:ring-2 focus:ring-wl-brand/30"
                                     rows={4}
                                     placeholder="Enter the answer..."
                                 />
@@ -365,7 +366,7 @@ const ChatBotQA = () => {
                             <div className="flex gap-3 pt-4">
                                 <button
                                     onClick={handleUpdate}
-                                    className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
+                                    className="flex items-center gap-2 px-4 py-2 bg-wl-brand text-white rounded-lg hover:brightness-95 transition-colors disabled:opacity-50"
                                 >
                                     <Save size={16} />
                                     Update
@@ -375,7 +376,7 @@ const ChatBotQA = () => {
                                         setShowEditModal(false);
                                         setFormData({ role: 'user', question: '', answer: '' });
                                     }}
-                                    className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors"
+                                    className="px-4 py-2 border border-wl-line bg-wl-pageAlt text-wl-ink rounded-lg hover:bg-wl-page transition-colors"
                                 >
                                     Cancel
                                 </button>

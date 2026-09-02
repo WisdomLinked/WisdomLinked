@@ -1,0 +1,967 @@
+import React, { useState, useRef, useEffect } from 'react';
+import {
+  User,
+  Mail,
+  Lock,
+  CreditCard,
+  X,
+  Check,
+  Loader2,
+  StickyNote,
+  Save,
+  GraduationCap,
+} from 'lucide-react';
+import { useAppSelector } from '../../store';
+import { useDispatch } from 'react-redux';
+import { showErrorAlert, showSuccessAlert } from '../../actions/alertActions';
+import { updateMe } from '../../actions/authActions';
+import { doUpdateProfile, profileImageFetch, passwordResetRequest, confirmPasswordResetByCode } from '../../api/api';
+import FormAlert from '../FormAlert';
+import { useFormAlert } from '../../hooks/useFormAlert';
+import { usePaymentHistory, PaymentHistoryTable, PaymentHistorySummary } from './PaymentHistoryTable';
+import { resolveProfileImageSrc, safeImageSrc } from '../../utils/profileImage';
+import { saveProfilePhotoFile } from '../../utils/profileImageUpload';
+import { SERVICE_OPTIONS, canonicalLabelsFromMixedServiceEntries } from '../../constants/serviceOptions';
+import MajorSelect from '../MajorSelect';
+import OptionSelect from '../ui/OptionSelect';
+
+const PREFERENCE_OPTIONS = SERVICE_OPTIONS.map((o) => ({ id: o.value, label: o.label }));
+
+/** Pull a display string from a stored entry (raw string or populated {value|label|name} doc). */
+function extractEntryValue(item: unknown): string {
+  if (typeof item === 'string') return item.trim();
+  const doc = item as { value?: string; label?: string; name?: string } | null;
+  return String(doc?.value ?? doc?.label ?? doc?.name ?? '').trim();
+}
+
+/** Map the user's stored services -> the three canonical preference toggles. */
+function preferencesFromServices(services: unknown[] | undefined): Record<string, boolean> {
+  const labels = new Set(canonicalLabelsFromMixedServiceEntries(services as any[]));
+  const out: Record<string, boolean> = {};
+  for (const opt of PREFERENCE_OPTIONS) out[opt.id] = labels.has(opt.label);
+  return out;
+}
+
+/** Map the user's stored keywords -> interest chips (de-duped, preserves any non-option majors). */
+function interestsFromKeywords(keywords: unknown[] | undefined): string[] {
+  const list = Array.isArray(keywords) ? keywords : [];
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const k of list) {
+    const v = extractEntryValue(k);
+    if (v && !seen.has(v.toLowerCase())) {
+      seen.add(v.toLowerCase());
+      out.push(v);
+    }
+  }
+  return out;
+}
+
+
+const inputBase =
+  'w-full rounded-xl border bg-white px-4 py-2.5 text-sm text-slate-800 placeholder-slate-400 outline-none transition-all focus:ring-2 focus:ring-[#234C6A]/30 focus:border-[#234C6A]';
+const inputNormal = `${inputBase} border-slate-200`;
+
+const DEGREE_OPTIONS = ["Bachelor's", "Master's", "PhD", 'Other'];
+const RANKING_OPTIONS = ['Top 10%', 'Top 25%', 'Top 50%', 'Other'];
+
+/** Academic-background fields are optional and free-form; coerce any stored shape to a string. */
+function coerceProfileString(value: unknown): string {
+  if (typeof value === 'string') return value;
+  if (value && typeof value === 'object') {
+    const doc = value as { label?: string; value?: string; name?: string };
+    return String(doc.label ?? doc.value ?? doc.name ?? '');
+  }
+  return '';
+}
+
+function academicFromUser(userDetails: any) {
+  return {
+    degreeSought: coerceProfileString(userDetails?.degreeSought),
+    intendedIntake: coerceProfileString(userDetails?.intendedIntake),
+    currentUniversity: coerceProfileString(userDetails?.currentUniversity),
+    gpa: coerceProfileString(userDetails?.gpa),
+    rankingPercentile: coerceProfileString(userDetails?.rankingPercentile),
+    targetUniversities: coerceProfileString(userDetails?.targetUniversities),
+    country: coerceProfileString(userDetails?.country),
+  };
+}
+
+
+export default function StudentProfile() {
+  const dispatch = useDispatch();
+  const userDetails = useAppSelector((state: any) => state?.auth?.userDetails ?? null);
+
+  const [name, setName] = useState(() => userDetails?.username ?? '');
+  const [email, setEmail] = useState(() => userDetails?.email ?? '');
+  const [photoUrl, setPhotoUrl] = useState<string | null>(null);
+  const [photoDataUrl, setPhotoDataUrl] = useState<string | null>(null);
+  const [photoFile, setPhotoFile] = useState<File | null>(null);
+
+  const readFileAsDataUrl = (file: File) =>
+    new Promise<string | null>(resolve => {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        resolve(typeof reader.result === 'string' ? reader.result : null);
+      };
+      reader.readAsDataURL(file);
+    });
+  const [preferences, setPreferences] = useState<Record<string, boolean>>(
+    () => preferencesFromServices(userDetails?.services),
+  );
+  const [interests, setInterests] = useState<string[]>(
+    () => interestsFromKeywords([...(userDetails?.keywords || []), ...(userDetails?.customKeywords || [])]),
+  );
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const [personalDirty, setPersonalDirty] = useState(false);
+  const [personalSaving, setPersonalSaving] = useState(false);
+  const [photoSaving, setPhotoSaving] = useState(false);
+  const [preferencesDirty, setPreferencesDirty] = useState(false);
+  const [preferencesSaving, setPreferencesSaving] = useState(false);
+  const [interestsDirty, setInterestsDirty] = useState(false);
+  const [interestsSaving, setInterestsSaving] = useState(false);
+
+  const SPECIAL_NOTE_MAX = 2000;
+  const [specialNote, setSpecialNote] = useState(() => (userDetails as any)?.specialNote ?? '');
+  const [notesDirty, setNotesDirty] = useState(false);
+  const [notesSaving, setNotesSaving] = useState(false);
+
+  const [academic, setAcademic] = useState(() => academicFromUser(userDetails));
+  const [academicDirty, setAcademicDirty] = useState(false);
+  const [academicSaving, setAcademicSaving] = useState(false);
+  const setAcademicField = (key: keyof ReturnType<typeof academicFromUser>, value: string) => {
+    setAcademic(prev => ({ ...prev, [key]: value }));
+    setAcademicDirty(true);
+  };
+
+  // Keep profile header fields in sync with the authenticated user.
+  // Avoid overwriting while the user is editing the personal section.
+  useEffect(() => {
+    if (personalDirty) return;
+    if (userDetails?.username) setName(userDetails.username);
+    if (userDetails?.email) setEmail(userDetails.email);
+    let cancelled = false;
+    const loadPhoto = async () => {
+      const src = await resolveProfileImageSrc(
+        userDetails?.image,
+        'small',
+        profileImageFetch as any,
+      );
+      if (!cancelled) setPhotoUrl(src);
+    };
+    void loadPhoto();
+    return () => {
+      cancelled = true;
+    };
+  }, [personalDirty, userDetails?.username, userDetails?.email, userDetails?.image]);
+
+  useEffect(() => {
+    if (notesDirty) return;
+    setSpecialNote((userDetails as any)?.specialNote ?? '');
+  }, [notesDirty, (userDetails as any)?.specialNote]);
+
+  useEffect(() => {
+    if (academicDirty) return;
+    setAcademic(academicFromUser(userDetails));
+  }, [
+    academicDirty,
+    (userDetails as any)?.degreeSought,
+    (userDetails as any)?.intendedIntake,
+    (userDetails as any)?.currentUniversity,
+    (userDetails as any)?.gpa,
+    (userDetails as any)?.rankingPercentile,
+    (userDetails as any)?.targetUniversities,
+    (userDetails as any)?.country,
+  ]);
+
+  // Load saved preferences (services) / interests (keywords) from the account.
+  // Skip while the user has unsaved edits so we don't clobber their changes.
+  useEffect(() => {
+    if (preferencesDirty) return;
+    setPreferences(preferencesFromServices(userDetails?.services));
+  }, [preferencesDirty, userDetails?.services]);
+
+  useEffect(() => {
+    if (interestsDirty) return;
+    setInterests(interestsFromKeywords([...(userDetails?.keywords || []), ...(userDetails?.customKeywords || [])]));
+  }, [interestsDirty, userDetails?.keywords, userDetails?.customKeywords]);
+
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [passwordStep, setPasswordStep] = useState<'request' | 'verify' | 'done'>('request');
+  const [otpSent, setOtpSent] = useState(false);
+  const [otpValue, setOtpValue] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [passwordLoading, setPasswordLoading] = useState(false);
+  const {
+    message: passwordAlert,
+    variant: passwordAlertVariant,
+    setFormError: setPasswordError,
+    clearFormAlert: clearPasswordAlert,
+  } = useFormAlert();
+
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const { payments, loading: paymentsLoading, error: paymentsError } = usePaymentHistory(showPaymentModal);
+
+  const togglePreference = (id: string) => {
+    setPreferences(prev => ({ ...prev, [id]: !prev[id] }));
+    setPreferencesDirty(true);
+  };
+
+  const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file && file.type.startsWith('image/')) {
+      const url = URL.createObjectURL(file);
+      setPhotoUrl(url);
+      setPhotoFile(file);
+      setPhotoDataUrl(null);
+
+      // Persist image by sending a base64 data URL to the backend.
+      // (The backend update endpoint expects `image` in the request body.)
+      // Precompute preview payload; we also re-read on save if needed.
+      readFileAsDataUrl(file).then(dataUrl => setPhotoDataUrl(dataUrl));
+    }
+  };
+
+  const hasPhotoChanges = photoFile != null;
+  const hasPersonalTextChanges =
+    name.trim() !== (userDetails?.username ?? '').trim() ||
+    email.trim() !== (userDetails?.email ?? '').trim();
+
+  const profileHasUnsavedChanges =
+    hasPersonalTextChanges || preferencesDirty || interestsDirty || academicDirty;
+
+  const handleSavePhoto = async () => {
+    if (!photoFile) return;
+    setPhotoSaving(true);
+    try {
+      const filename = await saveProfilePhotoFile(photoFile);
+      setPhotoFile(null);
+      setPhotoDataUrl(null);
+      await dispatch(updateMe() as any);
+      const src = await resolveProfileImageSrc(
+        filename,
+        'small',
+        profileImageFetch as any,
+      );
+      setPhotoUrl(src);
+      dispatch(showSuccessAlert('Profile photo saved'));
+    } catch (err: any) {
+      dispatch(
+        showErrorAlert(
+          err?.response?.data?.error || err?.message || 'Could not save profile photo',
+        ),
+      );
+    } finally {
+      setPhotoSaving(false);
+    }
+  };
+
+  const handleSavePersonal = async () => {
+    const trimmedName = name.trim();
+    if (!trimmedName) {
+      dispatch(showErrorAlert('Name is required'));
+      return;
+    }
+
+    setPersonalSaving(true);
+    try {
+      const ok = await doUpdateProfile({
+        username: trimmedName,
+      });
+
+      if (ok) {
+        setPersonalDirty(false);
+        if (userDetails?.email) setEmail(userDetails.email);
+        await dispatch(updateMe() as any);
+        dispatch(showSuccessAlert('Profile saved'));
+      } else {
+        dispatch(showErrorAlert('Could not save profile'));
+      }
+    } catch (err: any) {
+      dispatch(showErrorAlert(err?.message || 'Could not save profile'));
+    } finally {
+      setPersonalSaving(false);
+    }
+  };
+
+  const handleSaveAllProfileChanges = async () => {
+    if (hasPersonalTextChanges) await handleSavePersonal();
+    if (preferencesDirty) await handleSavePreferences();
+    if (interestsDirty) await handleSaveInterests();
+    if (academicDirty) await handleSaveAcademic();
+  };
+
+  // Academic background is optional; persist the fields the student filled in.
+  const handleSaveAcademic = async () => {
+    setAcademicSaving(true);
+    try {
+      const ok = await doUpdateProfile({
+        degreeSought: academic.degreeSought.trim(),
+        intendedIntake: academic.intendedIntake.trim(),
+        currentUniversity: academic.currentUniversity.trim(),
+        gpa: academic.gpa.trim(),
+        rankingPercentile: academic.rankingPercentile.trim(),
+        targetUniversities: academic.targetUniversities.trim(),
+        country: academic.country.trim(),
+      });
+      if (ok) {
+        setAcademicDirty(false);
+        dispatch(showSuccessAlert('Academic background saved'));
+      } else {
+        dispatch(showErrorAlert('Could not save academic background'));
+      }
+    } catch (err: any) {
+      dispatch(showErrorAlert(err?.message || 'Could not save academic background'));
+    } finally {
+      setAcademicSaving(false);
+    }
+  };
+
+  // Preferences are persisted as the user's `services` (the three canonical service options).
+  const handleSavePreferences = async () => {
+    setPreferencesSaving(true);
+    try {
+      const services = PREFERENCE_OPTIONS.filter(o => preferences[o.id]).map(o => o.label);
+      const ok = await doUpdateProfile({ services });
+      if (ok) {
+        setPreferencesDirty(false);
+        dispatch(showSuccessAlert('Preferences saved'));
+      } else {
+        dispatch(showErrorAlert('Could not save preferences'));
+      }
+    } catch (err: any) {
+      dispatch(showErrorAlert(err?.message || 'Could not save preferences'));
+    } finally {
+      setPreferencesSaving(false);
+    }
+  };
+
+  // Interests are persisted as the user's `keywords` (fields of study / majors).
+  const handleSaveInterests = async () => {
+    setInterestsSaving(true);
+    try {
+      const ok = await doUpdateProfile({ keywords: interests });
+      if (ok) {
+        setInterestsDirty(false);
+        dispatch(showSuccessAlert('Interests saved'));
+      } else {
+        dispatch(showErrorAlert('Could not save interests'));
+      }
+    } catch (err: any) {
+      dispatch(showErrorAlert(err?.message || 'Could not save interests'));
+    } finally {
+      setInterestsSaving(false);
+    }
+  };
+
+  const handleSaveSpecialNote = async () => {
+    const trimmed = specialNote.slice(0, SPECIAL_NOTE_MAX);
+    setNotesSaving(true);
+    const ok = await doUpdateProfile({ specialNote: trimmed });
+    setNotesSaving(false);
+    if (ok) {
+      setNotesDirty(false);
+      setSpecialNote(trimmed);
+    }
+  };
+
+  const handleRequestOtp = async () => {
+    clearPasswordAlert();
+    setPasswordLoading(true);
+    try {
+      const res = (await passwordResetRequest({ email })) as any;
+      if (res === false) return; // session expired -> handled (logged out) upstream
+      if (res?.status === 'SUCCESS') {
+        setOtpSent(true);
+        setPasswordStep('verify');
+      } else {
+        setPasswordError(res?.error || 'Could not send the code. Please try again.');
+      }
+    } catch (err: any) {
+      setPasswordError(err?.message || 'Could not send the code. Please try again.');
+    } finally {
+      setPasswordLoading(false);
+    }
+  };
+
+  const handleVerifyAndChangePassword = async () => {
+    clearPasswordAlert();
+    if (otpValue.length < 6) {
+      setPasswordError('Please enter the 6-digit code sent to your email.');
+      return;
+    }
+    if (
+      newPassword.length < 8 ||
+      !/[A-Z]/.test(newPassword) ||
+      !/[0-9]/.test(newPassword) ||
+      !/[^A-Za-z0-9]/.test(newPassword)
+    ) {
+      setPasswordError('Password must be 8+ characters and include an uppercase letter, a number, and a symbol.');
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setPasswordError('Passwords do not match.');
+      return;
+    }
+    setPasswordLoading(true);
+    try {
+      const res = (await confirmPasswordResetByCode({
+        email,
+        password: newPassword,
+        code: otpValue,
+      })) as any;
+      if (res === false) return; // session expired -> handled (logged out) upstream
+      if (res?.status === 'SUCCESS') {
+        setPasswordStep('done');
+        setOtpValue('');
+        setNewPassword('');
+        setConfirmPassword('');
+      } else {
+        setPasswordError(res?.error || 'Could not update your password. Please try again.');
+      }
+    } catch (err: any) {
+      setPasswordError(err?.message || 'Could not update your password. Please try again.');
+    } finally {
+      setPasswordLoading(false);
+    }
+  };
+
+  const closePasswordModal = () => {
+    setShowPasswordModal(false);
+    setPasswordStep('request');
+    setOtpSent(false);
+    setOtpValue('');
+    setNewPassword('');
+    setConfirmPassword('');
+    clearPasswordAlert();
+  };
+
+  const cardClass =
+    'rounded-2xl border border-slate-200 bg-white p-6 shadow-[0_10px_30px_rgba(0,0,0,0.06)]';
+
+  return (
+    <div className="h-[calc(100vh-56px)] overflow-y-auto bg-[#F5F3EF] px-4 py-8 sm:px-6">
+      <div className="mx-auto w-full max-w-3xl">
+      <h1 className="text-2xl font-semibold text-slate-900 mb-1">Profile</h1>
+      <p className="text-sm text-slate-500 mb-6">
+        Manage your account details, preferences, and security.
+      </p>
+
+      {/* Profile info: photo, name, email */}
+      <section className={cardClass + ' mb-6'}>
+        <div className="mb-4 flex items-center justify-between gap-2">
+          <h2 className="text-sm font-semibold uppercase tracking-wider text-slate-900">
+            Personal information
+          </h2>
+          {hasPersonalTextChanges && (
+            <button
+              type="button"
+              onClick={() => void handleSavePersonal()}
+              disabled={personalSaving}
+              className="rounded-lg bg-[#234C6A] px-3 py-1.5 text-[11px] font-semibold text-white hover:brightness-110 disabled:opacity-50"
+            >
+              {personalSaving ? 'Saving…' : 'Save'}
+            </button>
+          )}
+        </div>
+        <div className="flex flex-col sm:flex-row gap-6">
+          <div className="flex flex-col items-center sm:items-start">
+            <div className="relative">
+              <div className="h-24 w-24 rounded-2xl border-2 border-slate-200 bg-slate-100 overflow-hidden flex items-center justify-center">
+                {photoUrl ? (
+                  <img src={safeImageSrc(photoUrl)} alt="Profile" className="h-full w-full object-cover" />
+                ) : (
+                  <span className="text-3xl font-bold text-[#234C6A]">
+                    {String(name ?? '')
+                      .trim()
+                      .split(/\s+/)
+                      .filter(Boolean)
+                      .map(p => p[0])
+                      .join('')
+                      .slice(0, 2)
+                      .toUpperCase() || '?'}
+                  </span>
+                )}
+              </div>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={handlePhotoChange}
+              />
+            </div>
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-[11px] font-semibold text-slate-700 hover:bg-slate-50 transition"
+              >
+                Change photo
+              </button>
+              <button
+                type="button"
+                disabled={!hasPhotoChanges || photoSaving}
+                onClick={() => void handleSavePhoto()}
+                className="rounded-lg bg-[#234C6A] px-3 py-1.5 text-[11px] font-semibold text-white shadow-sm hover:bg-[#1b3c53] disabled:opacity-40 disabled:cursor-not-allowed transition"
+              >
+                {photoSaving ? 'Saving…' : 'Save photo'}
+              </button>
+            </div>
+          </div>
+          <div className="flex-1 space-y-4">
+            <div>
+              <label className="block text-xs font-semibold text-slate-600 mb-1">
+                <span className="flex items-center gap-1.5"><User size={12} /> Full name</span>
+              </label>
+              <input
+                type="text"
+                value={name}
+                onChange={e => {
+                  setName(e.target.value);
+                  setPersonalDirty(true);
+                }}
+                placeholder="Your name"
+                className={inputNormal}
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-slate-600 mb-1">
+                <span className="flex items-center gap-1.5"><Mail size={12} /> Email</span>
+              </label>
+              <input
+                type="email"
+                value={email}
+                onChange={e => {
+                  setEmail(e.target.value);
+                  setPersonalDirty(true);
+                }}
+                placeholder="you@example.com"
+                className={inputNormal}
+              />
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Academic background (optional, recommended) */}
+      <section className={cardClass + ' mb-6'}>
+        <div className="mb-4 flex items-center justify-between gap-2">
+          <h2 className="text-sm font-semibold uppercase tracking-wider text-slate-900 flex items-center gap-2">
+            <GraduationCap className="h-4 w-4 text-[#234C6A]" aria-hidden />
+            Academic background
+          </h2>
+          {academicDirty && (
+            <button
+              type="button"
+              onClick={() => void handleSaveAcademic()}
+              disabled={academicSaving}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-[#234C6A] px-3 py-1.5 text-[11px] font-semibold text-white hover:brightness-110 disabled:opacity-60"
+            >
+              {academicSaving && <Loader2 className="h-3 w-3 animate-spin" aria-hidden />}
+              {academicSaving ? 'Saving…' : 'Save'}
+            </button>
+          )}
+        </div>
+        <p className="text-xs text-slate-600 mb-4">
+          Optional but recommended — experts you book use this to prepare for your session, so you don&apos;t have to
+          repeat it each time.
+        </p>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div>
+            <label className="block text-xs font-semibold text-slate-600 mb-1" htmlFor="degree-sought">
+              Degree sought
+            </label>
+            <OptionSelect
+              id="degree-sought"
+              ariaLabel="Degree sought"
+              value={academic.degreeSought}
+              onChange={next => setAcademicField('degreeSought', next)}
+              options={DEGREE_OPTIONS}
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-slate-600 mb-1">Intended intake</label>
+            <input
+              type="text"
+              value={academic.intendedIntake}
+              onChange={e => setAcademicField('intendedIntake', e.target.value)}
+              placeholder="e.g. Fall 2027"
+              className={inputNormal}
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-slate-600 mb-1">Current university</label>
+            <input
+              type="text"
+              value={academic.currentUniversity}
+              onChange={e => setAcademicField('currentUniversity', e.target.value)}
+              placeholder="e.g. HUST"
+              className={inputNormal}
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-slate-600 mb-1">GPA</label>
+            <input
+              type="text"
+              value={academic.gpa}
+              onChange={e => setAcademicField('gpa', e.target.value)}
+              placeholder="e.g. 3.75/4.0"
+              className={inputNormal}
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-slate-600 mb-1" htmlFor="ranking-percentile">
+              Ranking percentile
+            </label>
+            <OptionSelect
+              id="ranking-percentile"
+              ariaLabel="Ranking percentile"
+              value={academic.rankingPercentile}
+              onChange={next => setAcademicField('rankingPercentile', next)}
+              options={RANKING_OPTIONS}
+            />
+          </div>
+          <div className="sm:col-span-2">
+            <label className="block text-xs font-semibold text-slate-600 mb-1">Target universities</label>
+            <input
+              type="text"
+              value={academic.targetUniversities}
+              onChange={e => setAcademicField('targetUniversities', e.target.value)}
+              placeholder="Comma-separated, e.g. MIT, Stanford, CMU"
+              className={inputNormal}
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-slate-600 mb-1">Country</label>
+            <input
+              type="text"
+              value={academic.country}
+              onChange={e => setAcademicField('country', e.target.value)}
+              placeholder="e.g. China"
+              className={inputNormal}
+            />
+          </div>
+        </div>
+      </section>
+
+      {/* Preferences & expectations (saved to your account) */}
+      <section className={cardClass + ' mb-6'}>
+        <div className="mb-4">
+          <h2 className="text-sm font-semibold uppercase tracking-wider text-slate-900 flex items-center gap-2">
+            <StickyNote className="h-4 w-4 text-[#234C6A]" aria-hidden />
+            Preferences &amp; expectations
+          </h2>
+        </div>
+        <p className="text-xs text-slate-600 mb-3">
+          Share your goals, learning style, and what you hope to get from mentors or sessions. Mentors you work with can
+          use this to prepare.
+        </p>
+        <textarea
+          value={specialNote}
+          onChange={e => {
+            const v = e.target.value.slice(0, SPECIAL_NOTE_MAX);
+            setSpecialNote(v);
+            setNotesDirty(true);
+          }}
+          placeholder="e.g. I’m applying to MS programs in the US, prefer structured feedback, and want help with SOP drafts…"
+          rows={5}
+          className={`${inputNormal} resize-y min-h-[120px] py-3`}
+        />
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+          <p className="text-[11px] text-slate-400">
+            {specialNote.length}/{SPECIAL_NOTE_MAX}
+          </p>
+          <button
+            type="button"
+            onClick={handleSaveSpecialNote}
+            disabled={notesSaving || !notesDirty}
+            className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#234C6A] px-4 py-2.5 text-[13px] font-semibold text-white shadow-sm transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {notesSaving ? (
+              <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+            ) : (
+              <Save className="h-4 w-4" aria-hidden />
+            )}
+            {notesSaving ? 'Saving…' : 'Save'}
+          </button>
+        </div>
+      </section>
+
+      {/* Preferences */}
+      <section className={cardClass + ' mb-6'}>
+        <div className="mb-4 flex items-center justify-between gap-2">
+          <h2 className="text-sm font-semibold uppercase tracking-wider text-slate-900">
+            Preferences
+          </h2>
+          {preferencesDirty && (
+            <button
+              type="button"
+              onClick={handleSavePreferences}
+              disabled={preferencesSaving}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-[#234C6A] px-3 py-1.5 text-[11px] font-semibold text-white hover:brightness-110 disabled:opacity-60"
+            >
+              {preferencesSaving && <Loader2 className="h-3 w-3 animate-spin" aria-hidden />}
+              {preferencesSaving ? 'Saving…' : 'Save'}
+            </button>
+          )}
+        </div>
+        <p className="text-xs text-slate-600 mb-3">
+          What are you looking for? (Study Abroad, Work Abroad, Research Guidance, etc.)
+        </p>
+        <div className="flex flex-wrap gap-3">
+          {PREFERENCE_OPTIONS.map(opt => (
+            <label
+              key={opt.id}
+              className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50/50 px-4 py-2.5 cursor-pointer hover:bg-slate-50 transition-colors has-[:checked]:border-[#234C6A] has-[:checked]:bg-[#E8EEF4] has-[:checked]:text-[#234C6A]"
+            >
+              <input
+                type="checkbox"
+                checked={!!preferences[opt.id]}
+                onChange={() => togglePreference(opt.id)}
+                className="rounded border-slate-300 text-[#234C6A] focus:ring-[#234C6A]"
+              />
+              <span className="text-sm font-medium text-slate-700">{opt.label}</span>
+            </label>
+          ))}
+        </div>
+      </section>
+
+      {/* Interests */}
+      <section className={cardClass + ' mb-6'}>
+        <div className="mb-4 flex items-center justify-between gap-2">
+          <h2 className="text-sm font-semibold uppercase tracking-wider text-slate-900">
+            Interests
+          </h2>
+          {interestsDirty && (
+            <button
+              type="button"
+              onClick={handleSaveInterests}
+              disabled={interestsSaving}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-[#234C6A] px-3 py-1.5 text-[11px] font-semibold text-white hover:brightness-110 disabled:opacity-60"
+            >
+              {interestsSaving && <Loader2 className="h-3 w-3 animate-spin" aria-hidden />}
+              {interestsSaving ? 'Saving…' : 'Save'}
+            </button>
+          )}
+        </div>
+        <p className="text-xs text-slate-600 mb-3">
+          Select your fields of interest (e.g. Civil Engineering, Computer Science, other).
+        </p>
+        <MajorSelect
+          label=""
+          placeholder="Select your interests"
+          value={interests}
+          onChange={next => { setInterests(next); setInterestsDirty(true); }}
+        />
+      </section>
+
+      {/* Actions: Change password, Payment history */}
+      <section className={cardClass}>
+        <h2 className="text-sm font-semibold uppercase tracking-wider text-slate-900 mb-4">
+          Security & billing
+        </h2>
+        <div className="flex flex-wrap gap-3">
+          <button
+            type="button"
+            onClick={() => setShowPasswordModal(true)}
+            className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 hover:border-[#234C6A] hover:text-[#234C6A] transition-colors"
+          >
+            <Lock className="h-4 w-4" />
+            Change password
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowPaymentModal(true)}
+            className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 hover:border-[#234C6A] hover:text-[#234C6A] transition-colors"
+          >
+            <CreditCard className="h-4 w-4" />
+            Payment history
+          </button>
+        </div>
+      </section>
+
+      {/* Change password modal (OTP) */}
+      {showPasswordModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40"
+          onClick={e => e.target === e.currentTarget && closePasswordModal()}
+        >
+          <div
+            className="w-full max-w-md rounded-2xl border border-slate-200 bg-white shadow-xl overflow-hidden"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4">
+              <h3 className="text-lg font-semibold text-slate-900">Change password</h3>
+              <button
+                type="button"
+                onClick={closePasswordModal}
+                className="p-1 rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+                aria-label="Close"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              {passwordStep !== 'done' && passwordAlert && (
+                <FormAlert
+                  variant={passwordAlertVariant}
+                  message={passwordAlert}
+                  onDismiss={clearPasswordAlert}
+                />
+              )}
+              {passwordStep === 'request' && (
+                <>
+                  <p className="text-sm text-slate-600">
+                    We&apos;ll send a one-time code to <strong>{email}</strong> to verify it&apos;s you.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={handleRequestOtp}
+                    disabled={passwordLoading}
+                    className="w-full rounded-xl bg-[#234C6A] text-white py-2.5 text-sm font-semibold flex items-center justify-center gap-2 disabled:opacity-70"
+                  >
+                    {passwordLoading ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      'Send OTP to email'
+                    )}
+                  </button>
+                </>
+              )}
+              {passwordStep === 'verify' && (
+                <>
+                  <p className="text-sm text-slate-600">
+                    Enter the 6-digit code sent to your email.
+                  </p>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    maxLength={6}
+                    value={otpValue}
+                    onChange={e => setOtpValue(e.target.value.replace(/\D/g, ''))}
+                    placeholder="000000"
+                    className={inputNormal + ' text-center text-lg tracking-widest'}
+                  />
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-600 mb-1">
+                      New password
+                    </label>
+                    <input
+                      type="password"
+                      value={newPassword}
+                      onChange={e => setNewPassword(e.target.value)}
+                      placeholder="Min. 8 characters"
+                      className={inputNormal}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-600 mb-1">
+                      Confirm password
+                    </label>
+                    <input
+                      type="password"
+                      value={confirmPassword}
+                      onChange={e => setConfirmPassword(e.target.value)}
+                      placeholder="Re-enter password"
+                      className={inputNormal}
+                    />
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setPasswordStep('request')}
+                      className="flex-1 rounded-xl border border-slate-200 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-50"
+                    >
+                      Back
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleVerifyAndChangePassword}
+                      disabled={passwordLoading}
+                      className="flex-1 rounded-xl bg-[#234C6A] text-white py-2.5 text-sm font-semibold flex items-center justify-center gap-2 disabled:opacity-70"
+                    >
+                      {passwordLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Confirm'}
+                    </button>
+                  </div>
+                </>
+              )}
+              {passwordStep === 'done' && (
+                <div className="text-center py-4">
+                  <div className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-emerald-100 text-emerald-600 mb-3">
+                    <Check className="h-6 w-6" />
+                  </div>
+                  <p className="text-sm font-medium text-slate-800">Password updated successfully.</p>
+                  <p className="text-xs text-slate-500 mt-1">You can close this window.</p>
+                  <button
+                    type="button"
+                    onClick={closePasswordModal}
+                    className="mt-4 rounded-xl bg-[#234C6A] text-white px-4 py-2 text-sm font-semibold"
+                  >
+                    Done
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Payment history modal */}
+      {showPaymentModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40"
+          onClick={e => e.target === e.currentTarget && setShowPaymentModal(false)}
+        >
+          <div
+            className="w-full max-w-3xl max-h-[90vh] rounded-2xl border border-slate-200 bg-white shadow-xl overflow-hidden flex flex-col"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4 shrink-0">
+              <h3 className="text-lg font-semibold text-slate-900">Payment history</h3>
+              <button
+                type="button"
+                onClick={() => setShowPaymentModal(false)}
+                className="p-1 rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+                aria-label="Close"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <div className="overflow-x-auto overflow-y-auto flex-1">
+              <PaymentHistoryTable payments={payments} loading={paymentsLoading} error={paymentsError} stickyHeader />
+            </div>
+            <div className="border-t border-slate-200 px-6 py-3 bg-slate-50 text-sm text-slate-600 shrink-0">
+              <PaymentHistorySummary payments={payments} loading={paymentsLoading} />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {profileHasUnsavedChanges ? (
+        <div className="sticky bottom-4 z-10 mt-6">
+          <div className="rounded-2xl border border-slate-200 bg-white/90 backdrop-blur-md px-5 py-3.5 shadow-lg flex items-center justify-between gap-3">
+            <p className="text-xs text-slate-500">You have unsaved profile changes.</p>
+            <button
+              type="button"
+              onClick={() => void handleSaveAllProfileChanges()}
+              disabled={personalSaving}
+              className="inline-flex items-center gap-2 rounded-xl bg-[#234C6A] px-5 py-2 text-sm font-semibold text-white shadow-sm hover:bg-[#1b3c53] disabled:opacity-40 disabled:cursor-not-allowed transition"
+            >
+              {personalSaving ? (
+                <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+              ) : (
+                <Save className="h-4 w-4" aria-hidden />
+              )}
+              Save changes
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      </div>
+    </div>
+  );
+}

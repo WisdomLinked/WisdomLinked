@@ -1,10 +1,30 @@
 // import { Dispatch } from "redux";
-import { actionTypes, SetChosenChatDetails, SetMessages, Message, SetTyping, AddNewMessage, SetInitialTypingStatus, Typing, GroupChatDetails, SetChosenGroupChatDetails, ResetChat } from "./types";
+import {
+    actionTypes,
+    SetChosenChatDetails,
+    SetMessages,
+    Message,
+    SetTyping,
+    AddNewMessage,
+    SetInitialTypingStatus,
+    Typing,
+    GroupChatDetails,
+    SetChosenGroupChatDetails,
+    ResetChat,
+    SetChatChannelInfo,
+    ReplaceChatMessages,
+    IncrementDmUnreadRid,
+    ClearDmUnreadRid,
+    RemoveChatMessage,
+    SetDmUnreadByRidBulk,
+    PatchDmUnreadRid,
+} from "./types";
 
 export const setChosenChatDetails = (chatDetails: {
     userId: string;
     username: string;
-    image: any;
+    image?: any;
+    peerRole?: string;
 }): SetChosenChatDetails => {
     return {
         type: actionTypes.setChosenChatDetails,
@@ -26,6 +46,37 @@ export const setMessages = (messages: Array<Message>): SetMessages => {
         payload: messages,
     };
 };
+
+export const replaceChatMessages = (messages: Array<Message>): ReplaceChatMessages => ({
+    type: actionTypes.replaceChatMessages,
+    payload: messages,
+});
+
+export const incrementDmUnreadRid = (rid: string): IncrementDmUnreadRid => ({
+    type: actionTypes.incrementDmUnreadRid,
+    payload: rid,
+});
+
+/** Pass `null` to clear all DM room unread badges. */
+export const clearDmUnreadRid = (rid: string | null): ClearDmUnreadRid => ({
+    type: actionTypes.clearDmUnreadRid,
+    payload: rid,
+});
+
+export const setDmUnreadByRidBulk = (map: Record<string, number>): SetDmUnreadByRidBulk => ({
+    type: actionTypes.setDmUnreadByRidBulk,
+    payload: map || {},
+});
+
+export const patchDmUnreadRid = (rid: string, unread: number): PatchDmUnreadRid => ({
+    type: actionTypes.patchDmUnreadRid,
+    payload: { rid, unread: Number(unread) || 0 },
+});
+
+export const removeChatMessage = (messageId: string): RemoveChatMessage => ({
+    type: actionTypes.removeChatMessage,
+    payload: messageId,
+});
 
 export const addNewMessage = (message: Message): AddNewMessage => {
     return {
@@ -54,3 +105,13 @@ export const resetChatAction = (): ResetChat => {
         type: actionTypes.resetChat
     }
 }
+
+export const setChatChannelInfo = (info: {
+    conversationId: string | null;
+    rcChannelId: string | null;
+}): SetChatChannelInfo => {
+    return {
+        type: actionTypes.setChatChannelInfo,
+        payload: info,
+    };
+};

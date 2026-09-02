@@ -3,8 +3,11 @@ import Header from "./header";
 import LandingFooter from "./landingFooter";
 import { SetLoadingStatus } from "../actions/appActions";
 import { login, confirmLoginByCode } from "../api/api";
+import { persistUserDetails } from "../utils/safeLocalStorage";
 import { useDispatch } from "react-redux";
-import { showAlert } from "../actions/alertActions";
+import { showSuccessAlert } from "../actions/alertActions";
+import FormAlert from "./FormAlert";
+import { useFormAlert } from "../hooks/useFormAlert";
 import ReactCodeInput from "react-code-input";
 import { actionTypes } from "../actions/types";
 import { useAppSelector } from "../store";
@@ -12,6 +15,7 @@ import { useNavigate } from "react-router-dom";
 
 const ConfirmCode = ({ email, password }: any) => {
     const dispatch = useDispatch();
+    const { message: formBannerMessage, variant: formBannerVariant, setFormError, setFormSuccess, clearFormAlert } = useFormAlert();
     const [timeRemained, set_timeRemained] = useState(60);
     const [inputCode, set_inputCode] = useState('');
 
@@ -33,9 +37,9 @@ const ConfirmCode = ({ email, password }: any) => {
     const resend = async () => {
         SetLoadingStatus(true);
         const response: any = await login({ email, password });
-        if (response.status === "SUCCESS") {
-            // console.log(response.code, "////");
-            dispatch(showAlert("Verification code is sent again."));
+        if (response === false) return;
+        if (response?.status === "SUCCESS") {
+            setFormSuccess("Verification code is sent again.");
             clearAllIntervals();
             set_inputCode('')
             set_timeRemained(60);
@@ -44,23 +48,25 @@ const ConfirmCode = ({ email, password }: any) => {
     };
 
     const confirmCode = async () => {
+        clearFormAlert();
         SetLoadingStatus(true);
-        const response: any = await confirmLoginByCode({ email, password, code: inputCode, timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone });
+        const response: any = await confirmLoginByCode({ email, password, code: inputCode});
         // console.log(response, '////')
-        if (response.status === "SUCCESS") {
-            localStorage.setItem("currentUser", JSON.stringify(response.userDetails));
+        if (response === false) return;
+        if (response?.status === "SUCCESS") {
+            persistUserDetails(localStorage, "currentUser", response.userDetails);
             dispatch({
                 type: actionTypes.authenticate,
                 payload: response.userDetails
             })
 
             dispatch(
-                showAlert(
+                showSuccessAlert(
                     `Hi, ${response.userDetails.username} 👋. Welcome back.`
                 )
             );
         } else {
-            dispatch(showAlert(response.error))
+            setFormError(response.error || 'Verification failed. Please try again.');
         }
         SetLoadingStatus(false);
     }
@@ -83,7 +89,14 @@ const ConfirmCode = ({ email, password }: any) => {
     return (
         <>
             <Header />
-            <div className="w-full h-[400px] flex flex-col items-center justify-center">
+            <div className="w-full h-[400px] flex flex-col items-center justify-center px-4">
+                <div className="w-full max-w-md mb-4">
+                    <FormAlert
+                        variant={formBannerVariant}
+                        message={formBannerMessage}
+                        onDismiss={clearFormAlert}
+                    />
+                </div>
                 <div className="text-center text-white text-2xl">
                     {!timeRemained
                         ? "Your code is expired."

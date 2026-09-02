@@ -1,8 +1,9 @@
 import { Dispatch } from "redux";
 import { createGroupChat, leaveGroup, deleteGroup } from "../api/api";
 import { AddMembersToGroupArgs, DeleteGroupArgs, LeaveGroupArgs } from "../api/types";
-import { showAlert } from "./alertActions";
+import { showErrorAlert, showSuccessAlert } from "./alertActions";
 import { resetChatAction } from "./chatActions";
+import { updateMe } from "./authActions";
 // import { actionTypes, CurrentUser } from "./types";
 
 export const createGroupChatAction = (
@@ -12,9 +13,14 @@ export const createGroupChatAction = (
     return async (dispatch: Dispatch) => {
         const response = await createGroupChat(name);
 
+        if (response === false) return;
         if (response === "Group created successfully") {
             closeDialogHandler();
-            dispatch(showAlert(response));
+            dispatch(showSuccessAlert(response));
+        } else if (typeof response === 'string' && response.length > 0) {
+            dispatch(showErrorAlert(response));
+        } else {
+            dispatch(showErrorAlert('Could not create the community. Please try again.'));
         }
     };
 };
@@ -25,9 +31,17 @@ export const leaveGroupAction = (
     return async (dispatch: Dispatch) => {
         const response = await leaveGroup(args);
 
-        if (response === "You have left the group!") {
-            dispatch(showAlert(response));
-            dispatch(resetChatAction())
+        if (
+            response === "You have left the group!" ||
+            (typeof response === 'string' && response.startsWith('The community was removed'))
+        ) {
+            dispatch(showSuccessAlert(response));
+            dispatch(resetChatAction());
+            dispatch(updateMe() as any);
+        } else if (typeof response === 'string' && response.length > 0) {
+            dispatch(showErrorAlert(response));
+        } else {
+            dispatch(showErrorAlert('Could not leave the community. Try again.'));
         }
     };
 };
@@ -36,9 +50,18 @@ export const deleteGroupAction = ({ groupChatId, groupChatName } : {groupChatId:
     return async (dispatch: Dispatch) => {
         const response = await deleteGroup({groupChatId});
 
-        if (response === "Group deleted successfully!") {
-            dispatch(showAlert(`You deleted the "${groupChatName}" group!`));
+        const ok =
+            response === "Group deleted successfully!" ||
+            (typeof response === "string" && response.includes("Group deleted successfully"));
+
+        if (ok) {
+            dispatch(showSuccessAlert(`You deleted the "${groupChatName}" community.`));
             dispatch(resetChatAction());
+            dispatch(updateMe() as any);
+        } else if (typeof response === 'string' && response.length > 0) {
+            dispatch(showErrorAlert(response));
+        } else if (response !== false) {
+            dispatch(showErrorAlert('Could not delete the community.'));
         }
     };
 };

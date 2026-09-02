@@ -153,13 +153,15 @@ const ChatHistory = ({
             <div className="w-full h-[100px] lg:hidden border-b-[1px] border-b-grey">
 
             </div>
-            <div className="w-full h-[calc(100%-100px)] lg:h-full bg-darkgrey overflow-auto py-3 flex flex-col items-center" onScroll={handleScroll}>
+            <div className="w-full h-[calc(100%-100px)] lg:h-full bg-wl-page overflow-auto py-3 flex flex-col items-center" onScroll={handleScroll}>
                 {
                     gotAllChats ?
                         <div className="mt-[15px] text-[13px] text-grey text-center px-6">
                             {!selectedChat?.admin
                                 ? `This is the beginning of your conversation with ${selectedChat?.username}`
-                                : "This is the beginning of the conversation with your friends!"}
+                                : selectedChat?.type === 'community'
+                                  ? 'This is the beginning of the conversation with your community.'
+                                  : 'This is the beginning of the conversation with your friends!'}
                         </div>
                         : null
                 }

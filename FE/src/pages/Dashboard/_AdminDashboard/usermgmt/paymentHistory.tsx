@@ -70,7 +70,7 @@ const PaymentHistory = ({
                 </div>
                 <div className="relative overflow-x-auto w-full px-4">
                     <table className="w-full text-sm text-left">
-                        <thead className="text-xs uppercase bg-darkgrey">
+                        <thead className="text-xs uppercase bg-wl-brandSoft text-wl-brand">
                             <tr>
                                 <th scope="col" className="px-6 py-3 text-center">
                                     No
@@ -105,7 +105,7 @@ const PaymentHistory = ({
                             {
                                 histories.map((item, index) => {
                                     return (
-                                        <tr key={index} className="border-b border-grey hover:bg-midgrey">
+                                        <tr key={index} className="border-b border-wl-line hover:bg-wl-pageAlt text-wl-ink">
                                             <td className='py-2 px-2 text-center'>{numPerPage * currentPage + index + 1}</td>
                                             <td className='px-2'>{formatDateYYYY_MM_DD_h_m(new Date(item.createdAt))}</td>
                                             <td className='text-center px-2'>{item.amount / 100}</td>
@@ -126,7 +126,7 @@ const PaymentHistory = ({
                     <div className='flex gap-6'>
                         <div className="">Show rows:</div>
                         <select
-                            className='bg-black text-white border rounded-md border-midgrey px-2 outline-none'
+                            className='bg-wl-card text-wl-ink border rounded-md border-wl-line px-2 outline-none'
                             value={numPerPage}
                             onChange={(e) => set_numPerPage(e.target.value)}
                         >

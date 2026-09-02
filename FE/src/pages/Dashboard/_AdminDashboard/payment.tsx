@@ -1,5 +1,7 @@
 import React, { useEffect, useState } from "react";
-import { doFilterPaymentHistories, getStripeMode, setStripeMode, sendPaymentLinkToUser, processRefund, sendAdHocPaymentLink } from "../../../api/api";
+import { useDispatch } from "react-redux";
+import { showErrorAlert, showSuccessAlert } from "../../../actions/alertActions";
+import { doFilterPaymentHistories, getStripeMode, setStripeMode, setSeminarApprovalDeadline, sendPaymentLinkToUser, processRefund, sendAdHocPaymentLink } from "../../../api/api";
 import { SetLoadingStatus } from "../../../actions/appActions";
 import SelectionWithCheckBox from "../../../components/SelectionWithCheckBox";
 import { DateRangePicker, createStaticRanges } from 'react-date-range';
@@ -11,11 +13,48 @@ import RetryPaymentModal from "../../../components/RetryPaymentModal";
 import RefundPaymentModal from "../../../components/RefundPaymentModal";
 import AdHocPaymentModal from "../../../components/AdHocPaymentModal";
 
+const STATUS_LABELS: Record<string, string> = {
+    withheld: 'Withheld',
+    pending: 'Pending',
+    completed: 'Completed',
+    released: 'Released',
+    failed: 'Failed',
+    refunded: 'Refunded',
+};
+
+const STATUS_STYLES: Record<string, string> = {
+    withheld: 'bg-amber-500/20 text-amber-600',
+    pending: 'bg-yellow-500/20 text-yellow-500',
+    completed: 'bg-green/20 text-green',
+    released: 'bg-slate-500/20 text-slate-600',
+    failed: 'bg-red-500/20 text-red-500',
+    refunded: 'bg-blue-500/20 text-blue-500',
+};
+
+const STATUS_HINTS: Record<string, string> = {
+    withheld: 'Card authorized, not charged — waiting on the host or expert to decide.',
+    pending: 'A capture is in flight, or the row needs manual reconciliation.',
+    completed: 'Money captured and settled.',
+    released: 'Authorization released. The card was never charged.',
+    failed: 'The payment did not go through.',
+    refunded: 'Money was captured, then returned to the customer.',
+};
+
+const eventTypeLabel = (item: any) => {
+    if (item?.event) return 'Event';
+    const type = item?.groupChat?.type;
+    if (type === 'seminar') return 'Seminar';
+    if (type === 'individual') return '1:1 Session';
+    if (type) return 'Chat';
+    return item?.groupChat ? 'Session' : '—';
+};
+
 const currentYear = new Date().getFullYear();
 const currentMonth = new Date().getMonth() + 1;
 const currentDate = new Date().getDate();
 
 const Payment = () => {
+    const dispatch = useDispatch();
     const modes = [
         {
             value: "",
@@ -50,12 +89,20 @@ const Payment = () => {
             label: "All"
         },
         {
+            value: "withheld",
+            label: "Withheld"
+        },
+        {
             value: "pending",
             label: "Pending"
         },
         {
             value: "completed",
             label: "Completed"
+        },
+        {
+            value: "released",
+            label: "Released"
         },
         {
             value: "failed",
@@ -66,7 +113,15 @@ const Payment = () => {
             label: "Refunded"
         }
     ]
+    const pageSizeOptions = [
+        { value: 5, label: "5" },
+        { value: 10, label: "10" },
+        { value: 25, label: "25" },
+        { value: 50, label: "50" },
+    ]
     const [stripeMode, set_stripeMode] = useState('test');
+    const [approvalDeadlineHours, set_approvalDeadlineHours] = useState<number>(24);
+    const [deadlineInput, set_deadlineInput] = useState<string>('24');
     const [email, set_email] = useState('');
     const [selectedMode, set_selectedMode] = useState(modes[0]);
     const [selectedType, set_selectedType] = useState(types[0]);
@@ -77,7 +132,7 @@ const Payment = () => {
     });
     const [datePickerShow, set_datePickerShow] = useState(false);
 
-    const [numPerPage, set_numPerPage] = useState<any>(5)
+    const [numPerPage, set_numPerPage] = useState(5)
     const [currentPage, set_currentPage] = useState(0)
     const [totalCount, set_totalCount] = useState(-1)
     const [totalPage, set_totalPage] = useState(0)
@@ -172,8 +227,31 @@ const Payment = () => {
     const getCurrentStripeMode = async () => {
         const response = await getStripeMode();
         console.log(response, '///////');
-        if (response)
+        if (response) {
             set_stripeMode(response.stripeMode || 'test');
+            const hours = typeof response.seminarApprovalDeadlineHours === 'number'
+                ? response.seminarApprovalDeadlineHours
+                : 24;
+            set_approvalDeadlineHours(hours);
+            set_deadlineInput(String(hours));
+        }
+    }
+
+    const saveApprovalDeadline = async () => {
+        const hours = Number(deadlineInput);
+        if (!Number.isFinite(hours) || hours < 0 || hours > 168) {
+            dispatch(showErrorAlert('Enter a value between 0 and 168 hours.'));
+            return;
+        }
+        SetLoadingStatus(true);
+        const response = await setSeminarApprovalDeadline(hours);
+        SetLoadingStatus(false);
+        if (response === false || response?.error) {
+            dispatch(showErrorAlert(response?.error || 'Could not save the approval deadline.'));
+            return;
+        }
+        set_approvalDeadlineHours(hours);
+        dispatch(showSuccessAlert('Seminar approval deadline updated.'));
     }
 
     useEffect(() => {
@@ -274,13 +352,13 @@ const Payment = () => {
             });
             
             if (response?.status === 'SUCCESS') {
-                alert('Payment link has been sent successfully to the customer!');
+                dispatch(showSuccessAlert('Payment link has been sent successfully to the customer.'));
                 handleRetryModalClose();
             } else {
                 const errorMessage = typeof response?.message === 'string' 
                     ? response.message 
                     : 'Unknown error';
-                alert('Failed to send payment link: ' + errorMessage);
+                dispatch(showErrorAlert('Failed to send payment link: ' + errorMessage));
             }
         } catch (error: any) {
             console.error('Error sending payment link:', error);
@@ -289,7 +367,7 @@ const Payment = () => {
                 : typeof error === 'string'
                 ? error
                 : 'An unexpected error occurred';
-            alert('Failed to send payment link: ' + errorMessage);
+            dispatch(showErrorAlert('Failed to send payment link: ' + errorMessage));
         } finally {
             SetLoadingStatus(false);
         }
@@ -309,7 +387,7 @@ const Payment = () => {
             });
             
             if (response?.status === 'SUCCESS') {
-                alert('Refund processed successfully!');
+                dispatch(showSuccessAlert('Refund processed successfully.'));
                 handleRefundModalClose();
                 // Refresh the payment history to show the refund
                 filterHisotries(currentPage);
@@ -317,7 +395,7 @@ const Payment = () => {
                 const errorMessage = typeof response?.message === 'string' 
                     ? response.message 
                     : 'Unknown error';
-                alert('Failed to process refund: ' + errorMessage);
+                dispatch(showErrorAlert('Failed to process refund: ' + errorMessage));
             }
         } catch (error: any) {
             console.error('Error processing refund:', error);
@@ -326,7 +404,7 @@ const Payment = () => {
                 : typeof error === 'string'
                 ? error
                 : 'An unexpected error occurred';
-            alert('Failed to process refund: ' + errorMessage);
+            dispatch(showErrorAlert('Failed to process refund: ' + errorMessage));
         } finally {
             SetLoadingStatus(false);
         }
@@ -349,7 +427,7 @@ const Payment = () => {
             });
             
             if (response?.status === 'SUCCESS') {
-                alert('Payment link sent successfully to customer!');
+                dispatch(showSuccessAlert('Payment link sent successfully to customer.'));
                 handleAdHocModalClose();
                 // Refresh the payment history to show the new pending payment
                 filterHisotries(currentPage);
@@ -357,7 +435,7 @@ const Payment = () => {
                 const errorMessage = typeof response?.message === 'string' 
                     ? response.message 
                     : 'Unknown error';
-                alert('Failed to send payment link: ' + errorMessage);
+                dispatch(showErrorAlert('Failed to send payment link: ' + errorMessage));
             }
         } catch (error: any) {
             console.error('Error sending ad-hoc payment link:', error);
@@ -366,28 +444,28 @@ const Payment = () => {
                 : typeof error === 'string'
                 ? error
                 : 'An unexpected error occurred';
-            alert('Failed to send payment link: ' + errorMessage);
+            dispatch(showErrorAlert('Failed to send payment link: ' + errorMessage));
         } finally {
             SetLoadingStatus(false);
         }
     };
 
     return (
-        <div className="w-full h-full pt-10 overflow-y-auto text-white px-[18px]">
-            <div className="w-full max-w-[1500px] mx-auto text-white">
-                <div className="text-center text-2xl">Payment Management</div>
+        <div className="w-full h-full pt-10 overflow-y-auto text-wl-ink px-[18px]">
+            <div className="w-full max-w-[1500px] mx-auto text-wl-ink">
+                <div className="text-center text-2xl font-semibold text-wl-brand">Payment Management</div>
                 <div className="flex items-center justify-center space-x-6 mt-6">
-                    <div>Toggle Stripe Mode</div>
-                    <div className="rounded-full border border-white overflow-clip">
+                    <div className="text-wl-muted">Toggle Stripe Mode</div>
+                    <div className="rounded-full border border-wl-line overflow-hidden bg-wl-card shadow-sm">
                         <button
-                            className={`w-16 h-8 ${stripeMode === 'test' ? 'bg-white text-black' : ''} hover:bg-grey`}
+                            className={`w-16 h-8 text-sm font-medium ${stripeMode === 'test' ? 'bg-wl-brand text-white' : 'text-wl-muted hover:bg-wl-pageAlt'}`}
                             disabled={stripeMode === 'test'}
                             onClick={() => updateStripeMode('test')}
                         >
                             Test
                         </button>
                         <button
-                            className={`w-16 h-8 ${stripeMode === 'live' ? 'bg-white text-black' : ''} hover:bg-grey`}
+                            className={`w-16 h-8 text-sm font-medium ${stripeMode === 'live' ? 'bg-wl-brand text-white' : 'text-wl-muted hover:bg-wl-pageAlt'}`}
                             disabled={stripeMode === 'live'}
                             onClick={() => updateStripeMode('live')}
                         >
@@ -395,12 +473,30 @@ const Payment = () => {
                         </button>
                     </div>
                 </div>
+                <div className="flex flex-wrap items-center justify-center gap-3 mt-4">
+                    <div className="text-wl-muted">Seminar seat-request approval deadline (hours before start)</div>
+                    <input
+                        type="number"
+                        min={0}
+                        max={168}
+                        value={deadlineInput}
+                        onChange={(e) => set_deadlineInput(e.target.value)}
+                        className="w-24 rounded-[10px] h-9 bg-white border border-lightgrey text-[14px] px-3 text-wl-ink"
+                    />
+                    <button
+                        onClick={saveApprovalDeadline}
+                        disabled={String(approvalDeadlineHours) === deadlineInput.trim()}
+                        className="h-9 rounded-full bg-wl-brand px-4 text-sm font-medium text-white disabled:opacity-50"
+                    >
+                        Save
+                    </button>
+                </div>
                 <div className="max-w-[800px] mx-auto w-full py-1">
                     <div className="flex justify-between mt-4">
                         <div className="w-[calc(100%-174px)] sm:w-[calc(100%-324px)]">
                             <div className="text-grey mb-0.5 text-[12px] leading-[19px]">Filter by email</div>
                             <input
-                                className="w-full rounded-[15px] h-[50px] bg-transparent border border-lightgrey text-[14px] leading-[21px] px-[24px]"
+                                className="w-full rounded-[15px] h-[50px] bg-white border border-lightgrey text-[14px] leading-[21px] px-[24px] text-wl-ink placeholder:text-grey"
                                 placeholder="Input email"
                                 value={email}
                                 onChange={(e) => set_email(e.target.value)}
@@ -443,9 +539,9 @@ const Payment = () => {
                         <div className="w-[calc(100%-174px)] sm:w-[calc(100%-324px)] relative">
                             <div className="text-grey mb-0.5 text-[12px] leading-[19px]">Time periods</div>
                             <div
-                                className={`w-full rounded-[15px] h-[50px] bg-transparent border border-lightgrey text-[14px] leading-[21px] px-[24px] flex items-center justify-between cursor-pointer ${dateRange.dateFrom && dateRange.dateTo
-                                    ? 'text-white'
-                                    : 'text-white/50 hover:text-white'
+                                className={`w-full rounded-[15px] h-[50px] bg-white border border-lightgrey text-[14px] leading-[21px] px-[24px] flex items-center justify-between cursor-pointer ${dateRange.dateFrom && dateRange.dateTo
+                                    ? 'text-wl-ink'
+                                    : 'text-wl-muted hover:text-wl-ink'
                                     }`}
                                 onClick={() => set_datePickerShow(!datePickerShow)}
                             >
@@ -515,10 +611,10 @@ const Payment = () => {
                         </div>
                     </div>
                 </div>
-                <div className="w-full rounded-[16px]">
-                    <div className="w-full flex flex-col sm:flex-row sm:justify-between sm:items-center p-4 gap-4">
+                <div className="w-full rounded-2xl border border-wl-line bg-wl-card shadow-sm overflow-hidden mt-4">
+                    <div className="w-full flex flex-col sm:flex-row sm:justify-between sm:items-center p-4 gap-4 border-b border-wl-line bg-wl-pageAlt/50">
                         <div>
-                            <div className="">Total of {totalCount} histories</div>
+                            <div className="text-wl-ink font-medium">Total of {totalCount} histories</div>
                         </div>
                         <Pagination
                             currentPage={currentPage}
@@ -534,7 +630,7 @@ const Payment = () => {
                     <div className="flex justify-end px-4 mb-4">
                         <button
                             onClick={handleAdHocPaymentClick}
-                            className="bg-blue hover:bg-blue/60 text-white px-6 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2"
+                            className="bg-wl-brand hover:brightness-95 text-white px-6 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2"
                             title="Send custom payment request to any customer"
                         >
                             Send Ad-hoc Payment
@@ -543,7 +639,7 @@ const Payment = () => {
                     
                     <div className="relative overflow-x-auto w-full px-4">
                         <table className="w-full text-sm text-left">
-                            <thead className="text-xs uppercase bg-darkgrey">
+                            <thead className="text-xs uppercase bg-wl-brandSoft text-wl-brand">
                                 <tr>
                                     <th scope="col" className="px-6 py-3 text-center">
                                         No
@@ -590,33 +686,30 @@ const Payment = () => {
                                 {
                                     histories.map((item, index) => {
                                         return (
-                                            <tr key={index} className="border-b border-grey hover:bg-midgrey">
+                                            <tr key={index} className="border-b border-wl-line hover:bg-wl-pageAlt text-wl-ink">
                                                 <td className='py-2 px-2 text-center'>{numPerPage * currentPage + index + 1}</td>
                                                 <td className='px-2'>{formatDateYYYY_MM_DD_h_m(new Date(item.createdAt))}</td>
                                                 <td className='text-center px-2'>{item.amount / 100}</td>
                                                 <td className='text-center px-2'>{item.currency}</td>
                                                 <td className='text-center px-2'>{item.expert?.email}</td>
                                                 <td className='text-center px-2'>{item.customer?.email}</td>
-                                                <td className='px-2 text-center'>{item.event ? 'Event' : 'Seminar'}</td>
+                                                <td className='px-2 text-center'>{eventTypeLabel(item)}</td>
                                                 <td className='px-2 max-w-[200px] truncate'>{item.description}</td>
                                                 <td className='px-2 text-center'>{item.stripeMode}</td>
                                                 <td className='px-2 text-center'>{item.paymentType}</td>
                                                 <td className='px-2 text-center'>
-                                                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                                                        item.status === 'completed' ? 'bg-green/20 text-green' :
-                                                        item.status === 'pending' ? 'bg-yellow-500/20 text-yellow-500' :
-                                                        item.status === 'failed' ? 'bg-red-500/20 text-red-500' :
-                                                        item.status === 'refunded' ? 'bg-blue-500/20 text-blue-500' :
-                                                        'bg-grey/20 text-grey'
-                                                    }`}>
-                                                        {item.status || 'completed'}
+                                                    <span
+                                                        className={`px-2 py-1 rounded-full text-xs font-medium ${STATUS_STYLES[item.status] || 'bg-grey/20 text-grey'}`}
+                                                        title={STATUS_HINTS[item.status] || ''}
+                                                    >
+                                                        {STATUS_LABELS[item.status] || item.status || 'Completed'}
                                                     </span>
                                                 </td>
                                                 <td className='px-2'>{item.paymentIntent || 'N/A'}</td>
                                                 <td className='px-2 text-center'>
                                                     <div className="flex gap-2 justify-center">
                                                         {/* Show Retry button only for non-refunded payments and non-refund records */}
-                                                        {item.status !== 'refunded' && item.paymentType !== 'refund' && item.paymentType !== 'retry' && (
+                                                        {item.status !== 'refunded' && item.status !== 'withheld' && item.status !== 'released' && item.paymentType !== 'refund' && item.paymentType !== 'retry' && (
                                                             <button
                                                                 onClick={() => handleRetryPaymentClick(item)}
                                                                 className='bg-green hover:bg-green/80 text-white px-3 py-1 rounded text-sm font-medium transition-colors'
@@ -637,7 +730,10 @@ const Payment = () => {
                                                                 Refund
                                                             </button>
                                                         )}
-                                                        {(item.status === 'refunded' || item.paymentType === 'refund') && (
+                                                        {item.status === 'withheld' && (
+                                                            <span className="text-grey text-sm italic">Awaiting decision</span>
+                                                        )}
+                                                        {(item.status === 'refunded' || item.status === 'released' || item.paymentType === 'refund') && (
                                                             <span className="text-grey text-sm italic">No actions available</span>
                                                         )}
                                                     </div>
@@ -650,18 +746,17 @@ const Payment = () => {
                         </table>
                     </div>
                     <div className="w-full flex flex-col sm:flex-row sm:justify-between sm:items-center p-4 gap-4">
-                        <div className='flex gap-6'>
-                            <div className="">Show rows:</div>
-                            <select
-                                className='bg-black text-white border rounded-md border-midgrey px-2 outline-none'
-                                value={numPerPage}
-                                onChange={(e) => set_numPerPage(e.target.value)}
-                            >
-                                <option value={5}>5</option>
-                                <option value={10}>10</option>
-                                <option value={25}>25</option>
-                                <option value={50}>50</option>
-                            </select>
+                        <div className="w-full max-w-[200px]">
+                            <div className="text-grey mb-0.5 text-[12px] leading-[19px]">Show rows</div>
+                            <SelectionWithCheckBox
+                                options={pageSizeOptions}
+                                selectedOptions={
+                                    pageSizeOptions.find((o) => o.value === numPerPage) ?? pageSizeOptions[0]
+                                }
+                                set_selectedOptions={(opt: { value: number }) => set_numPerPage(opt.value)}
+                                placeholder="Rows per page"
+                                isMulti={false}
+                            />
                         </div>
                         <Pagination
                             currentPage={currentPage}

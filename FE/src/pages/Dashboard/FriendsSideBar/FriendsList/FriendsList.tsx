@@ -3,6 +3,7 @@ import { styled } from "@mui/system";
 import FriendsListItem from "./FriendsListItem";
 import { useAppSelector } from "../../../../store";
 import { profileImageFetch } from "../../../../api/api";
+import { buildOnlineUserIdSet, hasOnlineUserId } from "../../../../utils/onlinePresence";
 
 const MainContainer = styled("div")({
   flexGrow: 1,
@@ -34,10 +35,12 @@ const FriendsList = () => {
 
   
   const updateFriendsWithImages = async (friends: any[], onlineUsers: any[]): Promise<any[]> => {
+    const onlineIdSet = buildOnlineUserIdSet(onlineUsers);
     try {
       return await Promise.all(
         friends.map(async (friend): Promise<any> => {
-          const isOnline = onlineUsers.find((user) => user.userId === friend.id);
+          const friendId = friend?.id ?? friend?._id ?? friend?.userId;
+          const isOnline = hasOnlineUserId(onlineIdSet, friendId);
           let base64Image: string | null = null;
   
           if (friend.image) {
@@ -51,7 +54,7 @@ const FriendsList = () => {
   
           return {
             ...friend,
-            isOnline: !!isOnline,
+            isOnline,
             image: base64Image, // string | null
           };
         })
@@ -96,6 +99,7 @@ const FriendsList = () => {
                   image={f.image}
                   lastChatDate={f.lastChatDate}
                   missedChats={f.missedChats}
+                  peerRole={f.role}
               />
           ))}
       </MainContainer>

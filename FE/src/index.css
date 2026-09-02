@@ -1,6 +1,15 @@
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;500;600&family=DM+Sans:wght@300;400;500;600&display=swap');
+
+html {
+  overflow-x: hidden;
+  -webkit-text-size-adjust: 100%;
+}
+
 body {
   margin: 0;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen", "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif;
+  min-height: 100vh;
+  overflow-x: hidden;
+  font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen", "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
@@ -39,14 +48,23 @@ code {
 
 .main_container {
   width: 100%;
+  max-width: 100%;
   padding-left: 90px;
   padding-right: 90px;
+  box-sizing: border-box;
 }
 
 @media (max-width: 1279px) {
   .main_container {
     padding-left: 24px;
     padding-right: 24px;
+  }
+}
+
+@media (max-width: 640px) {
+  .main_container {
+    padding-left: 16px;
+    padding-right: 16px;
   }
 }
 .multi-line-text-truncate-6 {
@@ -73,6 +91,134 @@ code {
   overflow-y: auto;
 }
 
+.chat-composer-quill .ql-container {
+  height: auto !important;
+  max-height: 220px !important;
+  overflow-y: visible !important;
+}
+
+.chat-composer-quill .ql-editor {
+  min-height: 44px;
+  max-height: 180px;
+  overflow-y: auto;
+}
+
+.chat-composer-quill-light .ql-editor {
+  min-height: 40px;
+  max-height: 160px;
+  overflow-y: auto;
+  color: #1e293b;
+  padding: 8px 12px;
+}
+
+.chat-composer-quill-light .ql-toolbar {
+  background-color: #f8fafc !important;
+  border: 0 !important;
+  border-bottom: 1px solid #e2e8f0 !important;
+  border-radius: 0.75rem 0.75rem 0 0;
+  padding: 4px 6px;
+}
+
+.chat-composer-quill-light .ql-container {
+  background-color: #fff !important;
+  color: #1e293b;
+  border: 0 !important;
+  font-size: 14px;
+}
+
+.chat-composer-quill-light .ql-container.ql-snow {
+  border-top: 0 !important;
+}
+
+.chat-composer-quill-light .ql-editor.ql-blank::before {
+  color: #94a3b8;
+  font-style: normal;
+}
+
+.chat-composer-quill-light .ql-picker-options {
+  background-color: #fff !important;
+  color: #1e293b;
+  transform: none;
+}
+
+.chat-composer-quill-light .ql-stroke {
+  stroke: #475569;
+}
+
+.chat-composer-quill-light .ql-fill {
+  fill: #475569;
+}
+
+.chat-composer-quill-light .ql-picker-label {
+  color: #475569;
+}
+
+.chat-message-rich {
+  white-space: normal;
+}
+
+.chat-message-rich p {
+  margin: 0;
+}
+
+.chat-message-rich p + p,
+.chat-message-rich ul,
+.chat-message-rich ol {
+  margin-top: 0.35rem;
+}
+
+.chat-message-rich ul {
+  list-style-type: disc;
+  padding-left: 1.25rem;
+}
+
+.chat-message-rich ol {
+  list-style-type: decimal;
+  padding-left: 1.25rem;
+}
+
+.chat-message-rich li[data-list="bullet"] {
+  list-style-type: disc;
+}
+
+.chat-message-rich li[data-list="ordered"] {
+  list-style-type: decimal;
+}
+
+.chat-message-rich li + li {
+  margin-top: 0.15rem;
+}
+
+.chat-message-rich .ql-align-center {
+  text-align: center;
+}
+
+.chat-message-rich .ql-align-right {
+  text-align: right;
+}
+
+.chat-message-rich .ql-align-justify {
+  text-align: justify;
+}
+
+.chat-message-rich strong,
+.chat-message-rich b {
+  font-weight: 700;
+}
+
+.chat-message-rich em,
+.chat-message-rich i {
+  font-style: italic;
+}
+
+.chat-message-rich u {
+  text-decoration: underline;
+}
+
+.chat-message-rich s {
+  text-decoration: line-through;
+}
+
 .ql-container img {
   max-height: 270px;
 }
@@ -87,6 +233,41 @@ code {
   border-radius: 8px;
   max-width: 100%;
   max-height: 500px;
+}
+
+.chat-message-rich blockquote {
+  margin: 0 0 6px 0;
+  border-left: 3px solid rgba(201, 168, 76, 0.95);
+  border-radius: 8px;
+  padding: 6px 8px;
+  background: rgba(255, 255, 255, 0.2);
+  color: inherit;
+  font-size: 12px;
+  line-height: 1.3;
+  white-space: normal;
+  opacity: 0.92;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+}
+
+.chat-message-rich blockquote strong {
+  display: block;
+  margin-bottom: 2px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  opacity: 0.9;
+}
+
+.chat-message-rich blockquote blockquote {
+  margin-top: 6px;
+  font-size: 11px;
+  opacity: 0.88;
+}
+
+.chat-message-rich blockquote + p,
+.chat-message-rich blockquote + div,
+.chat-message-rich blockquote + span {
+  margin-top: 4px;
 }
 
 .chat_value_container ol {
@@ -156,35 +337,9 @@ code {
     transform: none;
   }
 }
-/* React Big Calendar */
+/* React Big Calendar — shared (non-theme) */
 .rbc-toolbar {
   gap: 8px;
-}
-
-.rbc-toolbar button {
-  color: white !important;
-  background-color: transparent !important;
-}
-
-.rbc-toolbar button:hover {
-  background-color: #6c7278 !important;
-}
-
-.rbc-off-range-bg {
-  background-color: #141414 !important;
-}
-
-.rbc-today {
-  background-color: #6c7278;
-}
-
-.rbc-show-more {
-  color: #dce4e8 !important;
-  background-color: transparent !important;
-}
-
-.rbc-agenda-view table.rbc-agenda-table .rbc-agenda-time-cell {
-  border: 1px solid white;
 }
 
 .rbc-agenda-event-cell {
@@ -207,9 +362,162 @@ code {
   cursor: pointer;
 }
 
-/* customerSelectDateTimeCalendar */
+/* Legacy dark customer booking calendar */
+.customerSelectDateTimeCalendar .rbc-toolbar button {
+  color: white !important;
+  background-color: transparent !important;
+}
+
+.customerSelectDateTimeCalendar .rbc-toolbar button:hover {
+  background-color: #6c7278 !important;
+}
+
+.customerSelectDateTimeCalendar .rbc-off-range-bg {
+  background-color: #141414 !important;
+}
+
+.customerSelectDateTimeCalendar .rbc-today {
+  background-color: #6c7278 !important;
+}
+
+.customerSelectDateTimeCalendar .rbc-show-more {
+  color: #dce4e8 !important;
+  background-color: transparent !important;
+}
+
+.customerSelectDateTimeCalendar .rbc-agenda-view table.rbc-agenda-table .rbc-agenda-time-cell {
+  border: 1px solid white;
+}
+
 .customerSelectDateTimeCalendar .rbc-row-segment {
   pointer-events: none;
+}
+
+/* studentBookingCalendar — Find Experts / student dashboard */
+.studentBookingCalendar {
+  font-family: inherit;
+  color: #1a3a4a !important;
+}
+
+.studentBookingCalendar .rbc-toolbar {
+  margin-bottom: 0.75rem;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.studentBookingCalendar .rbc-toolbar button {
+  color: #1a3a4a !important;
+  border: 1px solid #e5e2db !important;
+  border-radius: 4px !important;
+  background: #fff !important;
+  font-size: 13px !important;
+  font-weight: 600 !important;
+  padding: 5px 12px !important;
+}
+
+.studentBookingCalendar .rbc-toolbar button:hover,
+.studentBookingCalendar .rbc-toolbar button.rbc-active {
+  background: #1a3a4a !important;
+  color: #fff !important;
+  border-color: #1a3a4a !important;
+}
+
+.studentBookingCalendar .rbc-toolbar-label {
+  color: #1a3a4a !important;
+  font-weight: 600 !important;
+  font-size: 15px !important;
+}
+
+.studentBookingCalendar .rbc-month-header .rbc-header {
+  padding: 0.5rem 0;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: none;
+  letter-spacing: 0.02em;
+  color: #7a7a72 !important;
+  border-bottom: 1px solid #e5e2db;
+  overflow: visible;
+  white-space: nowrap;
+}
+
+.studentBookingCalendar .rbc-month-view {
+  border: 1px solid #e5e2db;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #fff !important;
+}
+
+.studentBookingCalendar .rbc-day-bg + .rbc-day-bg {
+  border-left: 1px solid #e5e2db;
+}
+
+.studentBookingCalendar .rbc-month-row + .rbc-month-row {
+  border-top: 1px solid #e5e2db;
+}
+
+.studentBookingCalendar .rbc-off-range-bg {
+  background: #faf9f7 !important;
+}
+
+.studentBookingCalendar .rbc-off-range .rbc-button-link {
+  color: #7a7a72 !important;
+}
+
+.studentBookingCalendar .rbc-button-link {
+  color: #1a3a4a !important;
+}
+
+.studentBookingCalendar .rbc-button-link.studentBookingCalendar-day-past {
+  color: #54524c !important;
+}
+
+.studentBookingCalendar .rbc-date-cell {
+  padding: 4px 6px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #1a3a4a !important;
+}
+
+.studentBookingCalendar .rbc-day-bg {
+  height: 100%;
+}
+
+.studentBookingCalendar .rbc-date-cell .rbc-button-link {
+  pointer-events: auto;
+}
+
+.studentBookingCalendar .studentBookingCalendar-day-clickable,
+.studentBookingCalendar .rbc-date-cell .rbc-button-link.cursor-pointer {
+  cursor: pointer;
+}
+
+.studentBookingCalendar .studentBookingCalendar-day-disabled,
+.studentBookingCalendar .rbc-date-cell .rbc-button-link.cursor-not-allowed {
+  cursor: not-allowed;
+}
+
+.studentBookingCalendar .studentBookingCalendar-day-selected {
+  outline: 2px solid #1a3a4a;
+  outline-offset: 1px;
+  border-radius: 4px;
+}
+
+.studentBookingCalendar .rbc-row-segment {
+  pointer-events: none;
+}
+
+.studentBookingCalendar .rbc-show-more {
+  color: #1a3a4a !important;
+  background-color: transparent !important;
+}
+
+/* Student month view: day colors are the affordance; hide busy event chips */
+.studentBookingCalendar .rbc-event {
+  display: none;
+}
+
+.student-booking-picker .rbc-event-label {
+  font-size: 10px;
 }
 
 /* expertTimeSlot */
@@ -236,6 +544,22 @@ code {
   border-color: #0c4a6e;
   text-decoration: none;
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+}
+
+.resume-link:disabled {
+  background-color: #475569;
+  color: #cbd5e1;
+  cursor: not-allowed;
+  opacity: 0.65;
+  border-color: transparent;
+  box-shadow: none;
+}
+
+.resume-link:disabled:hover {
+  background-color: #475569;
+  color: #cbd5e1;
+  border-color: transparent;
+  box-shadow: none;
 }
 
 .expertTimeSlot .rbc-toolbar {
@@ -312,6 +636,12 @@ code {
   max-height: none !important;
 }
 
+
+.wl-photo-picker .ReactImagePickerEditor .place-image .caption,
+.wl-photo-picker .ReactImagePickerEditor .place-image .editing-bar-btn {
+  display: none !important;
+}
+
 .MultiSelection > div {
   background: transparent !important;
   border: 0px;
@@ -327,12 +657,38 @@ code {
   color: inherit !important;
 }
 
-.MultiSelection .css-1p3m7a8-multiValue {
-  background-color: rgba(49, 176, 153, 0.5333333333);
+.MultiSelection .css-1p3m7a8-multiValue,
+.MultiSelection .wl-select__multi-value {
+  background-color: #e8eef4 !important;
+  border: 1px solid #bcd6ea !important;
+}
+
+.MultiSelection .wl-select__multi-value__label {
+  color: #234c6a !important;
+  font-weight: 600;
 }
 
 .MultiSelection > div:hover {
   box-shadow: 0px 0px 0px transparent;
+}
+
+/* react-select (SelectionWithCheckBox): white field + menu — overrides transparent rule above */
+.MultiSelection .wl-select__control {
+  background-color: #ffffff !important;
+}
+.MultiSelection .wl-select__menu,
+.MultiSelection .wl-select__menu-list {
+  background-color: #ffffff !important;
+}
+
+/* Admin register forms: fields on white card — muted surface + border for react-select */
+.admin-register-form .MultiSelection .wl-select__control {
+  background-color: #f8f7f4 !important;
+  border-color: #e8e6e1 !important;
+  box-shadow: inset 0 1px 2px rgba(35, 76, 106, 0.06);
+}
+.admin-register-form .MultiSelection .wl-select__control:hover {
+  border-color: rgba(35, 76, 106, 0.2) !important;
 }
 
 .react-tel-input .form-control {
@@ -348,6 +704,17 @@ code {
   background-color: transparent !important;
   border: 1px solid #dce4e8 !important;
   border-radius: 15px 0 0 15px !important;
+}
+
+/* After global react-tel rules — admin register card fields */
+.admin-register-form .react-tel-input .form-control {
+  background-color: #f8f7f4 !important;
+  border-color: #e8e6e1 !important;
+  box-shadow: inset 0 1px 2px rgba(35, 76, 106, 0.06);
+}
+.admin-register-form .react-tel-input .flag-dropdown {
+  background-color: #f8f7f4 !important;
+  border-color: #e8e6e1 !important;
 }
 
 .react-tel-input .selected-flag {
@@ -391,6 +758,55 @@ code {
   #dateRangePickerInSearch .rdrDateRangePickerWrapper .rdrDefinedRangesWrapper .rdrStaticRanges button {
     width: 120px;
   }
+}
+
+.wl-chat-scroll {
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(35, 76, 106, 0.45) rgba(15, 23, 42, 0.07);
+}
+
+.wl-chat-scroll::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.wl-chat-scroll::-webkit-scrollbar-track {
+  background: rgba(15, 23, 42, 0.07);
+  border: 3px solid transparent;
+  background-clip: padding-box;
+  border-radius: 999px;
+}
+
+.wl-chat-scroll::-webkit-scrollbar-thumb {
+  background: rgba(35, 76, 106, 0.45);
+  background-clip: padding-box;
+  border: 3px solid transparent;
+  border-radius: 999px;
+}
+
+.wl-chat-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(35, 76, 106, 0.7);
+  background-clip: padding-box;
+}
+
+.wl-chat-scroll-dark {
+  scrollbar-color: rgba(226, 232, 240, 0.45) rgba(226, 232, 240, 0.1);
+}
+
+.wl-chat-scroll-dark::-webkit-scrollbar-track {
+  background: rgba(226, 232, 240, 0.1);
+  background-clip: padding-box;
+}
+
+.wl-chat-scroll-dark::-webkit-scrollbar-thumb {
+  background: rgba(226, 232, 240, 0.45);
+  background-clip: padding-box;
+}
+
+.wl-chat-scroll-dark::-webkit-scrollbar-thumb:hover {
+  background: rgba(226, 232, 240, 0.7);
+  background-clip: padding-box;
 }
 
 @tailwind base;

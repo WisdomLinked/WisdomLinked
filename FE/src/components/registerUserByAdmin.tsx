@@ -5,43 +5,54 @@ import AdminRegisterExpert from "./adminRegisterExpert";
 function RegisterUserByAdmin() {
     const [view, setView] = useState<"none" | "customer" | "expert">("none");
 
+    const choiceCardClass =
+        "bg-white border border-wl-line hover:border-wl-brand/35 p-8 rounded-2xl shadow-[0_10px_30px_rgba(35,76,106,0.08)] hover:shadow-[0_16px_40px_rgba(35,76,106,0.12)] transition-all cursor-pointer w-full sm:w-80 min-h-[240px] flex flex-col justify-center text-center";
+
     return (
-        <div className="w-full min-h-screen bg-[#181818] text-white relative z-[9999] flex flex-col items-center py-6">
+        <div className="w-full min-h-full bg-wl-page text-wl-ink relative z-[1] flex flex-col items-center px-[18px] pt-10 pb-10">
             {view === "none" && (
-                <div className="w-fit flex flex-col items-center">
-                    <div className="bg-[#181818] p-6 rounded-md shadow-lg mb-6 w-fit text-center">
-                        <h2 className="text-2xl font-bold text-[#31B099] mb-2">
+                <div className="w-full max-w-3xl mx-auto flex flex-col items-center">
+                    <div className="bg-white border border-wl-line p-6 rounded-2xl shadow-sm mb-8 w-full text-center max-w-xl">
+                        <h2 className="text-2xl font-semibold text-wl-brand mb-2">
                             Register a New User (Admin)
                         </h2>
-                        <p className="text-gray-300">
+                        <p className="text-wl-muted text-sm sm:text-base">
                             Manage user creation by selecting which type of account to register.
                         </p>
                     </div>
 
-                    <div className="flex flex-col md:flex-row gap-6 items-center justify-center w-fit">
+                    <div className="flex flex-col sm:flex-row gap-6 items-stretch justify-center w-full">
                         <div
+                            role="button"
+                            tabIndex={0}
+                            onKeyDown={(e) => {
+                                if (e.key === "Enter" || e.key === " ") setView("customer");
+                            }}
                             onClick={() => setView("customer")}
-                            className="bg-[#252525] hover:bg-[#2e2e2e] p-6 rounded-lg shadow-md
-                         hover:shadow-xl transition-shadow cursor-pointer w-64 text-center"
+                            className={choiceCardClass}
                         >
-                            <h3 className="text-xl font-semibold text-[#31B099] mb-2">
+                            <h3 className="text-xl font-semibold text-wl-brand mb-3">
                                 Register a Customer
                             </h3>
-                            <p className="text-gray-400">
-                                Create a new <strong>Customer</strong> account.
+                            <p className="text-wl-muted text-sm leading-relaxed">
+                                Create a new <strong className="text-wl-ink font-medium">Customer</strong> account.
                             </p>
                         </div>
 
                         <div
+                            role="button"
+                            tabIndex={0}
+                            onKeyDown={(e) => {
+                                if (e.key === "Enter" || e.key === " ") setView("expert");
+                            }}
                             onClick={() => setView("expert")}
-                            className="bg-[#252525] hover:bg-[#2e2e2e] p-6 rounded-lg shadow-md
-                         hover:shadow-xl transition-shadow cursor-pointer w-64 text-center"
+                            className={choiceCardClass}
                         >
-                            <h3 className="text-xl font-semibold text-[#31B099] mb-2">
+                            <h3 className="text-xl font-semibold text-wl-brand mb-3">
                                 Register an Expert
                             </h3>
-                            <p className="text-gray-400">
-                                Create a new <strong>Expert</strong> account.
+                            <p className="text-wl-muted text-sm leading-relaxed">
+                                Create a new <strong className="text-wl-ink font-medium">Expert</strong> account.
                             </p>
                         </div>
                     </div>
@@ -50,8 +61,8 @@ function RegisterUserByAdmin() {
 
             {view !== "none" && (
                 <button
-                    className="mb-4 bg-[#31B099] text-black px-4 py-2 rounded
-                     hover:bg-[#28a286] transition-colors w-fit"
+                    type="button"
+                    className="mb-6 self-start sm:self-center bg-wl-brand text-white px-5 py-2.5 rounded-xl text-sm font-medium hover:brightness-95 transition-colors shadow-sm"
                     onClick={() => setView("none")}
                 >
                     &larr; Go Back

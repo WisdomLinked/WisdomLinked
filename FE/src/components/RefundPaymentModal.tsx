@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from "react";
 import CloseIcon from '@mui/icons-material/Close';
+import { store } from '../store';
+import { showErrorAlert } from '../actions/alertActions';
 
 interface RefundPaymentModalProps {
     paymentItem: any;
@@ -32,17 +34,17 @@ const RefundPaymentModal: React.FC<RefundPaymentModalProps> = ({
 
     const handleConfirm = () => {
         if (!refundAmount || refundAmount <= 0) {
-            alert('Please enter a valid refund amount');
+            store.dispatch(showErrorAlert('Please enter a valid refund amount'));
             return;
         }
         
         if (refundAmount > maxRefundAmount) {
-            alert(`Refund amount cannot exceed $${maxRefundAmount.toFixed(2)}`);
+            store.dispatch(showErrorAlert(`Refund amount cannot exceed $${maxRefundAmount.toFixed(2)}`));
             return;
         }
         
         if (!refundReason.trim()) {
-            alert('Please provide a reason for the refund');
+            store.dispatch(showErrorAlert('Please provide a reason for the refund'));
             return;
         }
 

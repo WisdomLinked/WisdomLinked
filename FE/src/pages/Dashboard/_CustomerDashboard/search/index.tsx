@@ -8,13 +8,14 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import EventDetail from "../eventDetail";
 import { useAppSelector } from "../../../../store";
 import { getAvatarTitle } from "../../../../actions/common";
-import {doAppendEvent, doUpdateEvent, getExpertById, profileImageFetch, createGroupChatByUser} from "../../../../api/api";
+import {doUpdateEvent, getExpertById, profileImageFetch, createGroupChatByUser} from "../../../../api/api";
 import { useDispatch } from "react-redux";
 import { Swiper, SwiperSlide } from "swiper/react";
 import { Pagination, Navigation } from "swiper";
 import { SetLoadingStatus } from "../../../../actions/appActions";
 import ShowFieldError from "../../../../components/ShowFieldError";
-import { showAlert } from "../../../../actions/alertActions";
+import { showErrorAlert, showSuccessAlert, showWarningAlert } from '../../../../actions/alertActions';
+import FormAlert from '../../../../components/FormAlert';
 import { de } from "date-fns/locale";
 
 const Search = () => {
@@ -82,7 +83,7 @@ const Search = () => {
 
     const selectExpert = (expert: any) => {
         if (!expert) {
-            dispatch(showAlert("Expert isn't available"));
+            dispatch(showWarningAlert("Expert isn't available"));
             navigate(-1);
             return;
         }
@@ -129,16 +130,22 @@ const Search = () => {
             // because even a $0 payment will create a PaymentIntent and 'succeed' automatically.
             set_paidBy("stripe");
             const response = await createGroupChatByUser(details);
-            if (response) {
-                console.log("response: ",response);
-    
+            if (response === false) return;
+            if (response?.status === 'FAIL' || response?.error) {
+                dispatch(showErrorAlert(response?.error || 'Could not complete booking.'));
+                set_paymentFailed(true);
+                return;
+            }
+            if (response?.result?.groupChats) {
                 const groupChatId = response.result.groupChats[response.result.groupChats.length - 1];
-    
                 if (groupChatId) {
                     goToStep(4);
                 } else {
                     goToStep(3);
                 }
+            } else {
+                dispatch(showErrorAlert('Could not complete booking.'));
+                set_paymentFailed(true);
             }
 
             // const response = await doAppendEvent(details);
@@ -209,7 +216,7 @@ const Search = () => {
 
     useEffect(() => {
         if (userDetails.status === 'review') {
-            dispatch(showAlert("This feature isn't available under review"));
+            dispatch(showWarningAlert("This feature isn't available under review"));
             navigate(-1);
         }
         let temp: any[] = userDetails.events.map((ev: any) => ({
@@ -514,13 +521,19 @@ const Search = () => {
                 )}
             </>
         ) : (
-            <div className="w-full h-full flex flex-col items-center justify-center">
-                <div className="text-white text-2xl text-center">
-                    Oops, something went wrong with the payment
+            <div className="w-full h-full flex flex-col items-center justify-center px-6">
+                <div className="w-full max-w-md">
+                    <FormAlert
+                        variant="error"
+                        message="Payment did not complete. Your card was not charged for this booking."
+                    />
+                    <a
+                        href={window.location.href.split('?')[0]}
+                        className="mt-4 inline-flex text-lg text-green hover:underline"
+                    >
+                        Try again
+                    </a>
                 </div>
-                <a href={window.location.href} className="text-lg mt-6 text-green">
-                    Refresh page
-                </a>
             </div>
         )
     );

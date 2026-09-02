@@ -30,14 +30,14 @@ const ManageModal = ({
                 className="absolute top-0 left-0 w-full h-full cursor-pointer"
                 onClick={closeModal}
             />
-            <div className="relative w-full h-full max-w-[846px] mx-auto py-6 bg-black rounded-lg text-white">
+            <div className="relative w-full h-full max-w-[846px] mx-auto py-6 bg-wl-card rounded-2xl border border-wl-line text-wl-ink shadow-xl">
                 <button 
-                    className="absolute right-2 top-2 rounded-md hover:bg-grey"
+                    className="absolute right-2 top-2 rounded-md p-1 text-wl-muted hover:bg-wl-pageAlt hover:text-wl-ink"
                     onClick={closeModal}
                 >
                     <CloseIcon />
                 </button>
-                <div className="text-center text-white text-2xl mb-2 mt-3 sm:mt-0">Edit User Details ({userDetails?.role})</div>
+                <div className="text-center text-wl-brand text-2xl font-semibold mb-2 mt-3 sm:mt-0">Edit User Details ({userDetails?.role})</div>
                 <div className="w-full h-[calc(100%-50px)] sm:h-[calc(100%-40px)] overflow-y-auto px-6">
                     {
                         userDetails?.role === 'expert' ?

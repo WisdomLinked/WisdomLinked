@@ -11,7 +11,7 @@ import { SetLoadingStatus } from "../actions/appActions";
 export default function LeaveFeedback() {
 
     const dispatch = useDispatch();
-    const { app: { feedbackModalShow },chat: { currentEvent }, room: { roomDetails}, auth: { userDetails } } = useAppSelector((state) => state);
+    const { app: { feedbackModalShow },chat: { currentEvent }, auth: { userDetails } } = useAppSelector((state) => state);
     const [description, set_description] = useState("");
     const [rating, set_rating] = useState(0);
     const [enableToSubmit, set_enableToSubmit] = useState(false)

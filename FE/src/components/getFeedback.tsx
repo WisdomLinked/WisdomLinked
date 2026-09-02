@@ -99,21 +99,19 @@ export default function Feedback() {
     };
 
     return (
-        <div className="min-h-screen p-6 bg-[#181818] text-white">
-            {/* Page Title */}
-            <h2 className="text-2xl font-semibold text-[#31B099] mb-6">
+        <div className="w-full min-h-full pt-10 overflow-y-auto bg-wl-page text-wl-ink px-[18px] pb-10">
+            <div className="w-full max-w-[900px] mx-auto flex flex-col items-center">
+            <h2 className="text-center text-2xl font-semibold text-wl-brand mb-8 w-full">
                 User Feedbacks
             </h2>
 
-            {/* Container for label, search input, dropdown, and Clear button */}
-            <div className="mb-6 max-w-sm">
-                <label className="text-gray-300 block mb-2">Search and Select User:</label>
-                <div className="flex items-center">
-                    {/* Search input with dropdown */}
-                    <div className="relative w-full">
+            <div className="mb-6 w-full max-w-md">
+                <label className="text-wl-muted block mb-2 text-sm text-center">Search and Select User:</label>
+                <div className="flex items-center justify-center gap-3 flex-wrap">
+                    <div className="relative w-full min-w-[200px] flex-1">
                         <input
                             type="text"
-                            className="w-full bg-[#252525] text-white px-3 py-2 rounded-md border border-gray-700 focus:outline-none focus:ring-2 focus:ring-[#31B099] transition-all"
+                            className="w-full bg-white text-wl-ink px-3 py-2 rounded-[15px] border border-lightgrey focus:outline-none focus:ring-2 focus:ring-wl-brand/30 transition-all placeholder:text-grey"
                             placeholder="Type user name or email"
                             value={searchTerm}
                             onChange={handleSearchChange}
@@ -121,12 +119,12 @@ export default function Feedback() {
                         />
 
                         {filteredUsers.length > 0 && (
-                            <div className="absolute z-10 w-full bg-[#252525] mt-1 rounded-md border border-gray-700 max-h-48 overflow-y-auto">
+                            <div className="absolute z-10 w-full bg-white mt-1 rounded-xl border border-lightgrey shadow-md max-h-48 overflow-y-auto">
                                 {filteredUsers.map((user) => (
                                     <div
                                         key={user._id}
                                         onClick={() => handleSelectUser(user)}
-                                        className="px-3 py-2 hover:bg-[#31B099] cursor-pointer"
+                                        className="px-3 py-2 hover:bg-wl-brandSoft cursor-pointer text-sm text-left"
                                     >
                                         {user.username} ({user.email})
                                     </div>
@@ -135,11 +133,10 @@ export default function Feedback() {
                         )}
                     </div>
 
-                    {/* Clear Button on the right */}
                     <button
+                        type="button"
                         onClick={handleClear}
-                        className="ml-4 px-4 py-2 rounded-md border border-[#31B099] text-white bg-[#31B099]
-                                   hover:bg-transparent hover:text-[#31B099] transition-all"
+                        className="shrink-0 px-5 py-2 rounded-xl border border-wl-brand text-white bg-wl-brand hover:brightness-95 transition-all font-medium text-sm disabled:opacity-50"
                         disabled={isLoadingUsers}
                     >
                         Clear
@@ -147,73 +144,67 @@ export default function Feedback() {
                 </div>
             </div>
 
-            {/* Feedback List */}
             {isLoadingFeedbacks ? (
-                <p className="text-gray-400">Loading feedbacks...</p>
+                <p className="text-wl-muted text-center w-full">Loading feedbacks...</p>
             ) : feedbacks.length === 0 && selectedUserId ? (
-                <p className="text-gray-400">No feedback found for this user.</p>
+                <p className="text-wl-muted text-center w-full">No feedback found for this user.</p>
             ) : (
-                <div className="space-y-4">
+                <div className="space-y-4 w-full">
                     {feedbacks.map((fb, idx) => (
                         <div
                             key={idx}
-                            className="p-4 rounded-lg border border-gray-700 bg-[#252525] shadow-lg hover:shadow-[#31B099] transition-shadow"
+                            className="p-4 rounded-2xl border border-wl-line bg-white shadow-[0_10px_30px_rgba(35,76,106,0.06)] text-left"
                         >
-                            {/* Conditional display based on eventType */}
                             {fb.eventType === "event" && fb.event && (
-                                <p className="text-gray-300">
-                                    <strong className="text-white">Individual Event Name:</strong>{" "}
+                                <p className="text-wl-ink/90">
+                                    <strong className="text-wl-brand">Individual Event Name:</strong>{" "}
                                     {fb.event.title || "N/A"}
                                 </p>
                             )}
                             {fb.eventType === "seminar" && fb.groupChat && (
-                                <p className="text-gray-300">
-                                    <strong className="text-white">Seminar Name:</strong>{" "}
+                                <p className="text-wl-ink/90">
+                                    <strong className="text-wl-brand">Seminar Name:</strong>{" "}
                                     {fb.groupChat.name || "N/A"}
                                 </p>
                             )}
 
-                            {/* Rating */}
-                            <p className="text-gray-300">
-                                <strong className="text-[#31B099]">Rating:</strong> {fb.rating}
+                            <p className="text-wl-ink/90">
+                                <strong className="text-wl-brand">Rating:</strong> {fb.rating}
                             </p>
 
-                            {/* Feedback Description */}
-                            <p className="text-gray-300">
-                                <strong className="text-white">Feedback:</strong> {fb.description}
+                            <p className="text-wl-ink/90">
+                                <strong className="text-wl-brand">Feedback:</strong> {fb.description}
                             </p>
 
-                            {/* Event Start and End Times (formatted) */}
-                            <p className="text-gray-300">
-                                <strong className="text-white">Event Start:</strong>{" "}
+                            <p className="text-wl-ink/90">
+                                <strong className="text-wl-brand">Event Start:</strong>{" "}
                                 {fb.start ? new Date(fb.start).toLocaleString() : "N/A"}
                             </p>
-                            <p className="text-gray-300">
-                                <strong className="text-white">Event End:</strong>{" "}
+                            <p className="text-wl-ink/90">
+                                <strong className="text-wl-brand">Event End:</strong>{" "}
                                 {fb.end ? new Date(fb.end).toLocaleString() : "N/A"}
                             </p>
 
-                            {/* Total Time Spent */}
-                            <p className="text-gray-300">
-                                <strong className="text-white">Total Time Spent:</strong>{" "}
+                            <p className="text-wl-ink/90">
+                                <strong className="text-wl-brand">Total Time Spent:</strong>{" "}
                                 {fb.totalTimeSpent} minute(s)
                             </p>
 
-                            {/* Other User Info */}
                             {fb.otherUser ? (
-                                <p className="text-gray-300">
-                                    <strong className="text-[#31B099]">Other User:</strong>{" "}
+                                <p className="text-wl-ink/90">
+                                    <strong className="text-wl-brand">Other User:</strong>{" "}
                                     {fb.otherUser.username} (Role: {fb.otherUser.role})
                                 </p>
                             ) : (
-                                <p className="text-gray-300">
-                                    <strong className="text-[#31B099]">Other User:</strong> Unknown
+                                <p className="text-wl-ink/90">
+                                    <strong className="text-wl-brand">Other User:</strong> Unknown
                                 </p>
                             )}
                         </div>
                     ))}
                 </div>
             )}
+            </div>
         </div>
     );
 }

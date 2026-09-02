@@ -5,12 +5,13 @@ import FilterSeminars from "./filterSeminars";
 import Payment from "../payment";
 import { Link } from "react-router-dom";
 import { useAppSelector } from "../../../../store";
-import { addMemberToPendingGroup } from "../../../../api/api";
+import { registerForSeminar } from "../../../../api/api";
 import { useDispatch } from "react-redux";
 import { Swiper, SwiperSlide } from "swiper/react";
 import { Pagination, Navigation } from "swiper";
 import { SetLoadingStatus } from "../../../../actions/appActions";
-import { showAlert } from "../../../../actions/alertActions";
+import { showErrorAlert, showWarningAlert } from '../../../../actions/alertActions';
+import FormAlert from '../../../../components/FormAlert';
 
 const Seminars = () => {
     const { auth: { userDetails } } = useAppSelector((state) => state);
@@ -51,23 +52,34 @@ const Seminars = () => {
     const submit = async (details: any) => {
         set_paidBy('stripe')
         SetLoadingStatus(true)
-        const response = await addMemberToPendingGroup(details);
-        console.log(response.pendingGroupChats, '//////')
-        if (response) {
-            dispatch({
-                type: 'updateUserDetails',
-                payload: {
-                    pendingGroupChats: response.pendingGroupChats
-                }
-            })
-            set_step(2)
+        try {
+            const response = await registerForSeminar(details);
+            if (response === false) return;
+            if (response?.status === 'FAIL' || response?.error) {
+                dispatch(showErrorAlert(response?.error || 'Could not complete seminar registration.'));
+                set_paymentFailed(true);
+                return;
+            }
+            if (response?.result) {
+                dispatch({
+                    type: 'updateUserDetails',
+                    payload: response.result,
+                })
+                set_step(2)
+            } else {
+                dispatch(showErrorAlert('Could not complete seminar registration.'));
+                set_paymentFailed(true);
+            }
+        } catch {
+            dispatch(showErrorAlert('Could not complete seminar registration.'));
+            set_paymentFailed(true);
         }
         SetLoadingStatus(false)
     }
 
     useEffect(() => {
         if (userDetails.status === 'review') {
-            dispatch(showAlert("This feature isn't available under review"))
+            dispatch(showWarningAlert("This feature isn't available under review"))
             navigate(-1)
         }
         let temp = userDetails.events.map((event: any) => {
@@ -209,9 +221,19 @@ const Seminars = () => {
                         </div>
                 }
             </> :
-            <div className="w-full h-full flex flex-col items-center justify-center">
-                <div className="text-white text-2xl text-center"> Opps, something went wrong with the payment </div>
-                <a href={window.location.href} className="text-lg mt-6 text-green">Refresh page</a>
+            <div className="w-full h-full flex flex-col items-center justify-center px-6">
+                <div className="w-full max-w-md">
+                    <FormAlert
+                        variant="error"
+                        message="Payment did not complete. Your card was not charged for this seminar."
+                    />
+                    <a
+                        href={window.location.href.split('?')[0]}
+                        className="mt-4 inline-flex text-lg text-green hover:underline"
+                    >
+                        Try again
+                    </a>
+                </div>
             </div>
     );
 };
