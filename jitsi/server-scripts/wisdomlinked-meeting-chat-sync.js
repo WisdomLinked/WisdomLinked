@@ -23,7 +23,7 @@
       host === "wisdomlinked.com" ||
       host === "localhost" ||
       host === "127.0.0.1" ||
-      host.slice(-16) === ".wisdomlinked.com"
+      host.endsWith(".wisdomlinked.com")
     );
   }
 
