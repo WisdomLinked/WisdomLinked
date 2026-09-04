@@ -27,17 +27,36 @@ function hasStoredSession(): boolean {
     }
 }
 
-/** Review-status feature blocks return 401 with this copy — not a dead session. */
-function isUnderReviewBlock(responseData: unknown): boolean {
-    let text = '';
-    if (typeof responseData === 'string') {
-        text = responseData;
-    } else if (responseData && typeof responseData === 'object') {
-        const obj = responseData as Record<string, unknown>;
-        if (typeof obj.error === 'string') text = obj.error;
-        else if (typeof obj.message === 'string') text = obj.message;
+function readStoredUser(): { email?: string; status?: string } | null {
+    try {
+        const raw = localStorage.getItem('currentUser');
+        if (!raw || raw === '{}' || raw === 'undefined') return null;
+        const parsed = JSON.parse(raw);
+        return parsed && typeof parsed === 'object' ? parsed : null;
+    } catch {
+        return null;
     }
-    return /under review/i.test(text);
+}
+
+/** True when the signed-in user is still under admin review (session is valid). */
+function isUnderReviewSession(): boolean {
+    if (readStoredUser()?.status === 'review') return true;
+    try {
+        const fromRedux = (store.getState() as { auth?: { userDetails?: { status?: string } } })
+            ?.auth?.userDetails?.status;
+        return fromRedux === 'review';
+    } catch {
+        return false;
+    }
+}
+
+/** Machine-readable under-review feature block from requireAuth — not a dead session. */
+function isUnderReviewBlock(responseData: unknown): boolean {
+    if (responseData && typeof responseData === 'object') {
+        const code = (responseData as { code?: unknown }).code;
+        if (code === 'UNDER_REVIEW') return true;
+    }
+    return isUnderReviewSession();
 }
 
 function shouldForceLogout(responseCode: number | undefined, responseData: unknown): boolean {
