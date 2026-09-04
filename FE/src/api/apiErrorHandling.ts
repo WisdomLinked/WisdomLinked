@@ -27,9 +27,23 @@ function hasStoredSession(): boolean {
     }
 }
 
+/** Review-status feature blocks return 401 with this copy — not a dead session. */
+function isUnderReviewBlock(responseData: unknown): boolean {
+    let text = '';
+    if (typeof responseData === 'string') {
+        text = responseData;
+    } else if (responseData && typeof responseData === 'object') {
+        const obj = responseData as Record<string, unknown>;
+        if (typeof obj.error === 'string') text = obj.error;
+        else if (typeof obj.message === 'string') text = obj.message;
+    }
+    return /under review/i.test(text);
+}
+
 function shouldForceLogout(responseCode: number | undefined, responseData: unknown): boolean {
     if (responseCode !== 401 && responseCode !== 403) return false;
     if (isCsrfError(responseData, responseCode)) return false;
+    if (isUnderReviewBlock(responseData)) return false;
     return hasStoredSession();
 }
 

@@ -72,4 +72,30 @@ describe('apiErrorHandling', () => {
         expect(logoutUser).not.toHaveBeenCalled();
         localStorage.clear();
     });
+
+    it('handleApiFailure does not logout on under-review 401', async () => {
+        localStorage.setItem('currentUser', JSON.stringify({ email: 'a@test.com' }));
+        const { handleApiFailure } = await import('./apiErrorHandling');
+        const result = handleApiFailure({
+            response: { status: 401, data: 'Unable to use under review' },
+        });
+        expect(result).toBe(false);
+        expect(logoutUser).not.toHaveBeenCalled();
+        expect(showErrorAlert).toHaveBeenCalled();
+        localStorage.clear();
+    });
+
+    it('handleAuthApiFailure does not logout on under-review 401 object body', async () => {
+        localStorage.setItem('currentUser', JSON.stringify({ email: 'a@test.com' }));
+        const { handleAuthApiFailure } = await import('./apiErrorHandling');
+        const result = handleAuthApiFailure({
+            response: { status: 401, data: { error: 'Unable to use under review' } },
+        });
+        expect(result).toEqual({
+            status: 'FAIL',
+            error: 'Unable to use under review',
+        });
+        expect(logoutUser).not.toHaveBeenCalled();
+        localStorage.clear();
+    });
 });
