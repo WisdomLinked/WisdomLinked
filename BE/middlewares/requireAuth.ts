@@ -124,7 +124,11 @@ const requireAuth = (restrictUnderReview = false) => async (req, res, next) => {
         }
 
         if (restrictUnderReview && user.status === 'review') {
-            throw new Error("Unable to use under review")
+            return res.status(401).json({
+                status: 'FAIL',
+                error: safeErrorMessage(new Error("Unable to use under review")),
+                code: 'UNDER_REVIEW',
+            });
         }
 
         const decodedUserToken = jwt.verify(user.token, process.env.JWT_SECRET)
@@ -182,7 +186,11 @@ const customerAuth = (restrictUnderReview = false) => async (req, res, next) => 
         }
 
         if (restrictUnderReview && user.status === 'review') {
-            throw new Error("Unable to use under review")
+            return res.status(401).json({
+                status: 'FAIL',
+                error: safeErrorMessage(new Error("Unable to use under review")),
+                code: 'UNDER_REVIEW',
+            });
         }
 
         const decodedUserToken = jwt.verify(user.token, process.env.JWT_SECRET)
@@ -239,7 +247,11 @@ const expertAuth = (restrictUnderReview = false) => async (req, res, next) => {
         }
 
         if (restrictUnderReview && user.status === 'review') {
-            throw new Error("Unable to use under review")
+            return res.status(401).json({
+                status: 'FAIL',
+                error: safeErrorMessage(new Error("Unable to use under review")),
+                code: 'UNDER_REVIEW',
+            });
         }
 
         const decodedUserToken = jwt.verify(user.token, process.env.JWT_SECRET)

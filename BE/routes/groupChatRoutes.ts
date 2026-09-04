@@ -57,21 +57,21 @@ router.get(
 // student lists their own seat requests (for pending-status badges)
 router.get(
     "/my-seat-requests",
-    requireAuth(true),
+    requireAuth(false),
     getMySeatRequests
 );
 
 // student reads the notes experts attached to their recent accept/decline decisions
 router.get(
     "/decision-notices",
-    requireAuth(true),
+    requireAuth(false),
     getMyDecisionNotices
 );
 
 // student dismisses one of those notices
 router.post(
     "/decision-notices/read",
-    requireAuth(true),
+    requireAuth(false),
     markDecisionNoticeRead
 );
 
