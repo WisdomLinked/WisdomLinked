@@ -537,8 +537,9 @@ const login = async (req: Request, res: Response) => {
             return res.status(200).json({ status: 'FAIL', error: AUTH_USER_BLOCKED });
         }
 
-        // const code = randomize('0', 6)
-        const code = "123456"
+        const code = (process.env.NODE_ENV === 'staging' || process.env.AUTH_FIXED_OTP === 'true')
+            ? "123456"
+            : randomize('0', 6);
 
         let loginRequest = await PendingLogin.findOne({ email: { $regex: new RegExp(`^${utils.escapeRegExp(email)}$`, 'i') } })
         if (!loginRequest) {
@@ -673,8 +674,9 @@ const passwordResetRequest = async (req: Request, res: Response) => {
             return res.status(200).json({ status: 'FAIL', error: AUTH_OAUTH_PASSWORD_RESET_UNAVAILABLE(provider) });
         }
 
-        // const code = randomize('0', 6)
-        const code = "123456"
+        const code = (process.env.NODE_ENV === 'staging' || process.env.AUTH_FIXED_OTP === 'true')
+            ? "123456"
+            : randomize('0', 6);
 
         // The new password is supplied at confirm time (confirmPasswordResetByCode),
         // so it is optional here. When omitted we only (re)issue the OTP code.
