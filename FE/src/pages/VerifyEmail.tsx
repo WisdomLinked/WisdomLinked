@@ -3,7 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { useDispatch } from 'react-redux';
 import { CheckCircle, AlertCircle, Loader2, ArrowRight } from 'lucide-react';
 import { verifyRegistration } from '../api/api';
-import { autoLogin } from '../actions/authActions';
+import { actionTypes } from '../actions/types';
 import FormAlert from '../components/FormAlert';
 
 const VerifyEmail = () => {
@@ -28,7 +28,8 @@ const VerifyEmail = () => {
                 }
                 if (response?.status === 'SUCCESS' && response.userDetails) {
                     setStatus('success');
-                    dispatch(autoLogin() as any);
+                    localStorage.setItem('currentUser', JSON.stringify(response.userDetails));
+                    dispatch({ type: actionTypes.authenticate, payload: response.userDetails });
                     setTimeout(() => {
                         navigate(response.userDetails.role === 'customer' 
                             ? '/user/studentdashboard' 
