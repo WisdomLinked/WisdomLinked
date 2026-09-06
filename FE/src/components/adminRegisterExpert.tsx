@@ -87,7 +87,7 @@ function AdminRegisterExpert() {
             timeSlots: slots
         };
 
-        const response = await registerUserByAdmin(data);
+        const response = await registerUserByAdmin(data, file || undefined);
 
         let accountCreationMsg = "";
         let emailSendingMsg = "";

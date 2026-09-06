@@ -13,6 +13,7 @@ import {
   Shield,
   Calendar,
   GraduationCap,
+  ScrollText,
 } from 'lucide-react';
 
 import Sidebar from '../components/layout/Sidebar';
@@ -31,7 +32,7 @@ import {
   shouldShowPayment,
   type AdminTopBarDismissState,
 } from '../utils/adminTopBarDismiss';
-import StudentSettings from '../components/dashboard/StudentSettings';
+import AdminSettings from '../components/dashboard/AdminSettings';
 import { profileImageFetch } from '../api/api';
 import { useAppSelector } from '../store';
 import { logoutUser } from '../actions/authActions';
@@ -45,6 +46,7 @@ import UserMgmt from './Dashboard/_AdminDashboard/usermgmt';
 import Payment from './Dashboard/_AdminDashboard/payment';
 import AdminMajors from './Dashboard/_AdminDashboard/majors';
 import AdminUpcomingEvents from './Dashboard/_AdminDashboard/adminUpcomingEvents';
+import AdminAuditLog from './Dashboard/_AdminDashboard/auditLog';
 import Chatbot from '../components/chatbot';
 
 const AUTH_BASE = process.env.REACT_APP_AUTH_URL || '/user/';
@@ -59,6 +61,7 @@ const adminNavItems = [
   { id: 'contactedus', label: 'Contact requests', icon: Inbox },
   { id: 'registerUser', label: 'Register user', icon: UserPlus },
   { id: 'majors', label: 'Majors', icon: GraduationCap },
+  { id: 'auditLog', label: 'Audit log', icon: ScrollText },
   { id: 'chatBotQA', label: 'Chatbot Q&A', icon: Bot },
 ];
 
@@ -123,10 +126,10 @@ function AdminOverview({ go }: { go: (id: string, search?: string) => void }) {
               alignStart
               label="User management"
               value={fmt(stats.pendingApprovals)}
-              subline="Pending approvals (sign-ups & logins)"
+              subline="Users with status: review"
               icon={Users}
               color="primary"
-              tooltip="Review pending accounts and approve users"
+              tooltip="Approve or block accounts awaiting admin review"
               onClick={() => go('usermgmt')}
             />
             <StatCard
@@ -157,7 +160,7 @@ function AdminOverview({ go }: { go: (id: string, search?: string) => void }) {
               icon={Bot}
               color="warning"
               tooltip="Curate chatbot knowledge"
-              onClick={() => go('chatBotQA')}
+              onClick={() => go('chatBotQA', '?unanswered=1')}
             />
           </div>
 
@@ -412,7 +415,7 @@ export default function AdminDashboard() {
         icon: <Bot className="h-3.5 w-3.5 text-wl-brand" aria-hidden />,
         onClick: () => {
           dismissAndPersist({ chatbot: s.unansweredChatbotQuestions });
-          goToSection('chatBotQA');
+          goToSection('chatBotQA', '?unanswered=1');
         },
       });
     }
@@ -497,6 +500,8 @@ export default function AdminDashboard() {
                         ? 'Upcoming events'
                         : section === 'majors'
                           ? 'Majors'
+                          : section === 'auditLog'
+                            ? 'Audit log'
                           : 'Admin Dashboard';
 
   const handleSidebarNavigate = (id: string) => {
@@ -523,6 +528,7 @@ export default function AdminDashboard() {
         <Route path="registerUser" element={<RegisterUserByAdmin />} />
         <Route path="majors" element={<AdminMajors />} />
         <Route path="upcomingEvents" element={<AdminUpcomingEvents />} />
+        <Route path="auditLog" element={<AdminAuditLog />} />
         <Route path="chatBotQA" element={<ChatBotQA />} />
         <Route path="*" element={<AdminOverview go={goToSection} />} />
       </Routes>
@@ -559,9 +565,7 @@ export default function AdminDashboard() {
               avatarUrl={avatarUrl}
             />
           ) : extraView === 'settings' ? (
-            <div className="h-[calc(100vh-56px)] overflow-y-auto bg-wl-page">
-              <StudentSettings />
-            </div>
+            <AdminSettings />
           ) : section === 'chat' ? (
             <AdminChat />
           ) : (

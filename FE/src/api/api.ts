@@ -786,6 +786,57 @@ export const getUserFeedbacks = async (userId: string) => {
     }
 };
 
+export const getAllFeedbacks = async (params?: { numPerPage?: number; currentPage?: number }) => {
+    try {
+        const q = new URLSearchParams();
+        if (params?.numPerPage != null) q.set("numPerPage", String(params.numPerPage));
+        if (params?.currentPage != null) q.set("currentPage", String(params.currentPage));
+        const res = await api.get(`admin/allFeedbacks${q.toString() ? `?${q}` : ""}`);
+        return res.data;
+    } catch (err: any) {
+        return checkForAuthorization(err);
+    }
+};
+
+export const getAdminAuditLogs = async (params?: { numPerPage?: number; currentPage?: number }) => {
+    try {
+        const q = new URLSearchParams();
+        if (params?.numPerPage != null) q.set("numPerPage", String(params.numPerPage));
+        if (params?.currentPage != null) q.set("currentPage", String(params.currentPage));
+        const res = await api.get(`admin/auditLogs${q.toString() ? `?${q}` : ""}`);
+        return res.data;
+    } catch (err: any) {
+        return checkForAuthorization(err);
+    }
+};
+
+export const inviteAdmin = async (data: { email: string; username: string; password?: string }) => {
+    try {
+        const res = await api.post("admin/inviteAdmin", data);
+        return res.data;
+    } catch (err: any) {
+        return checkForAuthorization(err);
+    }
+};
+
+export const impersonateUser = async (email: string) => {
+    try {
+        const res = await api.post("admin/impersonate", { email });
+        return res.data;
+    } catch (err: any) {
+        return checkForAuthorization(err);
+    }
+};
+
+export const stopImpersonation = async () => {
+    try {
+        const res = await api.post("admin/stopImpersonation");
+        return res.data;
+    } catch (err: any) {
+        return checkForAuthorization(err);
+    }
+};
+
 export const createStripePaymentIntent = async (data: any) => {
     try {
         const res = await api.post("auth/createStripePaymentIntent", data);
@@ -830,6 +881,17 @@ export const setPaymentWindow = async (paymentWindowHours: number) => {
         return checkForAuthorization(err);
     }
 }
+
+export const doGetPaymentIntegrityReport = async (onlyActionable = true) => {
+    try {
+        const res = await api.get(
+            `admin/paymentIntegrityReport?onlyActionable=${onlyActionable ? 'true' : 'false'}`
+        );
+        return res.data;
+    } catch (err: any) {
+        return checkForAuthorization(err);
+    }
+};
 
 export const sendPaymentLinkToUser = async (data: any) => {
     try {
@@ -1250,6 +1312,8 @@ export const doGetCustomerPaymentHistory = async () => {
 
 export type AdminDashboardStatsData = {
     pendingApprovals: number;
+    /** Email-verify PendingUser queue (separate from status:review approvals). */
+    pendingEmailVerify?: number;
     newContactMessages: number;
     unansweredChatbotQuestions: number;
     expertCount: number;
@@ -1407,7 +1471,7 @@ export const sendEmailToUser = async (email: string, message: string) => {
 
 export const sendWelcomeEmail = async (email: string, password: string) => {
     try {
-        const res = await api.post("auth/sendWelcomeEmail", { email, password });
+        const res = await api.post("admin/sendWelcomeEmail", { email, password });
         return res.data;
     } catch (err: any) {
         return checkForAuthorization(err);
@@ -1477,11 +1541,16 @@ export const doActivatePendingUserById = async (pendingUserId: string) => {
     }
 };
 
-export const registerUserByAdmin = async (userdata: any) => {
+export const registerUserByAdmin = async (userdata: any, resumeFile?: any) => {
     try {
-        // This uses the /registerUserByAdmin route
-        const res = await api.post<any>("admin/registerUserByAdmin", userdata);
-        return res.data;
+        // Multipart so multer can populate req.file for resume (same pattern as auth/register).
+        const file =
+            resumeFile && typeof resumeFile === "object" && "name" in resumeFile
+                ? resumeFile
+                : undefined;
+        return (await callApi("POST", "admin/registerUserByAdmin", userdata, file, {
+            notify: false,
+        })) as any;
     } catch (err: any) {
         return checkForAuthorization(err);
     }
@@ -1496,14 +1565,20 @@ export const createChatBotQA = async (data: any) => {
     }
 };
 
-export const getChatBotQA = async (data: any) => {
+export const getChatBotQA = async (data: {
+    page: number;
+    limit: number;
+    search?: string;
+    unansweredOnly?: boolean;
+}) => {
     try {
-        const { page, limit } = data;
-        const queryString = new URLSearchParams({
-            page: page.toString(),
-            limit: limit.toString()
-        }).toString();
-        const res = await api.get(`admin/getChatBotQA?${queryString}`, data);
+        const params = new URLSearchParams({
+            page: String(data.page),
+            limit: String(data.limit),
+        });
+        if (data.search?.trim()) params.set("search", data.search.trim());
+        if (data.unansweredOnly) params.set("unansweredOnly", "1");
+        const res = await api.get(`admin/getChatBotQA?${params.toString()}`);
         return res.data;
     } catch (err: any) {
         return checkForAuthorization(err);

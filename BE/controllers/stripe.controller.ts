@@ -24,6 +24,7 @@ const GroupChat = require("../models/GroupChat");
 const PaymentHistory = require("../models/PaymentHistory");
 const { assertBookingLeadTime } = require("../utils/bookingLeadTime");
 const { resolveAppBaseUrl } = require("../utils/appBaseUrl");
+const { logAdminAction } = require("../utils/adminAudit");
 
 const stripePay = async (req, res) => {
     try {
@@ -243,6 +244,7 @@ const setStripeMode = async (req, res) => {
     try {
         const { stripeMode } = req.body
         const appState = await AppState.findOne()
+        const previous = appState?.stripeMode;
         if (!appState) {
             await AppState.create({
                 stripeMode: stripeMode
@@ -251,6 +253,12 @@ const setStripeMode = async (req, res) => {
             appState.stripeMode = stripeMode
             await appState.save()
         }
+        logAdminAction({
+            actor: req.user,
+            action: "set_stripe_mode",
+            targetType: "appState",
+            meta: { from: previous, to: stripeMode },
+        });
         res.send({
             result: 'SUCCESS',
         });
@@ -1148,6 +1156,22 @@ const processRefund = async (req, res) => {
             refundId: refundResult.id,
             paymentHistoryId: refundHistory._id,
             amount: refundAmount
+        });
+
+        logAdminAction({
+            actor: req.user,
+            action: "process_refund",
+            targetType: "paymentHistory",
+            targetId: paymentHistory._id,
+            targetEmail: paymentHistory.customer?.email,
+            meta: {
+                refundId: refundResult.id,
+                refundHistoryId: refundHistory._id,
+                amount: refundAmount,
+                currency: paymentHistory.currency,
+                reason: refundReason,
+                isFullRefund,
+            },
         });
 
         res.status(200).json({

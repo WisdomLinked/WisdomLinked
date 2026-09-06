@@ -1436,6 +1436,7 @@ const sendEmailToAdmin = async (req: Request, res: Response) => {
 const logout = async (req: Request, res: Response) => {
     try {
         res.clearCookie('accessToken', clearAuthCookieOptions());
+        res.clearCookie('impersonatorToken', clearAuthCookieOptions());
         return res.status(200).json({
             status: "SUCCESS"
         });
@@ -1508,5 +1509,6 @@ module.exports = {
     submitContactForm,
     sendEmailToAdmin,
     uploadFileToS3,
+    getArrayField,
 }
 

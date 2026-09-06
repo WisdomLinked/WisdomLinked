@@ -109,6 +109,7 @@ import { syncUserToRocketChat } from '../services/rocketchat.service';
 
 const redirectLoginError = (res: any, code: string, extraParams: Record<string, string> = {}) => {
     res.clearCookie('accessToken', clearAuthCookieOptions());
+    res.clearCookie('impersonatorToken', clearAuthCookieOptions());
     const params = new URLSearchParams({ error: code, ...extraParams });
     return res.redirect(`${process.env.FE_URL}/login?${params.toString()}`);
 };
@@ -167,6 +168,7 @@ const oauthCallback = async (req: any, res: any) => {
         await user.save();
         
         res.clearCookie('accessToken', clearAuthCookieOptions());
+        res.clearCookie('impersonatorToken', clearAuthCookieOptions());
         res.cookie('accessToken', token, authCookieOptions());
         
         // Sync user to Rocket.Chat (fire-and-forget)

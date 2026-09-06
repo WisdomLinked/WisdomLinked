@@ -101,6 +101,9 @@ export default function GetContactedUs() {
 
     const [adminMessages, setAdminMessages] = useState<{ [key: string]: string }>({});
 
+    const PAGE_SIZE = 10;
+    const [currentPage, setCurrentPage] = useState(0);
+
     const handleSelect = (ranges: any) => {
         const { startDate, endDate } = ranges.selection;
         setDateFrom(formatDateYYYY_MM_DD(startDate));
@@ -156,8 +159,15 @@ export default function GetContactedUs() {
     };
 
     useEffect(() => {
+        setCurrentPage(0);
         fetchContactedUs();
     }, [filterName, filterEmail, dateFrom, dateTo, sortBy, sortOrder, filterActioned]);
+
+    const totalPages = Math.max(1, Math.ceil(contactedUsList.length / PAGE_SIZE));
+    const pageItems = contactedUsList.slice(
+        currentPage * PAGE_SIZE,
+        currentPage * PAGE_SIZE + PAGE_SIZE
+    );
 
     const handleToggleActioned = async (id: string) => {
         try {
@@ -366,15 +376,40 @@ export default function GetContactedUs() {
                 </div>
             </div>
 
-            {/* Data Display */}
             {isLoading ? (
-                <p className="text-wl-muted text-center">Loading ContactedUs entries...</p>
+                <p className="text-wl-muted text-center">Loading contact requests...</p>
             ) : contactedUsList.length === 0 ? (
-                <p className="text-wl-muted text-center">No records found.</p>
+                <p className="text-wl-muted text-center py-10">No contact requests found.</p>
             ) : (
+                <>
+                <div className="flex justify-between items-center max-w-4xl mx-auto mb-3 text-sm text-wl-muted">
+                    <span>
+                        Showing {currentPage * PAGE_SIZE + 1}–
+                        {Math.min((currentPage + 1) * PAGE_SIZE, contactedUsList.length)} of{" "}
+                        {contactedUsList.length}
+                    </span>
+                    <div className="flex gap-2">
+                        <button
+                            type="button"
+                            disabled={currentPage <= 0}
+                            onClick={() => setCurrentPage((p) => Math.max(0, p - 1))}
+                            className="rounded-lg border border-wl-line px-3 py-1 disabled:opacity-40 hover:bg-wl-pageAlt"
+                        >
+                            Prev
+                        </button>
+                        <button
+                            type="button"
+                            disabled={currentPage >= totalPages - 1}
+                            onClick={() => setCurrentPage((p) => Math.min(totalPages - 1, p + 1))}
+                            className="rounded-lg border border-wl-line px-3 py-1 disabled:opacity-40 hover:bg-wl-pageAlt"
+                        >
+                            Next
+                        </button>
+                    </div>
+                </div>
                 <div className="space-y-4 max-w-4xl mx-auto">
-                    {contactedUsList.map((item) => {
-                        const isActionedYes = item.actioned === "No";
+                    {pageItems.map((item) => {
+                        const isActionedYes = item.actioned === "Yes";
                         return (
                             <div
                                 key={item._id}
@@ -392,7 +427,6 @@ export default function GetContactedUs() {
                                     <strong className="text-wl-brand">Contact Number:</strong>{" "}
                                     {(item.countryCode || "") + " " + (item.contactNumber || "")}
                                 </p>
-                                {/* Reason row, highlighted green if Actioned: Yes */}
                                 <p className="text-wl-ink/90">
                                     <strong
                                         className={`mr-1 ${
@@ -457,6 +491,7 @@ export default function GetContactedUs() {
                         );
                     })}
                 </div>
+                </>
             )}
             </div>
         </div>
