@@ -13,6 +13,7 @@ import {
   Shield,
   Calendar,
   GraduationCap,
+  ScrollText,
 } from 'lucide-react';
 
 import Sidebar from '../components/layout/Sidebar';
@@ -45,6 +46,7 @@ import UserMgmt from './Dashboard/_AdminDashboard/usermgmt';
 import Payment from './Dashboard/_AdminDashboard/payment';
 import AdminMajors from './Dashboard/_AdminDashboard/majors';
 import AdminUpcomingEvents from './Dashboard/_AdminDashboard/adminUpcomingEvents';
+import AdminAuditLog from './Dashboard/_AdminDashboard/auditLog';
 import Chatbot from '../components/chatbot';
 
 const AUTH_BASE = process.env.REACT_APP_AUTH_URL || '/user/';
@@ -59,6 +61,7 @@ const adminNavItems = [
   { id: 'contactedus', label: 'Contact requests', icon: Inbox },
   { id: 'registerUser', label: 'Register user', icon: UserPlus },
   { id: 'majors', label: 'Majors', icon: GraduationCap },
+  { id: 'auditLog', label: 'Audit log', icon: ScrollText },
   { id: 'chatBotQA', label: 'Chatbot Q&A', icon: Bot },
 ];
 
@@ -497,6 +500,8 @@ export default function AdminDashboard() {
                         ? 'Upcoming events'
                         : section === 'majors'
                           ? 'Majors'
+                          : section === 'auditLog'
+                            ? 'Audit log'
                           : 'Admin Dashboard';
 
   const handleSidebarNavigate = (id: string) => {
@@ -523,6 +528,7 @@ export default function AdminDashboard() {
         <Route path="registerUser" element={<RegisterUserByAdmin />} />
         <Route path="majors" element={<AdminMajors />} />
         <Route path="upcomingEvents" element={<AdminUpcomingEvents />} />
+        <Route path="auditLog" element={<AdminAuditLog />} />
         <Route path="chatBotQA" element={<ChatBotQA />} />
         <Route path="*" element={<AdminOverview go={goToSection} />} />
       </Routes>

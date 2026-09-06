@@ -25,12 +25,17 @@ const Conversation = require("../models/Conversation");
 const GroupChat = require("../models/GroupChat");
 const Keyword = require("../models/Keyword");
 const MajorConsolidation = require("../models/MajorConsolidation");
+const AdminAuditLog = require("../models/AdminAuditLog");
 const { classifyMajors } = require("../utils/majorClassification");
 const { isBaselineMajor } = require("../constants/majorOptions");
 const ContactedUs = require("../models/ContactedUs");
 const PendingUser = require("../models/PendingUser");
 const PendingLogin = require("../models/PendingLogin");
 const chatBotQA = require("../models/chatBotQA");
+const { logAdminAction } = require("../utils/adminAudit");
+const { authCookieOptions, clearAuthCookieOptions } = require("../config/authCookie");
+const { readAccessToken } = require("../middlewares/requireAuth");
+const jwt = require("jsonwebtoken");
 
 function startOfDayLocal(d: Date) {
     const x = new Date(d);
@@ -95,9 +100,12 @@ const bcrypt = require("bcryptjs");
 
 const filterUsers = async (req, res) => {
     try {
-        const { username, email, role, status, sortBy, sortOrder, numPerPage, currentPage } = req.body
-        let query = User.find({ role: { $ne: 'admin' } })
-        let countQuery = User.countDocuments({ role: { $ne: 'admin' } })
+        const { username, email, role, status, sortBy, sortOrder, numPerPage, currentPage, includeAdmins } = req.body
+        const roleFilter = role ? String(role) : "";
+        const allowAdmins = Boolean(includeAdmins) || roleFilter === "admin";
+        const baseFilter = allowAdmins ? {} : { role: { $ne: "admin" } };
+        let query = User.find(baseFilter)
+        let countQuery = User.countDocuments(baseFilter)
 
         if (username) {
             query.where({ username: { '$regex': escapeRegExp(username), '$options': 'i' } })
@@ -107,9 +115,9 @@ const filterUsers = async (req, res) => {
             query.where({ email: { '$regex': escapeRegExp(email), '$options': 'i' } })
             countQuery.where({ email: { '$regex': escapeRegExp(email), '$options': 'i' } })
         }
-        if (role) {
-            query.where({ role: String(role) })
-            countQuery.where({ role: String(role) })
+        if (roleFilter) {
+            query.where({ role: roleFilter })
+            countQuery.where({ role: roleFilter })
         }
         if (status) {
             query.where({ status: String(status) })
@@ -260,11 +268,22 @@ const updateProfileOfUser = async (req, res) => {
                 typeof specialNote === 'string' ? specialNote.slice(0, 5000) : String(specialNote).slice(0, 5000);
         }
 
+        const existing = await User.findOne({ email: String(email) }).select("_id email status role username");
         await User.findOneAndUpdate({ email: String(email) }, updates, { new: true })
         const result = await getFullUserData(email)
         if (status && status === 'active') {
             // If the user is activated, send an email notification
             await sendEmailUserAccountApproved(result.email, result.username);
+        }
+        if (status && existing && existing.status !== status) {
+            logAdminAction({
+                actor: req.user,
+                action: "user_status_change",
+                targetType: "user",
+                targetId: existing._id,
+                targetEmail: existing.email,
+                meta: { from: existing.status, to: status, role: existing.role },
+            });
         }
         result.password = null
         result.token = null
@@ -465,6 +484,15 @@ const toggleActionedStatus = async (req, res) => {
 
         contactEntry.actioned = contactEntry.actioned === "Yes" ? "No" : "Yes";
         await contactEntry.save();
+
+        logAdminAction({
+            actor: req.user,
+            action: "toggle_contact_actioned",
+            targetType: "contactedUs",
+            targetId: contactEntry._id,
+            targetEmail: contactEntry.email,
+            meta: { actioned: contactEntry.actioned },
+        });
 
         return res.status(200).json({
             message: "Actioned status updated",
@@ -763,7 +791,16 @@ const deletePendingUser = async (req, res) => {
         if (!pendingUserId) {
             return res.status(400).json({ message: "pendingUserId is required" });
         }
+        const pending = await PendingUser.findById(String(pendingUserId)).select("email username role");
         await PendingUser.findByIdAndDelete(String(pendingUserId));
+        logAdminAction({
+            actor: req.user,
+            action: "delete_pending_user",
+            targetType: "pendingUser",
+            targetId: pendingUserId,
+            targetEmail: pending?.email,
+            meta: pending ? { username: pending.username, role: pending.role } : undefined,
+        });
         return res.status(200).json({ message: "Pending User deleted successfully" });
     } catch (err) {
         return res.status(500).json({ message: safeErrorMessage(err) });
@@ -818,6 +855,15 @@ const convertPendingUserToUserByAdmin = async (req, res) => {
 
         await PendingUser.findByIdAndDelete(String(pendingUserId));
 
+        logAdminAction({
+            actor: req.user,
+            action: "convert_pending_user",
+            targetType: "user",
+            targetId: newUser._id,
+            targetEmail: newUser.email,
+            meta: { pendingUserId, role: newUser.role },
+        });
+
         return res.status(200).json({ message: "Pending User converted to a regular User successfully" });
     } catch (err) {
         return res.status(500).json({ message: safeErrorMessage(err) });
@@ -850,6 +896,12 @@ const registerUserByAdmin = async (req, res) => {
         const email = safeParse(req.body.email);
         const password = safeParse(req.body.password);
         const timeSlots = safeParse(req.body.timeSlots);
+        const sendWelcome = safeParse(req.body.sendWelcome) === true || req.body.sendWelcome === 'true';
+
+        const allowedRoles = new Set(['customer', 'expert', 'admin']);
+        if (!role || !allowedRoles.has(String(role))) {
+            return res.status(200).json({ status: 'FAIL', error: "Invalid role." });
+        }
 
         if (checkTitleNameInvalid('Username', username)) {
             return res.status(200).json({ status: 'FAIL', error: checkTitleNameInvalid('Username', username) });
@@ -898,16 +950,57 @@ const registerUserByAdmin = async (req, res) => {
             password: encryptedPassword,
             resume: resumeUrl,
             role,
-            timeSlots,
+            timeSlots: role === 'admin' ? undefined : timeSlots,
             status: 'active'
         });
 
         // Save user
         await newUser.save();
 
+        logAdminAction({
+            actor: req.user,
+            action: role === 'admin' ? "invite_admin" : "register_user",
+            targetType: "user",
+            targetId: newUser._id,
+            targetEmail: newUser.email,
+            meta: { role, username },
+        });
+
+        if (sendWelcome || role === 'admin') {
+            try {
+                const html = renderAdminEmail({
+                    heading: 'Welcome to WisdomLinked',
+                    previewText: 'Your account is ready.',
+                    blocks: [
+                        adminParagraph(
+                            role === 'admin'
+                                ? 'An administrator account has been created for you. Sign in with the credentials below.'
+                                : 'Your account has been registered. You can sign in with the credentials below.'
+                        ),
+                        adminFacts([['Email', email], ['Temporary password', password]]),
+                        adminCallout('Please sign in and change this password as soon as you can — it was sent by email and should not be treated as permanent.', 'warn'),
+                        adminButton('Sign in'),
+                    ],
+                });
+                const msg: any = {
+                    to: email,
+                    from: { name: "WisdomLinked Admin", email: adminEmail },
+                    subject: role === 'admin' ? "WisdomLinked admin invite" : "Welcome to WisdomLinked",
+                    html,
+                };
+                const inlineHeader = adminAttachments();
+                if (inlineHeader.length) msg.attachments = inlineHeader;
+                await sgMail.send(msg);
+            } catch (emailErr: any) {
+                console.error("Welcome email failed after admin register:", emailErr?.message || emailErr);
+            }
+        }
+
         return res.status(200).json({
             status: 'SUCCESS',
-            message: 'User created successfully by admin'
+            message: role === 'admin'
+                ? 'Admin invited successfully'
+                : 'User created successfully by admin'
         });
     } catch (err) {
         console.log(err);
@@ -1015,6 +1108,13 @@ const consolidateMajors = async (req: Request, res: Response) => {
                 seminarsUpdated: 0,
                 performedBy,
             });
+            logAdminAction({
+                actor: req.user,
+                action: "consolidate_majors",
+                targetType: "major",
+                targetId: keyword._id,
+                meta: { target: keyword.value, sources: [], usersUpdated: 0, seminarsUpdated: 0 },
+            });
             return res.status(200).json({
                 result: { major: keyword.value, usersUpdated: 0, seminarsUpdated: 0 },
             });
@@ -1081,6 +1181,14 @@ const consolidateMajors = async (req: Request, res: Response) => {
             usersUpdated,
             seminarsUpdated,
             performedBy,
+        });
+
+        logAdminAction({
+            actor: req.user,
+            action: "consolidate_majors",
+            targetType: "major",
+            targetId: keyword._id,
+            meta: { target: keyword.value, sources, usersUpdated, seminarsUpdated },
         });
 
         return res.status(200).json({
@@ -1219,6 +1327,287 @@ const getPaymentIntegrityReport = async (req, res) => {
     }
 };
 
+const getAuditLogs = async (req: Request, res: Response) => {
+    try {
+        const numPerPage = Math.min(Math.max(Number(req.query.numPerPage) || 25, 1), 100);
+        const currentPage = Math.max(Number(req.query.currentPage) || 0, 0);
+        const [totalCount, result] = await Promise.all([
+            AdminAuditLog.countDocuments({}),
+            AdminAuditLog.find({})
+                .sort({ createdAt: -1 })
+                .skip(numPerPage * currentPage)
+                .limit(numPerPage)
+                .lean(),
+        ]);
+        return res.status(200).json({ result, totalCount, numPerPage, currentPage });
+    } catch (err) {
+        console.log(err);
+        return res.status(500).send(safeErrorMessage(err));
+    }
+};
+
+const getAllFeedbacks = async (req: Request, res: Response) => {
+    try {
+        const numPerPage = Math.min(Math.max(Number(req.query.numPerPage) || 20, 1), 100);
+        const currentPage = Math.max(Number(req.query.currentPage) || 0, 0);
+
+        const pipeline: any[] = [
+            { $match: { feedbacks: { $exists: true, $ne: [] } } },
+            { $project: { email: 1, username: 1, role: 1, feedbacks: 1 } },
+            { $unwind: "$feedbacks" },
+            {
+                $project: {
+                    userId: "$_id",
+                    userEmail: "$email",
+                    userUsername: "$username",
+                    userRole: "$role",
+                    rating: { $ifNull: ["$feedbacks.rating", 0] },
+                    description: { $ifNull: ["$feedbacks.description", ""] },
+                    date: "$feedbacks.date",
+                    start: "$feedbacks.start",
+                    end: "$feedbacks.end",
+                    eventType: "$feedbacks.eventType",
+                    eventId: "$feedbacks.eventId",
+                    groupChatId: "$feedbacks.groupChatId",
+                    otherUserId: "$feedbacks.otherUserId",
+                    totalTimeSpent: "$feedbacks.totalTimeSpent",
+                },
+            },
+            { $sort: { date: -1, start: -1 } },
+            {
+                $facet: {
+                    total: [{ $count: "count" }],
+                    page: [{ $skip: numPerPage * currentPage }, { $limit: numPerPage }],
+                },
+            },
+        ];
+
+        const agg = await User.aggregate(pipeline);
+        const totalCount = agg[0]?.total?.[0]?.count || 0;
+        const page = agg[0]?.page || [];
+
+        const otherIds = page.map((r: any) => r.otherUserId).filter(Boolean);
+        const others = otherIds.length
+            ? await User.find({ _id: { $in: otherIds } }).select("username email role image").lean()
+            : [];
+        const otherById = new Map(others.map((u: any) => [String(u._id), u]));
+
+        const result = page.map((row: any) => ({
+            ...row,
+            otherUser: row.otherUserId ? otherById.get(String(row.otherUserId)) || null : null,
+        }));
+
+        return res.status(200).json({ result, totalCount, numPerPage, currentPage });
+    } catch (err) {
+        console.log(err);
+        return res.status(500).send(safeErrorMessage(err));
+    }
+};
+
+const IMPERSONATION_TTL = "2h";
+const IMPERSONATION_MAX_AGE_MS = 2 * 60 * 60 * 1000;
+
+const inviteAdmin = async (req: Request, res: Response) => {
+    try {
+        const email = String(req.body?.email || "").trim().toLowerCase();
+        const username = String(req.body?.username || "").trim();
+        let password = String(req.body?.password || "").trim();
+
+        if (!email || !username) {
+            return res.status(400).json({ status: "FAIL", error: "Email and username are required." });
+        }
+        if (checkTitleNameInvalid("Username", username)) {
+            return res.status(200).json({ status: "FAIL", error: checkTitleNameInvalid("Username", username) });
+        }
+        if (!password) {
+            password = Math.random().toString(36).slice(-10) + "A1!";
+        }
+
+        const userExists = await User.exists({ email });
+        if (userExists) {
+            return res.status(200).json({ status: "FAIL", error: "E-mail already in use." });
+        }
+        const pendingExists = await PendingUser.exists({ email });
+        if (pendingExists) {
+            return res.status(200).json({ status: "FAIL", error: "E-mail already in use in pending list." });
+        }
+
+        const encryptedPassword = await bcrypt.hash(password, 10);
+        const newUser = new User({
+            username,
+            email,
+            password: encryptedPassword,
+            role: "admin",
+            status: "active",
+            description: "Admin account invited by another admin",
+        });
+        await newUser.save();
+
+        logAdminAction({
+            actor: req.user,
+            action: "invite_admin",
+            targetType: "user",
+            targetId: newUser._id,
+            targetEmail: newUser.email,
+            meta: { username },
+        });
+
+        try {
+            const html = renderAdminEmail({
+                heading: "WisdomLinked admin invite",
+                previewText: "You have been invited as an admin.",
+                blocks: [
+                    adminParagraph("An administrator account has been created for you. Sign in with the credentials below."),
+                    adminFacts([["Email", email], ["Temporary password", password]]),
+                    adminCallout("Please sign in and change this password as soon as you can.", "warn"),
+                    adminButton("Sign in"),
+                ],
+            });
+            const msg: any = {
+                to: email,
+                from: { name: "WisdomLinked Admin", email: adminEmail },
+                subject: "WisdomLinked admin invite",
+                html,
+            };
+            const inlineHeader = adminAttachments();
+            if (inlineHeader.length) msg.attachments = inlineHeader;
+            await sgMail.send(msg);
+        } catch (emailErr: any) {
+            console.error("Admin invite welcome email failed:", emailErr?.message || emailErr);
+        }
+
+        return res.status(200).json({
+            status: "SUCCESS",
+            message: "Admin invited successfully",
+            temporaryPassword: password,
+        });
+    } catch (err) {
+        console.log(err);
+        return res.status(500).send(safeErrorMessage(err));
+    }
+};
+
+const impersonateUser = async (req: Request, res: Response) => {
+    try {
+        const email = String(req.body?.email || "").trim().toLowerCase();
+        if (!email) {
+            return res.status(400).json({ status: "FAIL", error: "email is required" });
+        }
+
+        const target = await User.findOne({ email }).select("+token");
+        if (!target) {
+            return res.status(404).json({ status: "FAIL", error: "User not found" });
+        }
+        if (target.role === "admin") {
+            return res.status(403).json({ status: "FAIL", error: "Cannot impersonate another admin" });
+        }
+        if (target.status === "blocked") {
+            return res.status(400).json({ status: "FAIL", error: "Cannot impersonate a blocked user" });
+        }
+
+        const adminToken = readAccessToken(req);
+        if (!adminToken) {
+            return res.status(401).json({ status: "FAIL", error: "Admin session missing" });
+        }
+
+        const impersonationToken = jwt.sign(
+            { email: target.email.toString() },
+            process.env.JWT_SECRET,
+            { expiresIn: IMPERSONATION_TTL }
+        );
+        target.token = impersonationToken;
+        await target.save();
+
+        res.cookie("impersonatorToken", adminToken, authCookieOptions(IMPERSONATION_MAX_AGE_MS));
+        res.cookie("accessToken", impersonationToken, authCookieOptions(IMPERSONATION_MAX_AGE_MS));
+
+        logAdminAction({
+            actor: req.user,
+            action: "impersonate_start",
+            targetType: "user",
+            targetId: target._id,
+            targetEmail: target.email,
+            meta: { targetRole: target.role, targetUsername: target.username },
+        });
+
+        const safeUser = target.toObject();
+        delete safeUser.password;
+        delete safeUser.token;
+
+        return res.status(200).json({
+            status: "SUCCESS",
+            userDetails: safeUser,
+        });
+    } catch (err) {
+        console.log(err);
+        return res.status(500).send(safeErrorMessage(err));
+    }
+};
+
+const stopImpersonation = async (req: Request, res: Response) => {
+    try {
+        const impersonatorToken = req.cookies?.impersonatorToken;
+        if (!impersonatorToken) {
+            return res.status(400).json({ status: "FAIL", error: "Not currently impersonating" });
+        }
+
+        let decoded: any;
+        try {
+            decoded = jwt.verify(impersonatorToken, process.env.JWT_SECRET);
+        } catch {
+            res.clearCookie("impersonatorToken", clearAuthCookieOptions());
+            return res.status(401).json({ status: "FAIL", error: "Impersonator session expired" });
+        }
+
+        const admin = await User.findOne({ email: decoded.email }).select("+token");
+        if (!admin || admin.role !== "admin") {
+            res.clearCookie("impersonatorToken", clearAuthCookieOptions());
+            return res.status(401).json({ status: "FAIL", error: "Invalid impersonator" });
+        }
+
+        let targetEmail: string | undefined;
+        let targetId: string | undefined;
+        try {
+            const currentAccess = readAccessToken(req);
+            if (currentAccess) {
+                const targetDecoded: any = jwt.verify(currentAccess, process.env.JWT_SECRET);
+                targetEmail = targetDecoded?.email;
+                if (targetEmail) {
+                    const target = await User.findOne({ email: targetEmail }).select("_id");
+                    targetId = target?._id ? String(target._id) : undefined;
+                }
+            }
+        } catch {
+            // ignore — still restore admin
+        }
+
+        const restoredToken = await admin.generateAuthToken();
+        res.cookie("accessToken", restoredToken, authCookieOptions());
+        res.clearCookie("impersonatorToken", clearAuthCookieOptions());
+
+        logAdminAction({
+            actor: { userId: admin._id.toString(), email: admin.email },
+            action: "impersonate_end",
+            targetType: "user",
+            targetId,
+            targetEmail,
+            meta: {},
+        });
+
+        const safeAdmin = admin.toObject();
+        delete safeAdmin.password;
+        delete safeAdmin.token;
+
+        return res.status(200).json({
+            status: "SUCCESS",
+            userDetails: safeAdmin,
+        });
+    } catch (err) {
+        console.log(err);
+        return res.status(500).send(safeErrorMessage(err));
+    }
+};
+
 module.exports = {
     getPaymentIntegrityReport,
     filterUsers,
@@ -1231,6 +1620,7 @@ module.exports = {
     getDirectChatHistory,
     getGroupChatHistory,
     getUserFeedbacks,
+    getAllFeedbacks,
     getContactedUs,
     toggleActionedStatus,
     sendEmailToUser,
@@ -1242,5 +1632,9 @@ module.exports = {
     deletePendingUser,
     deletePendingLogin,
     convertPendingUserToUserByAdmin,
-    registerUserByAdmin
-}
+    registerUserByAdmin,
+    inviteAdmin,
+    getAuditLogs,
+    impersonateUser,
+    stopImpersonation,
+};

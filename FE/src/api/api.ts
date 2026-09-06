@@ -786,6 +786,57 @@ export const getUserFeedbacks = async (userId: string) => {
     }
 };
 
+export const getAllFeedbacks = async (params?: { numPerPage?: number; currentPage?: number }) => {
+    try {
+        const q = new URLSearchParams();
+        if (params?.numPerPage != null) q.set("numPerPage", String(params.numPerPage));
+        if (params?.currentPage != null) q.set("currentPage", String(params.currentPage));
+        const res = await api.get(`admin/allFeedbacks${q.toString() ? `?${q}` : ""}`);
+        return res.data;
+    } catch (err: any) {
+        return checkForAuthorization(err);
+    }
+};
+
+export const getAdminAuditLogs = async (params?: { numPerPage?: number; currentPage?: number }) => {
+    try {
+        const q = new URLSearchParams();
+        if (params?.numPerPage != null) q.set("numPerPage", String(params.numPerPage));
+        if (params?.currentPage != null) q.set("currentPage", String(params.currentPage));
+        const res = await api.get(`admin/auditLogs${q.toString() ? `?${q}` : ""}`);
+        return res.data;
+    } catch (err: any) {
+        return checkForAuthorization(err);
+    }
+};
+
+export const inviteAdmin = async (data: { email: string; username: string; password?: string }) => {
+    try {
+        const res = await api.post("admin/inviteAdmin", data);
+        return res.data;
+    } catch (err: any) {
+        return checkForAuthorization(err);
+    }
+};
+
+export const impersonateUser = async (email: string) => {
+    try {
+        const res = await api.post("admin/impersonate", { email });
+        return res.data;
+    } catch (err: any) {
+        return checkForAuthorization(err);
+    }
+};
+
+export const stopImpersonation = async () => {
+    try {
+        const res = await api.post("admin/stopImpersonation");
+        return res.data;
+    } catch (err: any) {
+        return checkForAuthorization(err);
+    }
+};
+
 export const createStripePaymentIntent = async (data: any) => {
     try {
         const res = await api.post("auth/createStripePaymentIntent", data);

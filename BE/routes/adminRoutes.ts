@@ -32,14 +32,16 @@ const {
     deletePendingUser,
     convertPendingUserToUserByAdmin,
     registerUserByAdmin,
+    inviteAdmin,
     getCustomMajors,
     consolidateMajors,
     getMajorConsolidations,
-    getPaymentIntegrityReport
-} = require("../controllers/admin.controller");
-
-const {
-    getUserFeedbacks
+    getPaymentIntegrityReport,
+    getUserFeedbacks,
+    getAllFeedbacks,
+    getAuditLogs,
+    impersonateUser,
+    stopImpersonation,
 } = require("../controllers/admin.controller");
 
 const {
@@ -71,6 +73,10 @@ router.post("/getDirectChatHistory", adminAuth, getDirectChatHistory)
 router.post("/getGroupChatHistory", adminAuth, getGroupChatHistory)
 router.get("/getEventFeedback", adminAuth, getFeedback)
 router.post("/getUserFeedbacks", adminAuth, getUserFeedbacks);
+router.get("/allFeedbacks", adminAuth, getAllFeedbacks);
+router.get("/auditLogs", adminAuth, getAuditLogs);
+router.post("/impersonate", adminAuth, impersonateUser);
+router.post("/stopImpersonation", stopImpersonation);
 router.post("/getContactedUs", adminAuth, getContactedUs);
 router.post("/toggleActionedStatus", adminAuth, toggleActionedStatus);
 router.post("/sendEmailToUser", adminAuth, sendEmailToUser);
@@ -81,6 +87,7 @@ router.post("/deletePendingUser", adminAuth, deletePendingUser);
 router.post("/deletePendingLogin", adminAuth, deletePendingLogin);
 router.post("/convertPendingUserToUserByAdmin", adminAuth, convertPendingUserToUserByAdmin);
 router.post("/registerUserByAdmin", adminAuth, uploadsGeneral, registerUserByAdmin);
+router.post("/inviteAdmin", adminAuth, inviteAdmin);
 router.get("/getCustomMajors", adminAuth, getCustomMajors);
 router.post("/consolidateMajors", adminAuth, consolidateMajors);
 router.get("/getMajorConsolidations", adminAuth, getMajorConsolidations);

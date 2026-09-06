@@ -1,18 +1,17 @@
 import React, { useEffect, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useSearchParams, useNavigate } from "react-router-dom";
+import { useDispatch } from "react-redux";
 import SelectionWithCheckBox from "../../../../components/SelectionWithCheckBox";
 import {
     doFilterUsers,
     doUpdateProfileByAdmin,
-    profileImageFetch
-} from "../../../../api/api";
-
-import {
+    profileImageFetch,
+    impersonateUser,
     doGetPendingUsers,
     doGetPendingLogins,
     doDeletePendingUserById,
     doDeletePendingLoginById,
-    doActivatePendingUserById
+    doActivatePendingUserById,
 } from "../../../../api/api";
 
 import Avatar from "../../../../components/Avatar";
@@ -20,10 +19,14 @@ import ManageModal from "./manageModal";
 import AuditModal from "./auditModal";
 import Pagination from "../../../../components/Pagination";
 import { SetLoadingStatus } from "../../../../actions/appActions";
+import { actionTypes } from "../../../../actions/types";
+import { setImpersonationSession } from "../../../../components/ImpersonationBanner";
 
 const UserMgmt = () => {
     const [searchParams] = useSearchParams();
     const emailFromUrl = searchParams.get("email") || searchParams.get("q") || "";
+    const dispatch = useDispatch();
+    const navigate = useNavigate();
 
     const dataTypeOptions = [
         { value: "ReviewQueue", label: "Needs review" },
@@ -35,7 +38,8 @@ const UserMgmt = () => {
     const roles = [
         { value: "", label: "All" },
         { value: "expert", label: "Expert" },
-        { value: "customer", label: "Customer" }
+        { value: "customer", label: "Customer" },
+        { value: "admin", label: "Admin" },
     ];
 
     const statusOptions = [
@@ -239,6 +243,40 @@ const UserMgmt = () => {
 
     const handleBlockUser = async (u: any) => {
         await updateProfile({ email: u.email, status: "blocked" });
+    };
+
+    const handleImpersonate = async (u: any) => {
+        if (!u?.email || u.role === "admin") return;
+        try {
+            SetLoadingStatus(true);
+            const res = await impersonateUser(u.email);
+            if (res?.status === "SUCCESS" && res.userDetails) {
+                setImpersonationSession({
+                    email: res.userDetails.email,
+                    username: res.userDetails.username,
+                    role: res.userDetails.role,
+                });
+                window.dispatchEvent(new Event("wl-impersonation-change"));
+                localStorage.setItem("currentUser", JSON.stringify(res.userDetails));
+                dispatch({
+                    type: actionTypes.authenticate,
+                    payload: res.userDetails,
+                });
+                const role = res.userDetails.role;
+                if (role === "expert") {
+                    navigate("/user/expertdashboard", { replace: true });
+                } else {
+                    navigate("/user/studentdashboard", { replace: true });
+                }
+            } else {
+                window.alert(res?.error || "Impersonation failed");
+            }
+        } catch (err) {
+            console.error(err);
+            window.alert("Impersonation failed");
+        } finally {
+            SetLoadingStatus(false);
+        }
     };
 
     const handleDataTypeChange = (selected: any) => {
@@ -521,6 +559,15 @@ const UserMgmt = () => {
                                                     >
                                                         Manage
                                                     </button>
+                                                    {u.role !== "admin" ? (
+                                                        <button
+                                                            type="button"
+                                                            className="inline-flex items-center rounded-lg border border-amber-500/70 bg-amber-50 px-3 py-1.5 text-[12px] font-semibold text-amber-800 transition hover:bg-amber-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/40"
+                                                            onClick={() => handleImpersonate(u)}
+                                                        >
+                                                            Impersonate
+                                                        </button>
+                                                    ) : null}
                                                     <button
                                                         type="button"
                                                         className="inline-flex items-center rounded-lg border border-wl-line bg-white px-3 py-1.5 text-[12px] font-semibold text-wl-brand shadow-sm transition hover:bg-wl-brandSoft focus:outline-none focus-visible:ring-2 focus-visible:ring-wl-brand/20"
