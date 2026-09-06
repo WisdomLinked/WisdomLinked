@@ -8,7 +8,7 @@ import {
     BookingPaymentVerdict,
 } from '../utils/paymentIntegrity';
 const escapeRegExp = (value: unknown) => String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-const { uploadFileToS3 } = require("./auth.controller")
+const { uploadFileToS3, getArrayField } = require("./auth.controller")
 const {
     renderEmail: renderAdminEmail,
     paragraph: adminParagraph,
@@ -826,20 +826,30 @@ const convertPendingUserToUserByAdmin = async (req, res) => {
 
 const registerUserByAdmin = async (req, res) => {
     try {
-        // Parse incoming fields
-        const role = !req.body.role ? null : req.body.role;
-        const username = !req.body.username ? null : req.body.username;
-        const title = !req.body.title ? null : req.body.title;
-        const description = !req.body.description ? null : req.body.description;
-        const keywords = !req.body.keywords ? null : req.body.keywords;
-        const services = !req.body.services ? null : req.body.services;
-        const country = !req.body.country ? null : req.body.country;
-        const state = !req.body.state ? null : req.body.state;
-        const city = !req.body.city ? null : req.body.city;
-        const phoneNumber = !req.body.phoneNumber ? null : req.body.phoneNumber;
-        const email = !req.body.email ? null : req.body.email;
-        const password = !req.body.password ? null : req.body.password;
-        const timeSlots = !req.body.timeSlots ? null : req.body.timeSlots;
+        // Multipart fields arrive as strings; JSON.parse objects/arrays when needed.
+        const safeParse = (val) => {
+            if (val === undefined || val === null || val === '') return null;
+            if (typeof val !== 'string') return val;
+            try {
+                return JSON.parse(val);
+            } catch {
+                return val;
+            }
+        };
+
+        const role = safeParse(req.body.role);
+        const username = safeParse(req.body.username);
+        const title = safeParse(req.body.title);
+        const description = safeParse(req.body.description);
+        const keywords = getArrayField(req, 'keywords') || safeParse(req.body.keywords);
+        const services = getArrayField(req, 'services') || safeParse(req.body.services);
+        const country = safeParse(req.body.country);
+        const state = safeParse(req.body.state);
+        const city = safeParse(req.body.city);
+        const phoneNumber = safeParse(req.body.phoneNumber);
+        const email = safeParse(req.body.email);
+        const password = safeParse(req.body.password);
+        const timeSlots = safeParse(req.body.timeSlots);
 
         if (checkTitleNameInvalid('Username', username)) {
             return res.status(200).json({ status: 'FAIL', error: checkTitleNameInvalid('Username', username) });
@@ -857,7 +867,7 @@ const registerUserByAdmin = async (req, res) => {
             return res.status(200).json({ status: 'FAIL', error: "E-mail already in use in pending list." });
         }
 
-        // Handle uploading a resume if file is present
+        // Handle uploading a resume if file is present (multer uploadsGeneral → req.file)
         const file = req.file
         let resumeUrl = file ? await uploadFileToS3(file, 'resumes') : '';
 

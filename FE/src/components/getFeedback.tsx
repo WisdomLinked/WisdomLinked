@@ -1,6 +1,5 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { getUserFeedbacks, doFilterUsers } from "../api/api";
-import { useAppDispatch } from "../store";
 
 interface UserType {
     _id: string;
@@ -27,59 +26,82 @@ interface FeedbackItem {
     } | null;
 }
 
-export default function Feedback() {
-    const dispatch = useAppDispatch();
+const TYPEAHEAD_PAGE_SIZE = 12;
 
+export default function Feedback() {
     const [users, setUsers] = useState<UserType[]>([]);
     const [feedbacks, setFeedbacks] = useState<FeedbackItem[]>([]);
-    const [isLoadingUsers, setIsLoadingUsers] = useState(true);
+    const [isSearching, setIsSearching] = useState(false);
     const [isLoadingFeedbacks, setIsLoadingFeedbacks] = useState(false);
     const [searchTerm, setSearchTerm] = useState("");
     const [selectedUserId, setSelectedUserId] = useState("");
+    const [showDropdown, setShowDropdown] = useState(false);
+    const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const wrapRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
-        fetchUsers();
+        const onDocClick = (e: MouseEvent) => {
+            if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) {
+                setShowDropdown(false);
+            }
+        };
+        document.addEventListener("mousedown", onDocClick);
+        return () => document.removeEventListener("mousedown", onDocClick);
     }, []);
 
-    const fetchUsers = async () => {
+    const searchUsers = async (term: string) => {
+        const q = term.trim();
+        if (q.length < 2) {
+            setUsers([]);
+            setIsSearching(false);
+            return;
+        }
         try {
-            setIsLoadingUsers(true);
-            const response = await doFilterUsers({});
-            if (response && response.result) {
+            setIsSearching(true);
+            const looksLikeEmail = q.includes("@");
+            const response = await doFilterUsers({
+                email: looksLikeEmail ? q : "",
+                username: looksLikeEmail ? "" : q,
+                sortBy: "createdAt",
+                sortOrder: "DESC",
+                currentPage: 0,
+                numPerPage: TYPEAHEAD_PAGE_SIZE,
+            });
+            if (response && Array.isArray(response.result)) {
                 setUsers(response.result);
+                setShowDropdown(true);
+            } else {
+                setUsers([]);
             }
         } catch (err) {
             console.log(err);
+            setUsers([]);
         } finally {
-            setIsLoadingUsers(false);
+            setIsSearching(false);
         }
     };
-
-    const filteredUsers = users.filter((u) => {
-        if (!searchTerm) {
-            return true;
-        }
-        const lowerSearch = searchTerm.toLowerCase();
-        return (
-            u.username.toLowerCase().includes(lowerSearch) ||
-            u.email.toLowerCase().includes(lowerSearch)
-        );
-    });
 
     const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const value = e.target.value;
         setSearchTerm(value);
+        setSelectedUserId("");
+        setFeedbacks([]);
 
-        if (!value) {
-            setSelectedUserId("");
-            setFeedbacks([]);
+        if (debounceRef.current) clearTimeout(debounceRef.current);
+        if (!value.trim()) {
+            setUsers([]);
+            setShowDropdown(false);
+            return;
         }
+        debounceRef.current = setTimeout(() => searchUsers(value), 300);
     };
 
     const handleSelectUser = async (user: UserType) => {
         try {
             setSearchTerm(`${user.username} (${user.email})`);
             setSelectedUserId(user._id);
+            setShowDropdown(false);
+            setUsers([]);
             setIsLoadingFeedbacks(true);
 
             const data = await getUserFeedbacks(user._id);
@@ -96,6 +118,8 @@ export default function Feedback() {
         setSearchTerm("");
         setSelectedUserId("");
         setFeedbacks([]);
+        setUsers([]);
+        setShowDropdown(false);
     };
 
     return (
@@ -108,27 +132,35 @@ export default function Feedback() {
             <div className="mb-6 w-full max-w-md">
                 <label className="text-wl-muted block mb-2 text-sm text-center">Search and Select User:</label>
                 <div className="flex items-center justify-center gap-3 flex-wrap">
-                    <div className="relative w-full min-w-[200px] flex-1">
+                    <div className="relative w-full min-w-[200px] flex-1" ref={wrapRef}>
                         <input
                             type="text"
                             className="w-full bg-white text-wl-ink px-3 py-2 rounded-[15px] border border-lightgrey focus:outline-none focus:ring-2 focus:ring-wl-brand/30 transition-all placeholder:text-grey"
-                            placeholder="Type user name or email"
+                            placeholder="Type name or email (min 2 characters)"
                             value={searchTerm}
                             onChange={handleSearchChange}
-                            disabled={isLoadingUsers}
+                            onFocus={() => {
+                                if (users.length > 0 && !selectedUserId) setShowDropdown(true);
+                            }}
                         />
 
-                        {filteredUsers.length > 0 && (
+                        {showDropdown && !selectedUserId && (
                             <div className="absolute z-10 w-full bg-white mt-1 rounded-xl border border-lightgrey shadow-md max-h-48 overflow-y-auto">
-                                {filteredUsers.map((user) => (
-                                    <div
-                                        key={user._id}
-                                        onClick={() => handleSelectUser(user)}
-                                        className="px-3 py-2 hover:bg-wl-brandSoft cursor-pointer text-sm text-left"
-                                    >
-                                        {user.username} ({user.email})
-                                    </div>
-                                ))}
+                                {isSearching ? (
+                                    <div className="px-3 py-2 text-sm text-wl-muted">Searching…</div>
+                                ) : users.length === 0 ? (
+                                    <div className="px-3 py-2 text-sm text-wl-muted">No users found.</div>
+                                ) : (
+                                    users.map((user) => (
+                                        <div
+                                            key={user._id}
+                                            onClick={() => handleSelectUser(user)}
+                                            className="px-3 py-2 hover:bg-wl-brandSoft cursor-pointer text-sm text-left"
+                                        >
+                                            {user.username} ({user.email})
+                                        </div>
+                                    ))
+                                )}
                             </div>
                         )}
                     </div>
@@ -136,17 +168,20 @@ export default function Feedback() {
                     <button
                         type="button"
                         onClick={handleClear}
-                        className="shrink-0 px-5 py-2 rounded-xl border border-wl-brand text-white bg-wl-brand hover:brightness-95 transition-all font-medium text-sm disabled:opacity-50"
-                        disabled={isLoadingUsers}
+                        className="shrink-0 px-5 py-2 rounded-xl border border-wl-brand text-white bg-wl-brand hover:brightness-95 transition-all font-medium text-sm"
                     >
                         Clear
                     </button>
                 </div>
             </div>
 
-            {isLoadingFeedbacks ? (
+            {!selectedUserId && !isLoadingFeedbacks ? (
+                <p className="text-wl-muted text-center w-full text-sm">
+                    Search for a user to view their feedback.
+                </p>
+            ) : isLoadingFeedbacks ? (
                 <p className="text-wl-muted text-center w-full">Loading feedbacks...</p>
-            ) : feedbacks.length === 0 && selectedUserId ? (
+            ) : feedbacks.length === 0 ? (
                 <p className="text-wl-muted text-center w-full">No feedback found for this user.</p>
             ) : (
                 <div className="space-y-4 w-full">

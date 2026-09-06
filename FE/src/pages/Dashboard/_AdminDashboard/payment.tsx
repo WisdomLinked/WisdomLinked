@@ -868,7 +868,13 @@ const Payment = () => {
                                 </tr>
                             </thead>
                             <tbody>
-                                {
+                                {histories.length === 0 ? (
+                                    <tr>
+                                        <td colSpan={13} className="px-6 py-12 text-center text-sm text-wl-muted">
+                                            No payment histories match these filters.
+                                        </td>
+                                    </tr>
+                                ) : (
                                     histories.map((item, index) => {
                                         return (
                                             <tr key={index} className="border-b border-wl-line hover:bg-wl-pageAlt text-wl-ink">
@@ -926,7 +932,7 @@ const Payment = () => {
                                             </tr>
                                         )
                                     })
-                                }
+                                )}
                             </tbody>
                         </table>
                     </div>

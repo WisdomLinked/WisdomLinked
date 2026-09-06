@@ -1490,11 +1490,16 @@ export const doActivatePendingUserById = async (pendingUserId: string) => {
     }
 };
 
-export const registerUserByAdmin = async (userdata: any) => {
+export const registerUserByAdmin = async (userdata: any, resumeFile?: any) => {
     try {
-        // This uses the /registerUserByAdmin route
-        const res = await api.post<any>("admin/registerUserByAdmin", userdata);
-        return res.data;
+        // Multipart so multer can populate req.file for resume (same pattern as auth/register).
+        const file =
+            resumeFile && typeof resumeFile === "object" && "name" in resumeFile
+                ? resumeFile
+                : undefined;
+        return (await callApi("POST", "admin/registerUserByAdmin", userdata, file, {
+            notify: false,
+        })) as any;
     } catch (err: any) {
         return checkForAuthorization(err);
     }
@@ -1509,14 +1514,20 @@ export const createChatBotQA = async (data: any) => {
     }
 };
 
-export const getChatBotQA = async (data: any) => {
+export const getChatBotQA = async (data: {
+    page: number;
+    limit: number;
+    search?: string;
+    unansweredOnly?: boolean;
+}) => {
     try {
-        const { page, limit } = data;
-        const queryString = new URLSearchParams({
-            page: page.toString(),
-            limit: limit.toString()
-        }).toString();
-        const res = await api.get(`admin/getChatBotQA?${queryString}`, data);
+        const params = new URLSearchParams({
+            page: String(data.page),
+            limit: String(data.limit),
+        });
+        if (data.search?.trim()) params.set("search", data.search.trim());
+        if (data.unansweredOnly) params.set("unansweredOnly", "1");
+        const res = await api.get(`admin/getChatBotQA?${params.toString()}`);
         return res.data;
     } catch (err: any) {
         return checkForAuthorization(err);

@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import SelectionWithCheckBox from "../../../../components/SelectionWithCheckBox";
 import {
     doFilterUsers,
@@ -15,13 +16,15 @@ import {
 } from "../../../../api/api";
 
 import Avatar from "../../../../components/Avatar";
-import LoadingPlaceHolder from "../../../../components/LoadingPlaceholder";
 import ManageModal from "./manageModal";
 import AuditModal from "./auditModal";
 import Pagination from "../../../../components/Pagination";
 import { SetLoadingStatus } from "../../../../actions/appActions";
 
 const UserMgmt = () => {
+    const [searchParams] = useSearchParams();
+    const emailFromUrl = searchParams.get("email") || searchParams.get("q") || "";
+
     const dataTypeOptions = [
         { value: "ReviewQueue", label: "Needs review" },
         { value: "User", label: "All users" },
@@ -55,10 +58,10 @@ const UserMgmt = () => {
     const [totalCount, set_totalCount] = useState<number>(0);
     const [totalPage, set_totalPage] = useState<number>(0);
 
-    const [sortBy, set_sortBy] = useState<any>(sorts[0]);
+    const [sortBy, set_sortBy] = useState<any>(sorts[1]); // DESC by default (newest first)
     const [role, set_role] = useState<any>(roles[0]);
     const [statusFilter, set_statusFilter] = useState<any>(statusOptions[0]);
-    const [email, set_email] = useState<string>("");
+    const [email, set_email] = useState<string>(emailFromUrl);
     const [username, set_username] = useState<string>("");
 
     const [pendingUsers, set_pendingUsers] = useState<any[]>([]);
@@ -72,6 +75,14 @@ const UserMgmt = () => {
     const isUserListView = dataType.value === "User" || dataType.value === "ReviewQueue";
     const isReviewQueue = dataType.value === "ReviewQueue";
 
+    useEffect(() => {
+        if (emailFromUrl) {
+            set_email(emailFromUrl);
+            // Deep-links from events should land on the searchable user list
+            set_dataType(dataTypeOptions[1]);
+        }
+    }, [emailFromUrl]);
+
     const filterUsers = async (pageNum: number) => {
         try {
             SetLoadingStatus(true);
@@ -83,7 +94,7 @@ const UserMgmt = () => {
                 role: role.value,
                 status: isReviewQueue ? "review" : statusFilter.value,
                 sortBy: "createdAt",
-                sortOrder: "DESC", // or use sortBy.value if using ASC/DESC
+                sortOrder: sortBy?.value === "ASC" ? "ASC" : "DESC",
                 currentPage: pageNum,
                 numPerPage: numPerPage
             });
@@ -96,7 +107,6 @@ const UserMgmt = () => {
                 const totalPages = total % numPerPage ? Math.floor(total / numPerPage) : total / numPerPage - 1;
                 set_totalPage(totalPages < 0 ? 0 : totalPages);
             } else {
-                // fallback if res.result isn't an array
                 set_users([]);
                 set_totalCount(0);
                 set_totalPage(0);
@@ -142,7 +152,6 @@ const UserMgmt = () => {
             set_pendingUsers(Array.isArray(data) ? data : []);
         } catch (err) {
             console.error(err);
-            // fallback
             set_pendingUsers([]);
         } finally {
             SetLoadingStatus(false);
@@ -156,7 +165,6 @@ const UserMgmt = () => {
             set_pendingLogins(Array.isArray(data) ? data : []);
         } catch (err) {
             console.error(err);
-            // fallback
             set_pendingLogins([]);
         } finally {
             SetLoadingStatus(false);
@@ -404,13 +412,13 @@ const UserMgmt = () => {
 
                         {isUserListView && (
                             <div className="relative overflow-x-auto w-full px-4">
-                                {isUserListView && users.length === 0 ? (
+                                {users.length === 0 ? (
                                     <p className="py-8 text-center text-sm text-wl-muted">
                                         {isReviewQueue
                                             ? "No accounts currently awaiting review."
                                             : "No users match these filters."}
                                     </p>
-                                ) : null}
+                                ) : (
                                 <table className="w-full text-sm text-left">
                                     <thead className="text-xs uppercase bg-wl-brandSoft text-wl-brand">
                                     <tr>
@@ -526,11 +534,15 @@ const UserMgmt = () => {
                                     ))}
                                     </tbody>
                                 </table>
+                                )}
                             </div>
                         )}
 
                         {dataType.value === "PendingUser" && (
-                            <div className="relative overflow-x-auto w-full px-4">
+                            <div className="relative overflow-x-auto w-full px-4 py-2">
+                                {pendingUsers.length === 0 ? (
+                                    <p className="py-8 text-center text-sm text-wl-muted">No pending signups</p>
+                                ) : (
                                 <table className="w-full text-sm text-left">
                                     <thead className="text-xs uppercase bg-wl-brandSoft text-wl-brand">
                                     <tr>
@@ -570,11 +582,15 @@ const UserMgmt = () => {
                                     ))}
                                     </tbody>
                                 </table>
+                                )}
                             </div>
                         )}
 
                         {dataType.value === "PendingLogin" && (
-                            <div className="relative overflow-x-auto w-full px-4">
+                            <div className="relative overflow-x-auto w-full px-4 py-2">
+                                {pendingLogins.length === 0 ? (
+                                    <p className="py-8 text-center text-sm text-wl-muted">No pending logins</p>
+                                ) : (
                                 <table className="w-full text-sm text-left">
                                     <thead className="text-xs uppercase bg-wl-brandSoft text-wl-brand">
                                     <tr>
@@ -605,6 +621,7 @@ const UserMgmt = () => {
                                     ))}
                                     </tbody>
                                 </table>
+                                )}
                             </div>
                         )}
 

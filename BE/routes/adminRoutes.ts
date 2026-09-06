@@ -53,6 +53,8 @@ const {
     deleteChatBotQA
 } = require("../controllers/chatBotQA.controller")
 
+const { uploadsGeneral } = require("../middlewares/multerConfig");
+
 router.post("/setStripeMode", adminAuth, setStripeMode)
 router.post("/setSeminarApprovalDeadline", adminAuth, setSeminarApprovalDeadline)
 router.post("/setPaymentWindow", adminAuth, setPaymentWindow)
@@ -78,7 +80,7 @@ router.get("/getPendingLogins", adminAuth, getPendingLogins);
 router.post("/deletePendingUser", adminAuth, deletePendingUser);
 router.post("/deletePendingLogin", adminAuth, deletePendingLogin);
 router.post("/convertPendingUserToUserByAdmin", adminAuth, convertPendingUserToUserByAdmin);
-router.post("/registerUserByAdmin", adminAuth, registerUserByAdmin);
+router.post("/registerUserByAdmin", adminAuth, uploadsGeneral, registerUserByAdmin);
 router.get("/getCustomMajors", adminAuth, getCustomMajors);
 router.post("/consolidateMajors", adminAuth, consolidateMajors);
 router.get("/getMajorConsolidations", adminAuth, getMajorConsolidations);

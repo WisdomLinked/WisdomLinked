@@ -1508,5 +1508,6 @@ module.exports = {
     submitContactForm,
     sendEmailToAdmin,
     uploadFileToS3,
+    getArrayField,
 }
 

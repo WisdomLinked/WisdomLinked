@@ -31,7 +31,7 @@ import {
   shouldShowPayment,
   type AdminTopBarDismissState,
 } from '../utils/adminTopBarDismiss';
-import StudentSettings from '../components/dashboard/StudentSettings';
+import AdminSettings from '../components/dashboard/AdminSettings';
 import { profileImageFetch } from '../api/api';
 import { useAppSelector } from '../store';
 import { logoutUser } from '../actions/authActions';
@@ -157,7 +157,7 @@ function AdminOverview({ go }: { go: (id: string, search?: string) => void }) {
               icon={Bot}
               color="warning"
               tooltip="Curate chatbot knowledge"
-              onClick={() => go('chatBotQA')}
+              onClick={() => go('chatBotQA', '?unanswered=1')}
             />
           </div>
 
@@ -412,7 +412,7 @@ export default function AdminDashboard() {
         icon: <Bot className="h-3.5 w-3.5 text-wl-brand" aria-hidden />,
         onClick: () => {
           dismissAndPersist({ chatbot: s.unansweredChatbotQuestions });
-          goToSection('chatBotQA');
+          goToSection('chatBotQA', '?unanswered=1');
         },
       });
     }
@@ -559,9 +559,7 @@ export default function AdminDashboard() {
               avatarUrl={avatarUrl}
             />
           ) : extraView === 'settings' ? (
-            <div className="h-[calc(100vh-56px)] overflow-y-auto bg-wl-page">
-              <StudentSettings />
-            </div>
+            <AdminSettings />
           ) : section === 'chat' ? (
             <AdminChat />
           ) : (
