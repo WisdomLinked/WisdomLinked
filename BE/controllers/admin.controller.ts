@@ -1564,6 +1564,10 @@ const stopImpersonation = async (req: Request, res: Response) => {
             res.clearCookie("impersonatorToken", clearAuthCookieOptions());
             return res.status(401).json({ status: "FAIL", error: "Invalid impersonator" });
         }
+        if (admin.status === "blocked") {
+            res.clearCookie("impersonatorToken", clearAuthCookieOptions());
+            return res.status(403).json({ status: "FAIL", error: "Admin account is blocked" });
+        }
 
         let targetEmail: string | undefined;
         let targetId: string | undefined;
