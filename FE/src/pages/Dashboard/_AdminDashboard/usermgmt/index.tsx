@@ -23,15 +23,23 @@ import { SetLoadingStatus } from "../../../../actions/appActions";
 
 const UserMgmt = () => {
     const dataTypeOptions = [
-        { value: "User", label: "User" },
-        { value: "PendingUser", label: "PendingUser" },
-        { value: "PendingLogin", label: "PendingLogin" },
+        { value: "ReviewQueue", label: "Needs review" },
+        { value: "User", label: "All users" },
+        { value: "PendingUser", label: "Pending email verify" },
+        { value: "PendingLogin", label: "Pending login" },
     ];
 
     const roles = [
         { value: "", label: "All" },
         { value: "expert", label: "Expert" },
         { value: "customer", label: "Customer" }
+    ];
+
+    const statusOptions = [
+        { value: "", label: "All statuses" },
+        { value: "review", label: "Review" },
+        { value: "active", label: "Active" },
+        { value: "blocked", label: "Blocked" },
     ];
 
     const sorts = [
@@ -49,6 +57,7 @@ const UserMgmt = () => {
 
     const [sortBy, set_sortBy] = useState<any>(sorts[0]);
     const [role, set_role] = useState<any>(roles[0]);
+    const [statusFilter, set_statusFilter] = useState<any>(statusOptions[0]);
     const [email, set_email] = useState<string>("");
     const [username, set_username] = useState<string>("");
 
@@ -60,6 +69,9 @@ const UserMgmt = () => {
     const [auditModalShow, set_auditModalShow] = useState<boolean>(false);
     const [isFirstLoad, set_isFirstLoad] = useState<boolean>(true);
 
+    const isUserListView = dataType.value === "User" || dataType.value === "ReviewQueue";
+    const isReviewQueue = dataType.value === "ReviewQueue";
+
     const filterUsers = async (pageNum: number) => {
         try {
             SetLoadingStatus(true);
@@ -69,6 +81,7 @@ const UserMgmt = () => {
                 email,
                 username,
                 role: role.value,
+                status: isReviewQueue ? "review" : statusFilter.value,
                 sortBy: "createdAt",
                 sortOrder: "DESC", // or use sortBy.value if using ASC/DESC
                 currentPage: pageNum,
@@ -199,6 +212,11 @@ const UserMgmt = () => {
         }
     };
     const updateOneUser = (updated: any) => {
+        if (isReviewQueue && updated?.status !== "review") {
+            set_users((prev) => prev.filter((u) => u.email !== updated.email));
+            set_totalCount((c) => Math.max(0, c - 1));
+            return;
+        }
         const newArr = [...users];
         const idx = newArr.findIndex(u => u.email === updated.email);
         if (idx >= 0) {
@@ -207,12 +225,20 @@ const UserMgmt = () => {
         }
     };
 
+    const handleApproveUser = async (u: any) => {
+        await updateProfile({ email: u.email, status: "active" });
+    };
+
+    const handleBlockUser = async (u: any) => {
+        await updateProfile({ email: u.email, status: "blocked" });
+    };
+
     const handleDataTypeChange = (selected: any) => {
         set_dataType(selected);
     };
 
     useEffect(() => {
-        if (dataType.value === "User") {
+        if (isUserListView) {
             filterUsers(0);
         } else if (dataType.value === "PendingUser") {
             fetchPendingUsers();
@@ -222,25 +248,25 @@ const UserMgmt = () => {
     }, [dataType]);
 
     useEffect(() => {
-        if (!isFirstLoad && dataType.value === "User") {
+        if (!isFirstLoad && isUserListView) {
             filterUsers(0);
         }
     }, [numPerPage]);
 
     useEffect(() => {
-        if (!isFirstLoad && dataType.value === "User") {
+        if (!isFirstLoad && isUserListView) {
             filterUsers(currentPage);
         }
     }, [currentPage]);
 
     useEffect(() => {
-        if (!isFirstLoad && dataType.value === "User") {
+        if (!isFirstLoad && isUserListView) {
             const timer = setTimeout(() => {
                 filterUsers(0);
             }, 500);
             return () => clearTimeout(timer);
         }
-    }, [sortBy, role, email, username]);
+    }, [sortBy, role, statusFilter, email, username]);
 
 
     const openManageModal = (u: any) => {
@@ -266,6 +292,11 @@ const UserMgmt = () => {
             <div className={`w-full h-full py-10 px-5 ${manageModalShow || auditModalShow ? "overflow-hidden" : "overflow-y-auto"}`}>
                 <div className="w-full max-w-[1400px] mx-auto text-wl-ink">
                     <div className="text-center text-2xl font-semibold text-wl-brand">User Management</div>
+                    {isReviewQueue ? (
+                        <p className="mt-2 text-center text-sm text-wl-muted">
+                            Primary approval queue — accounts with status <span className="font-medium text-brownyellow">review</span>.
+                        </p>
+                    ) : null}
 
                     <div className="w-full my-4">
                         <div className="text-grey mb-0.5 text-[12px] leading-[19px]">Manage:</div>
@@ -278,7 +309,7 @@ const UserMgmt = () => {
                         />
                     </div>
 
-                    {dataType.value === "User" && (
+                    {isUserListView && (
                         <div className="w-full py-1">
                             <div className="flex justify-between mt-4">
                                 <div className="w-[calc(100%-174px)] sm:w-[calc(100%-324px)]">
@@ -312,24 +343,54 @@ const UserMgmt = () => {
                                     />
                                 </div>
                                 <div className="w-[150px] sm:w-[300px]">
-                                    <div className="text-grey mb-0.5 text-[12px] leading-[19px]">Sort by username</div>
-                                    <SelectionWithCheckBox
-                                        options={sorts}
-                                        selectedOptions={sortBy}
-                                        set_selectedOptions={set_sortBy}
-                                        placeholder="Sort by"
-                                        isMulti={false}
-                                    />
+                                    <div className="text-grey mb-0.5 text-[12px] leading-[19px]">
+                                        {isReviewQueue ? "Sort" : "Filter by status"}
+                                    </div>
+                                    {isReviewQueue ? (
+                                        <SelectionWithCheckBox
+                                            options={sorts}
+                                            selectedOptions={sortBy}
+                                            set_selectedOptions={set_sortBy}
+                                            placeholder="Sort by"
+                                            isMulti={false}
+                                        />
+                                    ) : (
+                                        <SelectionWithCheckBox
+                                            options={statusOptions}
+                                            selectedOptions={statusFilter}
+                                            set_selectedOptions={set_statusFilter}
+                                            placeholder="Filter by status"
+                                            isMulti={false}
+                                        />
+                                    )}
                                 </div>
                             </div>
+                            {!isReviewQueue ? (
+                                <div className="flex justify-end mt-2">
+                                    <div className="w-[150px] sm:w-[300px]">
+                                        <div className="text-grey mb-0.5 text-[12px] leading-[19px]">Sort</div>
+                                        <SelectionWithCheckBox
+                                            options={sorts}
+                                            selectedOptions={sortBy}
+                                            set_selectedOptions={set_sortBy}
+                                            placeholder="Sort by"
+                                            isMulti={false}
+                                        />
+                                    </div>
+                                </div>
+                            ) : null}
                         </div>
                     )}
 
                     <div className="w-full rounded-2xl mt-4 bg-wl-card border border-wl-line shadow-sm overflow-hidden">
 
-                        {dataType.value === "User" && (
+                        {isUserListView && (
                             <div className="w-full flex flex-col sm:flex-row sm:justify-between sm:items-center p-4 gap-4">
-                                <div>Total of {totalCount} Users</div>
+                                <div>
+                                    {isReviewQueue
+                                        ? `Total of ${totalCount} accounts awaiting review`
+                                        : `Total of ${totalCount} Users`}
+                                </div>
                                 <Pagination
                                     currentPage={currentPage}
                                     totalPage={totalPage}
@@ -341,8 +402,15 @@ const UserMgmt = () => {
                             </div>
                         )}
 
-                        {dataType.value === "User" && (
+                        {isUserListView && (
                             <div className="relative overflow-x-auto w-full px-4">
+                                {isUserListView && users.length === 0 ? (
+                                    <p className="py-8 text-center text-sm text-wl-muted">
+                                        {isReviewQueue
+                                            ? "No accounts currently awaiting review."
+                                            : "No users match these filters."}
+                                    </p>
+                                ) : null}
                                 <table className="w-full text-sm text-left">
                                     <thead className="text-xs uppercase bg-wl-brandSoft text-wl-brand">
                                     <tr>
@@ -418,8 +486,26 @@ const UserMgmt = () => {
                                                     <option value="blocked" className="text-red">Blocked</option>
                                                 </select>
                                             </td>
-                                            <td className="px-2 max-w-[200px] truncate">
-                                                <div className="flex flex-wrap gap-2">
+                                            <td className="px-2 max-w-[280px]">
+                                                <div className="flex flex-wrap gap-2 justify-center">
+                                                    {(isReviewQueue || u.status === "review") && (
+                                                        <>
+                                                            <button
+                                                                type="button"
+                                                                className="inline-flex items-center rounded-lg bg-green px-3 py-1.5 text-[12px] font-semibold text-white shadow-sm transition hover:brightness-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-green/30"
+                                                                onClick={() => handleApproveUser(u)}
+                                                            >
+                                                                Approve
+                                                            </button>
+                                                            <button
+                                                                type="button"
+                                                                className="inline-flex items-center rounded-lg border border-red-500/80 bg-white px-3 py-1.5 text-[12px] font-semibold text-red-600 transition hover:bg-red-500 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-red-400/40"
+                                                                onClick={() => handleBlockUser(u)}
+                                                            >
+                                                                Block
+                                                            </button>
+                                                        </>
+                                                    )}
                                                     <button
                                                         type="button"
                                                         className="inline-flex items-center rounded-lg bg-wl-brand px-3 py-1.5 text-[12px] font-semibold text-white shadow-sm transition hover:brightness-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-wl-brand/30"
@@ -522,7 +608,7 @@ const UserMgmt = () => {
                             </div>
                         )}
 
-                        {dataType.value === "User" && (
+                        {isUserListView && (
                             <div className="w-full flex flex-col sm:flex-row sm:justify-between sm:items-center p-4 gap-4">
                                 <div className="flex gap-6">
                                     <div>Show rows:</div>

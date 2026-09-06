@@ -831,6 +831,17 @@ export const setPaymentWindow = async (paymentWindowHours: number) => {
     }
 }
 
+export const doGetPaymentIntegrityReport = async (onlyActionable = true) => {
+    try {
+        const res = await api.get(
+            `admin/paymentIntegrityReport?onlyActionable=${onlyActionable ? 'true' : 'false'}`
+        );
+        return res.data;
+    } catch (err: any) {
+        return checkForAuthorization(err);
+    }
+};
+
 export const sendPaymentLinkToUser = async (data: any) => {
     try {
         const res = await api.post("admin/sendPaymentLinkToUser", data);
@@ -1250,6 +1261,8 @@ export const doGetCustomerPaymentHistory = async () => {
 
 export type AdminDashboardStatsData = {
     pendingApprovals: number;
+    /** Email-verify PendingUser queue (separate from status:review approvals). */
+    pendingEmailVerify?: number;
     newContactMessages: number;
     unansweredChatbotQuestions: number;
     expertCount: number;
@@ -1407,7 +1420,7 @@ export const sendEmailToUser = async (email: string, message: string) => {
 
 export const sendWelcomeEmail = async (email: string, password: string) => {
     try {
-        const res = await api.post("auth/sendWelcomeEmail", { email, password });
+        const res = await api.post("admin/sendWelcomeEmail", { email, password });
         return res.data;
     } catch (err: any) {
         return checkForAuthorization(err);

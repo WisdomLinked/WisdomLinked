@@ -4587,7 +4587,19 @@ const sweepOrphanedBookingIntentsForMode = async (stripeMode: 'test' | 'live') =
 
 const sweepOrphanedBookingIntents = async () => {
     let handled = 0;
-    for (const mode of ['test', 'live'] as const) {
+    let modes: Array<'test' | 'live'> = ['test', 'live'];
+    try {
+        const appState = await AppState.findOne().select('stripeMode').lean();
+        const configured: 'test' | 'live' = appState?.stripeMode === 'live' ? 'live' : 'test';
+        // Avoid sweeping test Stripe from prod / live AppState (wrong keys / noise).
+        if (process.env.NODE_ENV === 'production' || configured === 'live') {
+            modes = [configured];
+        }
+    } catch (err: any) {
+        console.log('[sweepOrphanedBookingIntents] mode resolve failed', err?.message);
+        if (process.env.NODE_ENV === 'production') return 0;
+    }
+    for (const mode of modes) {
         handled += await sweepOrphanedBookingIntentsForMode(mode);
     }
     return handled;

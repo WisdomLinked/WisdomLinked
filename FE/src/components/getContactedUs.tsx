@@ -374,7 +374,7 @@ export default function GetContactedUs() {
             ) : (
                 <div className="space-y-4 max-w-4xl mx-auto">
                     {contactedUsList.map((item) => {
-                        const isActionedYes = item.actioned === "No";
+                        const isActionedYes = item.actioned === "Yes";
                         return (
                             <div
                                 key={item._id}

@@ -95,7 +95,7 @@ const bcrypt = require("bcryptjs");
 
 const filterUsers = async (req, res) => {
     try {
-        const { username, email, role, sortBy, sortOrder, numPerPage, currentPage } = req.body
+        const { username, email, role, status, sortBy, sortOrder, numPerPage, currentPage } = req.body
         let query = User.find({ role: { $ne: 'admin' } })
         let countQuery = User.countDocuments({ role: { $ne: 'admin' } })
 
@@ -110,6 +110,10 @@ const filterUsers = async (req, res) => {
         if (role) {
             query.where({ role: String(role) })
             countQuery.where({ role: String(role) })
+        }
+        if (status) {
+            query.where({ status: String(status) })
+            countQuery.where({ status: String(status) })
         }
 
         // Dynamic sorting based on `sortBy` and `sortOrder`
@@ -586,9 +590,10 @@ const sendEmailToUser = async (req, res) => {
 
 const getDashboardStats = async (req: Request, res: Response) => {
     try {
+        const SYSTEM_CHAT_NAMES = ["Global Chat", "Admin"];
         const [
-            pendingUsersCount,
-            pendingLoginsCount,
+            pendingApprovals,
+            pendingEmailVerify,
             unactionedContacts,
             unansweredChatbot,
             expertCount,
@@ -599,8 +604,8 @@ const getDashboardStats = async (req: Request, res: Response) => {
             refundRecords,
             todayUpcomingEvents,
         ] = await Promise.all([
+            User.countDocuments({ status: "review", role: { $ne: "admin" } }),
             PendingUser.countDocuments(),
-            PendingLogin.countDocuments(),
             ContactedUs.countDocuments({ actioned: "No" }),
             chatBotQA.countDocuments({
                 $or: [
@@ -612,7 +617,10 @@ const getDashboardStats = async (req: Request, res: Response) => {
             User.countDocuments({ role: "expert" }),
             User.countDocuments({ role: "customer" }),
             Event.countDocuments(),
-            GroupChat.countDocuments({ type: "seminar" }),
+            GroupChat.countDocuments({
+                type: "seminar",
+                name: { $nin: SYSTEM_CHAT_NAMES },
+            }),
             PaymentHistory.countDocuments({ paymentType: { $ne: "refund" } }),
             PaymentHistory.countDocuments({ paymentType: "refund" }),
             countTodayUpcomingEvents(),
@@ -621,7 +629,8 @@ const getDashboardStats = async (req: Request, res: Response) => {
         return res.status(200).json({
             status: "SUCCESS",
             data: {
-                pendingApprovals: pendingUsersCount + pendingLoginsCount,
+                pendingApprovals,
+                pendingEmailVerify,
                 newContactMessages: unactionedContacts,
                 unansweredChatbotQuestions: unansweredChatbot,
                 expertCount,

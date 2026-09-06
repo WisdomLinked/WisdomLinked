@@ -123,10 +123,10 @@ function AdminOverview({ go }: { go: (id: string, search?: string) => void }) {
               alignStart
               label="User management"
               value={fmt(stats.pendingApprovals)}
-              subline="Pending approvals (sign-ups & logins)"
+              subline="Users with status: review"
               icon={Users}
               color="primary"
-              tooltip="Review pending accounts and approve users"
+              tooltip="Approve or block accounts awaiting admin review"
               onClick={() => go('usermgmt')}
             />
             <StatCard
