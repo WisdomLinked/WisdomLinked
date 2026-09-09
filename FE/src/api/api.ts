@@ -1332,9 +1332,10 @@ export type AdminPlatformEventItem = {
     start: string;
     end: string;
     status?: string;
-    expert: { username?: string; email?: string } | null;
-    customer: { username?: string; email?: string } | null;
+    expert: { id?: string; username?: string; email?: string } | null;
+    customer: { id?: string; username?: string; email?: string } | null;
     groupChatType?: string;
+    participantCount?: number;
 };
 
 export const doGetAdminDashboardStats = async (): Promise<{

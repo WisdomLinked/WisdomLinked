@@ -21,6 +21,9 @@ import TopBar from '../components/layout/TopBar';
 import type { TopBarNotificationItem } from '../components/layout/TopBar';
 import StatCard from '../components/ui/StatCard';
 import AdminMetricsPanel from '../components/dashboard/AdminMetricsPanel';
+import AdminSnapshotDrilldown, {
+  type SnapshotListType,
+} from '../components/dashboard/AdminSnapshotDrilldown';
 import { doGetAdminDashboardStats, type AdminDashboardStatsData } from '../api/api';
 import {
   loadAdminTopBarDismiss,
@@ -48,6 +51,7 @@ import AdminMajors from './Dashboard/_AdminDashboard/majors';
 import AdminUpcomingEvents from './Dashboard/_AdminDashboard/adminUpcomingEvents';
 import AdminAuditLog from './Dashboard/_AdminDashboard/auditLog';
 import Chatbot from '../components/chatbot';
+import { usePeerProfileModal } from '../hooks/usePeerProfileModal';
 
 const AUTH_BASE = process.env.REACT_APP_AUTH_URL || '/user/';
 
@@ -86,8 +90,15 @@ const emptyStats: AdminDashboardStatsData = {
 };
 
 function AdminOverview({ go }: { go: (id: string, search?: string) => void }) {
+  const {
+    auth: { userDetails },
+  } = useAppSelector(state => state);
   const [stats, setStats] = useState<AdminDashboardStatsData>(emptyStats);
   const [statsLoading, setStatsLoading] = useState(true);
+  const [activeListType, setActiveListType] = useState<SnapshotListType | null>(null);
+  const { openPeerProfile, closePeerProfile, peerProfileModal } = usePeerProfileModal(
+    String(userDetails?.role || 'admin'),
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -120,8 +131,8 @@ function AdminOverview({ go }: { go: (id: string, search?: string) => void }) {
           </p>
         </section>
 
-        <div className="flex flex-col gap-8 lg:flex-row lg:items-start lg:gap-10">
-          <div className="w-full space-y-4 text-left lg:max-w-md lg:shrink-0">
+        <div className="space-y-6 lg:space-y-8">
+          <div className="grid grid-cols-1 gap-4 text-left sm:grid-cols-2 lg:grid-cols-4">
             <StatCard
               alignStart
               label="User management"
@@ -164,16 +175,36 @@ function AdminOverview({ go }: { go: (id: string, search?: string) => void }) {
             />
           </div>
 
-          <div className="min-w-0 flex-1">
+          <div className="min-w-0">
             {statsLoading ? (
-              <div className="flex min-h-[420px] items-center justify-center rounded-2xl border border-dashed border-wl-line bg-wl-card/50 text-sm text-wl-muted">
+              <div className="flex min-h-[220px] items-center justify-center rounded-2xl border border-dashed border-wl-line bg-wl-card/50 text-sm text-wl-muted">
                 Loading platform snapshot…
               </div>
             ) : (
-              <AdminMetricsPanel stats={stats} />
+              <AdminMetricsPanel
+                stats={stats}
+                onSelectList={type => {
+                  closePeerProfile();
+                  setActiveListType(type);
+                }}
+              />
             )}
           </div>
         </div>
+
+        {activeListType ? (
+          <AdminSnapshotDrilldown
+            listType={activeListType}
+            onClose={() => {
+              closePeerProfile();
+              setActiveListType(null);
+            }}
+            onPersonClick={seed => {
+              void openPeerProfile(seed);
+            }}
+          />
+        ) : null}
+        {peerProfileModal}
 
         <section>
           <h3 className="mb-3 text-left text-sm font-semibold uppercase tracking-wide text-wl-muted">

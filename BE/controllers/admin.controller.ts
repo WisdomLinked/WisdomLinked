@@ -713,10 +713,18 @@ const getAdminPlatformEvents = async (req: Request, res: Response) => {
                     end: ev.end,
                     status: ev.status,
                     expert: ev.expert
-                        ? { username: ev.expert.username, email: ev.expert.email }
+                        ? {
+                            id: String(ev.expert._id),
+                            username: ev.expert.username,
+                            email: ev.expert.email,
+                        }
                         : null,
                     customer: ev.customer
-                        ? { username: ev.customer.username, email: ev.customer.email }
+                        ? {
+                            id: String(ev.customer._id),
+                            username: ev.customer.username,
+                            email: ev.customer.email,
+                        }
                         : null,
                 });
             }
@@ -746,10 +754,15 @@ const getAdminPlatformEvents = async (req: Request, res: Response) => {
                     end: g.end,
                     status: g.status,
                     expert: adminUser
-                        ? { username: adminUser.username, email: adminUser.email }
+                        ? {
+                            id: String(adminUser._id),
+                            username: adminUser.username,
+                            email: adminUser.email,
+                        }
                         : null,
                     customer: null,
                     groupChatType: g.type,
+                    participantCount: Array.isArray(g.participants) ? g.participants.length : 0,
                 });
             }
         }
