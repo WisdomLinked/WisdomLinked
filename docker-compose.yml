@@ -10,8 +10,6 @@ services:
       - "5000:5000"
     env_file:
       - ./BE/.env
-    environment:
-      AUTH_FIXED_OTP: "true"
 
     restart: unless-stopped
     networks:
