@@ -54,7 +54,7 @@ export default function SelectField({
 
   // Scroll the selected option into view when the list opens.
   useEffect(() => {
-    if (open && selectedRef.current) {
+    if (open && selectedRef.current?.scrollIntoView) {
       selectedRef.current.scrollIntoView({ block: 'center' });
     }
   }, [open]);
