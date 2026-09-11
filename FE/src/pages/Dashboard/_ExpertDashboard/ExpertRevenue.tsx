@@ -29,15 +29,16 @@ function stripeToMajor(amount: number, currency: string) {
   return amount / 100;
 }
 
-function formatMoney(amount: number | undefined, currency: string | undefined) {
+function formatMoney(amount: number | undefined, currency: string | undefined, signed = false) {
   const amt = typeof amount === 'number' ? amount : 0;
   const cur = (currency || 'usd').toUpperCase();
-  const major = stripeToMajor(amt, cur);
+  const major = stripeToMajor(amt, cur) * (signed ? -1 : 1);
   return new Intl.NumberFormat(undefined, {
     style: 'currency',
     currency: cur,
     minimumFractionDigits: ZERO_DECIMAL.has(cur.toLowerCase()) ? 0 : 2,
     maximumFractionDigits: ZERO_DECIMAL.has(cur.toLowerCase()) ? 0 : 2,
+    signDisplay: signed || major < 0 ? 'exceptZero' : 'auto',
   }).format(major);
 }
 
@@ -49,6 +50,7 @@ type PaymentRow = {
   currency?: string;
   description?: string;
   status?: string;
+  paymentType?: string;
   paymentIntent?: string;
   balanceTransaction?: string;
   paymentKind?: PaymentKind;
@@ -67,9 +69,10 @@ type Summary = {
 
 type DateFilter = 'all' | 'today' | 'last7' | 'last30';
 
-const kindLabel = (k: PaymentKind | undefined) => {
-  if (k === 'seminar') return 'Seminar';
-  if (k === 'individual') return '1:1 session';
+const kindLabel = (r: PaymentRow) => {
+  if (String(r.paymentType || '').toLowerCase() === 'refund') return 'Refund';
+  if (r.paymentKind === 'seminar') return 'Seminar';
+  if (r.paymentKind === 'individual') return '1:1 session';
   return 'Other';
 };
 
@@ -311,6 +314,7 @@ export default function ExpertRevenue() {
                 </thead>
                 <tbody className="text-slate-800">
                   {filteredRows.map((r) => {
+                    const isRefund = String(r.paymentType || '').toLowerCase() === 'refund';
                     const desc =
                       r.description ||
                       r.groupChat?.name ||
@@ -340,8 +344,14 @@ export default function ExpertRevenue() {
                           {dateStr}
                         </td>
                         <td className="py-3 pr-4 align-top">
-                          <span className="inline-flex whitespace-nowrap rounded-full bg-[#234C6A]/8 px-2.5 py-0.5 text-[11px] font-semibold text-[#234C6A]">
-                            {kindLabel(r.paymentKind)}
+                          <span
+                            className={`inline-flex whitespace-nowrap rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${
+                              isRefund
+                                ? 'bg-red-50 text-red-800'
+                                : 'bg-[#234C6A]/8 text-[#234C6A]'
+                            }`}
+                          >
+                            {kindLabel(r)}
                           </span>
                         </td>
                         <td className="py-3 pr-4 align-top">
@@ -365,8 +375,12 @@ export default function ExpertRevenue() {
                             {st}
                           </span>
                         </td>
-                        <td className="py-3 text-right align-top font-semibold tabular-nums text-slate-900">
-                          {formatMoney(r.amount, r.currency)}
+                        <td
+                          className={`py-3 text-right align-top font-semibold tabular-nums ${
+                            isRefund ? 'text-red-700' : 'text-slate-900'
+                          }`}
+                        >
+                          {formatMoney(r.amount, r.currency, isRefund)}
                         </td>
                       </tr>
                     );
