@@ -507,10 +507,12 @@ const getAllCommunityChats = async (req, res) => {
                 { participants: userObjectId }
             ]
         })
-            .populate('admin', '_id email username role')
-            .populate('participants', '_id email username')
+            // `image` belongs on everyone the participants dialog renders, not just
+            // co-moderators — without it every member falls back to their initials.
+            .populate('admin', '_id email username role image')
+            .populate('participants', '_id email username image')
             .populate('coModerators', '_id email username role image')
-            .populate('createdBy', '_id email username')
+            .populate('createdBy', '_id email username image')
             .lean();
 
         communityChats.sort((a: any, b: any) => {
