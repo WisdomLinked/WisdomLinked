@@ -33,4 +33,30 @@ describe("meetingSession", () => {
         expect(sessionStorage.getItem(PENDING_END_MEETING_KEY)).toBeNull();
         expect(sessionStorage.getItem(ACTIVE_MEETING_KEY)).toBeNull();
     });
+
+    it("does not end a live meeting just because one is open", async () => {
+        sessionStorage.setItem(ACTIVE_MEETING_KEY, "meeting-live");
+        const endSpy = vi.spyOn(chatApi, "endMeeting").mockResolvedValue({ endMessage: null });
+
+        const ended = await tryEndPendingMeeting();
+
+        expect(ended).toBe(false);
+        expect(endSpy).not.toHaveBeenCalled();
+        expect(sessionStorage.getItem(ACTIVE_MEETING_KEY)).toBe("meeting-live");
+    });
+
+    it("still ends the meeting once the meet tab reports it is over", async () => {
+        sessionStorage.setItem(ACTIVE_MEETING_KEY, "meeting-live");
+        const endSpy = vi.spyOn(chatApi, "endMeeting").mockResolvedValue({ endMessage: null });
+
+        handleMeetPostMessage({
+            origin: "https://meet.wisdomlinked.com",
+            data: { type: "wl-meeting-alone", meetingThreadId: "meeting-live" },
+        } as MessageEvent);
+        const ended = await tryEndPendingMeeting();
+
+        expect(ended).toBe(true);
+        expect(endSpy).toHaveBeenCalledWith("meeting-live", "last_participant_return");
+    });
+
 });

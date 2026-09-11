@@ -18,6 +18,7 @@ import ExpertSeminar from "../../_ExpertDashboard/seminar";
 // Chat API + realtime
 import { getOrCreateDM, fetchDirectHistory, fetchGroupHistory, fetchGroupMemberByRcSlug, markChatRead, getRCToken, deleteChatMessage, fetchReadReceiptsBatch, fetchDmUnreadSnapshot } from "../../../../api/chatApi";
 import { notifyChatMessage, stripChatHtml } from "../../../../utils/chatBrowserNotifications";
+import { seriesKey } from "../../../../utils/seminarSeriesOccurrence";
 import {
     setChatChannelInfo,
     setMessages,
@@ -680,7 +681,18 @@ const Messages = ({ theme = "dark", onReplyMessage }: { theme?: string; onReplyM
             })
             set_events([...temp])
         } else if (chosenGroupChatDetails) {
-            let temp = (userDetails?.groupChats || []).filter((x: any) => x._id === chosenGroupChatDetails.groupId)
+            const open =
+                (userDetails?.groupChats || []).find(
+                    (x: any) => String(x._id) === String(chosenGroupChatDetails.groupId),
+                ) || {
+                    _id: chosenGroupChatDetails.groupId,
+                    seriesId: chosenGroupChatDetails.seriesId,
+                };
+            const key = seriesKey(open);
+            // Include all series siblings so header calendar / Join gating see live occurrences.
+            const temp = (userDetails?.groupChats || []).filter(
+                (x: any) => seriesKey(x) === key,
+            );
             set_events([...temp])
         }
     }
@@ -690,7 +702,7 @@ const Messages = ({ theme = "dark", onReplyMessage }: { theme?: string; onReplyM
         set_eventsModalShow(false)
         set_seminarDetailsModalShow(false)
         set_editSeminarModalShow(false)
-    }, [chosenChatDetails, chosenGroupChatDetails])
+    }, [chosenChatDetails, chosenGroupChatDetails, userDetails?.groupChats, userDetails?.events])
 
     useEffect(() => {
         if (isScrollToTop && !gotAllChats) {

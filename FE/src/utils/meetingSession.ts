@@ -70,9 +70,9 @@ export async function tryEndPendingMeeting(
     onEnded?: (endMessage: Message | null) => void,
 ): Promise<boolean> {
     const pending =
-        (typeof sessionStorage !== "undefined" &&
-            sessionStorage.getItem(PENDING_END_MEETING_KEY)) ||
-        getActiveMeetingThreadId();
+        typeof sessionStorage !== "undefined"
+            ? sessionStorage.getItem(PENDING_END_MEETING_KEY)
+            : null;
     const id = pending && String(pending).trim() ? String(pending).trim() : "";
     if (!id) return false;
     clearMeetingSessionKeys();

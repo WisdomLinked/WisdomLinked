@@ -15,8 +15,17 @@ const GroupChat = require('../models/GroupChat');
 const User = require('../models/User');
 const Event = require('../models/Event');
 const MeetingGuestInvite = require('../models/MeetingGuestInvite');
-import { resolveMeetingRatingTargetUserId } from '../utils/meetingRatingRules';
-import { buildMeetingRoomName, canStartGroupMeeting } from '../utils/meetingModerationRules';
+import {
+    resolveMeetingRatingTargetUserId,
+    buildMeetingFeedbackEntry,
+    upsertMeetingFeedback,
+    averageFeedbackRating,
+} from '../utils/meetingRatingRules';
+import {
+    buildMeetingRoomName,
+    canStartGroupMeeting,
+    canEndMeetingAsLastParticipant,
+} from '../utils/meetingModerationRules';
 import { appendJitsiMobileWebOverrides } from '../utils/jitsiUrl';
 import { isMeetingModerator, isMeetingModeratorWithDelegates } from '../utils/meetingRoleRules';
 import {
@@ -28,6 +37,7 @@ import {
     MEETING_ONLY_EXPERTS_END_WHILE_OTHERS,
     MEETING_ONLY_EXPERTS_GRANT_ACCESS,
     MEETING_ONLY_EXPERTS_REVOKE_ACCESS,
+    MEETING_STILL_IN_PROGRESS,
     MEETING_ONLY_EXPERTS_REVOKE_DELEGATED,
     MEETING_REMOVED_BY_HOST,
 } from '../utils/meetingUserFacingCopy';
@@ -614,6 +624,19 @@ export const endMeeting = async (req: any, res: Response) => {
             });
         }
 
+        const reportedFromMeetTab = Boolean(req.meetingChatClaims);
+        if (
+            lastParticipantLeaving &&
+            !access.moderator &&
+            !reportedFromMeetTab &&
+            !canEndMeetingAsLastParticipant(meeting, Date.now(), MEETING_HEARTBEAT_STALE_MS)
+        ) {
+            return res.status(409).json({
+                error: MEETING_STILL_IN_PROGRESS,
+                status: 'active',
+            });
+        }
+
         await markMeetingEnded(meeting);
 
         const endContent = `__MEETING_ENDED__::${meetingThreadId}::${meeting.duration}::${meeting.participants.length}`;
@@ -969,6 +992,27 @@ export const submitMeetingRating = async (req: any, res: Response) => {
             meeting.ratings.push({ ...payload, createdAt: new Date() });
         }
         await meeting.save();
+
+        // `MeetingThread.ratings` is not read by any surface. The admin feedback page and
+        // the stars on a profile both read `User.feedbacks` / `User.rating`, so the rating
+        // is mirrored there too — upserted by meeting + rater, so editing a rating corrects
+        // the average instead of counting twice.
+        const targetUserDoc = await User.findById(targetId).select('feedbacks');
+        if (targetUserDoc) {
+            const feedbacks = upsertMeetingFeedback(
+                targetUserDoc.feedbacks,
+                buildMeetingFeedbackEntry({
+                    meeting,
+                    raterUserId: userId,
+                    score: numericScore,
+                    comment,
+                }),
+            );
+            await User.updateOne(
+                { _id: targetId },
+                { $set: { feedbacks, rating: averageFeedbackRating(feedbacks) } },
+            );
+        }
 
         const ratingsForTarget = (meeting.ratings || []).filter(
             (r: any) => String(r?.target?._id ?? r?.target) === String(targetId),

@@ -14,6 +14,8 @@ import { setChosenGroupChatDetails } from "../../../../actions/chatActions";
 import { updateMe } from "../../../../actions/authActions";
 import { fetchChatUserProfile } from "../../../../api/chatApi";
 import { buildFallbackChatProfile, mergeChatProfile } from "../../../../utils/chatProfileModal";
+import { useResolvedProfileImages } from "../../../../hooks/useResolvedProfileImages";
+import { safeImageSrc } from "../../../../utils/profileImage";
 import ProfileModal from "./ProfileModal";
 
 interface Props {
@@ -40,6 +42,11 @@ const GroupParticipantsDialog = ({
     const [removingId, setRemovingId] = useState<string | null>(null);
     const [profilePerson, setProfilePerson] = useState<any | null>(null);
     const [profileOpen, setProfileOpen] = useState(false);
+
+    // Callers that already resolved the images pass them in; the rest (the chat header,
+    // where members showed as initials) are resolved here so no screen has to remember.
+    const ownResolvedImages = useResolvedProfileImages(groupDetails?.participants);
+    const imagesForAvatars = resolvedImages ?? ownResolvedImages;
 
     const openParticipantProfile = async (participant: any) => {
         const pid = String(participant?._id ?? participant?.id ?? "");
@@ -211,8 +218,12 @@ const GroupParticipantsDialog = ({
                                             username={participant.username}
                                             image={
                                                 (typeof participant.image === "string"
-                                                    ? resolvedImages?.get(participant.image.trim())
-                                                    : undefined) ?? participant.image
+                                                    ? imagesForAvatars.get(participant.image.trim())
+                                                    : undefined)
+                                                // Never fall back to the raw value: a stored
+                                                // filename is not a URL, and renders as a
+                                                // broken image rather than their initials.
+                                                ?? safeImageSrc(participant.image)
                                             }
                                         />
                                         <div className="min-w-0 flex-1">
