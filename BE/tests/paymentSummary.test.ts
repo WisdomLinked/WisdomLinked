@@ -9,8 +9,8 @@ const seminarCharge = (amount: number) => ({
     groupChat: { type: 'seminar' },
 });
 
-const seminarRefund = (amount: number) => ({
-    status: 'completed',
+const seminarRefund = (amount: number, status: 'completed' | 'refunded' = 'completed') => ({
+    status,
     paymentType: 'refund',
     amount,
     groupChat: { type: 'seminar' },
@@ -31,7 +31,7 @@ test('a refunded seminar registration nets to zero', () => {
     assert.equal(summary.totalReceivedCents, 0);
 });
 
-test('leftSeminar rows (refunded charge + refunded refund row) net to zero', () => {
+test('legacy both-refunded (flipped charge + refunded refund) still nets to zero', () => {
     const summary = summarizePaymentHistory([
         { status: 'refunded', paymentType: 'charge', amount: 20000, groupChat: { type: 'seminar' } },
         { status: 'refunded', paymentType: 'refund', amount: 20000, groupChat: { type: 'seminar' } },
@@ -40,19 +40,31 @@ test('leftSeminar rows (refunded charge + refunded refund row) net to zero', () 
     assert.equal(summary.totalReceivedCents, 0);
 });
 
-test('the old leftSeminar shape (refunded charge + completed refund) would go negative', () => {
+test('new full-refund shape (completed charge + refunded refund) nets to zero', () => {
+    const summary = summarizePaymentHistory([
+        seminarCharge(250),
+        seminarRefund(250, 'refunded'),
+    ]);
+    assert.equal(summary.seminarsCents, 0);
+    assert.equal(summary.totalReceivedCents, 0);
+});
+
+test('legacy refunded charge + completed refund washes to zero', () => {
+    // Refunded charges are not income; matching refund rows are washed against them
+    // so the old leftSeminar bookkeeping shape does not go negative.
     const summary = summarizePaymentHistory([
         { status: 'refunded', paymentType: 'charge', amount: 20000, groupChat: { type: 'seminar' } },
         { status: 'completed', paymentType: 'refund', amount: 20000, groupChat: { type: 'seminar' } },
     ]);
-    assert.equal(summary.seminarsCents, -20000);
+    assert.equal(summary.seminarsCents, 0);
+    assert.equal(summary.totalReceivedCents, 0);
 });
 
 test('an admin full refund nets to zero, a partial refund leaves the remainder', () => {
-    // processRefund flips the charge to 'refunded' only on a full refund, so the refund
-    // row has to follow suit or the total double-subtracts and goes negative.
+    // processRefund leaves the charge completed and records the refund row as refunded
+    // when the payment is fully returned.
     const full = summarizePaymentHistory([
-        { status: 'refunded', paymentType: 'charge', amount: 5000, groupChat: { type: 'seminar' } },
+        { status: 'completed', paymentType: 'charge', amount: 5000, groupChat: { type: 'seminar' } },
         { status: 'refunded', paymentType: 'refund', amount: 5000, groupChat: { type: 'seminar' } },
     ]);
     assert.equal(full.seminarsCents, 0);
