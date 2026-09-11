@@ -1012,10 +1012,10 @@ const processRefund = async (req, res) => {
         }
 
         // Check if payment can be refunded
-        if (paymentHistory.status === 'refunded') {
+        if (paymentHistory.paymentType === 'refund') {
             return res.status(400).json({
                 status: 'FAILED',
-                message: 'This payment has already been refunded.'
+                message: 'Cannot refund a refund record. Select the original charge instead.'
             });
         }
 
@@ -1047,12 +1047,29 @@ const processRefund = async (req, res) => {
             });
         }
 
-        // Validate refund amount doesn't exceed original payment
-        const maxRefundAmount = paymentHistory.amount / 100;
-        if (refundAmount > maxRefundAmount) {
+        // Remaining refundable = original charge minus existing refund rows for this PI.
+        const originalCents = typeof paymentHistory.amount === 'number' ? paymentHistory.amount : 0;
+        const priorRefundRows = await PaymentHistory.find({
+            paymentIntent: paymentHistory.paymentIntent,
+            paymentType: 'refund',
+        }).select('amount').lean();
+        const alreadyRefundedCents = priorRefundRows.reduce((sum: number, row: any) => {
+            return sum + (typeof row?.amount === 'number' ? row.amount : 0);
+        }, 0);
+        const remainingCents = originalCents - alreadyRefundedCents;
+        const refundAmountCents = Math.round(refundAmount * 100);
+
+        if (remainingCents <= 0) {
             return res.status(400).json({
                 status: 'FAILED',
-                message: `Refund amount cannot exceed original payment amount of $${maxRefundAmount.toFixed(2)}`
+                message: 'This payment has already been refunded.'
+            });
+        }
+
+        if (refundAmountCents > remainingCents) {
+            return res.status(400).json({
+                status: 'FAILED',
+                message: `Refund amount cannot exceed remaining refundable amount of $${(remainingCents / 100).toFixed(2)}`
             });
         }
 
@@ -1063,7 +1080,7 @@ const processRefund = async (req, res) => {
         // Process the refund with Stripe
         const refundResult = await refundPaymentIntent(
             paymentHistory.paymentIntent,
-            Math.round(refundAmount * 100),
+            refundAmountCents,
             currentStripeMode
         );
 
@@ -1075,20 +1092,22 @@ const processRefund = async (req, res) => {
         }
 
         if ((refundResult as any).alreadyRefunded) {
-            await PaymentHistory.findByIdAndUpdate(paymentHistory._id, { status: 'refunded' }).catch(() => null);
+            // Do not flip the original charge to refunded — Expert Revenue keeps the
+            // charge as completed and shows a separate refund ledger row.
             return res.status(409).json({
                 status: 'FAILED',
-                message: 'This charge was already fully refunded at Stripe. No further refund was made; the payment record has been corrected.'
+                message: 'This charge was already fully refunded at Stripe. No further refund was made.'
             });
         }
 
-        const isFullRefund = refundAmount === maxRefundAmount;
+        const isFullRefund = alreadyRefundedCents + refundAmountCents >= originalCents;
 
-        // Create a refund record
+        // Create a refund record. Leave the original charge status as completed so
+        // revenue history shows Completed +$X and Refunded −$X on the same PI.
         const refundHistory = new PaymentHistory({
             stripeMode: currentStripeMode,
             paymentType: 'refund',
-            amount: Math.round(refundAmount * 100),
+            amount: refundAmountCents,
             currency: paymentHistory.currency,
             description: `Refund: ${refundReason}`,
             paymentIntent: refundResult.payment_intent,
@@ -1102,12 +1121,6 @@ const processRefund = async (req, res) => {
 
         await refundHistory.save();
 
-        // Update the original payment status if it's a full refund
-        if (isFullRefund) {
-            paymentHistory.status = 'refunded';
-            await paymentHistory.save();
-        }
-
         // Send refund notification email to customer
         if (paymentHistory.customer?.email) {
             const sgMail = require("@sendgrid/mail");
@@ -1118,10 +1131,10 @@ const processRefund = async (req, res) => {
 
             const refundEmailHtml = buildRefundEmail({
                 customerName: paymentHistory.customer?.username,
-                amountCents: Math.round(refundAmount * 100),
+                amountCents: refundAmountCents,
                 currency: paymentHistory.currency,
                 isFullRefund,
-                retainedCents: Math.round((maxRefundAmount - refundAmount) * 100),
+                retainedCents: remainingCents - refundAmountCents,
                 description: paymentHistory.description,
                 expertName: paymentHistory.expert?.username,
                 start: paymentHistory.groupChat?.start
@@ -1137,7 +1150,7 @@ const processRefund = async (req, res) => {
                     name: "WisdomLinked",
                     email: adminEmail,
                 },
-                subject: `${stripeMoneyFromCents(Math.round(refundAmount * 100), paymentHistory.currency)} refund processed`,
+                subject: `${stripeMoneyFromCents(refundAmountCents, paymentHistory.currency)} refund processed`,
                 html: refundEmailHtml,
             };
 
