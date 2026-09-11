@@ -303,6 +303,10 @@ const adminAuth = async (req, res, next) => {
         if (!(user.token))
             throw new Error("Invalid cookie");
 
+        if (user.status === 'blocked') {
+            throw new Error("User is blocked");
+        }
+
         const decodedUserToken = jwt.verify(user.token, process.env.JWT_SECRET)
 
         if (decodedUserToken.email !== decodedAccessToken.email)

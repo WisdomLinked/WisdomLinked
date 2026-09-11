@@ -1,8 +1,10 @@
 import React, { useCallback, useEffect, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { Calendar, Clock, User } from "lucide-react";
 import { doGetAdminPlatformEvents, type AdminPlatformEventItem } from "../../../api/api";
 import { SetLoadingStatus } from "../../../actions/appActions";
+
+const AUTH_BASE = process.env.REACT_APP_AUTH_URL || "/user/";
 
 const SCOPES = [
   { id: "today" as const, label: "Today" },
@@ -21,6 +23,11 @@ function formatRange(start: string, end: string) {
   const a = new Date(start);
   const b = new Date(end);
   return `${a.toLocaleString()} → ${b.toLocaleString()}`;
+}
+
+function usermgmtEmailHref(email?: string) {
+  if (!email) return `${AUTH_BASE}admindashboard/usermgmt`;
+  return `${AUTH_BASE}admindashboard/usermgmt?email=${encodeURIComponent(email)}`;
 }
 
 export default function AdminUpcomingEvents() {
@@ -198,14 +205,34 @@ export default function AdminUpcomingEvents() {
                       <span className="inline-flex items-center gap-1.5 text-wl-ink/90">
                         <User className="h-4 w-4 shrink-0 text-green" aria-hidden />
                         <span className="text-wl-muted">Expert:</span>{" "}
-                        {row.expert.username || row.expert.email || "—"}
+                        {row.expert.email ? (
+                          <Link
+                            to={usermgmtEmailHref(row.expert.email)}
+                            className="font-medium text-wl-brand underline decoration-wl-brand/30 underline-offset-2 hover:brightness-95"
+                            title="Open in User management"
+                          >
+                            {row.expert.username || row.expert.email}
+                          </Link>
+                        ) : (
+                          row.expert.username || "—"
+                        )}
                       </span>
                     ) : null}
                     {row.customer ? (
                       <span className="inline-flex items-center gap-1.5 text-wl-ink/90">
                         <img src="/icons/video-call.png" alt="" aria-hidden className="h-4 w-4 shrink-0 object-contain" />
                         <span className="text-wl-muted">Student:</span>{" "}
-                        {row.customer.username || row.customer.email || "—"}
+                        {row.customer.email ? (
+                          <Link
+                            to={usermgmtEmailHref(row.customer.email)}
+                            className="font-medium text-wl-brand underline decoration-wl-brand/30 underline-offset-2 hover:brightness-95"
+                            title="Open in User management"
+                          >
+                            {row.customer.username || row.customer.email}
+                          </Link>
+                        ) : (
+                          row.customer.username || "—"
+                        )}
                       </span>
                     ) : null}
                   </div>

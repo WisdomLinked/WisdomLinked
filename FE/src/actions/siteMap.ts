@@ -28,4 +28,5 @@ export const siteMap: any = {
     '/user/admindashboard/contactedus': 'admincontactedus',
     '/user/admindashboard/registerUser': 'adminregisteruser',
     '/user/admindashboard/chatBotQA': 'chatbotqa',
+    '/user/admindashboard/auditLog': 'adminauditlog',
 }

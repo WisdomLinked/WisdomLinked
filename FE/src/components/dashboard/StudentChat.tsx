@@ -39,6 +39,7 @@ import { updateMe } from '../../actions/authActions';
 import { leaveGroupAction } from '../../actions/groupChatActions';
 import { actionTypes } from '../../actions/types';
 import { isTheEventGoingOn } from '../../actions/common';
+import { pickLiveOrNextOccurrence } from '../../utils/seminarSeriesOccurrence';
 import { resolveProfileImageSrc } from '../../utils/profileImage';
 import { shouldShowMobileMessenger } from '../../utils/mobileChatLayout';
 import { buildOnlineUserIdSet, hasOnlineUserId } from '../../utils/onlinePresence';
@@ -187,16 +188,18 @@ const StudentChat: React.FC = () => {
     const rows: any[] = [];
     for (const g of seminars) {
       const sid = g?.seriesId ? String(g.seriesId) : null;
+      // Recurring series: keep live/next occurrence, not the first (often past) doc.
+      const rep = sid ? pickLiveOrNextOccurrence(seminars, sid) || g : g;
       if (sid) {
         if (seen.has(sid)) continue;
         seen.add(sid);
       }
       rows.push({
-        _id: String(g._id),
-        name: g.name || 'Seminar',
-        rcChannelId: g.rcChannelId ? String(g.rcChannelId) : undefined,
-        lastLine: g.description || 'Seminar chat',
-        raw: g,
+        _id: String(rep._id),
+        name: rep.name || 'Seminar',
+        rcChannelId: rep.rcChannelId ? String(rep.rcChannelId) : undefined,
+        lastLine: rep.description || 'Seminar chat',
+        raw: rep,
       });
     }
     return rows;

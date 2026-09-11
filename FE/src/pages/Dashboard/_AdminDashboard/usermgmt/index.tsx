@@ -1,37 +1,52 @@
 import React, { useEffect, useState } from "react";
+import { useSearchParams, useNavigate } from "react-router-dom";
+import { useDispatch } from "react-redux";
 import SelectionWithCheckBox from "../../../../components/SelectionWithCheckBox";
 import {
     doFilterUsers,
     doUpdateProfileByAdmin,
-    profileImageFetch
-} from "../../../../api/api";
-
-import {
+    profileImageFetch,
+    impersonateUser,
     doGetPendingUsers,
     doGetPendingLogins,
     doDeletePendingUserById,
     doDeletePendingLoginById,
-    doActivatePendingUserById
+    doActivatePendingUserById,
 } from "../../../../api/api";
 
 import Avatar from "../../../../components/Avatar";
-import LoadingPlaceHolder from "../../../../components/LoadingPlaceholder";
 import ManageModal from "./manageModal";
 import AuditModal from "./auditModal";
 import Pagination from "../../../../components/Pagination";
 import { SetLoadingStatus } from "../../../../actions/appActions";
+import { actionTypes } from "../../../../actions/types";
+import { setImpersonationSession } from "../../../../components/ImpersonationBanner";
 
 const UserMgmt = () => {
+    const [searchParams] = useSearchParams();
+    const emailFromUrl = searchParams.get("email") || searchParams.get("q") || "";
+    const dispatch = useDispatch();
+    const navigate = useNavigate();
+
     const dataTypeOptions = [
-        { value: "User", label: "User" },
-        { value: "PendingUser", label: "PendingUser" },
-        { value: "PendingLogin", label: "PendingLogin" },
+        { value: "ReviewQueue", label: "Needs review" },
+        { value: "User", label: "All users" },
+        { value: "PendingUser", label: "Pending email verify" },
+        { value: "PendingLogin", label: "Pending login" },
     ];
 
     const roles = [
         { value: "", label: "All" },
         { value: "expert", label: "Expert" },
-        { value: "customer", label: "Customer" }
+        { value: "customer", label: "Customer" },
+        { value: "admin", label: "Admin" },
+    ];
+
+    const statusOptions = [
+        { value: "", label: "All statuses" },
+        { value: "review", label: "Review" },
+        { value: "active", label: "Active" },
+        { value: "blocked", label: "Blocked" },
     ];
 
     const sorts = [
@@ -47,9 +62,10 @@ const UserMgmt = () => {
     const [totalCount, set_totalCount] = useState<number>(0);
     const [totalPage, set_totalPage] = useState<number>(0);
 
-    const [sortBy, set_sortBy] = useState<any>(sorts[0]);
+    const [sortBy, set_sortBy] = useState<any>(sorts[1]); // DESC by default (newest first)
     const [role, set_role] = useState<any>(roles[0]);
-    const [email, set_email] = useState<string>("");
+    const [statusFilter, set_statusFilter] = useState<any>(statusOptions[0]);
+    const [email, set_email] = useState<string>(emailFromUrl);
     const [username, set_username] = useState<string>("");
 
     const [pendingUsers, set_pendingUsers] = useState<any[]>([]);
@@ -60,6 +76,17 @@ const UserMgmt = () => {
     const [auditModalShow, set_auditModalShow] = useState<boolean>(false);
     const [isFirstLoad, set_isFirstLoad] = useState<boolean>(true);
 
+    const isUserListView = dataType.value === "User" || dataType.value === "ReviewQueue";
+    const isReviewQueue = dataType.value === "ReviewQueue";
+
+    useEffect(() => {
+        if (emailFromUrl) {
+            set_email(emailFromUrl);
+            // Deep-links from events should land on the searchable user list
+            set_dataType(dataTypeOptions[1]);
+        }
+    }, [emailFromUrl]);
+
     const filterUsers = async (pageNum: number) => {
         try {
             SetLoadingStatus(true);
@@ -69,8 +96,9 @@ const UserMgmt = () => {
                 email,
                 username,
                 role: role.value,
+                status: isReviewQueue ? "review" : statusFilter.value,
                 sortBy: "createdAt",
-                sortOrder: "DESC", // or use sortBy.value if using ASC/DESC
+                sortOrder: sortBy?.value === "ASC" ? "ASC" : "DESC",
                 currentPage: pageNum,
                 numPerPage: numPerPage
             });
@@ -83,7 +111,6 @@ const UserMgmt = () => {
                 const totalPages = total % numPerPage ? Math.floor(total / numPerPage) : total / numPerPage - 1;
                 set_totalPage(totalPages < 0 ? 0 : totalPages);
             } else {
-                // fallback if res.result isn't an array
                 set_users([]);
                 set_totalCount(0);
                 set_totalPage(0);
@@ -129,7 +156,6 @@ const UserMgmt = () => {
             set_pendingUsers(Array.isArray(data) ? data : []);
         } catch (err) {
             console.error(err);
-            // fallback
             set_pendingUsers([]);
         } finally {
             SetLoadingStatus(false);
@@ -143,7 +169,6 @@ const UserMgmt = () => {
             set_pendingLogins(Array.isArray(data) ? data : []);
         } catch (err) {
             console.error(err);
-            // fallback
             set_pendingLogins([]);
         } finally {
             SetLoadingStatus(false);
@@ -199,6 +224,11 @@ const UserMgmt = () => {
         }
     };
     const updateOneUser = (updated: any) => {
+        if (isReviewQueue && updated?.status !== "review") {
+            set_users((prev) => prev.filter((u) => u.email !== updated.email));
+            set_totalCount((c) => Math.max(0, c - 1));
+            return;
+        }
         const newArr = [...users];
         const idx = newArr.findIndex(u => u.email === updated.email);
         if (idx >= 0) {
@@ -207,12 +237,54 @@ const UserMgmt = () => {
         }
     };
 
+    const handleApproveUser = async (u: any) => {
+        await updateProfile({ email: u.email, status: "active" });
+    };
+
+    const handleBlockUser = async (u: any) => {
+        await updateProfile({ email: u.email, status: "blocked" });
+    };
+
+    const handleImpersonate = async (u: any) => {
+        if (!u?.email || u.role === "admin") return;
+        try {
+            SetLoadingStatus(true);
+            const res = await impersonateUser(u.email);
+            if (res?.status === "SUCCESS" && res.userDetails) {
+                setImpersonationSession({
+                    email: res.userDetails.email,
+                    username: res.userDetails.username,
+                    role: res.userDetails.role,
+                });
+                window.dispatchEvent(new Event("wl-impersonation-change"));
+                localStorage.setItem("currentUser", JSON.stringify(res.userDetails));
+                dispatch({
+                    type: actionTypes.authenticate,
+                    payload: res.userDetails,
+                });
+                const role = res.userDetails.role;
+                if (role === "expert") {
+                    navigate("/user/expertdashboard", { replace: true });
+                } else {
+                    navigate("/user/studentdashboard", { replace: true });
+                }
+            } else {
+                window.alert(res?.error || "Impersonation failed");
+            }
+        } catch (err) {
+            console.error(err);
+            window.alert("Impersonation failed");
+        } finally {
+            SetLoadingStatus(false);
+        }
+    };
+
     const handleDataTypeChange = (selected: any) => {
         set_dataType(selected);
     };
 
     useEffect(() => {
-        if (dataType.value === "User") {
+        if (isUserListView) {
             filterUsers(0);
         } else if (dataType.value === "PendingUser") {
             fetchPendingUsers();
@@ -222,25 +294,25 @@ const UserMgmt = () => {
     }, [dataType]);
 
     useEffect(() => {
-        if (!isFirstLoad && dataType.value === "User") {
+        if (!isFirstLoad && isUserListView) {
             filterUsers(0);
         }
     }, [numPerPage]);
 
     useEffect(() => {
-        if (!isFirstLoad && dataType.value === "User") {
+        if (!isFirstLoad && isUserListView) {
             filterUsers(currentPage);
         }
     }, [currentPage]);
 
     useEffect(() => {
-        if (!isFirstLoad && dataType.value === "User") {
+        if (!isFirstLoad && isUserListView) {
             const timer = setTimeout(() => {
                 filterUsers(0);
             }, 500);
             return () => clearTimeout(timer);
         }
-    }, [sortBy, role, email, username]);
+    }, [sortBy, role, statusFilter, email, username]);
 
 
     const openManageModal = (u: any) => {
@@ -266,6 +338,11 @@ const UserMgmt = () => {
             <div className={`w-full h-full py-10 px-5 ${manageModalShow || auditModalShow ? "overflow-hidden" : "overflow-y-auto"}`}>
                 <div className="w-full max-w-[1400px] mx-auto text-wl-ink">
                     <div className="text-center text-2xl font-semibold text-wl-brand">User Management</div>
+                    {isReviewQueue ? (
+                        <p className="mt-2 text-center text-sm text-wl-muted">
+                            Primary approval queue — accounts with status <span className="font-medium text-brownyellow">review</span>.
+                        </p>
+                    ) : null}
 
                     <div className="w-full my-4">
                         <div className="text-grey mb-0.5 text-[12px] leading-[19px]">Manage:</div>
@@ -278,7 +355,7 @@ const UserMgmt = () => {
                         />
                     </div>
 
-                    {dataType.value === "User" && (
+                    {isUserListView && (
                         <div className="w-full py-1">
                             <div className="flex justify-between mt-4">
                                 <div className="w-[calc(100%-174px)] sm:w-[calc(100%-324px)]">
@@ -312,24 +389,54 @@ const UserMgmt = () => {
                                     />
                                 </div>
                                 <div className="w-[150px] sm:w-[300px]">
-                                    <div className="text-grey mb-0.5 text-[12px] leading-[19px]">Sort by username</div>
-                                    <SelectionWithCheckBox
-                                        options={sorts}
-                                        selectedOptions={sortBy}
-                                        set_selectedOptions={set_sortBy}
-                                        placeholder="Sort by"
-                                        isMulti={false}
-                                    />
+                                    <div className="text-grey mb-0.5 text-[12px] leading-[19px]">
+                                        {isReviewQueue ? "Sort" : "Filter by status"}
+                                    </div>
+                                    {isReviewQueue ? (
+                                        <SelectionWithCheckBox
+                                            options={sorts}
+                                            selectedOptions={sortBy}
+                                            set_selectedOptions={set_sortBy}
+                                            placeholder="Sort by"
+                                            isMulti={false}
+                                        />
+                                    ) : (
+                                        <SelectionWithCheckBox
+                                            options={statusOptions}
+                                            selectedOptions={statusFilter}
+                                            set_selectedOptions={set_statusFilter}
+                                            placeholder="Filter by status"
+                                            isMulti={false}
+                                        />
+                                    )}
                                 </div>
                             </div>
+                            {!isReviewQueue ? (
+                                <div className="flex justify-end mt-2">
+                                    <div className="w-[150px] sm:w-[300px]">
+                                        <div className="text-grey mb-0.5 text-[12px] leading-[19px]">Sort</div>
+                                        <SelectionWithCheckBox
+                                            options={sorts}
+                                            selectedOptions={sortBy}
+                                            set_selectedOptions={set_sortBy}
+                                            placeholder="Sort by"
+                                            isMulti={false}
+                                        />
+                                    </div>
+                                </div>
+                            ) : null}
                         </div>
                     )}
 
                     <div className="w-full rounded-2xl mt-4 bg-wl-card border border-wl-line shadow-sm overflow-hidden">
 
-                        {dataType.value === "User" && (
+                        {isUserListView && (
                             <div className="w-full flex flex-col sm:flex-row sm:justify-between sm:items-center p-4 gap-4">
-                                <div>Total of {totalCount} Users</div>
+                                <div>
+                                    {isReviewQueue
+                                        ? `Total of ${totalCount} accounts awaiting review`
+                                        : `Total of ${totalCount} Users`}
+                                </div>
                                 <Pagination
                                     currentPage={currentPage}
                                     totalPage={totalPage}
@@ -341,8 +448,15 @@ const UserMgmt = () => {
                             </div>
                         )}
 
-                        {dataType.value === "User" && (
+                        {isUserListView && (
                             <div className="relative overflow-x-auto w-full px-4">
+                                {users.length === 0 ? (
+                                    <p className="py-8 text-center text-sm text-wl-muted">
+                                        {isReviewQueue
+                                            ? "No accounts currently awaiting review."
+                                            : "No users match these filters."}
+                                    </p>
+                                ) : (
                                 <table className="w-full text-sm text-left">
                                     <thead className="text-xs uppercase bg-wl-brandSoft text-wl-brand">
                                     <tr>
@@ -418,8 +532,26 @@ const UserMgmt = () => {
                                                     <option value="blocked" className="text-red">Blocked</option>
                                                 </select>
                                             </td>
-                                            <td className="px-2 max-w-[200px] truncate">
-                                                <div className="flex flex-wrap gap-2">
+                                            <td className="px-2 max-w-[280px]">
+                                                <div className="flex flex-wrap gap-2 justify-center">
+                                                    {(isReviewQueue || u.status === "review") && (
+                                                        <>
+                                                            <button
+                                                                type="button"
+                                                                className="inline-flex items-center rounded-lg bg-green px-3 py-1.5 text-[12px] font-semibold text-white shadow-sm transition hover:brightness-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-green/30"
+                                                                onClick={() => handleApproveUser(u)}
+                                                            >
+                                                                Approve
+                                                            </button>
+                                                            <button
+                                                                type="button"
+                                                                className="inline-flex items-center rounded-lg border border-red-500/80 bg-white px-3 py-1.5 text-[12px] font-semibold text-red-600 transition hover:bg-red-500 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-red-400/40"
+                                                                onClick={() => handleBlockUser(u)}
+                                                            >
+                                                                Block
+                                                            </button>
+                                                        </>
+                                                    )}
                                                     <button
                                                         type="button"
                                                         className="inline-flex items-center rounded-lg bg-wl-brand px-3 py-1.5 text-[12px] font-semibold text-white shadow-sm transition hover:brightness-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-wl-brand/30"
@@ -427,6 +559,15 @@ const UserMgmt = () => {
                                                     >
                                                         Manage
                                                     </button>
+                                                    {u.role !== "admin" ? (
+                                                        <button
+                                                            type="button"
+                                                            className="inline-flex items-center rounded-lg border border-amber-500/70 bg-amber-50 px-3 py-1.5 text-[12px] font-semibold text-amber-800 transition hover:bg-amber-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/40"
+                                                            onClick={() => handleImpersonate(u)}
+                                                        >
+                                                            Impersonate
+                                                        </button>
+                                                    ) : null}
                                                     <button
                                                         type="button"
                                                         className="inline-flex items-center rounded-lg border border-wl-line bg-white px-3 py-1.5 text-[12px] font-semibold text-wl-brand shadow-sm transition hover:bg-wl-brandSoft focus:outline-none focus-visible:ring-2 focus-visible:ring-wl-brand/20"
@@ -440,11 +581,15 @@ const UserMgmt = () => {
                                     ))}
                                     </tbody>
                                 </table>
+                                )}
                             </div>
                         )}
 
                         {dataType.value === "PendingUser" && (
-                            <div className="relative overflow-x-auto w-full px-4">
+                            <div className="relative overflow-x-auto w-full px-4 py-2">
+                                {pendingUsers.length === 0 ? (
+                                    <p className="py-8 text-center text-sm text-wl-muted">No pending signups</p>
+                                ) : (
                                 <table className="w-full text-sm text-left">
                                     <thead className="text-xs uppercase bg-wl-brandSoft text-wl-brand">
                                     <tr>
@@ -484,11 +629,15 @@ const UserMgmt = () => {
                                     ))}
                                     </tbody>
                                 </table>
+                                )}
                             </div>
                         )}
 
                         {dataType.value === "PendingLogin" && (
-                            <div className="relative overflow-x-auto w-full px-4">
+                            <div className="relative overflow-x-auto w-full px-4 py-2">
+                                {pendingLogins.length === 0 ? (
+                                    <p className="py-8 text-center text-sm text-wl-muted">No pending logins</p>
+                                ) : (
                                 <table className="w-full text-sm text-left">
                                     <thead className="text-xs uppercase bg-wl-brandSoft text-wl-brand">
                                     <tr>
@@ -519,10 +668,11 @@ const UserMgmt = () => {
                                     ))}
                                     </tbody>
                                 </table>
+                                )}
                             </div>
                         )}
 
-                        {dataType.value === "User" && (
+                        {isUserListView && (
                             <div className="w-full flex flex-col sm:flex-row sm:justify-between sm:items-center p-4 gap-4">
                                 <div className="flex gap-6">
                                     <div>Show rows:</div>

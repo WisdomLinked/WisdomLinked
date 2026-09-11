@@ -5,6 +5,7 @@ import { resetFriendsAction } from "./friendActions";
 import { actionTypes, CurrentUser } from "./types";
 import { clearCsrfToken } from "../api/csrf";
 import { clearClientAccessTokenCookie } from "../utils/authCookie";
+import { clearImpersonationSession } from "../components/ImpersonationBanner";
 
 export const autoLogin = () => {
     return async (dispatch: Dispatch) => {
@@ -52,6 +53,7 @@ export const logoutUser = () => {
     return async (dispatch: Dispatch) => {
         clearCsrfToken();
         clearClientAccessTokenCookie();
+        clearImpersonationSession();
         await callLogout();
         localStorage.clear();
         dispatch({

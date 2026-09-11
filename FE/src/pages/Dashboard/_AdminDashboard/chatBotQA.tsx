@@ -1,14 +1,18 @@
 import React, {useState, useEffect} from 'react'
+import { useSearchParams } from 'react-router-dom'
 import Pagination from '../../../components/Pagination'
 import { getChatBotQA, createChatBotQA, updateChatBotQA, deleteChatBotQA } from '../../../api/api'
 import { SetLoadingStatus } from '../../../actions/appActions'
 import { Plus, Edit, Trash2, Save, X, Search } from 'lucide-react'
 
 const ChatBotQA = () => {
+    const [searchParams, setSearchParams] = useSearchParams()
+    const unansweredFromUrl = searchParams.get('unanswered') === '1'
+
     const [numPerPage, setNumPerPage] = useState(5)
     const [currentPage, setCurrentPage] = useState(0)
-    const [totalCount, setTotalCount] = useState(-1)
-    const [totalPage, setTotalPage] = useState(1)
+    const [totalCount, setTotalCount] = useState(0)
+    const [totalPage, setTotalPage] = useState(0)
     interface QAItem {
         _id : string,
         role: string;
@@ -17,6 +21,9 @@ const ChatBotQA = () => {
     }
     const [editID, setEditID] = useState('')
     const [qAndA, setQAndA] = useState<QAItem[]>([])
+    const [searchTerm, setSearchTerm] = useState('')
+    const [debouncedSearch, setDebouncedSearch] = useState('')
+    const [unansweredOnly, setUnansweredOnly] = useState(unansweredFromUrl)
 
     const [showCreateModal, setShowCreateModal] = useState(false)
     const [showEditModal, setShowEditModal] = useState(false)
@@ -27,19 +34,46 @@ const ChatBotQA = () => {
         answer: ''
     })
 
+    useEffect(() => {
+        const t = setTimeout(() => setDebouncedSearch(searchTerm.trim()), 300)
+        return () => clearTimeout(t)
+    }, [searchTerm])
+
+    useEffect(() => {
+        setUnansweredOnly(unansweredFromUrl)
+    }, [unansweredFromUrl])
+
     const loadData = async () => {
         SetLoadingStatus(true)
-        const query = {page:currentPage, limit:numPerPage}
-        const result = await getChatBotQA(query)
-        setQAndA(result.chatBotQAs)
-        setTotalCount(result.total)
-        setTotalPage(Math.ceil(result.total / numPerPage)-1)
+        const result = await getChatBotQA({
+            page: currentPage,
+            limit: numPerPage,
+            search: debouncedSearch || undefined,
+            unansweredOnly,
+        })
+        setQAndA(Array.isArray(result?.chatBotQAs) ? result.chatBotQAs : [])
+        const total = result?.total ?? 0
+        setTotalCount(total)
+        setTotalPage(Math.max(0, Math.ceil(total / numPerPage) - 1))
         SetLoadingStatus(false)
     }
 
     useEffect(() => {
         loadData()
-    }, [currentPage, numPerPage])
+    }, [currentPage, numPerPage, debouncedSearch, unansweredOnly])
+
+    useEffect(() => {
+        setCurrentPage(0)
+    }, [debouncedSearch, unansweredOnly, numPerPage])
+
+    const toggleUnanswered = (checked: boolean) => {
+        setUnansweredOnly(checked)
+        if (checked) {
+            setSearchParams({ unanswered: '1' }, { replace: true })
+        } else {
+            setSearchParams({}, { replace: true })
+        }
+    }
 
     const handleCreate = async () => {
         SetLoadingStatus(true)
@@ -52,7 +86,6 @@ const ChatBotQA = () => {
 
     const handleEdit = (item: any) => {
         setEditID(item._id)
-        console.log(item)
         setFormData({
             role: item.role,
             question: item.question,
@@ -88,27 +121,37 @@ const ChatBotQA = () => {
                 <div className="text-center text-3xl font-semibold text-wl-brand mb-8">Chat Bot Q&A Management</div>
                 
                 <div className="w-full bg-wl-card rounded-2xl border border-wl-line shadow-[0_10px_30px_rgba(35,76,106,0.08)] overflow-hidden">
-                    {/* Header Section */}
                     <div className="w-full flex flex-col lg:flex-row lg:justify-between lg:items-center p-6 gap-4 border-b border-wl-line bg-wl-pageAlt/40">
-                        <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+                        <div className="flex flex-col sm:flex-row sm:items-center gap-4 flex-wrap">
                             <div className="text-lg font-medium text-wl-ink">
                                 Total of <span className="text-wl-brand font-bold">{totalCount}</span> questions
+                                {unansweredOnly ? (
+                                    <span className="ml-2 text-sm text-brownyellow font-medium">(unanswered)</span>
+                                ) : null}
                             </div>
                             
-                            {/* Search Bar */}
-                            {/* <div className="relative">
-                                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
+                            <div className="relative">
+                                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-wl-muted" size={18} />
                                 <input
                                     type="text"
                                     placeholder="Search questions, answers, or roles..."
                                     value={searchTerm}
                                     onChange={(e) => setSearchTerm(e.target.value)}
-                                    className="pl-10 pr-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 w-full sm:w-80"
+                                    className="pl-10 pr-4 py-2 bg-white border border-wl-line rounded-lg text-wl-ink placeholder:text-grey focus:outline-none focus:ring-2 focus:ring-wl-brand/30 w-full sm:w-80"
                                 />
-                            </div> */}
+                            </div>
+
+                            <label className="flex items-center gap-2 text-sm text-wl-ink cursor-pointer">
+                                <input
+                                    type="checkbox"
+                                    className="rounded border-lightgrey text-wl-brand focus:ring-wl-brand/30"
+                                    checked={unansweredOnly}
+                                    onChange={(e) => toggleUnanswered(e.target.checked)}
+                                />
+                                Unanswered only
+                            </label>
                         </div>
 
-                        {/* Add New Button */}
                         <button
                             type="button"
                             onClick={() => setShowCreateModal(true)}
@@ -119,7 +162,6 @@ const ChatBotQA = () => {
                         </button>
                     </div>
 
-                    {/* Pagination Top */}
                     <div className="flex justify-end p-4 border-b border-wl-line">
                         <Pagination
                             currentPage={currentPage}
@@ -131,7 +173,6 @@ const ChatBotQA = () => {
                         />
                     </div>
 
-                    {/* Table */}
                     <div className="relative overflow-x-auto">
                         <table className="w-full text-sm text-left">
                             <thead className="text-xs uppercase bg-wl-brandSoft text-wl-brand">
@@ -154,9 +195,17 @@ const ChatBotQA = () => {
                                 </tr>
                             </thead>
                             <tbody>
-                                {qAndA ? (
+                                {qAndA.length === 0 ? (
+                                    <tr>
+                                        <td colSpan={5} className="px-6 py-12 text-center text-wl-muted">
+                                            {unansweredOnly
+                                                ? 'No unanswered questions.'
+                                                : 'No Q&A items found.'}
+                                        </td>
+                                    </tr>
+                                ) : (
                                     qAndA.map((item, index) => (
-                                        <tr key={index} className="border-b border-wl-line hover:bg-wl-pageAlt transition-colors">
+                                        <tr key={item._id || index} className="border-b border-wl-line hover:bg-wl-pageAlt transition-colors">
                                             <td className="py-4 px-6 text-center font-medium text-wl-ink">
                                                 {numPerPage * currentPage + index + 1}
                                             </td>
@@ -176,7 +225,7 @@ const ChatBotQA = () => {
                                             </td>
                                             <td className="px-6 py-4 max-w-md">
                                                 <div className="truncate" title={item.answer}>
-                                                    {item.answer}
+                                                    {item.answer || '—'}
                                                 </div>
                                             </td>
                                             <td className="px-6 py-4">
@@ -199,18 +248,11 @@ const ChatBotQA = () => {
                                             </td>
                                         </tr>
                                     ))
-                                ) : (
-                                    <tr>
-                                        <td colSpan={5} className="px-6 py-12 text-center text-wl-muted">
-                                            {'No Q&A items found.'}
-                                        </td>
-                                    </tr>
                                 )}
                             </tbody>
                         </table>
                     </div>
 
-                    {/* Bottom Controls */}
                     <div className="w-full flex flex-col sm:flex-row sm:justify-between sm:items-center p-6 gap-4 border-t border-wl-line">
                         <div className="flex items-center gap-4">
                             <label className="text-sm text-wl-muted">Show rows:</label>
@@ -240,7 +282,6 @@ const ChatBotQA = () => {
                 </div>
             </div>
 
-            {/* Create Modal */}
             {showCreateModal && (
                 <div className="fixed inset-0 bg-slate-900/40 flex items-center justify-center z-50">
                     <div className="bg-wl-card border border-wl-line rounded-2xl p-6 w-full max-w-2xl mx-4 max-h-[90vh] overflow-y-auto shadow-xl">
@@ -313,7 +354,6 @@ const ChatBotQA = () => {
                 </div>
             )}
 
-            {/* Edit Modal */}
             {showEditModal && (
                 <div className="fixed inset-0 bg-slate-900/40 flex items-center justify-center z-50">
                     <div className="bg-wl-card border border-wl-line rounded-2xl p-6 w-full max-w-2xl mx-4 max-h-[90vh] overflow-y-auto shadow-xl">

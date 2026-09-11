@@ -101,6 +101,12 @@ const buildSpacesPublicUrl = (key: string): string => {
 const AUTH_LOCKOUT_DISABLED =
     process.env.AUTH_LOCKOUT_DISABLED === 'true' || process.env.NODE_ENV === 'staging';
 
+/** Fixed OTP on local/staging; random 6-digit only in production (unless AUTH_FIXED_OTP=true). */
+const issueAuthOtpCode = () =>
+    process.env.NODE_ENV !== 'production' || process.env.AUTH_FIXED_OTP === 'true'
+        ? '123456'
+        : randomize('0', 6);
+
 const checkRateLimit = (record: any) => {
     if (AUTH_LOCKOUT_DISABLED || !record) return null;
     if (record.lockUntil && record.lockUntil > new Date()) {
@@ -537,9 +543,7 @@ const login = async (req: Request, res: Response) => {
             return res.status(200).json({ status: 'FAIL', error: AUTH_USER_BLOCKED });
         }
 
-        const code = (process.env.NODE_ENV === 'staging' || process.env.AUTH_FIXED_OTP === 'true')
-            ? "123456"
-            : randomize('0', 6);
+        const code = issueAuthOtpCode();
 
         let loginRequest = await PendingLogin.findOne({ email: { $regex: new RegExp(`^${utils.escapeRegExp(email)}$`, 'i') } })
         if (!loginRequest) {
@@ -674,9 +678,7 @@ const passwordResetRequest = async (req: Request, res: Response) => {
             return res.status(200).json({ status: 'FAIL', error: AUTH_OAUTH_PASSWORD_RESET_UNAVAILABLE(provider) });
         }
 
-        const code = (process.env.NODE_ENV === 'staging' || process.env.AUTH_FIXED_OTP === 'true')
-            ? "123456"
-            : randomize('0', 6);
+        const code = issueAuthOtpCode();
 
         // The new password is supplied at confirm time (confirmPasswordResetByCode),
         // so it is optional here. When omitted we only (re)issue the OTP code.
@@ -1436,6 +1438,7 @@ const sendEmailToAdmin = async (req: Request, res: Response) => {
 const logout = async (req: Request, res: Response) => {
     try {
         res.clearCookie('accessToken', clearAuthCookieOptions());
+        res.clearCookie('impersonatorToken', clearAuthCookieOptions());
         return res.status(200).json({
             status: "SUCCESS"
         });
@@ -1508,5 +1511,6 @@ module.exports = {
     submitContactForm,
     sendEmailToAdmin,
     uploadFileToS3,
+    getArrayField,
 }
 

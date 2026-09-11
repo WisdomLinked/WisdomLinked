@@ -15,6 +15,7 @@ import { ensureCsrfToken } from './api/csrf';
 import { connectToRC, isRCConnected } from './services/rcRealtime';
 import 'swiper/swiper.min.css';
 import LeaveFeedback from './components/LeaveFeedback';
+import ImpersonationBanner from './components/ImpersonationBanner';
 import VerifyEmail from './pages/VerifyEmail';
 import VerifyEmailChange from './pages/VerifyEmailChange';
 import ForgotPassword from './pages/ForgotPassword';
@@ -308,6 +309,7 @@ function App() {
     <>
       <Suspense fallback={<LazyFallback />}>
         
+          <ImpersonationBanner />
           <Routes>
             <Route path={'/user/' + '*'} element={<AuthenticatedRoutes />} />
             <Route path={'/' + '*'} element={<UnauthenticatedRoutes />} />

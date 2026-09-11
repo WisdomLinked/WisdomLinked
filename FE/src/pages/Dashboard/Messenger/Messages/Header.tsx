@@ -42,6 +42,7 @@ import { History, Video } from "lucide-react";
 import { buildFallbackChatProfile, mergeChatProfile } from "../../../../utils/chatProfileModal";
 import { buildOnlineUserIdSet, hasOnlineUserId } from "../../../../utils/onlinePresence";
 import { trackMeetingJoin } from "../../../../utils/meetingSession";
+import { pickLiveOrNextOccurrence } from "../../../../utils/seminarSeriesOccurrence";
 import {
     formatCallDuration,
     formatCallEnded,
@@ -120,8 +121,23 @@ const MessagesHeader = ({ events, openCalendarModal, openSeminarModal, openEditS
     };
 
     const checkEnabledEvent = () => {
-        let event = events.find((event: any) => event?._id === currentEvent?._id)
-        set_enabledEvent(event)
+        let event = events.find((event: any) => event?._id === currentEvent?._id) ?? null;
+        // Recurring seminars: open room may be a past occurrence while a sibling is live.
+        if (chosenGroupChatDetails?.duration) {
+            const openId = chosenGroupChatDetails.groupId ?? chosenGroupChatDetails._id;
+            const openDoc =
+                (userDetails?.groupChats || []).find(
+                    (g: any) => String(g?._id) === String(openId),
+                ) || {
+                    seriesId: chosenGroupChatDetails.seriesId,
+                    _id: openId,
+                };
+            const occurrence = pickLiveOrNextOccurrence(userDetails?.groupChats, openDoc);
+            if (occurrence && isTheEventGoingOn(occurrence.start, occurrence.end)) {
+                event = occurrence;
+            }
+        }
+        set_enabledEvent(event);
     }
 
     const handleShowEvents = () => {
@@ -223,7 +239,11 @@ const MessagesHeader = ({ events, openCalendarModal, openSeminarModal, openEditS
     }
 
     const createNewRoomOrJoinRoom = async () => {
-        const gid = chosenGroupChatDetails?.groupId;
+        // Prefer the live series occurrence when Join is enabled for a sibling room.
+        const gid =
+            (chosenGroupChatDetails?.duration && enabledEvent?._id
+                ? String(enabledEvent._id)
+                : null) || chosenGroupChatDetails?.groupId;
         if (!gid) return;
         const pendingWindow = window.open("", "_blank");
         if (userDetails.role === 'expert' && enabledEvent) {
@@ -265,12 +285,12 @@ const MessagesHeader = ({ events, openCalendarModal, openSeminarModal, openEditS
     }, [events])
 
     useEffect(() => {
-        if (currentEvent) {
+        if (currentEvent || chosenGroupChatDetails?.duration) {
             checkEnabledEvent()
         } else {
             set_enabledEvent(null)
         }
-    }, [currentEvent, events])
+    }, [currentEvent, events, chosenGroupChatDetails, userDetails?.groupChats])
 
     useEffect(() => {
         if (chosenGroupChatDetails && !userDetails.joinPopupBlocked) {

@@ -90,13 +90,44 @@ const getChatBotAnswer = async (req, res) => {
 
 
 
+const UNANSWERED_FILTER = {
+    $or: [
+        { answer: { $exists: false } },
+        { answer: "" },
+        { answer: "Pending answer..." },
+    ],
+};
+
 const getChatBotQA = async (req, res) => {
     try {
-        const { page, limit } = req.query;
-        const skip = (page) * limit;
-        const total = await chatBotQA.countDocuments();
-        const chatBotQAs = await chatBotQA.find().skip(skip).limit(limit);
-        // const chatBotQAs = await chatBotQA.find();
+        const page = Number(req.query.page) || 0;
+        const limit = Math.min(Math.max(Number(req.query.limit) || 5, 1), 100);
+        const unansweredOnly =
+            req.query.unansweredOnly === "true" ||
+            req.query.unansweredOnly === "1" ||
+            req.query.unansweredOnly === "yes";
+        const search = String(req.query.search || "").trim();
+
+        const clauses: object[] = [];
+        if (unansweredOnly) {
+            clauses.push(UNANSWERED_FILTER);
+        }
+        if (search) {
+            const re = new RegExp(search.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
+            clauses.push({
+                $or: [{ question: re }, { answer: re }, { role: re }],
+            });
+        }
+        const filter =
+            clauses.length === 0
+                ? {}
+                : clauses.length === 1
+                  ? clauses[0]
+                  : { $and: clauses };
+
+        const skip = page * limit;
+        const total = await chatBotQA.countDocuments(filter);
+        const chatBotQAs = await chatBotQA.find(filter).skip(skip).limit(limit);
         return res.status(200).json({
             success: true,
             total,
