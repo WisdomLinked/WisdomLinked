@@ -16,7 +16,11 @@ const User = require('../models/User');
 const Event = require('../models/Event');
 const MeetingGuestInvite = require('../models/MeetingGuestInvite');
 import { resolveMeetingRatingTargetUserId } from '../utils/meetingRatingRules';
-import { buildMeetingRoomName, canStartGroupMeeting } from '../utils/meetingModerationRules';
+import {
+    buildMeetingRoomName,
+    canStartGroupMeeting,
+    canEndMeetingAsLastParticipant,
+} from '../utils/meetingModerationRules';
 import { appendJitsiMobileWebOverrides } from '../utils/jitsiUrl';
 import { isMeetingModerator, isMeetingModeratorWithDelegates } from '../utils/meetingRoleRules';
 import {
@@ -28,6 +32,7 @@ import {
     MEETING_ONLY_EXPERTS_END_WHILE_OTHERS,
     MEETING_ONLY_EXPERTS_GRANT_ACCESS,
     MEETING_ONLY_EXPERTS_REVOKE_ACCESS,
+    MEETING_STILL_IN_PROGRESS,
     MEETING_ONLY_EXPERTS_REVOKE_DELEGATED,
     MEETING_REMOVED_BY_HOST,
 } from '../utils/meetingUserFacingCopy';
@@ -611,6 +616,19 @@ export const endMeeting = async (req: any, res: Response) => {
         if (!lastParticipantLeaving && !access.moderator) {
             return res.status(403).json({
                 error: MEETING_ONLY_EXPERTS_END_WHILE_OTHERS,
+            });
+        }
+
+        const reportedFromMeetTab = Boolean(req.meetingChatClaims);
+        if (
+            lastParticipantLeaving &&
+            !access.moderator &&
+            !reportedFromMeetTab &&
+            !canEndMeetingAsLastParticipant(meeting, Date.now(), MEETING_HEARTBEAT_STALE_MS)
+        ) {
+            return res.status(409).json({
+                error: MEETING_STILL_IN_PROGRESS,
+                status: 'active',
             });
         }
 

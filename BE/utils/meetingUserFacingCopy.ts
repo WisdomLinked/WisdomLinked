@@ -29,3 +29,6 @@ export const MEETING_CANNOT_REVOKE_HOST_ROLE =
 
 export const MEETING_NOT_DELEGATED_EXPERT =
     'User is not a delegated expert';
+
+export const MEETING_STILL_IN_PROGRESS =
+    'This meeting is still in progress, so it was not ended.';
