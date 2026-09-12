@@ -6,6 +6,8 @@ export const PENDING_END_MEETING_KEY = "wlPendingEndMeeting";
 
 let meetPopup: Window | null = null;
 
+const endInFlight = new Set<string>();
+
 const isWisdomLinkedOrigin = (origin: string): boolean =>
     /^https:\/\/([a-z0-9-]+\.)?wisdomlinked\.com$/i.test(String(origin || ""));
 
@@ -68,11 +70,13 @@ export function trackMeetingJoin(
 
 export async function tryEndPendingMeeting(
     onEnded?: (endMessage: Message | null) => void,
+    meetingThreadId?: string | null,
 ): Promise<boolean> {
     const pending =
-        typeof sessionStorage !== "undefined"
+        (meetingThreadId && String(meetingThreadId).trim()) ||
+        (typeof sessionStorage !== "undefined"
             ? sessionStorage.getItem(PENDING_END_MEETING_KEY)
-            : null;
+            : null);
     const id = pending && String(pending).trim() ? String(pending).trim() : "";
     if (!id) return false;
     clearMeetingSessionKeys();
@@ -106,19 +110,22 @@ export function handleMeetPostMessage(
     }
 }
 
-/** Poll meet popup; when it closes after alone signal, end via session API. */
 export function startMeetPopupCloseWatcher(
     onEnded?: (endMessage: Message | null) => void,
 ): () => void {
     const interval = window.setInterval(() => {
         if (!meetPopup || !meetPopup.closed) return;
         meetPopup = null;
+
         const pending =
-            typeof sessionStorage !== "undefined" &&
-            sessionStorage.getItem(PENDING_END_MEETING_KEY);
-        if (pending) {
-            void tryEndPendingMeeting(onEnded);
-        }
+            (typeof sessionStorage !== "undefined" &&
+                sessionStorage.getItem(PENDING_END_MEETING_KEY)) ||
+            getActiveMeetingThreadId();
+        if (!pending) return;
+
+        if (endInFlight.has(pending)) return;
+        endInFlight.add(pending);
+        void tryEndPendingMeeting(onEnded, pending).finally(() => endInFlight.delete(pending));
     }, 800);
     return () => window.clearInterval(interval);
 }
