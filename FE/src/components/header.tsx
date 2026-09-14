@@ -14,7 +14,10 @@ const Header = () => {
     }, [opened])
 
     return (
-        <div className={`sticky top-0 left-0 main_container py-[20px] text-white bg-black bg-opacity-50 backdrop-blur-sm z-20`}>
+        <div
+          className={`sticky left-0 main_container py-[20px] text-white bg-black bg-opacity-50 backdrop-blur-sm z-20`}
+          style={{ top: 'var(--wl-banner-offset, 0px)' }}
+        >
             {/* MOBILE VIEW */}
             <div className="w-full flex lg:hidden justify-between items-center">
                 <Link to='/' className={`w-fit flex items-center space-x-[8px] font-black text-2xl`}>

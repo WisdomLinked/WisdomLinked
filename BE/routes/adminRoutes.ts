@@ -55,6 +55,18 @@ const {
     deleteChatBotQA
 } = require("../controllers/chatBotQA.controller")
 
+const {
+    setAnnouncement,
+} = require("../controllers/announcement.controller");
+
+const {
+    listAdminFeaturedExperts,
+    createFeaturedExpert,
+    updateFeaturedExpert,
+    deleteFeaturedExpert,
+    reorderFeaturedExpert,
+} = require("../controllers/featuredExpert.controller");
+
 const { uploadsGeneral } = require("../middlewares/multerConfig");
 
 router.post("/setStripeMode", adminAuth, setStripeMode)
@@ -96,5 +108,11 @@ router.post("/createChatBotQA", adminAuth, createChatBotQA)
 router.get("/getChatBotQA", adminAuth, getChatBotQA)
 router.post("/updateChatBotQA/:id", adminAuth, updateChatBotQA)
 router.post("/deleteChatBotQA/:id", adminAuth, deleteChatBotQA)
+router.post("/announcement", adminAuth, setAnnouncement)
+router.get("/experts", adminAuth, listAdminFeaturedExperts)
+router.post("/experts/reorder", adminAuth, reorderFeaturedExpert)
+router.post("/experts", adminAuth, createFeaturedExpert)
+router.put("/experts/:id", adminAuth, updateFeaturedExpert)
+router.delete("/experts/:id", adminAuth, deleteFeaturedExpert)
 
 module.exports = router;

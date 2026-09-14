@@ -12,6 +12,7 @@ import { useFormAlert } from '../hooks/useFormAlert';
 import { actionTypes } from '../actions/types';
 import SocialAuthBlock from '../components/SocialAuthBlock';
 import SignupModal from '../components/SignupModal';
+import BrandWordmark from '../components/BrandWordmark';
 
 const BTN_PRIMARY_STYLE = { background: 'linear-gradient(135deg, #234C6A 0%, #456882 100%)' };
 const FOCUS_RING = 'focus:ring-2 focus:ring-[#234C6A]/60 focus:border-[#234C6A]';
@@ -360,9 +361,7 @@ export default function WLLogin() {
                                 alt="WisdomLinked"
                                 className="h-10 w-auto max-w-[200px] object-contain shrink-0"
                             />
-                            <span className="font-display font-bold text-[1.35rem] text-slate-900 tracking-normal">
-                                WisdomLinked
-                            </span>
+                            <BrandWordmark />
                         </div>
 
                         <FormAlert

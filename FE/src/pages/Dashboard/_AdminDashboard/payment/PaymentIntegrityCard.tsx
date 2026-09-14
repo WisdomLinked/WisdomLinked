@@ -51,7 +51,7 @@ export default function PaymentIntegrityCard({
             {report.truncated ? ' — truncated' : ''}.
           </p>
           {(report.rows?.length > 0 || report.stuckPendingPayments?.length > 0) ? (
-            <div className="mt-4 space-y-4">
+            <div className="mt-4 max-h-80 overflow-y-auto overscroll-contain pr-1 space-y-4">
               {report.rows?.length > 0 ? (
                 <div>
                   <div className="mb-2 text-sm font-medium text-wl-ink">Booking mismatches</div>

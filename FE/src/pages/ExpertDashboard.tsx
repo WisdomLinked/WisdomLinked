@@ -57,6 +57,7 @@ import StudentChat from '../components/dashboard/StudentChat';
 import JoinMeeting from '../components/dashboard/JoinMeeting';
 import DecisionNoteField from '../components/dashboard/DecisionNoteField';
 import StatCard from '../components/ui/StatCard';
+import AccountReviewBanner from '../components/dashboard/AccountReviewBanner';
 import { awaitsExpertDecision, awaitsWalletPayment, pendingSessionState } from '../utils/bookingLifecycle';
 import Chatbot from '../components/chatbot';
 import UpcomingSessionModal, {
@@ -1118,6 +1119,7 @@ export default function ExpertDashboard() {
       <StudentSettings />
     ) : (
       <div className="px-6 py-7 space-y-6">
+        <AccountReviewBanner />
         {/* Stats row */}
         <section>
           <div className="mb-3 flex items-center justify-between gap-3">

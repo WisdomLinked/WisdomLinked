@@ -4,6 +4,7 @@ import { doContactUs } from '../api/api';
 import { store } from '../store';
 import { showErrorAlert } from '../actions/alertActions';
 import SignupModal from '../components/SignupModal';
+import FeaturedExperts from '../components/FeaturedExperts';
 import { SERVICE_LABELS } from '../constants/serviceOptions';
 import {
   Star, Users, Briefcase, GraduationCap, TrendingUp, MessageCircle, CheckCircle,
@@ -1579,7 +1580,10 @@ export default function TOEConsulting() {
       `}</style>
 
       {/* NAV */}
-      <header className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${scrolled ? 'bg-[#F8FAFC]/95 backdrop-blur-md shadow-sm border-b border-[#BCCCDC]' : 'bg-[#F8FAFC]/80 backdrop-blur-sm'}`}>
+      <header
+        className={`fixed left-0 right-0 z-40 transition-all duration-300 ${scrolled ? 'bg-[#F8FAFC]/95 backdrop-blur-md shadow-sm border-b border-[#BCCCDC]' : 'bg-[#F8FAFC]/80 backdrop-blur-sm'}`}
+        style={{ top: 'var(--wl-banner-offset, 0px)' }}
+      >
         <div className="max-w-7xl mx-auto px-4 sm:px-6 flex items-center justify-between h-16 sm:h-[4.5rem] py-3 sm:py-4">
           <button type="button" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })} className="flex items-center gap-3 group">
             <img src="/logos/main_gold_blue.svg" alt="WisdomLinked" className="h-10 w-auto max-w-[200px] object-contain object-left" />
@@ -1588,7 +1592,7 @@ export default function TOEConsulting() {
             </div>
           </button>
           <nav className="hidden lg:flex items-center gap-8">
-            {([["About Us", () => scrollTo(aboutRef)], ["Services", () => scrollTo(servicesRef)], ["Guidelines", () => scrollTo(guidelinesRef)], ["Pricing", () => scrollTo(pricingRef)], ["Contact Us", openContact]] as const).map(([label, action]) => (
+            {([["About Us", () => scrollTo(aboutRef)], ["Services", () => scrollTo(servicesRef)], ["Guidelines", () => scrollTo(guidelinesRef)], ["Pricing", () => scrollTo(pricingRef)], ["Resources", () => navigate('/resources')], ["Contact Us", openContact]] as const).map(([label, action]) => (
               <button key={label as string} onClick={action as () => void} className="nav-link text-slate-900 hover:text-[#234C6A] transition-colors text-sm font-semibold tracking-wide">{label}</button>
             ))}
           </nav>
@@ -1602,7 +1606,7 @@ export default function TOEConsulting() {
         </div>
         {mobileMenuOpen && (
           <div className="lg:hidden border-t border-[#BCCCDC] bg-[#F8FAFC] px-4 sm:px-6 py-4 space-y-3">
-            {([["About Us", () => scrollTo(aboutRef)], ["Services", () => scrollTo(servicesRef)], ["Guidelines", () => scrollTo(guidelinesRef)], ["Pricing", () => scrollTo(pricingRef)], ["Contact Us", openContact]] as const).map(([label, action]) => (
+            {([["About Us", () => { setMobileMenuOpen(false); scrollTo(aboutRef); }], ["Services", () => { setMobileMenuOpen(false); scrollTo(servicesRef); }], ["Guidelines", () => { setMobileMenuOpen(false); scrollTo(guidelinesRef); }], ["Pricing", () => { setMobileMenuOpen(false); scrollTo(pricingRef); }], ["Resources", () => { setMobileMenuOpen(false); navigate('/resources'); }], ["Contact Us", () => { setMobileMenuOpen(false); openContact(); }]] as const).map(([label, action]) => (
               <button key={label as string} onClick={action as () => void} className="block w-full text-left text-slate-700 hover:text-[#234C6A] font-semibold py-1 transition-colors">{label}</button>
             ))}
             <div className="flex gap-3 pt-2">
@@ -1659,12 +1663,13 @@ export default function TOEConsulting() {
                 <span className="text-[11px] font-bold tracking-[0.13em] uppercase" style={{ color: '#234C6A' }}>500+ Active Experts · 100+ Countries</span>
               </div>
 
-              <h1 className="font-display font-bold leading-[1.04] mb-6 animate-fade-up text-slate-900" style={{ animationDelay: '0.15s', fontSize: 'clamp(3rem, 5.5vw, 5rem)' }}>
-                WisdomLinked
+              <h1 className="font-display font-bold leading-[1.12] mb-6 animate-fade-up text-slate-900" style={{ animationDelay: '0.15s', fontSize: 'clamp(2.15rem, 4.2vw, 3.35rem)' }}>
+                Learn from the people who've already{' '}
+                <span className="whitespace-nowrap">made it.</span>
               </h1>
 
-              <p className="text-slate-500 leading-relaxed mb-6 sm:mb-9 max-w-[480px] animate-fade-up text-sm sm:text-base" style={{ animationDelay: '0.28s' }}>
-                Connect directly with world-leading professors, scientists, and senior engineers. Get personalized guidance on graduate studies, research, and career advancement from PhDs who've mastered their craft.
+              <p className="text-slate-500 leading-relaxed mb-6 sm:mb-9 max-w-[520px] animate-fade-up text-sm sm:text-base" style={{ animationDelay: '0.28s' }}>
+                Talk directly with professors at world-class universities and industry experts. Get personalized guidance on grad admissions, research, scholarships, and career advancement.
               </p>
 
               <div className="flex flex-col sm:flex-row gap-3 items-start mb-10 animate-fade-up" style={{ animationDelay: '0.4s' }}>
@@ -1872,6 +1877,8 @@ export default function TOEConsulting() {
             </div>
           </div>
         </section>
+
+        <FeaturedExperts onViewAll={() => setShowSignupModal(true)} />
 
         {/* TESTIMONIALS */}
         <section ref={successRef} className="relative py-16 sm:py-20 md:py-28 px-4 sm:px-6 scroll-mt-20" style={{ backgroundColor: '#F8FAFC' }}>

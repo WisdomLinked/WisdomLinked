@@ -86,7 +86,10 @@ export default function TopBar({
   }, [openMenu]);
 
   return (
-    <header className="sticky top-0 z-50 border-b border-[#e8e6e1] bg-white">
+    <header
+      className="sticky z-50 border-b border-[#e8e6e1] bg-white"
+      style={{ top: 'var(--wl-banner-offset, 0px)' }}
+    >
       <div className="flex h-14 items-center justify-between px-6">
         <span className="font-sans text-[14px] font-semibold text-slate-800">
           {title}

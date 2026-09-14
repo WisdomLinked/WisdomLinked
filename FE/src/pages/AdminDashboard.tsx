@@ -14,6 +14,7 @@ import {
   Calendar,
   GraduationCap,
   ScrollText,
+  Award,
 } from 'lucide-react';
 
 import Sidebar from '../components/layout/Sidebar';
@@ -50,8 +51,10 @@ import Payment from './Dashboard/_AdminDashboard/payment';
 import AdminMajors from './Dashboard/_AdminDashboard/majors';
 import AdminUpcomingEvents from './Dashboard/_AdminDashboard/adminUpcomingEvents';
 import AdminAuditLog from './Dashboard/_AdminDashboard/auditLog';
+import AdminExpertsManager from '../components/dashboard/AdminExpertsManager';
 import Chatbot from '../components/chatbot';
 import { usePeerProfileModal } from '../hooks/usePeerProfileModal';
+import { PendingContactRequestsProvider } from '../hooks/usePendingContactRequestsCount';
 
 const AUTH_BASE = process.env.REACT_APP_AUTH_URL || '/user/';
 
@@ -65,6 +68,7 @@ const adminNavItems = [
   { id: 'contactedus', label: 'Contact requests', icon: Inbox },
   { id: 'registerUser', label: 'Register user', icon: UserPlus },
   { id: 'majors', label: 'Majors', icon: GraduationCap },
+  { id: 'featuredExperts', label: 'Featured experts', icon: Award },
   { id: 'auditLog', label: 'Audit log', icon: ScrollText },
   { id: 'chatBotQA', label: 'Chatbot Q&A', icon: Bot },
 ];
@@ -347,6 +351,13 @@ export default function AdminDashboard() {
     }
   }, []);
 
+  const decrementPendingContacts = React.useCallback(() => {
+    setAdminStats(s => ({
+      ...s,
+      newContactMessages: Math.max(0, Number(s.newContactMessages || 0) - 1),
+    }));
+  }, []);
+
   useEffect(() => {
     void refreshAdminStats();
   }, [refreshAdminStats, location.pathname]);
@@ -531,6 +542,8 @@ export default function AdminDashboard() {
                         ? 'Upcoming events'
                         : section === 'majors'
                           ? 'Majors'
+                          : section === 'featuredExperts'
+                            ? 'Featured experts'
                           : section === 'auditLog'
                             ? 'Audit log'
                           : 'Admin Dashboard';
@@ -558,6 +571,7 @@ export default function AdminDashboard() {
         <Route path="contactedus" element={<GetContactedUs />} />
         <Route path="registerUser" element={<RegisterUserByAdmin />} />
         <Route path="majors" element={<AdminMajors />} />
+        <Route path="featuredExperts" element={<AdminExpertsManager />} />
         <Route path="upcomingEvents" element={<AdminUpcomingEvents />} />
         <Route path="auditLog" element={<AdminAuditLog />} />
         <Route path="chatBotQA" element={<ChatBotQA />} />
@@ -567,7 +581,12 @@ export default function AdminDashboard() {
   );
 
   return (
-    <div className="min-h-screen bg-wl-pageAlt text-[14px] text-wl-ink">
+    <PendingContactRequestsProvider
+      count={adminStats.newContactMessages}
+      refresh={refreshAdminStats}
+      decrement={decrementPendingContacts}
+    >
+      <div className="min-h-screen bg-wl-pageAlt text-[14px] text-wl-ink">
       <div className="flex min-h-screen">
         <Sidebar
           navItems={adminNavItems}
@@ -606,6 +625,7 @@ export default function AdminDashboard() {
           {section !== 'chat' ? <Chatbot /> : null}
         </main>
       </div>
-    </div>
+      </div>
+    </PendingContactRequestsProvider>
   );
 }

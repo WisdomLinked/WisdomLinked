@@ -30,6 +30,57 @@ import {
   type AppointmentDurationMinutes,
 } from '../../../utils/appointmentDurations';
 
+/** Allow wrap after en-dashes so labels like 11:00 AM–12:00 PM stay inside the cell. */
+function allowWrapAtDashes(text: string): string {
+  return text.replace(/\u2013/g, '\u2013\u200b');
+}
+
+function TimeSlotPill({
+  hour,
+  selected,
+  compact,
+  subDuration,
+  onClick,
+}: {
+  hour: number;
+  selected: boolean;
+  compact: boolean;
+  subDuration: number;
+  onClick: () => void;
+}) {
+  const range = formatHourRange(hour);
+  const sub = formatSubIntervals(hour, subDuration);
+  const tooltip = sub ? `${range} \u2014 ${sub}` : range;
+  return (
+    <button
+      type="button"
+      className={[
+        'min-w-0 w-full rounded-lg border text-center cursor-pointer transition-colors whitespace-normal leading-snug',
+        compact ? 'min-h-[2.75rem] px-2 py-1' : 'min-h-[3.25rem] px-3 py-2',
+        selected
+          ? 'bg-[#e8f0f8] border-[#234C6A] text-[#234C6A] font-medium'
+          : 'bg-white border-gray-200 text-gray-600 hover:border-[#234C6A] hover:text-[#234C6A]',
+      ].join(' ')}
+      onClick={onClick}
+      title={tooltip}
+    >
+      <div className={`${compact ? 'text-[11px]' : 'text-sm'} break-words`}>
+        {allowWrapAtDashes(range)}
+      </div>
+      {sub ? (
+        <div
+          className={[
+            'opacity-75 break-words',
+            compact ? 'mt-0.5 text-[9px]' : 'mt-0.5 text-[10px]',
+          ].join(' ')}
+        >
+          {allowWrapAtDashes(sub)}
+        </div>
+      ) : null}
+    </button>
+  );
+}
+
 type AvailabilityMode = 'common' | 'daily';
 
 type DayOfWeek = 'Mon' | 'Tue' | 'Wed' | 'Thu' | 'Fri' | 'Sat' | 'Sun';
@@ -417,39 +468,16 @@ const AvailabilityPage: React.FC = () => {
     selected: boolean,
     compact: boolean,
     onClick: () => void
-  ) => {
-    const range = formatHourRange(hour);
-    const sub = formatSubIntervals(hour, slotPreviewDuration);
-    const tooltip = sub ? `${range} \u2014 ${sub}` : range;
-    const classes = [
-      'rounded-lg border text-center cursor-pointer transition-colors whitespace-nowrap',
-      compact ? 'px-2 py-1' : 'px-3 py-2',
-      selected
-        ? 'bg-[#e8f0f8] border-[#234C6A] text-[#234C6A] font-medium'
-        : 'bg-white border-gray-200 text-gray-600 hover:border-[#234C6A] hover:text-[#234C6A]',
-    ].join(' ');
-    return (
-      <button
-        key={hour}
-        type="button"
-        className={classes}
-        onClick={onClick}
-        title={tooltip}
-      >
-        <div className={compact ? 'text-[11px]' : 'text-sm'}>{range}</div>
-        {sub ? (
-          <div
-            className={[
-              'opacity-75',
-              compact ? 'text-[9px] mt-0.5' : 'text-[10px] mt-0.5',
-            ].join(' ')}
-          >
-            {sub}
-          </div>
-        ) : null}
-      </button>
-    );
-  };
+  ) => (
+    <TimeSlotPill
+      key={hour}
+      hour={hour}
+      selected={selected}
+      compact={compact}
+      subDuration={slotPreviewDuration}
+      onClick={onClick}
+    />
+  );
 
   const renderCommonMode = () => (
     <>

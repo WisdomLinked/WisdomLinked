@@ -13,6 +13,8 @@ import {
   CreditCard,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import NavBadge from './NavBadge';
+import { usePendingContactRequestsCount } from '../../hooks/usePendingContactRequestsCount';
 
 const VideoCallNavIcon = ({ className }: { className?: string }) => (
   <Video aria-hidden="true" className={className || 'h-5 w-5'} />
@@ -50,6 +52,7 @@ export default function Sidebar({
   const [openMobile, setOpenMobile] = useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const navigate = useNavigate();
+  const { count: pendingContactCount } = usePendingContactRequestsCount();
 
   const mainNavItems = navItems.filter(item => item.id !== 'profile');
 
@@ -77,7 +80,8 @@ export default function Sidebar({
         {mainNavItems.map(item => {
           const Icon = item.icon;
           const isActive = item.id === activeItem;
-          const notificationValue = notifications[item.id];
+          const notificationValue =
+            item.id === 'contactedus' ? pendingContactCount : notifications[item.id];
           const hasDot = notificationValue === true;
           const count =
             typeof notificationValue === 'number' && Number.isFinite(notificationValue)
@@ -101,22 +105,15 @@ export default function Sidebar({
                 className={item.id === 'join-meeting' ? 'h-5 w-5' : 'h-4 w-4'}
                 aria-hidden="true"
               />
-              <span className="font-sans inline-flex items-center gap-2">
-                {item.label}
-                {count > 0 ? (
-                  <span
-                    className="inline-flex min-w-[18px] items-center justify-center rounded-full bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-semibold text-amber-800"
-                    aria-label={`${item.label} has ${count} unread messages`}
-                  >
-                    {count > 99 ? '99+' : count}
-                  </span>
-                ) : hasDot ? (
-                  <span
-                    className="inline-block h-2.5 w-2.5 rounded-full bg-emerald-500"
-                    aria-label={`${item.label} has new notification`}
-                  />
-                ) : null}
-              </span>
+              <span className="font-sans min-w-0 flex-1 truncate text-left">{item.label}</span>
+              {count > 0 ? (
+                <NavBadge count={count} label={`unread ${item.label.toLowerCase()}`} />
+              ) : hasDot ? (
+                <span
+                  className="inline-block h-2.5 w-2.5 shrink-0 rounded-full bg-emerald-500"
+                  aria-label={`${item.label} has new notification`}
+                />
+              ) : null}
             </button>
           );
         })}
@@ -190,13 +187,17 @@ export default function Sidebar({
 
   return (
     <>
-      <aside className="hidden lg:block fixed left-0 top-0 h-screen w-[220px] z-30">
+      <aside
+        className="hidden lg:block fixed left-0 w-[220px] z-30"
+        style={{ top: 'var(--wl-banner-offset, 0px)', height: 'calc(100vh - var(--wl-banner-offset, 0px))' }}
+      >
         {content}
       </aside>
 
       <button
         type="button"
-        className="fixed top-3 left-3 z-40 inline-flex h-9 w-9 items-center justify-center rounded-full border border-slate-300 bg-white text-slate-700 shadow lg:hidden"
+        className="fixed left-3 z-40 inline-flex h-9 w-9 items-center justify-center rounded-full border border-slate-300 bg-white text-slate-700 shadow lg:hidden"
+        style={{ top: 'calc(var(--wl-banner-offset, 0px) + 0.75rem)' }}
         onClick={() => setOpenMobile(true)}
         aria-label="Open navigation"
       >
