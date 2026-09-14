@@ -17,7 +17,7 @@ export const mockExperts: FeaturedExpert[] = [
   {
     id: 'bruce-wang',
     name: 'Dr. Bruce Wang',
-    title: 'Professor of Transportation Engineering',
+    title: 'Professor of Civil Engineering',
     organization: 'UC Berkeley',
     type: 'academic',
     photoUrl: '',
@@ -25,7 +25,7 @@ export const mockExperts: FeaturedExpert[] = [
   {
     id: 'mei-chen',
     name: 'Dr. Mei Chen',
-    title: 'Associate Professor of Traffic Systems',
+    title: 'Associate Professor of Computer Science',
     organization: 'MIT',
     type: 'academic',
     photoUrl: '',
@@ -33,7 +33,7 @@ export const mockExperts: FeaturedExpert[] = [
   {
     id: 'james-okonkwo',
     name: 'Prof. James Okonkwo',
-    title: 'Chair of Civil & Transportation',
+    title: 'Chair of Mechanical Engineering',
     organization: 'Imperial College London',
     type: 'academic',
     photoUrl: '',
@@ -41,7 +41,7 @@ export const mockExperts: FeaturedExpert[] = [
   {
     id: 'sarah-lindholm',
     name: 'Dr. Sarah Lindholm',
-    title: 'Professor of Transit Planning',
+    title: 'Professor of Public Policy',
     organization: 'KTH',
     type: 'academic',
     photoUrl: '',
@@ -49,7 +49,7 @@ export const mockExperts: FeaturedExpert[] = [
   {
     id: 'priya-raman',
     name: 'Priya Raman',
-    title: 'Principal Transportation Planner',
+    title: 'Principal Strategy Consultant',
     organization: 'AECOM',
     type: 'industry',
     photoUrl: '',
@@ -57,7 +57,7 @@ export const mockExperts: FeaturedExpert[] = [
   {
     id: 'michael-torres',
     name: 'Michael Torres',
-    title: 'Director of Traffic Operations',
+    title: 'Director of Operations',
     organization: 'WSP',
     type: 'industry',
     photoUrl: '',
@@ -65,7 +65,7 @@ export const mockExperts: FeaturedExpert[] = [
   {
     id: 'elena-vasquez',
     name: 'Elena Vasquez',
-    title: 'Senior Mobility Engineer',
+    title: 'Senior Structural Engineer',
     organization: 'Arup',
     type: 'industry',
     photoUrl: '',
@@ -73,7 +73,7 @@ export const mockExperts: FeaturedExpert[] = [
   {
     id: 'david-kim',
     name: 'David Kim',
-    title: 'Head of Intelligent Transportation',
+    title: 'Head of Data Science',
     organization: 'HDR',
     type: 'industry',
     photoUrl: '',
@@ -165,10 +165,10 @@ export default function FeaturedExperts({ onViewAll }: { onViewAll: () => void }
         <div className="text-center mb-10 sm:mb-16">
           <div className="inline-block section-label text-[#234C6A] mb-4">Our Network</div>
           <h2 className="font-display text-3xl sm:text-4xl md:text-5xl font-bold text-slate-900 mb-4">
-            Learn From Leaders in Transportation Engineering
+            Learn From Leaders Across Fields
           </h2>
           <p className="text-slate-600 text-base sm:text-lg">
-            Professors and industry experts ready to guide you
+            Professors and industry experts from many disciplines, ready to guide you
           </p>
         </div>
 

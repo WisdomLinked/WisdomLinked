@@ -327,7 +327,7 @@ export default function AdminExpertsManager() {
                   value={form.title}
                   onChange={(e) => setForm({ ...form, title: e.target.value })}
                   className="w-full p-3 bg-wl-card border border-wl-line rounded-lg text-wl-ink focus:outline-none focus:ring-2 focus:ring-wl-brand/30"
-                  placeholder="Professor of Transportation Engineering"
+                  placeholder="Professor of Computer Science"
                 />
                 {errors.title ? <p className="mt-1 text-sm text-red-500">{errors.title}</p> : null}
               </div>

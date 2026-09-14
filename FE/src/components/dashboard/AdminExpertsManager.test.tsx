@@ -38,7 +38,7 @@ const seed = [
   {
     id: '1',
     name: 'Dr. Bruce Wang',
-    title: 'Professor of Transportation Engineering',
+    title: 'Professor of Civil Engineering',
     organization: 'UC Berkeley',
     type: 'academic' as const,
     photoUrl: '',
@@ -46,7 +46,7 @@ const seed = [
   {
     id: '2',
     name: 'Priya Raman',
-    title: 'Principal Transportation Planner',
+    title: 'Principal Strategy Consultant',
     organization: 'AECOM',
     type: 'industry' as const,
     photoUrl: '',
@@ -100,7 +100,7 @@ describe('AdminExpertsManager', () => {
     await screen.findByText('Dr. Bruce Wang');
     fireEvent.click(screen.getByRole('button', { name: /add expert/i }));
     fireEvent.change(screen.getByPlaceholderText('Dr. Bruce Wang'), { target: { value: 'Test Mentor' } });
-    fireEvent.change(screen.getByPlaceholderText('Professor of Transportation Engineering'), {
+    fireEvent.change(screen.getByPlaceholderText('Professor of Computer Science'), {
       target: { value: 'Advisor' },
     });
     fireEvent.change(screen.getByPlaceholderText('UC Berkeley'), { target: { value: 'WisdomLinked' } });

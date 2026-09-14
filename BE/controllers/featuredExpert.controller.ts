@@ -21,7 +21,7 @@ export type PublicFeaturedExpert = {
 export const DEFAULT_FEATURED_EXPERTS = [
     {
         name: 'Dr. Bruce Wang',
-        title: 'Professor of Transportation Engineering',
+        title: 'Professor of Civil Engineering',
         organization: 'UC Berkeley',
         type: 'academic' as const,
         photoUrl: '',
@@ -30,7 +30,7 @@ export const DEFAULT_FEATURED_EXPERTS = [
     },
     {
         name: 'Dr. Mei Chen',
-        title: 'Associate Professor of Traffic Systems',
+        title: 'Associate Professor of Computer Science',
         organization: 'MIT',
         type: 'academic' as const,
         photoUrl: '',
@@ -39,7 +39,7 @@ export const DEFAULT_FEATURED_EXPERTS = [
     },
     {
         name: 'Prof. James Okonkwo',
-        title: 'Chair of Civil & Transportation',
+        title: 'Chair of Mechanical Engineering',
         organization: 'Imperial College London',
         type: 'academic' as const,
         photoUrl: '',
@@ -48,7 +48,7 @@ export const DEFAULT_FEATURED_EXPERTS = [
     },
     {
         name: 'Dr. Sarah Lindholm',
-        title: 'Professor of Transit Planning',
+        title: 'Professor of Public Policy',
         organization: 'KTH',
         type: 'academic' as const,
         photoUrl: '',
@@ -57,7 +57,7 @@ export const DEFAULT_FEATURED_EXPERTS = [
     },
     {
         name: 'Priya Raman',
-        title: 'Principal Transportation Planner',
+        title: 'Principal Strategy Consultant',
         organization: 'AECOM',
         type: 'industry' as const,
         photoUrl: '',
@@ -66,7 +66,7 @@ export const DEFAULT_FEATURED_EXPERTS = [
     },
     {
         name: 'Michael Torres',
-        title: 'Director of Traffic Operations',
+        title: 'Director of Operations',
         organization: 'WSP',
         type: 'industry' as const,
         photoUrl: '',
@@ -75,7 +75,7 @@ export const DEFAULT_FEATURED_EXPERTS = [
     },
     {
         name: 'Elena Vasquez',
-        title: 'Senior Mobility Engineer',
+        title: 'Senior Structural Engineer',
         organization: 'Arup',
         type: 'industry' as const,
         photoUrl: '',
@@ -84,13 +84,25 @@ export const DEFAULT_FEATURED_EXPERTS = [
     },
     {
         name: 'David Kim',
-        title: 'Head of Intelligent Transportation',
+        title: 'Head of Data Science',
         organization: 'HDR',
         type: 'industry' as const,
         photoUrl: '',
         order: 7,
         active: true,
     },
+];
+
+/** Retitle the original transportation-only dummy cards if they were never edited. */
+const LEGACY_SEED_TITLES: { name: string; from: string; to: string }[] = [
+    { name: 'Dr. Bruce Wang', from: 'Professor of Transportation Engineering', to: 'Professor of Civil Engineering' },
+    { name: 'Dr. Mei Chen', from: 'Associate Professor of Traffic Systems', to: 'Associate Professor of Computer Science' },
+    { name: 'Prof. James Okonkwo', from: 'Chair of Civil & Transportation', to: 'Chair of Mechanical Engineering' },
+    { name: 'Dr. Sarah Lindholm', from: 'Professor of Transit Planning', to: 'Professor of Public Policy' },
+    { name: 'Priya Raman', from: 'Principal Transportation Planner', to: 'Principal Strategy Consultant' },
+    { name: 'Michael Torres', from: 'Director of Traffic Operations', to: 'Director of Operations' },
+    { name: 'Elena Vasquez', from: 'Senior Mobility Engineer', to: 'Senior Structural Engineer' },
+    { name: 'David Kim', from: 'Head of Intelligent Transportation', to: 'Head of Data Science' },
 ];
 
 function trimStr(value: unknown): string {
@@ -125,8 +137,15 @@ export function toPublicExpert(raw: any): PublicFeaturedExpert | null {
 
 export async function ensureFeaturedExpertsSeeded() {
     const count = await FeaturedExpert.countDocuments();
-    if (count > 0) return;
-    await FeaturedExpert.insertMany(DEFAULT_FEATURED_EXPERTS);
+    if (count === 0) {
+        await FeaturedExpert.insertMany(DEFAULT_FEATURED_EXPERTS);
+        return;
+    }
+    await Promise.all(
+        LEGACY_SEED_TITLES.map(({ name, from, to }) =>
+            FeaturedExpert.updateOne({ name, title: from }, { $set: { title: to } }),
+        ),
+    );
 }
 
 function invalidId(id: string) {

@@ -17,6 +17,7 @@ const originalInsertMany = FeaturedExpert.insertMany;
 const originalFind = FeaturedExpert.find;
 const originalFindOne = FeaturedExpert.findOne;
 const originalCreate = FeaturedExpert.create;
+const originalUpdateOne = FeaturedExpert.updateOne;
 const originalAuditCreate = AdminAuditLog.create;
 
 AdminAuditLog.create = async () => ({});
@@ -128,6 +129,11 @@ function installStore(initial: Omit<StoreDoc, 'save'>[]) {
         store.push(created);
         return created;
     };
+    FeaturedExpert.updateOne = async (filter: any, update: any) => {
+        const doc = store.find((d) => d.name === filter.name && d.title === filter.title);
+        if (doc && update?.$set?.title) doc.title = update.$set.title;
+        return { acknowledged: true, modifiedCount: doc ? 1 : 0 };
+    };
 
     return store;
 }
@@ -138,6 +144,7 @@ function restoreModel() {
     FeaturedExpert.find = originalFind;
     FeaturedExpert.findOne = originalFindOne;
     FeaturedExpert.create = originalCreate;
+    FeaturedExpert.updateOne = originalUpdateOne;
 }
 
 test('toPublicExpert serializes _id as id and trims fields', () => {
@@ -177,7 +184,31 @@ test('public GET seeds the mock experts when the collection is empty', async () 
         assert.equal(store.length, DEFAULT_FEATURED_EXPERTS.length);
         assert.equal(res.body.experts.length, DEFAULT_FEATURED_EXPERTS.length);
         assert.equal(res.body.experts[0].name, 'Dr. Bruce Wang');
+        assert.equal(res.body.experts[0].title, 'Professor of Civil Engineering');
         assert.equal(res.body.experts[4].type, 'industry');
+    } finally {
+        restoreModel();
+    }
+});
+
+test('public GET retitles unedited transportation dummy cards', async () => {
+    try {
+        const store = installStore([
+            {
+                _id: ID_A,
+                name: 'Dr. Bruce Wang',
+                title: 'Professor of Transportation Engineering',
+                organization: 'UC Berkeley',
+                type: 'academic',
+                photoUrl: '',
+                order: 0,
+                active: true,
+            },
+        ]);
+        const res = createRes();
+        await listPublicFeaturedExperts({} as any, res);
+        assert.equal(res.body.experts[0].title, 'Professor of Civil Engineering');
+        assert.equal(store[0].title, 'Professor of Civil Engineering');
     } finally {
         restoreModel();
     }

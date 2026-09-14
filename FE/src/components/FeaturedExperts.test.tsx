@@ -50,6 +50,8 @@ describe('FeaturedExperts', () => {
     mockedGet.mockResolvedValue([]);
     render(<FeaturedExperts onViewAll={() => undefined} />);
     await waitFor(() => expect(mockedGet).toHaveBeenCalled());
+    expect(screen.getByRole('heading', { name: 'Learn From Leaders Across Fields' })).toBeInTheDocument();
+    expect(screen.queryByText(/Transportation Engineering/i)).not.toBeInTheDocument();
     expect(screen.getByText('Dr. Bruce Wang')).toBeInTheDocument();
     expect(screen.getByText('Priya Raman')).toBeInTheDocument();
   });
