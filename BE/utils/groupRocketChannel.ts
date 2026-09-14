@@ -16,6 +16,20 @@ export function groupRocketChannelKey(
     return String(fallbackId || '').trim();
 }
 
+/** GroupChat ids that share one Meet scope (all series occurrences, or just this group). */
+export async function resolveGroupMeetingScopeIds(
+    groupChat: { _id?: any; seriesId?: any } | null | undefined,
+): Promise<string[]> {
+    if (!groupChat) return [];
+    if (groupChat.seriesId) {
+        const docs = await GroupChat.find({ seriesId: groupChat.seriesId }).select('_id').lean();
+        const ids = docs.map((d: any) => String(d._id)).filter(Boolean);
+        if (ids.length) return ids;
+    }
+    if (groupChat._id != null) return [String(groupChat._id)];
+    return [];
+}
+
 const pushEmails = (emails: string[], groupChat: any) => {
     for (const p of groupChat?.participants || []) {
         if ((p as any)?.email) emails.push(String((p as any).email).toLowerCase());
