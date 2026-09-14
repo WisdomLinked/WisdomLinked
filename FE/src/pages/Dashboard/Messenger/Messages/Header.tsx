@@ -256,7 +256,7 @@ const MessagesHeader = ({ events, openCalendarModal, openSeminarModal, openEditS
             openMeetingUrl(res.jitsiUrl, pendingWindow);
         } else {
             if (pendingWindow && !pendingWindow.closed) pendingWindow.close();
-            dispatch(showErrorAlert(res?.error || 'Could not start the meeting room'));
+            dispatch(showErrorAlert(res?.error || 'Could not join or start the meeting'));
         }
     }
 
