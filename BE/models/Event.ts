@@ -14,9 +14,14 @@ const eventSchema = new mongoose.Schema(
             price: {type: Number},
             createdBy: {type: mongoose.Schema.Types.ObjectId, ref: "User"},
             feedbacks: [{ type: mongoose.Schema.Types.Mixed }],
+            /** See GroupChat.remindersSent — same contract, claimed atomically. */
+            remindersSent: [{ type: String }],
     },
     {timestamps: true}
 );
+
+// Mirrors the GroupChat index: the reminder sweep filters on status + start.
+eventSchema.index({ status: 1, start: 1 });
 
 
 module.exports = mongoose.model("Event", eventSchema);

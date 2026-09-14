@@ -4,7 +4,7 @@ const sgClient = require("@sendgrid/client");
 sgMail.setApiKey(process.env.SENDGRID_API_KEY);
 sgClient.setApiKey(process.env.SENDGRID_API_KEY);
 
-const { resolveAppBaseUrl, appAssetUrl } = require("../utils/appBaseUrl");
+const { resolveAppBaseUrl, appAssetUrl, appDashboardUrl } = require("../utils/appBaseUrl");
 const {
     BRAND,
     renderEmail,
@@ -55,33 +55,61 @@ sendEmailUserAccountApproved = (targetEmail, userName) => {
     return deliver(targetEmail, subject, html);
 }
 
-scheduleEmailReminder = async (targetEmail, userName, title,start, duration, timeZone) => {
-    subject = "You have a meeting: " + title;
-    // timezone is like "America/New_York" so we need to send the date as per time zone
-    const options = { timeZone: timeZone || "UTC" };
-    // Convert start time to local time based on the provided timezone
-    const date = new Date(start);
-    const scheduledTime = Math.floor(date.getTime() / 1000) - 900; // Convert to Unix timestamp
-    html = renderEmail({
-        heading: `Starting soon: ${title}`,
-        previewText: 'Your session starts in about 15 minutes.',
+/**
+ * A session reminder, sent at the moment it is due.
+ *
+ * Replaces `scheduleEmailReminder`, which handed the mail to SendGrid with a
+ * `sendAt` up to months ahead. SendGrid refuses anything beyond 72 hours, the
+ * error was swallowed, and most reminders therefore never sent at all. The
+ * reminder sweep decides *when* (see utils/sessionReminders.ts); this only
+ * decides what the mail says.
+ *
+ * `kind` is '24h' or '15m'. Subjects differ between the two on purpose: the same
+ * session sends both, and identical subject lines read as a duplicate in an inbox.
+ */
+sendSessionReminderEmail = async ({
+    kind,
+    targetEmail,
+    userName,
+    title,
+    start,
+    duration,
+    timeZone,
+    role,
+}: any) => {
+    const isDayBefore = kind === '24h';
+    const subject = isDayBefore
+        ? `Tomorrow: ${title}`
+        : `Starting in 15 minutes: ${title}`;
+    const html = renderEmail({
+        heading: isDayBefore ? `Tomorrow: ${title}` : `Starting soon: ${title}`,
+        previewText: isDayBefore
+            ? 'Your session is tomorrow.'
+            : 'Your session starts in about 15 minutes.',
         blocks: [
-            emailParagraph(`Dear ${emailEscape(userName)}, this is a reminder that your session begins shortly.`),
+            emailParagraph(
+                isDayBefore
+                    ? `Dear ${emailEscape(userName)}, this is a reminder that your session is scheduled for tomorrow.`
+                    : `Dear ${emailEscape(userName)}, this is a reminder that your session begins shortly.`,
+            ),
             emailFacts([
                 ['Session', title],
                 ['Date & time', emailWhen(start, timeZone)],
                 ['Duration', duration ? `${duration} minutes` : ''],
             ]),
-            emailParagraph('Video and audio become available at the scheduled start time.', { muted: true }),
-            emailButton('Join from your dashboard'),
+            emailParagraph(
+                isDayBefore
+                    ? 'You can use the session chat beforehand to ask questions or share material. Video and audio become available at the scheduled start time.'
+                    : 'Video and audio become available at the scheduled start time.',
+                { muted: true },
+            ),
+            emailButton(
+                isDayBefore ? 'View the session' : 'Join from your dashboard',
+                appDashboardUrl(role),
+            ),
         ],
     });
-    try {
-        return await sendNotificationEmail(targetEmail, subject, html, scheduledTime);
-    } catch (error) {
-        console.error("Failed to schedule reminder email:", error?.message || error);
-        return null;
-    }
+    return sendNotificationEmail(targetEmail, subject, html);
 }
 
 sendEmailMeetingAcceptance = async (targetEmail, userName, title,start, duration, timeZone, noteHtml = '', options: any = {}) => {
@@ -327,7 +355,13 @@ sendPaymentConfirmationEmail = async ({ to, sessionType, sessionName, expertName
     await sendNotificationEmail(to, subjectLine, html);
 }
 
-sendNotificationEmail = async (targetEmails, subject, html,scheduledTime = null) => {
+/**
+ * Send now. There is deliberately no scheduled-send path: SendGrid's `sendAt`
+ * refuses anything more than 72h ahead and cannot be cancelled without a
+ * batch_id, which silently broke every session reminder booked further out.
+ * Reminders are timed by services/sessionReminderSweep.ts instead.
+ */
+sendNotificationEmail = async (targetEmails, subject, html) => {
     const msg: any = {
       to: Array.isArray(targetEmails) ? targetEmails : [targetEmails],
       from: {
@@ -340,17 +374,9 @@ sendNotificationEmail = async (targetEmails, subject, html,scheduledTime = null)
     const inlineHeader = emailAttachments();
     if (inlineHeader.length) msg.attachments = inlineHeader;
 
-    if (scheduledTime) {
-        // scheduleTime should be a Unix timestamp
-        msg.sendAt = scheduledTime;
-    }
     try {
       const response = await sgMail.send(msg);
-      if (scheduledTime) {
-        console.log("Scheduled email queued via SendGrid:", response[0].statusCode);
-      } else {
-        console.log("Notification email sent via SendGrid:", response[0].statusCode);
-      }
+      console.log("Notification email sent via SendGrid:", response[0].statusCode);
     } catch (error) {
       console.error("Error sending notification email via SendGrid:", error.message);
       throw error;
@@ -362,7 +388,7 @@ module.exports = {
     sendEmailSessionPaidToExpert,
     sendEmailSessionOfferSentToExpert,
     sendEmailMeetingRequestToCustomer,
-    scheduleEmailReminder,
+    sendSessionReminderEmail,
     sendEmailMeetingAcceptance,
     sendEmailNewUserAccountApproval,
     sendEmailUserAccountApproved,

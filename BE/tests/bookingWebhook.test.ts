@@ -26,7 +26,7 @@ stripeController.refundPaymentIntent = async (pi: string, amount: any, mode: str
 stripeController.sendBookingReceiptAndConfirmation = async () => {};
 stripeController.listReconcilableBookingIntents = async () => [];
 notifications.sendNotificationEmail = async () => {};
-notifications.scheduleEmailReminder = () => {};
+notifications.sendSessionReminderEmail = async () => {};
 paymentController.appendPaymentHistory = async (data: any) => {
   record("appendPaymentHistory", [data]);
   return true;

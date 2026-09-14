@@ -126,6 +126,12 @@ const groupChatSchema = new mongoose.Schema(
                 clearedAt: { type: Date, default: null },
             },
         ],
+        /**
+         * Which session reminders have already gone out ('24h', '15m').
+         * Claimed atomically by the reminder sweep so overlapping runs, and
+         * restarts, cannot send the same reminder twice.
+         */
+        remindersSent: [{ type: String }],
         moderationNotes: [
             {
                 action: { type: String, default: "remove_member" },
@@ -140,5 +146,9 @@ const groupChatSchema = new mongoose.Schema(
 );
 
 groupChatSchema.index({ rcChannelId: 1 }, { sparse: true });
+
+// Reminder sweep runs every few minutes over "sessions starting within 24h".
+// Without this it degrades into a full scan as the collection grows.
+groupChatSchema.index({ type: 1, status: 1, start: 1 });
 
 module.exports = mongoose.model("GroupChat", groupChatSchema);

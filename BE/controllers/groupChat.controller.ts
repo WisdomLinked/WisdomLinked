@@ -172,7 +172,7 @@ const {
     studentNote: emailStudentNote,
     escapeHtml: emailEscape,
 } = require('../services/emailTemplate')
-const { scheduleEmailReminder, sendEmailMeetingRequestToCustomer, sendEmailMeetingRequestToExpert, sendEmailSessionPaidToExpert, sendEmailSessionOfferSentToExpert, sendEmailMeetingAcceptance, sendNotificationEmail } = require('../services/notifications')
+const { sendEmailMeetingRequestToCustomer, sendEmailMeetingRequestToExpert, sendEmailSessionPaidToExpert, sendEmailSessionOfferSentToExpert, sendEmailMeetingAcceptance, sendNotificationEmail } = require('../services/notifications')
 const { assertBookingLeadTime } = require("../utils/bookingLeadTime");
 const { assertBookingSlotValid, assertDurationAllowed } = require("../utils/bookingValidation");
 import { buildRemovedUserNotice, normalizeModerationReason } from '../utils/videoModerationNotice';
@@ -1395,7 +1395,7 @@ const joinGroupChat = async (req, res) => {
             // [REMOVED] updateUsersGroupChatList(participantId.toString());
         })
 
-        scheduleEmailReminder(currentUser.email, currentUser.username, groupChat.name, groupChat.start, groupChat.duration, currentUser.timeZone);
+        // Reminders: see services/sessionReminderSweep.ts
 
         return res.status(200).json({
             success: true,
@@ -1903,11 +1903,9 @@ const enrollAndConfirmSeminar = async ({ groupChat, customer, expert, charge, pa
         }
     }
 
-    try {
-        scheduleEmailReminder(customer.email, customer.username, groupChat.name, groupChat.start, groupChat.duration, customer.timeZone);
-    } catch (reminderErr) {
-        console.log('[enrollAndConfirmSeminar] reminder scheduling failed after enrollment', reminderErr);
-    }
+    // Reminders: see services/sessionReminderSweep.ts. Note this path only ever
+    // reminded the student — the expert hosting the seminar got nothing. The sweep
+    // reminds both.
 };
 
 const registerForSeminar = async (req, res) => {
@@ -5130,7 +5128,6 @@ const acceptIndividualAppointment = async (req, res) => {
 
         void (async () => {
             try {
-                const expertUser = await User.findById(userId);
                 const customerUser = await User.findById(groupChat.createdBy);
                 if (customerUser?.email && !charge) {
                     await sendEmailMeetingAcceptance(
@@ -5161,26 +5158,7 @@ const acceptIndividualAppointment = async (req, res) => {
                         );
                     }
                 }
-                if (expertUser?.email) {
-                    await scheduleEmailReminder(
-                        expertUser.email,
-                        expertUser.username,
-                        groupChat.name,
-                        groupChat.start,
-                        groupChat.duration,
-                        expertUser.timeZone,
-                    );
-                }
-                if (customerUser?.email) {
-                    await scheduleEmailReminder(
-                        customerUser.email,
-                        customerUser.username,
-                        groupChat.name,
-                        groupChat.start,
-                        groupChat.duration,
-                        customerUser.timeZone,
-                    );
-                }
+                // Reminders: see services/sessionReminderSweep.ts
             } catch (notifyErr) {
                 console.error('[acceptIndividualAppointment] notification failed:', notifyErr?.message || notifyErr);
             }

@@ -10,7 +10,7 @@ const { getFullUserData } = require("../middlewares/requireAuth");
 const { checkPaymentIntentSucceeded, refundPaymentIntent, sendBookingReceiptAndConfirmation } = require("./stripe.controller");
 const { appendPaymentHistory } = require("./payment.controller");
 const { checkTitleNameInvalid } = require('../services/global')
-const { sendEmailMeetingRequestToExpert, sendEmailMeetingRequestToCustomer, scheduleEmailReminder, sendEmailMeetingAcceptance, sendNotificationEmail } = require('../services/notifications')
+const { sendEmailMeetingRequestToExpert, sendEmailMeetingRequestToCustomer, sendEmailMeetingAcceptance, sendNotificationEmail } = require('../services/notifications')
 const {
     renderEmail: renderEventEmail,
     moneyFromCents: eventMoneyFromCents,
@@ -444,9 +444,9 @@ const acceptEvent = async (req, res) => {
         //
         sendEmailMeetingAcceptance(sender.email, sender.username, receiver.username, updatedEvent.start, updatedEvent.duration, sender.timeZone);
 
-        // Sending email reminders to both users
-        scheduleEmailReminder(sender.email, sender.username, receiver.username, updatedEvent.start, updatedEvent.duration, sender.timeZone);
-        scheduleEmailReminder(receiver.email, receiver.username, sender.username, updatedEvent.start, updatedEvent.duration, receiver.timeZone);
+        // Reminders are no longer queued here — services/sessionReminderSweep.ts
+        // sends them when they fall due, which also covers sessions further out
+        // than SendGrid's 72-hour scheduling limit.
 
         if (invitationExists) {
             await FriendInvitation.findByIdAndDelete(
