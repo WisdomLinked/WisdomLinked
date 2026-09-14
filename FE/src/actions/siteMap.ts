@@ -30,6 +30,7 @@ export const siteMap: any = {
     '/user/admindashboard/chatBotQA': 'chatbotqa',
     '/user/admindashboard/featuredExperts': 'adminfeaturedexperts',
     '/user/admindashboard/auditLog': 'adminauditlog',
+    '/user/admindashboard/settings': 'adminsettings',
 
     '/resources': 'resources',
 }

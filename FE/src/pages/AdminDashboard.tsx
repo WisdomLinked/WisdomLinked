@@ -15,6 +15,7 @@ import {
   GraduationCap,
   ScrollText,
   Award,
+  Settings,
 } from 'lucide-react';
 
 import Sidebar from '../components/layout/Sidebar';
@@ -71,6 +72,7 @@ const adminNavItems = [
   { id: 'featuredExperts', label: 'Featured experts', icon: Award },
   { id: 'auditLog', label: 'Audit log', icon: ScrollText },
   { id: 'chatBotQA', label: 'Chatbot Q&A', icon: Bot },
+  { id: 'settings', label: 'Settings', icon: Settings },
 ];
 
 function pathToSection(pathname: string): string {
@@ -546,6 +548,8 @@ export default function AdminDashboard() {
                             ? 'Featured experts'
                           : section === 'auditLog'
                             ? 'Audit log'
+                          : section === 'settings'
+                            ? 'Settings'
                           : 'Admin Dashboard';
 
   const handleSidebarNavigate = (id: string) => {
@@ -605,7 +609,10 @@ export default function AdminDashboard() {
             avatarUrl={avatarUrl}
             notifications={adminNotifications}
             onProfileClick={() => setExtraView('profile')}
-            onSettingsClick={() => setExtraView('settings')}
+            onSettingsClick={() => {
+              setExtraView(null);
+              goToSection('settings');
+            }}
           />
 
           {extraView === 'profile' ? (
@@ -614,7 +621,7 @@ export default function AdminDashboard() {
               email={userDetails?.email as string | undefined}
               avatarUrl={avatarUrl}
             />
-          ) : extraView === 'settings' ? (
+          ) : extraView === 'settings' || section === 'settings' ? (
             <AdminSettings />
           ) : section === 'chat' ? (
             <AdminChat />
