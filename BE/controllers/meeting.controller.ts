@@ -3,7 +3,6 @@ import {
     getOrCreateDMChannel,
     sendMessageToRC,
     toRocketChatUsername,
-    syncRocketGroupChannelMembers,
     wlHtmlToPlainTextForRocketChat,
 } from '../services/rocketchat.service';
 import crypto from 'crypto';
@@ -28,6 +27,7 @@ import {
 } from '../utils/meetingModerationRules';
 import { appendJitsiMobileWebOverrides } from '../utils/jitsiUrl';
 import { isMeetingModerator, isMeetingModeratorWithDelegates } from '../utils/meetingRoleRules';
+import { resolveGroupRocketChannelId } from '../utils/groupRocketChannel';
 import {
     MEETING_CANNOT_REVOKE_HOST_ROLE,
     MEETING_EXPERT_CANNOT_REVOKE_SELF,
@@ -387,13 +387,8 @@ const sendMeetingEndedToRocketChat = async (meeting: any, endContent: string): P
             .populate('participants', 'email')
             .populate('admin', 'email');
         if (groupChat) {
-            const emails: string[] = [];
-            for (const p of groupChat.participants || []) {
-                if ((p as any)?.email) emails.push(String((p as any).email).toLowerCase());
-            }
-            const adm = groupChat.admin as any;
-            if (adm?.email) emails.push(String(adm.email).toLowerCase());
-            const rcChannelId = await syncRocketGroupChannelMembers(String(meeting.groupChatId), emails);
+            // seriesId || _id — must match chat history room or peers never see __MEETING_ENDED__
+            const rcChannelId = await resolveGroupRocketChannelId(groupChat, String(meeting.groupChatId));
             if (rcChannelId) await sendMessageToRC(rcChannelId, endContent, me.username, me.email);
         }
     }
@@ -555,14 +550,23 @@ export const startMeeting = async (req: any, res: Response) => {
                 .populate('participants', 'email')
                 .populate('admin', 'email');
             if (me && me.email && groupChat) {
-                const emails: string[] = [];
-                for (const p of groupChat.participants || []) {
-                    if ((p as any)?.email) emails.push(String((p as any).email).toLowerCase());
+                // Post into series RC channel (not occurrence id) so all members see Meet card
+                const rcChannelId = await resolveGroupRocketChannelId(groupChat, groupChatId);
+                if (rcChannelId) {
+                    const posted = await sendMessageToRC(rcChannelId, meetingContent, me.username, me.email);
+                    if (!posted) {
+                        console.error('[meeting.start] RC __MEETING_STARTED__ post failed', {
+                            groupChatId,
+                            seriesId: groupChat.seriesId ? String(groupChat.seriesId) : null,
+                            rcChannelId,
+                        });
+                    }
+                } else {
+                    console.error('[meeting.start] no RC channel for group meet', {
+                        groupChatId,
+                        seriesId: groupChat.seriesId ? String(groupChat.seriesId) : null,
+                    });
                 }
-                const adm = groupChat.admin as any;
-                if (adm?.email) emails.push(String(adm.email).toLowerCase());
-                const rcChannelId = await syncRocketGroupChannelMembers(String(groupChatId), emails);
-                if (rcChannelId) await sendMessageToRC(rcChannelId, meetingContent, me.username, me.email);
             }
         }
 
@@ -825,13 +829,7 @@ export const syncMeetingChatMessage = async (req: any, res: Response) => {
                 .populate('participants', 'email')
                 .populate('admin', 'email');
             if (!groupChat) return res.status(404).json({ error: 'Group chat not found' });
-            const emails: string[] = [];
-            for (const p of groupChat.participants || []) {
-                if ((p as any)?.email) emails.push(String((p as any).email).toLowerCase());
-            }
-            const adm = groupChat.admin as any;
-            if (adm?.email) emails.push(String(adm.email).toLowerCase());
-            const rcChannelId = await syncRocketGroupChannelMembers(String(meeting.groupChatId), emails);
+            const rcChannelId = await resolveGroupRocketChannelId(groupChat, String(meeting.groupChatId));
             if (rcChannelId) {
                 if (isGuest) {
                     rcMessageId = await sendMessageToRC(rcChannelId, rcLine, `Meet · ${author}`, undefined);
