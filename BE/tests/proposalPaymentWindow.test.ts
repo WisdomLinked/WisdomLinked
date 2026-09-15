@@ -32,7 +32,7 @@ notifications.sendEmailMeetingRequestToExpert = async () => {};
 notifications.sendEmailMeetingRequestToCustomer = async () => {};
 notifications.sendEmailSessionPaidToExpert = async () => {};
 notifications.sendEmailMeetingAcceptance = async () => {};
-notifications.scheduleEmailReminder = () => {};
+notifications.sendSessionReminderEmail = async () => {};
 paymentController.appendPaymentHistory = async () => true;
 
 const groupController = require("../controllers/groupChat.controller");

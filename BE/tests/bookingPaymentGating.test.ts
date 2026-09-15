@@ -50,7 +50,7 @@ notifications.sendEmailMeetingRequestToCustomer = async () => {};
 notifications.sendEmailSessionPaidToExpert = async () => {};
 notifications.sendEmailMeetingAcceptance = async () => {};
 notifications.sendNotificationEmail = async () => {};
-notifications.scheduleEmailReminder = () => {};
+notifications.sendSessionReminderEmail = async () => {};
 paymentController.appendPaymentHistory = async (data: any) => {
   record("appendPaymentHistory", [data]);
   return true;
