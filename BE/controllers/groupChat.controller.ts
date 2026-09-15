@@ -4987,7 +4987,7 @@ const acceptIndividualAppointment = async (req, res) => {
         try {
             const activated = await GroupChat.findOneAndUpdate(
                 { _id: groupChat._id, status: { $ne: 'cancelled' } },
-                { $set: decisionNote ? { status: 'active', decisionNote, decisionNoteAt: new Date(), decisionNoteReadAt: null } : { status: 'active' } },
+                { $set: decisionNote ? { status: 'active', confirmedAt: new Date(), decisionNote, decisionNoteAt: new Date(), decisionNoteReadAt: null } : { status: 'active', confirmedAt: new Date() } },
             );
             if (!activated) {
                 if (charge && held) {
@@ -5036,9 +5036,12 @@ const acceptIndividualAppointment = async (req, res) => {
             const restore = async () => {
                 await GroupChat.updateOne(
                     { _id: groupChat._id, status: 'active' },
-                    { $set: { status: previousStatus } },
+                    // confirmedAt is cleared with the status it was stamped alongside:
+                    // a session that fell back to pending was never confirmed.
+                    { $set: { status: previousStatus, confirmedAt: null } },
                 ).catch(() => null);
                 groupChat.status = previousStatus;
+                groupChat.confirmedAt = null;
             };
 
             if (parkedRow) {

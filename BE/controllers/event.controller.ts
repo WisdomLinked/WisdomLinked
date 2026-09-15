@@ -431,7 +431,7 @@ const acceptEvent = async (req, res) => {
             throw new Error("Unable to accept past or ongoing event")
         }
 
-        const updatedEvent = await Event.findByIdAndUpdate(eventId, { status: 'accepted' }, { new: true })
+        const updatedEvent = await Event.findByIdAndUpdate(eventId, { status: 'accepted', confirmedAt: new Date() }, { new: true })
 
         const invitationExists = await FriendInvitation.findOne({
             senderId: event.customer,

@@ -57,6 +57,35 @@ test("booked between 24h and 15min ahead: only the 15-minute reminder", () => {
   assert.deepEqual(dueReminders({ start, createdAt, now: at15m }), ["15m"]);
 });
 
+test("booked inside the 24h mark but more than 18h out: still only the 15-minute one", () => {
+  const start = new Date(NOW + 20 * HOUR);
+  const createdAt = new Date(NOW);
+
+  assert.deepEqual(dueReminders({ start, createdAt, now: NOW }), []);
+  assert.deepEqual(dueReminders({ start, createdAt, now: NOW + 1 * HOUR }), []);
+
+  const at15m = NOW + 20 * HOUR - 15 * MIN;
+  assert.deepEqual(dueReminders({ start, createdAt, now: at15m }), ["15m"]);
+});
+
+test("booked exactly on the 24h mark still gets both", () => {
+  const start = new Date(NOW + 24 * HOUR);
+  const createdAt = new Date(NOW);
+
+  assert.deepEqual(dueReminders({ start, createdAt, now: NOW }), ["24h"]);
+  const at15m = NOW + 24 * HOUR - 15 * MIN;
+  assert.deepEqual(dueReminders({ start, createdAt, alreadySent: ["24h"], now: at15m }), ["15m"]);
+});
+
+test("an outage across the 24h mark still catches up for an eligible session", () => {
+  // Booked a week out, so it is eligible; the server misses the mark by 5h.
+  const start = new Date(NOW + 24 * HOUR);
+  const createdAt = new Date(NOW - 7 * 24 * HOUR);
+
+  const fiveHoursLate = NOW + 5 * HOUR;
+  assert.deepEqual(dueReminders({ start, createdAt, now: fiveHoursLate }), ["24h"]);
+});
+
 test("booked under 15 minutes before start: no reminder at all", () => {
   const start = new Date(NOW + 10 * MIN);
   const createdAt = new Date(NOW);

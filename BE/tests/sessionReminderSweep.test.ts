@@ -178,6 +178,86 @@ test("a legacy Event reminds both sides", async () => {
   } finally { d.restore(); }
 });
 
+// --- eligibility is judged from confirmation, not proposal ------------------
+
+test("a 1:1 confirmed inside the 24h mark gets only the 15-minute reminder", async () => {
+  reset();
+  const d = withData({
+    groups: [oneToOne({
+      start: new Date(NOW + 20 * HOUR),
+      createdAt: new Date(NOW - 10 * DAY),
+      confirmedAt: new Date(NOW),
+    })],
+    users: [user("expert1"), user("student1")],
+  });
+  try {
+    assert.equal(await sweepSessionReminders(NOW), 0);
+    const at15m = NOW + 20 * HOUR - 15 * MIN;
+    assert.equal(await sweepSessionReminders(at15m), 2);
+    assert.deepEqual(sent.map((x: any) => x.kind), ["15m", "15m"]);
+  } finally { d.restore(); }
+});
+
+test("a 1:1 confirmed before the 24h mark still gets both", async () => {
+  reset();
+  const d = withData({
+    groups: [oneToOne({
+      start: new Date(NOW + 25 * HOUR),
+      createdAt: new Date(NOW - 10 * DAY),
+      confirmedAt: new Date(NOW),
+    })],
+    users: [user("expert1"), user("student1")],
+  });
+  try {
+    const at24h = NOW + 25 * HOUR - 24 * HOUR;
+    assert.equal(await sweepSessionReminders(at24h), 2);
+    assert.deepEqual(sent.map((x: any) => x.kind), ["24h", "24h"]);
+  } finally { d.restore(); }
+});
+
+test("a legacy Event is judged from confirmedAt too", async () => {
+  reset();
+  const d = withData({
+    events: [legacyEvent({
+      start: new Date(NOW + 20 * HOUR),
+      createdAt: new Date(NOW - 10 * DAY),
+      confirmedAt: new Date(NOW),
+    })],
+    users: [user("expert1"), user("student1")],
+  });
+  try {
+    assert.equal(await sweepSessionReminders(NOW), 0);
+  } finally { d.restore(); }
+});
+
+test("a row with no confirmedAt falls back to createdAt", async () => {
+  reset();
+  // Sessions confirmed before the field existed must keep working.
+  const d = withData({
+    groups: [oneToOne({
+      start: new Date(NOW + 25 * HOUR),
+      createdAt: new Date(NOW - 10 * DAY),
+    })],
+    users: [user("expert1"), user("student1")],
+  });
+  try {
+    const at24h = NOW + 25 * HOUR - 24 * HOUR;
+    assert.equal(await sweepSessionReminders(at24h), 2);
+  } finally { d.restore(); }
+});
+
+test("a seminar is unaffected — it has no confirmation step", async () => {
+  reset();
+  const d = withData({
+    groups: [seminar({ start: new Date(NOW + 25 * HOUR), createdAt: new Date(NOW - 30 * DAY) })],
+    users: [user("expert1"), user("student1"), user("student2")],
+  });
+  try {
+    const at24h = NOW + 25 * HOUR - 24 * HOUR;
+    assert.equal(await sweepSessionReminders(at24h), 3);
+  } finally { d.restore(); }
+});
+
 test("a community is never reminded — it has no start time", async () => {
   reset();
   const d = withData({

@@ -4,6 +4,7 @@ const eventSchema = new mongoose.Schema(
     {
             expert: {type: mongoose.Schema.Types.ObjectId, ref: "User"},
             customer: {type: mongoose.Schema.Types.ObjectId, ref: "User"},
+            confirmedAt: {type: Date, default: null},
             start: {type: Date},
             end: {type: Date},
             duration: {type: Number},

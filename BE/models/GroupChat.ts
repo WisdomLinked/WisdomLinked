@@ -58,6 +58,7 @@ const groupChatSchema = new mongoose.Schema(
         },
         status: {type: String, enum: ["draft", "pending", "active", "cancelled"], default: 'pending'},
         decisionNote: { type: String, default: '' },
+        confirmedAt: { type: Date, default: null },
         decisionNoteAt: { type: Date, default: null },
         decisionNoteReadAt: { type: Date, default: null },
         decisionDeadline: { type: Date, default: null },

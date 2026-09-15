@@ -89,6 +89,7 @@ const remindOne = async (
         return false;
     }
 };
+const scheduledAt = (session: any): any => session?.confirmedAt || session?.createdAt;
 
 const sweepGroupChats = async (now: number): Promise<number> => {
     const { from, to } = reminderQueryWindow(now);
@@ -102,7 +103,7 @@ const sweepGroupChats = async (now: number): Promise<number> => {
     for (const session of sessions) {
         const due = dueReminders({
             start: session.start,
-            createdAt: session.createdAt,
+            createdAt: scheduledAt(session),
             alreadySent: session.remindersSent,
             now,
         });
@@ -138,7 +139,7 @@ const sweepEvents = async (now: number): Promise<number> => {
     for (const event of events) {
         const due = dueReminders({
             start: event.start,
-            createdAt: event.createdAt,
+            createdAt: scheduledAt(event),
             alreadySent: event.remindersSent,
             now,
         });
@@ -178,5 +179,6 @@ const sweepSessionReminders = async (now: number = Date.now()): Promise<number> 
 module.exports = {
     sweepSessionReminders,
     wantsReminder,
+    scheduledAt,
     REMINDABLE_GROUP_TYPES,
 };

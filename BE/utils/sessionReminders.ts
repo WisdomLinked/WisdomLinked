@@ -92,12 +92,20 @@ export const dueReminders = ({
     if (startMs <= now) return [];
 
     if (isLateBooking(start, createdAt)) return [];
+    const createdRaw = toMs(createdAt);
+    const createdMs = Number.isFinite(createdRaw) ? createdRaw : null;
 
     const sent = new Set((alreadySent || []).map((k) => String(k)));
 
     return (['24h', '15m'] as ReminderKind[]).filter((kind) => {
         if (sent.has(kind)) return false;
         const markMs = startMs - REMINDER_LEAD_MS[kind];
+        // Scheduled after this kind's own mark? Then it was never owed. Confirming
+        // 20h ahead means the 24h mark is already past, and "your session is
+        // tomorrow" seconds after booking is noise. Without this the staleness
+        // window below would still let it through for 6h, quietly turning the
+        // 24h boundary into 18h.
+        if (createdMs !== null && createdMs > markMs) return false;
         if (markMs > now) return false;                    // mark not reached yet
         return now - markMs <= staleAfterMs[kind];         // ...and not so long ago it is stale
     });
