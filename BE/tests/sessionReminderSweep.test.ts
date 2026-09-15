@@ -7,6 +7,7 @@ const notifications = require("../services/notifications");
 const GroupChat = require("../models/GroupChat");
 const Event = require("../models/Event");
 const User = require("../models/User");
+const AppState = require("../models/AppState");
 
 const sent: any[] = [];
 // The sweep destructures this at require time, so the dispatcher installed here is
@@ -34,14 +35,26 @@ const user = (id: string, over: any = {}) => ({
  * Install fake collections. `claimed` records every atomic claim so tests can
  * assert that a reminder was ticked off exactly once.
  */
-const withData = ({ groups = [], events = [], users = [] }: any) => {
+const withData = ({ groups = [], events = [], users = [], activatedAt = null }: any) => {
   const original = {
+    aFind: AppState.findOne,
+    aUpdate: AppState.updateOne,
     gFind: GroupChat.find,
     gFOAU: GroupChat.findOneAndUpdate,
     eFind: Event.find,
     eFOAU: Event.findOneAndUpdate,
     uById: User.findById,
     uFind: User.find,
+  };
+
+  // The sweep reads its activation stamp on every tick. Tests that do not care
+  // supply none, which leaves the notBefore rule inert.
+  let stamp: any = activatedAt;
+  AppState.findOne = async () => (stamp ? { reminderSweepActivatedAt: stamp } : null);
+  AppState.updateOne = async (filter: any, update: any) => {
+    const v = update?.$set?.reminderSweepActivatedAt;
+    if (v && !stamp) stamp = v;
+    return { acknowledged: true };
   };
   const byId = new Map(users.map((u: any) => [String(u._id), u]));
   const claimed: string[] = [];
@@ -82,6 +95,8 @@ const withData = ({ groups = [], events = [], users = [] }: any) => {
       Event.findOneAndUpdate = original.eFOAU;
       User.findById = original.uById;
       User.find = original.uFind;
+      AppState.findOne = original.aFind;
+      AppState.updateOne = original.aUpdate;
     },
   };
 };
@@ -255,6 +270,61 @@ test("a seminar is unaffected — it has no confirmation step", async () => {
   try {
     const at24h = NOW + 25 * HOUR - 24 * HOUR;
     assert.equal(await sweepSessionReminders(at24h), 3);
+  } finally { d.restore(); }
+});
+
+// --- the deploy that introduces the sweep -----------------------------------
+
+test("the first sweep in an environment does not fire a backlog", async () => {
+  reset();
+  // A database of live bookings, none with reminder history because the field is
+  // new. Their 24h marks are already in the past; without the activation stamp
+  // this tick would email every one of them at once.
+  const d = withData({
+    groups: [
+      seminar({ _id: "old1", start: new Date(NOW + 2 * HOUR), createdAt: new Date(NOW - 30 * DAY) }),
+      seminar({ _id: "old2", start: new Date(NOW + 20 * HOUR), createdAt: new Date(NOW - 30 * DAY) }),
+    ],
+    users: [user("expert1"), user("student1"), user("student2")],
+  });
+  try {
+    assert.equal(await sweepSessionReminders(NOW), 0);
+    assert.deepEqual(recipients(), []);
+  } finally { d.restore(); }
+});
+
+test("activation suppresses only the marks it predates, not later ones", async () => {
+  reset();
+  // Same session, but now at its 15-minute mark — which falls after activation,
+  // so it is genuinely owed and must still be sent.
+  const d = withData({
+    groups: [seminar({ start: new Date(NOW + 20 * HOUR), createdAt: new Date(NOW - 30 * DAY) })],
+    users: [user("expert1"), user("student1"), user("student2")],
+    activatedAt: new Date(NOW),
+  });
+  try {
+    assert.equal(await sweepSessionReminders(NOW), 0);              // 24h mark: predates activation
+    const at15m = NOW + 20 * HOUR - 15 * MIN;
+    assert.equal(await sweepSessionReminders(at15m), 3);            // 15m mark: after it
+  } finally { d.restore(); }
+});
+
+test("the activation stamp is written once and reused, so restarts cannot move it", async () => {
+  reset();
+  const d = withData({
+    groups: [seminar({ start: new Date(NOW + 40 * HOUR), createdAt: new Date(NOW - 30 * DAY) })],
+    users: [user("expert1"), user("student1"), user("student2")],
+  });
+  try {
+    await sweepSessionReminders(NOW);                                // stamps activation
+    const stamped = await AppState.findOne();
+    const first = new Date(stamped.reminderSweepActivatedAt).getTime();
+    await sweepSessionReminders(NOW + 10 * HOUR);                    // a later "restart"
+    const again = await AppState.findOne();
+    assert.equal(new Date(again.reminderSweepActivatedAt).getTime(), first);
+    // and a mark falling due after activation still fires
+    reset();
+    assert.equal(await sweepSessionReminders(NOW + 40 * HOUR - 24 * HOUR), 3);
   } finally { d.restore(); }
 });
 

@@ -86,6 +86,44 @@ test("an outage across the 24h mark still catches up for an eligible session", (
   assert.deepEqual(dueReminders({ start, createdAt, now: fiveHoursLate }), ["24h"]);
 });
 
+test("a mark that passed before the sweep existed here is not owed", () => {
+  // The deploy that introduces the sweep meets a database full of sessions with
+  // no reminder history. Without this, the first tick would email everyone
+  // starting within 24h at once.
+  const start = new Date(NOW + 10 * HOUR);
+  const createdAt = new Date(NOW - 30 * DAY);
+  const activatedAt = NOW;                       // sweep goes live now
+
+  // the 24h mark passed 14h before activation: never ours to send
+  assert.deepEqual(dueReminders({ start, createdAt, now: NOW, notBefore: activatedAt }), []);
+
+  // ...but the 15-minute mark is still ahead, so it is genuinely owed
+  const at15m = NOW + 10 * HOUR - 15 * MIN;
+  assert.deepEqual(
+    dueReminders({ start, createdAt, now: at15m, notBefore: activatedAt }),
+    ["15m"],
+  );
+});
+
+test("notBefore does not suppress marks that fall due after activation", () => {
+  const start = new Date(NOW + 40 * HOUR);
+  const createdAt = new Date(NOW - 30 * DAY);
+  const at24h = NOW + 40 * HOUR - 24 * HOUR;     // 16h after activation
+  assert.deepEqual(dueReminders({ start, createdAt, now: at24h, notBefore: NOW }), ["24h"]);
+});
+
+test("notBefore is what suppresses it — the same session fires without it", () => {
+  // 20h out, so the 24h mark passed 4h ago: inside the 6h staleness window, which
+  // means it WOULD be sent on catch-up. Only notBefore stops it. This is the case
+  // the deploy burst is actually made of.
+  const start = new Date(NOW + 20 * HOUR);
+  const createdAt = new Date(NOW - 30 * DAY);
+
+  assert.deepEqual(dueReminders({ start, createdAt, now: NOW }), ["24h"]);
+  assert.deepEqual(dueReminders({ start, createdAt, now: NOW, notBefore: null }), ["24h"]);
+  assert.deepEqual(dueReminders({ start, createdAt, now: NOW, notBefore: NOW }), []);
+});
+
 test("booked under 15 minutes before start: no reminder at all", () => {
   const start = new Date(NOW + 10 * MIN);
   const createdAt = new Date(NOW);

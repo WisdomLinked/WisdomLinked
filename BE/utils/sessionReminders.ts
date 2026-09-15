@@ -78,12 +78,19 @@ export const dueReminders = ({
     alreadySent = [],
     now = Date.now(),
     staleAfterMs = REMINDER_STALE_AFTER_MS,
+    notBefore = null,
 }: {
     start: any;
     createdAt?: any;
     alreadySent?: readonly string[] | null;
     now?: number;
     staleAfterMs?: Record<ReminderKind, number>;
+    /**
+     * Marks that passed before this instant are not owed. The sweep supplies the
+     * moment it first ran in this environment, so the deploy that introduces it
+     * does not fire a backlog of reminders for sessions already under way.
+     */
+    notBefore?: number | null;
 }): ReminderKind[] => {
     const startMs = toMs(start);
     if (!Number.isFinite(startMs)) return [];
@@ -106,6 +113,9 @@ export const dueReminders = ({
         // window below would still let it through for 6h, quietly turning the
         // 24h boundary into 18h.
         if (createdMs !== null && createdMs > markMs) return false;
+        // Same idea, from the other side: a mark that passed before the sweep
+        // existed here was never ours to send.
+        if (notBefore !== null && notBefore !== undefined && markMs < notBefore) return false;
         if (markMs > now) return false;                    // mark not reached yet
         return now - markMs <= staleAfterMs[kind];         // ...and not so long ago it is stale
     });

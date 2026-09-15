@@ -14,6 +14,7 @@
  *   - a rescheduled session is read at its current start
  *   - each occurrence of a recurring seminar is its own document, so no special case
  */
+const AppState = require('../models/AppState');
 const GroupChat = require('../models/GroupChat');
 const Event = require('../models/Event');
 const User = require('../models/User');
@@ -91,7 +92,37 @@ const remindOne = async (
 };
 const scheduledAt = (session: any): any => session?.confirmedAt || session?.createdAt;
 
-const sweepGroupChats = async (now: number): Promise<number> => {
+/**
+ * The instant this environment's sweep first ran, written once and reused.
+ *
+ * Replaces what would otherwise be a manual migration step at deploy time. Every
+ * session that already exists has an empty `remindersSent`, so the first tick
+ * would treat them all as never-reminded and email everyone starting within 24h
+ * at once. Marks older than this timestamp are simply not owed.
+ *
+ * Deliberately persisted rather than computed at boot: a process that recomputed
+ * "now" on every restart would suppress a 15-minute reminder that was genuinely
+ * due at that moment.
+ */
+const sweepActivatedAt = async (now: number): Promise<number> => {
+    const existing = await AppState.findOne({}, 'reminderSweepActivatedAt');
+    if (existing?.reminderSweepActivatedAt) return new Date(existing.reminderSweepActivatedAt).getTime();
+
+    // Ensure the singleton exists, then claim the timestamp only if unset. Both
+    // steps are idempotent, so concurrent boots settle on the same value.
+    if (!existing) await AppState.updateOne({}, { $setOnInsert: {} }, { upsert: true }).catch(() => null);
+    await AppState.updateOne(
+        { reminderSweepActivatedAt: null },
+        { $set: { reminderSweepActivatedAt: new Date(now) } },
+    ).catch(() => null);
+
+    const settled = await AppState.findOne({}, 'reminderSweepActivatedAt');
+    return settled?.reminderSweepActivatedAt
+        ? new Date(settled.reminderSweepActivatedAt).getTime()
+        : now;
+};
+
+const sweepGroupChats = async (now: number, notBefore: number): Promise<number> => {
     const { from, to } = reminderQueryWindow(now);
     const sessions = await GroupChat.find({
         type: { $in: REMINDABLE_GROUP_TYPES },
@@ -106,6 +137,7 @@ const sweepGroupChats = async (now: number): Promise<number> => {
             createdAt: scheduledAt(session),
             alreadySent: session.remindersSent,
             now,
+            notBefore,
         });
         for (const kind of due) {
             if (!(await claimReminder(GroupChat, session._id, kind))) continue;
@@ -128,7 +160,7 @@ const sweepGroupChats = async (now: number): Promise<number> => {
     return sent;
 };
 
-const sweepEvents = async (now: number): Promise<number> => {
+const sweepEvents = async (now: number, notBefore: number): Promise<number> => {
     const { from, to } = reminderQueryWindow(now);
     const events = await Event.find({
         status: 'accepted',
@@ -142,6 +174,7 @@ const sweepEvents = async (now: number): Promise<number> => {
             createdAt: scheduledAt(event),
             alreadySent: event.remindersSent,
             now,
+            notBefore,
         });
         for (const kind of due) {
             if (!(await claimReminder(Event, event._id, kind))) continue;
@@ -163,9 +196,10 @@ const sweepEvents = async (now: number): Promise<number> => {
  */
 const sweepSessionReminders = async (now: number = Date.now()): Promise<number> => {
     try {
+        const notBefore = await sweepActivatedAt(now);
         const [groupSent, eventSent] = await Promise.all([
-            sweepGroupChats(now),
-            sweepEvents(now),
+            sweepGroupChats(now, notBefore),
+            sweepEvents(now, notBefore),
         ]);
         const total = groupSent + eventSent;
         if (total > 0) console.log(`[sessionReminderSweep] sent ${total} reminder(s)`);
@@ -180,5 +214,6 @@ module.exports = {
     sweepSessionReminders,
     wantsReminder,
     scheduledAt,
+    sweepActivatedAt,
     REMINDABLE_GROUP_TYPES,
 };
