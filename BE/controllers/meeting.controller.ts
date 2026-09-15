@@ -3,7 +3,6 @@ import {
     getOrCreateDMChannel,
     sendMessageToRC,
     toRocketChatUsername,
-    syncRocketGroupChannelMembers,
     wlHtmlToPlainTextForRocketChat,
 } from '../services/rocketchat.service';
 import crypto from 'crypto';
@@ -28,6 +27,7 @@ import {
 } from '../utils/meetingModerationRules';
 import { appendJitsiMobileWebOverrides } from '../utils/jitsiUrl';
 import { isMeetingModerator, isMeetingModeratorWithDelegates } from '../utils/meetingRoleRules';
+import { resolveGroupMeetingScopeIds, resolveGroupRocketChannelId } from '../utils/groupRocketChannel';
 import {
     MEETING_CANNOT_REVOKE_HOST_ROLE,
     MEETING_EXPERT_CANNOT_REVOKE_SELF,
@@ -40,6 +40,7 @@ import {
     MEETING_STILL_IN_PROGRESS,
     MEETING_ONLY_EXPERTS_REVOKE_DELEGATED,
     MEETING_REMOVED_BY_HOST,
+    MEETING_WAITING_FOR_HOST,
 } from '../utils/meetingUserFacingCopy';
 import { buildMeetingInviteUrl, resolvePublicAppBaseUrl } from '../utils/inviteUrl';
 import { wlDisplayName } from '../utils/wlDisplayName';
@@ -314,17 +315,29 @@ const canUserJoinMeeting = async (meeting: any, userId: string): Promise<{ allow
     }
     if (meeting.groupChatId) {
         const groupChat = await GroupChat.findById(meeting.groupChatId)
-            .select('admin participants coModerators')
+            .select('admin participants coModerators seriesId')
             .lean();
         if (!groupChat) return { allowed: false, moderator: false };
-        const adminId = normalizeId(groupChat?.admin);
-        const participantIds = Array.isArray(groupChat?.participants)
-            ? groupChat.participants.map((p: any) => normalizeId(p))
-            : [];
-        const coModeratorIds = Array.isArray(groupChat?.coModerators)
-            ? groupChat.coModerators.map((p: any) => normalizeId(p))
-            : [];
-        const allowed = participantIds.includes(uid) || adminId === uid || coModeratorIds.includes(uid);
+        const scopeDocs = groupChat.seriesId
+            ? await GroupChat.find({ seriesId: groupChat.seriesId })
+                .select('admin participants coModerators')
+                .lean()
+            : [groupChat];
+        let allowed = false;
+        let adminId = normalizeId(groupChat?.admin);
+        for (const doc of scopeDocs) {
+            const docAdmin = normalizeId(doc?.admin);
+            if (docAdmin) adminId = adminId || docAdmin;
+            const participantIds = Array.isArray(doc?.participants)
+                ? doc.participants.map((p: any) => normalizeId(p))
+                : [];
+            const coModeratorIds = Array.isArray(doc?.coModerators)
+                ? doc.coModerators.map((p: any) => normalizeId(p))
+                : [];
+            if (participantIds.includes(uid) || docAdmin === uid || coModeratorIds.includes(uid)) {
+                allowed = true;
+            }
+        }
         const moderator = isMeetingModeratorWithDelegates({
             userId: uid,
             groupAdminId: adminId,
@@ -387,13 +400,8 @@ const sendMeetingEndedToRocketChat = async (meeting: any, endContent: string): P
             .populate('participants', 'email')
             .populate('admin', 'email');
         if (groupChat) {
-            const emails: string[] = [];
-            for (const p of groupChat.participants || []) {
-                if ((p as any)?.email) emails.push(String((p as any).email).toLowerCase());
-            }
-            const adm = groupChat.admin as any;
-            if (adm?.email) emails.push(String(adm.email).toLowerCase());
-            const rcChannelId = await syncRocketGroupChannelMembers(String(meeting.groupChatId), emails);
+            // seriesId || _id — must match chat history room or peers never see __MEETING_ENDED__
+            const rcChannelId = await resolveGroupRocketChannelId(groupChat, String(meeting.groupChatId));
             if (rcChannelId) await sendMessageToRC(rcChannelId, endContent, me.username, me.email);
         }
     }
@@ -417,15 +425,85 @@ const reconcileStaleActiveMeetingFromHeartbeat = async (meeting: any): Promise<b
     return true;
 };
 
-const closeActiveMeetingsForScope = async (scope: { conversationId?: any; groupChatId?: any }) => {
+const closeActiveMeetingsForScope = async (scope: {
+    conversationId?: any;
+    groupChatId?: any;
+    groupChatIds?: string[];
+}) => {
     const query = scope.conversationId
         ? { conversationId: String(scope.conversationId), status: 'active' }
-        : scope.groupChatId
-          ? { groupChatId: String(scope.groupChatId), status: 'active' }
-          : null;
+        : Array.isArray(scope.groupChatIds) && scope.groupChatIds.length
+          ? { groupChatId: { $in: scope.groupChatIds.map(String) }, status: 'active' }
+          : scope.groupChatId
+            ? { groupChatId: String(scope.groupChatId), status: 'active' }
+            : null;
     if (!query) return;
     const activeMeetings = await MeetingThread.find(query);
     await Promise.all(activeMeetings.map((meeting: any) => markMeetingEnded(meeting)));
+};
+
+/** Join an existing active Meet — used by header Join when host already started. No RC start message. */
+const joinActiveMeetingResponse = async (meeting: any, me: any, res: Response) => {
+    const meetingThreadId = String(meeting._id);
+    if (await expireStaleMeetingIfNeeded(meeting)) {
+        return res.status(400).json({ error: 'Meeting is no longer active' });
+    }
+    if (meeting.status !== 'active') {
+        return res.status(400).json({ error: 'Meeting is no longer active' });
+    }
+    if (isRemovedFromMeeting(meeting, String(me._id))) {
+        return res.status(403).json({ error: MEETING_REMOVED_BY_HOST });
+    }
+    const auth = await canUserJoinMeeting(meeting, String(me._id));
+    if (!auth.allowed) {
+        return res.status(403).json({ error: 'You do not have access to this meeting' });
+    }
+    const chatSync = meetingChatSyncUrlParams(String(me._id), meetingThreadId);
+    const jitsiUrl = buildSignedJitsiUrl(String(meeting.jitsiRoomName), me, {
+        moderator: auth.moderator,
+        guest: false,
+        meetingThreadId,
+        chatSyncToken: chatSync.chatSyncToken,
+        chatSyncApiBase: chatSync.chatSyncApiBase,
+        messengerOrigin: chatSync.messengerOrigin,
+    });
+    meeting.joinEvents = Array.isArray(meeting.joinEvents) ? meeting.joinEvents : [];
+    meeting.joinEvents.push({
+        userId: me._id,
+        joinedAt: new Date(),
+        source: 'start-join',
+    });
+    if (!Array.isArray(meeting.participants)) {
+        meeting.participants = [];
+    }
+    if (!meeting.participants.some((p: any) => normalizeId(p) === normalizeId(me._id))) {
+        meeting.participants.push(me._id);
+    }
+    await meeting.save();
+    return res.status(200).json({
+        meetingThreadId,
+        jitsiRoomName: meeting.jitsiRoomName,
+        jitsiUrl,
+        joinedExisting: true,
+        role: auth.moderator ? 'moderator' : 'participant',
+    });
+};
+
+const findActiveMeetingForScope = async (scope: {
+    conversationId?: string;
+    groupChatIds?: string[];
+}) => {
+    const query = scope.conversationId
+        ? { conversationId: scope.conversationId, status: 'active' }
+        : scope.groupChatIds?.length
+          ? { groupChatId: { $in: scope.groupChatIds }, status: 'active' }
+          : null;
+    if (!query) return null;
+    return MeetingThread.findOne(query)
+        .sort({ startedAt: -1 })
+        .select(
+            'jitsiRoomName status conversationId groupChatId removedParticipants joinEvents participants startedBy delegatedModerators startedAt endedAt duration',
+        );
 };
 
 const hasJoinedMeeting = (meeting: any, userId: string): boolean => {
@@ -477,11 +555,17 @@ export const startMeeting = async (req: any, res: Response) => {
 
         let roomScope = String(conversationId || groupChatId || "");
         let groupAdminId = "";
+        let groupMeetingScopeIds: string[] = [];
         if (conversationId) {
             const conversation = await Conversation.findById(conversationId);
             if (!conversation) return res.status(404).json({ error: 'Conversation not found' });
             const isParticipant = (conversation.participants || []).some((p: any) => String(p) === String(userId));
             if (!isParticipant) return res.status(403).json({ error: 'Only participants can start this call' });
+
+            const existingDm = await findActiveMeetingForScope({ conversationId });
+            if (existingDm && !(await expireStaleMeetingIfNeeded(existingDm)) && existingDm.status === 'active') {
+                return joinActiveMeetingResponse(existingDm, me, res);
+            }
 
             const otherUserId = (conversation.participants || []).find((p: any) => String(p) !== String(userId));
             const otherParticipant = otherUserId
@@ -514,13 +598,32 @@ export const startMeeting = async (req: any, res: Response) => {
                 .populate('participants', 'email role')
                 .populate('admin', 'email role');
             if (!groupChat) return res.status(404).json({ error: 'Group chat not found' });
+
+            groupMeetingScopeIds = await resolveGroupMeetingScopeIds(groupChat);
+            const existingGroupMeet = await findActiveMeetingForScope({
+                groupChatIds: groupMeetingScopeIds.length ? groupMeetingScopeIds : [groupChatId],
+            });
+            if (
+                existingGroupMeet &&
+                !(await expireStaleMeetingIfNeeded(existingGroupMeet)) &&
+                existingGroupMeet.status === 'active'
+            ) {
+                // Members (and admin) join the live call — never create a second Meet.
+                return joinActiveMeetingResponse(existingGroupMeet, me, res);
+            }
+
+            // No active Meet: only group admin (or community co-mod) may start.
             if (!canStartGroupMeeting(groupChat, me)) {
-                return res.status(403).json({ error: 'Only the group admin can start this group call' });
+                return res.status(403).json({ error: MEETING_WAITING_FOR_HOST });
             }
             groupAdminId = normalizeId(groupChat?.admin);
             roomScope = String(groupChatId);
         }
-        await closeActiveMeetingsForScope({ conversationId, groupChatId });
+        await closeActiveMeetingsForScope({
+            conversationId,
+            groupChatId,
+            groupChatIds: groupMeetingScopeIds.length ? groupMeetingScopeIds : undefined,
+        });
         const jitsiRoomName = buildMeetingRoomName(roomScope);
 
         const meetingThread = new MeetingThread({
@@ -555,14 +658,23 @@ export const startMeeting = async (req: any, res: Response) => {
                 .populate('participants', 'email')
                 .populate('admin', 'email');
             if (me && me.email && groupChat) {
-                const emails: string[] = [];
-                for (const p of groupChat.participants || []) {
-                    if ((p as any)?.email) emails.push(String((p as any).email).toLowerCase());
+                // Post into series RC channel (not occurrence id) so all members see Meet card
+                const rcChannelId = await resolveGroupRocketChannelId(groupChat, groupChatId);
+                if (rcChannelId) {
+                    const posted = await sendMessageToRC(rcChannelId, meetingContent, me.username, me.email);
+                    if (!posted) {
+                        console.error('[meeting.start] RC __MEETING_STARTED__ post failed', {
+                            groupChatId,
+                            seriesId: groupChat.seriesId ? String(groupChat.seriesId) : null,
+                            rcChannelId,
+                        });
+                    }
+                } else {
+                    console.error('[meeting.start] no RC channel for group meet', {
+                        groupChatId,
+                        seriesId: groupChat.seriesId ? String(groupChat.seriesId) : null,
+                    });
                 }
-                const adm = groupChat.admin as any;
-                if (adm?.email) emails.push(String(adm.email).toLowerCase());
-                const rcChannelId = await syncRocketGroupChannelMembers(String(groupChatId), emails);
-                if (rcChannelId) await sendMessageToRC(rcChannelId, meetingContent, me.username, me.email);
             }
         }
 
@@ -825,13 +937,7 @@ export const syncMeetingChatMessage = async (req: any, res: Response) => {
                 .populate('participants', 'email')
                 .populate('admin', 'email');
             if (!groupChat) return res.status(404).json({ error: 'Group chat not found' });
-            const emails: string[] = [];
-            for (const p of groupChat.participants || []) {
-                if ((p as any)?.email) emails.push(String((p as any).email).toLowerCase());
-            }
-            const adm = groupChat.admin as any;
-            if (adm?.email) emails.push(String(adm.email).toLowerCase());
-            const rcChannelId = await syncRocketGroupChannelMembers(String(meeting.groupChatId), emails);
+            const rcChannelId = await resolveGroupRocketChannelId(groupChat, String(meeting.groupChatId));
             if (rcChannelId) {
                 if (isGuest) {
                     rcMessageId = await sendMessageToRC(rcChannelId, rcLine, `Meet · ${author}`, undefined);
