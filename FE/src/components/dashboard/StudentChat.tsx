@@ -43,7 +43,7 @@ import { pickLiveOrNextOccurrence } from '../../utils/seminarSeriesOccurrence';
 import { resolveProfileImageSrc } from '../../utils/profileImage';
 import { shouldShowMobileMessenger } from '../../utils/mobileChatLayout';
 import { buildOnlineUserIdSet, hasOnlineUserId } from '../../utils/onlinePresence';
-import { getAvatarPalette, getInitials, getPrivateDmStatusDotClass } from '../../utils/avatarColor';
+import { getAvatarPalette, getInitials } from '../../utils/avatarColor';
 import { CommunityRoomAvatar } from './ChatSidebar';
 import { canAdminInitiateDmWithRole } from '../../utils/adminChatRules';
 
@@ -1458,7 +1458,6 @@ const StudentChat: React.FC = () => {
                 const displayName = title || '';
                 const initials = getInitials(displayName);
                 const palette = getAvatarPalette(initials);
-                const dmStatusDotClass = getPrivateDmStatusDotClass(online ? 'online' : 'offline');
                 const rowPortrait =
                   row.kind === 'friend' && row.image
                     ? row.image
@@ -1518,12 +1517,7 @@ const StudentChat: React.FC = () => {
                           </div>
                         )}
 
-                        {row.kind === 'privateDm' ? (
-                          <span
-                            className={`absolute bottom-0 right-0 z-10 h-2.5 w-2.5 rounded-full border-2 border-white ${dmStatusDotClass}`}
-                            aria-hidden
-                          />
-                        ) : online ? (
+                        {online ? (
                           <span
                             className="pointer-events-none absolute bottom-0 right-0 z-10 h-2.5 w-2.5 rounded-full border-2 border-white bg-[#1D9E75]"
                             aria-hidden
