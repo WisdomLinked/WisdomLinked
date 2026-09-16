@@ -194,38 +194,37 @@ export default function Sidebar({
         {content}
       </aside>
 
+      {/* Sits above TopBar (sticky, z-50, opaque) or the header paints over it and
+          the menu is unreachable until the page is scrolled. Above the drawer too
+          (z-[70]) so the same button closes what it opened. TopBar reserves space
+          on the left so the two never overlap. */}
       <button
         type="button"
-        className="fixed top-3 left-3 z-40 inline-flex h-9 w-9 items-center justify-center rounded-full border border-slate-300 bg-white text-slate-700 shadow lg:hidden"
-        onClick={() => setOpenMobile(true)}
-        aria-label="Open navigation"
+        className="fixed top-3 left-3 z-[80] inline-flex h-9 w-9 items-center justify-center rounded-full border border-slate-300 bg-white text-slate-700 shadow lg:hidden"
+        onClick={() => setOpenMobile(open => !open)}
+        aria-label={openMobile ? 'Close navigation' : 'Open navigation'}
+        aria-expanded={openMobile}
       >
-        <Menu className="h-4 w-4" />
+        {openMobile ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
       </button>
 
       {openMobile && (
-        <div className="fixed inset-0 z-40 lg:hidden">
+        <div className="fixed inset-0 z-[70] lg:hidden">
           <div
             className="absolute inset-0 bg-slate-900/50"
             aria-hidden="true"
             onClick={() => setOpenMobile(false)}
           />
-          <div className="relative h-full w-72 max-w-full shadow-2xl">
-            <button
-              type="button"
-              className="absolute top-3 right-3 flex h-8 w-8 items-center justify-center rounded-full border border-slate-300 bg-white text-slate-700"
-              onClick={() => setOpenMobile(false)}
-              aria-label="Close navigation"
-            >
-              <X className="h-4 w-4" />
-            </button>
+          <div className="relative h-full w-72 max-w-full shadow-2xl pt-12">
             {content}
           </div>
         </div>
       )}
 
+      {/* Logout dialog sits above the mobile drawer (z-[70]) and its toggle (z-[80]):
+          it is opened from inside the drawer, so anything lower is unreachable. */}
       {showLogoutConfirm && (
-        <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-900/40 px-4">
+        <div className="fixed inset-0 z-[90] flex items-center justify-center bg-slate-900/40 px-4">
           <div className="w-full max-w-sm rounded-2xl bg-white shadow-xl border border-slate-200 p-5">
             <h2 className="text-base font-semibold text-slate-900 mb-2">
               Sign out?
