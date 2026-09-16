@@ -27,17 +27,3 @@ export function getInitials(name: string): string {
     .toUpperCase()
     .slice(0, 2);
 }
-
-/** Tailwind `bg-*` segment for the DM sidebar status dot. */
-export function getPrivateDmStatusDotClass(
-  presence: 'online' | 'away' | 'offline',
-): string {
-  switch (presence) {
-    case 'online':
-      return 'bg-[#1D9E75]';
-    case 'away':
-      return 'bg-[#EF9F27]';
-    case 'offline':
-      return 'bg-[#B4B2A9]';
-  }
-}
