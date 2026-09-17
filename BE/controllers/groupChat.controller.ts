@@ -89,6 +89,7 @@ const groupMemberIds = (groupChat: any): string[] => [
     ...(Array.isArray(groupChat?.coModerators) ? groupChat.coModerators.map((p: any) => normalizeId(p)) : []),
 ].filter(Boolean);
 
+import { hasJoinedCommunity } from '../utils/communityMembership';
 import { enrolledStudentIds, seminarIsFull, computeSeatRequestDeadline, seatRequestWindowOpen, seatRequestUnavailableMessage, resolveSeatApprovalBlock } from '../utils/seminarCapacity';
 import { describeSeminarChanges } from '../utils/seminarChanges';
 import {
@@ -284,10 +285,9 @@ const createCommunityChat = async (req, res) => {
             lastMessageAt: now,
         });
 
-        // Add chat to the creator and any explicitly invited participants (not to all users).
         const participantsToUpdate = finalParticipants;
-        await User.updateMany(
-            { _id: { $in: participantsToUpdate } },
+        await User.updateOne(
+            { _id: userId },
             { $addToSet: { generalChats: communityChat._id } }
         );
 
@@ -384,11 +384,6 @@ const addParticipantsToCommunityChat = async (req, res) => {
 
         await syncGroupRocketChannel(String(communityChat._id));
 
-        // Add chat to new participants' generalChats arrays
-        await User.updateMany(
-            { _id: { $in: newParticipantIds } },
-            { $addToSet: { generalChats: communityChat._id } }
-        );
 
         // Update all participants' chat lists via socket
         newParticipantIds.forEach(participantId => {
@@ -534,7 +529,6 @@ const getAllCommunityChats = async (req, res) => {
 
         // Add isJoined flag to each chat
         const chatsWithJoinStatus = communityChats.map(chat => {
-            const chatId = chat._id.toString();
             const participantIds = (chat.participants || []).map((p) => {
                 if (typeof p === 'string') return p;
                 if (p && p._id) return p._id.toString();
@@ -543,7 +537,7 @@ const getAllCommunityChats = async (req, res) => {
 
             return {
                 ...chat,
-                isJoined: userChatIds.includes(chatId) || participantIds.includes(userId.toString()),
+                isJoined: hasJoinedCommunity(chat, userId, userChatIds),
                 participantCount: participantIds.length
             };
         });
