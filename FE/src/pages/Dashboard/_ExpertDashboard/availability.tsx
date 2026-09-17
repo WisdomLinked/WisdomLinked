@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Check, ChevronDown, ChevronRight, X } from 'lucide-react';
 import { useDispatch } from 'react-redux';
 import ExpertAvailabilitySchedule from './ExpertAvailabilitySchedule';
@@ -13,7 +13,6 @@ import {
   hoursToHalfHourIndices,
   normalizeExpertPrice,
   unionDailyAvailabilityHours,
-  weeklyTimeSlotsEqual,
   WEEKDAY_KEYS,
 } from '../../../utils/schedulingSlots';
 import { detectUserTimeZone } from '../../../utils/schedulingTimezone';
@@ -21,14 +20,13 @@ import {
   buildAvailabilitySaveSuccessMessage,
   buildBookingNoticeSaveSuccessMessage,
   mapAvailabilitySaveError,
-  slotsIndicesEqual,
 } from '../../../utils/availabilitySaveMessages';
 import {
-  appointmentDurationsEqual,
   normalizeAppointmentDurations,
   previewDurationForSlots,
   type AppointmentDurationMinutes,
 } from '../../../utils/appointmentDurations';
+import { computeAvailabilityChanges } from '../../../utils/availabilityDirty';
 
 type AvailabilityMode = 'common' | 'daily';
 
@@ -112,6 +110,12 @@ const AvailabilityPage: React.FC = () => {
   const [expandedDays, setExpandedDays] = useState<DayOfWeek[]>(['Mon']);
   const [noticeSaving, setNoticeSaving] = useState(false);
   const [saveBusy, setSaveBusy] = useState(false);
+  const bannerRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!banner.type) return;
+    bannerRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'center' });
+  }, [banner]);
 
   const detectedTimeZone = useMemo(
     () => userDetails?.timeZone || detectUserTimeZone(),
@@ -307,6 +311,25 @@ const AvailabilityPage: React.FC = () => {
     }, 0);
   }, [form]);
 
+  const draftAvailability = useMemo(() => {
+    const selectedHours =
+      form.mode === 'common'
+        ? form.commonSlots
+        : unionDailyAvailabilityHours(form.dailyAvailability);
+    return {
+      hourlyRate: form.hourlyRate,
+      mode: form.mode,
+      timeSlots: hoursToHalfHourIndices(selectedHours),
+      weeklyTimeSlots: buildWeeklyTimeSlots(form.dailyAvailability),
+      appointmentDurations: form.appointmentDurations,
+    };
+  }, [form]);
+
+  const changes = useMemo(
+    () => computeAvailabilityChanges(draftAvailability, userDetails),
+    [draftAvailability, userDetails],
+  );
+
   const handleSave = async () => {
     const numRate = Number(form.hourlyRate);
     const rateValid =
@@ -325,36 +348,12 @@ const AvailabilityPage: React.FC = () => {
       return;
     }
 
-    // `timeSlots` stays the flat union so 'common' mode and legacy consumers keep
-    // working; `weeklyTimeSlots` carries the per-weekday picks used by 'daily' mode.
-    const selectedHours =
-      form.mode === 'common'
-        ? form.commonSlots
-        : unionDailyAvailabilityHours(form.dailyAvailability);
-    const timeSlots = hoursToHalfHourIndices(selectedHours);
-    const weeklyTimeSlots = buildWeeklyTimeSlots(form.dailyAvailability);
+    const { timeSlots, weeklyTimeSlots } = draftAvailability;
     const timeZone = detectUserTimeZone();
 
-    const savedPrice = normalizeExpertPrice(userDetails?.price);
-    const savedSlots = Array.isArray(userDetails?.timeSlots) ? userDetails.timeSlots : [];
-    const savedDurations = normalizeAppointmentDurations(userDetails?.appointmentDurations);
-    const savedMode: AvailabilityMode =
-      userDetails?.availabilityMode === 'daily' ? 'daily' : 'common';
-    const rateChanged = numRate !== savedPrice;
-    const slotsChanged = !slotsIndicesEqual(timeSlots, savedSlots);
-    const durationsChanged = !appointmentDurationsEqual(
-      form.appointmentDurations,
-      savedDurations,
-    );
-    const modeChanged = form.mode !== savedMode;
-    // Per-weekday picks only count as a change in 'daily' mode; in 'common' mode the
-    // daily rows are just UI defaults and must not trigger a save on their own.
-    const weeklyChanged =
-      form.mode === 'daily' &&
-      !weeklyTimeSlotsEqual(weeklyTimeSlots, userDetails?.weeklyTimeSlots);
-    const availabilityChanged = slotsChanged || modeChanged || weeklyChanged;
+    const { rateChanged, durationsChanged, availabilityChanged } = changes;
 
-    if (!rateChanged && !availabilityChanged && !durationsChanged) {
+    if (!changes.anyChanged) {
       setBanner({
         type: 'success',
         message: 'No changes to save.',
@@ -607,7 +606,8 @@ const AvailabilityPage: React.FC = () => {
 
   return (
     <div className="min-h-full bg-white">
-      <div className="mx-auto max-w-6xl px-6 py-8 pb-28 bg-[#F5F3EF] rounded-2xl">
+      {/* Bottom padding keeps the save button clear of the fixed hint bar and the HelpBot. */}
+      <div className="mx-auto max-w-6xl px-6 py-8 pb-40 sm:pb-36 bg-[#F5F3EF] rounded-2xl">
         <div className="mb-4">
           <h1 className="text-2xl font-semibold text-gray-900">Your Availability</h1>
           <p className="mt-1 text-sm text-gray-500">
@@ -618,6 +618,7 @@ const AvailabilityPage: React.FC = () => {
 
         {banner.type && (
           <div
+            ref={bannerRef}
             className={[
               'mb-4 flex items-start gap-3 rounded-lg border-l-4 px-4 py-3 text-sm',
               banner.type === 'error'
@@ -848,20 +849,34 @@ const AvailabilityPage: React.FC = () => {
 
         <ExpertAvailabilitySchedule />
 
+        <div className="mt-6 flex justify-end">
+          <button
+            type="button"
+            onClick={handleSave}
+            disabled={!changes.anyChanged || saveBusy}
+            aria-disabled={!changes.anyChanged || saveBusy}
+            title={
+              changes.anyChanged
+                ? undefined
+                : 'Make a change to your rate, durations or time slots to enable saving.'
+            }
+            className={[
+              'inline-flex shrink-0 items-center rounded-lg px-5 py-2.5 text-sm font-medium transition-colors',
+              changes.anyChanged && !saveBusy
+                ? 'bg-[#234C6A] text-white hover:bg-[#1b3c53]'
+                : 'cursor-not-allowed bg-gray-200 text-gray-500',
+            ].join(' ')}
+          >
+            {saveBusy ? 'Saving…' : 'Save Changes'}
+          </button>
+        </div>
+
         <div className="pointer-events-none fixed bottom-0 left-0 right-0 z-30 lg:left-[70px]">
           <div className="pointer-events-auto mx-auto max-w-6xl px-6 pb-4">
             <div className="flex items-center justify-between gap-3 rounded-2xl border border-gray-200 bg-white/95 px-5 py-3.5 shadow-lg backdrop-blur-md">
-              <p className="hidden text-xs text-gray-500 sm:block">
+              <p className="text-xs text-gray-500">
                 Save your hourly rate and weekly time slots when you are done editing.
               </p>
-              <button
-                type="button"
-                onClick={handleSave}
-                disabled={saveBusy}
-                className="ml-auto inline-flex shrink-0 items-center rounded-lg bg-[#234C6A] px-5 py-2.5 text-sm font-medium text-white hover:bg-[#1b3c53] disabled:opacity-60"
-              >
-                {saveBusy ? 'Saving…' : 'Save Changes'}
-              </button>
             </div>
           </div>
         </div>
