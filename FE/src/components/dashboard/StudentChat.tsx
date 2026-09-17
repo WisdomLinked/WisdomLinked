@@ -6,7 +6,7 @@ import DialogTitle from '@mui/material/DialogTitle';
 import DialogContent from '@mui/material/DialogContent';
 import DialogActions from '@mui/material/DialogActions';
 import Button from '@mui/material/Button';
-import { MessageCircle, Plus, X, CheckCircle2, MoreVertical, UserPlus, ArrowLeft } from 'lucide-react';
+import { MessageCircle, Plus, X, CheckCircle2, MoreVertical, UserPlus, ArrowLeft, Users } from 'lucide-react';
 import Messenger from '../../pages/Dashboard/Messenger/Messenger';
 import { useAppSelector } from '../../store';
 import { onSubscriptionChanged, onNewMessage, normalizeRcStreamRoomMessage, subscribeToRoom } from '../../services/rcRealtime';
@@ -97,6 +97,7 @@ const StudentChat: React.FC = () => {
   const [privateQuery, setPrivateQuery] = useState('');
   const [seminarQuery, setSeminarQuery] = useState('');
   const [communityChats, setCommunityChats] = useState<CommunityRow[]>([]);
+  const [joiningCommunity, setJoiningCommunity] = useState(false);
   const [privateRows, setPrivateRows] = useState<PrivateRow[]>([]);
   const [events, setEvents] = useState<any[]>([]);
   const [resetCurrentEventFlag, setResetCurrentEventFlag] = useState(false);
@@ -834,19 +835,6 @@ const StudentChat: React.FC = () => {
         });
         clearLiveGroupUnread(rid);
       }
-      if (isExpert && !row.raw?.isJoined) {
-        try {
-          const res: any = await joinCommunityChat(row._id);
-          if (res?.status === 'SUCCESS') {
-            dispatch(updateMe() as any);
-            await loadCommunityChats();
-          } else if (res?.error) {
-            dispatch(showErrorAlert(res.error));
-          }
-        } catch {
-          /* may already be a member */
-        }
-      }
       dispatch(
         setChosenGroupChatDetails({
           ...row.raw,
@@ -860,7 +848,7 @@ const StudentChat: React.FC = () => {
         payload: { receiverId: row._id, count: 0 },
       });
     },
-    [dispatch, isExpert, loadCommunityChats, clearLiveGroupUnread],
+    [dispatch, clearLiveGroupUnread],
   );
 
   const onCreateCommunity = async () => {
@@ -1245,6 +1233,35 @@ const StudentChat: React.FC = () => {
     return hasOnlineUserId(onlineIdSet, userId);
   };
   const showMobileMessenger = shouldShowMobileMessenger(chosenChatDetails, chosenGroupChatDetails);
+
+  const pendingJoinCommunity = useMemo(() => {
+    const openId = String(
+      (chosenGroupChatDetails as any)?.groupId ?? (chosenGroupChatDetails as any)?._id ?? '',
+    );
+    if (!openId) return null;
+    const row = communityChats.find(c => String(c._id) === openId);
+    if (!row) return null;
+    return row.raw?.isJoined ? null : row;
+  }, [chosenGroupChatDetails, communityChats]);
+
+  const onJoinCommunity = async () => {
+    if (!pendingJoinCommunity || joiningCommunity) return;
+    setJoiningCommunity(true);
+    try {
+      const res: any = await joinCommunityChat(pendingJoinCommunity._id);
+      if (res?.status === 'SUCCESS') {
+        dispatch(showSuccessAlert('You have joined the community'));
+        dispatch(updateMe() as any);
+        await loadCommunityChats();
+      } else {
+        dispatch(showErrorAlert(res?.error || 'Could not join this community'));
+      }
+    } catch {
+      dispatch(showErrorAlert('Could not join this community'));
+    } finally {
+      setJoiningCommunity(false);
+    }
+  };
 
   return (
     <div className="flex h-full min-h-0 overflow-hidden bg-wl-page text-slate-900">
@@ -1706,7 +1723,34 @@ const StudentChat: React.FC = () => {
             Chats
           </button>
         </div>
-        <Messenger videoChaton={false} theme="light" />
+        {pendingJoinCommunity ? (
+          <div className="flex flex-1 flex-col min-h-0">
+            <div className="flex items-center gap-2 border-b border-slate-200 bg-white px-4 py-3">
+              <Users className="h-5 w-5 text-[#234C6A]" aria-hidden />
+              <p className="truncate text-[15px] font-semibold text-slate-900">
+                {pendingJoinCommunity.name}
+              </p>
+            </div>
+            <div className="flex flex-1 items-center justify-center p-6">
+              <div className="flex flex-col items-center gap-4">
+                <p className="max-w-full text-center text-[14px] text-slate-600 xl:whitespace-nowrap">
+                  Click on &ldquo;Join&rdquo; Button below to be a part of the community and post your thoughts.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => void onJoinCommunity()}
+                  disabled={joiningCommunity}
+                  aria-label="Join community"
+                  className="inline-flex items-center gap-2 rounded-xl bg-[#234C6A] px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-[#1b3c53] disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {joiningCommunity ? 'Joining…' : 'Join'}
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <Messenger videoChaton={false} theme="light" />
+        )}
       </section>
 
       <Dialog
