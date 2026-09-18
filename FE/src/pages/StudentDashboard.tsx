@@ -4,6 +4,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import queryString from 'query-string';
 import { BookOpen, UserCheck, AlertCircle, MessageSquare, Users } from 'lucide-react';
 import { useAppSelector } from '../store';
+import { useBackToDashboard } from '../hooks/useBackToDashboard';
 import { doGetMyEvents, getAllCommunityChats, profileImageFetch, doFilterExperts, doFilterSeminars } from '../api/api';
 import { resolveProfileImageSrc } from '../utils/profileImage';
 import {
@@ -478,6 +479,8 @@ export default function StudentDashboard() {
   useEffect(() => {
     window.localStorage.setItem('studentDashboardView', activeItem);
   }, [activeItem]);
+  const goToDashboardTab = useCallback(() => setActiveItem('dashboard'), []);
+  useBackToDashboard(activeItem, goToDashboardTab);
   const [paymentReturnSuccess, setPaymentReturnSuccess] = useState(false);
   const [bookingReturnError, setBookingReturnError] = useState<string | null>(null);
   const [paySuccessToast, setPaySuccessToast] = useState(false);
