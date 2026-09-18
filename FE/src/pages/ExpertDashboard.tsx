@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation } from 'react-router-dom';
+import { useBackToDashboard } from '../hooks/useBackToDashboard';
 import { useDispatch } from 'react-redux';
 import {
   MessageSquare,
@@ -250,6 +251,8 @@ export default function ExpertDashboard() {
   useEffect(() => {
     window.localStorage.setItem('expertDashboardView', activeItem);
   }, [activeItem]);
+  const goToDashboardTab = useCallback(() => setActiveItem('dashboard'), []);
+  useBackToDashboard(activeItem, goToDashboardTab);
   // Child views (e.g. the calendar) request the chat tab by firing this event.
   useEffect(() => {
     const onNav = () => setActiveItem('chat');
