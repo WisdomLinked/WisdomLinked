@@ -545,7 +545,7 @@ test("student declines an expert's offer and the expert is told", async () => {
   }
 });
 
-test("student cancelling their own pending request does not mail the expert a decline", async () => {
+test("student cancelling their own pending request tells the expert their slot is free", async () => {
   resetCalls();
   // createdBy is the student, so this is their request, not an offer they can decline.
   const restore = withModels({ chat: chatDoc({ createdBy: STUDENT_ID }) });
@@ -554,7 +554,9 @@ test("student cancelling their own pending request does not mail the expert a de
 
     assert.equal(res.statusCode, 200);
     const toExpert = (calls.email || []).find((c: any[]) => String(c[0]) === "expert@test.com");
-    assert.equal(toExpert, undefined);
+    assert.ok(toExpert, "the expert must hear that the request was withdrawn");
+    assert.match(String(toExpert?.[1]), /cancelled/i);
+    assert.doesNotMatch(String(toExpert?.[1]), /declined/i);
   } finally {
     restore();
   }

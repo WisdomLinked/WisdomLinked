@@ -5532,6 +5532,7 @@ const cancelIndividualAppointment = async (req, res) => {
         const sessionName = groupChat.name || '1:1 session';
         const startLabel = groupChat.start ? new Date(groupChat.start).toLocaleString() : '';
         const declinedProposal = expertProposed && !cancelledByExpert;
+        const cancelledOwnRequest = !cancelledByExpert && !expertProposed;
 
         const noteBlock = decisionNoteEmailBlock(decisionNote);
         // The note is the only channel the student has once the cancelled session
@@ -5695,6 +5696,21 @@ const cancelIndividualAppointment = async (req, res) => {
                     },
                 );
             }
+        }
+
+        if (cancelledOwnRequest && expertUser?.email) {
+            await sendSeminarEmail(
+                expertUser.email,
+                `A session request was cancelled — ${sessionName}`,
+                {
+                    heading: 'A session request was cancelled',
+                    blocks: [
+                        emailParagraph(`${emailEscape(student?.username || 'The student')} cancelled the session they requested, <strong>${emailEscape(sessionName)}</strong>${startLabel ? ` on ${emailEscape(startLabel)}` : ''}.`),
+                        emailCallout('Your time is free again. Nothing was paid out for this request.'),
+                        emailButton('View your calendar'),
+                    ],
+                },
+            );
         }
 
         for (const participantId of groupChat.participants) {
