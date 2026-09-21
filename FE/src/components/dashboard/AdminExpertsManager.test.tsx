@@ -13,9 +13,14 @@ vi.mock('../../api/api', () => ({
   reorderFeaturedExpert: vi.fn(),
 }));
 
-vi.mock('../../actions/alertActions', () => ({
-  showSuccessAlert: (message: string) => ({ type: 'SHOW_ALERT', payload: message }),
-  showErrorAlert: (message: string) => ({ type: 'SHOW_ALERT', payload: message }),
+vi.mock('../../utils/notify', () => ({
+  notify: {
+    success: vi.fn(),
+    error: vi.fn(),
+    warning: vi.fn(),
+    info: vi.fn(),
+    dismiss: vi.fn(),
+  },
 }));
 
 vi.mock('../../utils/profileImageUpload', () => ({

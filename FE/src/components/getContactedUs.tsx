@@ -2,9 +2,9 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { doGetContactedUs, sendEmailToUser } from '../api/api';
 import SelectionWithCheckBox from './SelectionWithCheckBox';
 import DatePickerField from './ui/DatePickerField';
+import ClearableInput from './ui/ClearableInput';
 import ContactRequestCard, { type ContactedUsItem } from './contactedUs/ContactRequestCard';
-import { store } from '../store';
-import { showErrorAlert, showSuccessAlert } from '../actions/alertActions';
+import { notify } from '../utils/notify';
 import { usePendingContactRequestsCount } from '../hooks/usePendingContactRequestsCount';
 
 const sortByOptions = [
@@ -96,7 +96,7 @@ export default function GetContactedUs() {
     if (!adminRawMessage.trim()) {
       const msg = 'Please enter a message before sending.';
       setSendErrors(prev => ({ ...prev, [id]: msg }));
-      store.dispatch(showErrorAlert(msg));
+      notify.error(msg);
       return;
     }
     setSendingId(id);
@@ -114,20 +114,20 @@ export default function GetContactedUs() {
           prev.map(item => (item._id === id ? { ...item, actioned: res.actioned || 'Yes' } : item)),
         );
         setAdminMessages(prev => ({ ...prev, [id]: '' }));
-        store.dispatch(showSuccessAlert('Email sent. Request marked as responded.'));
+        notify.success('Email sent. Request marked as responded.');
         if (wasPending) decrementPendingCount();
         void refreshPendingCount();
       } else {
         const msg =
           typeof res?.message === 'string' ? res.message : 'Failed to send email.';
         setSendErrors(prev => ({ ...prev, [id]: msg }));
-        store.dispatch(showErrorAlert(msg));
+        notify.error(msg);
       }
     } catch (error) {
       console.error('Error sending email:', error);
       const msg = 'An error occurred while sending email.';
       setSendErrors(prev => ({ ...prev, [id]: msg }));
-      store.dispatch(showErrorAlert(msg));
+      notify.error(msg);
     } finally {
       setSendingId(null);
     }
@@ -144,27 +144,25 @@ export default function GetContactedUs() {
         </h2>
 
         <div className="mb-8 flex flex-wrap items-end justify-center gap-x-4 gap-y-5">
-          <div className="flex w-full min-w-[200px] max-w-[280px] flex-col">
+          <div className="flex min-w-0 w-full flex-1 basis-[260px] max-w-xl flex-col">
             <label className="mb-1 text-center text-sm text-wl-muted">Search by name</label>
-            <input
-              className="h-[50px] rounded-[15px] border border-lightgrey bg-white px-4 text-[14px] text-wl-ink placeholder:text-grey focus:outline-none focus:ring-2 focus:ring-wl-brand/30"
+            <ClearableInput
               placeholder="Type a name"
               value={filterName}
               onChange={e => setFilterName(e.target.value)}
             />
           </div>
 
-          <div className="flex w-full min-w-[200px] max-w-[280px] flex-col">
+          <div className="flex min-w-0 w-full flex-1 basis-[260px] max-w-xl flex-col">
             <label className="mb-1 text-center text-sm text-wl-muted">Search by email</label>
-            <input
-              className="h-[50px] rounded-[15px] border border-lightgrey bg-white px-4 text-[14px] text-wl-ink placeholder:text-grey focus:outline-none focus:ring-2 focus:ring-wl-brand/30"
+            <ClearableInput
               placeholder="Type an email"
               value={filterEmail}
               onChange={e => setFilterEmail(e.target.value)}
             />
           </div>
 
-          <div className="flex w-full min-w-[220px] max-w-[360px] flex-col">
+          <div className="flex min-w-0 w-full flex-1 basis-[280px] max-w-xl flex-col">
             <div className="mb-1 flex items-center justify-between">
               <span className="text-sm text-wl-muted">Date range</span>
               {dateFrom || dateTo ? (
@@ -184,6 +182,7 @@ export default function GetContactedUs() {
                 </label>
                 <DatePickerField
                   id="contact-date-from"
+                  size="filter"
                   value={dateFrom}
                   onChange={next => {
                     setDateFrom(next);
@@ -198,6 +197,7 @@ export default function GetContactedUs() {
                 </label>
                 <DatePickerField
                   id="contact-date-to"
+                  size="filter"
                   value={dateTo}
                   onChange={setDateTo}
                   min={dateFrom || undefined}
@@ -207,7 +207,7 @@ export default function GetContactedUs() {
             </div>
           </div>
 
-          <div className="flex w-full min-w-[200px] max-w-[260px] flex-col">
+          <div className="flex min-w-0 w-full flex-1 basis-[220px] max-w-sm flex-col">
             <label className="mb-1 text-center text-sm text-wl-muted">Sort by</label>
             <SelectionWithCheckBox
               options={sortByOptions}

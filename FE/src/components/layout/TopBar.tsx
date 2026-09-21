@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useState } from 'react';
 import {
   Bell,
   ChevronDown,
@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { useDispatch } from 'react-redux';
 import { logoutUser } from '../../actions/authActions';
+import { syncHeaderHeight } from '../../hooks/useSyncHeaderHeight';
 
 export type TopBarNotificationItem = {
   id: string;
@@ -85,8 +86,16 @@ export default function TopBar({
     return () => window.clearTimeout(id);
   }, [openMenu]);
 
+  useLayoutEffect(() => {
+    syncHeaderHeight();
+    return () => {
+      syncHeaderHeight();
+    };
+  }, []);
+
   return (
     <header
+      data-wl-header
       className="sticky z-50 border-b border-[#e8e6e1] bg-white"
       style={{ top: 'var(--wl-banner-offset, 0px)' }}
     >

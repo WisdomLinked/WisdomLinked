@@ -6,7 +6,7 @@ import { login, confirmLoginByCode } from '../api/api';
 import { refreshCsrfToken, bootstrapCsrfToken, isCsrfError, CsrfFetchError } from '../api/csrf';
 import { resetAuthSessionForLogin } from '../utils/resetAuthSession';
 import { clearClientAccessTokenCookie } from '../utils/authCookie';
-import { showSuccessAlert } from '../actions/alertActions';
+import { notify } from '../utils/notify';
 import FormAlert from '../components/FormAlert';
 import { useFormAlert } from '../hooks/useFormAlert';
 import { actionTypes } from '../actions/types';
@@ -263,7 +263,9 @@ export default function WLLogin() {
                 localStorage.setItem('isLoginRemembered', 'true');
                 localStorage.setItem('currentUser', JSON.stringify(response.userDetails));
                 dispatch({ type: actionTypes.authenticate, payload: response.userDetails });
-                dispatch(showSuccessAlert(`Hi, ${response.userDetails.username} 👋. Welcome back.`));
+            notify.success(`Welcome back, ${response.userDetails.username}`, {
+                description: "You're signed in and ready to go.",
+            });
                 if (redirectPath.startsWith("/")) {
                     navigate(redirectPath, {replace: true});
                     return;

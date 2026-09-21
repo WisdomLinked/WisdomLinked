@@ -21,7 +21,7 @@ import {
   seatRequestWindowShortLabel,
 } from '../../utils/seatRequestWindow';
 import { SetLoadingStatus } from '../../actions/appActions';
-import { showSuccessAlert } from '../../actions/alertActions';
+import { notify } from '../../utils/notify';
 import { paymentBannerMessage, stripeTransactionId } from '../../utils/paymentBanner';
 import { updateMe } from '../../actions/authActions';
 import StudentBookingCheckout from './StudentBookingCheckout';
@@ -226,15 +226,13 @@ export default function StudentSeminars({
           return;
         }
         window.localStorage.removeItem('pendingDetails');
-        dispatch(
-          showSuccessAlert(
+        notify.success(
             paymentBannerMessage({
               kind: 'withheld',
               amount: selectedSeminar.price,
               deciderName: selectedSeminar.expertName,
             }),
-          ),
-        );
+          );
         setCheckout(null);
         setSeatRequested(true);
         return;
@@ -248,15 +246,13 @@ export default function StudentSeminars({
         return;
       }
       window.localStorage.removeItem('pendingDetails');
-      dispatch(
-        showSuccessAlert(
+      notify.success(
           paymentBannerMessage({
             kind: 'paid',
             forWhat: `you are registered for ${selectedSeminar.title}`,
             transactionId: stripeTransactionId(paymentIntentId),
           }),
-        ),
-      );
+        );
       dispatch(updateMe() as any);
       setCheckout(null);
       setBookingDone(true);
@@ -296,15 +292,13 @@ export default function StudentSeminars({
         return;
       }
       window.localStorage.removeItem('pendingDetails');
-      dispatch(
-        showSuccessAlert(
+      notify.success(
           paymentBannerMessage({
             kind: 'paid',
             forWhat: 'your seat is confirmed',
             transactionId: stripeTransactionId(paymentIntentId),
           }),
-        ),
-      );
+        );
       dispatch(updateMe() as any);
       setCheckout(null);
       setBookingDone(true);

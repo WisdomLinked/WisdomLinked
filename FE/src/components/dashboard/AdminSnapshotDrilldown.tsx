@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Search, X } from 'lucide-react';
+import ClearableInput from '../ui/ClearableInput';
 import {
   doFilterPaymentHistories,
   doFilterUsers,
@@ -399,12 +400,12 @@ export default function AdminSnapshotDrilldown({
                   className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-wl-muted"
                   aria-hidden
                 />
-                <input
+                <ClearableInput
                   type="search"
                   value={query}
                   onChange={e => setQuery(e.target.value)}
                   placeholder={meta.searchPlaceholder}
-                  className="w-full rounded-xl border border-wl-line bg-white py-2.5 pl-9 pr-3 text-sm text-wl-ink outline-none placeholder:text-wl-muted focus:border-wl-brand focus:ring-2 focus:ring-wl-brand/40"
+                  className="pl-9"
                 />
               </label>
             </div>

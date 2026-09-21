@@ -1,5 +1,4 @@
 import React, { useEffect, useState } from "react";
-import LoadingPlaceHolder from "../../../../components/LoadingPlaceholder";
 import { doFilterPaymentHistories } from "../../../../api/api";
 import { formatDateYYYY_MM_DD_h_m } from "../../../../actions/common";
 import Pagination from "../../../../components/Pagination";
@@ -9,10 +8,9 @@ const PaymentHistory = ({
     userDetails
 }: any) => {
 
-    const [numPerPage, set_numPerPage] = useState<any>(5)
+    const [numPerPage, set_numPerPage] = useState(5)
     const [currentPage, set_currentPage] = useState(0)
-    const [totalCount, set_totalCount] = useState(-1)
-    const [totalPage, set_totalPage] = useState(0)
+    const [totalCount, set_totalCount] = useState(0)
     const [histories, set_histories] = useState<Array<any>>([])
     const [isFirstLoad, set_isFirstLoad] = useState(true)
 
@@ -27,10 +25,8 @@ const PaymentHistory = ({
             sort: 'DESC',
         })
         if (response) {
-            console.log(response, '/////')
             set_histories([...response.result])
             set_totalCount(response.totalCount)
-            set_totalPage(response.totalCount % numPerPage ? Math.floor(response.totalCount / numPerPage) : response.totalCount / numPerPage - 1)
         }
         set_isFirstLoad(false)
         SetLoadingStatus(false)
@@ -54,19 +50,9 @@ const PaymentHistory = ({
 
     return (
         <div className="w-full h-full overflow-y-auto pt-6">
-            <div className="w-full rounded-[16px]">
-                <div className="w-full flex flex-col sm:flex-row sm:justify-between sm:items-center p-4 gap-4">
-                    <div>
-                        <div className="">Total of {totalCount} histories</div>
-                    </div>
-                    <Pagination
-                        currentPage={currentPage}
-                        totalPage={totalPage}
-                        goFirst={() => set_currentPage(0)}
-                        goPrev={() => set_currentPage((currentPage - 1) || 0)}
-                        goNext={() => set_currentPage(currentPage < totalPage ? currentPage + 1 : totalPage)}
-                        goLast={() => set_currentPage(totalPage)}
-                    />
+            <div className="w-full rounded-[16px] overflow-hidden border border-wl-line bg-wl-card">
+                <div className="w-full p-4">
+                    <div>Total of {totalCount} histories</div>
                 </div>
                 <div className="relative overflow-x-auto w-full px-4">
                     <table className="w-full text-sm text-left">
@@ -122,29 +108,16 @@ const PaymentHistory = ({
                         </tbody>
                     </table>
                 </div>
-                <div className="w-full flex flex-col sm:flex-row sm:justify-between sm:items-center p-4 gap-4">
-                    <div className='flex gap-6'>
-                        <div className="">Show rows:</div>
-                        <select
-                            className='bg-wl-card text-wl-ink border rounded-md border-wl-line px-2 outline-none'
-                            value={numPerPage}
-                            onChange={(e) => set_numPerPage(e.target.value)}
-                        >
-                            <option value={5}>5</option>
-                            <option value={10}>10</option>
-                            <option value={25}>25</option>
-                            <option value={50}>50</option>
-                        </select>
-                    </div>
-                    <Pagination
-                        currentPage={currentPage}
-                        totalPage={totalPage}
-                        goFirst={() => set_currentPage(0)}
-                        goPrev={() => set_currentPage((currentPage - 1) || 0)}
-                        goNext={() => set_currentPage(currentPage < totalPage ? currentPage + 1 : totalPage)}
-                        goLast={() => set_currentPage(totalPage)}
-                    />
-                </div>
+                <Pagination
+                    currentPage={currentPage}
+                    totalCount={Math.max(0, totalCount)}
+                    pageSize={Number(numPerPage)}
+                    onPage={set_currentPage}
+                    onPageSize={size => {
+                        set_numPerPage(size)
+                        set_currentPage(0)
+                    }}
+                />
             </div>
         </div>
     );

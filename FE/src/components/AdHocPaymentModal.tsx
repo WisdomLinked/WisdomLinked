@@ -1,8 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
-import { store } from '../store';
-import { showErrorAlert } from '../actions/alertActions';
+import { notify } from '../utils/notify';
 import { OVERLAY_Z_DIALOG } from '../utils/overlayLayers';
 
 interface AdHocPaymentModalProps {
@@ -43,23 +42,23 @@ const AdHocPaymentModal: React.FC<AdHocPaymentModalProps> = ({ isOpen, onClose, 
 
   const handleConfirm = () => {
     if (!amount || amount <= 0) {
-      store.dispatch(showErrorAlert('Please enter a valid amount greater than $0'));
+      notify.error('Please enter a valid amount greater than $0');
       return;
     }
 
     if (!description.trim()) {
-      store.dispatch(showErrorAlert('Please enter a payment description'));
+      notify.error('Please enter a payment description');
       return;
     }
 
     if (!customerEmail.trim()) {
-      store.dispatch(showErrorAlert('Please enter customer email address'));
+      notify.error('Please enter customer email address');
       return;
     }
 
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(customerEmail.trim())) {
-      store.dispatch(showErrorAlert('Please enter a valid email address'));
+      notify.error('Please enter a valid email address');
       return;
     }
 

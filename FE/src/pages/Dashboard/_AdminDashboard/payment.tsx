@@ -1,7 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useDispatch } from 'react-redux';
 import { useSearchParams } from 'react-router-dom';
-import { showErrorAlert, showSuccessAlert } from '../../../actions/alertActions';
+import { notify } from '../../../utils/notify';
 import {
   doFilterPaymentHistories,
   doGetPaymentIntegrityReport,
@@ -15,7 +14,6 @@ import {
 } from '../../../api/api';
 import { SetLoadingStatus } from '../../../actions/appActions';
 import Pagination from '../../../components/Pagination';
-import SelectField from '../../../components/ui/SelectField';
 import RetryPaymentModal from '../../../components/RetryPaymentModal';
 import RefundPaymentModal from '../../../components/RefundPaymentModal';
 import AdHocPaymentModal from '../../../components/AdHocPaymentModal';
@@ -26,58 +24,15 @@ import PaymentIntegrityCard from './payment/PaymentIntegrityCard';
 import PaymentSettingRow from './payment/PaymentSettingRow';
 import {
   EMPTY_FILTERS,
-  PAGE_SIZE_OPTIONS,
   countActiveFilters,
   hasAnyParty,
   historySearchFromState,
-  lastPageIndex,
   parseHistorySearch,
   type HistoryFilters,
   type PaymentHistoryRow as HistoryRow,
 } from './payment/paymentHistoryUtils';
 
-function HistoryPager({
-  currentPage,
-  totalPage,
-  pageSize,
-  onPage,
-  onPageSize,
-  id,
-}: {
-  currentPage: number;
-  totalPage: number;
-  pageSize: number;
-  onPage: (page: number) => void;
-  onPageSize: (size: number) => void;
-  id: string;
-}) {
-  return (
-    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-      <div className="w-28">
-        <label htmlFor={id} className="mb-0.5 block text-[12px] text-wl-muted">
-          Show rows
-        </label>
-        <SelectField
-          id={id}
-          value={String(pageSize)}
-          onChange={next => onPageSize(Number(next))}
-          options={PAGE_SIZE_OPTIONS.map(size => ({ value: String(size), label: String(size) }))}
-        />
-      </div>
-      <Pagination
-        currentPage={currentPage}
-        totalPage={totalPage}
-        goFirst={() => onPage(0)}
-        goPrev={() => onPage(Math.max(0, currentPage - 1))}
-        goNext={() => onPage(currentPage < totalPage ? currentPage + 1 : totalPage)}
-        goLast={() => onPage(totalPage)}
-      />
-    </div>
-  );
-}
-
 const Payment = () => {
-  const dispatch = useDispatch();
   const [searchParams, setSearchParams] = useSearchParams();
   const parsed = useMemo(() => parseHistorySearch(searchParams), [searchParams]);
   const filters = parsed.filters;
@@ -106,7 +61,6 @@ const Payment = () => {
   const [detailsItem, setDetailsItem] = useState<HistoryRow | null>(null);
   const emailTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const totalPage = lastPageIndex(totalCount, pageSize);
   const activeCount = countActiveFilters(filters);
   const showParty = hasAnyParty(histories);
   const genuineEmpty = hasLoaded && !loading && totalCount === 0 && activeCount === 0;
@@ -189,15 +143,15 @@ const Payment = () => {
       if (res && res.summary) setIntegrityReport(res);
       else {
         setIntegrityReport(null);
-        if (res !== false) dispatch(showErrorAlert('Could not load payment integrity report.'));
+        if (res !== false) notify.error('Could not load payment integrity report.');
       }
     } catch {
       setIntegrityReport(null);
-      dispatch(showErrorAlert('Could not load payment integrity report.'));
+      notify.error('Could not load payment integrity report.');
     } finally {
       setIntegrityLoading(false);
     }
-  }, [dispatch]);
+  }, []);
 
   useEffect(() => {
     (async () => {
@@ -228,45 +182,45 @@ const Payment = () => {
     const response = await setStripeMode({ stripeMode: next });
     SetLoadingStatus(false);
     if (response === false || response?.error) {
-      dispatch(showErrorAlert(response?.error || 'Could not update Stripe mode.'));
+      notify.error(response?.error || 'Could not update Stripe mode.');
       return;
     }
     setPlatformStripeMode(next);
-    dispatch(showSuccessAlert(`Stripe mode set to ${next}.`));
+    notify.success(`Stripe mode set to ${next}.`);
   };
 
   const saveApprovalDeadline = async () => {
     const hours = Number(deadlineInput);
     if (!Number.isFinite(hours) || hours < 0 || hours > 168) {
-      dispatch(showErrorAlert('Enter a value between 0 and 168 hours.'));
+      notify.error('Enter a value between 0 and 168 hours.');
       return;
     }
     setSavingDeadline(true);
     const response = await setSeminarApprovalDeadline(hours);
     setSavingDeadline(false);
     if (response === false || response?.error) {
-      dispatch(showErrorAlert(response?.error || 'Could not save the approval deadline.'));
+      notify.error(response?.error || 'Could not save the approval deadline.');
       return;
     }
     setApprovalDeadlineHours(hours);
-    dispatch(showSuccessAlert('Seminar approval deadline updated.'));
+    notify.success('Seminar approval deadline updated.');
   };
 
   const savePaymentWindow = async () => {
     const hours = Number(paymentWindowInput);
     if (!Number.isFinite(hours) || hours <= 0 || hours > 168) {
-      dispatch(showErrorAlert('Enter a value between 1 and 168 hours.'));
+      notify.error('Enter a value between 1 and 168 hours.');
       return;
     }
     setSavingWindow(true);
     const response = await setPaymentWindow(hours);
     setSavingWindow(false);
     if (response === false || response?.error) {
-      dispatch(showErrorAlert(response?.error || 'Could not save the payment window.'));
+      notify.error(response?.error || 'Could not save the payment window.');
       return;
     }
     setPaymentWindowHours(hours);
-    dispatch(showSuccessAlert('Payment window updated.'));
+    notify.success('Payment window updated.');
   };
 
   const handleRetryPaymentConfirm = async (customizedPayment: {
@@ -281,16 +235,14 @@ const Payment = () => {
       customDescription: customizedPayment.description,
     });
     if (response?.status === 'SUCCESS') {
-      dispatch(showSuccessAlert('Payment link has been sent successfully to the customer.'));
+      notify.success('Payment link has been sent successfully to the customer.');
       setIsRetryModalOpen(false);
       setSelectedPaymentItem(null);
     } else {
-      dispatch(
-        showErrorAlert(
+      notify.error(
           'Failed to send payment link: ' +
             (typeof response?.message === 'string' ? response.message : 'Unknown error'),
-        ),
-      );
+        );
     }
   };
 
@@ -301,17 +253,15 @@ const Payment = () => {
       refundReason: refundData.reason,
     });
     if (response?.status === 'SUCCESS') {
-      dispatch(showSuccessAlert('Refund processed successfully.'));
+      notify.success('Refund processed successfully.');
       setIsRefundModalOpen(false);
       setSelectedRefundItem(null);
       void loadHistories();
     } else {
-      dispatch(
-        showErrorAlert(
+      notify.error(
           'Failed to process refund: ' +
             (typeof response?.message === 'string' ? response.message : 'Unknown error'),
-        ),
-      );
+        );
     }
   };
 
@@ -328,16 +278,14 @@ const Payment = () => {
       customerName: paymentData.customerName,
     });
     if (response?.status === 'SUCCESS') {
-      dispatch(showSuccessAlert('Payment link sent successfully to customer.'));
+      notify.success('Payment link sent successfully to customer.');
       setIsAdHocModalOpen(false);
       void loadHistories();
     } else {
-      dispatch(
-        showErrorAlert(
+      notify.error(
           'Failed to send payment link: ' +
             (typeof response?.message === 'string' ? response.message : 'Unknown error'),
-        ),
-      );
+        );
     }
   };
 
@@ -436,21 +384,6 @@ const Payment = () => {
             onClear={clearFilters}
           />
           <div className="space-y-4 p-4">
-            <HistoryPager
-              id="payment-page-size-top"
-              currentPage={currentPage}
-              totalPage={totalPage}
-              pageSize={pageSize}
-              onPage={page => {
-                parsedRef.current = { ...parsedRef.current, page };
-                writeParams(parsedRef.current.filters, page, parsedRef.current.pageSize);
-              }}
-              onPageSize={size => {
-                parsedRef.current = { ...parsedRef.current, page: 0, pageSize: size };
-                writeParams(parsedRef.current.filters, 0, size);
-              }}
-            />
-
             {loading ? (
               <div className="space-y-2" data-testid="payment-history-skeleton">
                 {Array.from({ length: 5 }).map((_, i) => (
@@ -533,10 +466,10 @@ const Payment = () => {
               </>
             )}
 
-            <HistoryPager
-              id="payment-page-size-bottom"
+            <Pagination
+              id="payment-page-size"
               currentPage={currentPage}
-              totalPage={totalPage}
+              totalCount={totalCount}
               pageSize={pageSize}
               onPage={page => {
                 parsedRef.current = { ...parsedRef.current, page };

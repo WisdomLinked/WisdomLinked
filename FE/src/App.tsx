@@ -16,6 +16,7 @@ import { connectToRC, isRCConnected } from './services/rcRealtime';
 import 'swiper/swiper.min.css';
 import LeaveFeedback from './components/LeaveFeedback';
 import AppBanners from './components/AppBanners';
+import { useSyncHeaderHeight } from './hooks/useSyncHeaderHeight';
 import VerifyEmail from './pages/VerifyEmail';
 import VerifyEmailChange from './pages/VerifyEmailChange';
 import ForgotPassword from './pages/ForgotPassword';
@@ -290,6 +291,7 @@ function App() {
   }, [userDetails, navigate])
 
   const location = useLocation()
+  useSyncHeaderHeight();
   useEffect(() => {
     if (siteMap[location.pathname]) {
       dispatch(updateLocation(siteMap[location.pathname]))

@@ -9,7 +9,7 @@ import { Crown, Mail, UserMinus, Users, X } from "lucide-react";
 import { useDispatch, useSelector } from "react-redux";
 import { RootState } from "../../../../store";
 import { removeCommunityMember } from "../../../../api/api";
-import { showErrorAlert, showSuccessAlert, showWarningAlert } from '../../../../actions/alertActions';
+import { notify } from '../../../../utils/notify';
 import { setChosenGroupChatDetails } from "../../../../actions/chatActions";
 import { updateMe } from "../../../../actions/authActions";
 import { fetchChatUserProfile } from "../../../../api/chatApi";
@@ -124,13 +124,13 @@ const GroupParticipantsDialog = ({
                         participants: nextParticipants,
                     }),
                 );
-                dispatch(showSuccessAlert("Member removed from the community"));
+                notify.success("Member removed from the community");
                 dispatch(updateMe() as any);
             } else {
-                dispatch(showErrorAlert(res?.error || "Could not remove member"));
+                notify.error(res?.error || "Could not remove member");
             }
         } catch (e: any) {
-            dispatch(showErrorAlert(e?.response?.data?.error || e?.message || "Could not remove member"));
+            notify.error(e?.response?.data?.error || e?.message || "Could not remove member");
         } finally {
             setRemovingId(null);
         }

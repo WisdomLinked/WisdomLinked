@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useDispatch } from 'react-redux';
 import { Users, GraduationCap, Loader2 } from 'lucide-react';
 import { callApi, getMe } from '../api/api';
-import { showErrorAlert } from '../actions/alertActions';
+import { notify } from '../utils/notify';
 import { useAppSelector } from '../store';
 import { actionTypes } from '../actions/types';
 import FormAlert from '../components/FormAlert';
@@ -94,10 +94,10 @@ export default function WLOAuthRolePicker() {
                 }
                 navigate('/auth-complete-profile', { replace: true });
             } else {
-                dispatch(showErrorAlert(response.error || 'Could not save your role. Please try again.'));
+                notify.error(response.error || 'Could not save your role. Please try again.');
             }
         } catch (err: any) {
-            dispatch(showErrorAlert(err?.message || 'Could not save your role. Please try again.'));
+            notify.error(err?.message || 'Could not save your role. Please try again.');
         }
         setSubmitting(false);
     };

@@ -17,7 +17,7 @@ import { SetLoadingStatus } from "../../../actions/appActions";
 import CountrySelect from "../../../components/CountrySelection";
 import FileBrowser from "../../../components/fileBrowser";
 import { useDispatch } from "react-redux";
-import { showErrorAlert, showSuccessAlert, showWarningAlert } from '../../../actions/alertActions';
+import { notify } from '../../../utils/notify';
 import { updateMe } from "../../../actions/authActions";
 import { SERVICE_OPTIONS, matchesServiceOption } from "../../../constants/serviceOptions";
 
@@ -189,16 +189,16 @@ const ExpertProfile = ({
             const ok = await doUpdateProfile({ email: userDetails.email, specialNote: trimmed });
             if (ok) {
                 set_specialNote(trimmed);
-                dispatch(showSuccessAlert('Notes saved'));
+                notify.success('Notes saved');
             }
         } else {
             const res = await doUpdateProfileByAdmin({ email: userDetails.email, specialNote: trimmed });
             if (res?.result) {
                 updateOneUser(res.result);
                 set_specialNote(trimmed);
-                dispatch(showSuccessAlert('Notes saved'));
+                notify.success('Notes saved');
             } else {
-                dispatch(showErrorAlert('Could not save notes'));
+                notify.error('Could not save notes');
             }
         }
         set_savingSpecialNote(false);
@@ -235,13 +235,13 @@ const ExpertProfile = ({
             set_currFileName(filename);
             await dispatch(updateMe() as any);
             await loadData();
-            dispatch(showSuccessAlert('Profile photo saved'));
+            notify.success('Profile photo saved');
         } catch (error: any) {
             const msg =
                 error?.response?.data?.error ||
                 error?.message ||
                 'Could not save profile photo';
-            dispatch(showErrorAlert(String(msg)));
+            notify.error(String(msg));
         } finally {
             set_photoSaving(false);
         }
@@ -272,12 +272,12 @@ const ExpertProfile = ({
             userDetails,
         });
         if (!hasFormChanges) {
-            dispatch(showErrorAlert('No profile changes to save.'));
+            notify.error('No profile changes to save.');
             return;
         }
         if (!isProfileFormValid()) {
             set_showError(true);
-            dispatch(showErrorAlert('Please complete all required fields before saving.'));
+            notify.error('Please complete all required fields before saving.');
             return;
         }
         SetLoadingStatus(true);
@@ -297,19 +297,19 @@ const ExpertProfile = ({
             const ok = await doUpdateProfile(updates);
             if (ok) {
                 await dispatch(updateMe() as any);
-                dispatch(showSuccessAlert('Profile saved'));
+                notify.success('Profile saved');
                 await loadData();
             } else {
-                dispatch(showErrorAlert('Could not save profile'));
+                notify.error('Could not save profile');
             }
         } else {
             const res = await doUpdateProfileByAdmin(updates);
             if (res) {
                 updateOneUser(res.result);
-                dispatch(showSuccessAlert('Profile saved'));
+                notify.success('Profile saved');
                 await loadData();
             } else {
-                dispatch(showErrorAlert('Could not save profile'));
+                notify.error('Could not save profile');
             }
         }
         SetLoadingStatus(false);
@@ -322,7 +322,7 @@ const ExpertProfile = ({
             set_resume(response.newResume);
             set_file('');
         } else {
-            dispatch(showErrorAlert(response.error));
+            notify.error(response.error);
         }
         SetLoadingStatus(false);
     };

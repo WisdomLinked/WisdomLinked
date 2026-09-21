@@ -1,5 +1,6 @@
 import React from 'react';
 import SelectField from '../../../../components/ui/SelectField';
+import ClearableInput, { FILTER_CONTROL_CLASS } from '../../../../components/ui/ClearableInput';
 import {
   HISTORY_STATUS_OPTIONS,
   MODE_OPTIONS,
@@ -24,8 +25,7 @@ export default function PaymentFilterBar({
   onChange: (patch: Partial<HistoryFilters>) => void;
   onClear: () => void;
 }) {
-  const field =
-    'h-10 w-full rounded-xl border border-wl-line bg-white px-3 text-sm text-wl-ink outline-none focus:border-wl-brand focus:ring-2 focus:ring-wl-brand/40';
+  const field = FILTER_CONTROL_CLASS;
 
   return (
     <div className="space-y-3 border-b border-wl-line bg-wl-pageAlt/40 p-4">
@@ -49,13 +49,12 @@ export default function PaymentFilterBar({
           <label htmlFor="payment-filter-email" className="mb-1 block text-[12px] text-wl-muted">
             Filter by email
           </label>
-          <input
+          <ClearableInput
             id="payment-filter-email"
             type="search"
             value={emailDraft}
             onChange={e => onEmailDraft(e.target.value)}
             placeholder="Exact user email"
-            className={field}
           />
         </div>
         <div data-testid="payment-filter-mode">
@@ -68,6 +67,7 @@ export default function PaymentFilterBar({
             onChange={mode => onChange({ mode })}
             options={[...MODE_OPTIONS]}
             placeholder="All"
+            size="filter"
           />
         </div>
         <div data-testid="payment-filter-status">
@@ -80,6 +80,7 @@ export default function PaymentFilterBar({
             onChange={status => onChange({ status })}
             options={[...HISTORY_STATUS_OPTIONS]}
             placeholder="All"
+            size="filter"
           />
         </div>
         <div data-testid="payment-filter-type">
@@ -92,6 +93,7 @@ export default function PaymentFilterBar({
             onChange={type => onChange({ type })}
             options={[...PAYMENT_TYPE_OPTIONS]}
             placeholder="All"
+            size="filter"
           />
         </div>
         <div className="grid grid-cols-2 gap-2">

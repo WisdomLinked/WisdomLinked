@@ -1,8 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { doContactUs } from '../api/api';
-import { store } from '../store';
-import { showErrorAlert } from '../actions/alertActions';
+import { notify } from '../utils/notify';
 import SignupModal from '../components/SignupModal';
 import FeaturedExperts from '../components/FeaturedExperts';
 import { SERVICE_LABELS } from '../constants/serviceOptions';
@@ -109,7 +108,7 @@ function ContactFormModal({ onClose }: { onClose: () => void }) {
       setSubmitted(true);
     } catch (err) {
       console.error('Contact form error:', err);
-      store.dispatch(showErrorAlert('Failed to submit. Please try again.'));
+      notify.error('Failed to submit. Please try again.');
     }
     setSubmitting(false);
   };
@@ -1581,6 +1580,7 @@ export default function TOEConsulting() {
 
       {/* NAV */}
       <header
+        data-wl-header
         className={`fixed left-0 right-0 z-40 transition-all duration-300 ${scrolled ? 'bg-[#F8FAFC]/95 backdrop-blur-md shadow-sm border-b border-[#BCCCDC]' : 'bg-[#F8FAFC]/80 backdrop-blur-sm'}`}
         style={{ top: 'var(--wl-banner-offset, 0px)' }}
       >

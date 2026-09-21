@@ -1,6 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import ImpersonationBanner from './ImpersonationBanner';
 import AnnouncementBanner from './AnnouncementBanner';
+import { syncHeaderHeight } from '../hooks/useSyncHeaderHeight';
 
 const OFFSET_VAR = '--wl-banner-offset';
 
@@ -14,6 +15,7 @@ export default function AppBanners() {
     const apply = () => {
       const h = Math.ceil(el.getBoundingClientRect().height);
       document.documentElement.style.setProperty(OFFSET_VAR, `${h}px`);
+      syncHeaderHeight();
     };
 
     apply();
@@ -27,7 +29,7 @@ export default function AppBanners() {
 
   return (
     <>
-      <div ref={ref} className="fixed top-0 inset-x-0 z-[100]">
+      <div ref={ref} data-wl-header className="fixed top-0 inset-x-0 z-[100]">
         <ImpersonationBanner />
         <AnnouncementBanner />
       </div>

@@ -1,7 +1,7 @@
 import { Dispatch } from "redux";
 import { createGroupChat, leaveGroup, deleteGroup } from "../api/api";
 import { AddMembersToGroupArgs, DeleteGroupArgs, LeaveGroupArgs } from "../api/types";
-import { showErrorAlert, showSuccessAlert } from "./alertActions";
+import { notify } from '../utils/notify';
 import { resetChatAction } from "./chatActions";
 import { updateMe } from "./authActions";
 // import { actionTypes, CurrentUser } from "./types";
@@ -16,11 +16,11 @@ export const createGroupChatAction = (
         if (response === false) return;
         if (response === "Group created successfully") {
             closeDialogHandler();
-            dispatch(showSuccessAlert(response));
+            notify.success(response);
         } else if (typeof response === 'string' && response.length > 0) {
-            dispatch(showErrorAlert(response));
+            notify.error(response);
         } else {
-            dispatch(showErrorAlert('Could not create the community. Please try again.'));
+            notify.error('Could not create the community. Please try again.');
         }
     };
 };
@@ -35,13 +35,13 @@ export const leaveGroupAction = (
             response === "You have left the group!" ||
             (typeof response === 'string' && response.startsWith('The community was removed'))
         ) {
-            dispatch(showSuccessAlert(response));
+            notify.success(response);
             dispatch(resetChatAction());
             dispatch(updateMe() as any);
         } else if (typeof response === 'string' && response.length > 0) {
-            dispatch(showErrorAlert(response));
+            notify.error(response);
         } else {
-            dispatch(showErrorAlert('Could not leave the community. Try again.'));
+            notify.error('Could not leave the community. Try again.');
         }
     };
 };
@@ -55,13 +55,13 @@ export const deleteGroupAction = ({ groupChatId, groupChatName } : {groupChatId:
             (typeof response === "string" && response.includes("Group deleted successfully"));
 
         if (ok) {
-            dispatch(showSuccessAlert(`You deleted the "${groupChatName}" community.`));
+            notify.success(`You deleted the "${groupChatName}" community.`);
             dispatch(resetChatAction());
             dispatch(updateMe() as any);
         } else if (typeof response === 'string' && response.length > 0) {
-            dispatch(showErrorAlert(response));
+            notify.error(response);
         } else if (response !== false) {
-            dispatch(showErrorAlert('Could not delete the community.'));
+            notify.error('Could not delete the community.');
         }
     };
 };

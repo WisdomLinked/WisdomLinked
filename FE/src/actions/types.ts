@@ -68,14 +68,12 @@ interface LogoutAction {
 
 interface ShowAlertAction {
     type: actionTypes.showAlert;
-    payload: {
-        message: string;
-        variant?: import('../types/alert').AlertVariant;
-    };
+    payload: import('../types/alert').EnqueueToastPayload;
 }
 
 interface HideAlertAction {
     type: actionTypes.hideAlert;
+    payload?: { id?: string };
 }
 
 export interface PendingInvitation {

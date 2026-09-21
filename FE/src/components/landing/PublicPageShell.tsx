@@ -50,6 +50,7 @@ export default function PublicPageShell({ children }: { children: React.ReactNod
       `}</style>
 
       <header
+        data-wl-header
         className="fixed left-0 right-0 z-40 bg-[#F8FAFC]/95 backdrop-blur-md shadow-sm border-b border-[#BCCCDC]"
         style={{ top: 'var(--wl-banner-offset, 0px)' }}
       >

@@ -4,7 +4,7 @@ import { Search, Users } from 'lucide-react';
 import { useDispatch, useSelector } from 'react-redux';
 import { addParticipantsToCommunityChat, doFilterCustomers, getMyFollowers } from '../../../../api/api';
 import { fetchGroupHistory } from '../../../../api/chatApi';
-import { showErrorAlert, showSuccessAlert, showWarningAlert } from '../../../../actions/alertActions';
+import { notify } from '../../../../utils/notify';
 import { replaceChatMessages, setChatChannelInfo, setChosenGroupChatDetails } from '../../../../actions/chatActions';
 import { updateMe } from '../../../../actions/authActions';
 import Avatar from '../../../../components/Avatar';
@@ -150,7 +150,7 @@ export default function AddCommunityMembersDialog({ open, onClose, groupDetails,
                 setFollowerIds(ids);
                 setFollowerSkipped(skipped);
             } catch (e: any) {
-                dispatch(showErrorAlert('Could not load your followers.'));
+                notify.error('Could not load your followers.');
                 setLoadingFollowers(false);
                 return;
             } finally {
@@ -185,7 +185,7 @@ export default function AddCommunityMembersDialog({ open, onClose, groupDetails,
 
     const handleAdd = async () => {
         if (!gid || selected.size === 0) {
-            dispatch(showErrorAlert('Select at least one person to add.'));
+            notify.error('Select at least one person to add.');
             return;
         }
         setSubmitting(true);
@@ -195,7 +195,7 @@ export default function AddCommunityMembersDialog({ open, onClose, groupDetails,
                 participantIds: Array.from(selected),
             });
             if (res?.status === 'SUCCESS') {
-                dispatch(showSuccessAlert('Members added.'));
+                notify.success('Members added.');
                 const added = rows.filter((r) => selected.has(r.id));
                 const mergedParticipants = [
                     ...(groupDetails.participants || []),
@@ -228,10 +228,10 @@ export default function AddCommunityMembersDialog({ open, onClose, groupDetails,
                 onClose();
                 setSelected(new Set());
             } else {
-                dispatch(showErrorAlert(res?.error || 'Could not add members'));
+                notify.error(res?.error || 'Could not add members');
             }
         } catch (e: any) {
-            dispatch(showErrorAlert(e?.response?.data?.error || e?.message || 'Could not add members'));
+            notify.error(e?.response?.data?.error || e?.message || 'Could not add members');
         } finally {
             setSubmitting(false);
         }

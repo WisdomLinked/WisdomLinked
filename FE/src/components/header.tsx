@@ -15,6 +15,7 @@ const Header = () => {
 
     return (
         <div
+          data-wl-header
           className={`sticky left-0 main_container py-[20px] text-white bg-black bg-opacity-50 backdrop-blur-sm z-20`}
           style={{ top: 'var(--wl-banner-offset, 0px)' }}
         >

@@ -16,7 +16,7 @@ import {
   doFilterCustomers,
   joinPrivateChat,
 } from '../../../api/api';
-import { showErrorAlert, showSuccessAlert, showWarningAlert } from '../../../actions/alertActions';
+import { notify } from '../../../utils/notify';
 import { updateMe } from '../../../actions/authActions';
 import { setChosenChatDetails, setChosenGroupChatDetails } from '../../../actions/chatActions';
 import Messenger from '../Messenger/Messenger';
@@ -95,7 +95,7 @@ export default function ModernChat({ videoChaton }: { videoChaton: boolean }) {
 
   const onCreateCommunity = async () => {
     if (!newName.trim()) {
-      dispatch(showErrorAlert('Community name is required'));
+      notify.error('Community name is required');
       return;
     }
     setCreating(true);
@@ -106,7 +106,7 @@ export default function ModernChat({ videoChaton }: { videoChaton: boolean }) {
         isOpenToAll: newOpenToAll,
       });
       if (res?.status === 'SUCCESS') {
-        dispatch(showSuccessAlert('Community created'));
+        notify.success('Community created');
         setCreateOpen(false);
         setNewName('');
         setNewDescription('');
@@ -114,7 +114,7 @@ export default function ModernChat({ videoChaton }: { videoChaton: boolean }) {
         dispatch(updateMe() as any);
         await refreshCommunity();
       } else {
-        dispatch(showErrorAlert(res?.error || 'Failed to create community'));
+        notify.error(res?.error || 'Failed to create community');
       }
     } finally {
       setCreating(false);
@@ -125,10 +125,10 @@ export default function ModernChat({ videoChaton }: { videoChaton: boolean }) {
     try {
       const res: any = await joinCommunityChat(chat._id);
       if (res?.status === 'SUCCESS') {
-        dispatch(showSuccessAlert('Joined community'));
+        notify.success('Joined community');
         dispatch(updateMe() as any);
       } else {
-        dispatch(showErrorAlert(res?.error || 'Failed to join'));
+        notify.error(res?.error || 'Failed to join');
       }
     } finally {
       // attempt to open in Messenger by setting chosen group chat

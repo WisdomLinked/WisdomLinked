@@ -255,19 +255,18 @@ describe('Admin Payment Management', () => {
     expect(await screen.findByText(/Showing 5 of 6 histories/)).toBeInTheDocument();
   });
 
-  it('paginates and disables First/Prev on the first page', async () => {
+  it('paginates and disables previous on the first page', async () => {
     renderPayment();
     await screen.findByText(/Showing 5 of 6 histories/);
-    const firstButtons = screen.getAllByRole('button', { name: 'First' });
-    expect(firstButtons[0]).toBeDisabled();
-    fireEvent.click(screen.getAllByRole('button', { name: 'Last' })[0]);
+    expect(screen.getByRole('button', { name: 'Previous page' })).toBeDisabled();
+    fireEvent.click(screen.getByRole('button', { name: 'Next page' }));
     await waitFor(() => {
       expect(doFilterPaymentHistories).toHaveBeenCalledWith(
         expect.objectContaining({ currentPage: 1, numPerPage: 5 }),
       );
     });
     expect(await screen.findByText(/Showing 1 of 6 histories/)).toBeInTheDocument();
-    chooseSelect('Show rows', '25', '#payment-page-size-top');
+    fireEvent.change(screen.getByLabelText('Rows per page'), { target: { value: '25' } });
     await waitFor(() => {
       expect(doFilterPaymentHistories).toHaveBeenCalledWith(
         expect.objectContaining({ currentPage: 0, numPerPage: 25 }),

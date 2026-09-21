@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { getUserFeedbacks, doFilterUsers, getAllFeedbacks } from "../api/api";
 import Pagination from "./Pagination";
+import ClearableInput from "./ui/ClearableInput";
 
 interface UserType {
     _id: string;
@@ -89,7 +90,7 @@ export default function Feedback() {
     const [selectedUserId, setSelectedUserId] = useState("");
     const [showDropdown, setShowDropdown] = useState(false);
     const [allPage, setAllPage] = useState(0);
-    const [allTotalPage, setAllTotalPage] = useState(0);
+    const [allTotalCount, setAllTotalCount] = useState(0);
     const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const wrapRef = useRef<HTMLDivElement>(null);
 
@@ -99,12 +100,11 @@ export default function Feedback() {
             setAllPage(page);
             const res = await getAllFeedbacks({ numPerPage: ALL_PAGE_SIZE, currentPage: page });
             setAllFeedbacks(Array.isArray(res?.result) ? res.result : []);
-            const total = res?.totalCount || 0;
-            const pages = total === 0 ? 0 : Math.ceil(total / ALL_PAGE_SIZE) - 1;
-            setAllTotalPage(pages < 0 ? 0 : pages);
+            setAllTotalCount(res?.totalCount || 0);
         } catch (err) {
             console.log(err);
             setAllFeedbacks([]);
+            setAllTotalCount(0);
         } finally {
             setIsLoadingAll(false);
         }
@@ -213,9 +213,8 @@ export default function Feedback() {
                     </label>
                     <div className="flex items-center justify-center gap-3 flex-wrap">
                         <div className="relative w-full min-w-[200px] flex-1" ref={wrapRef}>
-                            <input
+                            <ClearableInput
                                 type="text"
-                                className="w-full bg-white text-wl-ink px-3 py-2 rounded-[15px] border border-lightgrey focus:outline-none focus:ring-2 focus:ring-wl-brand/30 transition-all placeholder:text-grey"
                                 placeholder="Type name or email (min 2 characters)"
                                 value={searchTerm}
                                 onChange={handleSearchChange}
@@ -278,17 +277,13 @@ export default function Feedback() {
                                 <FeedbackCard key={idx} fb={fb} showUser />
                             ))}
                         </div>
-                        {allTotalPage > 0 ? (
-                            <div className="mt-6">
-                                <Pagination
-                                    currentPage={allPage}
-                                    totalPage={allTotalPage}
-                                    goPrev={() => loadAll(Math.max(0, allPage - 1))}
-                                    goNext={() => loadAll(Math.min(allTotalPage, allPage + 1))}
-                                    goFirst={() => loadAll(0)}
-                                    goLast={() => loadAll(allTotalPage)}
-                                />
-                            </div>
+                        {allTotalCount > ALL_PAGE_SIZE ? (
+                            <Pagination
+                                currentPage={allPage}
+                                totalCount={allTotalCount}
+                                pageSize={ALL_PAGE_SIZE}
+                                onPage={loadAll}
+                            />
                         ) : null}
                     </>
                 )}

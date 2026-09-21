@@ -1,8 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { useDispatch } from 'react-redux';
 import { Loader2, RefreshCw, GitMerge, History } from 'lucide-react';
 import { doGetCustomMajors, doConsolidateMajors, doGetKeywordsAndServices, doGetMajorConsolidations } from '../../../api/api';
-import { showErrorAlert, showSuccessAlert, showWarningAlert } from '../../../actions/alertActions';
+import { notify } from '../../../utils/notify';
 import SelectField from '../../../components/ui/SelectField';
 
 type CustomMajorRow = {
@@ -25,7 +24,6 @@ type ConsolidationRow = {
 };
 
 export default function AdminMajors() {
-  const dispatch = useDispatch();
   const [rows, setRows] = useState<CustomMajorRow[]>([]);
   const [history, setHistory] = useState<ConsolidationRow[]>([]);
   const [officialMajors, setOfficialMajors] = useState<string[]>([]);
@@ -78,11 +76,11 @@ export default function AdminMajors() {
   const apply = async () => {
     const finalTarget = addingNew ? newMajor.trim() : target;
     if (!finalTarget) {
-      dispatch(showWarningAlert(addingNew ? 'Enter a name for the new major.' : 'Choose a major, or add a new one.'));
+      notify.warning(addingNew ? 'Enter a name for the new major.' : 'Choose a major, or add a new one.');
       return;
     }
     if (!addingNew && !selectedValues.length) {
-      dispatch(showWarningAlert('Select at least one custom entry to consolidate.'));
+      notify.warning('Select at least one custom entry to consolidate.');
       return;
     }
 
@@ -92,16 +90,14 @@ export default function AdminMajors() {
     if (res && res.major) {
       const parts = [`updated ${res.usersUpdated} profile(s)`];
       if (typeof res.seminarsUpdated === 'number') parts.push(`${res.seminarsUpdated} seminar(s)`);
-      dispatch(
-        showSuccessAlert(
+      notify.success(
           selectedValues.length
             ? `"${res.major}" is now official — ${parts.join(', ')}.`
             : `"${res.major}" added as an official major.`,
-        ),
-      );
+        );
       await load();
     } else {
-      dispatch(showErrorAlert('Could not update majors. Please try again.'));
+      notify.error('Could not update majors. Please try again.');
     }
   };
 

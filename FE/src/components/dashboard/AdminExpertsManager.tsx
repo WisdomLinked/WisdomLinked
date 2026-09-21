@@ -1,5 +1,4 @@
 import React, { useEffect, useState } from 'react';
-import { useDispatch } from 'react-redux';
 import { ArrowDown, ArrowUp, Edit, Plus, Save, Trash2, X } from 'lucide-react';
 import {
   createFeaturedExpert,
@@ -10,7 +9,7 @@ import {
   type FeaturedExpertRecord,
   type FeaturedExpertType,
 } from '../../api/api';
-import { showErrorAlert, showSuccessAlert } from '../../actions/alertActions';
+import { notify } from '../../utils/notify';
 import { ExpertPhoto, expertInitials } from '../FeaturedExperts';
 import { uploadProfilePhotoFile } from '../../utils/profileImageUpload';
 
@@ -42,7 +41,6 @@ function validateForm(form: FormState): Record<string, string> {
 }
 
 export default function AdminExpertsManager() {
-  const dispatch = useDispatch();
   const [experts, setExperts] = useState<FeaturedExpertRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -56,7 +54,7 @@ export default function AdminExpertsManager() {
     setLoading(true);
     const rows = await getAdminFeaturedExperts();
     if (rows === false) {
-      dispatch(showErrorAlert('Could not load featured experts.'));
+      notify.error('Could not load featured experts.');
       setExperts([]);
     } else {
       setExperts(rows);
@@ -122,7 +120,7 @@ export default function AdminExpertsManager() {
         ? await updateFeaturedExpert(editingId, payload)
         : await createFeaturedExpert(payload);
       if (!res) {
-        dispatch(showErrorAlert(editingId ? 'Could not update expert.' : 'Could not add expert.'));
+        notify.error(editingId ? 'Could not update expert.' : 'Could not add expert.');
         return;
       }
       if (res.errors) {
@@ -130,17 +128,17 @@ export default function AdminExpertsManager() {
         return;
       }
       if (res.error) {
-        dispatch(showErrorAlert(res.error));
+        notify.error(res.error);
         return;
       }
-      dispatch(showSuccessAlert(editingId ? 'Expert updated.' : 'Expert added.'));
+      notify.success(editingId ? 'Expert updated.' : 'Expert added.');
       setModalOpen(false);
       setEditingId(null);
       setForm(emptyForm);
       setPhotoFile(null);
       await load();
     } catch (err: any) {
-      dispatch(showErrorAlert(err?.message || (editingId ? 'Could not update expert.' : 'Could not add expert.')));
+      notify.error(err?.message || (editingId ? 'Could not update expert.' : 'Could not add expert.'));
     } finally {
       setBusy(false);
     }
@@ -152,10 +150,10 @@ export default function AdminExpertsManager() {
     const res = await deleteFeaturedExpert(expert.id);
     setBusy(false);
     if (!res || res.error) {
-      dispatch(showErrorAlert(res && res.error ? res.error : 'Could not remove expert.'));
+      notify.error(res && res.error ? res.error : 'Could not remove expert.');
       return;
     }
-    dispatch(showSuccessAlert('Expert removed.'));
+    notify.success('Expert removed.');
     await load();
   };
 
@@ -164,7 +162,7 @@ export default function AdminExpertsManager() {
     const res = await reorderFeaturedExpert(expert.id, direction);
     setBusy(false);
     if (!res || res.error) {
-      dispatch(showErrorAlert(res && res.error ? res.error : 'Could not reorder experts.'));
+      notify.error(res && res.error ? res.error : 'Could not reorder experts.');
       return;
     }
     if (Array.isArray(res.experts) && res.experts.length) {
@@ -172,7 +170,7 @@ export default function AdminExpertsManager() {
     } else {
       await load();
     }
-    dispatch(showSuccessAlert('Expert order updated.'));
+    notify.success('Expert order updated.');
   };
 
   return (
