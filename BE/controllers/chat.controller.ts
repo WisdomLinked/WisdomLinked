@@ -21,6 +21,7 @@ import {
 import { wlDisplayName } from '../utils/wlDisplayName';
 import { prepareMessageForRocketChat } from '../utils/chatReplyPlainText';
 import { safeErrorMessage } from '../utils/httpUserFacingCopy';
+import { searchableRolesFor } from '../utils/chatSearchRoles';
 
 const Conversation = require('../models/Conversation');
 const GroupChat = require('../models/GroupChat');
@@ -1026,7 +1027,7 @@ export const getDmUnreadSnapshot = async (req: any, res: Response) => {
     }
 };
 
-/** Authenticated private-chat target search (cross-role): experts + students, excluding self/blocked/admin. */
+/** Authenticated private-chat target search: students only see students; experts keep the cross-role result. */
 export const searchPrivateChatUsers = async (req: any, res: Response) => {
     try {
         const { userId } = req.user;
@@ -1035,7 +1036,7 @@ export const searchPrivateChatUsers = async (req: any, res: Response) => {
         const safe = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
         const users = await User.find({
             _id: { $ne: userId },
-            role: { $in: ['expert', 'customer'] },
+            role: { $in: searchableRolesFor(req.user?.role) },
             status: { $ne: 'blocked' },
             $or: [
                 { username: { $regex: safe, $options: 'i' } },
