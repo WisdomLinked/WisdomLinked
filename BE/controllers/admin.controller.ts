@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { safeErrorMessage } from '../utils/httpUserFacingCopy';
+import { resolveFeedbackMeetingKind, toLookupIds, isLookupId } from '../utils/feedbackMeetingKind';
 import {
     classifyBookingPayment,
     foldChargeRows,
@@ -392,24 +393,35 @@ const getUserFeedbacks = async (req, res) => {
         for (let i = 0; i < feedbacks.length; i++) {
             const feedback = feedbacks[i];
             let otherUser = null;
-            if (feedback.otherUserId) {
-                otherUser = await User.findById(feedback.otherUserId).select("username _id image role");
+            if (isLookupId(feedback.otherUserId)) {
+                otherUser = await User.findById(feedback.otherUserId).select("username _id image role email");
             }
 
             let eventData = null;
-            if (feedback.eventId) {
+            if (isLookupId(feedback.eventId)) {
                 eventData = await Event.findById(feedback.eventId).select("title");
             }
 
             let groupChatData = null;
-            if (feedback.groupChatId) {
-                groupChatData = await GroupChat.findById(feedback.groupChatId).select("name");
+            if (isLookupId(feedback.groupChatId)) {
+                groupChatData = await GroupChat.findById(feedback.groupChatId).select("name type");
             }
+            const meeting = resolveFeedbackMeetingKind({
+                eventType: feedback.eventType,
+                groupChat: groupChatData,
+                event: eventData,
+                eventId: feedback.eventId,
+            });
 
             enriched.push({
                 event: eventData || null,
                 groupChat: groupChatData || null,
                 eventType: feedback.eventType || null,
+                meetingKind: meeting.kind,
+                meetingName: meeting.name,
+                userEmail: user.email || null,
+                userUsername: user.username || null,
+                userRole: user.role || null,
                 start: feedback.start || null,
                 end: feedback.end || null,
                 totalTimeSpent: feedback.totalTimeSpent || null,
@@ -1429,10 +1441,36 @@ const getAllFeedbacks = async (req: Request, res: Response) => {
             : [];
         const otherById = new Map(others.map((u: any) => [String(u._id), u]));
 
-        const result = page.map((row: any) => ({
-            ...row,
-            otherUser: row.otherUserId ? otherById.get(String(row.otherUserId)) || null : null,
-        }));
+        const groupChatIds = toLookupIds(page.map((r: any) => r.groupChatId));
+        const groupChats = groupChatIds.length
+            ? await GroupChat.find({ _id: { $in: groupChatIds } }).select("name type").lean()
+            : [];
+        const groupChatById = new Map(groupChats.map((g: any) => [String(g._id), g]));
+
+        const eventIds = toLookupIds(page.map((r: any) => r.eventId));
+        const events = eventIds.length
+            ? await Event.find({ _id: { $in: eventIds } }).select("title").lean()
+            : [];
+        const eventById = new Map(events.map((e: any) => [String(e._id), e]));
+
+        const result = page.map((row: any) => {
+            const groupChat = row.groupChatId ? groupChatById.get(String(row.groupChatId)) || null : null;
+            const event = row.eventId ? eventById.get(String(row.eventId)) || null : null;
+            const meeting = resolveFeedbackMeetingKind({
+                eventType: row.eventType,
+                groupChat,
+                event,
+                eventId: row.eventId,
+            });
+            return {
+                ...row,
+                groupChat,
+                event,
+                meetingKind: meeting.kind,
+                meetingName: meeting.name,
+                otherUser: row.otherUserId ? otherById.get(String(row.otherUserId)) || null : null,
+            };
+        });
 
         return res.status(200).json({ result, totalCount, numPerPage, currentPage });
     } catch (err) {

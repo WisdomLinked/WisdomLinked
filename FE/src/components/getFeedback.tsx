@@ -30,33 +30,55 @@ interface FeedbackItem {
     userEmail?: string;
     userUsername?: string;
     userRole?: string;
+    meetingKind?: "seminar" | "individual" | "community" | "unknown";
+    meetingName?: string | null;
+}
+
+function personLine(
+    name?: string | null,
+    email?: string | null,
+    role?: string | null,
+): string {
+    const who = email || name || "—";
+    return role ? `${who} (${role})` : who;
+}
+
+function sessionHeading(fb: FeedbackItem): string {
+    const name = fb.meetingName || fb.groupChat?.name || null;
+    switch (fb.meetingKind) {
+        case "seminar":
+            return name ? `Seminar: ${name}` : "Seminar";
+        case "community":
+            return name ? `Community: ${name}` : "Community";
+        case "individual":
+            return "1:1 Appointment";
+        default:
+            break;
+    }
+    if (fb.eventType === "seminar" && fb.groupChat) return `Seminar: ${fb.groupChat.name || "N/A"}`;
+    if (fb.eventType === "event" && fb.event) return "1:1 Appointment";
+    return "Session";
 }
 
 const TYPEAHEAD_PAGE_SIZE = 12;
 const ALL_PAGE_SIZE = 20;
 
-function FeedbackCard({ fb, showUser }: { fb: FeedbackItem; showUser?: boolean }) {
+function FeedbackCard({ fb }: { fb: FeedbackItem }) {
     return (
         <div className="p-4 rounded-2xl border border-wl-line bg-white shadow-[0_10px_30px_rgba(35,76,106,0.06)] text-left">
-            {showUser ? (
-                <p className="text-wl-ink/90 mb-1">
-                    <strong className="text-wl-brand">From:</strong>{" "}
-                    {fb.userUsername || "—"} ({fb.userEmail || "—"})
-                    {fb.userRole ? ` · ${fb.userRole}` : ""}
+            <p className="text-wl-ink/90 mb-1">
+                <strong className="text-wl-brand">{sessionHeading(fb)}</strong>
+            </p>
+            {fb.otherUser ? (
+                <p className="text-wl-ink/90">
+                    <strong className="text-wl-brand">Given by:</strong>{" "}
+                    {personLine(fb.otherUser.username, fb.otherUser.email, fb.otherUser.role)}
                 </p>
             ) : null}
-            {fb.eventType === "event" && fb.event && (
-                <p className="text-wl-ink/90">
-                    <strong className="text-wl-brand">Individual Event Name:</strong>{" "}
-                    {fb.event.title || "N/A"}
-                </p>
-            )}
-            {fb.eventType === "seminar" && fb.groupChat && (
-                <p className="text-wl-ink/90">
-                    <strong className="text-wl-brand">Seminar Name:</strong>{" "}
-                    {fb.groupChat.name || "N/A"}
-                </p>
-            )}
+            <p className="text-wl-ink/90">
+                <strong className="text-wl-brand">Given to:</strong>{" "}
+                {personLine(fb.userUsername, fb.userEmail, fb.userRole)}
+            </p>
             <p className="text-wl-ink/90">
                 <strong className="text-wl-brand">Rating:</strong> {fb.rating}
             </p>
@@ -67,12 +89,6 @@ function FeedbackCard({ fb, showUser }: { fb: FeedbackItem; showUser?: boolean }
                 <p className="text-wl-ink/90">
                     <strong className="text-wl-brand">Date:</strong>{" "}
                     {new Date(fb.date || fb.start || "").toLocaleString()}
-                </p>
-            ) : null}
-            {fb.otherUser ? (
-                <p className="text-wl-ink/90">
-                    <strong className="text-wl-brand">Counterpart:</strong>{" "}
-                    {fb.otherUser.username} (Role: {fb.otherUser.role})
                 </p>
             ) : null}
         </div>
@@ -274,7 +290,7 @@ export default function Feedback() {
                     <>
                         <div className="space-y-4 w-full">
                             {allFeedbacks.map((fb, idx) => (
-                                <FeedbackCard key={idx} fb={fb} showUser />
+                                <FeedbackCard key={idx} fb={fb} />
                             ))}
                         </div>
                         {allTotalCount > ALL_PAGE_SIZE ? (

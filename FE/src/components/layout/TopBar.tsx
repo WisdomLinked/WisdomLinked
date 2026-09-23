@@ -99,7 +99,8 @@ export default function TopBar({
       className="sticky z-50 border-b border-[#e8e6e1] bg-white"
       style={{ top: 'var(--wl-banner-offset, 0px)' }}
     >
-      <div className="flex h-14 items-center justify-between px-6">
+      {/* pl-14 on small screens reserves room for the fixed menu button (Sidebar.tsx). */}
+      <div className="flex h-14 items-center justify-between pl-14 pr-6 lg:px-6">
         <span className="font-sans text-[14px] font-semibold text-slate-800">
           {title}
         </span>

@@ -228,3 +228,85 @@ describe('AvailabilityPage save', () => {
     expect(btn.className).not.toMatch(/overflow-hidden/);
   });
 });
+
+describe('AvailabilityPage save button state', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  const renderPage = async () => {
+    const view = render(
+      <Provider store={store}>
+        <AvailabilityPage />
+      </Provider>,
+    );
+    await waitFor(() => {
+      expect(screen.getByPlaceholderText('0')).toHaveValue(50);
+    });
+    return view;
+  };
+
+  const saveButton = () => screen.getByRole('button', { name: /Save Changes/i });
+
+  it('is disabled while the form matches what is saved', async () => {
+    await renderPage();
+    expect(saveButton()).toBeDisabled();
+  });
+
+  it('enables once the hourly rate changes', async () => {
+    await renderPage();
+    fireEvent.change(screen.getByPlaceholderText('0'), { target: { value: '75' } });
+    expect(saveButton()).toBeEnabled();
+  });
+
+  it('enables once an appointment duration is toggled', async () => {
+    await renderPage();
+    fireEvent.click(screen.getByRole('button', { name: '30 minutes, selected' }));
+    expect(saveButton()).toBeEnabled();
+  });
+
+  it('enables once time slots change', async () => {
+    await renderPage();
+    fireEvent.click(screen.getByRole('button', { name: /Clear All/i }));
+    expect(saveButton()).toBeEnabled();
+  });
+
+  it('goes back to disabled when an edit is undone', async () => {
+    await renderPage();
+    fireEvent.click(screen.getByRole('button', { name: '30 minutes, selected' }));
+    expect(saveButton()).toBeEnabled();
+    fireEvent.click(screen.getByRole('button', { name: '30 minutes' }));
+    expect(saveButton()).toBeDisabled();
+  });
+
+  it('ignores buffer time, which is never saved', async () => {
+    await renderPage();
+    fireEvent.click(screen.getByRole('button', { name: '30 min' }));
+    expect(saveButton()).toBeDisabled();
+  });
+
+  it('ignores minimum booking notice, which saves on its own', async () => {
+    vi.mocked(doSetExpertBookingNoticeHours).mockResolvedValue({ result: {} });
+    await renderPage();
+    fireEvent.click(screen.getByRole('button', { name: '48 hours' }));
+    await waitFor(() => {
+      expect(screen.getByText(/Minimum booking notice set to 48 hours/i)).toBeInTheDocument();
+    });
+    expect(saveButton()).toBeDisabled();
+  });
+
+  it('does not submit when clicked while disabled', async () => {
+    await renderPage();
+    fireEvent.click(saveButton());
+    expect(doUpdateTimeSlots).not.toHaveBeenCalled();
+    expect(doUpdateProfile).not.toHaveBeenCalled();
+  });
+
+  it('keeps the hint bar, without the button inside it', async () => {
+    await renderPage();
+    const hint = screen.getByText(/Save your hourly rate and weekly time slots/i);
+    expect(hint).toBeInTheDocument();
+    expect(hint.className).not.toMatch(/\bhidden\b/);
+    expect(hint.parentElement?.contains(saveButton())).toBe(false);
+  });
+});

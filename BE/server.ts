@@ -164,6 +164,13 @@ mongoose
         sweepOrphanedBookingIntents();
         setInterval(sweepOrphanedBookingIntents, 15 * 60 * 1000);
 
+        // Every 3 minutes, not 15 like the others: a "starting in 15 minutes"
+        // reminder swept on a 15-minute interval could arrive with only moments
+        // left. At 3 minutes a reminder lands at most 3 minutes after its mark.
+        const { sweepSessionReminders } = require('./services/sessionReminderSweep');
+        sweepSessionReminders();
+        setInterval(sweepSessionReminders, 3 * 60 * 1000);
+
         const httpServer = require('http').Server(app);
         httpServer.listen(PORT, function () {
             console.log(`App listening on port ${PORT}.`);

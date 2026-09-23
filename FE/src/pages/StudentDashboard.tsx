@@ -4,6 +4,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import queryString from 'query-string';
 import { BookOpen, UserCheck, AlertCircle, MessageSquare, Users } from 'lucide-react';
 import { useAppSelector } from '../store';
+import { useBackToDashboard } from '../hooks/useBackToDashboard';
 import { doGetMyEvents, getAllCommunityChats, profileImageFetch, doFilterExperts, doFilterSeminars } from '../api/api';
 import { resolveProfileImageSrc } from '../utils/profileImage';
 import {
@@ -319,6 +320,7 @@ function deriveModalSessions(
         windowOpen &&
         (expertProposed || walletWindowOpen);
       const canDecline = status === 'pending' && !expired && expertProposed;
+      const canCancel = status === 'pending' && !expired && !expertProposed && !payable;
       const metaLines: string[] = [];
       if (expertProposed && g?.paymentDeadline) {
         metaLines.push(
@@ -341,6 +343,7 @@ function deriveModalSessions(
         peerUserId: String(g?.admin?._id ?? g?.admin ?? ''),
         payable,
         canDecline,
+        canCancel,
         metaLines: metaLines.length ? metaLines : undefined,
         price,
         paymentMode: g?.paymentMode,
@@ -477,6 +480,8 @@ export default function StudentDashboard() {
   useEffect(() => {
     window.localStorage.setItem('studentDashboardView', activeItem);
   }, [activeItem]);
+  const goToDashboardTab = useCallback(() => setActiveItem('dashboard'), []);
+  useBackToDashboard(activeItem, goToDashboardTab);
   const [paymentReturnSuccess, setPaymentReturnSuccess] = useState(false);
   const [bookingReturnError, setBookingReturnError] = useState<string | null>(null);
   const [paySuccessToast, setPaySuccessToast] = useState(false);
@@ -1325,6 +1330,17 @@ export default function StudentDashboard() {
     [dispatch],
   );
 
+  const handleCancelRequest = useCallback(
+    async (session: UpcomingModalSession): Promise<boolean> => {
+      const res: any = await cancelIndividualAppointment(session.id);
+      if (res === false || res?.status === 'FAIL') return false;
+      dispatch(updateMe() as any);
+      setEventsReloadKey((k) => k + 1);
+      return true;
+    },
+    [dispatch],
+  );
+
   const handleUpcomingJoinSession = (session: UpcomingModalSession) => {
     setUpcomingModal(null);
     if (upcomingModal?.kind === 'seminar') openSeminarChat(session.id);
@@ -1598,6 +1614,7 @@ export default function StudentDashboard() {
             onJoinSession={handleUpcomingJoinSession}
             onViewProfile={handleViewPeerProfile}
             onDeclineProposal={handleDeclineProposal}
+            onCancelRequest={handleCancelRequest}
             onPay={(session) => {
               setUpcomingModal(null);
               // Seat requests are listed by request id, so they settle on their own route.

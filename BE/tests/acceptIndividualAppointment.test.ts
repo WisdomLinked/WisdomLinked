@@ -45,7 +45,7 @@ notifications.sendEmailMeetingAcceptance = async (
 ) => {
   record("acceptanceEmail", [to, noteHtml]);
 };
-notifications.scheduleEmailReminder = () => {};
+notifications.sendSessionReminderEmail = async () => {};
 paymentController.appendPaymentHistory = async (data: any) => {
   record("appendPaymentHistory", [data]);
   return true;

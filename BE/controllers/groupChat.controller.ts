@@ -89,6 +89,7 @@ const groupMemberIds = (groupChat: any): string[] => [
     ...(Array.isArray(groupChat?.coModerators) ? groupChat.coModerators.map((p: any) => normalizeId(p)) : []),
 ].filter(Boolean);
 
+import { hasJoinedCommunity } from '../utils/communityMembership';
 import { enrolledStudentIds, seminarIsFull, computeSeatRequestDeadline, seatRequestWindowOpen, seatRequestUnavailableMessage, resolveSeatApprovalBlock } from '../utils/seminarCapacity';
 import { describeSeminarChanges } from '../utils/seminarChanges';
 import {
@@ -172,7 +173,7 @@ const {
     studentNote: emailStudentNote,
     escapeHtml: emailEscape,
 } = require('../services/emailTemplate')
-const { scheduleEmailReminder, sendEmailMeetingRequestToCustomer, sendEmailMeetingRequestToExpert, sendEmailSessionPaidToExpert, sendEmailSessionOfferSentToExpert, sendEmailMeetingAcceptance, sendNotificationEmail } = require('../services/notifications')
+const { sendEmailMeetingRequestToCustomer, sendEmailMeetingRequestToExpert, sendEmailSessionPaidToExpert, sendEmailSessionOfferSentToExpert, sendEmailMeetingAcceptance, sendNotificationEmail } = require('../services/notifications')
 const { assertBookingLeadTime } = require("../utils/bookingLeadTime");
 const { assertBookingSlotValid, assertDurationAllowed } = require("../utils/bookingValidation");
 import { buildRemovedUserNotice, normalizeModerationReason } from '../utils/videoModerationNotice';
@@ -284,10 +285,9 @@ const createCommunityChat = async (req, res) => {
             lastMessageAt: now,
         });
 
-        // Add chat to the creator and any explicitly invited participants (not to all users).
         const participantsToUpdate = finalParticipants;
-        await User.updateMany(
-            { _id: { $in: participantsToUpdate } },
+        await User.updateOne(
+            { _id: userId },
             { $addToSet: { generalChats: communityChat._id } }
         );
 
@@ -384,11 +384,6 @@ const addParticipantsToCommunityChat = async (req, res) => {
 
         await syncGroupRocketChannel(String(communityChat._id));
 
-        // Add chat to new participants' generalChats arrays
-        await User.updateMany(
-            { _id: { $in: newParticipantIds } },
-            { $addToSet: { generalChats: communityChat._id } }
-        );
 
         // Update all participants' chat lists via socket
         newParticipantIds.forEach(participantId => {
@@ -534,7 +529,6 @@ const getAllCommunityChats = async (req, res) => {
 
         // Add isJoined flag to each chat
         const chatsWithJoinStatus = communityChats.map(chat => {
-            const chatId = chat._id.toString();
             const participantIds = (chat.participants || []).map((p) => {
                 if (typeof p === 'string') return p;
                 if (p && p._id) return p._id.toString();
@@ -543,7 +537,7 @@ const getAllCommunityChats = async (req, res) => {
 
             return {
                 ...chat,
-                isJoined: userChatIds.includes(chatId) || participantIds.includes(userId.toString()),
+                isJoined: hasJoinedCommunity(chat, userId, userChatIds),
                 participantCount: participantIds.length
             };
         });
@@ -1395,7 +1389,7 @@ const joinGroupChat = async (req, res) => {
             // [REMOVED] updateUsersGroupChatList(participantId.toString());
         })
 
-        scheduleEmailReminder(currentUser.email, currentUser.username, groupChat.name, groupChat.start, groupChat.duration, currentUser.timeZone);
+        // Reminders: see services/sessionReminderSweep.ts
 
         return res.status(200).json({
             success: true,
@@ -1903,11 +1897,9 @@ const enrollAndConfirmSeminar = async ({ groupChat, customer, expert, charge, pa
         }
     }
 
-    try {
-        scheduleEmailReminder(customer.email, customer.username, groupChat.name, groupChat.start, groupChat.duration, customer.timeZone);
-    } catch (reminderErr) {
-        console.log('[enrollAndConfirmSeminar] reminder scheduling failed after enrollment', reminderErr);
-    }
+    // Reminders: see services/sessionReminderSweep.ts. Note this path only ever
+    // reminded the student — the expert hosting the seminar got nothing. The sweep
+    // reminds both.
 };
 
 const registerForSeminar = async (req, res) => {
@@ -4989,7 +4981,7 @@ const acceptIndividualAppointment = async (req, res) => {
         try {
             const activated = await GroupChat.findOneAndUpdate(
                 { _id: groupChat._id, status: { $ne: 'cancelled' } },
-                { $set: decisionNote ? { status: 'active', decisionNote, decisionNoteAt: new Date(), decisionNoteReadAt: null } : { status: 'active' } },
+                { $set: decisionNote ? { status: 'active', confirmedAt: new Date(), decisionNote, decisionNoteAt: new Date(), decisionNoteReadAt: null } : { status: 'active', confirmedAt: new Date() } },
             );
             if (!activated) {
                 if (charge && held) {
@@ -5038,9 +5030,12 @@ const acceptIndividualAppointment = async (req, res) => {
             const restore = async () => {
                 await GroupChat.updateOne(
                     { _id: groupChat._id, status: 'active' },
-                    { $set: { status: previousStatus } },
+                    // confirmedAt is cleared with the status it was stamped alongside:
+                    // a session that fell back to pending was never confirmed.
+                    { $set: { status: previousStatus, confirmedAt: null } },
                 ).catch(() => null);
                 groupChat.status = previousStatus;
+                groupChat.confirmedAt = null;
             };
 
             if (parkedRow) {
@@ -5130,7 +5125,6 @@ const acceptIndividualAppointment = async (req, res) => {
 
         void (async () => {
             try {
-                const expertUser = await User.findById(userId);
                 const customerUser = await User.findById(groupChat.createdBy);
                 if (customerUser?.email && !charge) {
                     await sendEmailMeetingAcceptance(
@@ -5161,26 +5155,7 @@ const acceptIndividualAppointment = async (req, res) => {
                         );
                     }
                 }
-                if (expertUser?.email) {
-                    await scheduleEmailReminder(
-                        expertUser.email,
-                        expertUser.username,
-                        groupChat.name,
-                        groupChat.start,
-                        groupChat.duration,
-                        expertUser.timeZone,
-                    );
-                }
-                if (customerUser?.email) {
-                    await scheduleEmailReminder(
-                        customerUser.email,
-                        customerUser.username,
-                        groupChat.name,
-                        groupChat.start,
-                        groupChat.duration,
-                        customerUser.timeZone,
-                    );
-                }
+                // Reminders: see services/sessionReminderSweep.ts
             } catch (notifyErr) {
                 console.error('[acceptIndividualAppointment] notification failed:', notifyErr?.message || notifyErr);
             }
@@ -5557,6 +5532,7 @@ const cancelIndividualAppointment = async (req, res) => {
         const sessionName = groupChat.name || '1:1 session';
         const startLabel = groupChat.start ? new Date(groupChat.start).toLocaleString() : '';
         const declinedProposal = expertProposed && !cancelledByExpert;
+        const cancelledOwnRequest = !cancelledByExpert && !expertProposed;
 
         const noteBlock = decisionNoteEmailBlock(decisionNote);
         // The note is the only channel the student has once the cancelled session
@@ -5720,6 +5696,21 @@ const cancelIndividualAppointment = async (req, res) => {
                     },
                 );
             }
+        }
+
+        if (cancelledOwnRequest && expertUser?.email) {
+            await sendSeminarEmail(
+                expertUser.email,
+                `A session request was cancelled — ${sessionName}`,
+                {
+                    heading: 'A session request was cancelled',
+                    blocks: [
+                        emailParagraph(`${emailEscape(student?.username || 'The student')} cancelled the session they requested, <strong>${emailEscape(sessionName)}</strong>${startLabel ? ` on ${emailEscape(startLabel)}` : ''}.`),
+                        emailCallout('Your time is free again. Nothing was paid out for this request.'),
+                        emailButton('View your calendar'),
+                    ],
+                },
+            );
         }
 
         for (const participantId of groupChat.participants) {

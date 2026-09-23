@@ -59,6 +59,7 @@ export type UpcomingModalSession = {
   canWithdraw?: boolean;
   /** Pending expert-proposed 1:1 the student can turn down instead of paying. */
   canDecline?: boolean;
+  canCancel?: boolean;
   /** Extra small lines under the date (e.g. "$20.00 held", "Decide by …"). */
   metaLines?: string[];
   pendingState?: PendingSessionState;
@@ -138,6 +139,7 @@ export default function UpcomingSessionModal({
   onDeclineSession,
   onWithdrawSession,
   onDeclineProposal,
+  onCancelRequest,
   onViewProfile,
   sessions,
   role = 'student',
@@ -168,6 +170,7 @@ export default function UpcomingSessionModal({
   onWithdrawSession?: (session: UpcomingModalSession, note: string) => void | Promise<void | boolean>;
   /** Student turns down an expert's offer instead of paying for it. */
   onDeclineProposal?: (session: UpcomingModalSession, note: string) => void | Promise<void | boolean>;
+  onCancelRequest?: (session: UpcomingModalSession) => void | Promise<void | boolean>;
   sessions: UpcomingModalSession[];
   role?: 'student' | 'expert';
 }) {
@@ -185,6 +188,8 @@ export default function UpcomingSessionModal({
   const [declineBusyId, setDeclineBusyId] = useState<string | null>(null);
   const [declineConfirmId, setDeclineConfirmId] = useState<string | null>(null);
   const [proposalDeclineId, setProposalDeclineId] = useState<string | null>(null);
+  const [cancelBusyId, setCancelBusyId] = useState<string | null>(null);
+  const [cancelConfirmId, setCancelConfirmId] = useState<string | null>(null);
   const [notes, setNotes] = useState<Record<string, string>>({});
   const [noteErrors, setNoteErrors] = useState<Record<string, string>>({});
   const noteFor = (id: string) => notes[id] ?? '';
@@ -293,6 +298,24 @@ export default function UpcomingSessionModal({
       );
     } finally {
       setDeclineBusyId(null);
+    }
+  };
+
+  const cancelRequest = async (session: UpcomingModalSession) => {
+    if (!onCancelRequest) return;
+    setCancelBusyId(session.id);
+    try {
+      const ok = await onCancelRequest(session);
+      if (ok === false) return;
+      setCancelConfirmId(null);
+      flashNotice(
+        session,
+        `Your request${session.title ? ` for “${session.title}”` : ''} has been cancelled. ${
+          session.with || 'Your mentor'
+        } has been told.`,
+      );
+    } finally {
+      setCancelBusyId(null);
     }
   };
 
@@ -666,17 +689,50 @@ export default function UpcomingSessionModal({
                         </div>
                       )
                     ) : (
-                      <span
-                        className={`mt-2 inline-flex rounded-lg px-2 py-1 text-[10px] font-semibold ${
-                          session.pendingState === 'awaiting_expert'
-                            ? 'border border-[#234C6A]/30 text-[#234C6A]'
-                            : session.pendingState
-                              ? 'bg-amber-100 text-amber-700'
-                              : 'border border-[#234C6A]/30 text-[#234C6A]'
-                        }`}
-                      >
-                        {pendingStateLabel(session.pendingState)}
-                      </span>
+                      <div className="mt-2 flex items-center justify-end gap-2">
+                        {session.canCancel && onCancelRequest ? (
+                          cancelConfirmId === session.id ? (
+                            <>
+                              <button
+                                type="button"
+                                disabled={cancelBusyId === session.id}
+                                onClick={() => setCancelConfirmId(null)}
+                                className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-60"
+                              >
+                                Keep
+                              </button>
+                              <button
+                                type="button"
+                                disabled={cancelBusyId === session.id}
+                                onClick={() => cancelRequest(session)}
+                                className="rounded-lg bg-rose-600 px-3 py-1.5 text-[11px] font-semibold text-white hover:bg-rose-700 disabled:opacity-60"
+                              >
+                                {cancelBusyId === session.id ? 'Cancelling…' : 'Confirm cancel'}
+                              </button>
+                            </>
+                          ) : (
+                            <button
+                              type="button"
+                              aria-label="Cancel this request"
+                              onClick={() => setCancelConfirmId(session.id)}
+                              className="rounded-lg border border-rose-200 bg-white px-3 py-1.5 text-[11px] font-semibold text-rose-600 hover:bg-rose-50"
+                            >
+                              Cancel
+                            </button>
+                          )
+                        ) : null}
+                        <span
+                          className={`inline-flex rounded-lg px-2 py-1 text-[10px] font-semibold ${
+                            session.pendingState === 'awaiting_expert'
+                              ? 'border border-[#234C6A]/30 text-[#234C6A]'
+                              : session.pendingState
+                                ? 'bg-amber-100 text-amber-700'
+                                : 'border border-[#234C6A]/30 text-[#234C6A]'
+                          }`}
+                        >
+                          {pendingStateLabel(session.pendingState)}
+                        </span>
+                      </div>
                     )}
                   </div>
                 </div>
