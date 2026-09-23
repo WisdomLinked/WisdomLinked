@@ -123,6 +123,72 @@ test('cheapest plus how booking works sets Mongo, /rules, retrieve, and model', 
     assert.equal(got.model, true);
 });
 
+test('caller-scoped questions are pure facts and skip the public seminar list', () => {
+    const seminar = plan('what is my next seminar?');
+    assert.equal(seminar.ownSeminar, true);
+    assert.equal(seminar.ownIndividual, false);
+    assert.equal(seminar.ownCommunity, false);
+    assert.equal(seminar.ownLegacyEvent, false);
+    assert.equal(seminar.retrieve, false);
+    assert.equal(seminar.model, false);
+    assert.equal(seminar.mongoSeminars, false);
+    assert.deepEqual(seminar.routes, []);
+
+    const meetings = plan('what meetings do I have?');
+    assert.equal(meetings.ownIndividual, true);
+    assert.equal(meetings.ownSeminar, false);
+    assert.equal(meetings.retrieve, false);
+    assert.equal(meetings.model, false);
+    assert.equal(meetings.mongoSeminars, false);
+
+    const communities = plan('my communities');
+    assert.equal(communities.ownCommunity, true);
+    assert.equal(communities.ownIndividual, false);
+    assert.equal(communities.ownSeminar, false);
+    assert.equal(communities.retrieve, false);
+    assert.equal(communities.model, false);
+    assert.deepEqual(communities.routes, []);
+
+    const upcoming = plan('upcoming');
+    assert.equal(upcoming.ownLegacyEvent, true);
+    assert.equal(upcoming.retrieve, false);
+    assert.equal(upcoming.model, false);
+    assert.equal(upcoming.mongoSeminars, false);
+    assert.deepEqual(upcoming.routes, []);
+});
+
+test('an own-record question plus how, why, or Chinese sets retrieve and the model', () => {
+    const seminarHow = plan('how does my next seminar work');
+    assert.equal(seminarHow.ownSeminar, true);
+    assert.equal(seminarHow.mongoSeminars, false);
+    assert.equal(seminarHow.retrieve, true);
+    assert.equal(seminarHow.model, true);
+    assert.deepEqual(seminarHow.routes, []);
+
+    const meetingWhy = plan('why is my meeting late');
+    assert.equal(meetingWhy.ownIndividual, true);
+    assert.equal(meetingWhy.retrieve, true);
+    assert.equal(meetingWhy.model, true);
+
+    const seminarZh = plan('my seminar 怎么');
+    assert.equal(seminarZh.ownSeminar, true);
+    assert.equal(seminarZh.mongoSeminars, false);
+    assert.equal(seminarZh.retrieve, true);
+    assert.equal(seminarZh.model, true);
+});
+
+test('a pure public cheapest professor question sets no own flag', () => {
+    const got = plan('cheapest professor in civil');
+    assert.equal(got.ownIndividual, false);
+    assert.equal(got.ownSeminar, false);
+    assert.equal(got.ownCommunity, false);
+    assert.equal(got.ownLegacyEvent, false);
+    assert.equal(got.mongoExperts, true);
+    assert.equal(got.mongoSeminars, false);
+    assert.equal(got.retrieve, false);
+    assert.equal(got.model, false);
+});
+
 test('the plan never selects the whole public catalog or private records', () => {
     const got = plan('home about contact services rules booking cheapest professor seminar price');
     assert.deepEqual(got.routes, ['/rules', '/services']);

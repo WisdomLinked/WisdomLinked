@@ -13,6 +13,10 @@
  * The plan never authorizes emails, phones, GPA, ranking, resumes, chatFiles,
  * profile photos, 1:1s, communities, or student records. Students stay on
  * keyword cards only for a logged-in expert.
+ *
+ * ownIndividual, ownSeminar, ownCommunity, and ownLegacyEvent name the
+ * caller's records a later ticket may load. This function still receives
+ * only the question string. Those flags are not the public seminar list.
  */
 
 export const ASK_RETRIEVE_CONTRACT = {
@@ -46,6 +50,14 @@ export type AskPageRoute = (typeof ASK_PAGE_ROUTES)[number];
 export type AskPlan = {
     mongoExperts: boolean;
     mongoSeminars: boolean;
+    /** Caller's 1:1s and meetings. Not another person's rows. */
+    ownIndividual: boolean;
+    /** Caller's seminars. Not the public seminar catalog. */
+    ownSeminar: boolean;
+    /** Caller's communities. */
+    ownCommunity: boolean;
+    /** Caller's legacy events, including an upcoming question. */
+    ownLegacyEvent: boolean;
     routes: AskPageRoute[];
     retrieve: boolean;
     model: boolean;
@@ -61,6 +73,20 @@ const BOOKING_EN = /\b(?:bookings?|appointments?)\b/i;
 const EXPLANATORY_EN = /\b(?:how|why)\b/i;
 const EXPLANATORY_ZH = /怎么|如何|怎样/;
 const HAN = /[\u4e00-\u9fff]/;
+const MY_NEXT = String.raw`my\s+(?:next\s+|upcoming\s+)?`;
+const OWN_INDIVIDUAL = new RegExp(
+    String.raw`\b${MY_NEXT}(?:meetings?|1:1s?|one-on-ones?|one\s+on\s+ones?)\b|\bmeetings?\b[\s\S]{0,40}\b(?:i|i've|i'm)\b|\b(?:i|i've|i'm)\b[\s\S]{0,40}\bmeetings?\b`,
+    'i',
+);
+const OWN_SEMINAR = new RegExp(
+    String.raw`\b${MY_NEXT}seminars?\b|\bseminars?\b[\s\S]{0,40}\b(?:i have|do i)\b|\b(?:i have|do i)\b[\s\S]{0,40}\bseminars?\b`,
+    'i',
+);
+const OWN_COMMUNITY = new RegExp(
+    String.raw`\b${MY_NEXT}communit(?:y|ies)\b|\bcommunit(?:y|ies)\b[\s\S]{0,40}\b(?:i have|do i)\b`,
+    'i',
+);
+const OWN_LEGACY = /\bupcoming\b|\bmy\s+(?:legacy\s+)?events?\b/i;
 
 const SERVICE_LABELS = [
     'study abroad',
@@ -86,6 +112,10 @@ const otherChinese = (question: string): boolean => {
 const emptyPlan = (): AskPlan => ({
     mongoExperts: false,
     mongoSeminars: false,
+    ownIndividual: false,
+    ownSeminar: false,
+    ownCommunity: false,
+    ownLegacyEvent: false,
     routes: [],
     retrieve: true,
     model: true,
@@ -106,8 +136,13 @@ export function routeAsk(question: unknown): AskPlan {
     const explanatory = EXPLANATORY_EN.test(lower) || EXPLANATORY_ZH.test(text);
     const expertSubject = who || /\bexperts?\b/i.test(lower) || exactServices;
     const seminarOwnsPrice = seminarFact && price && !expertSubject;
+    const ownIndividual = OWN_INDIVIDUAL.test(lower);
+    const ownSeminar = OWN_SEMINAR.test(lower);
+    const ownCommunity = OWN_COMMUNITY.test(lower);
+    const ownLegacyEvent = OWN_LEGACY.test(lower);
+    const ownRecord = ownIndividual || ownSeminar || ownCommunity || ownLegacyEvent;
 
-    const hasFact = price || who || seminarFact || exactServices || servicesPage;
+    const hasFact = price || who || seminarFact || exactServices || servicesPage || ownRecord;
     const needsLanguage = explanatory || otherChinese(text) || !hasFact;
 
     const routes: AskPageRoute[] = [];
@@ -116,7 +151,11 @@ export function routeAsk(question: unknown): AskPlan {
 
     return {
         mongoExperts: (price && !seminarOwnsPrice) || who || exactServices,
-        mongoSeminars: seminarFact,
+        mongoSeminars: seminarFact && !ownSeminar,
+        ownIndividual,
+        ownSeminar,
+        ownCommunity,
+        ownLegacyEvent,
         routes,
         retrieve: needsLanguage,
         model: needsLanguage,
