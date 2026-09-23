@@ -12,13 +12,15 @@ export default function FindExpertsPage({
   followedMentorIds,
   followerCounts,
   onToggleFollow,
+  initialQuery,
 }: {
   onViewExpert?: (mentor: ExpertCardProps) => void;
   followedMentorIds: Array<string | number>;
   followerCounts: Record<string, number>;
   onToggleFollow: (mentorId: string | number) => void;
+  initialQuery?: string;
 }) {
-  const [searchQuery, setSearchQuery] = useState('');
+  const [searchQuery, setSearchQuery] = useState(initialQuery ?? '');
   const [selectedMajor, setSelectedMajor] = useState<string>('all');
   const [selectedService, setSelectedService] = useState<string>('all');
   const [mentors, setMentors] = useState<ExpertCardProps[]>([]);
@@ -82,6 +84,11 @@ export default function FindExpertsPage({
       SetLoadingStatus(false);
     }
   }, [searchQuery, selectedMajor, selectedService]);
+
+  useEffect(() => {
+    if (initialQuery == null) return;
+    setSearchQuery(initialQuery);
+  }, [initialQuery]);
 
   useEffect(() => {
     loadKeywordsAndServices();
