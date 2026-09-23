@@ -90,6 +90,9 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Stage public page index for the backend image
+        run: cp FE/src/content/publicPages.ts BE/search/publicPageCatalog.ts
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 

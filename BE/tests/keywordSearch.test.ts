@@ -257,7 +257,13 @@ function assertShape(body: any) {
         assert.ok(Array.isArray(body[key]), key);
         assert.ok(body[key].length <= 5, key);
     }
-    assert.deepEqual(body.pages, []);
+    for (const page of body.pages) {
+        assertKeys(page, ['title', 'snippet', 'route']);
+        assert.equal(typeof page.title, 'string');
+        assert.equal(page.title.length > 0, true);
+        assert.equal(typeof page.snippet, 'string');
+        assert.equal(['/', '/aboutus', '/services', '/rules', '/contactus'].includes(page.route), true);
+    }
     for (const expert of body.experts) {
         assertKeys(expert, EXPERT_KEYS);
         assert.equal(expert.bookable, true);

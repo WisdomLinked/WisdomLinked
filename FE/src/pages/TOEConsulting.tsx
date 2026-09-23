@@ -5,6 +5,7 @@ import { notify } from '../utils/notify';
 import SignupModal from '../components/SignupModal';
 import FeaturedExperts from '../components/FeaturedExperts';
 import { SERVICE_LABELS } from '../constants/serviceOptions';
+import { homePage } from '../content/publicPages';
 import {
   Star, Users, Briefcase, GraduationCap, TrendingUp, MessageCircle, CheckCircle,
   ArrowRight, Sparkles, Menu, X, BookOpen, Globe, ChevronDown, ChevronUp, Phone, Mail, User,
@@ -1664,12 +1665,12 @@ export default function TOEConsulting() {
               </div>
 
               <h1 className="font-display font-bold leading-[1.12] mb-6 animate-fade-up text-slate-900" style={{ animationDelay: '0.15s', fontSize: 'clamp(2.15rem, 4.2vw, 3.35rem)' }}>
-                Learn from the people who've already{' '}
-                <span className="whitespace-nowrap">made it.</span>
+                {homePage.hero.titleLead}{' '}
+                <span className="whitespace-nowrap">{homePage.hero.titleAccent}</span>
               </h1>
 
               <p className="text-slate-500 leading-relaxed mb-6 sm:mb-9 max-w-[520px] animate-fade-up text-sm sm:text-base" style={{ animationDelay: '0.28s' }}>
-                Talk directly with professors at world-class universities and industry experts. Get personalized guidance on grad admissions, research, scholarships, and career advancement.
+                {homePage.hero.snippet}
               </p>
 
               <div className="flex flex-col sm:flex-row gap-3 items-start mb-10 animate-fade-up" style={{ animationDelay: '0.4s' }}>
@@ -1784,8 +1785,8 @@ export default function TOEConsulting() {
             <div className="grid lg:grid-cols-2 gap-10 lg:gap-16 items-start">
               <div>
                 <div className="inline-block section-label text-[#234C6A] mb-4">About Us</div>
-                <h2 className="font-display text-3xl sm:text-4xl md:text-5xl font-bold text-slate-900 mb-4 sm:mb-6 leading-tight">Connect to Knowledge <span style={{ color: '#234C6A' }}>Across the Globe</span></h2>
-                <p className="text-slate-600 text-lg leading-relaxed mb-4">Starting from Study and Work Abroad — WisdomLinked is a global consulting service company backed by professors in top universities in the U.S. and other countries.</p>
+                <h2 className="font-display text-3xl sm:text-4xl md:text-5xl font-bold text-slate-900 mb-4 sm:mb-6 leading-tight">{homePage.connect.titleLead} <span style={{ color: '#234C6A' }}>{homePage.connect.titleAccent}</span></h2>
+                <p className="text-slate-600 text-lg leading-relaxed mb-4">{homePage.connect.snippet}</p>
                 <p className="text-slate-600 text-lg leading-relaxed mb-6">The business draws on the talents of elite professionals — mostly top-notch professors, scientists, researchers and other successful professionals. These elite professionals all have their graduate degrees, mostly Ph.D., with decades of successful experiences.</p>
                 <div className="about-highlight rounded-r-xl p-5 mb-6">
                   <p className="text-slate-600 text-lg leading-relaxed">A 30-minute conversation with an authoritative expert through this platform could save clients years or months of effort — or countless dollars that could otherwise be wasted in darkness.</p>
@@ -1820,8 +1821,8 @@ export default function TOEConsulting() {
           <div className="relative z-10 max-w-7xl mx-auto">
             <div className="text-center mb-16">
               <div className="inline-block section-label text-[#234C6A] mb-4">Our Services</div>
-              <h2 className="font-display text-4xl md:text-5xl font-bold text-slate-900 mb-4">Expert's advice</h2>
-              <p className="text-slate-600 text-lg max-w-2xl mx-auto">Get personalized, one-on-one guidance from the elites of the elite or join a speacialized seminar</p>
+              <h2 className="font-display text-4xl md:text-5xl font-bold text-slate-900 mb-4">{homePage.advice.title}</h2>
+              <p className="text-slate-600 text-lg max-w-2xl mx-auto">{homePage.advice.snippet}</p>
             </div>
             <div className="grid md:grid-cols-3 gap-8 items-stretch">
               {services.map((service, index) => (
@@ -1854,10 +1855,10 @@ export default function TOEConsulting() {
             <div className="text-left mb-8 sm:mb-10">
               <div className="inline-block section-label text-[#234C6A] mb-4">Guidelines</div>
               <h2 className="font-display text-3xl sm:text-4xl md:text-5xl font-bold text-slate-900 mb-4">
-                Guidelines for Quality
+                {homePage.guidelines.title}
               </h2>
               <p className="text-slate-600 text-lg leading-relaxed">
-                Integrity, Respect, and Truth
+                {homePage.guidelines.snippet}
               </p>
             </div>
             <div className="space-y-6">
@@ -1886,8 +1887,8 @@ export default function TOEConsulting() {
           <div className="relative z-10 max-w-4xl mx-auto">
             <div className="text-center mb-10 sm:mb-16">
               <div className="inline-block section-label text-[#234C6A] mb-4">Success Stories</div>
-              <h2 className="font-display text-3xl sm:text-4xl md:text-5xl font-bold text-slate-900 mb-4">Hear From Our Community</h2>
-              <p className="text-slate-600 text-base sm:text-lg">Clients and experts who've transformed their journeys</p>
+              <h2 className="font-display text-3xl sm:text-4xl md:text-5xl font-bold text-slate-900 mb-4">{homePage.community.title}</h2>
+              <p className="text-slate-600 text-base sm:text-lg">{homePage.community.snippet}</p>
             </div>
             <div className="relative rounded-2xl sm:rounded-3xl border border-slate-200 p-6 sm:p-10 md:p-16 overflow-hidden min-h-[280px] sm:min-h-[320px] flex items-center" style={{ background: 'linear-gradient(135deg, #F0F4F8 0%, #E8EEF4 100%)' }}>
               <div className="absolute top-0 right-0 w-64 h-64 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 opacity-60" style={{ background: 'radial-gradient(circle, rgba(35,60,82,0.12) 0%, transparent 70%)' }}></div>
@@ -1918,8 +1919,8 @@ export default function TOEConsulting() {
             <div className="grid md:grid-cols-2 gap-10 lg:gap-16 items-center">
               <div>
                 <div className="inline-block section-label text-[#234C6A] mb-4">For Experts</div>
-                <h2 className="font-display text-3xl sm:text-4xl md:text-5xl font-bold text-slate-900 mb-4 sm:mb-6 leading-tight">Share Your Expertise, <span style={{ color: '#234C6A' }}>Make an Impact</span></h2>
-                <p className="text-slate-600 text-lg mb-8 leading-relaxed">Share your decades of experience with the next generation. Make a meaningful impact while building your global network and earning for your expertise.</p>
+                <h2 className="font-display text-3xl sm:text-4xl md:text-5xl font-bold text-slate-900 mb-4 sm:mb-6 leading-tight">{homePage.impact.titleLead} <span style={{ color: '#234C6A' }}>{homePage.impact.titleAccent}</span></h2>
+                <p className="text-slate-600 text-lg mb-8 leading-relaxed">{homePage.impact.snippet}</p>
                 <div className="space-y-3 mb-8">
                   {expertBenefits.map((benefit, index) => (
                     <div key={index} className="card-hover flex items-start gap-4 p-4 rounded-xl border border-slate-200" style={{ background: 'linear-gradient(rgba(69,104,130,0.06), rgba(69,104,130,0.06)), #F0F4F8' }}>
@@ -1957,10 +1958,10 @@ export default function TOEConsulting() {
             <div className="max-w-3xl">
               <div className="inline-block section-label text-[#234C6A] mb-4">How pricing works</div>
               <h2 className="font-display text-3xl sm:text-4xl md:text-5xl font-bold text-slate-900 mb-4">
-                Fair, transparent, expert driven rates
+                {homePage.pricing.title}
               </h2>
               <p className="text-slate-600 text-base sm:text-lg leading-relaxed mb-4">
-                Every expert sets their own rate based on their field, seniority, and demand. You see the full cost before you commit, no hidden fees, no surprises.
+                {homePage.pricing.snippet}
               </p>
               <div className="inline-flex items-center gap-2 px-3 py-2 rounded-full bg-emerald-50 border border-emerald-200 text-xs sm:text-sm text-emerald-800 font-semibold">
                 <CheckCircle className="w-4 h-4" />
