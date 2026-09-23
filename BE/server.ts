@@ -25,6 +25,7 @@ const meetingRoutes = require("./routes/meetingRoutes");
 const receiptRoutes = require("./routes/receiptRoutes");
 const announcementRoutes = require("./routes/announcementRoutes");
 const featuredExpertRoutes = require("./routes/featuredExpertRoutes");
+const searchRoutes = require("./routes/searchRoutes");
 
 const { appendDefaultServices, appendAdminUserAndGroupChat, initAppStates } = require('./initDB')
 const { apiLimiter } = require('./middlewares/rateLimit');
@@ -96,6 +97,7 @@ app.use("/api/auth", authRoutes);
 app.use("/api/invite-friend", friendInvitationRoutes);
 app.use("/api/group-chat", groupChatRoutes);
 app.use("/api/experts", featuredExpertRoutes);
+app.use("/api/search", searchRoutes);
 app.use("/api/expert", expertRoutes);
 app.use("/api/customer", customerRoutes);
 app.use("/api/admin", adminRoutes);
