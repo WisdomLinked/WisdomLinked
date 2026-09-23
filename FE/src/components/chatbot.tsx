@@ -5,14 +5,15 @@ import { MessageSquare, X } from "lucide-react";
 interface ChatItem {
     question: string;
     answer: string;
-    similarQuestions?: { id: string; question: string }[];
+    pending?: boolean;
 }
 
 const Chatbot = () => {
     const [isMinimized, setIsMinimized] = useState<boolean>(true);
     const [input, setInput] = useState<string>("");
     const [chat, setChat] = useState<ChatItem[]>([]);
-    const [similarQuestions, setSimilarQuestions] = useState<{ id: string; question: string }[]>([]);
+    const [pending, setPending] = useState<boolean>(false);
+    const pendingRef = useRef(false);
     const chatHistoryRef = useRef<HTMLDivElement | null>(null);
 
     const primaryBlue = "#234C6A";
@@ -28,28 +29,36 @@ const Chatbot = () => {
         setInput(e.target.value);
     };
 
+    const finishPending = (answer: string) => {
+        setChat((prev) => {
+            const next = [...prev];
+            for (let i = next.length - 1; i >= 0; i -= 1) {
+                if (next[i].pending) {
+                    next[i] = { question: next[i].question, answer, pending: false };
+                    break;
+                }
+            }
+            return next;
+        });
+    };
+
     const sendQuestion = async (question: string) => {
         const current = question.trim();
-        if (!current) return;
+        if (!current || pendingRef.current) return;
+        pendingRef.current = true;
+        setPending(true);
+        setInput("");
+        setChat((prev) => [...prev, { question: current, answer: "", pending: true }]);
         try {
             const response = await askSite(current);
             const answer = typeof response?.answer === "string" ? response.answer : "";
-            const similar = Array.isArray(response?.similarQuestions) ? response.similarQuestions : [];
-            setChat((prev) => [
-                ...prev,
-                { question: current, answer, similarQuestions: similar },
-            ]);
-            setSimilarQuestions(similar);
+            finishPending(answer);
         } catch {
-            setChat((prev) => [
-                ...prev,
-                {
-                    question: current,
-                    answer: "I couldn't reach HelpBot just now. Please try again.",
-                },
-            ]);
+            finishPending("I couldn't reach HelpBot just now. Please try again.");
+        } finally {
+            pendingRef.current = false;
+            setPending(false);
         }
-        setInput("");
     };
 
     const handleChatSubmit = (e: React.FormEvent) => {
@@ -123,9 +132,22 @@ const Chatbot = () => {
                                                 </div>
                                             </div>
                                             <div className="flex justify-start">
-                                                <div className="max-w-[85%] rounded-md border border-[#234C6A] bg-[#234C6A] px-3 py-2 text-sm text-white whitespace-pre-wrap">
-                                                    {c.answer}
-                                                </div>
+                                                {c.pending ? (
+                                                    <div
+                                                        className="max-w-[85%] rounded-md border border-[#E5E2DB] bg-white px-3 py-2 text-sm text-[#234C6A]"
+                                                        role="status"
+                                                        aria-label="HelpBot is answering"
+                                                    >
+                                                        <span
+                                                            className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-[#E5E2DB] border-t-[#234C6A]"
+                                                            aria-hidden
+                                                        />
+                                                    </div>
+                                                ) : (
+                                                    <div className="max-w-[85%] rounded-md border border-[#E5E2DB] bg-white px-3 py-2 text-sm text-[#234C6A] whitespace-pre-wrap">
+                                                        {c.answer}
+                                                    </div>
+                                                )}
                                             </div>
                                         </div>
                                     ))}
@@ -133,18 +155,15 @@ const Chatbot = () => {
                             )}
                         </div>
 
-                        {/* Quick actions */}
-                        <div className="border-t border-[#E5E2DB] bg-white px-3 py-3">
-                            <div className="flex items-center justify-between mb-2">
-                                <div className="text-[11px] font-semibold uppercase tracking-widest text-[#7A7A72]">
-                                    {chat.length === 0
-                                        ? "Frequently asked"
-                                        : "Similar questions"}
+                        {chat.length === 0 ? (
+                            <div className="border-t border-[#E5E2DB] bg-white px-3 py-3">
+                                <div className="flex items-center justify-between mb-2">
+                                    <div className="text-[11px] font-semibold uppercase tracking-widest text-[#7A7A72]">
+                                        Frequently asked
+                                    </div>
                                 </div>
-                            </div>
-                            <div className="flex flex-col gap-2 max-h-24 overflow-y-auto pr-1">
-                                {chat.length === 0 ? (
-                                    staticFaqs.map((q: string) => (
+                                <div className="flex flex-col gap-2 max-h-24 overflow-y-auto pr-1">
+                                    {staticFaqs.map((q: string) => (
                                         <button
                                             key={q}
                                             type="button"
@@ -153,25 +172,10 @@ const Chatbot = () => {
                                         >
                                             {q}
                                         </button>
-                                    ))
-                                ) : similarQuestions.length > 0 ? (
-                                    similarQuestions.map((q: { id: string; question: string }) => (
-                                        <button
-                                            key={q.id}
-                                            type="button"
-                                            onClick={() => handleQuickAction(q.question)}
-                                            className="w-full text-left rounded-md border border-[#E5E2DB] bg-[#F5F3EF] px-3 py-2 text-sm text-[#234C6A] hover:bg-white transition-colors"
-                                        >
-                                            {q.question}
-                                        </button>
-                                    ))
-                                ) : (
-                                    <div className="text-sm text-[#7A7A72] px-1">
-                                        No similar questions found.
-                                    </div>
-                                )}
+                                    ))}
+                                </div>
                             </div>
-                        </div>
+                        ) : null}
 
                         {/* Input bar */}
                         <form
@@ -188,7 +192,7 @@ const Chatbot = () => {
                             <button
                                 type="submit"
                                 className="rounded-[4px] bg-[#234C6A] px-3 py-2 text-sm font-semibold text-white hover:bg-[#1f3f5a] disabled:opacity-60"
-                                disabled={!input.trim()}
+                                disabled={pending || !input.trim()}
                             >
                                 Send
                             </button>

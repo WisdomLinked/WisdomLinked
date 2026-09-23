@@ -222,4 +222,39 @@ describe('SiteSearchBox', () => {
     expect(screen.getByRole('link', { name: /Ada Lovelace/i })).toBeInTheDocument();
     expect(screen.queryByTestId('site-search-answer')).not.toBeInTheDocument();
   });
+
+  it('shows the Asking spinner while askSite is pending and does not start a second ask', async () => {
+    let resolveAsk: (value?: unknown) => void = () => {};
+    askSite.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveAsk = resolve;
+        }),
+    );
+
+    render(
+      <MemoryRouter>
+        <SiteSearchBox audience="public" />
+      </MemoryRouter>,
+    );
+    await typeQuery('ada');
+    await flushDebounce();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Ask' }));
+    expect(askSite).toHaveBeenCalledTimes(1);
+    expect(screen.getAllByLabelText('Asking').length).toBeGreaterThanOrEqual(2);
+    expect(document.querySelectorAll('.animate-spin').length).toBeGreaterThanOrEqual(2);
+    expect(screen.getByRole('link', { name: /Ada Lovelace/i })).toBeInTheDocument();
+
+    fireEvent.keyDown(screen.getByLabelText('Search WisdomLinked'), { key: 'Enter' });
+    fireEvent.click(screen.getByRole('button', { name: 'Asking' }));
+    expect(askSite).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      resolveAsk({ answer: 'Ada is a professor.' });
+    });
+    expect(screen.queryByLabelText('Asking')).not.toBeInTheDocument();
+    expect(screen.getByTestId('site-search-answer')).toHaveTextContent('Ada is a professor.');
+    expect(screen.getByRole('link', { name: /Ada Lovelace/i })).toBeInTheDocument();
+  });
 });

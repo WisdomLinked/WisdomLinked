@@ -360,16 +360,33 @@ const searchYours = async (req: any, query: string) => {
     return cards;
 };
 
+const majorNames = (doc: any): string[] => {
+    if (!Array.isArray(doc?.keywords)) return [];
+    const names: string[] = [];
+    for (const row of doc.keywords) {
+        if (!row || typeof row !== 'object') continue;
+        const value = String(row.value ?? '').trim();
+        if (value) names.push(value);
+    }
+    return names;
+};
+
 /** Every active expert, as the same public card keyword search returns. */
 const listPublicExpertCards = async () => {
     const docs = await User.find({
         role: 'expert',
         status: 'active',
     })
-        .select('username title description image price appointmentDurations')
+        .select('username title description image price appointmentDurations keywords')
+        .populate({ path: 'keywords', select: 'value' })
         .lean();
 
-    return (Array.isArray(docs) ? docs : []).map(toExpertCard);
+    return (Array.isArray(docs) ? docs : []).map((doc) => {
+        const card = toExpertCard(doc);
+        const majors = majorNames(doc);
+        if (majors.length) card.keywords = majors;
+        return card;
+    });
 };
 
 /** Every live seminar series, as the same public card keyword search returns. */

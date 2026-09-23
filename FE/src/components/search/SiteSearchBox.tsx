@@ -100,11 +100,15 @@ export default function SiteSearchBox({
   const adminEmail = audience === 'admin' && isEmailQuery(trimmed);
   const canAsk = trimmed.length >= 2 && !adminEmail;
 
+  const askInFlightRef = useRef(false);
+
   const askQuestion = async (value: string) => {
     const current = value.trim();
-    if (current.length < 2) return;
+    if (current.length < 2 || askInFlightRef.current) return;
+    askInFlightRef.current = true;
     const requestId = ++askRequestRef.current;
     setAsking(true);
+    setOpen(true);
     try {
       const response = await askSite(current);
       if (requestId !== askRequestRef.current) return;
@@ -112,7 +116,10 @@ export default function SiteSearchBox({
     } catch {
       if (requestId !== askRequestRef.current) return;
     } finally {
-      if (requestId === askRequestRef.current) setAsking(false);
+      if (requestId === askRequestRef.current) {
+        askInFlightRef.current = false;
+        setAsking(false);
+      }
     }
   };
 
@@ -182,13 +189,14 @@ export default function SiteSearchBox({
             setQuery(event.target.value);
             setOpen(true);
             askRequestRef.current += 1;
+            askInFlightRef.current = false;
             setAsking(false);
             setAskAnswer(null);
           }}
           onFocus={() => setOpen(true)}
           onKeyDown={(event) => {
             if (event.key === 'Escape') setOpen(false);
-            if (event.key === 'Enter' && canAsk) {
+            if (event.key === 'Enter' && canAsk && !askInFlightRef.current) {
               event.preventDefault();
               void askQuestion(trimmed);
             }
@@ -202,9 +210,17 @@ export default function SiteSearchBox({
               void askQuestion(trimmed);
             }}
             disabled={asking}
+            aria-label={asking ? 'Asking' : undefined}
             className="shrink-0 rounded-full bg-[#234C6A] px-2.5 py-1 text-[11px] font-semibold text-white disabled:opacity-60"
           >
-            Ask
+            {asking ? (
+              <span
+                className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-white/40 border-t-white"
+                aria-hidden
+              />
+            ) : (
+              'Ask'
+            )}
           </button>
         ) : null}
       </div>
@@ -213,6 +229,14 @@ export default function SiteSearchBox({
           data-testid="site-search-results"
           className="absolute left-0 right-0 top-full z-[80] mt-1 max-h-96 overflow-y-auto rounded-xl border border-[#E5E2DB] bg-white p-2 text-slate-800 shadow-[0_16px_40px_rgba(0,0,0,0.14)]"
         >
+          {asking ? (
+            <div className="mb-2 flex items-center px-2 py-2" role="status" aria-label="Asking">
+              <span
+                className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-[#E5E2DB] border-t-[#234C6A]"
+                aria-hidden
+              />
+            </div>
+          ) : null}
           {askAnswer ? (
             <p data-testid="site-search-answer" className="mb-2 rounded-lg bg-[#F5F3EF] px-2 py-2 text-[13px] text-slate-800 whitespace-pre-wrap">
               {askAnswer}
