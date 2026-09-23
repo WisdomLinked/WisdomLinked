@@ -1,4 +1,5 @@
 import subhero_bg from '../assets/images/subhero_bg.jpg'
+import { servicesPage } from '../content/publicPages'
 
 const Services = () => {
     return (
@@ -7,17 +8,17 @@ const Services = () => {
             <img src={subhero_bg} className="w-full h-full object-cover object-center blur-sm" />
             <div className="absolute top-0 left-0 w-full h-full main_container flex justify-center items-center">
               <h1 className='w-full max-w-[1500px] mx-auto text-center text-white font-bold text-[32px] leading-[48px] lg:text-[72px] lg:leading-[94px] textShadow '>
-                Uncommon Quality, Undeniable Value
+                {servicesPage.title}
               </h1>
             </div>
         </div>
         <div className="main_container text-lightgrey text-xl pt-14 flex flex-col lg:flex-row">
           <div className='w-full lg:w-[50%]'>
-            <b className='text-2xl'>We provide advice regarding the following consulting-for-a-fee services through registered experts:</b>
+            <b className='text-2xl'>{servicesPage.intro}</b>
             <ul className="list-disc my-3 pl-6">
-              <li className='mt-2'>Study Abroad</li>
-              <li className='mt-2'>Work Abroad</li>
-              <li className='mt-2'>Research Guidance</li>
+              {servicesPage.offerings.map((item) => (
+                <li key={item} className='mt-2'>{item}</li>
+              ))}
             </ul>
           </div>
           <div className='w-full lg:w-[50%] pl-0 lg:pl-4'>
