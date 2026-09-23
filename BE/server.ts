@@ -166,6 +166,13 @@ mongoose
         sweepOrphanedBookingIntents();
         setInterval(sweepOrphanedBookingIntents, 15 * 60 * 1000);
 
+        // One backend container per environment. Staging and production each
+        // write search/${NODE_ENV}/catalog.txt and do not share this timer.
+        const { rebuildSearchCatalog } = require('./services/searchCatalogExport');
+        const SEARCH_CATALOG_INTERVAL_MS = 24 * 60 * 60 * 1000;
+        rebuildSearchCatalog();
+        setInterval(rebuildSearchCatalog, SEARCH_CATALOG_INTERVAL_MS);
+
         // Every 3 minutes, not 15 like the others: a "starting in 15 minutes"
         // reminder swept on a 15-minute interval could arrive with only moments
         // left. At 3 minutes a reminder lands at most 3 minutes after its mark.
