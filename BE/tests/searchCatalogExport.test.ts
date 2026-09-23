@@ -237,6 +237,9 @@ function installStore(data: { users?: any[]; chats?: any[]; questions?: any[] })
             select() {
                 return api;
             },
+            populate() {
+                return api;
+            },
             lean() {
                 return Promise.resolve(users.filter((row) => docMatches(row, query)).map(cloneDoc));
             },

@@ -30,7 +30,15 @@ const SEAT_PHRASE = /\b\d+\s+of\s+\d+\s+seats?\b|\b\d+\s+seats?\b(?:\s+(?:left|f
 export type StoredAskRole = 'user' | 'customer' | 'expert';
 
 export type PromptPage = { title?: string; snippet?: string; route?: string };
-export type PromptExpert = { name?: string; title?: string; bio?: string };
+export type PromptSessionPrice = { minutes?: number; dollars?: number };
+export type PromptExpert = {
+    name?: string;
+    title?: string;
+    bio?: string;
+    keywords?: string[];
+    hourlyRate?: number;
+    sessionPrices?: PromptSessionPrice[];
+};
 export type PromptSeminar = { name?: string; description?: string };
 export type PromptQuestion = { question?: string; answer?: string };
 
@@ -212,7 +220,22 @@ export const promptContext = (input: {
         blocks.push(`Retrieved site text\n${chunk}`);
     }
     for (const expert of input.experts || []) {
-        blocks.push(`Public expert\nname: ${expert.name ?? ''}\ntitle: ${expert.title ?? ''}\nbio: ${expert.bio ?? ''}`);
+        const lines = [
+            'Public expert',
+            `name: ${expert.name ?? ''}`,
+            `title: ${expert.title ?? ''}`,
+            `bio: ${expert.bio ?? ''}`,
+        ];
+        const keywords = (expert.keywords || []).map((label) => String(label ?? '').trim()).filter(Boolean);
+        if (keywords.length) lines.push(`keywords: ${keywords.join(', ')}`);
+        if (typeof expert.hourlyRate === 'number' && Number.isFinite(expert.hourlyRate)) {
+            lines.push(`hourlyRate: ${expert.hourlyRate}`);
+        }
+        const prices = (expert.sessionPrices || [])
+            .filter((row) => typeof row?.minutes === 'number' && typeof row?.dollars === 'number')
+            .map((row) => `${row.minutes} min $${row.dollars}`);
+        if (prices.length) lines.push(`sessionPrices: ${prices.join(', ')}`);
+        blocks.push(lines.join('\n'));
     }
     for (const seminar of input.seminars || []) {
         blocks.push(`Public seminar\nname: ${seminar.name ?? ''}\ndescription: ${seminar.description ?? ''}`);

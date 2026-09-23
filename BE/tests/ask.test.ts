@@ -2,6 +2,7 @@ import test, { describe } from 'node:test';
 import assert from 'node:assert/strict';
 
 const chatBotQA = require('../models/chatBotQA');
+const User = require('../models/User');
 const searchController = require('../controllers/search.controller');
 const { ask } = require('../controllers/ask.controller');
 const { createAskLimiter } = require('../middlewares/askRateLimit');
@@ -72,6 +73,8 @@ describe('POST /api/ask', { concurrency: false }, () => {
     const originalFind = chatBotQA.find;
     const originalSave = chatBotQA.prototype.save;
     const originalCollect = searchController.collectSearchResults;
+    const originalListExperts = searchController.listPublicExpertCards;
+    const originalUserFind = User.find;
     const originalFetch = global.fetch;
     const originalTimeout = AbortSignal.timeout;
     const originalNodeEnv = process.env.NODE_ENV;
@@ -107,6 +110,21 @@ describe('POST /api/ask', { concurrency: false }, () => {
         assert.equal(/star/i.test(filtered), false);
         assert.equal(/seat/i.test(filtered), false);
         assert.equal(filtered.includes('4.8'), false);
+    });
+
+    test('postFilterAnswer keeps a price that appears on an included expert and strips a price that does not', () => {
+        const source = [
+            'Public expert',
+            'name: Ada Lovelace',
+            'title: Professor',
+            'keywords: Civil Engineering',
+            'hourlyRate: 40',
+            'sessionPrices: 30 min $20',
+        ].join('\n');
+        const filtered = postFilterAnswer('Ada charges $40 or $20, not $999.', source);
+        assert.match(filtered, /\$40/);
+        assert.match(filtered, /\$20/);
+        assert.equal(filtered.includes('$999'), false);
     });
 
     test('NODE_ENV=staging still returns 429 after 20 requests from the same IP', async () => {
@@ -153,6 +171,7 @@ describe('POST /api/ask', { concurrency: false }, () => {
             fetchCalls = [];
             timeouts = [];
             searchController.collectSearchResults = async () => cards;
+            searchController.listPublicExpertCards = async () => [];
             chatBotQA.find = () => ({
                 select: () => ({
                     lean: async () => [...seed, ...saved],
@@ -299,7 +318,7 @@ describe('POST /api/ask', { concurrency: false }, () => {
             const prompt = body.messages.map((message: any) => message.content).join('\n');
             assert.equal(prompt.includes('student-card-leak'), false);
             assert.equal(prompt.includes('yours-card-leak'), false);
-            assert.equal(prompt.includes('hourlyRate'), false);
+            assert.equal(prompt.includes('Treat hourlyRate as the price.'), true);
             assert.equal(prompt.includes('sessionPrices'), false);
             assert.equal(prompt.includes('3 of 10 seats'), false);
             assert.equal(prompt.includes('Booking answer 0'), true);
@@ -372,7 +391,7 @@ describe('POST /api/ask', { concurrency: false }, () => {
             assert.equal(prompt.includes('yours-card-leak'), false);
             assert.equal(prompt.includes('skip-unknown-shape'), false);
             assert.equal(prompt.includes('nested'), false);
-            assert.equal(prompt.includes('hourlyRate'), false);
+            assert.equal(prompt.includes('Treat hourlyRate as the price.'), true);
             assert.equal(prompt.includes('sessionPrices'), false);
         });
 
@@ -439,12 +458,199 @@ describe('POST /api/ask', { concurrency: false }, () => {
             assert.equal(res.body.students[0].name, 'student-card-leak');
             assert.equal(res.body.yours[0].name, 'yours-card-leak');
             assert.equal(res.body.pages[0].route, '/rules');
+            process.env.GRADIENT_MODEL_ACCESS_KEY = MODEL_KEY;
+        });
+
+        test('inference fetch is called without AbortSignal', async () => {
+            nextCompletion = { miss: false, answer: 'Booking is by appointment.', citations: [] };
+            const before = timeouts.length;
+            const res = makeRes();
+            await ask({ body: { question: 'How does booking work' }, user: undefined }, res);
+            assert.equal(res.statusCode, 200);
+            assert.equal(timeouts.length, before + 1);
+            assert.equal(timeouts[timeouts.length - 1], 15000);
+            assert.equal(timeouts.some((ms) => ms !== 15000), false);
+            const inference = [...fetchCalls].reverse().find((call) => call.url === INFERENCE_URL);
+            assert.ok(inference);
+            assert.equal(Object.prototype.hasOwnProperty.call(inference.options, 'signal'), false);
+            const retrieve = [...fetchCalls].reverse().find((call) => call.url === RETRIEVE_URL);
+            assert.ok(retrieve?.options.signal);
+        });
+
+        test('a non-ok inference status does not save a ChatBotQA row', async () => {
+            const stubFetch = global.fetch;
+            const originalError = console.error;
+            const logs: string[] = [];
+            console.error = (...args: unknown[]) => {
+                logs.push(args.map((item) => String(item)).join(' '));
+            };
+            global.fetch = (async (url: string, options: any) => {
+                fetchCalls.push({ url: String(url), options });
+                if (String(url).includes('/retrieve')) {
+                    return {
+                        ok: true,
+                        json: async () => ({ results: [{ text_content: RETRIEVED_CHUNK }] }),
+                    };
+                }
+                return {
+                    ok: false,
+                    status: 503,
+                    json: async () => ({ error: 'secret-body', key: MODEL_KEY }),
+                };
+            }) as typeof fetch;
+            const before = saved.length;
+            try {
+                const res = makeRes();
+                await ask({ body: { question: 'How do I book a session?' }, user: undefined }, res);
+                assert.equal(res.statusCode, 200);
+                assert.equal(res.body.answer, 'Answers are unavailable right now.');
+                assert.equal(saved.length, before);
+                const joined = logs.join('\n');
+                assert.match(joined, /inference status 503/);
+                assert.equal(joined.includes(MODEL_KEY), false);
+                assert.equal(joined.includes('secret-body'), false);
+                assert.equal(joined.includes(INFERENCE_URL), false);
+            } finally {
+                console.error = originalError;
+                global.fetch = stubFetch;
+            }
+        });
+
+        test('a question that keyword-matches nobody still sends every public expert', async () => {
+            const keywordDocs: Record<string, { _id: string; value: string }> = {
+                'kw-civil': { _id: 'kw-civil', value: 'Civil Engineering' },
+                'kw-cs': { _id: 'kw-cs', value: 'Computer Science' },
+            };
+            const experts = [
+                {
+                    _id: 'p1',
+                    role: 'expert',
+                    status: 'active',
+                    username: 'Ada Lovelace',
+                    title: 'Professor of Civil Engineering',
+                    description: 'Teaches structures.',
+                    price: 40,
+                    appointmentDurations: [30],
+                    keywords: ['kw-civil'],
+                    image: 'secret-photo.png',
+                    phoneNumber: '555-0100',
+                    resume: 'resume.pdf',
+                },
+                {
+                    _id: 'p2',
+                    role: 'expert',
+                    status: 'active',
+                    username: 'Grace Hopper',
+                    title: 'Lecturer',
+                    description: 'Computing pioneer.',
+                    price: 90,
+                    appointmentDurations: [60],
+                    keywords: ['kw-cs'],
+                },
+                {
+                    _id: 'p3',
+                    role: 'expert',
+                    status: 'active',
+                    username: 'hidden@school.edu',
+                    title: 'Professor',
+                    description: 'Should not be sent',
+                    price: 5,
+                    appointmentDurations: [30],
+                    keywords: ['kw-civil'],
+                },
+                {
+                    _id: 'p4',
+                    role: 'expert',
+                    status: 'pending',
+                    username: 'Pending Person',
+                    title: 'Professor',
+                    description: 'not public',
+                    price: 1,
+                    keywords: ['kw-civil'],
+                },
+            ];
+            let seenQuery: any = null;
+            let populateArg: any = null;
+            searchController.collectSearchResults = async () => ({ ...cards, experts: [] });
+            searchController.listPublicExpertCards = originalListExperts;
+            User.find = (query: any) => {
+                seenQuery = query;
+                const api: any = {
+                    select() {
+                        return api;
+                    },
+                    populate(arg: any) {
+                        populateArg = arg;
+                        return api;
+                    },
+                    lean() {
+                        const docs = experts
+                            .filter((row) => row.role === query?.role && row.status === query?.status)
+                            .map((row) => ({ ...row, keywords: [...row.keywords] }));
+                        if (populateArg?.path === 'keywords') {
+                            for (const doc of docs) {
+                                doc.keywords = doc.keywords.map((id: string) => keywordDocs[id]).filter(Boolean);
+                            }
+                        }
+                        return Promise.resolve(docs);
+                    },
+                };
+                return api;
+            };
+            nextCompletion = {
+                miss: false,
+                answer: 'Ada Lovelace is $40 an hour for a $20 session, not $5 or $999.',
+                citations: [],
+            };
+            try {
+                const res = makeRes();
+                await ask({ body: { question: 'find me the cheapest professor in civil' }, user: undefined }, res);
+                assert.equal(res.statusCode, 200);
+                assert.deepEqual(seenQuery, { role: 'expert', status: 'active' });
+                assert.deepEqual(populateArg, { path: 'keywords', select: 'value' });
+                assert.match(res.body.answer, /\$40/);
+                assert.match(res.body.answer, /\$20/);
+                assert.equal(res.body.answer.includes('$5'), false);
+                assert.equal(res.body.answer.includes('$999'), false);
+                assert.equal(res.body.experts.length, 0);
+                assert.equal(res.body.students[0].name, 'student-card-leak');
+
+                const inference = [...fetchCalls].reverse().find((call) => call.url === INFERENCE_URL);
+                assert.ok(inference);
+                assert.equal(Object.prototype.hasOwnProperty.call(inference.options, 'signal'), false);
+                const prompt = JSON.parse(inference.options.body).messages.map((message: any) => message.content).join('\n');
+                assert.equal(prompt.includes('Ada Lovelace'), true);
+                assert.equal(prompt.includes('Grace Hopper'), true);
+                assert.equal(prompt.includes('Civil Engineering'), true);
+                assert.equal(prompt.includes('Computer Science'), true);
+                assert.equal(prompt.includes('hourlyRate: 40'), true);
+                assert.equal(prompt.includes('hourlyRate: 90'), true);
+                assert.equal(prompt.includes('sessionPrices: 30 min $20'), true);
+                assert.equal(prompt.includes('sessionPrices: 60 min $90'), true);
+                assert.equal(prompt.includes('hidden@school.edu'), false);
+                assert.equal(prompt.includes('Should not be sent'), false);
+                assert.equal(prompt.includes('Pending Person'), false);
+                assert.equal(prompt.includes('secret-photo.png'), false);
+                assert.equal(prompt.includes('555-0100'), false);
+                assert.equal(prompt.includes('resume.pdf'), false);
+                assert.equal(prompt.includes('student-card-leak'), false);
+                assert.equal(prompt.includes('yours-card-leak'), false);
+                assert.match(prompt, /cheapest/i);
+                assert.match(prompt, /professor/i);
+                assert.match(prompt, /Do not invent experts/);
+            } finally {
+                searchController.collectSearchResults = async () => cards;
+                searchController.listPublicExpertCards = async () => [];
+                User.find = originalUserFind;
+            }
         });
 
         test('restores stubs', () => {
             chatBotQA.find = originalFind;
             chatBotQA.prototype.save = originalSave;
             searchController.collectSearchResults = originalCollect;
+            searchController.listPublicExpertCards = originalListExperts;
+            User.find = originalUserFind;
             global.fetch = originalFetch;
             AbortSignal.timeout = originalTimeout;
             restoreEnv();
