@@ -1020,6 +1020,12 @@ export const searchSite = async (q: string) => {
     return res.data;
 };
 
+/** POST /api/ask through the shared client so the CSRF header is sent. */
+export const askSite = async (question: string) => {
+    const res = await api.post('ask', { question });
+    return res.data;
+};
+
 
 
 export const doFilterExperts = async (filter: any) => {

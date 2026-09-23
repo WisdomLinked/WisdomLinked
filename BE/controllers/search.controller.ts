@@ -399,26 +399,29 @@ const listPublicSeminarCards = async () => {
     return cards;
 };
 
+const collectSearchResults = async (req, q: string) => {
+    const query = String(q ?? '').trim();
+    if (query.length < 2) return emptyResult();
+    const [experts, seminars, students, yours] = await Promise.all([
+        searchExperts(query),
+        searchSeminars(query),
+        searchStudents(req, query),
+        searchYours(req, query),
+    ]);
+    return {
+        experts,
+        seminars,
+        students,
+        yours,
+        pages: searchPages(query),
+    };
+};
+
 const search = async (req, res) => {
     try {
         const raw = req.query?.q;
         const q = String(Array.isArray(raw) ? raw[0] : raw ?? '').trim();
-        if (q.length < 2) {
-            return res.status(200).json(emptyResult());
-        }
-        const [experts, seminars, students, yours] = await Promise.all([
-            searchExperts(q),
-            searchSeminars(q),
-            searchStudents(req, q),
-            searchYours(req, q),
-        ]);
-        return res.status(200).json({
-            experts,
-            seminars,
-            students,
-            yours,
-            pages: searchPages(q),
-        });
+        return res.status(200).json(await collectSearchResults(req, q));
     } catch (err) {
         console.log(err);
         return res.status(500).send(safeErrorMessage(err));
@@ -427,6 +430,7 @@ const search = async (req, res) => {
 
 module.exports = {
     search,
+    collectSearchResults,
     SEARCH_GROUP_LIMIT,
     listPublicExpertCards,
     listPublicSeminarCards,

@@ -3,14 +3,16 @@ import { act, fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { SITE_SEARCH_DEBOUNCE_MS } from '../../utils/siteSearch';
 
-const { searchSite, profileImageFetch } = vi.hoisted(() => ({
+const { searchSite, profileImageFetch, askSite } = vi.hoisted(() => ({
   searchSite: vi.fn(),
   profileImageFetch: vi.fn(),
+  askSite: vi.fn(),
 }));
 
 vi.mock('../../api/api', () => ({
   searchSite: (...args: unknown[]) => searchSite(...args),
   profileImageFetch: (...args: unknown[]) => profileImageFetch(...args),
+  askSite: (...args: unknown[]) => askSite(...args),
 }));
 
 import SiteSearchBox from './SiteSearchBox';
@@ -54,6 +56,8 @@ describe('SiteSearchBox', () => {
     vi.useFakeTimers();
     searchSite.mockReset();
     profileImageFetch.mockReset();
+    askSite.mockReset();
+    askSite.mockResolvedValue({ answer: '', similarQuestions: [] });
     profileImageFetch.mockImplementation(async (file: string) => `data:image/png;base64,${file}`);
     searchSite.mockResolvedValue(sample);
   });
@@ -188,5 +192,34 @@ describe('SiteSearchBox', () => {
     expect(searchSite).not.toHaveBeenCalled();
     expect(screen.queryByText('Directory User')).not.toBeInTheDocument();
     expect(screen.queryByText(/user directory/i)).not.toBeInTheDocument();
+  });
+
+  it('does not clear keyword cards when ask starts or the ask call throws', async () => {
+    let rejectAsk: (reason?: unknown) => void = () => {};
+    askSite.mockImplementation(
+      () =>
+        new Promise((_resolve, reject) => {
+          rejectAsk = reject;
+        }),
+    );
+
+    render(
+      <MemoryRouter>
+        <SiteSearchBox audience="public" />
+      </MemoryRouter>,
+    );
+    await typeQuery('ada');
+    await flushDebounce();
+    expect(screen.getByRole('link', { name: /Ada Lovelace/i })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Ask' }));
+    expect(askSite).toHaveBeenCalledWith('ada');
+    expect(screen.getByRole('link', { name: /Ada Lovelace/i })).toBeInTheDocument();
+
+    await act(async () => {
+      rejectAsk(new Error('ask failed'));
+    });
+    expect(screen.getByRole('link', { name: /Ada Lovelace/i })).toBeInTheDocument();
+    expect(screen.queryByTestId('site-search-answer')).not.toBeInTheDocument();
   });
 });

@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Search } from 'lucide-react';
-import { profileImageFetch, searchSite } from '../../api/api';
+import { askSite, profileImageFetch, searchSite } from '../../api/api';
 import { isDisplayImageUrl } from '../../utils/profileImage';
 import {
   SITE_SEARCH_DEBOUNCE_MS,
@@ -91,10 +91,30 @@ export default function SiteSearchBox({
   // Keyword cards stay until a search response replaces them.
   // A later ask must not clear this list, and a new search must not wipe it before it returns.
   const [searchCards, setSearchCards] = useState<SiteSearchResponse | null>(null);
+  const [askAnswer, setAskAnswer] = useState<string | null>(null);
+  const [asking, setAsking] = useState(false);
+  const askRequestRef = useRef(0);
   const [open, setOpen] = useState(false);
 
   const trimmed = query.trim();
   const adminEmail = audience === 'admin' && isEmailQuery(trimmed);
+  const canAsk = trimmed.length >= 2 && !adminEmail;
+
+  const askQuestion = async (value: string) => {
+    const current = value.trim();
+    if (current.length < 2) return;
+    const requestId = ++askRequestRef.current;
+    setAsking(true);
+    try {
+      const response = await askSite(current);
+      if (requestId !== askRequestRef.current) return;
+      setAskAnswer(typeof response?.answer === 'string' ? response.answer : '');
+    } catch {
+      if (requestId !== askRequestRef.current) return;
+    } finally {
+      if (requestId === askRequestRef.current) setAsking(false);
+    }
+  };
 
   useEffect(() => {
     if (trimmed.length < 2) return undefined;
@@ -161,19 +181,43 @@ export default function SiteSearchBox({
           onChange={(event) => {
             setQuery(event.target.value);
             setOpen(true);
+            askRequestRef.current += 1;
+            setAsking(false);
+            setAskAnswer(null);
           }}
           onFocus={() => setOpen(true)}
           onKeyDown={(event) => {
             if (event.key === 'Escape') setOpen(false);
+            if (event.key === 'Enter' && canAsk) {
+              event.preventDefault();
+              void askQuestion(trimmed);
+            }
           }}
           className={inputClass}
         />
+        {canAsk ? (
+          <button
+            type="button"
+            onClick={() => {
+              void askQuestion(trimmed);
+            }}
+            disabled={asking}
+            className="shrink-0 rounded-full bg-[#234C6A] px-2.5 py-1 text-[11px] font-semibold text-white disabled:opacity-60"
+          >
+            Ask
+          </button>
+        ) : null}
       </div>
       {showPanel ? (
         <div
           data-testid="site-search-results"
           className="absolute left-0 right-0 top-full z-[80] mt-1 max-h-96 overflow-y-auto rounded-xl border border-[#E5E2DB] bg-white p-2 text-slate-800 shadow-[0_16px_40px_rgba(0,0,0,0.14)]"
         >
+          {askAnswer ? (
+            <p data-testid="site-search-answer" className="mb-2 rounded-lg bg-[#F5F3EF] px-2 py-2 text-[13px] text-slate-800 whitespace-pre-wrap">
+              {askAnswer}
+            </p>
+          ) : null}
           {cards!.experts.length > 0 ? (
             <Group title="Experts">
               {cards!.experts.map((expert) => (
