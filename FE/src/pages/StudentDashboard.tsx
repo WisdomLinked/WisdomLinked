@@ -42,6 +42,13 @@ import { updateMe } from '../actions/authActions';
 import type { ExpertCardProps } from '../components/ExpertCard';
 import { mapExpertToMentorWithImage } from '../utils/mapExpertToMentor';
 import StudentChat from '../components/dashboard/StudentChat';
+import {
+  type ChatSection,
+  CHAT_SECTION_DEFAULT,
+  CHAT_SECTION_ITEMS,
+  normalizeChatSection,
+  sectionForChatTarget,
+} from '../utils/chatSections';
 import StudentPaymentHistory from '../components/dashboard/StudentPaymentHistory';
 import { detectUserTimeZone, toYMDInTimeZone } from '../utils/schedulingTimezone';
 import {
@@ -49,7 +56,7 @@ import {
   onSubscriptionChanged,
   subscribeToRoom,
 } from '../services/rcRealtime';
-import { patchDmUnreadRid, setDmUnreadByRidBulk } from '../actions/chatActions';
+import { patchDmUnreadRid, resetChatAction, setDmUnreadByRidBulk } from '../actions/chatActions';
 import { canonicalLabelsFromMixedServiceEntries } from '../constants/serviceOptions';
 import { useEndMeetingOnReturn } from '../hooks/useEndMeetingOnReturn';
 import { pendingRequestIsLive } from '../utils/bookingLifecycle';
@@ -480,6 +487,15 @@ export default function StudentDashboard() {
   useEffect(() => {
     window.localStorage.setItem('studentDashboardView', activeItem);
   }, [activeItem]);
+  const [chatSection, setChatSection] = useState<ChatSection>(() =>
+    normalizeChatSection(window.localStorage.getItem('studentChatSection')),
+  );
+  useEffect(() => {
+    window.localStorage.setItem('studentChatSection', chatSection);
+  }, [chatSection]);
+  const openChatSection = useCallback((target: 'dm' | 'community' | 'seminar') => {
+    setChatSection(sectionForChatTarget(target));
+  }, []);
   const goToDashboardTab = useCallback(() => setActiveItem('dashboard'), []);
   useBackToDashboard(activeItem, goToDashboardTab);
   const [paymentReturnSuccess, setPaymentReturnSuccess] = useState(false);
@@ -1264,6 +1280,7 @@ export default function StudentDashboard() {
               if (isDm) localStorage.setItem('wl_open_dm_rid', rid);
               else localStorage.setItem('wl_open_community_rc_rid', rid);
               window.dispatchEvent(new Event('wl-open-chat-nav'));
+              openChatSection(isDm ? 'dm' : 'community');
               setActiveItem('chat');
             },
           };
@@ -1279,6 +1296,7 @@ export default function StudentDashboard() {
         localStorage.setItem('wl_open_seminar_id', meeting.groupId);
         window.dispatchEvent(new Event('wl-open-chat-nav'));
       }
+      openChatSection('seminar');
       setActiveItem('chat');
       return;
     }
@@ -1293,6 +1311,7 @@ export default function StudentDashboard() {
       );
       window.dispatchEvent(new Event('wl-open-chat-nav'));
     }
+    openChatSection('dm');
     setActiveItem('chat');
   };
 
@@ -1301,6 +1320,7 @@ export default function StudentDashboard() {
       localStorage.setItem('wl_open_seminar_id', String(seminarId));
       window.dispatchEvent(new Event('wl-open-chat-nav'));
     }
+    openChatSection('seminar');
     setActiveItem('chat');
   };
 
@@ -1316,6 +1336,7 @@ export default function StudentDashboard() {
       );
       window.dispatchEvent(new Event('wl-open-chat-nav'));
     }
+    openChatSection('dm');
     setActiveItem('chat');
   };
 
@@ -1377,10 +1398,23 @@ export default function StudentDashboard() {
       <div className="flex min-h-screen">
         <Sidebar
           activeItem={activeItem}
-          onNavigate={setActiveItem}
+          onNavigate={(id) => {
+            if (id === 'chat') {
+              setChatSection(CHAT_SECTION_DEFAULT);
+              dispatch(resetChatAction() as any);
+            }
+            setActiveItem(id);
+          }}
           studentName={studentName}
           avatarUrl={avatarUrl}
           notifications={{ chat: activeItem === 'chat' ? 0 : totalUnreadDm }}
+          subItems={{ chat: CHAT_SECTION_ITEMS }}
+          activeSubItem={chatSection}
+          onNavigateSub={(navId, subId) => {
+            setActiveItem(navId);
+            setChatSection(normalizeChatSection(subId));
+            dispatch(resetChatAction() as any);
+          }}
         />
         <main className="flex-1 min-w-0 lg:ml-[220px]">
           <TopBar
@@ -1453,7 +1487,7 @@ export default function StudentDashboard() {
           ) : null}
           {activeItem === 'chat' ? (
             <div className="h-[calc(100vh-56px)] bg-wl-page">
-              <StudentChat />
+              <StudentChat section={chatSection} />
             </div>
           ) : activeItem === 'profile' ? (
             <StudentProfile />

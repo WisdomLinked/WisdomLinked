@@ -40,6 +40,17 @@ import { leaveGroupAction } from '../../actions/groupChatActions';
 import { actionTypes } from '../../actions/types';
 import { isTheEventGoingOn } from '../../actions/common';
 import { pickLiveOrNextOccurrence } from '../../utils/seminarSeriesOccurrence';
+import {
+  type ChatSection,
+  CHAT_SECTION_DEFAULT,
+  chatSectionEmptySubtitle,
+  chatSectionEmptyTitle,
+  chatSectionHeading,
+  isChatSectionUnset,
+  showsAppointments,
+  showsCommunities,
+  showsSeminars,
+} from '../../utils/chatSections';
 import { resolveProfileImageSrc } from '../../utils/profileImage';
 import { shouldShowMobileMessenger } from '../../utils/mobileChatLayout';
 import { buildOnlineUserIdSet, hasOnlineUserId } from '../../utils/onlinePresence';
@@ -85,7 +96,7 @@ type PrivateRow =
   /** Admin: expert from directory search (admins cannot initiate with students). */
   | { kind: 'adminSearchedExpert'; id: string; title: string; lastLine: string; raw: any };
 
-const StudentChat: React.FC = () => {
+const StudentChat: React.FC<{ section?: ChatSection }> = ({ section = CHAT_SECTION_DEFAULT }) => {
   const dispatch = useDispatch();
   const {
     auth: { userDetails },
@@ -1278,13 +1289,14 @@ const StudentChat: React.FC = () => {
 
   return (
     <div className="flex h-full min-h-0 overflow-hidden bg-wl-page text-slate-900">
+      {isChatSectionUnset(section) ? null : (
       <aside className={`${showMobileMessenger ? 'hidden md:flex' : 'flex'} w-full md:w-80 lg:w-96 min-h-0 flex-col border-r border-slate-200 bg-white`}>
         <div className="px-4 pt-4 pb-3 border-b border-slate-200">
           <div className="flex items-center justify-between gap-2">
             <p className="text-xs font-bold uppercase tracking-[0.12em] text-slate-600">
-              Communities
+              {chatSectionHeading(section)}
             </p>
-            {isExpert ? (
+            {isExpert && showsCommunities(section) ? (
               <button
                 type="button"
                 onClick={() => {
@@ -1303,19 +1315,22 @@ const StudentChat: React.FC = () => {
               </button>
             ) : null}
           </div>
-          <div className="mt-2 rounded-lg bg-slate-100 px-3 py-2 flex items-center gap-2 text-xs text-slate-500">
-            <MessageCircle className="h-3.5 w-3.5 text-slate-500 shrink-0" aria-hidden />
-            <input
-              type="text"
-              value={communityQuery}
-              onChange={e => setCommunityQuery(e.target.value)}
-              placeholder="Search by name or last message…"
-              aria-label="Search community chats by title or last message"
-              className="flex-1 min-w-0 bg-transparent outline-none text-xs text-slate-700 placeholder:text-slate-400"
-            />
-          </div>
+          {showsCommunities(section) ? (
+            <div className="mt-2 rounded-lg bg-slate-100 px-3 py-2 flex items-center gap-2 text-xs text-slate-500">
+              <MessageCircle className="h-3.5 w-3.5 text-slate-500 shrink-0" aria-hidden />
+              <input
+                type="text"
+                value={communityQuery}
+                onChange={e => setCommunityQuery(e.target.value)}
+                placeholder="Search by name or last message…"
+                aria-label="Search community chats by title or last message"
+                className="flex-1 min-w-0 bg-transparent outline-none text-xs text-slate-700 placeholder:text-slate-400"
+              />
+            </div>
+          ) : null}
         </div>
         <div className="wl-chat-scroll flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-3 py-3">
+          {showsCommunities(section) ? (
           <div className="shrink-0">
             <div className="wl-chat-scroll min-h-[3rem] max-h-[15rem] overflow-y-auto pr-1">
             {filteredCommunity.length === 0 ? (
@@ -1418,10 +1433,11 @@ const StudentChat: React.FC = () => {
             )}
             </div>
           </div>
+          ) : null}
 
-          <div className="shrink-0 pt-1 border-t border-slate-200">
-            <div className="mb-2 flex items-center justify-between gap-2">
-              <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-slate-600">1:1 Appointments</p>
+          {showsAppointments(section) ? (
+          <div className="shrink-0 pt-1">
+            <div className="mb-2 flex items-center justify-end gap-2">
               {(() => {
                 const n = privateRows.reduce((acc, r) => {
                   if (r.kind === 'privateDm' && r.rcChannelId) {
@@ -1646,11 +1662,10 @@ const StudentChat: React.FC = () => {
             )}
             </div>
           </div>
+          ) : null}
 
-          <div className="flex shrink-0 flex-col pt-1 border-t border-slate-200">
-            <div className="mb-2 flex items-center justify-between gap-2">
-              <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-slate-600">Seminars</p>
-            </div>
+          {showsSeminars(section) ? (
+          <div className="flex shrink-0 flex-col pt-1">
             <div className="shrink-0 rounded-lg bg-slate-100 px-3 py-2 mb-2 flex items-center gap-2 text-xs text-slate-500">
               <MessageCircle className="h-3.5 w-3.5 text-slate-500 shrink-0" aria-hidden />
               <input
@@ -1721,11 +1736,13 @@ const StudentChat: React.FC = () => {
             )}
             </div>
           </div>
+          ) : null}
         </div>
       </aside>
+      )}
 
-      <section className={`${showMobileMessenger ? 'flex' : 'hidden md:flex'} flex-1 flex-col min-h-0 min-w-0 bg-wl-page`}>
-        <div className="md:hidden border-b border-slate-200 bg-white px-3 py-2">
+      <section className={`${isChatSectionUnset(section) || showMobileMessenger ? 'flex' : 'hidden md:flex'} flex-1 flex-col min-h-0 min-w-0 bg-wl-page`}>
+        <div className={`${isChatSectionUnset(section) ? 'hidden' : ''} md:hidden border-b border-slate-200 bg-white px-3 py-2`}>
           <button
             type="button"
             className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-[12px] font-semibold text-[#234C6A] hover:bg-slate-100"
@@ -1762,7 +1779,12 @@ const StudentChat: React.FC = () => {
             </div>
           </div>
         ) : (
-          <Messenger videoChaton={false} theme="light" />
+          <Messenger
+            videoChaton={false}
+            theme="light"
+            emptyTitle={chatSectionEmptyTitle(section)}
+            emptySubtitle={chatSectionEmptySubtitle(section)}
+          />
         )}
       </section>
 
