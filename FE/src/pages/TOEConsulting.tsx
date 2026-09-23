@@ -6,6 +6,7 @@ import SignupModal from '../components/SignupModal';
 import FeaturedExperts from '../components/FeaturedExperts';
 import { SERVICE_LABELS } from '../constants/serviceOptions';
 import { homePage } from '../content/publicPages';
+import SiteSearchBox from '../components/search/SiteSearchBox';
 import {
   Star, Users, Briefcase, GraduationCap, TrendingUp, MessageCircle, CheckCircle,
   ArrowRight, Sparkles, Menu, X, BookOpen, Globe, ChevronDown, ChevronUp, Phone, Mail, User,
@@ -1598,6 +1599,9 @@ export default function TOEConsulting() {
             ))}
           </nav>
           <div className="hidden lg:flex items-center gap-3">
+            <div className="w-36 xl:w-52">
+              <SiteSearchBox audience="public" />
+            </div>
             <button onClick={() => navigate('/login')} className="px-5 py-2.5 rounded-full border border-[#BCCCDC] text-slate-900 hover:border-[#9AA6B2] hover:text-[#234C6A] transition-all text-sm font-semibold bg-white/85">Login</button>
             <button onClick={() => setShowSignupModal(true)} className="btn-primary px-5 py-2.5 rounded-full text-white font-semibold text-sm shadow-md shadow-[#BCCCDC]">Sign Up</button>
           </div>
@@ -1607,6 +1611,7 @@ export default function TOEConsulting() {
         </div>
         {mobileMenuOpen && (
           <div className="lg:hidden border-t border-[#BCCCDC] bg-[#F8FAFC] px-4 sm:px-6 py-4 space-y-3">
+            <SiteSearchBox audience="public" />
             {([["About Us", () => { setMobileMenuOpen(false); scrollTo(aboutRef); }], ["Services", () => { setMobileMenuOpen(false); scrollTo(servicesRef); }], ["Guidelines", () => { setMobileMenuOpen(false); scrollTo(guidelinesRef); }], ["Pricing", () => { setMobileMenuOpen(false); scrollTo(pricingRef); }], ["Resources", () => { setMobileMenuOpen(false); navigate('/resources'); }], ["Contact Us", () => { setMobileMenuOpen(false); openContact(); }]] as const).map(([label, action]) => (
               <button key={label as string} onClick={action as () => void} className="block w-full text-left text-slate-700 hover:text-[#234C6A] font-semibold py-1 transition-colors">{label}</button>
             ))}

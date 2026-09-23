@@ -1,5 +1,6 @@
 import React from "react";
 import { Link } from "react-router-dom";
+import SiteSearchBox from "./search/SiteSearchBox";
 
 const Header = () => {
 
@@ -45,6 +46,7 @@ const Header = () => {
             {/* MOBILE NAVIGATE MODAL */}
             <div className={`z-20 lg:hidden fixed top-[80px] left-0 w-full h-[calc(100vh-80px)] bg-black overflow-y-auto ${opened ? '' : 'hidden'}`}>
                 <div className="px-5 py-4 text-base text-white space-y-3">
+                    <SiteSearchBox audience="public" tone="dark" />
                     <div className="flex flex-col space-y-3 sm:space-y-0 sm:flex-row justify-between">
                         <Link to='/customerregister' className="flex justify-center sm:w-[calc(50%-6px)] py-3 rounded-xl bg-darkgrey">Customer Register</Link>
                         <Link to='/expertregister' className="flex justify-center sm:w-[calc(50%-6px)] py-3 rounded-xl bg-darkgrey">Expert Register</Link>
@@ -92,6 +94,9 @@ const Header = () => {
                     <Link to='/contactus'>Contact US</Link>
                 </div>
                 <div className="flex items-center space-x-10">
+                    <div className="w-52">
+                        <SiteSearchBox audience="public" tone="dark" />
+                    </div>
                     <div className="h-[48px] py-3 relative hoverBox cursor-pointer">
                         Create Account
                         <div className="absolute w-full top-10 left-0 bg-darkgrey p-3 hidden rounded-sm">
