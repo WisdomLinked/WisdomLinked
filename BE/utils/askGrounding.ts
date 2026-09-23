@@ -57,6 +57,54 @@ export const isInstructionShaped = (value: unknown): boolean => {
     return INSTRUCTION_PATTERNS.some((pattern) => pattern.test(text));
 };
 
+const GREETINGS = new Set(['hi', 'hii', 'hey', 'hello', 'thanks', 'thank you']);
+
+/** Whole-message greetings, including the same words with punctuation. */
+export const isGreeting = (value: unknown): boolean => {
+    const text = String(value ?? '')
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9\s]+/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+    return GREETINGS.has(text);
+};
+
+const CHUNK_TEXT_FIELDS = ['text_content', 'text', 'content', 'chunk_text', 'page_content'];
+
+const textFromChunk = (chunk: unknown): string => {
+    if (typeof chunk === 'string') return chunk.trim();
+    if (!chunk || typeof chunk !== 'object' || Array.isArray(chunk)) return '';
+    const record = chunk as Record<string, unknown>;
+    for (const field of CHUNK_TEXT_FIELDS) {
+        const value = record[field];
+        if (typeof value === 'string' && value.trim()) return value.trim();
+    }
+    return '';
+};
+
+/** Chunk strings from a knowledge-base retrieve payload. Unknown shapes contribute nothing. */
+export const retrievedChunkTexts = (payload: unknown): string[] => {
+    let rows: unknown[] = [];
+    if (Array.isArray(payload)) {
+        rows = payload;
+    } else if (payload && typeof payload === 'object') {
+        const record = payload as Record<string, unknown>;
+        for (const key of ['results', 'chunks', 'documents']) {
+            if (Array.isArray(record[key])) {
+                rows = record[key] as unknown[];
+                break;
+            }
+        }
+    }
+    const texts: string[] = [];
+    for (const row of rows) {
+        const text = textFromChunk(row);
+        if (text) texts.push(text);
+    }
+    return texts;
+};
+
 export const storedRoleForCaller = (user: any): StoredAskRole => {
     const role = String(user?.role || '');
     if (role === 'customer') return 'customer';
@@ -126,7 +174,7 @@ const tidyAnswer = (value: string): string =>
         .replace(/\s+([,.!?;:])/g, '$1')
         .trim();
 
-/** Dollar amounts and clock times stay only when that number is in public page text. Ratings and seat counts never stay in the sentence. */
+/** Dollar amounts and clock times stay only when that number is in the source text. Ratings and seat counts never stay in the sentence. */
 export const postFilterAnswer = (answer: unknown, pageText: unknown): string => {
     const pages = String(pageText ?? '');
     const numbers = pageNumbers(pages);
@@ -152,10 +200,16 @@ export const promptContext = (input: {
     experts?: PromptExpert[];
     seminars?: PromptSeminar[];
     questions?: PromptQuestion[];
+    retrieved?: string[];
 }): string => {
     const blocks: string[] = [];
     for (const page of input.pages || []) {
         blocks.push(`Public page\ntitle: ${page.title ?? ''}\nroute: ${page.route ?? ''}\ntext: ${page.snippet ?? ''}`);
+    }
+    for (const text of input.retrieved || []) {
+        const chunk = String(text ?? '').trim();
+        if (!chunk) continue;
+        blocks.push(`Retrieved site text\n${chunk}`);
     }
     for (const expert of input.experts || []) {
         blocks.push(`Public expert\nname: ${expert.name ?? ''}\ntitle: ${expert.title ?? ''}\nbio: ${expert.bio ?? ''}`);

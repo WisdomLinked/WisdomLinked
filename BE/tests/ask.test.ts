@@ -10,7 +10,10 @@ const { PENDING_ANSWER, SAVED_QUESTION_FOR_REVIEW } = require('../controllers/ch
 
 const MODEL_KEY = 'model-access-key-test';
 const INDEXING_TOKEN = 'indexing-only-token';
+const KB_UUID = 'kb-uuid-test';
 const INFERENCE_URL = 'https://inference.do-ai.run/v1/chat/completions';
+const RETRIEVE_URL = `https://kbaas.do-ai.run/v1/${KB_UUID}/retrieve`;
+const RETRIEVED_CHUNK = 'Office opens at 4:45. A listed example fee is $18.';
 
 const cards = {
     experts: [{
@@ -74,6 +77,7 @@ describe('POST /api/ask', { concurrency: false }, () => {
     const originalNodeEnv = process.env.NODE_ENV;
     const originalModelKey = process.env.GRADIENT_MODEL_ACCESS_KEY;
     const originalIndexingToken = process.env.GRADIENT_API_TOKEN;
+    const originalKbUuid = process.env.GRADIENT_KNOWLEDGE_BASE_UUID;
 
     let saved: any[] = [];
     let seed: any[] = [];
@@ -88,6 +92,8 @@ describe('POST /api/ask', { concurrency: false }, () => {
         else process.env.GRADIENT_MODEL_ACCESS_KEY = originalModelKey;
         if (originalIndexingToken === undefined) delete process.env.GRADIENT_API_TOKEN;
         else process.env.GRADIENT_API_TOKEN = originalIndexingToken;
+        if (originalKbUuid === undefined) delete process.env.GRADIENT_KNOWLEDGE_BASE_UUID;
+        else process.env.GRADIENT_KNOWLEDGE_BASE_UUID = originalKbUuid;
     };
 
     test('post-filter keeps page-grounded amounts and drops prices, ratings, and seats', () => {
@@ -167,10 +173,24 @@ describe('POST /api/ask', { concurrency: false }, () => {
             }) as typeof AbortSignal.timeout;
             global.fetch = (async (url: string, options: any) => {
                 fetchCalls.push({ url: String(url), options });
+                if (String(url).includes('/retrieve')) {
+                    return {
+                        ok: true,
+                        json: async () => ({
+                            results: [
+                                { text_content: RETRIEVED_CHUNK },
+                                { metadata: { item_name: 'skip-unknown-shape' } },
+                                { text_content: { nested: true } },
+                                null,
+                            ],
+                        }),
+                    };
+                }
                 return inferencePayload(nextCompletion);
             }) as typeof fetch;
             process.env.GRADIENT_MODEL_ACCESS_KEY = MODEL_KEY;
             process.env.GRADIENT_API_TOKEN = INDEXING_TOKEN;
+            process.env.GRADIENT_KNOWLEDGE_BASE_UUID = KB_UUID;
         });
 
         test('a miss stores Pending answer... for the caller audience and shows the review sentence', async () => {
@@ -311,9 +331,99 @@ describe('POST /api/ask', { concurrency: false }, () => {
             assert.equal(expertPrompt.includes('student-card-leak'), false);
         });
 
-        test('an unset model access key does not call DigitalOcean or save a pending row', async () => {
+        test('a question that keyword-matches nothing still receives the services page and retrieved chunks', async () => {
+            nextCompletion = {
+                miss: false,
+                answer: 'A listed example fee is $18 at 4:45 PM, not $80 or $999.',
+                citations: [],
+            };
+            const res = makeRes();
+            await ask({ body: { question: 'What services do you offer?' }, user: undefined }, res);
+            assert.equal(res.statusCode, 200);
+            assert.match(res.body.answer, /\$18/);
+            assert.match(res.body.answer, /4:45/);
+            assert.equal(res.body.answer.includes('$80'), false);
+            assert.equal(res.body.answer.includes('$999'), false);
+            assert.equal(res.body.pages[0].route, '/rules');
+            assert.equal(res.body.students[0].name, 'student-card-leak');
+            assert.equal(res.body.yours[0].name, 'yours-card-leak');
+
+            const retrieve = [...fetchCalls].reverse().find((call) => call.url === RETRIEVE_URL);
+            assert.ok(retrieve);
+            assert.equal(retrieve.options.headers.Authorization, `Bearer ${INDEXING_TOKEN}`);
+            assert.equal(String(retrieve.options.headers.Authorization).includes(MODEL_KEY), false);
+            const retrieveBody = JSON.parse(retrieve.options.body);
+            assert.equal(retrieveBody.query, 'What services do you offer?');
+            assert.equal(retrieveBody.num_results, 8);
+            assert.equal(retrieveBody.alpha, 0.5);
+
+            const inference = [...fetchCalls].reverse().find((call) => call.url === INFERENCE_URL);
+            assert.ok(inference);
+            assert.equal(inference.options.headers.Authorization, `Bearer ${MODEL_KEY}`);
+            assert.equal(JSON.stringify(inference.options).includes(INDEXING_TOKEN), false);
+            const prompt = JSON.parse(inference.options.body).messages.map((message: any) => message.content).join('\n');
+            assert.equal(prompt.includes('Uncommon Quality, Undeniable Value'), true);
+            assert.equal(prompt.includes('consulting-for-a-fee'), true);
+            assert.equal(prompt.includes('/services'), true);
+            assert.equal(prompt.includes('We have Rules for Both'), true);
+            assert.equal(prompt.includes('Please contact us'), true);
+            assert.equal(prompt.includes(RETRIEVED_CHUNK), true);
+            assert.equal(prompt.includes('student-card-leak'), false);
+            assert.equal(prompt.includes('yours-card-leak'), false);
+            assert.equal(prompt.includes('skip-unknown-shape'), false);
+            assert.equal(prompt.includes('nested'), false);
+            assert.equal(prompt.includes('hourlyRate'), false);
+            assert.equal(prompt.includes('sessionPrices'), false);
+        });
+
+        test('a greeting does not insert a ChatBotQA row', async () => {
+            const before = saved.length;
+            const fetchBefore = fetchCalls.length;
+            for (const question of ['hi', 'hii', 'hey', 'hello', 'thanks', 'thank you', 'Hi!', 'hii!!', 'hello.', 'thanks!', 'Thank you?']) {
+                const res = makeRes();
+                await ask({ body: { question }, user: undefined }, res);
+                assert.equal(res.statusCode, 200, question);
+                assert.match(res.body.answer, /services/i);
+                assert.match(res.body.answer, /experts/i);
+                assert.match(res.body.answer, /seminars/i);
+                assert.match(res.body.answer, /booking/i);
+                assert.notEqual(res.body.answer, SAVED_QUESTION_FOR_REVIEW);
+                assert.equal(res.body.answer.includes(PENDING_ANSWER), false);
+                assert.equal(res.body.experts[0].name, 'Ada');
+            }
+            assert.equal(saved.length, before);
+            assert.equal(fetchCalls.length, fetchBefore);
+        });
+
+        test('a failed knowledge base retrieve still answers from the public pages', async () => {
+            const stubFetch = global.fetch;
+            global.fetch = (async (url: string, options: any) => {
+                fetchCalls.push({ url: String(url), options });
+                if (String(url).includes('/retrieve')) {
+                    throw new Error('retrieve down');
+                }
+                return inferencePayload({ miss: false, answer: 'Booking is by appointment.', citations: [] });
+            }) as typeof fetch;
+            const before = saved.length;
+            const fetchBefore = fetchCalls.length;
+            try {
+                const res = makeRes();
+                await ask({ body: { question: 'How to book appointment?' }, user: undefined }, res);
+                assert.equal(res.statusCode, 200);
+                assert.equal(res.body.answer, 'Booking is by appointment.');
+                assert.equal(saved.length, before);
+                const calls = fetchCalls.slice(fetchBefore);
+                assert.equal(calls.some((call) => call.url === RETRIEVE_URL), true);
+                assert.equal(calls.some((call) => call.url === INFERENCE_URL), true);
+            } finally {
+                global.fetch = stubFetch;
+            }
+        });
+
+        test('an unset model access key does not call inference or save a pending row', async () => {
             delete process.env.GRADIENT_MODEL_ACCESS_KEY;
             process.env.GRADIENT_API_TOKEN = INDEXING_TOKEN;
+            process.env.GRADIENT_KNOWLEDGE_BASE_UUID = KB_UUID;
             const before = saved.length;
             const fetchBefore = fetchCalls.length;
             const res = makeRes();
@@ -323,6 +433,7 @@ describe('POST /api/ask', { concurrency: false }, () => {
             assert.equal(res.body.answer.includes(PENDING_ANSWER), false);
             assert.equal(saved.length, before);
             assert.equal(fetchCalls.length, fetchBefore);
+            assert.equal(fetchCalls.slice(fetchBefore).some((call) => call.url === INFERENCE_URL), false);
             assert.equal(res.body.experts[0].name, 'Ada');
             assert.equal(res.body.seminars[0].name, 'Cells');
             assert.equal(res.body.students[0].name, 'student-card-leak');
