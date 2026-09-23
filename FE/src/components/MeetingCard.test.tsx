@@ -3,13 +3,27 @@ import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { describe, it, expect, vi } from "vitest";
 import MeetingCard from "./MeetingCard";
 import * as chatApi from "../api/chatApi";
+import { notify } from "../utils/notify";
 
 vi.mock("../api/chatApi");
+vi.mock("../utils/notify", () => ({
+  notify: {
+    success: vi.fn(),
+    error: vi.fn(),
+    warning: vi.fn(),
+    info: vi.fn(),
+    dismiss: vi.fn(),
+  },
+}));
 
 const mockDispatch = vi.fn();
-vi.mock("react-redux", () => ({
-  useDispatch: () => mockDispatch,
-}));
+vi.mock("react-redux", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("react-redux")>();
+  return {
+    ...actual,
+    useDispatch: () => mockDispatch,
+  };
+});
 
 describe("MeetingCard", () => {
   beforeEach(() => {
@@ -214,7 +228,7 @@ describe("MeetingCard", () => {
     fireEvent.click(screen.getByText("Join call"));
 
     await waitFor(() => {
-      expect(mockDispatch).toHaveBeenCalled();
+      expect(notify.error).toHaveBeenCalledWith("Join token failed");
       expect((popup.close as any)).toHaveBeenCalled();
       expect(popup.location.href).toBe("");
     });
