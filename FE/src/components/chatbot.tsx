@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
-import { getChatBotAnswer } from "../api/api";
+import { askSite } from "../api/api";
 import { MessageSquare, X } from "lucide-react";
 
 interface ChatItem {
@@ -28,26 +28,37 @@ const Chatbot = () => {
         setInput(e.target.value);
     };
 
-    const handleChatSubmit = async (e: React.FormEvent) => {
-        e.preventDefault();
-        if (!input.trim()) return;
-        const response = await getChatBotAnswer({ question: input });
-        setChat([
-            ...chat,
-            { question: input, answer: response.answer, similarQuestions: response.similarQuestions }
-        ]);
-        setSimilarQuestions(response.similarQuestions || []);
+    const sendQuestion = async (question: string) => {
+        const current = question.trim();
+        if (!current) return;
+        try {
+            const response = await askSite(current);
+            const answer = typeof response?.answer === "string" ? response.answer : "";
+            const similar = Array.isArray(response?.similarQuestions) ? response.similarQuestions : [];
+            setChat((prev) => [
+                ...prev,
+                { question: current, answer, similarQuestions: similar },
+            ]);
+            setSimilarQuestions(similar);
+        } catch {
+            setChat((prev) => [
+                ...prev,
+                {
+                    question: current,
+                    answer: "I couldn't reach HelpBot just now. Please try again.",
+                },
+            ]);
+        }
         setInput("");
     };
 
-    const handleQuickAction = async (faqInput: string) => {
-        const response = await getChatBotAnswer({ question: faqInput });
-        setChat([
-            ...chat,
-            { question: faqInput, answer: response.answer, similarQuestions: response.similarQuestions }
-        ]);
-        setSimilarQuestions(response.similarQuestions || []);
-        setInput("");
+    const handleChatSubmit = (e: React.FormEvent) => {
+        e.preventDefault();
+        void sendQuestion(input);
+    };
+
+    const handleQuickAction = (faqInput: string) => {
+        void sendQuestion(faqInput);
     };
 
     useEffect(() => {
