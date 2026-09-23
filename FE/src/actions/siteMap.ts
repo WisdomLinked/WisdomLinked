@@ -20,7 +20,6 @@ export const siteMap: any = {
     '/user/expertdashboard/search': 'expertsearch',
 
     '/user/admindashboard': 'admindashboard',
-    '/user/admindashboard/upcomingEvents': 'adminupcomingevents',
     '/user/admindashboard/usermgmt': 'adminusermgmt',
     '/user/admindashboard/payment': 'adminpayment',
     '/user/admindashboard/chat': 'adminchat',

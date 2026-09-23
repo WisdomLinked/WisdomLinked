@@ -2,10 +2,7 @@ import React from 'react';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
-import AnnouncementBanner, {
-  DISMISSED_ANNOUNCEMENT_ID_KEY,
-  DUMMY_ANNOUNCEMENT,
-} from './AnnouncementBanner';
+import AnnouncementBanner, { DISMISSED_ANNOUNCEMENT_ID_KEY } from './AnnouncementBanner';
 
 vi.mock('../api/api', () => ({
   getActiveAnnouncement: vi.fn(),
@@ -37,12 +34,23 @@ describe('AnnouncementBanner', () => {
     localStorage.clear();
   });
 
-  it('falls back to the dummy announcement when the API returns null', async () => {
+  it('hides when the API returns null (no active announcement)', async () => {
     mockedGet.mockResolvedValue(null);
     renderBanner();
+    await waitFor(() => expect(mockedGet).toHaveBeenCalled());
+    expect(screen.queryByRole('region', { name: 'Announcement' })).not.toBeInTheDocument();
+  });
+
+  it('hides after wl-announcement-change when the API returns null', async () => {
+    mockedGet.mockResolvedValueOnce(active).mockResolvedValueOnce(null);
+    renderBanner();
     expect(await screen.findByRole('region', { name: 'Announcement' })).toHaveTextContent(
-      DUMMY_ANNOUNCEMENT.message,
+      'New seminar this Friday',
     );
+    window.dispatchEvent(new Event('wl-announcement-change'));
+    await waitFor(() => {
+      expect(screen.queryByRole('region', { name: 'Announcement' })).not.toBeInTheDocument();
+    });
   });
 
   it('hides when the stored dismissed id matches the current announcement', async () => {

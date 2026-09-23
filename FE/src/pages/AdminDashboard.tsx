@@ -11,7 +11,6 @@ import {
   UserPlus,
   Bot,
   Shield,
-  Calendar,
   GraduationCap,
   ScrollText,
   Award,
@@ -50,7 +49,6 @@ import ChatBotQA from './Dashboard/_AdminDashboard/chatBotQA';
 import UserMgmt from './Dashboard/_AdminDashboard/usermgmt';
 import Payment from './Dashboard/_AdminDashboard/payment';
 import AdminMajors from './Dashboard/_AdminDashboard/majors';
-import AdminUpcomingEvents from './Dashboard/_AdminDashboard/adminUpcomingEvents';
 import AdminAuditLog from './Dashboard/_AdminDashboard/auditLog';
 import AdminExpertsManager from '../components/dashboard/AdminExpertsManager';
 import Chatbot from '../components/chatbot';
@@ -64,7 +62,6 @@ const adminNavItems = [
   { id: 'usermgmt', label: 'User management', icon: Users },
   { id: 'payment', label: 'Payments', icon: CreditCard },
   { id: 'chat', label: 'Chat', icon: MessageSquare },
-  { id: 'upcomingEvents', label: 'Upcoming events', icon: Calendar },
   { id: 'feedbacks', label: 'Feedback', icon: MessageCircleWarning },
   { id: 'contactedus', label: 'Contact requests', icon: Inbox },
   { id: 'registerUser', label: 'Register user', icon: UserPlus },
@@ -122,10 +119,6 @@ function AdminOverview({ go }: { go: (id: string, search?: string) => void }) {
   }, []);
 
   const fmt = (n: number) => (statsLoading ? '—' : n);
-  const todayCount =
-    statsLoading || stats.todayUpcomingEvents === undefined
-      ? '—'
-      : stats.todayUpcomingEvents;
 
   return (
     <div className="px-4 py-7 sm:px-6">
@@ -216,29 +209,7 @@ function AdminOverview({ go }: { go: (id: string, search?: string) => void }) {
           <h3 className="mb-3 text-left text-sm font-semibold uppercase tracking-wide text-wl-muted">
             More
           </h3>
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-            <button
-              type="button"
-              onClick={() => go('upcomingEvents', '?scope=today')}
-              className="text-left rounded-2xl border border-wl-line bg-wl-card p-5 shadow-[0_10px_30px_rgba(35,76,106,0.08)] transition hover:-translate-y-0.5 hover:shadow-[0_16px_40px_rgba(35,76,106,0.12)]"
-            >
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <div className="text-[15px] font-semibold text-wl-ink">Upcoming events</div>
-                  <div className="mt-1 text-[13px] text-wl-muted">
-                    Today — 1:1 bookings & seminars still scheduled (not ended).
-                  </div>
-                </div>
-                <div className="shrink-0 rounded-xl bg-wl-brandSoft px-3 py-2 text-center">
-                  <div className="text-[10px] font-semibold uppercase tracking-wide text-wl-muted">
-                    Today
-                  </div>
-                  <div className="font-serif text-2xl font-bold tabular-nums leading-tight text-wl-brand">
-                    {todayCount}
-                  </div>
-                </div>
-              </div>
-            </button>
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             {(
               [
                 {
@@ -540,9 +511,7 @@ export default function AdminDashboard() {
                     ? 'Register user'
                     : section === 'chatBotQA'
                       ? 'Chatbot Q&A'
-                      : section === 'upcomingEvents'
-                        ? 'Upcoming events'
-                        : section === 'majors'
+                      : section === 'majors'
                           ? 'Majors'
                           : section === 'featuredExperts'
                             ? 'Featured experts'
@@ -576,7 +545,6 @@ export default function AdminDashboard() {
         <Route path="registerUser" element={<RegisterUserByAdmin />} />
         <Route path="majors" element={<AdminMajors />} />
         <Route path="featuredExperts" element={<AdminExpertsManager />} />
-        <Route path="upcomingEvents" element={<AdminUpcomingEvents />} />
         <Route path="auditLog" element={<AdminAuditLog />} />
         <Route path="chatBotQA" element={<ChatBotQA />} />
         <Route path="*" element={<AdminOverview go={goToSection} />} />

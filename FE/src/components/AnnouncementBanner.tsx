@@ -5,15 +5,6 @@ import { getActiveAnnouncement, type SiteAnnouncement } from '../api/api';
 
 export const DISMISSED_ANNOUNCEMENT_ID_KEY = 'dismissedAnnouncementId';
 
-/** Temporary placeholder until an admin publishes a real announcement. */
-export const DUMMY_ANNOUNCEMENT: SiteAnnouncement = {
-  id: 'dummy-welcome',
-  message: 'Meet our newest mentor, Dr. Bruce Wang — now available for transportation engineering research.',
-  link: '/expertregister',
-  linkLabel: 'Learn more',
-  active: true,
-};
-
 export function isExternalAnnouncementLink(link: string): boolean {
   return /^(https?:)?\/\//i.test(link) || /^mailto:/i.test(link);
 }
@@ -29,13 +20,18 @@ function readDismissedId(): string | null {
 export default function AnnouncementBanner() {
   const [announcement, setAnnouncement] = useState<SiteAnnouncement | null>(null);
   const [dismissedId, setDismissedId] = useState<string | null>(() => readDismissedId());
+  const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
     const load = () => {
-      getActiveAnnouncement().then(data => {
-        if (!cancelled) setAnnouncement(data ?? DUMMY_ANNOUNCEMENT);
-      });
+      getActiveAnnouncement()
+        .then(data => {
+          if (!cancelled) setAnnouncement(data);
+        })
+        .finally(() => {
+          if (!cancelled) setLoaded(true);
+        });
     };
     load();
     window.addEventListener('wl-announcement-change', load);
@@ -45,6 +41,7 @@ export default function AnnouncementBanner() {
     };
   }, []);
 
+  if (!loaded) return null;
   if (!announcement?.id || !announcement.message || announcement.active === false) return null;
   if (dismissedId === announcement.id) return null;
 
