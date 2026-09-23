@@ -30,7 +30,7 @@ import {
     removeChatMessage,
     setDmUnreadByRidBulk,
 } from "../../../../actions/chatActions";
-import { showErrorAlert, showSuccessAlert, showWarningAlert } from '../../../../actions/alertActions';
+import { notify } from '../../../../utils/notify';
 import { store } from "../../../../store";
 import {
     connectToRC,
@@ -174,11 +174,11 @@ const Messages = ({ theme = "dark", onReplyMessage }: { theme?: string; onReplyM
                 }
             }
             if (mode === 'both' && !rid) {
-                dispatch(showErrorAlert('Chat room not ready — try again.'));
+                notify.error('Chat room not ready — try again.');
                 return;
             }
             if (mode === 'me' && !cid && !groupIdStr) {
-                dispatch(showErrorAlert('Chat is not ready — try again.'));
+                notify.error('Chat is not ready — try again.');
                 return;
             }
             const r = await deleteChatMessage({
@@ -189,7 +189,7 @@ const Messages = ({ theme = "dark", onReplyMessage }: { theme?: string; onReplyM
                 groupChatId: groupIdStr || undefined,
             });
             if (!r?.success) {
-                dispatch(showErrorAlert((r as { error?: string })?.error || 'Could not delete message'));
+                notify.error((r as { error?: string })?.error || 'Could not delete message');
                 return;
             }
             if (groupIdStr) {
@@ -239,7 +239,7 @@ const Messages = ({ theme = "dark", onReplyMessage }: { theme?: string; onReplyM
                     d.code === 'rc_missing_token_secret'
                         ? 'Chat realtime is unavailable (server config). Messages may not update live — contact support if this persists.'
                         : 'Chat connection failed. Try refreshing the page.';
-                dispatch(showWarningAlert(hint));
+                notify.warning(hint);
             }
         });
         return () => {

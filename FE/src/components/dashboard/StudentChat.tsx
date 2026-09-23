@@ -34,7 +34,7 @@ import {
   clearDmUnreadRid,
   resetChatAction,
 } from '../../actions/chatActions';
-import { showErrorAlert, showSuccessAlert, showWarningAlert } from '../../actions/alertActions';
+import { notify } from '../../utils/notify';
 import { updateMe } from '../../actions/authActions';
 import { leaveGroupAction } from '../../actions/groupChatActions';
 import { actionTypes } from '../../actions/types';
@@ -225,10 +225,10 @@ const StudentChat: React.FC = () => {
         });
         setCommunityChats(rows);
       } else if (response?.error || response?.message) {
-        dispatch(showErrorAlert(response.error || response.message));
+        notify.error(response.error || response.message);
       }
     } catch (e: any) {
-      dispatch(showErrorAlert(e?.message || 'Failed to fetch community chats'));
+      notify.error(e?.message || 'Failed to fetch community chats');
     }
   }, [currentUserId, userDetails?.missedChats, dispatch]);
 
@@ -610,11 +610,11 @@ const StudentChat: React.FC = () => {
         return [...prev, ...followers.filter((f: { id: string }) => !seen.has(f.id))];
       });
       if (followers.length === 0) {
-        dispatch(showWarningAlert('You have no followers yet. Add members manually below.'));
+        notify.warning('You have no followers yet. Add members manually below.');
       }
     } catch {
       setNewOpenToFollowers(false);
-      dispatch(showErrorAlert('Failed to load your followers. Please try again.'));
+      notify.error('Failed to load your followers. Please try again.');
     } finally {
       setLoadingFollowers(false);
     }
@@ -835,6 +835,19 @@ const StudentChat: React.FC = () => {
         });
         clearLiveGroupUnread(rid);
       }
+      if (isExpert && !row.raw?.isJoined) {
+        try {
+          const res: any = await joinCommunityChat(row._id);
+          if (res?.status === 'SUCCESS') {
+            dispatch(updateMe() as any);
+            await loadCommunityChats();
+          } else if (res?.error) {
+            notify.error(res.error);
+          }
+        } catch {
+          /* may already be a member */
+        }
+      }
       dispatch(
         setChosenGroupChatDetails({
           ...row.raw,
@@ -848,16 +861,16 @@ const StudentChat: React.FC = () => {
         payload: { receiverId: row._id, count: 0 },
       });
     },
-    [dispatch, clearLiveGroupUnread],
+    [dispatch, clearLiveGroupUnread, isExpert, loadCommunityChats],
   );
 
   const onCreateCommunity = async () => {
     if (!newName.trim()) {
-      dispatch(showErrorAlert('Community name is required'));
+      notify.error('Community name is required');
       return;
     }
     if (!newOpenToAll && communityInviteSelected.length === 0) {
-      dispatch(showErrorAlert('Add at least one member, or turn on “Open to all users”.'));
+      notify.error('Add at least one member, or turn on “Open to all users”.');
       return;
     }
     setCreating(true);
@@ -869,7 +882,7 @@ const StudentChat: React.FC = () => {
         participants: !newOpenToAll ? communityInviteSelected.map(p => p.id) : undefined,
       });
       if (res?.status === 'SUCCESS') {
-        dispatch(showSuccessAlert('Community created'));
+        notify.success('Community created');
         setCreateOpen(false);
         setNewName('');
         setNewDescription('');
@@ -882,7 +895,7 @@ const StudentChat: React.FC = () => {
         dispatch(updateMe() as any);
         await loadCommunityChats();
       } else {
-        dispatch(showErrorAlert(res?.error || 'Failed to create community'));
+        notify.error(res?.error || 'Failed to create community');
       }
     } finally {
       setCreating(false);
@@ -933,7 +946,7 @@ const StudentChat: React.FC = () => {
           }),
         );
       } catch (e: any) {
-        dispatch(showErrorAlert(e?.message || 'Failed to start private chat'));
+        notify.error(e?.message || 'Failed to start private chat');
       }
     },
     [dispatch],
@@ -1104,13 +1117,13 @@ const StudentChat: React.FC = () => {
     const row = privateDmMenuRow;
     closePrivateDmMenu();
     if (!row?.conversationId) {
-      dispatch(showErrorAlert('This chat cannot be removed yet. Open it once so it syncs, then try again.'));
+      notify.error('This chat cannot be removed yet. Open it once so it syncs, then try again.');
       return;
     }
     // "Delete chat" in sidebar = clear thread for me + remove row from sidebar.
     const clearRes = await clearDmThread(row.conversationId);
     if (!clearRes?.success) {
-      dispatch(showErrorAlert((clearRes as { error?: string })?.error || 'Could not delete chat'));
+      notify.error((clearRes as { error?: string })?.error || 'Could not delete chat');
       return;
     }
     const hideRes = await hideDmFromList(row.conversationId);
@@ -1120,9 +1133,9 @@ const StudentChat: React.FC = () => {
         dispatch(resetChatAction());
       }
       dispatch(updateMe() as any);
-      dispatch(showSuccessAlert('Chat deleted for you'));
+      notify.success('Chat deleted for you');
     } else {
-      dispatch(showErrorAlert((hideRes as { error?: string })?.error || 'Chat was cleared, but removing from list failed'));
+      notify.error((hideRes as { error?: string })?.error || 'Chat was cleared, but removing from list failed');
     }
   };
 
@@ -1156,15 +1169,15 @@ const StudentChat: React.FC = () => {
         participantIds: [String(target.otherUserId)],
       });
       if (res?.status === 'SUCCESS' || res?.success) {
-        dispatch(showSuccessAlert(`Added ${target.title} to ${chat.name}`));
+        notify.success(`Added ${target.title} to ${chat.name}`);
         await loadCommunityChats();
         dispatch(updateMe() as any);
         closeAddToCommunityDialog();
       } else {
-        dispatch(showErrorAlert(res?.error || res?.message || 'Could not add member to community'));
+        notify.error(res?.error || res?.message || 'Could not add member to community');
       }
     } catch (e: any) {
-      dispatch(showErrorAlert(e?.response?.data?.error || e?.message || 'Could not add member to community'));
+      notify.error(e?.response?.data?.error || e?.message || 'Could not add member to community');
     } finally {
       setAddingToCommunityId(null);
     }
@@ -1209,7 +1222,7 @@ const StudentChat: React.FC = () => {
         }),
       );
     } catch (e: any) {
-      dispatch(showErrorAlert(e?.message || 'Failed to start private chat'));
+      notify.error(e?.message || 'Failed to start private chat');
     }
   };
 

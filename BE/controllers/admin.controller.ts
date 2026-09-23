@@ -455,18 +455,23 @@ const getContactedUs = async (req, res) => {
 
         if (dateFrom && dateTo) {
             const fromDate = new Date(dateFrom);
-            fromDate.setUTCHours(0, 0, 0, 0); // Start of the day
             const toDate = new Date(dateTo);
-            toDate.setUTCHours(23, 59, 59, 999); // End of the day
-
-            query = query.where("createdAt").gte(fromDate).lte(toDate);
+            if (!Number.isNaN(fromDate.getTime()) && !Number.isNaN(toDate.getTime())) {
+                fromDate.setUTCHours(0, 0, 0, 0);
+                toDate.setUTCHours(23, 59, 59, 999);
+                if (fromDate <= toDate) {
+                    query = query.where("createdAt").gte(fromDate).lte(toDate);
+                }
+            }
         }
 
         if (actioned) {
             query = query.where("actioned", String(actioned));
         }
 
-        query = query.collation({ locale: "en", strength: 2 });
+        if (sortBy === "name") {
+            query = query.collation({ locale: "en", strength: 2 });
+        }
 
         if (sortBy) {
             const order = sortOrder && sortOrder.toLowerCase() === "desc" ? -1 : 1;
@@ -575,7 +580,7 @@ const sendWelcomeEmail = async (req, res) => {
 
 const sendEmailToUser = async (req, res) => {
     try {
-        const { email, message } = req.body;
+        const { email, message, contactId } = req.body;
 
         if (!email || !message) {
             return res.status(400).json({
@@ -615,9 +620,28 @@ const sendEmailToUser = async (req, res) => {
             throw error;
         }
 
+        let actioned;
+        if (contactId) {
+            const contactEntry = await ContactedUs.findById(String(contactId));
+            if (contactEntry) {
+                contactEntry.actioned = "Yes";
+                await contactEntry.save();
+                actioned = contactEntry.actioned;
+                logAdminAction({
+                    actor: req.user,
+                    action: "contact_email_sent",
+                    targetType: "contactedUs",
+                    targetId: contactEntry._id,
+                    targetEmail: contactEntry.email,
+                    meta: { actioned: contactEntry.actioned },
+                });
+            }
+        }
+
         return res.status(200).json({
             status: "SUCCESS",
-            message: "Email sent successfully."
+            message: "Email sent successfully.",
+            ...(actioned ? { actioned } : {}),
         });
     } catch (error) {
         console.error("Error sending email:", error);
@@ -725,10 +749,18 @@ const getAdminPlatformEvents = async (req: Request, res: Response) => {
                     end: ev.end,
                     status: ev.status,
                     expert: ev.expert
-                        ? { username: ev.expert.username, email: ev.expert.email }
+                        ? {
+                            id: String(ev.expert._id),
+                            username: ev.expert.username,
+                            email: ev.expert.email,
+                        }
                         : null,
                     customer: ev.customer
-                        ? { username: ev.customer.username, email: ev.customer.email }
+                        ? {
+                            id: String(ev.customer._id),
+                            username: ev.customer.username,
+                            email: ev.customer.email,
+                        }
                         : null,
                 });
             }
@@ -758,10 +790,15 @@ const getAdminPlatformEvents = async (req: Request, res: Response) => {
                     end: g.end,
                     status: g.status,
                     expert: adminUser
-                        ? { username: adminUser.username, email: adminUser.email }
+                        ? {
+                            id: String(adminUser._id),
+                            username: adminUser.username,
+                            email: adminUser.email,
+                        }
                         : null,
                     customer: null,
                     groupChatType: g.type,
+                    participantCount: Array.isArray(g.participants) ? g.participants.length : 0,
                 });
             }
         }

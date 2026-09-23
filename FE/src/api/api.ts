@@ -1332,9 +1332,170 @@ export type AdminPlatformEventItem = {
     start: string;
     end: string;
     status?: string;
-    expert: { username?: string; email?: string } | null;
-    customer: { username?: string; email?: string } | null;
+    expert: { id?: string; username?: string; email?: string } | null;
+    customer: { id?: string; username?: string; email?: string } | null;
     groupChatType?: string;
+    participantCount?: number;
+};
+
+export type SiteAnnouncement = {
+    id: string;
+    message: string;
+    link?: string;
+    linkLabel?: string;
+    active: boolean;
+};
+
+export const getActiveAnnouncement = async (): Promise<SiteAnnouncement | null> => {
+    try {
+        const res = await api.get("announcement/active");
+        const data = res.data as SiteAnnouncement | null;
+        if (!data?.id || !data.message || data.active === false) return null;
+        return data;
+    } catch {
+        return null;
+    }
+};
+
+export const setSiteAnnouncement = async (payload: {
+    message: string;
+    link?: string;
+    linkLabel?: string;
+    active: boolean;
+}): Promise<{ result?: string; announcement?: SiteAnnouncement; error?: string } | false> => {
+    try {
+        const res = await api.post("admin/announcement", payload);
+        return res.data;
+    } catch (err: any) {
+        return checkForAuthorization(err);
+    }
+};
+
+export type FeaturedExpertType = 'academic' | 'industry';
+
+export type FeaturedExpertRecord = {
+    id: string;
+    name: string;
+    title: string;
+    organization: string;
+    type: FeaturedExpertType;
+    photoUrl: string;
+    order?: number;
+    active?: boolean;
+};
+
+export type FeaturedExpertPayload = {
+    name: string;
+    title: string;
+    organization: string;
+    type: FeaturedExpertType;
+    photoUrl?: string;
+    active?: boolean;
+};
+
+function parseFeaturedExpertList(data: unknown): FeaturedExpertRecord[] {
+    const rows = Array.isArray(data)
+        ? data
+        : data && typeof data === 'object'
+            ? (data as { experts?: unknown }).experts
+            : null;
+    if (!Array.isArray(rows)) return [];
+    return rows
+        .map((raw): FeaturedExpertRecord | null => {
+            if (!raw || typeof raw !== 'object') return null;
+            const rec = raw as Record<string, unknown>;
+            const id = String(rec.id || rec._id || '').trim();
+            const name = String(rec.name || '').trim();
+            const title = String(rec.title || '').trim();
+            const organization = String(rec.organization || '').trim();
+            const type = String(rec.type || '').trim().toLowerCase();
+            if (!id || !name || !title || !organization || (type !== 'academic' && type !== 'industry')) {
+                return null;
+            }
+            return {
+                id,
+                name,
+                title,
+                organization,
+                type,
+                photoUrl: String(rec.photoUrl || '').trim(),
+                order: Number.isFinite(Number(rec.order)) ? Number(rec.order) : undefined,
+                active: rec.active !== false,
+            };
+        })
+        .filter((row): row is FeaturedExpertRecord => Boolean(row));
+}
+
+function featuredExpertWriteError(err: any) {
+    const data = err?.response?.data;
+    if (err?.response?.status === 400 && data && typeof data === 'object') {
+        return data;
+    }
+    return checkForAuthorization(err);
+}
+
+export const getFeaturedExperts = async (): Promise<FeaturedExpertRecord[]> => {
+    try {
+        const res = await api.get('experts');
+        return parseFeaturedExpertList(res.data);
+    } catch {
+        return [];
+    }
+};
+
+export const getAdminFeaturedExperts = async (): Promise<FeaturedExpertRecord[] | false> => {
+    try {
+        const res = await api.get('admin/experts');
+        return parseFeaturedExpertList(res.data);
+    } catch (err: any) {
+        return checkForAuthorization(err);
+    }
+};
+
+export const createFeaturedExpert = async (
+    payload: FeaturedExpertPayload,
+): Promise<{ result?: string; expert?: FeaturedExpertRecord; errors?: Record<string, string>; error?: string } | false> => {
+    try {
+        const res = await api.post('admin/experts', payload);
+        return res.data;
+    } catch (err: any) {
+        return featuredExpertWriteError(err);
+    }
+};
+
+export const updateFeaturedExpert = async (
+    id: string,
+    payload: FeaturedExpertPayload,
+): Promise<{ result?: string; expert?: FeaturedExpertRecord; errors?: Record<string, string>; error?: string } | false> => {
+    try {
+        const res = await api.put(`admin/experts/${id}`, payload);
+        return res.data;
+    } catch (err: any) {
+        return featuredExpertWriteError(err);
+    }
+};
+
+export const deleteFeaturedExpert = async (
+    id: string,
+): Promise<{ result?: string; error?: string } | false> => {
+    try {
+        const res = await api.delete(`admin/experts/${id}`);
+        return res.data;
+    } catch (err: any) {
+        return checkForAuthorization(err);
+    }
+};
+
+export const reorderFeaturedExpert = async (
+    id: string,
+    direction: 'up' | 'down',
+): Promise<{ result?: string; experts?: FeaturedExpertRecord[]; error?: string } | false> => {
+    try {
+        const res = await api.post('admin/experts/reorder', { id, direction });
+        return res.data;
+    } catch (err: any) {
+        return checkForAuthorization(err);
+    }
 };
 
 export const doGetAdminDashboardStats = async (): Promise<{
@@ -1438,6 +1599,8 @@ export const doContactUs = async (data: {
 export const doGetContactedUs = async (filters: {
     name?: string;
     email?: string;
+    dateFrom?: string;
+    dateTo?: string;
     startDate?: string;
     endDate?: string;
     sortBy?: string;
@@ -1460,9 +1623,9 @@ export const toggleActionedStatus = async (id: string) => {
     }
 };
 
-export const sendEmailToUser = async (email: string, message: string) => {
+export const sendEmailToUser = async (email: string, message: string, contactId?: string) => {
     try {
-        const res = await api.post("admin/sendEmailToUser", { email, message });
+        const res = await api.post("admin/sendEmailToUser", { email, message, contactId });
         return res.data;
     } catch (err: any) {
         return checkForAuthorization(err);

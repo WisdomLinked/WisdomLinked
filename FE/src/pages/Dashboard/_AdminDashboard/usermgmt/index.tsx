@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { useDispatch } from "react-redux";
 import SelectionWithCheckBox from "../../../../components/SelectionWithCheckBox";
+import ClearableInput from "../../../../components/ui/ClearableInput";
 import {
     doFilterUsers,
     doUpdateProfileByAdmin,
@@ -14,9 +15,9 @@ import {
     doActivatePendingUserById,
 } from "../../../../api/api";
 
-import Avatar from "../../../../components/Avatar";
 import ManageModal from "./manageModal";
 import AuditModal from "./auditModal";
+import UserListTable from "./UserListTable";
 import Pagination from "../../../../components/Pagination";
 import { SetLoadingStatus } from "../../../../actions/appActions";
 import { actionTypes } from "../../../../actions/types";
@@ -360,8 +361,8 @@ const UserMgmt = () => {
                             <div className="flex justify-between mt-4">
                                 <div className="w-[calc(100%-174px)] sm:w-[calc(100%-324px)]">
                                     <div className="text-grey mb-0.5 text-[12px] leading-[19px]">Filter by email</div>
-                                    <input
-                                        className="w-full rounded-[15px] h-[50px] bg-wl-card border border-lightgrey text-[14px] leading-[21px] px-[24px] text-wl-ink placeholder:text-grey"
+                                    <ClearableInput
+                                        className="bg-wl-card"
                                         placeholder="Input email"
                                         value={email}
                                         onChange={(e) => set_email(e.target.value)}
@@ -381,8 +382,8 @@ const UserMgmt = () => {
                             <div className="flex justify-between mt-2">
                                 <div className="w-[calc(100%-174px)] sm:w-[calc(100%-324px)]">
                                     <div className="text-grey mb-0.5 text-[12px] leading-[19px]">Filter by username</div>
-                                    <input
-                                        className="w-full rounded-[15px] h-[50px] bg-wl-card border border-lightgrey text-[14px] leading-[21px] px-[24px] text-wl-ink placeholder:text-grey"
+                                    <ClearableInput
+                                        className="bg-wl-card"
                                         placeholder="Input username"
                                         value={username}
                                         onChange={(e) => set_username(e.target.value)}
@@ -431,158 +432,31 @@ const UserMgmt = () => {
                     <div className="w-full rounded-2xl mt-4 bg-wl-card border border-wl-line shadow-sm overflow-hidden">
 
                         {isUserListView && (
-                            <div className="w-full flex flex-col sm:flex-row sm:justify-between sm:items-center p-4 gap-4">
-                                <div>
-                                    {isReviewQueue
-                                        ? `Total of ${totalCount} accounts awaiting review`
-                                        : `Total of ${totalCount} Users`}
-                                </div>
-                                <Pagination
-                                    currentPage={currentPage}
-                                    totalPage={totalPage}
-                                    goFirst={() => set_currentPage(0)}
-                                    goPrev={() => set_currentPage(currentPage > 0 ? currentPage - 1 : 0)}
-                                    goNext={() => set_currentPage(currentPage < totalPage ? currentPage + 1 : totalPage)}
-                                    goLast={() => set_currentPage(totalPage)}
-                                />
+                            <div className="w-full p-4">
+                                {isReviewQueue
+                                    ? `Total of ${totalCount} accounts awaiting review`
+                                    : `Total of ${totalCount} Users`}
                             </div>
                         )}
 
                         {isUserListView && (
-                            <div className="relative overflow-x-auto w-full px-4">
-                                {users.length === 0 ? (
-                                    <p className="py-8 text-center text-sm text-wl-muted">
-                                        {isReviewQueue
-                                            ? "No accounts currently awaiting review."
-                                            : "No users match these filters."}
-                                    </p>
-                                ) : (
-                                <table className="w-full text-sm text-left">
-                                    <thead className="text-xs uppercase bg-wl-brandSoft text-wl-brand">
-                                    <tr>
-                                        <th className="px-6 py-3 text-center">No</th>
-                                        <th className="px-6 py-3 text-center">Avatar</th>
-                                        <th className="px-6 py-3 text-center">Email</th>
-                                        <th className="px-6 py-3 text-center">Name</th>
-                                        <th className="px-6 py-3 text-center">Title</th>
-                                        <th className="px-6 py-3 text-center">Role</th>
-                                        <th className="px-6 py-3 text-center">Country</th>
-                                        <th className="px-6 py-3 text-center">State</th>
-                                        <th className="px-6 py-3 text-center">City</th>
-                                        <th className="px-6 py-3 text-center">Phone</th>
-                                        <th className="px-6 py-3 text-center">Resume</th>
-                                        <th className="px-6 py-3 text-center">Status</th>
-                                        <th className="px-6 py-3 text-center">Actions</th>
-                                    </tr>
-                                    </thead>
-                                    <tbody>
-                                    {users.map((u, idx) => (
-                                        <tr key={idx} className="border-b border-wl-line hover:bg-wl-pageAlt text-wl-ink">
-                                            <td className="py-2 px-2 text-center">
-                                                {numPerPage * currentPage + idx + 1}
-                                            </td>
-                                            <td className="px-2 py-1 flex justify-center">
-                                                <Avatar username={u.username} image={u.image} />
-                                            </td>
-                                            <td className="text-center px-2">{u.email}</td>
-                                            <td className="text-center px-2">{u.username}</td>
-                                            <td className="text-center px-2">{u.title}</td>
-                                            <td
-                                                className={`px-2 text-center uppercase text-sm ${
-                                                    u.role === "expert" ? "text-brownyellow" : "text-wl-brand"
-                                                }`}
-                                            >
-                                                {u.role}
-                                            </td>
-                                            <td className="text-center px-2">{u.country?.name}</td>
-                                            <td className="text-center px-2">{u.state?.name}</td>
-                                            <td className="text-center px-2">{u.city?.name}</td>
-                                            <td className="text-center px-2">{u.phoneNumber}</td>
-                                            <td className="text-center px-2">
-                                                {u.resume ? (
-                                                    <a
-                                                        href={`${process.env.REACT_APP_SERVER_URL}/${u.resume}`}
-                                                        target="_blank"
-                                                        rel="noreferrer"
-                                                        className="text-wl-brand underline font-medium hover:brightness-95"
-                                                    >
-                                                        resume
-                                                    </a>
-                                                ) : null}
-                                            </td>
-                                            <td>
-                                                <select
-                                                    className={`bg-wl-card border rounded-lg border-wl-line text-wl-ink px-2 py-1 text-[13px] outline-none focus:ring-2 focus:ring-wl-brand/20 ${
-                                                        u.status === "active"
-                                                            ? "text-wl-brand font-medium"
-                                                            : u.status === "blocked"
-                                                                ? "text-red"
-                                                                : "text-brownyellow"
-                                                    }`}
-                                                    value={u.status}
-                                                    onChange={(e) =>
-                                                        updateProfile({
-                                                            email: u.email,
-                                                            status: e.target.value
-                                                        })
-                                                    }
-                                                >
-                                                    <option value="active" className="text-wl-brand">Active</option>
-                                                    <option value="review" className="text-brownyellow">Review</option>
-                                                    <option value="blocked" className="text-red">Blocked</option>
-                                                </select>
-                                            </td>
-                                            <td className="px-2 max-w-[280px]">
-                                                <div className="flex flex-wrap gap-2 justify-center">
-                                                    {(isReviewQueue || u.status === "review") && (
-                                                        <>
-                                                            <button
-                                                                type="button"
-                                                                className="inline-flex items-center rounded-lg bg-green px-3 py-1.5 text-[12px] font-semibold text-white shadow-sm transition hover:brightness-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-green/30"
-                                                                onClick={() => handleApproveUser(u)}
-                                                            >
-                                                                Approve
-                                                            </button>
-                                                            <button
-                                                                type="button"
-                                                                className="inline-flex items-center rounded-lg border border-red-500/80 bg-white px-3 py-1.5 text-[12px] font-semibold text-red-600 transition hover:bg-red-500 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-red-400/40"
-                                                                onClick={() => handleBlockUser(u)}
-                                                            >
-                                                                Block
-                                                            </button>
-                                                        </>
-                                                    )}
-                                                    <button
-                                                        type="button"
-                                                        className="inline-flex items-center rounded-lg bg-wl-brand px-3 py-1.5 text-[12px] font-semibold text-white shadow-sm transition hover:brightness-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-wl-brand/30"
-                                                        onClick={() => openManageModal(u)}
-                                                    >
-                                                        Manage
-                                                    </button>
-                                                    {u.role !== "admin" ? (
-                                                        <button
-                                                            type="button"
-                                                            className="inline-flex items-center rounded-lg border border-amber-500/70 bg-amber-50 px-3 py-1.5 text-[12px] font-semibold text-amber-800 transition hover:bg-amber-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/40"
-                                                            onClick={() => handleImpersonate(u)}
-                                                        >
-                                                            Impersonate
-                                                        </button>
-                                                    ) : null}
-                                                    <button
-                                                        type="button"
-                                                        className="inline-flex items-center rounded-lg border border-wl-line bg-white px-3 py-1.5 text-[12px] font-semibold text-wl-brand shadow-sm transition hover:bg-wl-brandSoft focus:outline-none focus-visible:ring-2 focus-visible:ring-wl-brand/20"
-                                                        onClick={() => openAuditModal(u)}
-                                                    >
-                                                        Audit
-                                                    </button>
-                                                </div>
-                                            </td>
-                                        </tr>
-                                    ))}
-                                    </tbody>
-                                </table>
-                                )}
-                            </div>
+                            <UserListTable
+                                users={users}
+                                isReviewQueue={isReviewQueue}
+                                emptyMessage={
+                                    isReviewQueue
+                                        ? "No accounts currently awaiting review."
+                                        : "No users match these filters."
+                                }
+                                onStatusChange={(u, status) =>
+                                    updateProfile({ email: u.email, status })
+                                }
+                                onApprove={handleApproveUser}
+                                onBlock={handleBlockUser}
+                                onManage={openManageModal}
+                                onImpersonate={handleImpersonate}
+                                onAudit={openAuditModal}
+                            />
                         )}
 
                         {dataType.value === "PendingUser" && (
@@ -673,29 +547,13 @@ const UserMgmt = () => {
                         )}
 
                         {isUserListView && (
-                            <div className="w-full flex flex-col sm:flex-row sm:justify-between sm:items-center p-4 gap-4">
-                                <div className="flex gap-6">
-                                    <div>Show rows:</div>
-                                    <select
-                                        className="bg-wl-card text-wl-ink border rounded-md border-wl-line px-2 outline-none"
-                                        value={numPerPage}
-                                        onChange={(e) => set_numPerPage(Number(e.target.value))}
-                                    >
-                                        <option value={5}>5</option>
-                                        <option value={10}>10</option>
-                                        <option value={25}>25</option>
-                                        <option value={50}>50</option>
-                                    </select>
-                                </div>
-                                <Pagination
-                                    currentPage={currentPage}
-                                    totalPage={totalPage}
-                                    goFirst={() => set_currentPage(0)}
-                                    goPrev={() => set_currentPage(currentPage > 0 ? currentPage - 1 : 0)}
-                                    goNext={() => set_currentPage(currentPage < totalPage ? currentPage + 1 : totalPage)}
-                                    goLast={() => set_currentPage(totalPage)}
-                                />
-                            </div>
+                            <Pagination
+                                currentPage={currentPage}
+                                totalCount={totalCount}
+                                pageSize={numPerPage}
+                                onPage={set_currentPage}
+                                onPageSize={set_numPerPage}
+                            />
                         )}
                     </div>
                 </div>

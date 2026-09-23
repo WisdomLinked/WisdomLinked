@@ -23,6 +23,8 @@ const meetingAnalyticsRoutes = require("./routes/meetingAnalyticsRoutes");
 const chatRoutes = require("./routes/chatRoutes");
 const meetingRoutes = require("./routes/meetingRoutes");
 const receiptRoutes = require("./routes/receiptRoutes");
+const announcementRoutes = require("./routes/announcementRoutes");
+const featuredExpertRoutes = require("./routes/featuredExpertRoutes");
 
 const { appendDefaultServices, appendAdminUserAndGroupChat, initAppStates } = require('./initDB')
 const { apiLimiter } = require('./middlewares/rateLimit');
@@ -93,6 +95,7 @@ app.use(csrfProtection);
 app.use("/api/auth", authRoutes);
 app.use("/api/invite-friend", friendInvitationRoutes);
 app.use("/api/group-chat", groupChatRoutes);
+app.use("/api/experts", featuredExpertRoutes);
 app.use("/api/expert", expertRoutes);
 app.use("/api/customer", customerRoutes);
 app.use("/api/admin", adminRoutes);
@@ -103,6 +106,7 @@ app.use("/api/meeting-analytics", meetingAnalyticsRoutes);
 app.use("/api/chat", chatRoutes);
 app.use("/api/meeting", meetingRoutes);
 app.use("/api/receipt", receiptRoutes);
+app.use("/api/announcement", announcementRoutes);
 
 app.use(csrfErrorHandler);
 

@@ -3,13 +3,22 @@ import { describe, expect, it, vi, beforeEach } from 'vitest';
 const dispatch = vi.fn();
 const getState = vi.fn(() => ({ auth: { userDetails: null } }));
 const logoutUser = vi.fn(() => ({ type: 'LOGOUT' }));
-const showErrorAlert = vi.fn((msg: string) => ({ type: 'SHOW_ALERT', payload: msg }));
 const SetLoadingStatus = vi.fn();
 
 vi.mock('../store', () => ({ store: { dispatch, getState } }));
 vi.mock('../actions/authActions', () => ({ logoutUser }));
-vi.mock('../actions/alertActions', () => ({ showErrorAlert }));
 vi.mock('../actions/appActions', () => ({ SetLoadingStatus }));
+vi.mock('../utils/notify', () => ({
+    notify: {
+        error: vi.fn(),
+        success: vi.fn(),
+        warning: vi.fn(),
+        info: vi.fn(),
+        dismiss: vi.fn(),
+    },
+}));
+
+import { notify } from '../utils/notify';
 
 describe('apiErrorHandling', () => {
     beforeEach(() => {
@@ -24,7 +33,7 @@ describe('apiErrorHandling', () => {
             response: { status: 500, data: { error: 'Server error' } },
         });
         expect(result).toBe(false);
-        expect(showErrorAlert).toHaveBeenCalledWith('Server error');
+        expect(notify.error).toHaveBeenCalledWith('Server error');
     });
 
     it('handleAuthApiFailure returns FAIL body without toast', async () => {
@@ -36,7 +45,7 @@ describe('apiErrorHandling', () => {
             status: 'FAIL',
             error: 'Invalid credentials. Please try again.',
         });
-        expect(showErrorAlert).not.toHaveBeenCalled();
+        expect(notify.error).not.toHaveBeenCalled();
     });
 
     it('handleAuthApiFailure logs out on 401 when session exists', async () => {
@@ -81,7 +90,7 @@ describe('apiErrorHandling', () => {
         });
         expect(result).toBe(false);
         expect(logoutUser).not.toHaveBeenCalled();
-        expect(showErrorAlert).toHaveBeenCalled();
+        expect(notify.error).toHaveBeenCalled();
     });
 
     it('handleAuthApiFailure does not logout on UNDER_REVIEW code', async () => {

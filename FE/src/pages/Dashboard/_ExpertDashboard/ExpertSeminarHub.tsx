@@ -18,7 +18,7 @@ import { useAppSelector } from '../../../store';
 import { updateMe } from '../../../actions/authActions';
 import { setChosenGroupChatDetails } from '../../../actions/chatActions';
 import { SetLoadingStatus } from '../../../actions/appActions';
-import { showSuccessAlert } from '../../../actions/alertActions';
+import { notify } from '../../../utils/notify';
 import { deleteGroup, profileImageFetch, getSeminarSeatRequests, approveSeminarSeatRequest, rejectSeminarSeatRequest } from '../../../api/api';
 import { resolveProfileImageSrc } from '../../../utils/profileImage';
 import { seminarCapacityLabel, seminarEnrollmentLabel } from '../../../utils/seminarCapacityLabel';
@@ -996,11 +996,9 @@ export default function ExpertSeminarHub() {
     const res = await deleteGroup({ groupChatId: groupId, scope });
     SetLoadingStatus(false);
     if (res !== false) {
-      dispatch(
-        showSuccessAlert(
+      notify.success(
           scope === 'occurrence' ? 'Seminar session deleted' : 'Seminar deleted',
-        ),
-      );
+        );
       await (dispatch as any)(updateMe());
       setDetailSeminar(null);
       setScreen('list');

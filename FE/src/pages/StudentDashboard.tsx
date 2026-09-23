@@ -22,6 +22,7 @@ import { buildFallbackChatProfile, mergeChatProfile } from '../utils/chatProfile
 import Sidebar from '../components/layout/Sidebar';
 import TopBar, { TopBarNotificationItem } from '../components/layout/TopBar';
 import StatsGrid from '../components/dashboard/StatsGrid';
+import AccountReviewBanner from '../components/dashboard/AccountReviewBanner';
 import CarouselSection, { type CarouselSectionData } from '../components/dashboard/CarouselSection';
 import StudentProfile from '../components/dashboard/StudentProfile';
 import StudentSettings from '../components/dashboard/StudentSettings';
@@ -1521,6 +1522,7 @@ export default function StudentDashboard() {
             <StudentPaymentHistory />
           ) : (
             <div className="px-6 py-7">
+              <AccountReviewBanner className="mb-6" />
               <div className="grid gap-6 lg:grid-cols-[1fr_380px]">
                 <section className="min-w-0">
                   <h2 className="text-3xl font-semibold text-slate-900">

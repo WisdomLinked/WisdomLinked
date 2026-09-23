@@ -40,7 +40,7 @@ import SeminarDetails from './Dashboard/seminarDetails';
 import { buildFallbackChatProfile, mergeChatProfile } from '../utils/chatProfileModal';
 import { useAppSelector } from '../store';
 import { logoutUser, updateMe } from '../actions/authActions';
-import { showErrorAlert, showWarningAlert } from '../actions/alertActions';
+import { notify } from '../utils/notify';
 import { patchDmUnreadRid, setChosenGroupChatDetails, setDmUnreadByRidBulk } from '../actions/chatActions';
 import { connectToRC, onSubscriptionChanged, subscribeToRoom } from '../services/rcRealtime';
 import { useEndMeetingOnReturn } from '../hooks/useEndMeetingOnReturn';
@@ -58,6 +58,7 @@ import StudentChat from '../components/dashboard/StudentChat';
 import JoinMeeting from '../components/dashboard/JoinMeeting';
 import DecisionNoteField from '../components/dashboard/DecisionNoteField';
 import StatCard from '../components/ui/StatCard';
+import AccountReviewBanner from '../components/dashboard/AccountReviewBanner';
 import { awaitsExpertDecision, awaitsWalletPayment, pendingSessionState } from '../utils/bookingLifecycle';
 import Chatbot from '../components/chatbot';
 import UpcomingSessionModal, {
@@ -790,7 +791,7 @@ export default function ExpertDashboard() {
         dispatch(updateMe() as any);
         return true;
       } catch {
-        dispatch(showErrorAlert('Could not accept the session. Please try again.'));
+        notify.error('Could not accept the session. Please try again.');
         return false;
       } finally {
         setAcceptingId(null);
@@ -857,13 +858,11 @@ export default function ExpertDashboard() {
         dispatch(updateMe() as any);
         return true;
       } catch {
-        dispatch(
-          showErrorAlert(
+        notify.error(
             intent === 'withdraw'
               ? 'Could not withdraw the session offer. Please try again.'
               : 'Could not decline the request. Please try again.',
-          ),
-        );
+          );
         return false;
       } finally {
         setBusy(null);
@@ -1024,7 +1023,7 @@ export default function ExpertDashboard() {
           ? await approveSeminarSeatRequest(requestId, note)
           : await rejectSeminarSeatRequest(requestId, note);
         if (res === false || res?.status === 'FAIL' || res?.error) {
-          dispatch(showErrorAlert(res?.error || 'Could not update the seat request.'));
+          notify.error(res?.error || 'Could not update the seat request.');
           return;
         }
         setSeatRequests(prev => prev.filter(r => String(r._id) !== String(requestId)));
@@ -1033,7 +1032,7 @@ export default function ExpertDashboard() {
           ? `${studentName} has been admitted to the seminar “${seminarTitle}”.${amountLabel ? ` A payment of ${amountLabel} has been successfully charged.` : ''}`
           : `${studentName} was not admitted to “${seminarTitle}”.${amountLabel ? ` The payment authorization of ${amountLabel} has been released.` : ''}`;
       } catch {
-        dispatch(showErrorAlert('Could not update the seat request. Please try again.'));
+        notify.error('Could not update the seat request. Please try again.');
       }
     },
     [dispatch, seatRequests],
@@ -1045,7 +1044,7 @@ export default function ExpertDashboard() {
       bookedSessions.find((x: any) => String(x._id) === id) ||
       acceptedSeminars.find((x: any) => String(x._id) === id);
     if (!raw) {
-      dispatch(showErrorAlert('Could not open this session.'));
+      notify.error('Could not open this session.');
       return;
     }
     dispatch(
@@ -1121,6 +1120,7 @@ export default function ExpertDashboard() {
       <StudentSettings />
     ) : (
       <div className="px-6 py-7 space-y-6">
+        <AccountReviewBanner />
         {/* Stats row */}
         <section>
           <div className="mb-3 flex items-center justify-between gap-3">

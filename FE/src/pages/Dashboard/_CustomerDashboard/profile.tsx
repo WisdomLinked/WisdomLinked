@@ -20,7 +20,7 @@ import CountrySelect from "../../../components/CountrySelection";
 import PhoneInput from "react-phone-input-2";
 import { useDispatch } from "react-redux";
 import { validateImageSize } from "../../../utils/validators";
-import { showErrorAlert, showSuccessAlert, showWarningAlert } from '../../../actions/alertActions';
+import { notify } from '../../../utils/notify';
 import ImagePicker from "../../../components/imagePicker";
 import { filterApiServicesToCanonical } from "../../../constants/serviceOptions";
 import {
@@ -137,13 +137,13 @@ const CustomerProfile = ({
             set_image(filename);
             await dispatch(updateMe() as any);
             await loadData();
-            dispatch(showSuccessAlert('Profile photo saved'));
+            notify.success('Profile photo saved');
         } catch (error: any) {
             const msg =
                 error?.response?.data?.error ||
                 error?.message ||
                 'Could not save profile photo';
-            dispatch(showErrorAlert(String(msg)));
+            notify.error(String(msg));
         } finally {
             set_photoSaving(false);
         }
@@ -163,12 +163,12 @@ const CustomerProfile = ({
             userDetails,
         });
         if (!hasFormChanges) {
-            dispatch(showErrorAlert('No profile changes to save.'));
+            notify.error('No profile changes to save.');
             return;
         }
         if (!isProfileFormValid()) {
             set_showError(true);
-            dispatch(showErrorAlert('Please complete all required fields before saving.'));
+            notify.error('Please complete all required fields before saving.');
             return;
         }
         SetLoadingStatus(true)
@@ -186,10 +186,10 @@ const CustomerProfile = ({
             const ok = await doUpdateProfile(updates);
             if (ok) {
                 await dispatch(updateMe() as any);
-                dispatch(showSuccessAlert('Profile saved'));
+                notify.success('Profile saved');
                 await loadData();
             } else {
-                dispatch(showErrorAlert('Could not save profile'));
+                notify.error('Could not save profile');
             }
         } else {
             const res = await doUpdateProfileByAdmin(updates)
@@ -217,7 +217,7 @@ const CustomerProfile = ({
 
     const on_imageChange = (newImageSrc: any) => {
         if (validateImageSize(newImageSrc) === false) {
-            dispatch(showErrorAlert(`Image size cannot be greater than the allowed limit.`));
+            notify.error(`Image size cannot be greater than the allowed limit.`);
             return;
         }
         set_imageSrc(newImageSrc);

@@ -8,9 +8,14 @@ vi.mock("../../../../api/api", () => ({
   getMyFollowers: vi.fn(async () => ({ result: [] })),
   inviteToSeminar: vi.fn(async () => ({ success: true, free: false, results: [] })),
 }));
-vi.mock("../../../../actions/alertActions", () => ({
-  showErrorAlert: (m: string) => ({ type: "err", m }),
-  showSuccessAlert: (m: string) => ({ type: "ok", m }),
+vi.mock("../../../../utils/notify", () => ({
+  notify: {
+    error: vi.fn(),
+    success: vi.fn(),
+    warning: vi.fn(),
+    info: vi.fn(),
+    dismiss: vi.fn(),
+  },
 }));
 const mockDispatch = vi.fn();
 vi.mock("react-redux", () => ({ useDispatch: () => mockDispatch }));

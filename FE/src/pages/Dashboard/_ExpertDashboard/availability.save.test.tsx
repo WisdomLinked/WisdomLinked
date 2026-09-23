@@ -214,6 +214,19 @@ describe('AvailabilityPage save', () => {
       'true',
     );
   });
+
+  it('lets long AM–PM slot labels wrap inside the time-slot button', () => {
+    render(
+      <Provider store={store}>
+        <AvailabilityPage />
+      </Provider>,
+    );
+    const btn = screen.getByTitle(/11:00 AM.12:00 PM/);
+    expect(btn.className).toMatch(/whitespace-normal/);
+    expect(btn.className).not.toMatch(/whitespace-nowrap/);
+    expect(btn.className).toMatch(/min-w-0/);
+    expect(btn.className).not.toMatch(/overflow-hidden/);
+  });
 });
 
 describe('AvailabilityPage save button state', () => {

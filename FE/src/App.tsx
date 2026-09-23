@@ -15,7 +15,8 @@ import { ensureCsrfToken } from './api/csrf';
 import { connectToRC, isRCConnected } from './services/rcRealtime';
 import 'swiper/swiper.min.css';
 import LeaveFeedback from './components/LeaveFeedback';
-import ImpersonationBanner from './components/ImpersonationBanner';
+import AppBanners from './components/AppBanners';
+import { useSyncHeaderHeight } from './hooks/useSyncHeaderHeight';
 import VerifyEmail from './pages/VerifyEmail';
 import VerifyEmailChange from './pages/VerifyEmailChange';
 import ForgotPassword from './pages/ForgotPassword';
@@ -36,6 +37,8 @@ const WLOAuthRolePicker = React.lazy(() => import('./pages/WLOAuthRolePicker'));
 const WLProfileCompletion = React.lazy(() => import('./pages/WLProfileCompletion'));
 const MeetingGuestInvite = React.lazy(() => import('./pages/MeetingGuestInvite'));
 const PaymentReceipt = React.lazy(() => import('./pages/PaymentReceipt'));
+const Resources = React.lazy(() => import('./pages/Resources'));
+const ResourceGuide = React.lazy(() => import('./pages/ResourceGuide'));
 
 // Heavy dashboard chunks — MUI, calendars, quill, etc. only load after login
 const LegacyExpertDashboard = React.lazy(() => import('./pages/Dashboard/_ExpertDashboard'));
@@ -92,6 +95,8 @@ const UnauthenticatedRoutes = () => {
             <LandingFooter />
           </React.Fragment>
         } />
+        <Route path="/resources" element={<Resources />} />
+        <Route path="/resources/:slug" element={<ResourceGuide />} />
         <Route path="/*" element={<TOEConsulting />} />
       </Routes>
     </React.Fragment>
@@ -251,6 +256,7 @@ function App() {
         path.includes('/auth-complete-profile') ||
         path.includes('/auth-choose-role') ||
         path.includes('/meeting/invite/') ||
+        path.startsWith('/resources') ||
         (path.includes('/login') && search.includes('error='))
       ) {
         return;
@@ -285,6 +291,7 @@ function App() {
   }, [userDetails, navigate])
 
   const location = useLocation()
+  useSyncHeaderHeight();
   useEffect(() => {
     if (siteMap[location.pathname]) {
       dispatch(updateLocation(siteMap[location.pathname]))
@@ -309,7 +316,7 @@ function App() {
     <>
       <Suspense fallback={<LazyFallback />}>
         
-          <ImpersonationBanner />
+          <AppBanners />
           <Routes>
             <Route path={'/user/' + '*'} element={<AuthenticatedRoutes />} />
             <Route path={'/' + '*'} element={<UnauthenticatedRoutes />} />

@@ -5,11 +5,9 @@ import ShowFieldError from "../components/ShowFieldError";
 import { validateEmail } from "../actions/common";
 import {doContactUs, sendEmailToAdmin} from "../api/api"; // Import the new function
 import { SetLoadingStatus } from "../actions/appActions";
-import { useDispatch } from "react-redux";
-import { showErrorAlert, showSuccessAlert } from "../actions/alertActions";
+import { notify } from '../utils/notify';
 
 const ContactUS = () => {
-    const dispatch = useDispatch();
     const CONTACT_MESSAGE_MAX_LENGTH = 100;
     const navigate = useNavigate(); // For programmatic navigation
 
@@ -96,14 +94,14 @@ The WisdomLinked.com Team
 
                 if (response === false) return;
                 if (response?.status === 'FAIL' || response?.error) {
-                    dispatch(showErrorAlert(response?.error || 'Failed to submit contact details. Please try again later.'));
+                    notify.error(response?.error || 'Failed to submit contact details. Please try again later.');
                     return;
                 }
                 if (response) {
 
                     const finalMessage = createEmailTemplate(name, email, countryCode, contactNumber, subject, issue);
                     await handleSendEmail(finalMessage);
-                    dispatch(showSuccessAlert('Thank you for contacting us. Your query has been submitted successfully.'));
+                    notify.success('Thank you for contacting us. Your query has been submitted successfully.');
 
                     // Clear input fields
                     set_name("");
@@ -121,11 +119,11 @@ The WisdomLinked.com Team
                         window.scrollTo(0, 0);
                     }, 0);
                 } else {
-                    dispatch(showErrorAlert('Failed to submit contact details. Please try again later.'));
+                    notify.error('Failed to submit contact details. Please try again later.');
                 }
             } catch (error) {
                 console.error("Error submitting contact:", error);
-                dispatch(showErrorAlert('An error occurred. Please try again.'));
+                notify.error('An error occurred. Please try again.');
             } finally {
                 SetLoadingStatus(false);
             }

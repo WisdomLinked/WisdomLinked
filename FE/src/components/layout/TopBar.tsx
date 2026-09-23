@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useState } from 'react';
 import {
   Bell,
   ChevronDown,
@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { useDispatch } from 'react-redux';
 import { logoutUser } from '../../actions/authActions';
+import { syncHeaderHeight } from '../../hooks/useSyncHeaderHeight';
 
 export type TopBarNotificationItem = {
   id: string;
@@ -85,8 +86,19 @@ export default function TopBar({
     return () => window.clearTimeout(id);
   }, [openMenu]);
 
+  useLayoutEffect(() => {
+    syncHeaderHeight();
+    return () => {
+      syncHeaderHeight();
+    };
+  }, []);
+
   return (
-    <header className="sticky top-0 z-50 border-b border-[#e8e6e1] bg-white">
+    <header
+      data-wl-header
+      className="sticky z-50 border-b border-[#e8e6e1] bg-white"
+      style={{ top: 'var(--wl-banner-offset, 0px)' }}
+    >
       {/* pl-14 on small screens reserves room for the fixed menu button (Sidebar.tsx). */}
       <div className="flex h-14 items-center justify-between pl-14 pr-6 lg:px-6">
         <span className="font-sans text-[14px] font-semibold text-slate-800">

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { ChevronDown, Check, Plus } from 'lucide-react';
+import { FILTER_CONTROL_CLASS } from './ClearableInput';
 
 export type SelectOption = { value: string; label: string };
 
@@ -11,6 +12,8 @@ type Props = {
   placeholder?: string;
   disabled?: boolean;
   footerAction?: { label: string; onSelect: () => void };
+  /** `filter` matches ClearableInput admin filter height/type. */
+  size?: 'default' | 'filter';
 };
 
 /**
@@ -26,6 +29,7 @@ export default function SelectField({
   placeholder = 'Select…',
   disabled = false,
   footerAction,
+  size = 'default',
 }: Props) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement | null>(null);
@@ -54,7 +58,7 @@ export default function SelectField({
 
   // Scroll the selected option into view when the list opens.
   useEffect(() => {
-    if (open && selectedRef.current) {
+    if (open && selectedRef.current?.scrollIntoView) {
       selectedRef.current.scrollIntoView({ block: 'center' });
     }
   }, [open]);
@@ -66,7 +70,11 @@ export default function SelectField({
         id={id}
         disabled={disabled}
         onClick={() => setOpen(v => !v)}
-        className="flex w-full items-center justify-between gap-2 rounded-lg border border-gray-200 px-4 py-2.5 text-sm text-gray-800 focus:border-transparent focus:outline-none focus:ring-2 focus:ring-[#234C6A] disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-400"
+        className={
+          size === 'filter'
+            ? `flex items-center justify-between gap-2 ${FILTER_CONTROL_CLASS} disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-400`
+            : 'flex w-full items-center justify-between gap-2 rounded-lg border border-gray-200 px-4 py-2.5 text-sm text-gray-800 focus:border-transparent focus:outline-none focus:ring-2 focus:ring-[#234C6A] disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-400'
+        }
       >
         <span className={`min-w-0 truncate ${selected ? 'text-gray-800' : 'text-gray-400'}`}>
           {selected ? selected.label : placeholder}

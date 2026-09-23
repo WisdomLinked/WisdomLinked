@@ -32,7 +32,7 @@ import { proposedTimeNeedsOverride, hasBookingConflict, presetAvailabilityRanges
 import { normalizeExpertPrice } from "../../../../utils/schedulingSlots";
 import {SetLoadingStatus, SetTotalTimeSpent} from "../../../../actions/appActions";
 import { updateMe } from "../../../../actions/authActions";
-import { showErrorAlert, showSuccessAlert, showWarningAlert } from '../../../../actions/alertActions';
+import { notify } from '../../../../utils/notify';
 import { addNewMessage, resetChatAction, setChosenGroupChatDetails } from "../../../../actions/chatActions";
 import ProfileModal from "./ProfileModal";
 import CommunityProfileModal from "./CommunityProfileModal";
@@ -159,7 +159,7 @@ const MessagesHeader = ({ events, openCalendarModal, openSeminarModal, openEditS
 
     const handleOpenCallHistory = async () => {
         if (!conversationId) {
-            dispatch(showErrorAlert('Chat is still loading — try again in a moment'));
+            notify.error('Chat is still loading — try again in a moment');
             return;
         }
         set_buttonsModalShow(false);
@@ -193,7 +193,7 @@ const MessagesHeader = ({ events, openCalendarModal, openSeminarModal, openEditS
         const response = await doLeftSeminar(chosenGroupChatDetails.groupId);
         if (response) {
             dispatch(updateMe());
-            dispatch(showSuccessAlert('You left a seminar and your money refunded'));
+            notify.success('You left a seminar and your money refunded');
             dispatch(resetChatAction());
         }
         SetLoadingStatus(false);
@@ -256,7 +256,7 @@ const MessagesHeader = ({ events, openCalendarModal, openSeminarModal, openEditS
             openMeetingUrl(res.jitsiUrl, pendingWindow);
         } else {
             if (pendingWindow && !pendingWindow.closed) pendingWindow.close();
-            dispatch(showErrorAlert(res?.error || 'Could not join or start the meeting'));
+            notify.error(res?.error || 'Could not join or start the meeting');
         }
     }
 
@@ -428,36 +428,36 @@ const MessagesHeader = ({ events, openCalendarModal, openSeminarModal, openEditS
 
     const submitPropose = async (override = false) => {
         if (!proposeTitle.trim()) {
-            dispatch(showWarningAlert("Add a title for the session."));
+            notify.warning("Add a title for the session.");
             return;
         }
         if (!proposeDate || !proposeStart) {
-            dispatch(showWarningAlert("Pick a date and start time."));
+            notify.warning("Pick a date and start time.");
             return;
         }
         if (!proposeCustomerEmail) {
-            dispatch(showErrorAlert("Still resolving the student — try again in a moment."));
+            notify.error("Still resolving the student — try again in a moment.");
             return;
         }
         const start = new Date(`${proposeDate}T${proposeStart}:00`);
         if (Number.isNaN(start.getTime())) {
-            dispatch(showErrorAlert("That date/time isn't valid."));
+            notify.error("That date/time isn't valid.");
             return;
         }
         if (start.getTime() <= Date.now()) {
-            dispatch(showWarningAlert("Pick a time in the future."));
+            notify.warning("Pick a time in the future.");
             return;
         }
         const end = new Date(start.getTime() + proposeDuration * 60000);
         const price = Math.round(Number(proposePrice) * 100) / 100;
         if (Number.isNaN(price) || price < 0) {
-            dispatch(showWarningAlert("Enter a valid price for the session."));
+            notify.warning("Enter a valid price for the session.");
             return;
         }
 
         if (hasBookingConflict(userDetails, start, end)) {
             setOutsideConfirm(false);
-            dispatch(showWarningAlert("You already have a session at this time. Pick another time."));
+            notify.warning("You already have a session at this time. Pick another time.");
             return;
         }
 
@@ -487,7 +487,7 @@ const MessagesHeader = ({ events, openCalendarModal, openSeminarModal, openEditS
             } else {
                 dispatch(updateMe());
             }
-            dispatch(showSuccessAlert("Session proposed — the student will be notified to accept."));
+            notify.success("Session proposed — the student will be notified to accept.");
             setProposeOpen(false);
         }
     };
@@ -499,7 +499,7 @@ const MessagesHeader = ({ events, openCalendarModal, openSeminarModal, openEditS
         }
         if (!conversationId) {
             if (pendingWindow && !pendingWindow.closed) pendingWindow.close();
-            dispatch(showErrorAlert("Chat is still loading — try again in a moment"));
+            notify.error("Chat is still loading — try again in a moment");
             return;
         }
         const res = await startMeeting({ conversationId });
@@ -509,7 +509,7 @@ const MessagesHeader = ({ events, openCalendarModal, openSeminarModal, openEditS
             openMeetingUrl(res.jitsiUrl, pendingWindow);
         } else {
             if (pendingWindow && !pendingWindow.closed) pendingWindow.close();
-            dispatch(showErrorAlert(res?.error || "Could not start the call"));
+            notify.error(res?.error || "Could not start the call");
         }
     };
 
@@ -639,7 +639,7 @@ const MessagesHeader = ({ events, openCalendarModal, openSeminarModal, openEditS
                                 }
                                 if (!conversationId) {
                                     if (pendingWindow && !pendingWindow.closed) pendingWindow.close();
-                                    dispatch(showErrorAlert('Chat is still loading — try again in a moment'));
+                                    notify.error('Chat is still loading — try again in a moment');
                                     return;
                                 }
                                 const res = await startMeeting({ conversationId });
@@ -649,7 +649,7 @@ const MessagesHeader = ({ events, openCalendarModal, openSeminarModal, openEditS
                                     openMeetingUrl(res.jitsiUrl, pendingWindow);
                                 } else {
                                     if (pendingWindow && !pendingWindow.closed) pendingWindow.close();
-                                    dispatch(showErrorAlert(res?.error || 'Could not start the call'));
+                                    notify.error(res?.error || 'Could not start the call');
                                 }
                             }}
                         >
@@ -716,7 +716,7 @@ const MessagesHeader = ({ events, openCalendarModal, openSeminarModal, openEditS
                                             openMeetingUrl(res.jitsiUrl, pendingWindow);
                                         } else {
                                             if (pendingWindow && !pendingWindow.closed) pendingWindow.close();
-                                            dispatch(showErrorAlert(res?.error || 'Could not start the meeting room'));
+                                            notify.error(res?.error || 'Could not start the meeting room');
                                         }
                                     }}
                                 >

@@ -20,7 +20,6 @@ export const siteMap: any = {
     '/user/expertdashboard/search': 'expertsearch',
 
     '/user/admindashboard': 'admindashboard',
-    '/user/admindashboard/upcomingEvents': 'adminupcomingevents',
     '/user/admindashboard/usermgmt': 'adminusermgmt',
     '/user/admindashboard/payment': 'adminpayment',
     '/user/admindashboard/chat': 'adminchat',
@@ -28,5 +27,9 @@ export const siteMap: any = {
     '/user/admindashboard/contactedus': 'admincontactedus',
     '/user/admindashboard/registerUser': 'adminregisteruser',
     '/user/admindashboard/chatBotQA': 'chatbotqa',
+    '/user/admindashboard/featuredExperts': 'adminfeaturedexperts',
     '/user/admindashboard/auditLog': 'adminauditlog',
+    '/user/admindashboard/settings': 'adminsettings',
+
+    '/resources': 'resources',
 }

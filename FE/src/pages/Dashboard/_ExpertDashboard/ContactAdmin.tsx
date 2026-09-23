@@ -1,14 +1,12 @@
 import React, { useMemo, useState } from 'react';
 import { Send, MessageSquare } from 'lucide-react';
-import { useDispatch } from 'react-redux';
 
 import { doContactUs } from '../../../api/api';
 import { useAppSelector } from '../../../store';
-import { showErrorAlert, showSuccessAlert, showWarningAlert } from '../../../actions/alertActions';
+import { notify } from '../../../utils/notify';
 
 export default function ContactAdmin() {
   const MAX_CONTACT_MESSAGE_LENGTH = 100;
-  const dispatch = useDispatch();
   const {
     auth: { userDetails },
   } = useAppSelector((state) => state);
@@ -31,15 +29,15 @@ export default function ContactAdmin() {
     e.preventDefault();
     const body = message.trim();
     if (!body) {
-      dispatch(showErrorAlert('Please enter your message before submitting.'));
+      notify.error('Please enter your message before submitting.');
       return;
     }
     if (body.length > MAX_CONTACT_MESSAGE_LENGTH) {
-      dispatch(showErrorAlert(`Please keep the message within ${MAX_CONTACT_MESSAGE_LENGTH} characters.`));
+      notify.error(`Please keep the message within ${MAX_CONTACT_MESSAGE_LENGTH} characters.`);
       return;
     }
     if (!email) {
-      dispatch(showErrorAlert('Email not found on your profile. Please update profile first.'));
+      notify.error('Email not found on your profile. Please update profile first.');
       return;
     }
 
@@ -53,13 +51,13 @@ export default function ContactAdmin() {
       });
       if (res === false) return;
       if (res?.status === 'FAIL' || res?.error) {
-        dispatch(showErrorAlert(res?.error || 'Could not send your message. Please try again.'));
+        notify.error(res?.error || 'Could not send your message. Please try again.');
         return;
       }
       if (res) {
         setMessage('');
         setSubmitted(true);
-        dispatch(showSuccessAlert('Your message has been sent to admin.'));
+        notify.success('Your message has been sent to admin.');
       }
     } finally {
       setSubmitting(false);

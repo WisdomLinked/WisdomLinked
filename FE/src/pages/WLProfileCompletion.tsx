@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useDispatch } from 'react-redux';
 import { ChevronDown, Check, Loader2 } from 'lucide-react';
 import { callApi, getMe } from '../api/api';
-import { showErrorAlert, showSuccessAlert, showWarningAlert } from '../actions/alertActions';
+import { notify } from '../utils/notify';
 import { useAppSelector } from '../store';
 import { autoLogin } from '../actions/authActions';
 import { actionTypes } from '../actions/types';
@@ -258,10 +258,10 @@ export default function WLProfileCompletion() {
                         : `/user/${dashboardRole}dashboard`;
                 navigate(dashboardPath, { replace: true });
             } else {
-                dispatch(showErrorAlert(response.error || 'Failed to update profile.'));
+                notify.error(response.error || 'Failed to update profile.');
             }
         } catch (err: any) {
-            dispatch(showErrorAlert(err?.message || 'Update failed. Please try again.'));
+            notify.error(err?.message || 'Update failed. Please try again.');
         }
         setSubmitting(false);
     };
