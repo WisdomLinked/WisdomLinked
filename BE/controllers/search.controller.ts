@@ -360,6 +360,45 @@ const searchYours = async (req: any, query: string) => {
     return cards;
 };
 
+/** Every active expert, as the same public card keyword search returns. */
+const listPublicExpertCards = async () => {
+    const docs = await User.find({
+        role: 'expert',
+        status: 'active',
+    })
+        .select('username title description image price appointmentDurations')
+        .lean();
+
+    return (Array.isArray(docs) ? docs : []).map(toExpertCard);
+};
+
+/** Every live seminar series, as the same public card keyword search returns. */
+const listPublicSeminarCards = async () => {
+    const now = Date.now();
+    const docs = await GroupChat.find({
+        type: 'seminar',
+        status: { $in: ['pending', 'active'] },
+    })
+        .populate({ path: 'admin', select: 'username image status' })
+        .lean();
+
+    const groups = new Map<string, any[]>();
+    for (const doc of Array.isArray(docs) ? docs : []) {
+        if (!hostIsActive(doc)) continue;
+        const key = seriesKey(doc);
+        const list = groups.get(key) || [];
+        list.push(doc);
+        groups.set(key, list);
+    }
+
+    const cards: any[] = [];
+    for (const [id, occurrences] of groups) {
+        const card = toSeminarCard(id, occurrences, now);
+        if (card) cards.push(card);
+    }
+    return cards;
+};
+
 const search = async (req, res) => {
     try {
         const raw = req.query?.q;
@@ -389,4 +428,6 @@ const search = async (req, res) => {
 module.exports = {
     search,
     SEARCH_GROUP_LIMIT,
+    listPublicExpertCards,
+    listPublicSeminarCards,
 };
