@@ -1,6 +1,6 @@
 import React from "react";
 
-const WelcomeMessage = ({ theme = "dark" }: any) => {
+const WelcomeMessage = ({ theme = "dark", title, subtitle }: any) => {
     return (
         <div
             className={
@@ -11,14 +11,16 @@ const WelcomeMessage = ({ theme = "dark" }: any) => {
         >
             <div className={theme === "light" ? "text-[15px] font-semibold text-wl-ink" : "text-[15px] font-semibold text-white"}>
                 {theme === "light"
-                  ? "Choose a chat from the list to get started."
+                  ? title || "Choose a chat from the list to get started."
                   : "To start chatting — select a chat from the left"}
             </div>
-            <div className={theme === "light" ? "mt-1 text-[13px] text-wl-muted" : "mt-1 text-[13px] text-lightgrey"}>
-                {theme === "light"
-                  ? "Community rooms and direct messages open in this panel."
-                  : "You can open a private chat or join a community."}
-            </div>
+            {theme === "light" && subtitle === "" ? null : (
+                <div className={theme === "light" ? "mt-1 text-[13px] text-wl-muted" : "mt-1 text-[13px] text-lightgrey"}>
+                    {theme === "light"
+                      ? subtitle || "Community rooms and direct messages open in this panel."
+                      : "You can open a private chat or join a community."}
+                </div>
+            )}
         </div>
     );
 };

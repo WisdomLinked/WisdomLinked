@@ -41,7 +41,7 @@ import { buildFallbackChatProfile, mergeChatProfile } from '../utils/chatProfile
 import { useAppSelector } from '../store';
 import { logoutUser, updateMe } from '../actions/authActions';
 import { notify } from '../utils/notify';
-import { patchDmUnreadRid, setChosenGroupChatDetails, setDmUnreadByRidBulk } from '../actions/chatActions';
+import { patchDmUnreadRid, resetChatAction, setChosenGroupChatDetails, setDmUnreadByRidBulk } from '../actions/chatActions';
 import { connectToRC, onSubscriptionChanged, subscribeToRoom } from '../services/rcRealtime';
 import { useEndMeetingOnReturn } from '../hooks/useEndMeetingOnReturn';
 
@@ -55,6 +55,13 @@ import ExpertProfile from './Dashboard/_ExpertDashboard/profile';
 import ExpertRevenue from './Dashboard/_ExpertDashboard/ExpertRevenue';
 import ContactAdmin from './Dashboard/_ExpertDashboard/ContactAdmin';
 import StudentChat from '../components/dashboard/StudentChat';
+import {
+  type ChatSection,
+  CHAT_SECTION_DEFAULT,
+  CHAT_SECTION_ITEMS,
+  normalizeChatSection,
+  sectionForChatTarget,
+} from '../utils/chatSections';
 import JoinMeeting from '../components/dashboard/JoinMeeting';
 import DecisionNoteField from '../components/dashboard/DecisionNoteField';
 import StatCard from '../components/ui/StatCard';
@@ -252,6 +259,15 @@ export default function ExpertDashboard() {
   useEffect(() => {
     window.localStorage.setItem('expertDashboardView', activeItem);
   }, [activeItem]);
+  const [chatSection, setChatSection] = useState<ChatSection>(() =>
+    normalizeChatSection(window.localStorage.getItem('expertChatSection')),
+  );
+  useEffect(() => {
+    window.localStorage.setItem('expertChatSection', chatSection);
+  }, [chatSection]);
+  const openChatSection = useCallback((target: 'dm' | 'community' | 'seminar') => {
+    setChatSection(sectionForChatTarget(target));
+  }, []);
   const goToDashboardTab = useCallback(() => setActiveItem('dashboard'), []);
   useBackToDashboard(activeItem, goToDashboardTab);
   // Child views (e.g. the calendar) request the chat tab by firing this event.
@@ -645,6 +661,7 @@ export default function ExpertDashboard() {
               if (isDm) localStorage.setItem('wl_open_dm_rid', rid);
               else localStorage.setItem('wl_open_community_rc_rid', rid);
               window.dispatchEvent(new Event('wl-open-chat-nav'));
+              openChatSection(isDm ? 'dm' : 'community');
               setActiveItem('chat');
             },
           };
@@ -1040,9 +1057,8 @@ export default function ExpertDashboard() {
 
   const handleExpertJoinSession = (session: UpcomingModalSession) => {
     const id = session.id;
-    const raw =
-      bookedSessions.find((x: any) => String(x._id) === id) ||
-      acceptedSeminars.find((x: any) => String(x._id) === id);
+    const booked = bookedSessions.find((x: any) => String(x._id) === id);
+    const raw = booked || acceptedSeminars.find((x: any) => String(x._id) === id);
     if (!raw) {
       notify.error('Could not open this session.');
       return;
@@ -1055,6 +1071,7 @@ export default function ExpertDashboard() {
       } as any)
     );
     setExpertUpcomingModal(null);
+    openChatSection(booked ? 'dm' : 'seminar');
     setActiveItem('chat');
   };
 
@@ -1084,7 +1101,7 @@ export default function ExpertDashboard() {
   const content =
     activeItem === 'chat' ? (
       <div className="h-[calc(100vh-56px)] bg-wl-page">
-        <StudentChat />
+        <StudentChat section={chatSection} />
       </div>
     ) : activeItem === 'clients' ? (
       <div className="h-[calc(100vh-56px)] overflow-y-auto bg-[#F5F3EF]">
@@ -1476,6 +1493,12 @@ export default function ExpertDashboard() {
               dispatch(logoutUser() as any);
               return;
             }
+            // Opening Chat itself picks no section — the page prompts for one, so
+            // whatever was open has to go with it or it fills the panel with no list.
+            if (id === 'chat') {
+              setChatSection(CHAT_SECTION_DEFAULT);
+              dispatch(resetChatAction() as any);
+            }
             setActiveItem(id);
           }}
           navItems={navItems}
@@ -1483,6 +1506,13 @@ export default function ExpertDashboard() {
           avatarUrl={avatarUrl}
           roleLabel="Expert"
           notifications={{ chat: activeItem === 'chat' ? 0 : totalUnreadDm }}
+          subItems={{ chat: CHAT_SECTION_ITEMS }}
+          activeSubItem={chatSection}
+          onNavigateSub={(navId, subId) => {
+            setActiveItem(navId);
+            setChatSection(normalizeChatSection(subId));
+            dispatch(resetChatAction() as any);
+          }}
         />
 
         <main className="flex-1 min-w-0 lg:ml-[220px]">
