@@ -11,6 +11,28 @@ vi.mock('../api/api', () => ({
 
 import Chatbot from './chatbot';
 
+const STARTER_FAQS = [
+  'How to accept a meeting?',
+  'How to upload/change my avatar image?',
+  'What does the calendar do?',
+];
+
+function expectUserBubble(text: string) {
+  const bubble = screen.getByText(text);
+  expect(bubble.className).toContain('bg-[#234C6A]');
+  expect(bubble.className).toContain('text-white');
+  expect(bubble.parentElement?.className).toContain('justify-end');
+}
+
+function expectBotBubble(bubble: HTMLElement) {
+  const hasBotBackground =
+    bubble.className.includes('bg-white') || bubble.className.includes('bg-[#F5F3EF]');
+  expect(hasBotBackground).toBe(true);
+  expect(bubble.className).toContain('text-[#234C6A]');
+  expect(bubble.className).toContain('border-[#E5E2DB]');
+  expect(bubble.parentElement?.className).toContain('justify-start');
+}
+
 describe('HelpBot', () => {
   beforeEach(() => {
     askSite.mockReset();
@@ -72,9 +94,10 @@ describe('HelpBot', () => {
 
     render(<Chatbot />);
     fireEvent.click(screen.getByRole('button', { name: 'Open HelpBot' }));
-    expect(screen.getByText('How to accept a meeting?')).toBeInTheDocument();
-    expect(screen.getByText('How to upload/change my avatar image?')).toBeInTheDocument();
-    expect(screen.getByText('What does the calendar do?')).toBeInTheDocument();
+    const starterButtons = screen
+      .getAllByRole('button')
+      .filter((button) => (button.textContent ?? '').trim().endsWith('?'));
+    expect(starterButtons.map((button) => button.textContent)).toEqual(STARTER_FAQS);
     expect(screen.queryByText('Similar questions')).not.toBeInTheDocument();
 
     fireEvent.change(screen.getByPlaceholderText('Ask me a question...'), {
@@ -88,12 +111,20 @@ describe('HelpBot', () => {
     expect(screen.queryByText('Similar questions')).not.toBeInTheDocument();
     expect(screen.queryByText('No similar questions found.')).not.toBeInTheDocument();
     expect(screen.queryByText('How to accept a meeting?')).not.toBeInTheDocument();
-    const question = screen.getByText('How do I book?');
-    expect(question.className).toContain('bg-[#234C6A]');
-    expect(question.className).toContain('text-white');
+    expectUserBubble('How do I book?');
     const answering = screen.getByLabelText('HelpBot is answering');
-    expect(answering.className).toContain('border-[#E5E2DB]');
-    expect(answering.className).toContain('text-[#234C6A]');
+    expectBotBubble(answering);
+    expect(answering.querySelector('.animate-spin')).toBeTruthy();
+
+    fireEvent.change(screen.getByPlaceholderText('Ask me a question...'), {
+      target: { value: 'Where are seminars?' },
+    });
+    fireEvent.submit(screen.getByPlaceholderText('Ask me a question...').closest('form')!);
+    expect(askSite).toHaveBeenCalledTimes(1);
+    expect(askSite.mock.calls[0]).toEqual(['How do I book?']);
+    expect(screen.queryByText('Where are seminars?')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Send' })).toBeDisabled();
+    expect(screen.getByLabelText('HelpBot is answering')).toBeInTheDocument();
 
     await act(async () => {
       resolveAsk({
@@ -104,8 +135,11 @@ describe('HelpBot', () => {
 
     expect(await screen.findByText('Grounded one')).toBeInTheDocument();
     expect(screen.queryByLabelText('HelpBot is answering')).not.toBeInTheDocument();
+    expectUserBubble('How do I book?');
+    expectBotBubble(screen.getByText('Grounded one'));
     expect(screen.queryByText('Similar questions')).not.toBeInTheDocument();
     expect(screen.queryByText('Similar seminar question')).not.toBeInTheDocument();
     expect(screen.queryByText('No similar questions found.')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Send' })).not.toBeDisabled();
   });
 });
