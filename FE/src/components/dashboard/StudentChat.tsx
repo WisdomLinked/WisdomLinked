@@ -861,7 +861,7 @@ const StudentChat: React.FC = () => {
         payload: { receiverId: row._id, count: 0 },
       });
     },
-    [dispatch, clearLiveGroupUnread],
+    [dispatch, clearLiveGroupUnread, isExpert, loadCommunityChats],
   );
 
   const onCreateCommunity = async () => {
