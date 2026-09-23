@@ -12,7 +12,7 @@ const renderSidebar = (props: Record<string, unknown> = {}) =>
       activeItem="chat"
       onNavigate={vi.fn()}
       subItems={{ chat: CHAT_SECTION_ITEMS }}
-      activeSubItem="all"
+      activeSubItem="communities"
       onNavigateSub={vi.fn()}
       {...props}
     />,
@@ -36,6 +36,14 @@ describe('the Chat dropdown', () => {
     for (const label of ['DIRECT MESSAGES', '1:1 APPOINTMENTS', 'COMMUNITIES', 'SEMINARS']) {
       expect(screen.getByRole('button', { name: label })).toBeInTheDocument();
     }
+  });
+
+  it('marks the section currently in view', () => {
+    renderSidebar();
+    fireEvent.click(toggle());
+
+    expect(screen.getByRole('button', { name: 'COMMUNITIES' }).className).toMatch(/text-\[#234C6A\]/);
+    expect(screen.getByRole('button', { name: 'SEMINARS' }).className).not.toMatch(/text-\[#234C6A\]/);
   });
 
   it('reports which section was picked, under which nav item', () => {
