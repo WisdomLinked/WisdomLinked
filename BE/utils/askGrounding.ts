@@ -55,6 +55,7 @@ const tokens = (value: unknown): string[] =>
     normalizeQuestion(value).split(/[^a-z0-9]+/).filter(Boolean);
 
 export const isStopWordOnly = (value: unknown): boolean => {
+    if (/[\u4e00-\u9fff]/.test(String(value ?? ''))) return false;
     const words = tokens(value);
     if (!words.length) return true;
     return words.every((word) => STOP_WORDS.has(word));

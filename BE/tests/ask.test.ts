@@ -3,6 +3,9 @@ import assert from 'node:assert/strict';
 
 const chatBotQA = require('../models/chatBotQA');
 const User = require('../models/User');
+const GroupChat = require('../models/GroupChat');
+const Event = require('../models/Event');
+const SeminarSeatRequest = require('../models/SeminarSeatRequest');
 const searchController = require('../controllers/search.controller');
 const { ask } = require('../controllers/ask.controller');
 const { createAskLimiter } = require('../middlewares/askRateLimit');
@@ -41,6 +44,167 @@ const cards = {
     }],
 };
 
+const PRIVATE_LEAKS = [
+    'student-card-leak',
+    'resume-leak.pdf',
+    'photo-leak.png',
+    'hidden@school.edu',
+    'phone-555-0199',
+    'gpa-leak-3.95',
+    'ranking-leak-99',
+    'chatFiles/leak.png',
+    'other-person-meeting-leak',
+    'secret-chat-body',
+];
+
+function publicExpertFixtures() {
+    return [
+        {
+            _id: 'p1',
+            role: 'expert',
+            status: 'active',
+            username: 'Ada Lovelace',
+            title: 'Professor of Civil Engineering',
+            description: 'Teaches structures.',
+            price: 40,
+            appointmentDurations: [30],
+            keywords: ['kw-civil'],
+            image: 'photo-leak.png',
+            phoneNumber: 'phone-555-0199',
+            resume: 'resume-leak.pdf',
+            gpa: 'gpa-leak-3.95',
+            ranking: 'ranking-leak-99',
+            chatFiles: 'chatFiles/leak.png',
+            email: 'hidden@school.edu',
+        },
+        {
+            _id: 'p2',
+            role: 'expert',
+            status: 'active',
+            username: 'Charles Darwin',
+            title: 'Professor of Civil Engineering',
+            description: 'Teaches foundations.',
+            price: 40,
+            appointmentDurations: [30],
+            keywords: ['kw-civil'],
+        },
+        {
+            _id: 'p3',
+            role: 'expert',
+            status: 'active',
+            username: 'Maya Lin',
+            title: 'Professor of Civil Engineering',
+            description: 'Teaches design.',
+            price: 90,
+            keywords: ['kw-civil'],
+        },
+        {
+            _id: 'p4',
+            role: 'expert',
+            status: 'active',
+            username: 'Unrated Chen',
+            title: 'Professor of Civil Engineering',
+            description: 'Rate not published.',
+            keywords: ['kw-civil'],
+        },
+        {
+            _id: 'p5',
+            role: 'expert',
+            status: 'active',
+            username: 'Site Lecturer',
+            title: 'Lecturer',
+            description: 'Lab instructor for structures.',
+            price: 8,
+            keywords: ['kw-civil'],
+        },
+        {
+            _id: 'p6',
+            role: 'expert',
+            status: 'active',
+            username: 'Grace Hopper',
+            title: 'Professor',
+            description: 'Computing pioneer.',
+            price: 5,
+            keywords: ['kw-cs'],
+        },
+        {
+            _id: 'p7',
+            role: 'expert',
+            status: 'active',
+            username: 'hidden@school.edu',
+            title: 'Professor',
+            description: 'Should not be sent',
+            price: 1,
+            keywords: ['kw-civil'],
+        },
+        {
+            _id: 'p8',
+            role: 'expert',
+            status: 'pending',
+            username: 'Pending Person',
+            title: 'Professor',
+            description: 'not public',
+            price: 1,
+            keywords: ['kw-civil'],
+        },
+    ];
+}
+
+function leanChain(rows: any[]) {
+    const api: any = {
+        select() {
+            return api;
+        },
+        populate() {
+            return api;
+        },
+        lean() {
+            return Promise.resolve(rows);
+        },
+    };
+    return api;
+}
+
+function stubPublicExperts(experts: any[], seen?: { query: any; populatePaths: string[] }) {
+    const keywordDocs: Record<string, { _id: string; value: string }> = {
+        'kw-civil': { _id: 'kw-civil', value: 'Civil Engineering' },
+        'kw-cs': { _id: 'kw-cs', value: 'Computer Science' },
+    };
+    User.find = (query: any) => {
+        if (seen) seen.query = query;
+        let populateArg: any = null;
+        const api: any = {
+            select() {
+                return api;
+            },
+            populate(arg: any) {
+                populateArg = arg;
+                if (seen && arg?.path) seen.populatePaths.push(String(arg.path));
+                return api;
+            },
+            lean() {
+                const docs = experts
+                    .filter((row) => row.role === query?.role && row.status === query?.status)
+                    .map((row) => ({
+                        ...row,
+                        keywords: Array.isArray(row.keywords) ? [...row.keywords] : [],
+                    }));
+                if (populateArg?.path === 'keywords') {
+                    for (const doc of docs) {
+                        doc.keywords = doc.keywords.map((id: string) => keywordDocs[id]).filter(Boolean);
+                    }
+                }
+                return Promise.resolve(docs);
+            },
+        };
+        return api;
+    };
+}
+
+function promptOf(call: { options: any }) {
+    return JSON.parse(call.options.body).messages.map((message: any) => message.content).join('\n');
+}
+
 function makeRes() {
     return {
         statusCode: 200,
@@ -74,6 +238,9 @@ describe('POST /api/ask', { concurrency: false }, () => {
     const originalSave = chatBotQA.prototype.save;
     const originalCollect = searchController.collectSearchResults;
     const originalUserFind = User.find;
+    const originalGroupFind = GroupChat.find;
+    const originalEventFind = Event.find;
+    const originalSeatFind = SeminarSeatRequest.find;
     const originalFetch = global.fetch;
     const originalTimeout = AbortSignal.timeout;
     const originalNodeEnv = process.env.NODE_ENV;
@@ -380,8 +547,10 @@ describe('POST /api/ask', { concurrency: false }, () => {
             await ask({ body: { question: 'What services do you offer?' }, user: undefined }, res);
             assert.equal(res.statusCode, 200);
             assert.equal(fetchCalls.length, fetchBefore);
+            assert.equal(fetchCalls.slice(fetchBefore).some((call) => call.url === RETRIEVE_URL), false);
             assert.match(res.body.answer, /Uncommon Quality, Undeniable Value/);
             assert.match(res.body.answer, /consulting-for-a-fee/);
+            assert.match(res.body.answer, /Study Abroad/);
             assert.equal(res.body.answer.includes('We have Rules for Both'), false);
             assert.equal(res.body.answer.includes('Please contact us'), false);
             assert.equal(res.body.answer.includes('student-card-leak'), false);
@@ -521,106 +690,34 @@ describe('POST /api/ask', { concurrency: false }, () => {
         });
 
         test('a cheapest professor question answers from Mongo facts and does not call fetch', async () => {
-            const keywordDocs: Record<string, { _id: string; value: string }> = {
-                'kw-civil': { _id: 'kw-civil', value: 'Civil Engineering' },
-                'kw-cs': { _id: 'kw-cs', value: 'Computer Science' },
-            };
-            const experts = [
-                {
-                    _id: 'p1',
-                    role: 'expert',
-                    status: 'active',
-                    username: 'Ada Lovelace',
-                    title: 'Professor of Civil Engineering',
-                    description: 'Teaches structures.',
-                    price: 40,
-                    appointmentDurations: [30],
-                    keywords: ['kw-civil'],
-                    image: 'secret-photo.png',
-                    phoneNumber: '555-0100',
-                    resume: 'resume.pdf',
-                },
-                {
-                    _id: 'p2',
-                    role: 'expert',
-                    status: 'active',
-                    username: 'Grace Hopper',
-                    title: 'Lecturer',
-                    description: 'Computing pioneer.',
-                    price: 90,
-                    appointmentDurations: [60],
-                    keywords: ['kw-cs'],
-                },
-                {
-                    _id: 'p3',
-                    role: 'expert',
-                    status: 'active',
-                    username: 'hidden@school.edu',
-                    title: 'Professor',
-                    description: 'Should not be sent',
-                    price: 5,
-                    appointmentDurations: [30],
-                    keywords: ['kw-civil'],
-                },
-                {
-                    _id: 'p4',
-                    role: 'expert',
-                    status: 'pending',
-                    username: 'Pending Person',
-                    title: 'Professor',
-                    description: 'not public',
-                    price: 1,
-                    keywords: ['kw-civil'],
-                },
-            ];
-            let seenQuery: any = null;
-            const populatePaths: string[] = [];
+            const seen = { query: null as any, populatePaths: [] as string[] };
             searchController.collectSearchResults = async () => ({ ...cards, experts: [] });
-            User.find = (query: any) => {
-                seenQuery = query;
-                let populateArg: any = null;
-                const api: any = {
-                    select() {
-                        return api;
-                    },
-                    populate(arg: any) {
-                        populateArg = arg;
-                        if (arg?.path) populatePaths.push(String(arg.path));
-                        return api;
-                    },
-                    lean() {
-                        const docs = experts
-                            .filter((row) => row.role === query?.role && row.status === query?.status)
-                            .map((row) => ({ ...row, keywords: [...row.keywords] }));
-                        if (populateArg?.path === 'keywords') {
-                            for (const doc of docs) {
-                                doc.keywords = doc.keywords.map((id: string) => keywordDocs[id]).filter(Boolean);
-                            }
-                        }
-                        return Promise.resolve(docs);
-                    },
-                };
-                return api;
-            };
+            stubPublicExperts(publicExpertFixtures(), seen);
             const fetchBefore = fetchCalls.length;
             try {
                 const res = makeRes();
                 await ask({ body: { question: 'find me the cheapest professor in civil' }, user: undefined }, res);
                 assert.equal(res.statusCode, 200);
                 assert.equal(fetchCalls.length, fetchBefore);
-                assert.deepEqual(seenQuery, { role: 'expert', status: 'active' });
-                assert.equal(populatePaths.includes('keywords'), true);
-                assert.match(res.body.answer, /Ada Lovelace/);
-                assert.match(res.body.answer, /40/);
-                assert.equal(res.body.answer.includes('$999'), false);
-                assert.equal(res.body.answer.includes('hidden@school.edu'), false);
-                assert.equal(res.body.answer.includes('Should not be sent'), false);
-                assert.equal(res.body.answer.includes('Pending Person'), false);
-                assert.equal(res.body.answer.includes('secret-photo.png'), false);
-                assert.equal(res.body.answer.includes('555-0100'), false);
-                assert.equal(res.body.answer.includes('resume.pdf'), false);
+                assert.deepEqual(seen.query, { role: 'expert', status: 'active' });
+                assert.equal(seen.populatePaths.includes('keywords'), true);
+                assert.equal(
+                    res.body.answer,
+                    'Ada Lovelace has a public hourly rate of 40 and Charles Darwin has a public hourly rate of 40.',
+                );
+                assert.equal(res.body.answer.includes('Maya Lin'), false);
+                assert.equal(res.body.answer.includes('Unrated Chen'), false);
+                assert.equal(res.body.answer.includes('Site Lecturer'), false);
                 assert.equal(res.body.answer.includes('Grace Hopper'), false);
-                assert.equal(res.body.answer.includes('student-card-leak'), false);
+                assert.equal(res.body.answer.includes('hidden@school.edu'), false);
+                assert.equal(res.body.answer.includes('Pending Person'), false);
+                assert.equal(res.body.answer.includes('photo-leak.png'), false);
+                assert.equal(res.body.answer.includes('phone-555-0199'), false);
+                assert.equal(res.body.answer.includes('resume-leak.pdf'), false);
+                assert.equal(res.body.answer.includes('hourly rate of 90'), false);
+                assert.equal(res.body.answer.includes('hourly rate of 8'), false);
+                assert.equal(res.body.answer.includes('hourly rate of 5'), false);
+                assert.equal(res.body.answer.includes('hourly rate of 1'), false);
                 assert.equal(res.body.experts.length, 0);
                 assert.equal(res.body.students[0].name, 'student-card-leak');
             } finally {
@@ -629,11 +726,335 @@ describe('POST /api/ask', { concurrency: false }, () => {
             }
         });
 
+        test('booking questions retrieve rules text and do not paste every expert', async () => {
+            const catalog = ['Catalog Ada', 'Catalog Grace', 'Catalog Katherine'];
+            searchController.collectSearchResults = async () => ({
+                ...cards,
+                experts: catalog.map((name, index) => ({
+                    id: `cat-${index}`,
+                    name,
+                    title: 'Professor',
+                    bio: 'Catalog bio',
+                    hourlyRate: 80 + index,
+                    resume: 'resume-leak.pdf',
+                    image: 'photo-leak.png',
+                    email: 'hidden@school.edu',
+                    phoneNumber: 'phone-555-0199',
+                    gpa: 'gpa-leak-3.95',
+                    ranking: 'ranking-leak-99',
+                    chatFiles: 'chatFiles/leak.png',
+                })),
+                yours: [{ id: 'y-other', name: 'other-person-meeting-leak' }],
+            });
+            GroupChat.find = () => leanChain([{
+                name: 'other-person-meeting-leak',
+                description: 'secret-chat-body',
+                messages: [{ body: 'secret-chat-body' }],
+                status: 'active',
+                type: 'individual',
+                admin: { _id: 'expert-other', username: 'Other Host' },
+                participants: [{ _id: 'student-other', username: 'Other Student' }],
+            }]);
+            Event.find = () => leanChain([]);
+            SeminarSeatRequest.find = () => leanChain([]);
+            seed = [];
+            nextCompletion = {
+                miss: false,
+                answer: 'An appointment is made after the client has paid.',
+                citations: [],
+            };
+            retrieveEmpty = false;
+            try {
+                for (const question of ['how does booking work', '预约是怎么工作的']) {
+                    const before = saved.length;
+                    const fetchBefore = fetchCalls.length;
+                    const res = makeRes();
+                    await ask({ body: { question }, user: undefined }, res);
+                    assert.equal(res.statusCode, 200, question);
+                    assert.notEqual(res.body.answer, SAVED_QUESTION_FOR_REVIEW, question);
+                    assert.equal(saved.length, before, question);
+                    const calls = fetchCalls.slice(fetchBefore);
+                    const retrieve = calls.find((call) => call.url === RETRIEVE_URL);
+                    assert.ok(retrieve, question);
+                    const retrieveBody = JSON.parse(retrieve.options.body);
+                    assert.equal(retrieveBody.num_results, 8, question);
+                    assert.equal(retrieveBody.alpha, 0.5, question);
+                    const inferences = calls.filter((call) => call.url === INFERENCE_URL);
+                    assert.equal(inferences.length, 1, question);
+                    const prompt = promptOf(inferences[0]);
+                    assert.equal(prompt.includes('/rules'), true, question);
+                    assert.equal(prompt.includes('route: /services'), false, question);
+                    for (const name of catalog) {
+                        assert.equal(prompt.includes(name), false, `${question} ${name}`);
+                    }
+                    for (const leak of PRIVATE_LEAKS) {
+                        assert.equal(prompt.includes(leak), false, `${question} ${leak}`);
+                    }
+                }
+            } finally {
+                searchController.collectSearchResults = async () => cards;
+                GroupChat.find = originalGroupFind;
+                Event.find = originalEventFind;
+                SeminarSeatRequest.find = originalSeatFind;
+                retrieveEmpty = false;
+            }
+        });
+
+        test('a failed retrieve on how does booking work still answers from the rules page', async () => {
+            const stubFetch = global.fetch;
+            global.fetch = (async (url: string, options: any) => {
+                fetchCalls.push({ url: String(url), options });
+                if (String(url).includes('/retrieve')) {
+                    throw new Error('retrieve down');
+                }
+                return inferencePayload({ miss: true, answer: '', citations: [] });
+            }) as typeof fetch;
+            seed = [];
+            const before = saved.length;
+            const fetchBefore = fetchCalls.length;
+            try {
+                const res = makeRes();
+                await ask({ body: { question: 'how does booking work' }, user: undefined }, res);
+                assert.equal(res.statusCode, 200);
+                assert.match(res.body.answer, /We have Rules for Both/);
+                assert.match(res.body.answer, /appointment based/);
+                assert.notEqual(res.body.answer, SAVED_QUESTION_FOR_REVIEW);
+                assert.equal(saved.length, before);
+                assert.equal(res.body.answer.includes('Uncommon Quality, Undeniable Value'), false);
+                const calls = fetchCalls.slice(fetchBefore);
+                assert.equal(calls.some((call) => call.url === RETRIEVE_URL), true);
+            } finally {
+                global.fetch = stubFetch;
+            }
+        });
+
+        test('an expert next seminar is only that expert and skips retrieve', async () => {
+            const chats = [
+                {
+                    name: 'Concrete Studio',
+                    description: 'Weekly review',
+                    start: '2099-03-15T18:30:00.000Z',
+                    end: '2099-03-15T19:30:00.000Z',
+                    price: 25,
+                    status: 'active',
+                    type: 'seminar',
+                    admin: { _id: 'expert-ada', username: 'Ada Lovelace' },
+                    participants: [{ _id: 'expert-ada', username: 'Ada Lovelace' }],
+                    messages: [{ body: 'secret-chat-body' }],
+                },
+                {
+                    name: 'Other Expert Bridge Review',
+                    start: '2099-04-01T18:30:00.000Z',
+                    end: '2099-04-01T19:30:00.000Z',
+                    price: 99,
+                    status: 'active',
+                    type: 'seminar',
+                    admin: { _id: 'expert-other', username: 'Other Host' },
+                    participants: [{ _id: 'expert-other', username: 'Other Host' }],
+                    messages: [{ body: 'secret-chat-body' }],
+                },
+                {
+                    name: 'Ada Private Hour',
+                    start: '2099-03-20T18:30:00.000Z',
+                    end: '2099-03-20T19:00:00.000Z',
+                    price: 40,
+                    status: 'active',
+                    type: 'individual',
+                    admin: { _id: 'expert-ada', username: 'Ada Lovelace' },
+                    participants: [
+                        { _id: 'expert-ada', username: 'Ada Lovelace' },
+                        { _id: 'student-a', username: 'Sam Student' },
+                    ],
+                    messages: [{ body: 'secret-chat-body' }],
+                },
+            ];
+            GroupChat.find = () => leanChain(chats);
+            Event.find = () => leanChain([]);
+            SeminarSeatRequest.find = () => leanChain([]);
+            const fetchBefore = fetchCalls.length;
+            try {
+                const res = makeRes();
+                await ask({
+                    body: { question: 'what is my next seminar?' },
+                    user: { role: 'expert', userId: 'expert-ada' },
+                }, res);
+                assert.equal(res.statusCode, 200);
+                assert.equal(fetchCalls.length, fetchBefore);
+                assert.equal(
+                    res.body.answer,
+                    'Concrete Studio at 2099-03-15T18:30:00.000Z for $25.',
+                );
+                assert.equal(res.body.answer.includes('Other Expert Bridge Review'), false);
+                assert.equal(res.body.answer.includes('Ada Private Hour'), false);
+                assert.equal(res.body.answer.includes('secret-chat-body'), false);
+            } finally {
+                GroupChat.find = originalGroupFind;
+                Event.find = originalEventFind;
+                SeminarSeatRequest.find = originalSeatFind;
+            }
+        });
+
+        test('a student meetings question returns only that student rows', async () => {
+            const chats = [
+                {
+                    name: 'Ada One on One',
+                    start: '2099-04-01T15:00:00.000Z',
+                    end: '2099-04-01T16:00:00.000Z',
+                    price: 40,
+                    status: 'active',
+                    type: 'individual',
+                    admin: { _id: 'expert-ada', username: 'Ada Lovelace' },
+                    participants: [
+                        { _id: 'expert-ada', username: 'Ada Lovelace' },
+                        { _id: 'student-a', username: 'Sam Student' },
+                    ],
+                    messages: [{ body: 'secret-chat-body' }],
+                },
+                {
+                    name: 'Civil Studio',
+                    start: '2099-05-01T15:00:00.000Z',
+                    end: '2099-05-01T16:00:00.000Z',
+                    price: 15,
+                    status: 'active',
+                    type: 'seminar',
+                    admin: { _id: 'expert-ada', username: 'Ada Lovelace' },
+                    participants: [
+                        { _id: 'expert-ada', username: 'Ada Lovelace' },
+                        { _id: 'student-a', username: 'Sam Student' },
+                    ],
+                    messages: [{ body: 'secret-chat-body' }],
+                },
+                {
+                    name: 'Grace One on One',
+                    start: '2099-06-01T15:00:00.000Z',
+                    end: '2099-06-01T16:00:00.000Z',
+                    price: 55,
+                    status: 'active',
+                    type: 'individual',
+                    admin: { _id: 'expert-grace', username: 'Grace Hopper' },
+                    participants: [
+                        { _id: 'expert-grace', username: 'Grace Hopper' },
+                        { _id: 'student-b', username: 'Blair Student' },
+                    ],
+                    messages: [{ body: 'secret-chat-body' }],
+                },
+                {
+                    name: 'Grace Seminar',
+                    start: '2099-07-01T15:00:00.000Z',
+                    end: '2099-07-01T16:00:00.000Z',
+                    price: 22,
+                    status: 'active',
+                    type: 'seminar',
+                    admin: { _id: 'expert-grace', username: 'Grace Hopper' },
+                    participants: [
+                        { _id: 'expert-grace', username: 'Grace Hopper' },
+                        { _id: 'student-b', username: 'Blair Student' },
+                    ],
+                    messages: [{ body: 'secret-chat-body' }],
+                },
+                {
+                    name: 'Campus Club',
+                    start: '2099-08-01T15:00:00.000Z',
+                    end: '2099-08-01T16:00:00.000Z',
+                    price: 0,
+                    status: 'active',
+                    type: 'community',
+                    admin: { _id: 'expert-ada', username: 'Ada Lovelace' },
+                    participants: [
+                        { _id: 'expert-ada', username: 'Ada Lovelace' },
+                        { _id: 'student-a', username: 'Sam Student' },
+                    ],
+                    messages: [{ body: 'secret-chat-body' }],
+                },
+            ];
+            GroupChat.find = () => leanChain(chats);
+            Event.find = () => leanChain([]);
+            SeminarSeatRequest.find = () => leanChain([]);
+            const fetchBefore = fetchCalls.length;
+            try {
+                const first = makeRes();
+                await ask({
+                    body: { question: 'what meetings do I have?' },
+                    user: { role: 'customer', userId: 'student-a' },
+                }, first);
+                assert.equal(first.statusCode, 200);
+                assert.equal(
+                    first.body.answer,
+                    'Ada One on One at 2099-04-01T15:00:00.000Z for $40 and Civil Studio at 2099-05-01T15:00:00.000Z for $15.',
+                );
+                assert.equal(first.body.answer.includes('Grace One on One'), false);
+                assert.equal(first.body.answer.includes('Grace Seminar'), false);
+                assert.equal(first.body.answer.includes('Campus Club'), false);
+                assert.equal(first.body.answer.includes('secret-chat-body'), false);
+
+                const second = makeRes();
+                await ask({
+                    body: { question: 'what meetings do I have?' },
+                    user: { role: 'customer', userId: 'student-b' },
+                }, second);
+                assert.equal(second.statusCode, 200);
+                assert.equal(
+                    second.body.answer,
+                    'Grace One on One at 2099-06-01T15:00:00.000Z for $55 and Grace Seminar at 2099-07-01T15:00:00.000Z for $22.',
+                );
+                assert.equal(second.body.answer.includes('Ada One on One'), false);
+                assert.equal(second.body.answer.includes('Civil Studio'), false);
+                assert.equal(fetchCalls.length, fetchBefore);
+            } finally {
+                GroupChat.find = originalGroupFind;
+                Event.find = originalEventFind;
+                SeminarSeatRequest.find = originalSeatFind;
+            }
+        });
+
+        test('cheapest plus booking sends winners, rules, and chunks in one model call', async () => {
+            searchController.collectSearchResults = async () => ({ ...cards, experts: [] });
+            stubPublicExperts(publicExpertFixtures());
+            seed = [];
+            nextCompletion = { miss: false, answer: 'Ada Lovelace is one match. Booking is by appointment.', citations: [] };
+            retrieveEmpty = false;
+            const fetchBefore = fetchCalls.length;
+            try {
+                const res = makeRes();
+                await ask({
+                    body: { question: 'who is the cheapest professor in civil and how does booking work' },
+                    user: undefined,
+                }, res);
+                assert.equal(res.statusCode, 200);
+                const calls = fetchCalls.slice(fetchBefore);
+                const inferences = calls.filter((call) => call.url === INFERENCE_URL);
+                assert.equal(inferences.length, 1);
+                const retrieve = calls.find((call) => call.url === RETRIEVE_URL);
+                assert.ok(retrieve);
+                const prompt = promptOf(inferences[0]);
+                assert.equal(prompt.includes('Ada Lovelace'), true);
+                assert.equal(prompt.includes('Charles Darwin'), true);
+                assert.equal(prompt.includes('hourly rate of 40') || prompt.includes('hourlyRate: 40'), true);
+                assert.equal(prompt.includes('/rules'), true);
+                assert.equal(prompt.includes(RETRIEVED_CHUNK), true);
+                assert.equal(prompt.includes('route: /services'), false);
+                for (const name of ['Maya Lin', 'Unrated Chen', 'Site Lecturer', 'Grace Hopper', 'Pending Person', 'hidden@school.edu', 'yours-card-leak']) {
+                    assert.equal(prompt.includes(name), false, name);
+                }
+                for (const leak of PRIVATE_LEAKS) {
+                    assert.equal(prompt.includes(leak), false, leak);
+                }
+                assert.notEqual(res.body.answer, SAVED_QUESTION_FOR_REVIEW);
+            } finally {
+                searchController.collectSearchResults = async () => cards;
+                User.find = originalUserFind;
+                retrieveEmpty = false;
+            }
+        });
+
         test('restores stubs', () => {
             chatBotQA.find = originalFind;
             chatBotQA.prototype.save = originalSave;
             searchController.collectSearchResults = originalCollect;
             User.find = originalUserFind;
+            GroupChat.find = originalGroupFind;
+            Event.find = originalEventFind;
+            SeminarSeatRequest.find = originalSeatFind;
             global.fetch = originalFetch;
             AbortSignal.timeout = originalTimeout;
             restoreEnv();

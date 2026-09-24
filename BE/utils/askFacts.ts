@@ -9,7 +9,7 @@ const EXPERT_STOPWORDS = new Set([
     'highest', 'under', 'over', 'most', 'expensive', 'free', 'named', 'called', 'name',
     'whose', 'whom', 'that', 'this', 'these', 'those', 'your', 'our', 'we', 'want', 'looking',
     'search', 'available', 'book', 'booking', 'expert', 'experts', 'faculty', 'teach',
-    'teaches', 'teaching',
+    'teaches', 'teaching', 'work', 'works',
 ]);
 
 const SEMINAR_STOPWORDS = new Set([
@@ -364,7 +364,7 @@ export const filterOwnRecords = (rows: any[], caller: any, question?: string): a
         const kind = rowKind(row);
         if (narrowed) {
             const allowed = (wantSeminar && kind === 'seminar')
-                || (wantMeeting && kind === 'individual')
+                || (wantMeeting && (kind === 'individual' || kind === 'seminar'))
                 || (wantCommunity && kind === 'community')
                 || (wantLegacy && kind === 'legacyEvent');
             if (!allowed) return false;
