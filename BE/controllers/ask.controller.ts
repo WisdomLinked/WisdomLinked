@@ -1,3 +1,4 @@
+import routeAsk from '../utils/askRouter';
 import { safeErrorMessage } from '../utils/httpUserFacingCopy';
 import {
     groundedCitations,
@@ -21,6 +22,9 @@ import {
 const chatBotQA = require('../models/chatBotQA');
 const searchController = require('./search.controller');
 const publicPages = require('../search/publicPages');
+const GroupChat = require('../models/GroupChat');
+const Event = require('../models/Event');
+const SeminarSeatRequest = require('../models/SeminarSeatRequest');
 const {
     PENDING_ANSWER,
     SAVED_QUESTION_FOR_REVIEW,
@@ -58,16 +62,147 @@ const SYSTEM_PROMPT = [
 
 const modelAccessKey = (): string => String(process.env.GRADIENT_MODEL_ACCESS_KEY || '').trim();
 
-const pageIdentity = (page: any): string =>
-    `${String(page?.route ?? '')}\n${String(page?.title ?? '')}\n${String(page?.snippet ?? '')}`;
-
-/** Catalog pages first, then any keyword card whose heading is not already in that catalog. */
-const pagesForModel = (hits: any[]) => {
+/** Catalog rows whose route the plan selected. Never the whole catalog. */
+const pagesForPlan = (routes: string[]) => {
     const all = typeof publicPages.allPublicPages === 'function' ? publicPages.allPublicPages() : [];
-    const catalog = Array.isArray(all) ? all : [];
-    const seen = new Set(catalog.map(pageIdentity));
-    const extra = (Array.isArray(hits) ? hits : []).filter((page) => page && !seen.has(pageIdentity(page)));
-    return [...catalog, ...extra];
+    const wanted = new Set(Array.isArray(routes) ? routes : []);
+    return (Array.isArray(all) ? all : []).filter((page) => wanted.has(String(page?.route ?? '')));
+};
+
+const idOf = (value: any): string => {
+    if (value == null) return '';
+    if (typeof value === 'object') return String(value._id ?? value.id ?? '').trim();
+    return String(value).trim();
+};
+
+const personName = (value: any): string => {
+    if (!value || typeof value !== 'object') return '';
+    const name = String(value.username ?? '').trim();
+    if (!name || name.includes('@')) return '';
+    return name;
+};
+
+const ownFactSentence = (rows: any[]): string => {
+    const clauses = (Array.isArray(rows) ? rows : []).map((row) => {
+        const name = String(row?.name ?? '').trim() || 'A session';
+        const startValue = row?.start ? new Date(row.start) : null;
+        const when = startValue && !Number.isNaN(startValue.getTime()) ? startValue.toISOString() : '';
+        const price = typeof row?.price === 'number' && Number.isFinite(row.price) ? row.price : null;
+        const pieces = [name];
+        if (when) pieces.push(`at ${when}`);
+        if (price !== null) pieces.push(`for $${price}`);
+        return pieces.join(' ');
+    });
+    if (!clauses.length) return '';
+    if (clauses.length === 1) return `${clauses[0]}.`;
+    if (clauses.length === 2) return `${clauses[0]} and ${clauses[1]}.`;
+    return `${clauses.slice(0, -1).join(', ')}, and ${clauses[clauses.length - 1]}.`;
+};
+
+const mapGroupRow = (doc: any) => ({
+    name: String(doc?.name ?? ''),
+    description: String(doc?.description ?? ''),
+    purpose: String(doc?.purposeOther ?? ''),
+    start: doc?.start ?? null,
+    end: doc?.end ?? null,
+    duration: doc?.duration,
+    timezone: String(doc?.timezone ?? ''),
+    price: doc?.price,
+    currency: String(doc?.currency ?? ''),
+    status: String(doc?.status ?? ''),
+    type: String(doc?.type ?? ''),
+    maxAttendees: doc?.maxAttendees,
+    kind: String(doc?.type ?? ''),
+    adminId: idOf(doc?.admin),
+    participantIds: (Array.isArray(doc?.participants) ? doc.participants : []).map(idOf).filter(Boolean),
+    expertId: idOf(doc?.admin),
+    customerId: '',
+    hostName: personName(doc?.admin),
+    participantNames: (Array.isArray(doc?.participants) ? doc.participants : []).map(personName).filter(Boolean),
+    decisionNote: String(doc?.decisionNote ?? ''),
+});
+
+const mapEventRow = (doc: any) => ({
+    name: String(doc?.title ?? ''),
+    description: '',
+    purpose: '',
+    start: doc?.start ?? null,
+    end: doc?.end ?? null,
+    duration: doc?.duration,
+    timezone: '',
+    price: doc?.price,
+    currency: '',
+    status: String(doc?.status ?? ''),
+    type: 'legacyEvent',
+    maxAttendees: undefined,
+    kind: 'legacyEvent',
+    adminId: '',
+    participantIds: [],
+    expertId: idOf(doc?.expert),
+    customerId: idOf(doc?.customer),
+    hostName: '',
+    participantNames: [],
+    decisionNote: '',
+});
+
+const mapSeatRow = (doc: any) => {
+    const group = doc?.groupChat && typeof doc.groupChat === 'object' ? doc.groupChat : {};
+    const amount = typeof doc?.amount === 'number' && Number.isFinite(doc.amount) ? doc.amount : group?.price;
+    return {
+        name: String(group?.name ?? ''),
+        description: String(group?.description ?? ''),
+        purpose: '',
+        start: group?.start ?? null,
+        end: group?.end ?? null,
+        duration: group?.duration,
+        timezone: String(group?.timezone ?? ''),
+        price: amount,
+        currency: String(doc?.currency ?? ''),
+        status: String(doc?.status ?? ''),
+        type: 'seatRequest',
+        maxAttendees: group?.maxAttendees,
+        kind: 'seatRequest',
+        adminId: '',
+        participantIds: [],
+        expertId: idOf(doc?.expert),
+        customerId: idOf(doc?.customer),
+        hostName: '',
+        participantNames: [],
+        decisionNote: String(doc?.decisionNote ?? ''),
+    };
+};
+
+/** Caller's own rows only. Logged-out and other roles get none. */
+const loadOwnRows = async (user: any, plan: { ownIndividual: boolean; ownSeminar: boolean; ownCommunity: boolean; ownLegacyEvent: boolean; mongoExperts: boolean }, question: string) => {
+    const wantsOwn = plan.ownIndividual || plan.ownSeminar || plan.ownCommunity || plan.ownLegacyEvent;
+    if (!user || !wantsOwn || plan.mongoExperts) return [];
+    const role = String(user.role || '');
+    if (role !== 'expert' && role !== 'customer') return [];
+    const callerId = String(user.userId || user._id || '').trim();
+    if (!callerId) return [];
+
+    const party = role === 'expert' ? { expert: callerId } : { customer: callerId };
+    const [chats, events, seats] = await Promise.all([
+        GroupChat.find({ $or: [{ admin: callerId }, { participants: callerId }] })
+            .select('name description purposeOther start end duration timezone price currency status type maxAttendees admin participants decisionNote')
+            .populate({ path: 'admin', select: 'username' })
+            .populate({ path: 'participants', select: 'username' })
+            .lean(),
+        Event.find(party)
+            .select('title start end duration price status expert customer')
+            .lean(),
+        SeminarSeatRequest.find(party)
+            .select('status amount currency decisionNote expert customer groupChat')
+            .populate({ path: 'groupChat', select: 'name description start end duration timezone price maxAttendees' })
+            .lean(),
+    ]);
+
+    const rows = [
+        ...(Array.isArray(chats) ? chats : []).map(mapGroupRow),
+        ...(Array.isArray(events) ? events : []).map(mapEventRow),
+        ...(Array.isArray(seats) ? seats : []).map(mapSeatRow),
+    ];
+    return searchController.queryOwnRecords({ userId: callerId, _id: callerId, role }, rows, question);
 };
 
 const retrieveKnowledgeChunks = async (question: string): Promise<string[]> => {
@@ -183,22 +318,24 @@ const completeAsk = async (
     question: string,
     promptRows: any[],
     experts: PromptExpert[],
-    cards: any,
+    seminars: PromptSeminar[],
     pages: any[],
     retrieved: string[],
+    factText: string,
 ) => {
-    const context = promptContext({
-        pages,
-        retrieved,
-        experts,
-        seminars: (Array.isArray(cards.seminars) ? cards.seminars : []).map(toPromptSeminar),
-        questions: promptRows.map((row) => ({
-            question: String(row?.question ?? ''),
-            answer: String(row?.answer ?? ''),
-        })),
-    });
-    // No client abort: a comparison over every public expert can outlast 15s.
-    // A hung call is not retried.
+    const context = [
+        factText,
+        promptContext({
+            pages,
+            retrieved,
+            experts,
+            seminars,
+            questions: promptRows.map((row) => ({
+                question: String(row?.question ?? ''),
+                answer: String(row?.answer ?? ''),
+            })),
+        }),
+    ].filter((part) => String(part ?? '').trim()).join('\n\n');
     const response = await fetch(INFERENCE_CHAT_COMPLETIONS_URL, {
         method: 'POST',
         headers: {
@@ -213,6 +350,7 @@ const completeAsk = async (
                 { role: 'user', content: `Question: ${String(question).trim()}\n\nContext:\n${context}` },
             ],
         }),
+        signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
     });
     if (!response.ok) {
         console.error(`[ask] inference status ${response.status}`);
@@ -240,19 +378,40 @@ const ask = async (req, res) => {
             return respond(res, GREETING_REPLY, cards);
         }
 
+        const plan = routeAsk(question);
         const qa = await loadQa(req.user);
         const similarQuestions = selectSimilarQuestions(qa.promptRows, question, 4);
+
+        const [expertWinners, seminarWinners, ownWinners] = await Promise.all([
+            plan.mongoExperts ? searchController.queryPublicExperts(question) : Promise.resolve([]),
+            plan.mongoSeminars ? searchController.queryPublicSeminars(question) : Promise.resolve([]),
+            loadOwnRows(req.user, plan, question),
+        ]);
+        const pages = pagesForPlan(plan.routes);
+        const promptExperts = expertsForPrompt(expertWinners);
+        const promptSeminars = (Array.isArray(seminarWinners) ? seminarWinners : []).map(toPromptSeminar);
+        const hasWinners = (Array.isArray(expertWinners) && expertWinners.length > 0)
+            || (Array.isArray(seminarWinners) && seminarWinners.length > 0)
+            || (Array.isArray(ownWinners) && ownWinners.length > 0);
+        const factText = plan.mongoExperts
+            ? searchController.publicFactTemplate(expertWinners)
+            : plan.mongoSeminars
+                ? searchController.publicFactTemplate(seminarWinners)
+                : ownFactSentence(ownWinners);
+
+        if (!plan.model) {
+            const answer = factText || publicPageText(pages);
+            return respond(res, answer, cards, { similarQuestions });
+        }
+
         const modelKey = modelAccessKey();
         if (!modelKey) {
             return respond(res, ANSWERS_UNAVAILABLE, cards, { similarQuestions });
         }
 
-        const pages = pagesForModel(cards.pages);
-        const [retrieved, publicExperts] = await Promise.all([
-            retrieveKnowledgeChunks(String(question).trim()),
-            searchController.listPublicExpertCards(),
-        ]);
-        const promptExperts = expertsForPrompt(publicExperts);
+        const retrieved = plan.retrieve
+            ? await retrieveKnowledgeChunks(String(question).trim())
+            : [];
         let completion: { answer: string; miss: boolean; citations: any[] };
         try {
             completion = await completeAsk(
@@ -260,24 +419,36 @@ const ask = async (req, res) => {
                 question,
                 qa.promptRows,
                 promptExperts,
-                cards,
+                promptSeminars,
                 pages,
                 retrieved,
+                factText,
             );
         } catch (err) {
             if (!err || !(err as any)[INFERENCE_STATUS_LOGGED]) {
                 console.error('[ask] inference failed');
+            }
+            if (hasWinners) {
+                return respond(res, factText, cards, { similarQuestions });
             }
             return respond(res, ANSWERS_UNAVAILABLE, cards, { similarQuestions });
         }
 
         const filtered = postFilterAnswer(
             completion.answer,
-            [publicPageText(pages), ...retrieved, promptContext({ experts: promptExperts })].join('\n'),
+            [factText, publicPageText(pages), ...retrieved].join('\n'),
         );
         if (completion.miss || !filtered || filtered === PENDING_ANSWER) {
-            await saveMiss(question, qa.storedRole, qa.rows);
-            return respond(res, SAVED_QUESTION_FOR_REVIEW, cards, { similarQuestions });
+            const canSave = !hasWinners && plan.routes.length === 0 && retrieved.length === 0;
+            if (canSave) {
+                await saveMiss(question, qa.storedRole, qa.rows);
+                return respond(res, SAVED_QUESTION_FOR_REVIEW, cards, { similarQuestions });
+            }
+            const fallback = factText || publicPageText(pages) || retrieved.join('\n');
+            return respond(res, fallback, cards, {
+                citations: groundedCitations(pages, completion.citations),
+                similarQuestions,
+            });
         }
 
         return respond(res, filtered, cards, {

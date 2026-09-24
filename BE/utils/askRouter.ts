@@ -161,3 +161,5 @@ export function routeAsk(question: unknown): AskPlan {
         model: needsLanguage,
     };
 }
+
+export default routeAsk;
