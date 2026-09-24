@@ -29,7 +29,7 @@ describe("filterPublicExperts", () => {
     assert.deepEqual(names, ["Grace", "Alan"]);
   });
 
-  it("drops a missing or non-finite hourly rate", () => {
+  it("keeps a missing rate unless the question sorts by price", () => {
     const cards = [
       civilProfessor("Ada", 30),
       civilProfessor("Grace", null),
@@ -37,7 +37,9 @@ describe("filterPublicExperts", () => {
       civilProfessor("Lin", Number.NaN),
     ];
     const names = filterPublicExperts(cards, "civil professor").map((card) => card.name);
-    assert.deepEqual(names, ["Ada"]);
+    assert.deepEqual(names, ["Ada", "Grace", "Alan", "Lin"]);
+    const cheapest = filterPublicExperts(cards, "cheapest civil professor").map((card) => card.name);
+    assert.deepEqual(cheapest, ["Ada"]);
   });
 
   it("keeps hourlyRate 0 as free", () => {

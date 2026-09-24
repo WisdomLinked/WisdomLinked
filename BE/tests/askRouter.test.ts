@@ -40,14 +40,16 @@ test('retrieve contract is documented and not invoked', () => {
     ]);
 });
 
-test('pure price, who, seminar, and exact-service questions skip retrieve and the model', () => {
-    const cases: Array<[string, Partial<AskPlan>]> = [
+test('price sorts skip retrieve and every question still calls the model', () => {
+    const priceCases: Array<[string, Partial<AskPlan>]> = [
         ['who is the cheapest professor in civil', { mongoExperts: true, mongoSeminars: false }],
         ['highest hourly rate', { mongoExperts: true, mongoSeminars: false }],
         ['experts under 50', { mongoExperts: true, mongoSeminars: false }],
         ['experts over 100', { mongoExperts: true, mongoSeminars: false }],
         ['最便宜', { mongoExperts: true, mongoSeminars: false }],
         ['最贵', { mongoExperts: true, mongoSeminars: false }],
+    ];
+    const retrieveCases: Array<[string, Partial<AskPlan>]> = [
         ['which expert teaches structures', { mongoExperts: true, mongoSeminars: false }],
         ['教授', { mongoExperts: true, mongoSeminars: false }],
         ['what is the seminar price', { mongoExperts: false, mongoSeminars: true }],
@@ -56,22 +58,24 @@ test('pure price, who, seminar, and exact-service questions skip retrieve and th
         ['Work Abroad', { mongoExperts: true, mongoSeminars: false, routes: ['/services'] }],
         ['Research Guidance', { mongoExperts: true, mongoSeminars: false, routes: ['/services'] }],
     ];
-    for (const [question, expected] of cases) {
+    const check = (question: string, expected: Partial<AskPlan>, retrieve: boolean) => {
         const got = plan(question);
-        assert.equal(got.retrieve, false, question);
-        assert.equal(got.model, false, question);
+        assert.equal(got.retrieve, retrieve, question);
+        assert.equal(got.model, true, question);
         assert.equal(got.mongoExperts, expected.mongoExperts, question);
         assert.equal(got.mongoSeminars, expected.mongoSeminars, question);
         if (expected.routes) assert.deepEqual(got.routes, expected.routes, question);
         else assert.deepEqual(got.routes, [], question);
-    }
+    };
+    for (const [question, expected] of priceCases) check(question, expected, false);
+    for (const [question, expected] of retrieveCases) check(question, expected, true);
 });
 
 test('a Chinese question that is only 最便宜 or 最贵 does not set retrieve', () => {
     for (const question of ['最便宜', '最贵', '  最便宜  ', '最便宜最贵']) {
         const got = plan(question);
         assert.equal(got.retrieve, false, question);
-        assert.equal(got.model, false, question);
+        assert.equal(got.model, true, question);
         assert.equal(got.mongoExperts, true, question);
     }
 });
@@ -102,15 +106,15 @@ test('booking, appointment, and 预约 select only /rules', () => {
     }
 });
 
-test('a pure services question selects only /services and does not retrieve', () => {
+test('a pure services question selects only /services and still calls the model', () => {
     for (const question of [
         'what services do you offer',
         'Study Abroad, Work Abroad, and Research Guidance',
     ]) {
         const got = plan(question);
         assert.deepEqual(got.routes, ['/services'], question);
-        assert.equal(got.retrieve, false, question);
-        assert.equal(got.model, false, question);
+        assert.equal(got.retrieve, true, question);
+        assert.equal(got.model, true, question);
     }
 });
 
@@ -129,30 +133,30 @@ test('caller-scoped questions are pure facts and skip the public seminar list', 
     assert.equal(seminar.ownIndividual, false);
     assert.equal(seminar.ownCommunity, false);
     assert.equal(seminar.ownLegacyEvent, false);
-    assert.equal(seminar.retrieve, false);
-    assert.equal(seminar.model, false);
+    assert.equal(seminar.retrieve, true);
+    assert.equal(seminar.model, true);
     assert.equal(seminar.mongoSeminars, false);
     assert.deepEqual(seminar.routes, []);
 
     const meetings = plan('what meetings do I have?');
     assert.equal(meetings.ownIndividual, true);
     assert.equal(meetings.ownSeminar, false);
-    assert.equal(meetings.retrieve, false);
-    assert.equal(meetings.model, false);
+    assert.equal(meetings.retrieve, true);
+    assert.equal(meetings.model, true);
     assert.equal(meetings.mongoSeminars, false);
 
     const communities = plan('my communities');
     assert.equal(communities.ownCommunity, true);
     assert.equal(communities.ownIndividual, false);
     assert.equal(communities.ownSeminar, false);
-    assert.equal(communities.retrieve, false);
-    assert.equal(communities.model, false);
+    assert.equal(communities.retrieve, true);
+    assert.equal(communities.model, true);
     assert.deepEqual(communities.routes, []);
 
     const upcoming = plan('upcoming');
     assert.equal(upcoming.ownLegacyEvent, true);
-    assert.equal(upcoming.retrieve, false);
-    assert.equal(upcoming.model, false);
+    assert.equal(upcoming.retrieve, true);
+    assert.equal(upcoming.model, true);
     assert.equal(upcoming.mongoSeminars, false);
     assert.deepEqual(upcoming.routes, []);
 });
@@ -186,7 +190,7 @@ test('a pure public cheapest professor question sets no own flag', () => {
     assert.equal(got.mongoExperts, true);
     assert.equal(got.mongoSeminars, false);
     assert.equal(got.retrieve, false);
-    assert.equal(got.model, false);
+    assert.equal(got.model, true);
 });
 
 test('the plan never selects the whole public catalog or private records', () => {

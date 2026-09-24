@@ -1,17 +1,5 @@
 const SERVICE_LABELS = ['Study Abroad', 'Work Abroad', 'Research Guidance'];
 
-const EXPERT_STOPWORDS = new Set([
-    'who', 'is', 'the', 'a', 'an', 'in', 'of', 'for', 'what', 'which', 'show', 'me', 'my',
-    'has', 'have', 'with', 'and', 'or', 'hourly', 'rate', 'rates', 'price', 'public', 'active',
-    'does', 'do', 'can', 'you', 'tell', 'about', 'their', 'there', 'any', 'all', 'please',
-    'find', 'list', 'give', 'get', 'to', 'from', 'by', 'at', 'on', 'be', 'are', 'was', 'were',
-    'how', 'much', 'many', 'someone', 'somebody', 'professor', 'professors', 'cheapest',
-    'highest', 'under', 'over', 'most', 'expensive', 'free', 'named', 'called', 'name',
-    'whose', 'whom', 'that', 'this', 'these', 'those', 'your', 'our', 'we', 'want', 'looking',
-    'search', 'available', 'book', 'booking', 'expert', 'experts', 'faculty', 'teach',
-    'teaches', 'teaching', 'work', 'works',
-]);
-
 const SEMINAR_STOPWORDS = new Set([
     'a', 'an', 'the', 'in', 'on', 'of', 'for', 'and', 'or', 'to', 'is', 'are', 'what', 'which',
     'who', 'show', 'me', 'my', 'find', 'list', 'seminar', 'seminars', 'upcoming', 'with',
@@ -107,40 +95,6 @@ const numberAfter = (question: string, keyword: 'under' | 'over'): number | null
     return Number.isFinite(parsed) ? parsed : null;
 };
 
-const leftoverTokens = (question: string): string[] => {
-    let remaining = question;
-    remaining = remaining.replace(/土木工程/g, ' ');
-    remaining = remaining.replace(/土木/g, ' ');
-    remaining = remaining.replace(/教授/g, ' ');
-    remaining = remaining.replace(/最便宜/g, ' ');
-    remaining = remaining.replace(/最贵/g, ' ');
-    SERVICE_LABELS.forEach((label) => {
-        remaining = remaining.replace(new RegExp(label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'ig'), ' ');
-    });
-    remaining = remaining.replace(/\bcivil\b/ig, ' ');
-    remaining = remaining.replace(/\bprofessors?\b/ig, ' ');
-    remaining = remaining.replace(/\bcheapest\b/ig, ' ');
-    remaining = remaining.replace(/\bhighest\b/ig, ' ');
-    remaining = remaining.replace(/\b(?:under|over)\b[^\d]{0,32}\d+(?:\.\d+)?/ig, ' ');
-    remaining = remaining.replace(/\bunder\b/ig, ' ');
-    remaining = remaining.replace(/\bover\b/ig, ' ');
-    return remaining
-        .split(/[^A-Za-z0-9]+/)
-        .filter((token) => token.length >= 2 && !EXPERT_STOPWORDS.has(token.toLowerCase()));
-};
-
-const expertHaystack = (card: any): string =>
-    [
-        card?.name,
-        card?.title,
-        card?.bio,
-        ...majorLabels(card),
-        ...serviceLabels(card),
-    ]
-        .map((part) => String(part ?? ''))
-        .join(' ')
-        .toLowerCase();
-
 const keepExtreme = (cards: any[], which: 'min' | 'max'): any[] => {
     let best: number | null = null;
     cards.forEach((card) => {
@@ -159,11 +113,11 @@ export const filterPublicExperts = (cards: any[], question: string): any[] => {
     const civil = wantsCivil(asked);
     const professor = wantsProfessor(asked);
     const services = requestedServices(asked);
-    const tokens = leftoverTokens(asked);
     const under = /\bunder\b/i.test(asked) ? numberAfter(asked, 'under') : null;
     const over = /\bover\b/i.test(asked) ? numberAfter(asked, 'over') : null;
     const cheapest = /最便宜|\bcheapest\b/i.test(asked);
     const highest = /最贵|\bhighest\b/i.test(asked);
+    const priceQuestion = cheapest || highest || /\b(?:under|over)\b/i.test(asked);
 
     const matched = (Array.isArray(cards) ? cards : []).filter((card) => {
         if (!card || typeof card !== 'object') return false;
@@ -172,11 +126,10 @@ export const filterPublicExperts = (cards: any[], question: string): any[] => {
         if (civil && !hasCivilEngineering(card)) return false;
         if (professor && !isProfessorCard(card)) return false;
         if (services.some((label) => !hasService(card, label))) return false;
-        if (tokens.some((token) => !expertHaystack(card).includes(token.toLowerCase()))) return false;
         const rate = finiteRate(card.hourlyRate);
-        if (rate === null) return false;
-        if (under !== null && !(rate < under)) return false;
-        if (over !== null && !(rate > over)) return false;
+        if (priceQuestion && rate === null) return false;
+        if (under !== null && !(rate !== null && rate < under)) return false;
+        if (over !== null && !(rate !== null && rate > over)) return false;
         return true;
     });
 

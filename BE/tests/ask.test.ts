@@ -541,13 +541,19 @@ describe('POST /api/ask', { concurrency: false }, () => {
             assert.equal(expertPrompt.includes('student-card-leak'), false);
         });
 
-        test('a services question answers from the services page and does not call fetch', async () => {
+        test('a services question answers from the services page through the model', async () => {
+            nextCompletion = {
+                miss: false,
+                answer: 'Uncommon Quality, Undeniable Value. consulting-for-a-fee. Study Abroad.',
+                citations: [],
+            };
             const fetchBefore = fetchCalls.length;
             const res = makeRes();
             await ask({ body: { question: 'What services do you offer?' }, user: undefined }, res);
             assert.equal(res.statusCode, 200);
-            assert.equal(fetchCalls.length, fetchBefore);
-            assert.equal(fetchCalls.slice(fetchBefore).some((call) => call.url === RETRIEVE_URL), false);
+            assert.equal(fetchCalls.slice(fetchBefore).some((call) => call.url === INFERENCE_URL), true);
+            const prompt = promptOf(fetchCalls.slice(fetchBefore).find((call) => call.url === INFERENCE_URL));
+            assert.equal(prompt.includes('/services'), true);
             assert.match(res.body.answer, /Uncommon Quality, Undeniable Value/);
             assert.match(res.body.answer, /consulting-for-a-fee/);
             assert.match(res.body.answer, /Study Abroad/);
@@ -689,21 +695,35 @@ describe('POST /api/ask', { concurrency: false }, () => {
             }
         });
 
-        test('a cheapest professor question answers from Mongo facts and does not call fetch', async () => {
+        test('a cheapest professor question sends only the sorted winners to the model', async () => {
             const seen = { query: null as any, populatePaths: [] as string[] };
             searchController.collectSearchResults = async () => ({ ...cards, experts: [] });
             stubPublicExperts(publicExpertFixtures(), seen);
+            nextCompletion = {
+                miss: false,
+                answer: 'Ada Lovelace and Charles Darwin are the lowest public rate, 40.',
+                citations: [],
+            };
             const fetchBefore = fetchCalls.length;
             try {
                 const res = makeRes();
                 await ask({ body: { question: 'find me the cheapest professor in civil' }, user: undefined }, res);
                 assert.equal(res.statusCode, 200);
-                assert.equal(fetchCalls.length, fetchBefore);
+                const calls = fetchCalls.slice(fetchBefore);
+                assert.equal(calls.filter((call) => call.url === INFERENCE_URL).length, 1);
+                assert.equal(calls.some((call) => call.url === RETRIEVE_URL), false);
+                const prompt = promptOf(calls.find((call) => call.url === INFERENCE_URL));
+                assert.equal(prompt.includes('Ada Lovelace'), true);
+                assert.equal(prompt.includes('Charles Darwin'), true);
+                assert.equal(prompt.includes('40'), true);
+                for (const name of ['Maya Lin', 'Unrated Chen', 'Site Lecturer', 'Grace Hopper', 'Pending Person', 'hidden@school.edu']) {
+                    assert.equal(prompt.includes(name), false, name);
+                }
                 assert.deepEqual(seen.query, { role: 'expert', status: 'active' });
                 assert.equal(seen.populatePaths.includes('keywords'), true);
                 assert.equal(
                     res.body.answer,
-                    'Ada Lovelace has a public hourly rate of 40 and Charles Darwin has a public hourly rate of 40.',
+                    'Ada Lovelace and Charles Darwin are the lowest public rate, 40.',
                 );
                 assert.equal(res.body.answer.includes('Maya Lin'), false);
                 assert.equal(res.body.answer.includes('Unrated Chen'), false);
@@ -720,6 +740,35 @@ describe('POST /api/ask', { concurrency: false }, () => {
                 assert.equal(res.body.answer.includes('hourly rate of 1'), false);
                 assert.equal(res.body.experts.length, 0);
                 assert.equal(res.body.students[0].name, 'student-card-leak');
+            } finally {
+                searchController.collectSearchResults = async () => cards;
+                User.find = originalUserFind;
+            }
+        });
+
+        test('a civil professor name question includes unrated professors and the model writes the answer', async () => {
+            searchController.collectSearchResults = async () => ({ ...cards, experts: [] });
+            stubPublicExperts(publicExpertFixtures());
+            nextCompletion = { miss: false, answer: 'Ada Lovelace is a Civil Engineering professor.', citations: [] };
+            const fetchBefore = fetchCalls.length;
+            try {
+                const res = makeRes();
+                await ask({
+                    body: { question: 'can u let me know a good professor in civil, i need a name not rates' },
+                    user: undefined,
+                }, res);
+                assert.equal(res.statusCode, 200);
+                assert.equal(res.body.answer, 'Ada Lovelace is a Civil Engineering professor.');
+                assert.equal(res.body.answer.includes('No active professor in Civil Engineering has a public hourly rate.'), false);
+                const calls = fetchCalls.slice(fetchBefore);
+                assert.equal(calls.some((call) => call.url === INFERENCE_URL), true);
+                const prompt = promptOf(calls.find((call) => call.url === INFERENCE_URL));
+                for (const name of ['Ada Lovelace', 'Charles Darwin', 'Maya Lin', 'Unrated Chen']) {
+                    assert.equal(prompt.includes(name), true, name);
+                }
+                for (const name of ['Site Lecturer', 'Grace Hopper', 'hidden@school.edu', 'Pending Person']) {
+                    assert.equal(prompt.includes(name), false, name);
+                }
             } finally {
                 searchController.collectSearchResults = async () => cards;
                 User.find = originalUserFind;
@@ -871,6 +920,7 @@ describe('POST /api/ask', { concurrency: false }, () => {
             GroupChat.find = () => leanChain(chats);
             Event.find = () => leanChain([]);
             SeminarSeatRequest.find = () => leanChain([]);
+            nextCompletion = { miss: false, answer: 'Concrete Studio is your next seminar.', citations: [] };
             const fetchBefore = fetchCalls.length;
             try {
                 const res = makeRes();
@@ -879,11 +929,14 @@ describe('POST /api/ask', { concurrency: false }, () => {
                     user: { role: 'expert', userId: 'expert-ada' },
                 }, res);
                 assert.equal(res.statusCode, 200);
-                assert.equal(fetchCalls.length, fetchBefore);
-                assert.equal(
-                    res.body.answer,
-                    'Concrete Studio at 2099-03-15T18:30:00.000Z for $25.',
-                );
+                const calls = fetchCalls.slice(fetchBefore);
+                assert.equal(calls.filter((call) => call.url === INFERENCE_URL).length, 1);
+                const prompt = promptOf(calls.find((call) => call.url === INFERENCE_URL));
+                assert.equal(prompt.includes('Concrete Studio'), true);
+                assert.equal(prompt.includes('Other Expert Bridge Review'), false);
+                assert.equal(prompt.includes('Ada Private Hour'), false);
+                assert.equal(prompt.includes('secret-chat-body'), false);
+                assert.equal(res.body.answer, 'Concrete Studio is your next seminar.');
                 assert.equal(res.body.answer.includes('Other Expert Bridge Review'), false);
                 assert.equal(res.body.answer.includes('Ada Private Hour'), false);
                 assert.equal(res.body.answer.includes('secret-chat-body'), false);
@@ -973,33 +1026,40 @@ describe('POST /api/ask', { concurrency: false }, () => {
             const fetchBefore = fetchCalls.length;
             try {
                 const first = makeRes();
+                nextCompletion = { miss: false, answer: 'Sam has Ada One on One.', citations: [] };
                 await ask({
                     body: { question: 'what meetings do I have?' },
                     user: { role: 'customer', userId: 'student-a' },
                 }, first);
                 assert.equal(first.statusCode, 200);
-                assert.equal(
-                    first.body.answer,
-                    'Ada One on One at 2099-04-01T15:00:00.000Z for $40 and Civil Studio at 2099-05-01T15:00:00.000Z for $15.',
-                );
+                assert.equal(first.body.answer, 'Sam has Ada One on One.');
+                const firstPrompt = promptOf([...fetchCalls].reverse().find((call) => call.url === INFERENCE_URL));
+                assert.equal(firstPrompt.includes('Ada One on One'), true);
+                assert.equal(firstPrompt.includes('Civil Studio'), true);
+                assert.equal(firstPrompt.includes('Grace One on One'), false);
+                assert.equal(firstPrompt.includes('Grace Seminar'), false);
+                assert.equal(firstPrompt.includes('secret-chat-body'), false);
                 assert.equal(first.body.answer.includes('Grace One on One'), false);
                 assert.equal(first.body.answer.includes('Grace Seminar'), false);
                 assert.equal(first.body.answer.includes('Campus Club'), false);
                 assert.equal(first.body.answer.includes('secret-chat-body'), false);
 
                 const second = makeRes();
+                nextCompletion = { miss: false, answer: 'Sam has Grace One on One.', citations: [] };
                 await ask({
                     body: { question: 'what meetings do I have?' },
                     user: { role: 'customer', userId: 'student-b' },
                 }, second);
                 assert.equal(second.statusCode, 200);
-                assert.equal(
-                    second.body.answer,
-                    'Grace One on One at 2099-06-01T15:00:00.000Z for $55 and Grace Seminar at 2099-07-01T15:00:00.000Z for $22.',
-                );
+                assert.equal(second.body.answer, 'Sam has Grace One on One.');
+                const secondPrompt = promptOf([...fetchCalls].reverse().find((call) => call.url === INFERENCE_URL));
+                assert.equal(secondPrompt.includes('Grace One on One'), true);
+                assert.equal(secondPrompt.includes('Grace Seminar'), true);
+                assert.equal(secondPrompt.includes('Ada One on One'), false);
+                assert.equal(secondPrompt.includes('Civil Studio'), false);
+                assert.equal(secondPrompt.includes('secret-chat-body'), false);
                 assert.equal(second.body.answer.includes('Ada One on One'), false);
                 assert.equal(second.body.answer.includes('Civil Studio'), false);
-                assert.equal(fetchCalls.length, fetchBefore);
             } finally {
                 GroupChat.find = originalGroupFind;
                 Event.find = originalEventFind;

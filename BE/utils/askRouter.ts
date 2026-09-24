@@ -140,14 +140,13 @@ export function routeAsk(question: unknown): AskPlan {
     const ownSeminar = OWN_SEMINAR.test(lower);
     const ownCommunity = OWN_COMMUNITY.test(lower);
     const ownLegacyEvent = OWN_LEGACY.test(lower);
-    const ownRecord = ownIndividual || ownSeminar || ownCommunity || ownLegacyEvent;
-
-    const hasFact = price || who || seminarFact || exactServices || servicesPage || ownRecord;
-    const needsLanguage = explanatory || otherChinese(text) || !hasFact;
 
     const routes: AskPageRoute[] = [];
     if (booking) routes.push('/rules');
     if (servicesPage) routes.push('/services');
+
+    // Retrieve stays off only for an explicit numeric price sort. The model still answers.
+    const purePriceSort = price && !explanatory && !otherChinese(text);
 
     return {
         mongoExperts: (price && !seminarOwnsPrice) || who || exactServices,
@@ -157,8 +156,8 @@ export function routeAsk(question: unknown): AskPlan {
         ownCommunity,
         ownLegacyEvent,
         routes,
-        retrieve: needsLanguage,
-        model: needsLanguage,
+        retrieve: !purePriceSort,
+        model: true,
     };
 }
 
