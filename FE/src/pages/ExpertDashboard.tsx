@@ -251,6 +251,7 @@ export default function ExpertDashboard() {
   const {
     auth: { userDetails },
   } = useAppSelector((state) => state);
+  const storeUnreadByRid = useAppSelector((state: any) => state.chat?.dmUnreadByRid);
 
   // Persist the active view so a refresh keeps the user on the same tab.
   const [activeItem, setActiveItem] = useState(
@@ -468,8 +469,13 @@ export default function ExpertDashboard() {
       await connectToRC();
       const snapshot = await fetchDmUnreadSnapshot();
       if (!mounted) return;
-      if (snapshot?.success && snapshot.unreadByRid) setDmUnreadByRid(snapshot.unreadByRid);
-      else setDmUnreadByRid({});
+      if (snapshot?.success && snapshot.unreadByRid) {
+        setDmUnreadByRid(snapshot.unreadByRid);
+        dispatch(setDmUnreadByRidBulk(snapshot.unreadByRid));
+      } else {
+        setDmUnreadByRid({});
+        dispatch(setDmUnreadByRidBulk({}));
+      }
       if (snapshot?.success && snapshot.nameByRid && typeof snapshot.nameByRid === 'object') {
         setRcRoomNameByRid(snapshot.nameByRid);
       } else {
@@ -573,11 +579,11 @@ export default function ExpertDashboard() {
 
   const filteredUnreadByRid = useMemo(() => {
     const out: Record<string, number> = {};
-    Object.entries(dmUnreadByRid).forEach(([rid, n]) => {
+    Object.entries(storeUnreadByRid || {}).forEach(([rid, n]) => {
       if (allowedChatRidSet.has(String(rid))) out[rid] = Number(n) || 0;
     });
     return out;
-  }, [dmUnreadByRid, allowedChatRidSet]);
+  }, [storeUnreadByRid, allowedChatRidSet]);
 
   const groupNameByRid = useMemo(() => {
     const out: Record<string, string> = {};
