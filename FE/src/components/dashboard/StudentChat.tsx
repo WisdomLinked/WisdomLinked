@@ -1337,10 +1337,10 @@ const StudentChat: React.FC<{ section?: ChatSection }> = ({ section = CHAT_SECTI
             </div>
           ) : null}
         </div>
-        <div className="wl-chat-scroll flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-3 py-3">
+        <div className="wl-chat-scroll flex min-h-0 flex-1 flex-col gap-4 overflow-hidden px-3 py-3">
           {showsCommunities(section) ? (
-          <div className="shrink-0">
-            <div className="wl-chat-scroll min-h-[3rem] max-h-[15rem] overflow-y-auto pr-1">
+          <div className="flex min-h-0 flex-1 flex-col">
+            <div className="wl-chat-scroll min-h-0 flex-1 overflow-y-auto pr-1">
             {filteredCommunity.length === 0 ? (
               <p className="px-2 py-3 text-[11px] text-slate-500">
                 {communityQuery.trim()
@@ -1444,7 +1444,7 @@ const StudentChat: React.FC<{ section?: ChatSection }> = ({ section = CHAT_SECTI
           ) : null}
 
           {showsAppointments(section) ? (
-          <div className="shrink-0 pt-1">
+          <div className="flex min-h-0 flex-1 flex-col pt-1">
             <div className="mb-2 flex items-center justify-end gap-2">
               {(() => {
                 const n = privateRows.reduce((acc, r) => {
@@ -1476,7 +1476,7 @@ const StudentChat: React.FC<{ section?: ChatSection }> = ({ section = CHAT_SECTI
                 className="flex-1 min-w-0 bg-transparent outline-none text-xs text-slate-700 placeholder:text-slate-400"
               />
             </div>
-            <div className="wl-chat-scroll min-h-[3rem] max-h-[15rem] overflow-y-auto pr-1">
+            <div className="wl-chat-scroll min-h-0 flex-1 overflow-y-auto pr-1">
             {filteredPrivate.length === 0 ? (
               <p className="px-2 py-3 text-[11px] text-slate-500">
                 {privateQuery.trim()
@@ -1673,7 +1673,7 @@ const StudentChat: React.FC<{ section?: ChatSection }> = ({ section = CHAT_SECTI
           ) : null}
 
           {showsSeminars(section) ? (
-          <div className="flex shrink-0 flex-col pt-1">
+          <div className="flex min-h-0 flex-1 flex-col pt-1">
             <div className="shrink-0 rounded-lg bg-slate-100 px-3 py-2 mb-2 flex items-center gap-2 text-xs text-slate-500">
               <MessageCircle className="h-3.5 w-3.5 text-slate-500 shrink-0" aria-hidden />
               <input
@@ -1685,7 +1685,7 @@ const StudentChat: React.FC<{ section?: ChatSection }> = ({ section = CHAT_SECTI
                 className="flex-1 min-w-0 bg-transparent outline-none text-xs text-slate-700 placeholder:text-slate-400"
               />
             </div>
-            <div className="wl-chat-scroll min-h-[3rem] max-h-[15rem] overflow-y-auto pr-1">
+            <div className="wl-chat-scroll min-h-0 flex-1 overflow-y-auto pr-1">
             {filteredSeminars.length === 0 ? (
               <p className="px-2 py-3 text-[11px] text-slate-500">
                 {seminarQuery.trim()

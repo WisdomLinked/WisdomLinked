@@ -6,8 +6,8 @@ export const CHAT_SECTION_DEFAULT: ChatSection = 'none';
 export const CHAT_SECTION_ITEMS: { id: ChatSection; label: string }[] = [
     { id: 'direct', label: 'DIRECT MESSAGES' },
     { id: 'appointments', label: '1:1 APPOINTMENTS' },
-    { id: 'communities', label: 'COMMUNITIES' },
     { id: 'seminars', label: 'SEMINARS' },
+    { id: 'communities', label: 'COMMUNITIES' },
 ];
 
 const SECTIONS = new Set<ChatSection>(['none', 'direct', 'appointments', 'communities', 'seminars']);
