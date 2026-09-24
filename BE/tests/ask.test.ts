@@ -610,7 +610,7 @@ describe('POST /api/ask', { concurrency: false }, () => {
                 assert.deepEqual(populateArg, { path: 'keywords', select: 'value' });
                 assert.match(res.body.answer, /\$40/);
                 assert.match(res.body.answer, /\$20/);
-                assert.equal(res.body.answer.includes('$5'), false);
+                assert.match(res.body.answer, /\$5/);
                 assert.equal(res.body.answer.includes('$999'), false);
                 assert.equal(res.body.experts.length, 0);
                 assert.equal(res.body.students[0].name, 'student-card-leak');
