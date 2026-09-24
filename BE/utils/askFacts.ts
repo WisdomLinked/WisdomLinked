@@ -67,6 +67,20 @@ const serviceLabels = (card: any): string[] => textList(card?.services);
 const hasCivilEngineering = (card: any): boolean =>
     majorLabels(card).some((label) => label.toLowerCase() === 'civil engineering');
 
+const isCivilSubject = (subject: string): boolean =>
+    /^(?:civil engineering|civil|土木工程|土木)$/i.test(subject.trim());
+
+const matchesSubject = (card: any, subject: string): boolean => {
+    const raw = subject.trim();
+    if (!raw) return true;
+    if (isCivilSubject(raw)) return hasCivilEngineering(card);
+    const needle = raw.toLowerCase();
+    if (majorLabels(card).some((label) => label.toLowerCase().includes(needle))) return true;
+    const title = String(card?.title ?? '').toLowerCase();
+    const bio = String(card?.bio ?? '').toLowerCase();
+    return title.includes(needle) || bio.includes(needle);
+};
+
 const wantsCivil = (question: string): boolean => /土木工程|土木|\bcivil\b/i.test(question);
 
 const wantsProfessor = (question: string): boolean => /教授|\bprofessors?\b/i.test(question);
@@ -86,6 +100,19 @@ const requestedServices = (question: string): string[] => {
 const hasService = (card: any, label: string): boolean => {
     const want = label.toLowerCase();
     return serviceLabels(card).some((service) => service.toLowerCase() === want);
+};
+
+const canonicalService = (value: unknown): string | null => {
+    if (typeof value !== 'string') return null;
+    const folded = value.trim().toLowerCase();
+    return SERVICE_LABELS.find((label) => label.toLowerCase() === folded) ?? null;
+};
+
+const sortMode = (value: unknown): 'cheapest' | 'highest' | null => {
+    const folded = String(value ?? '').trim().toLowerCase();
+    if (folded === 'cheapest') return 'cheapest';
+    if (folded === 'highest') return 'highest';
+    return null;
 };
 
 const numberAfter = (question: string, keyword: 'under' | 'over'): number | null => {
@@ -141,6 +168,34 @@ export const filterPublicExperts = (cards: any[], question: string): any[] => {
     }
     if (cheapest) return keepExtreme(matched, 'min');
     if (highest) return keepExtreme(matched, 'max');
+    return matched;
+};
+
+export const filterExpertsByArgs = (cards: any[], args: any = {}): any[] => {
+    const subject = typeof args?.subject === 'string' ? args.subject : '';
+    const professor = args?.professor === true;
+    const service = canonicalService(args?.service);
+    const under = finiteRate(args?.priceUnder);
+    const over = finiteRate(args?.priceOver);
+    const sort = sortMode(args?.sort);
+    const priceConstrained = sort !== null || under !== null || over !== null;
+
+    const matched = (Array.isArray(cards) ? cards : []).filter((card) => {
+        if (!card || typeof card !== 'object') return false;
+        const name = String(card.name ?? card.username ?? '');
+        if (name.includes('@')) return false;
+        if (subject.trim() && !matchesSubject(card, subject)) return false;
+        if (professor && !isProfessorCard(card)) return false;
+        if (service && !hasService(card, service)) return false;
+        const rate = finiteRate(card.hourlyRate);
+        if (priceConstrained && rate === null) return false;
+        if (under !== null && !(rate !== null && rate < under)) return false;
+        if (over !== null && !(rate !== null && rate > over)) return false;
+        return true;
+    });
+
+    if (sort === 'cheapest') return keepExtreme(matched, 'min');
+    if (sort === 'highest') return keepExtreme(matched, 'max');
     return matched;
 };
 
@@ -259,6 +314,42 @@ export const filterPublicSeminars = (cards: any[], question: string): any[] => {
     });
 };
 
+const withPublicPrice = (card: any): any => {
+    const next = scrubSeminar(card);
+    delete next.hourlyRate;
+    const price = finiteRate(card?.price);
+    if (price !== null) next.price = price;
+    return next;
+};
+
+export const filterSeminarsByArgs = (cards: any[], args: any = {}): any[] => {
+    const query = typeof args?.query === 'string' ? args.query.trim() : '';
+    const under = finiteRate(args?.priceUnder);
+    const over = finiteRate(args?.priceOver);
+    const sort = sortMode(args?.sort);
+    const priceConstrained = sort !== null || under !== null || over !== null;
+
+    const matched = (Array.isArray(cards) ? cards : []).filter((card) => {
+        if (!card || typeof card !== 'object') return false;
+        if (query) {
+            const haystack = `${card.name ?? ''} ${card.description ?? ''}`.toLowerCase();
+            if (!haystack.includes(query.toLowerCase())) return false;
+        }
+        const price = finiteRate(card.price);
+        if (priceConstrained && price === null) return false;
+        if (under !== null && !(price !== null && price < under)) return false;
+        if (over !== null && !(price !== null && price > over)) return false;
+        return true;
+    });
+
+    const ranked = sort === 'cheapest'
+        ? keepExtreme(matched.map((card) => ({ ...card, hourlyRate: finiteRate(card.price) })), 'min')
+        : sort === 'highest'
+            ? keepExtreme(matched.map((card) => ({ ...card, hourlyRate: finiteRate(card.price) })), 'max')
+            : matched;
+    return ranked.map(withPublicPrice);
+};
+
 const recordId = (value: unknown): string => {
     if (value == null) return '';
     if (typeof value === 'object') {
@@ -355,4 +446,41 @@ export const filterOwnRecords = (rows: any[], caller: any, question?: string): a
         }
         return true;
     }).map(toOwnRecord);
+};
+
+const CHAT_FIELD_KEYS = ['messages', 'body', 'chat', 'chatFiles'];
+
+const stripChatFields = (row: any): any => {
+    const next = { ...row };
+    CHAT_FIELD_KEYS.forEach((key) => {
+        delete next[key];
+    });
+    return next;
+};
+
+const matchesRecordKind = (row: any, kind: string): boolean => {
+    const type = rowKind(row);
+    if (kind === 'event') return type === 'legacyEvent';
+    return type === kind;
+};
+
+export const filterOwnRecordsByKind = (rows: any[], caller: any, kind?: string): any[] => {
+    const owned = filterOwnRecords(rows, caller).map(stripChatFields);
+    const wanted = String(kind ?? '').trim().toLowerCase();
+    if (wanted !== 'individual' && wanted !== 'seminar' && wanted !== 'community' && wanted !== 'event') {
+        return owned;
+    }
+
+    const list = Array.isArray(rows) ? rows : [];
+    let cursor = 0;
+    const picked: any[] = [];
+    list.forEach((row) => {
+        if (!row || typeof row !== 'object') return;
+        if (filterOwnRecords([row], caller).length === 0) return;
+        const record = owned[cursor];
+        cursor += 1;
+        if (!matchesRecordKind(row, wanted)) return;
+        picked.push(record);
+    });
+    return picked;
 };

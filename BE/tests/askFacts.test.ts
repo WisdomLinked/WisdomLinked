@@ -4,6 +4,9 @@ import {
   filterPublicExperts,
   filterPublicSeminars,
   filterOwnRecords,
+  filterExpertsByArgs,
+  filterSeminarsByArgs,
+  filterOwnRecordsByKind,
   publicFactTemplate,
 } from "../utils/askFacts";
 
@@ -114,6 +117,71 @@ describe("filterPublicExperts", () => {
   });
 });
 
+describe("filterExpertsByArgs", () => {
+  const cards = [
+    civilProfessor("Ada", 30),
+    civilProfessor("Grace", null),
+    civilProfessor("Alan", undefined),
+    civilProfessor("Lin", Number.NaN),
+    civilProfessor("Zero", 0),
+    civilProfessor("ada@school.edu", 1),
+    civilProfessor("Ivy", 5, { keywords: ["History"], bio: "civil engineering outreach" }),
+  ];
+
+  it("keeps a missing rate for Civil Engineering when no price args are set", () => {
+    const names = filterExpertsByArgs(cards, { subject: "Civil Engineering" }).map((card) => card.name);
+    assert.deepEqual(names, ["Ada", "Grace", "Alan", "Lin", "Zero"]);
+  });
+
+  it("drops a missing rate for sort cheapest and keeps hourlyRate 0", () => {
+    const cheapest = filterExpertsByArgs(cards, { subject: "Civil Engineering", sort: "cheapest" });
+    assert.deepEqual(cheapest.map((card) => card.name), ["Zero"]);
+    assert.equal(cheapest[0].hourlyRate, 0);
+  });
+
+  it("treats civil, 土木, and 土木工程 as Civil Engineering", () => {
+    const names = (subject: string) =>
+      filterExpertsByArgs(cards, { subject }).map((card) => card.name);
+    assert.deepEqual(names("civil"), ["Ada", "Grace", "Alan", "Lin", "Zero"]);
+    assert.deepEqual(names("土木"), ["Ada", "Grace", "Alan", "Lin", "Zero"]);
+    assert.deepEqual(names("土木工程"), ["Ada", "Grace", "Alan", "Lin", "Zero"]);
+  });
+
+  it("keeps a professor only when professor is true and a canonical service", () => {
+    const pool = [
+      civilProfessor("Ada", 40, { services: ["Study Abroad"] }),
+      civilProfessor("Grace", 10, { title: "Lecturer", bio: "structures lab", services: ["Study Abroad"] }),
+      civilProfessor("Alan", 12, { services: ["Research Guidance"] }),
+    ];
+    assert.deepEqual(
+      filterExpertsByArgs(pool, { professor: true, service: "Study Abroad" }).map((card) => card.name),
+      ["Ada"],
+    );
+    assert.deepEqual(
+      filterExpertsByArgs(pool, { service: "Tutoring" }).map((card) => card.name),
+      ["Ada", "Grace", "Alan"],
+    );
+  });
+
+  it("keeps rates strictly under or over and drops a missing rate", () => {
+    const pool = [
+      civilProfessor("Ada", 25),
+      civilProfessor("Grace", 24),
+      civilProfessor("Alan", 50),
+      civilProfessor("Lin", 51),
+      civilProfessor("NoRate", null),
+    ];
+    assert.deepEqual(
+      filterExpertsByArgs(pool, { priceUnder: 25 }).map((card) => card.name),
+      ["Grace"],
+    );
+    assert.deepEqual(
+      filterExpertsByArgs(pool, { priceOver: 50 }).map((card) => card.name),
+      ["Lin"],
+    );
+  });
+});
+
 describe("publicFactTemplate", () => {
   it("does not invent a person when no card has a public rate", () => {
     const text = publicFactTemplate([]);
@@ -185,6 +253,40 @@ describe("filterPublicSeminars", () => {
     assert.equal(result[0].seats, "3 of 20");
     assert.equal(result[0].hostName, undefined);
     assert.equal(result[0].image, undefined);
+  });
+});
+
+describe("filterSeminarsByArgs", () => {
+  it("keeps a seminar whose host name contains @ and omits that name", () => {
+    const result = filterSeminarsByArgs([
+      {
+        name: "Bridge Design Studio",
+        description: "Weekly review",
+        price: 15,
+        hostName: "ada@school.edu",
+        host: { username: "ada@school.edu" },
+      },
+    ], {});
+    assert.equal(result.length, 1);
+    assert.equal(result[0].name, "Bridge Design Studio");
+    assert.equal(JSON.stringify(result).includes("@"), false);
+  });
+
+  it("matches query on name or description and sorts by price", () => {
+    const cards = [
+      { name: "Bridge Design Studio", description: "Weekly review", price: 15, hostName: "Ada" },
+      { name: "Poetry Night", description: "bridge poems", price: 0, hostName: "Lin" },
+      { name: "Lab", description: "structures", price: null, hostName: "Grace" },
+    ];
+    const named = filterSeminarsByArgs(cards, { query: "bridge" });
+    assert.deepEqual(named.map((card) => card.name), ["Bridge Design Studio", "Poetry Night"]);
+    const cheapest = filterSeminarsByArgs(cards, { query: "bridge", sort: "cheapest" });
+    assert.deepEqual(cheapest.map((card) => card.name), ["Poetry Night"]);
+    assert.equal(cheapest[0].price, 0);
+    assert.deepEqual(
+      filterSeminarsByArgs(cards, { priceUnder: 15 }).map((card) => card.name),
+      ["Poetry Night"],
+    );
   });
 });
 
@@ -346,5 +448,75 @@ describe("filterOwnRecords", () => {
     ];
     const seminar = filterOwnRecords(withSeminar, { id: "caller-a", role: "expert" }, "what is my next seminar?");
     assert.deepEqual(seminar.map((row) => row.name), ["Structures studio"]);
+  });
+});
+
+describe("filterOwnRecordsByKind", () => {
+  const futureEnd = "2099-01-01T00:00:00.000Z";
+
+  const rows = [
+    {
+      name: "Ada session",
+      status: "active",
+      type: "individual",
+      adminId: "caller-a",
+      participantIds: ["caller-a"],
+      end: futureEnd,
+      messages: ["hello"],
+      body: "secret note",
+      chat: "thread",
+    },
+    {
+      name: "Grace session",
+      status: "active",
+      type: "individual",
+      adminId: "caller-b",
+      participantIds: ["caller-b"],
+      end: futureEnd,
+      messages: ["other"],
+    },
+    {
+      name: "Ada seminar",
+      status: "active",
+      type: "seminar",
+      adminId: "caller-a",
+      participantIds: ["caller-a"],
+      end: futureEnd,
+    },
+    {
+      name: "Cancelled session",
+      status: "cancelled",
+      type: "individual",
+      adminId: "caller-a",
+      participantIds: ["caller-a"],
+      end: futureEnd,
+    },
+    {
+      kind: "legacyEvent",
+      name: "Old tutoring",
+      status: "accepted",
+      expertId: "caller-a",
+      customerId: "student-1",
+      end: futureEnd,
+    },
+  ];
+
+  it("hides another caller and does not return messages", () => {
+    const ada = filterOwnRecordsByKind(rows, { id: "caller-a", role: "customer" }, "individual");
+    assert.deepEqual(ada.map((row) => row.name), ["Ada session"]);
+    assert.equal(ada.some((row) => row.name === "Grace session"), false);
+    assert.equal(ada[0].messages, undefined);
+    assert.equal(ada[0].body, undefined);
+    assert.equal(ada[0].chat, undefined);
+    assert.equal(JSON.stringify(ada).includes("hello"), false);
+  });
+
+  it("returns the caller rows when kind is omitted and only legacy events for event", () => {
+    const caller = { id: "caller-a", role: "expert" };
+    const all = filterOwnRecordsByKind(rows, caller);
+    assert.deepEqual(all.map((row) => row.name), ["Ada session", "Ada seminar", "Old tutoring"]);
+    assert.equal(all.some((row) => row.name === "Grace session"), false);
+    const events = filterOwnRecordsByKind(rows, caller, "event");
+    assert.deepEqual(events.map((row) => row.name), ["Old tutoring"]);
   });
 });
