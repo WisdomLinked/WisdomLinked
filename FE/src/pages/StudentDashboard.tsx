@@ -528,6 +528,7 @@ export default function StudentDashboard() {
   const [followedMentorIds, setFollowedMentorIds] = useState<string[]>([]);
   const [followerCounts, setFollowerCounts] = useState<Record<string, number>>({});
   const { auth: { userDetails } } = useAppSelector((state: any) => state);
+  const storeUnreadByRid = useAppSelector((state: any) => state.chat?.dmUnreadByRid);
 
   useEffect(() => {
     if (selectedExpert?.id != null) {
@@ -1228,11 +1229,11 @@ export default function StudentDashboard() {
 
   const filteredUnreadByRid = useMemo(() => {
     const out: Record<string, number> = {};
-    Object.entries(dmUnreadByRid).forEach(([rid, n]) => {
+    Object.entries(storeUnreadByRid || {}).forEach(([rid, n]) => {
       if (allowedChatRidSet.has(String(rid))) out[rid] = Number(n) || 0;
     });
     return out;
-  }, [dmUnreadByRid, allowedChatRidSet]);
+  }, [storeUnreadByRid, allowedChatRidSet]);
 
   /** WisdomLinked group/community names by RC room id (overrides RC internal slugs like wl_*). */
   const groupNameByRid = useMemo(() => {

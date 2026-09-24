@@ -30,16 +30,38 @@ describe('chatReducer', () => {
         expect(cleared.dmUnreadByRid).toEqual({});
     });
 
-    it('resetChat clears active thread and unread state', () => {
+    it('resetChat clears the active thread but keeps unread counts', () => {
         const state = chatReducer(undefined as any, {
             type: actionTypes.patchDmUnreadRid,
             payload: { rid: 'room-2', unread: 4 },
         } as any);
         const reset = chatReducer(state as any, { type: actionTypes.resetChat } as any);
         expect(reset.messages).toEqual([]);
-        expect(reset.dmUnreadByRid).toEqual({});
         expect(reset.chosenChatDetails).toBeNull();
         expect(reset.chosenGroupChatDetails).toBeNull();
+        expect(reset.dmUnreadByRid).toEqual({ 'room-2': 4 });
+    });
+
+    it('a room read after hydration stays cleared across a resetChat', () => {
+        let state = chatReducer(undefined as any, {
+            type: actionTypes.setDmUnreadByRidBulk,
+            payload: { 'room-a': 3, 'room-b': 2 },
+        } as any);
+
+        state = chatReducer(state as any, {
+            type: actionTypes.clearDmUnreadRid,
+            payload: 'room-a',
+        } as any);
+        expect(state.dmUnreadByRid).toEqual({ 'room-b': 2 });
+
+        state = chatReducer(state as any, {
+            type: actionTypes.clearDmUnreadRid,
+            payload: 'room-b',
+        } as any);
+        expect(state.dmUnreadByRid).toEqual({});
+
+        state = chatReducer(state as any, { type: actionTypes.resetChat } as any);
+        expect(state.dmUnreadByRid).toEqual({});
     });
 });
 
