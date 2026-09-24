@@ -7,7 +7,7 @@ import {
 import { computeBookingPriceCents } from '../utils/bookingPrice';
 import { normalizeExpertPrice } from '../utils/normalizeExpertPrice';
 import { seminarCapacityLabel } from '../utils/seminarCapacityLabel';
-import { canonicalOptionsForQuery, matchesServiceOption } from '../utils/serviceOptions';
+import { SERVICE_OPTIONS, canonicalOptionsForQuery, matchesServiceOption } from '../utils/serviceOptions';
 import { enrolledStudentIds, firstFullFutureOccurrence } from '../utils/seminarCapacity';
 import { normalizeProfileImageRef } from '../utils/profileImageFilename';
 import { decodeBasicEntities, stripTags } from '../utils/wlHtmlPlainText';
@@ -417,7 +417,12 @@ const listPublicSeminarCards = async () => {
     const cards: any[] = [];
     for (const [id, occurrences] of groups) {
         const card = toSeminarCard(id, occurrences, now);
-        if (card) cards.push(card);
+        if (!card) continue;
+        const host = String(
+            occurrences.find((row: any) => row?.admin && typeof row.admin === 'object')?.admin?.username ?? '',
+        ).trim();
+        if (host && !host.includes('@')) card.hostName = host;
+        cards.push(card);
     }
     return cards;
 };
@@ -440,8 +445,32 @@ const collectSearchResults = async (req, q: string) => {
     };
 };
 
-const queryPublicExperts = async (question: string) =>
-    filterPublicExperts(await listPublicExpertCards(), String(question ?? ''));
+const canonicalServiceLabels = (doc: any): string[] => {
+    const rows = Array.isArray(doc?.services) ? doc.services : [];
+    return SERVICE_OPTIONS
+        .filter((option) => rows.some((row: any) => matchesServiceOption(row || {}, option)))
+        .map((option) => option.label);
+};
+
+const queryPublicExperts = async (question: string) => {
+    const [cards, docs] = await Promise.all([
+        listPublicExpertCards(),
+        User.find({ role: 'expert', status: 'active' })
+            .select('services')
+            .populate({ path: 'services', select: 'value label' })
+            .lean(),
+    ]);
+    const servicesById = new Map<string, string[]>();
+    for (const doc of Array.isArray(docs) ? docs : []) {
+        const labels = canonicalServiceLabels(doc);
+        if (labels.length) servicesById.set(refId(doc), labels);
+    }
+    const withServices = (Array.isArray(cards) ? cards : []).map((card: any) => {
+        const services = servicesById.get(String(card?.id ?? ''));
+        return services ? { ...card, services } : card;
+    });
+    return filterPublicExperts(withServices, String(question ?? ''));
+};
 
 const queryPublicSeminars = async (question: string) =>
     filterPublicSeminars(await listPublicSeminarCards(), String(question ?? ''));
