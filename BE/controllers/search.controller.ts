@@ -1,3 +1,9 @@
+import {
+    filterOwnRecords,
+    filterPublicExperts,
+    filterPublicSeminars,
+    publicFactTemplate,
+} from '../utils/askFacts';
 import { computeBookingPriceCents } from '../utils/bookingPrice';
 import { normalizeExpertPrice } from '../utils/normalizeExpertPrice';
 import { seminarCapacityLabel } from '../utils/seminarCapacityLabel';
@@ -434,6 +440,15 @@ const collectSearchResults = async (req, q: string) => {
     };
 };
 
+const queryPublicExperts = async (question: string) =>
+    filterPublicExperts(await listPublicExpertCards(), String(question ?? ''));
+
+const queryPublicSeminars = async (question: string) =>
+    filterPublicSeminars(await listPublicSeminarCards(), String(question ?? ''));
+
+const queryOwnRecords = async (caller: any, rows?: any[], question?: string) =>
+    filterOwnRecords(Array.isArray(rows) ? rows : [], caller, question);
+
 const search = async (req, res) => {
     try {
         const raw = req.query?.q;
@@ -451,4 +466,8 @@ module.exports = {
     SEARCH_GROUP_LIMIT,
     listPublicExpertCards,
     listPublicSeminarCards,
+    queryPublicExperts,
+    queryPublicSeminars,
+    queryOwnRecords,
+    publicFactTemplate,
 };
