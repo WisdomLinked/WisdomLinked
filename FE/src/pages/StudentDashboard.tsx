@@ -14,7 +14,8 @@ import {
   sessionEndMs,
 } from '../utils/sessionDuration';
 import { paymentWindowOpen } from '../utils/bookingLifecycle';
-import { displayRoomLabel, shouldNotifyRoom } from '../utils/chatRoomLabel';
+import { displayRoomLabel } from '../utils/chatRoomLabel';
+import { chatTargetsByRid } from '../utils/chatNavTarget';
 import { fetchDmUnreadSnapshot, fetchChatUserProfile } from '../api/chatApi';
 import ProfileModal from './Dashboard/Messenger/Messages/ProfileModal';
 import { seatWalletOption } from '../utils/seatCheckoutOptions';
@@ -528,6 +529,7 @@ export default function StudentDashboard() {
   const [followedMentorIds, setFollowedMentorIds] = useState<string[]>([]);
   const [followerCounts, setFollowerCounts] = useState<Record<string, number>>({});
   const { auth: { userDetails } } = useAppSelector((state: any) => state);
+  const storeUnreadByRid = useAppSelector((state: any) => state.chat?.dmUnreadByRid);
 
   useEffect(() => {
     if (selectedExpert?.id != null) {
@@ -1206,33 +1208,26 @@ export default function StudentDashboard() {
     return s;
   }, [userDetails?.directConversations]);
 
-  const knownRidSet = useMemo(() => new Set(knownRids.map(String)), [knownRids]);
+  /** Community rids come from getAllCommunityChats, which the user payload often omits. */
+  const chatTargetByRid = useMemo(
+    () =>
+      chatTargetsByRid(
+        dmRidSet,
+        [...(userDetails?.groupChats ?? []), ...(userDetails?.generalChats ?? [])],
+        Object.keys(communityRidToName),
+      ),
+    [dmRidSet, userDetails?.groupChats, userDetails?.generalChats, communityRidToName],
+  );
 
-  /** Same idea as DM rids from directConversations — include community rids from getAllCommunityChats (often missing on user payload). */
-  const allowedChatRidSet = useMemo(() => {
-    const s = new Set<string>();
-    dmRidSet.forEach(rid => s.add(rid));
-    /** Include unread snapshot rooms only when the backend matched them to a WL chat (an unidentified room is one we cannot open). */
-    Object.entries(dmUnreadByRid || {}).forEach(([rid]) => {
-      if (shouldNotifyRoom(rid, knownRidSet, rcRoomNameByRid?.[rid], roomNamesUnresolved)) s.add(String(rid));
-    });
-    (userDetails?.generalChats ?? []).forEach((g: any) => {
-      if (g?.rcChannelId) s.add(String(g.rcChannelId));
-    });
-    (userDetails?.groupChats ?? []).forEach((g: any) => {
-      if (g?.rcChannelId) s.add(String(g.rcChannelId));
-    });
-    Object.keys(communityRidToName).forEach(rid => s.add(rid));
-    return s;
-  }, [dmRidSet, dmUnreadByRid, rcRoomNameByRid, knownRidSet, roomNamesUnresolved, userDetails?.generalChats, userDetails?.groupChats, communityRidToName]);
+  const allowedChatRidSet = useMemo(() => new Set(Object.keys(chatTargetByRid)), [chatTargetByRid]);
 
   const filteredUnreadByRid = useMemo(() => {
     const out: Record<string, number> = {};
-    Object.entries(dmUnreadByRid).forEach(([rid, n]) => {
+    Object.entries(storeUnreadByRid || {}).forEach(([rid, n]) => {
       if (allowedChatRidSet.has(String(rid))) out[rid] = Number(n) || 0;
     });
     return out;
-  }, [dmUnreadByRid, allowedChatRidSet]);
+  }, [storeUnreadByRid, allowedChatRidSet]);
 
   /** WisdomLinked group/community names by RC room id (overrides RC internal slugs like wl_*). */
   const groupNameByRid = useMemo(() => {
@@ -1305,7 +1300,8 @@ export default function StudentDashboard() {
         .filter(([, count]) => Number(count) > 0)
         .map(([rid, count]) => {
           const n = Number(count) || 0;
-          const isDm = dmRidSet.has(rid);
+          const target = chatTargetByRid[rid] ?? 'community';
+          const isDm = target === 'dm';
           const label = displayRoomLabel(roomLabelByRid[rid], isDm ? 'Someone' : 'a group chat');
           return {
             id: `chat-${rid}`,
@@ -1314,15 +1310,16 @@ export default function StudentDashboard() {
             unreadCount: n,
             icon: <MessageSquare className="h-3.5 w-3.5 text-[#1A3A4A]" aria-hidden />,
             onClick: () => {
-              if (isDm) localStorage.setItem('wl_open_dm_rid', rid);
+              if (target === 'dm') localStorage.setItem('wl_open_dm_rid', rid);
+              else if (target === 'seminar') localStorage.setItem('wl_open_seminar_rc_rid', rid);
               else localStorage.setItem('wl_open_community_rc_rid', rid);
               window.dispatchEvent(new Event('wl-open-chat-nav'));
-              openChatSection(isDm ? 'dm' : 'community');
+              openChatSection(target);
               setActiveItem('chat');
             },
           };
         }),
-    [filteredUnreadByRid, roomLabelByRid, dmRidSet],
+    [filteredUnreadByRid, roomLabelByRid, chatTargetByRid],
   );
 
   // Calendar "Join" routing: seminars open their seminar group chat; 1:1s open a

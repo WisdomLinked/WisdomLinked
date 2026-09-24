@@ -32,7 +32,8 @@ import {
   getMyFollowers,
 } from '../api/api';
 import { resolveProfileImageSrc } from '../utils/profileImage';
-import { displayRoomLabel, shouldNotifyRoom } from '../utils/chatRoomLabel';
+import { displayRoomLabel } from '../utils/chatRoomLabel';
+import { chatTargetsByRid } from '../utils/chatNavTarget';
 import { seminarEnrollmentLabel } from '../utils/seminarCapacityLabel';
 import { fetchDmUnreadSnapshot, fetchChatUserProfile } from '../api/chatApi';
 import ProfileModal from './Dashboard/Messenger/Messages/ProfileModal';
@@ -251,6 +252,7 @@ export default function ExpertDashboard() {
   const {
     auth: { userDetails },
   } = useAppSelector((state) => state);
+  const storeUnreadByRid = useAppSelector((state: any) => state.chat?.dmUnreadByRid);
 
   // Persist the active view so a refresh keeps the user on the same tab.
   const [activeItem, setActiveItem] = useState(
@@ -468,8 +470,13 @@ export default function ExpertDashboard() {
       await connectToRC();
       const snapshot = await fetchDmUnreadSnapshot();
       if (!mounted) return;
-      if (snapshot?.success && snapshot.unreadByRid) setDmUnreadByRid(snapshot.unreadByRid);
-      else setDmUnreadByRid({});
+      if (snapshot?.success && snapshot.unreadByRid) {
+        setDmUnreadByRid(snapshot.unreadByRid);
+        dispatch(setDmUnreadByRidBulk(snapshot.unreadByRid));
+      } else {
+        setDmUnreadByRid({});
+        dispatch(setDmUnreadByRidBulk({}));
+      }
       if (snapshot?.success && snapshot.nameByRid && typeof snapshot.nameByRid === 'object') {
         setRcRoomNameByRid(snapshot.nameByRid);
       } else {
@@ -552,32 +559,24 @@ export default function ExpertDashboard() {
     return s;
   }, [userDetails?.directConversations]);
 
-  const knownRidSet = useMemo(() => new Set(knownRids.map(String)), [knownRids]);
-
-  const allowedChatRidSet = useMemo(() => {
-    const s = new Set<string>();
-    dmRidSet.forEach(rid => s.add(rid));
-    /** Include unread snapshot rooms only when the backend matched them to a WL chat (an unidentified room is one we cannot open). */
-    Object.entries(dmUnreadByRid || {}).forEach(([rid]) => {
-      if (shouldNotifyRoom(rid, knownRidSet, rcRoomNameByRid?.[rid], roomNamesUnresolved)) s.add(String(rid));
-    });
-    (userDetails?.generalChats ?? []).forEach((g: any) => {
-      if (g?.rcChannelId) s.add(String(g.rcChannelId));
-    });
-    (userDetails?.groupChats ?? []).forEach((g: any) => {
-      if (g?.rcChannelId) s.add(String(g.rcChannelId));
-    });
-    Object.keys(communityRidToName).forEach(rid => s.add(rid));
-    return s;
-  }, [dmRidSet, dmUnreadByRid, rcRoomNameByRid, knownRidSet, roomNamesUnresolved, userDetails?.generalChats, userDetails?.groupChats, communityRidToName]);
+  const chatTargetByRid = useMemo(
+    () =>
+      chatTargetsByRid(
+        dmRidSet,
+        [...(userDetails?.groupChats ?? []), ...(userDetails?.generalChats ?? [])],
+        Object.keys(communityRidToName),
+      ),
+    [dmRidSet, userDetails?.groupChats, userDetails?.generalChats, communityRidToName],
+  );
+  const allowedChatRidSet = useMemo(() => new Set(Object.keys(chatTargetByRid)), [chatTargetByRid]);
 
   const filteredUnreadByRid = useMemo(() => {
     const out: Record<string, number> = {};
-    Object.entries(dmUnreadByRid).forEach(([rid, n]) => {
+    Object.entries(storeUnreadByRid || {}).forEach(([rid, n]) => {
       if (allowedChatRidSet.has(String(rid))) out[rid] = Number(n) || 0;
     });
     return out;
-  }, [dmUnreadByRid, allowedChatRidSet]);
+  }, [storeUnreadByRid, allowedChatRidSet]);
 
   const groupNameByRid = useMemo(() => {
     const out: Record<string, string> = {};
@@ -649,7 +648,8 @@ export default function ExpertDashboard() {
         .filter(([, count]) => Number(count) > 0)
         .map(([rid, count]) => {
           const n = Number(count) || 0;
-          const isDm = dmRidSet.has(rid);
+          const target = chatTargetByRid[rid] ?? 'community';
+          const isDm = target === 'dm';
           const label = displayRoomLabel(roomLabelByRid[rid], isDm ? 'Someone' : 'a group chat');
           return {
             id: `chat-${rid}`,
@@ -658,15 +658,16 @@ export default function ExpertDashboard() {
             unreadCount: n,
             icon: <MessageSquare className="h-3.5 w-3.5 text-[#1A3A4A]" aria-hidden />,
             onClick: () => {
-              if (isDm) localStorage.setItem('wl_open_dm_rid', rid);
+              if (target === 'dm') localStorage.setItem('wl_open_dm_rid', rid);
+              else if (target === 'seminar') localStorage.setItem('wl_open_seminar_rc_rid', rid);
               else localStorage.setItem('wl_open_community_rc_rid', rid);
               window.dispatchEvent(new Event('wl-open-chat-nav'));
-              openChatSection(isDm ? 'dm' : 'community');
+              openChatSection(target);
               setActiveItem('chat');
             },
           };
         }),
-    [filteredUnreadByRid, roomLabelByRid, dmRidSet],
+    [filteredUnreadByRid, roomLabelByRid, chatTargetByRid],
   );
 
   const navItems = useMemo(
