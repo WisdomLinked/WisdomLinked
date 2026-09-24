@@ -1026,6 +1026,14 @@ const StudentChat: React.FC<{ section?: ChatSection }> = ({ section = CHAT_SECTI
         localStorage.removeItem('wl_open_seminar_id');
       }
     }
+    const seminarRid = localStorage.getItem('wl_open_seminar_rc_rid');
+    if (seminarRid) {
+      const row = seminarRows.find(s => String(s.rcChannelId || '') === String(seminarRid));
+      if (row) {
+        void openSeminar(row);
+        localStorage.removeItem('wl_open_seminar_rc_rid');
+      }
+    }
     const dmUserRaw = localStorage.getItem('wl_open_dm_userid');
     if (dmUserRaw) {
       try {
