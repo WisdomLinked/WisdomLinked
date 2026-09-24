@@ -1014,6 +1014,18 @@ export const profileImageFetch = async (url: string, size: string) => {
     }
 };
 
+/** GET /api/search. Safe methods do not send a CSRF token. */
+export const searchSite = async (q: string) => {
+    const res = await api.get('search', { params: { q } });
+    return res.data;
+};
+
+/** POST /api/ask through the shared client so the CSRF header is sent. */
+export const askSite = async (question: string) => {
+    const res = await api.post('ask', { question });
+    return res.data;
+};
+
 
 
 export const doFilterExperts = async (filter: any) => {

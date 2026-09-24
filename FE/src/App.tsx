@@ -141,7 +141,7 @@ const AuthenticatedRoutes = () => {
   )
 };
 
-const PrivateRoute = ({ children }: any) => {
+export const PrivateRoute = ({ children }: any) => {
   const dispatch = useDispatch()
   const { auth: { userDetails } } = useAppSelector((state) => state);
   // PRIVATE ROUTE --------------

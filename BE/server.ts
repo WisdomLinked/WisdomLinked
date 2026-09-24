@@ -26,6 +26,7 @@ const receiptRoutes = require("./routes/receiptRoutes");
 const announcementRoutes = require("./routes/announcementRoutes");
 const featuredExpertRoutes = require("./routes/featuredExpertRoutes");
 const searchRoutes = require("./routes/searchRoutes");
+const askRoutes = require("./routes/askRoutes");
 
 const { appendDefaultServices, appendAdminUserAndGroupChat, initAppStates } = require('./initDB')
 const { apiLimiter } = require('./middlewares/rateLimit');
@@ -98,6 +99,7 @@ app.use("/api/invite-friend", friendInvitationRoutes);
 app.use("/api/group-chat", groupChatRoutes);
 app.use("/api/experts", featuredExpertRoutes);
 app.use("/api/search", searchRoutes);
+app.use("/api/ask", askRoutes);
 app.use("/api/expert", expertRoutes);
 app.use("/api/customer", customerRoutes);
 app.use("/api/admin", adminRoutes);
@@ -165,6 +167,13 @@ mongoose
 
         sweepOrphanedBookingIntents();
         setInterval(sweepOrphanedBookingIntents, 15 * 60 * 1000);
+
+        // One backend container per environment. Staging and production each
+        // write search/${NODE_ENV}/catalog.txt and do not share this timer.
+        const { rebuildSearchCatalog } = require('./services/searchCatalogExport');
+        const SEARCH_CATALOG_INTERVAL_MS = 24 * 60 * 60 * 1000;
+        rebuildSearchCatalog();
+        setInterval(rebuildSearchCatalog, SEARCH_CATALOG_INTERVAL_MS);
 
         // Every 3 minutes, not 15 like the others: a "starting in 15 minutes"
         // reminder swept on a 15-minute interval could arrive with only moments

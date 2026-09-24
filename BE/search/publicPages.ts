@@ -4,7 +4,7 @@
  * render the same copy. Deploy copies that file to ./publicPageCatalog.ts
  * because the backend image build context is BE/ only.
  */
-function loadCatalog(): { searchPublicPages: (query: unknown) => unknown } {
+function loadCatalog(): { searchPublicPages: (query: unknown) => unknown; PUBLIC_PAGES?: unknown; default?: { PUBLIC_PAGES?: unknown } } {
     const candidates = ['../../FE/src/content/publicPages', './publicPageCatalog'];
     let lastError: unknown;
     for (const id of candidates) {
@@ -22,6 +22,18 @@ function loadCatalog(): { searchPublicPages: (query: unknown) => unknown } {
     throw lastError;
 }
 
-const { searchPublicPages } = loadCatalog();
+const catalog = loadCatalog();
+const { searchPublicPages } = catalog;
 
-module.exports = { searchPublicPages };
+/** Every indexed public page (headings, snippets, and routes), not a keyword slice. */
+const allPublicPages = (): { title: string; snippet: string; route: string }[] => {
+    const source = catalog.PUBLIC_PAGES ?? catalog.default?.PUBLIC_PAGES;
+    if (!Array.isArray(source)) return [];
+    return source.map((row: any) => ({
+        title: String(row?.title ?? ''),
+        snippet: String(row?.snippet ?? ''),
+        route: String(row?.route ?? ''),
+    }));
+};
+
+module.exports = { searchPublicPages, allPublicPages };

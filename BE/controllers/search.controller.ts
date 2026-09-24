@@ -1,7 +1,13 @@
+import {
+    filterOwnRecords,
+    filterPublicExperts,
+    filterPublicSeminars,
+    publicFactTemplate,
+} from '../utils/askFacts';
 import { computeBookingPriceCents } from '../utils/bookingPrice';
 import { normalizeExpertPrice } from '../utils/normalizeExpertPrice';
 import { seminarCapacityLabel } from '../utils/seminarCapacityLabel';
-import { canonicalOptionsForQuery, matchesServiceOption } from '../utils/serviceOptions';
+import { SERVICE_OPTIONS, canonicalOptionsForQuery, matchesServiceOption } from '../utils/serviceOptions';
 import { enrolledStudentIds, firstFullFutureOccurrence } from '../utils/seminarCapacity';
 import { normalizeProfileImageRef } from '../utils/profileImageFilename';
 import { decodeBasicEntities, stripTags } from '../utils/wlHtmlPlainText';
@@ -360,26 +366,123 @@ const searchYours = async (req: any, query: string) => {
     return cards;
 };
 
+const majorNames = (doc: any): string[] => {
+    if (!Array.isArray(doc?.keywords)) return [];
+    const names: string[] = [];
+    for (const row of doc.keywords) {
+        if (!row || typeof row !== 'object') continue;
+        const value = String(row.value ?? '').trim();
+        if (value) names.push(value);
+    }
+    return names;
+};
+
+/** Every active expert, as the same public card keyword search returns. */
+const listPublicExpertCards = async () => {
+    const docs = await User.find({
+        role: 'expert',
+        status: 'active',
+    })
+        .select('username title description image price appointmentDurations keywords')
+        .populate({ path: 'keywords', select: 'value' })
+        .lean();
+
+    return (Array.isArray(docs) ? docs : []).map((doc) => {
+        const card = toExpertCard(doc);
+        const majors = majorNames(doc);
+        if (majors.length) card.keywords = majors;
+        return card;
+    });
+};
+
+/** Every live seminar series, as the same public card keyword search returns. */
+const listPublicSeminarCards = async () => {
+    const now = Date.now();
+    const docs = await GroupChat.find({
+        type: 'seminar',
+        status: { $in: ['pending', 'active'] },
+    })
+        .populate({ path: 'admin', select: 'username image status' })
+        .lean();
+
+    const groups = new Map<string, any[]>();
+    for (const doc of Array.isArray(docs) ? docs : []) {
+        if (!hostIsActive(doc)) continue;
+        const key = seriesKey(doc);
+        const list = groups.get(key) || [];
+        list.push(doc);
+        groups.set(key, list);
+    }
+
+    const cards: any[] = [];
+    for (const [id, occurrences] of groups) {
+        const card = toSeminarCard(id, occurrences, now);
+        if (!card) continue;
+        const host = String(
+            occurrences.find((row: any) => row?.admin && typeof row.admin === 'object')?.admin?.username ?? '',
+        ).trim();
+        if (host && !host.includes('@')) card.hostName = host;
+        cards.push(card);
+    }
+    return cards;
+};
+
+const collectSearchResults = async (req, q: string) => {
+    const query = String(q ?? '').trim();
+    if (query.length < 2) return emptyResult();
+    const [experts, seminars, students, yours] = await Promise.all([
+        searchExperts(query),
+        searchSeminars(query),
+        searchStudents(req, query),
+        searchYours(req, query),
+    ]);
+    return {
+        experts,
+        seminars,
+        students,
+        yours,
+        pages: searchPages(query),
+    };
+};
+
+const canonicalServiceLabels = (doc: any): string[] => {
+    const rows = Array.isArray(doc?.services) ? doc.services : [];
+    return SERVICE_OPTIONS
+        .filter((option) => rows.some((row: any) => matchesServiceOption(row || {}, option)))
+        .map((option) => option.label);
+};
+
+const queryPublicExperts = async (question: string) => {
+    const [cards, docs] = await Promise.all([
+        listPublicExpertCards(),
+        User.find({ role: 'expert', status: 'active' })
+            .select('services')
+            .populate({ path: 'services', select: 'value label' })
+            .lean(),
+    ]);
+    const servicesById = new Map<string, string[]>();
+    for (const doc of Array.isArray(docs) ? docs : []) {
+        const labels = canonicalServiceLabels(doc);
+        if (labels.length) servicesById.set(refId(doc), labels);
+    }
+    const withServices = (Array.isArray(cards) ? cards : []).map((card: any) => {
+        const services = servicesById.get(String(card?.id ?? ''));
+        return services ? { ...card, services } : card;
+    });
+    return filterPublicExperts(withServices, String(question ?? ''));
+};
+
+const queryPublicSeminars = async (question: string) =>
+    filterPublicSeminars(await listPublicSeminarCards(), String(question ?? ''));
+
+const queryOwnRecords = async (caller: any, rows?: any[], question?: string) =>
+    filterOwnRecords(Array.isArray(rows) ? rows : [], caller, question);
+
 const search = async (req, res) => {
     try {
         const raw = req.query?.q;
         const q = String(Array.isArray(raw) ? raw[0] : raw ?? '').trim();
-        if (q.length < 2) {
-            return res.status(200).json(emptyResult());
-        }
-        const [experts, seminars, students, yours] = await Promise.all([
-            searchExperts(q),
-            searchSeminars(q),
-            searchStudents(req, q),
-            searchYours(req, q),
-        ]);
-        return res.status(200).json({
-            experts,
-            seminars,
-            students,
-            yours,
-            pages: searchPages(q),
-        });
+        return res.status(200).json(await collectSearchResults(req, q));
     } catch (err) {
         console.log(err);
         return res.status(500).send(safeErrorMessage(err));
@@ -388,5 +491,12 @@ const search = async (req, res) => {
 
 module.exports = {
     search,
+    collectSearchResults,
     SEARCH_GROUP_LIMIT,
+    listPublicExpertCards,
+    listPublicSeminarCards,
+    queryPublicExperts,
+    queryPublicSeminars,
+    queryOwnRecords,
+    publicFactTemplate,
 };

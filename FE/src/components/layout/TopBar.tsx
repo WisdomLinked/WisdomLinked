@@ -9,6 +9,9 @@ import {
 import { useDispatch } from 'react-redux';
 import { logoutUser } from '../../actions/authActions';
 import { syncHeaderHeight } from '../../hooks/useSyncHeaderHeight';
+import { useAppSelector } from '../../store';
+import SiteSearchBox from '../search/SiteSearchBox';
+import { siteSearchAudienceForRole } from '../../utils/siteSearch';
 
 export type TopBarNotificationItem = {
   id: string;
@@ -48,6 +51,7 @@ export default function TopBar({
   notificationsEnabled?: boolean;
 }) {
   const dispatch = useDispatch();
+  const role = useAppSelector((state) => state.auth?.userDetails?.role);
   const [openMenu, setOpenMenu] = useState(false);
   const [menuVisible, setMenuVisible] = useState(false);
   const [openNotifications, setOpenNotifications] = useState(false);
@@ -78,11 +82,14 @@ export default function TopBar({
       style={{ top: 'var(--wl-banner-offset, 0px)' }}
     >
       {/* pl-14 on small screens reserves room for the fixed menu button (Sidebar.tsx). */}
-      <div className="flex h-14 items-center justify-between pl-14 pr-6 lg:px-6">
-        <span className="font-sans text-[14px] font-semibold text-slate-800">
+      <div className="flex h-14 items-center justify-between gap-3 pl-14 pr-6 lg:px-6">
+        <span className="shrink-0 font-sans text-[14px] font-semibold text-slate-800">
           {title}
         </span>
-        <div className="relative flex items-center gap-2.5">
+        <div className="min-w-0 flex-1 max-w-md">
+          <SiteSearchBox audience={siteSearchAudienceForRole(role)} />
+        </div>
+        <div className="relative flex shrink-0 items-center gap-2.5">
           <button
             type="button"
             onClick={() => {

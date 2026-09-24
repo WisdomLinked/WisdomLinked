@@ -38,6 +38,7 @@ import UpcomingSessionModal, { type UpcomingModalSession } from '../components/d
 import ExpertProfile from '../components/dashboard/ExpertProfile';
 import StudentBookingCheckout, { completeStudentBookingFromStorage } from '../components/dashboard/StudentBookingCheckout';
 import { getExpertById, doFollowExpert, doUnfollowExpert, acceptIndividualAppointment, cancelIndividualAppointment, getMySeatRequests } from '../api/api';
+import { studentSearchActions } from '../utils/siteSearch';
 import { updateMe } from '../actions/authActions';
 import type { ExpertCardProps } from '../components/ExpertCard';
 import { mapExpertToMentorWithImage } from '../utils/mapExpertToMentor';
@@ -521,6 +522,9 @@ export default function StudentDashboard() {
   /** Same source as chat sidebar — RC room id → community name (DMs use directConversations only). */
   const [communityRidToName, setCommunityRidToName] = useState<Record<string, string>>({});
   const [selectedExpert, setSelectedExpert] = useState<ExpertCardProps | null>(null);
+  const [expertsQueryPrefill, setExpertsQueryPrefill] = useState<string | undefined>(undefined);
+  const [seminarsQueryPrefill, setSeminarsQueryPrefill] = useState<string | undefined>(undefined);
+  const [openSeminarId, setOpenSeminarId] = useState<string | null>(null);
   const [followedMentorIds, setFollowedMentorIds] = useState<string[]>([]);
   const [followerCounts, setFollowerCounts] = useState<Record<string, number>>({});
   const { auth: { userDetails } } = useAppSelector((state: any) => state);
@@ -579,6 +583,39 @@ export default function StudentDashboard() {
     window.addEventListener('wl-open-expert-profile', onOpenExpertProfile);
     return () => window.removeEventListener('wl-open-expert-profile', onOpenExpertProfile);
   }, []);
+
+  // Global search lands here with expert or seminar inside the query.
+  // Seminar ids open StudentSeminars detail and are not passed to getExpertById.
+  // This does not set wl_open_seminar_id or student_booking.
+  useEffect(() => {
+    const actions = studentSearchActions(location.search);
+    if (!actions.length) return;
+    for (const action of actions) {
+      if (action.type === 'open-expert') {
+        window.localStorage.setItem('studentDashboardExpertId', action.expertId);
+        window.dispatchEvent(new Event('wl-open-expert-profile'));
+      } else if (action.type === 'open-seminar') {
+        setOpenSeminarId(action.seminarId);
+        setActiveItem('seminars');
+      } else if (action.type === 'prefill-experts') {
+        setExpertsQueryPrefill(action.query);
+        setActiveItem('experts');
+      } else if (action.type === 'prefill-seminars') {
+        setSeminarsQueryPrefill(action.query);
+        setActiveItem('seminars');
+      }
+    }
+    const next = new URLSearchParams(location.search);
+    next.delete('expert');
+    next.delete('seminar');
+    next.delete('expertsQuery');
+    next.delete('seminarsQuery');
+    const search = next.toString();
+    navigate(
+      { pathname: location.pathname, search: search ? `?${search}` : '' },
+      { replace: true },
+    );
+  }, [location.search, location.pathname, navigate]);
   // Derived from the store so the stat cards recompute live as bookings change
   // (booking dispatches updateUserDetails; reloads refetch via doGetMyEvents).
   const sessionStats = useMemo(() => deriveSessionCounts(userDetails), [userDetails]);
@@ -1526,6 +1563,7 @@ export default function StudentDashboard() {
               <FindExpertsPage
                 followedMentorIds={followedMentorIds}
                 followerCounts={followerCounts}
+                initialQuery={expertsQueryPrefill}
                 onToggleFollow={toggleExpertFollow}
                 onViewExpert={mentor => {
                   setSelectedExpert(mentor);
@@ -1552,7 +1590,11 @@ export default function StudentDashboard() {
           ) : activeItem === 'contact-admin' ? (
             <ContactAdmin />
           ) : activeItem === 'seminars' ? (
-            <StudentSeminars onEnterSeminarChat={openSeminarChat} />
+            <StudentSeminars
+              onEnterSeminarChat={openSeminarChat}
+              initialQuery={seminarsQueryPrefill}
+              openSeminarId={openSeminarId}
+            />
           ) : activeItem === 'history' ? (
             <StudentPaymentHistory />
           ) : (
