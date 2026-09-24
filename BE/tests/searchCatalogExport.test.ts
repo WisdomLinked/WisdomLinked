@@ -79,6 +79,7 @@ function catalogFixture() {
         image: 'public-expert.png',
         price: [40],
         appointmentDurations: [30, 60],
+        keywords: [{ value: 'Civil Engineering' }],
         email: 'catalog-leak-email@example.com',
         phoneNumber: 'catalog-phone-leak',
         password: 'catalog-password-leak',
@@ -392,6 +393,17 @@ describe('search catalog export', { concurrency: false }, () => {
         assert.match(body, /Weekly office hours for applicants/);
         assert.match(body, /How do I find a seminar\?/);
         assert.match(body, /Open Seminars and pick a session/);
+        assert.match(body, /majors: \["Civil Engineering"\]/);
+        assert.match(body, /hourlyRate: 40/);
+        assert.match(body, /"minutes":30/);
+        assert.match(body, /"dollars":20/);
+        assert.match(body, /price: 25/);
+        assert.match(body, /seats: /);
+        assert.equal(body.includes('public-expert.png'), false);
+        assert.equal(body.includes('public-cover.png'), false);
+        assert.equal(body.includes('hostImage'), false);
+        assert.equal(body.includes('chatFiles'), false);
+        assert.equal(body.includes('image:'), false);
         for (const leak of LEAKS) {
             assert.equal(body.includes(leak), false, leak);
         }

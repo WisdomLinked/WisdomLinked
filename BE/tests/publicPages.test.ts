@@ -12,7 +12,7 @@ test('searchPublicPages loads from the shared public page index', () => {
     assert.ok(rows.length >= 1);
     for (const row of rows) {
         assert.deepEqual(Object.keys(row).sort(), ['route', 'snippet', 'title']);
-        assert.equal(['/', '/aboutus', '/services', '/rules', '/contactus'].includes(row.route), true);
+        assert.equal(['/', '/aboutus', '/services', '/rules', '/contactus', '/resources', '/resources/graduate-school-guide', '/resources/scholarship-guide'].includes(row.route), true);
     }
     assert.equal(rows.some((row: any) => row.route === '/' && row.title.includes('Guidelines for Quality')), true);
     assert.equal(searchPublicPages('Student sign up').length, 0);

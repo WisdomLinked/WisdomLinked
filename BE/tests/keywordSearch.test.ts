@@ -262,7 +262,7 @@ function assertShape(body: any) {
         assert.equal(typeof page.title, 'string');
         assert.equal(page.title.length > 0, true);
         assert.equal(typeof page.snippet, 'string');
-        assert.equal(['/', '/aboutus', '/services', '/rules', '/contactus'].includes(page.route), true);
+        assert.equal(['/', '/aboutus', '/services', '/rules', '/contactus', '/resources', '/resources/graduate-school-guide', '/resources/scholarship-guide'].includes(page.route), true);
     }
     for (const expert of body.experts) {
         assertKeys(expert, EXPERT_KEYS);

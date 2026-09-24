@@ -2,11 +2,20 @@ const chatBotQA = require('../models/chatBotQA');
 const storage = require('./profileImageStorage');
 const { listPublicExpertCards, listPublicSeminarCards } = require('../controllers/search.controller');
 
+/**
+ * Shared catalog for paraphrase, how, why, 怎么, 如何, 怎样, other Chinese
+ * wording, and unmatched wording. Retrieve reads wisdomlinked-search-staging.
+ * Do not delete that knowledge base and do not create a replacement.
+ * Exact cheapest, highest, under, over, 最便宜, and 最贵 questions do not
+ * sort this file. Those use live Mongo because this index cannot sort and
+ * can be stale. Personal 1:1s, communities, legacy events, and seat requests
+ * are not written here.
+ */
 const INDEXING_JOBS_URL = 'https://api.digitalocean.com/v2/gen-ai/indexing_jobs';
 const PENDING_ANSWER = 'Pending answer...';
 
-const EXPERT_FIELDS = ['id', 'name', 'title', 'bio', 'bookable', 'image', 'hourlyRate', 'sessionPrices'];
-const SEMINAR_FIELDS = ['id', 'name', 'description', 'price', 'full', 'seats', 'image', 'hostImage'];
+const EXPERT_FIELDS = ['id', 'name', 'title', 'bio', 'bookable', 'majors', 'hourlyRate', 'sessionPrices'];
+const SEMINAR_FIELDS = ['id', 'name', 'description', 'price', 'full', 'seats'];
 
 const FORBIDDEN_KEY_PARTS = new Set([
     'profile',
@@ -53,6 +62,30 @@ const renderRecord = (label: string, source: any, fields: string[]): string => {
 
 const byId = (a: any, b: any) => String(a?.id ?? '').localeCompare(String(b?.id ?? ''));
 
+const publicExpertRecord = (card: any) => {
+    const name = String(card?.name ?? '');
+    if (name.includes('@')) return null;
+    return {
+        id: card?.id,
+        name,
+        title: card?.title,
+        bio: card?.bio,
+        bookable: card?.bookable,
+        majors: card?.keywords,
+        hourlyRate: card?.hourlyRate,
+        sessionPrices: card?.sessionPrices,
+    };
+};
+
+const publicSeminarRecord = (card: any) => ({
+    id: card?.id,
+    name: card?.name,
+    description: card?.description,
+    price: card?.price,
+    full: card?.full,
+    seats: card?.seats,
+});
+
 const buildCatalogText = async (): Promise<string> => {
     const [experts, seminars, questions] = await Promise.all([
         listPublicExpertCards(),
@@ -62,10 +95,12 @@ const buildCatalogText = async (): Promise<string> => {
 
     const records: string[] = [];
     for (const card of (Array.isArray(experts) ? experts : []).slice().sort(byId)) {
-        records.push(renderRecord('Expert', card, EXPERT_FIELDS));
+        const record = publicExpertRecord(card);
+        if (!record) continue;
+        records.push(renderRecord('Expert', record, EXPERT_FIELDS));
     }
     for (const card of (Array.isArray(seminars) ? seminars : []).slice().sort(byId)) {
-        records.push(renderRecord('Seminar', card, SEMINAR_FIELDS));
+        records.push(renderRecord('Seminar', publicSeminarRecord(card), SEMINAR_FIELDS));
     }
 
     const answered = (Array.isArray(questions) ? questions : [])
