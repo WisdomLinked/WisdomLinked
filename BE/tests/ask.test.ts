@@ -746,6 +746,22 @@ describe('POST /api/ask', { concurrency: false }, () => {
             }
         });
 
+        test('a cheapest professor miss does not return the public rate sentence', async () => {
+            searchController.collectSearchResults = async () => ({ ...cards, experts: [] });
+            stubPublicExperts(publicExpertFixtures());
+            nextCompletion = { miss: true, answer: '', citations: [] };
+            try {
+                const res = makeRes();
+                await ask({ body: { question: 'find me the cheapest professor in civil' }, user: undefined }, res);
+                assert.equal(res.statusCode, 200);
+                assert.equal(res.body.answer, 'Answers are unavailable right now.');
+                assert.equal(res.body.answer.includes('hourly rate'), false);
+            } finally {
+                searchController.collectSearchResults = async () => cards;
+                User.find = originalUserFind;
+            }
+        });
+
         test('a civil professor name question includes unrated professors and the model writes the answer', async () => {
             searchController.collectSearchResults = async () => ({ ...cards, experts: [] });
             stubPublicExperts(publicExpertFixtures());
@@ -1061,6 +1077,43 @@ describe('POST /api/ask', { concurrency: false }, () => {
                 assert.equal(second.body.answer.includes('Ada One on One'), false);
                 assert.equal(second.body.answer.includes('Civil Studio'), false);
             } finally {
+                GroupChat.find = originalGroupFind;
+                Event.find = originalEventFind;
+                SeminarSeatRequest.find = originalSeatFind;
+            }
+        });
+
+        test('a caller meetings miss does not return the own-record sentence', async () => {
+            GroupChat.find = () => leanChain([{
+                name: 'Ada One on One',
+                start: '2099-04-01T15:00:00.000Z',
+                end: '2099-04-01T16:00:00.000Z',
+                price: 40,
+                status: 'active',
+                type: 'individual',
+                admin: { _id: 'expert-ada', username: 'Ada Lovelace' },
+                participants: [
+                    { _id: 'expert-ada', username: 'Ada Lovelace' },
+                    { _id: 'student-a', username: 'Sam Student' },
+                ],
+                messages: [{ body: 'secret-chat-body' }],
+            }]);
+            Event.find = () => leanChain([]);
+            SeminarSeatRequest.find = () => leanChain([]);
+            nextCompletion = { miss: true, answer: '', citations: [] };
+            retrieveEmpty = true;
+            try {
+                const res = makeRes();
+                await ask({
+                    body: { question: 'what meetings do I have?' },
+                    user: { role: 'customer', userId: 'student-a' },
+                }, res);
+                assert.equal(res.statusCode, 200);
+                assert.equal(res.body.answer, 'Answers are unavailable right now.');
+                assert.equal(res.body.answer.includes('Ada One on One'), false);
+                assert.equal(res.body.answer.includes('secret-chat-body'), false);
+            } finally {
+                retrieveEmpty = false;
                 GroupChat.find = originalGroupFind;
                 Event.find = originalEventFind;
                 SeminarSeatRequest.find = originalSeatFind;

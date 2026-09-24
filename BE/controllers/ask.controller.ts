@@ -441,8 +441,7 @@ const ask = async (req, res) => {
                 await saveMiss(question, qa.storedRole, qa.rows);
                 return respond(res, SAVED_QUESTION_FOR_REVIEW, cards, { similarQuestions });
             }
-            const safeFact = factText === EMPTY_RATE ? '' : factText;
-            const fallback = safeFact || publicPageText(pages) || retrieved.join('\n');
+            const fallback = publicPageText(pages) || retrieved.join('\n');
             if (!fallback) {
                 return respond(res, ANSWERS_UNAVAILABLE, cards, { similarQuestions });
             }
