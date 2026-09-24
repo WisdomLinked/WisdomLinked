@@ -899,9 +899,15 @@ const AvailabilityPage: React.FC = () => {
           </button>
         </div>
 
-        <div className="pointer-events-none fixed bottom-0 left-0 right-0 z-30 lg:left-[70px]">
-          <div className="pointer-events-auto mx-auto max-w-6xl px-6 pb-4">
-            <div className="flex items-center justify-between gap-3 rounded-2xl border border-gray-200 bg-white/95 px-5 py-3.5 shadow-lg backdrop-blur-md">
+        {/* Fixed, so it cannot inherit the content column's left edge: each shell that
+            mounts this page publishes its own sidebar width. Default suits the 220px
+            sidebar every current dashboard uses. */}
+        <div className="pointer-events-none fixed bottom-0 left-0 right-0 z-30 lg:left-[var(--wl-shell-left-inset,220px)]">
+          {/* pr-32 keeps the bar clear of the HelpBot bubble, which is fixed 16px from
+              the right edge and 100px wide. Padding rather than a narrower box, so the
+              left edge still lines up with the page content. */}
+          <div className="mx-auto max-w-6xl pl-6 pr-32 pb-4">
+            <div className="pointer-events-auto flex items-center justify-between gap-3 rounded-2xl border border-gray-200 bg-white/95 px-5 py-3.5 shadow-lg backdrop-blur-md">
               <p className="text-xs text-gray-500">
                 Save your hourly rate and weekly time slots when you are done editing.
               </p>
