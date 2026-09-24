@@ -63,8 +63,8 @@ describe('dropdown entries', () => {
     expect(CHAT_SECTION_ITEMS.map(i => i.label)).toEqual([
       'DIRECT MESSAGES',
       '1:1 APPOINTMENTS',
-      'COMMUNITIES',
       'SEMINARS',
+      'COMMUNITIES',
     ]);
   });
 
