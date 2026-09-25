@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from "react";
 import { askSite } from "../api/api";
 import { MessageSquare, X } from "lucide-react";
+import AnswerText from "./AnswerText";
 
 interface ChatItem {
     question: string;
@@ -153,9 +154,10 @@ const Chatbot = () => {
                                                         />
                                                     </div>
                                                 ) : (
-                                                    <div className="max-w-[85%] rounded-md border border-[#E5E2DB] bg-white px-3 py-2 text-sm text-[#234C6A] whitespace-pre-wrap">
-                                                        {c.answer}
-                                                    </div>
+                                                    <AnswerText
+                                                        text={c.answer}
+                                                        className="max-w-[85%] rounded-md border border-[#E5E2DB] bg-white px-3 py-2 text-sm text-[#234C6A] whitespace-pre-wrap"
+                                                    />
                                                 )}
                                             </div>
                                         </div>
