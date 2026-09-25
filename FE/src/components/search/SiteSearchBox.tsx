@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Search } from 'lucide-react';
 import { askSite, profileImageFetch, searchSite } from '../../api/api';
+import AnswerText from '../AnswerText';
 import { isDisplayImageUrl } from '../../utils/profileImage';
 import {
   SITE_SEARCH_DEBOUNCE_MS,
@@ -238,9 +239,9 @@ export default function SiteSearchBox({
             </div>
           ) : null}
           {askAnswer ? (
-            <p data-testid="site-search-answer" className="mb-2 rounded-lg bg-[#F5F3EF] px-2 py-2 text-[13px] text-slate-800 whitespace-pre-wrap">
-              {askAnswer}
-            </p>
+            <div data-testid="site-search-answer" className="mb-2 min-w-0 rounded-lg bg-[#F5F3EF] px-2 py-2 text-[13px] text-slate-800 whitespace-pre-wrap">
+              <AnswerText text={askAnswer} />
+            </div>
           ) : null}
           {cards!.experts.length > 0 ? (
             <Group title="Experts">

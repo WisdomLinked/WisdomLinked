@@ -243,6 +243,25 @@ test('poisoned tool output stays a tool message and is not followed', async () =
     }
 });
 
+test('system prompt caps list items and forbids markdown headers', async () => {
+    const originalFetch = global.fetch;
+    let system = '';
+    global.fetch = (async (_url: string, options: any) => {
+        const body = JSON.parse(options.body);
+        system = body.messages.find((message: any) => message.role === 'system')?.content ?? '';
+        return inferenceMessage({ content: 'Ok.', tool_calls: [] });
+    }) as typeof fetch;
+    try {
+        await runAskAgent({
+            messages: [{ role: 'user', content: 'hi' }],
+            modelKey: 'test-key',
+        });
+        assert.match(system, /headers \(# or ##\)[\s\S]*at most 4 bullet or numbered items/);
+    } finally {
+        global.fetch = originalFetch;
+    }
+});
+
 test('a missing model key does not call inference', async () => {
     const originalFetch = global.fetch;
     let calls = 0;

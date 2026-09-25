@@ -33,6 +33,7 @@ interface SeminarDetailsProps {
     onDeleteCommunityChat?: () => void;
     theme?: "light" | "dark";
     hideParticipants?: boolean;
+    adminLabel?: string;
 }
 
 const SeminarDetails = ({
@@ -58,6 +59,7 @@ const SeminarDetails = ({
     onDeleteCommunityChat,
     theme = "dark",
     hideParticipants = false,
+    adminLabel = "Admin",
 }: SeminarDetailsProps) => {
     const recurrenceLabel = describeRecurrence({
         isRecurring,
@@ -257,7 +259,7 @@ const SeminarDetails = ({
                 <div className={`rounded-xl border p-3 ${isLight ? "border-slate-200 bg-white" : "border-slate-700 bg-[#141414]"}`}>
                     <div className={`mb-2 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.12em] ${isLight ? "text-[#234C6A]" : "text-slate-300"}`}>
                         <UserRound className="h-3.5 w-3.5" />
-                        Admin
+                        {adminLabel}
                     </div>
                     <div className="flex space-x-3 items-center">
                         <Avatar username={admin?.username || "Admin"} isOnline={false} image={avatarImage(admin)} />

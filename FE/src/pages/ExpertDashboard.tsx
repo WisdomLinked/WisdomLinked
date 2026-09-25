@@ -1618,7 +1618,7 @@ export default function ExpertDashboard() {
                 </button>
               </div>
               <div className="px-5 py-4">
-                <SeminarDetails {...inlineDetailSession.detail} theme="light" />
+                <SeminarDetails {...inlineDetailSession.detail} theme="light" adminLabel="Expert" />
               </div>
             </div>
           </div>
