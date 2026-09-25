@@ -13,6 +13,19 @@ const Harness = ({ activeItem, onGoToDashboard }: { activeItem: string; onGoToDa
   return <div>dashboard</div>;
 };
 
+const PromptHarness = ({
+  activeItem,
+  onGoToDashboard,
+  onDashboardBack,
+}: {
+  activeItem: string;
+  onGoToDashboard: () => void;
+  onDashboardBack: () => void;
+}) => {
+  useBackToDashboard(activeItem, onGoToDashboard, 'dashboard', onDashboardBack);
+  return <div>dashboard</div>;
+};
+
 const popBack = () => act(() => {
   window.dispatchEvent(new PopStateEvent('popstate'));
 });
@@ -83,6 +96,47 @@ describe('useBackToDashboard', () => {
     popBack();
 
     expect(goToDashboard).not.toHaveBeenCalled();
+    expect(navigateMock).not.toHaveBeenCalled();
+  });
+
+  it('asks the dashboard to confirm instead of leaving, when a handler is given', () => {
+    const onDashboardBack = vi.fn();
+    render(
+      <PromptHarness activeItem="dashboard" onGoToDashboard={() => {}} onDashboardBack={onDashboardBack} />,
+    );
+
+    popBack();
+
+    expect(onDashboardBack).toHaveBeenCalledTimes(1);
+    expect(navigateMock).not.toHaveBeenCalled();
+  });
+
+  it('re-arms after confirming, so a cancelled prompt catches the next back press', () => {
+    const onDashboardBack = vi.fn();
+    render(
+      <PromptHarness activeItem="dashboard" onGoToDashboard={() => {}} onDashboardBack={onDashboardBack} />,
+    );
+    pushSpy.mockClear();
+
+    popBack();
+    expect(pushSpy).toHaveBeenCalledTimes(1);
+
+    popBack();
+    expect(onDashboardBack).toHaveBeenCalledTimes(2);
+    expect(navigateMock).not.toHaveBeenCalled();
+  });
+
+  it('still returns to the dashboard tab from another tab when a handler is given', () => {
+    const goToDashboard = vi.fn();
+    const onDashboardBack = vi.fn();
+    render(
+      <PromptHarness activeItem="chat" onGoToDashboard={goToDashboard} onDashboardBack={onDashboardBack} />,
+    );
+
+    popBack();
+
+    expect(goToDashboard).toHaveBeenCalledTimes(1);
+    expect(onDashboardBack).not.toHaveBeenCalled();
     expect(navigateMock).not.toHaveBeenCalled();
   });
 

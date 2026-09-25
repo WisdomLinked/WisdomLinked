@@ -381,6 +381,12 @@ export const sendMessage = async (req: any, res: Response) => {
             }
         }
 
+        await Conversation.updateOne(
+            { _id: conversation._id },
+            { $set: { lastMessageAt: new Date() } },
+            { timestamps: false },
+        ).exec();
+
         const storedContent = prepareMessageForRocketChat(content);
         // Build a fake message object just to satisfy the frontend's optimistic update
         const populatedMessage = {
@@ -455,6 +461,22 @@ export const getDirectHistory = async (req: any, res: Response) => {
                     return true;
                 });
                 const messages = await mapRCMessagesToWL(visible, { me, other });
+
+                if (visible.length > 0) {
+                    let maxMs = 0;
+                    for (const m of visible) {
+                        const ms = new Date(normalizeRcMessageTs((m as any).ts)).getTime();
+                        if (!Number.isNaN(ms) && ms > maxMs) maxMs = ms;
+                    }
+                    if (maxMs > 0) {
+                        await Conversation.updateOne(
+                            { _id: conversation._id },
+                            { $max: { lastMessageAt: new Date(maxMs) } },
+                            { timestamps: false },
+                        ).exec();
+                    }
+                }
+
                 return res.status(200).json({ messages });
             }
         }
@@ -638,10 +660,8 @@ export const sendGroupMessage = async (req: any, res: Response) => {
             }
         }
 
-        if (String((groupChat as any).type) === 'community') {
-            const activityAt = new Date();
-            await GroupChat.updateOne({ _id: groupChat._id }, { $set: { lastMessageAt: activityAt } }).exec();
-        }
+        const activityAt = new Date();
+        await GroupChat.updateOne({ _id: groupChat._id }, { $set: { lastMessageAt: activityAt } }).exec();
 
         const populatedMessage = {
             _id: sentId,
@@ -729,7 +749,7 @@ export const getGroupHistory = async (req: any, res: Response) => {
                 }
                 const messages = await mapRCMessagesToWL(visible, undefined, parts);
 
-                if (String((groupChat as any).type) === 'community' && visible.length > 0) {
+                if (visible.length > 0) {
                     let maxMs = 0;
                     for (const m of visible) {
                         const ms = new Date(normalizeRcMessageTs((m as any).ts)).getTime();
