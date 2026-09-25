@@ -386,19 +386,17 @@ describe('search catalog export', { concurrency: false }, () => {
         assert.equal(puts.length, 1);
         assert.equal(puts[0].key, 'search/staging/catalog.txt');
         const body = puts[0].body;
-        assert.match(body, /Public Catalog Expert/);
-        assert.match(body, /Admissions Advisor/);
-        assert.match(body, /Helps students plan graduate applications/);
-        assert.match(body, /Public Catalog Seminar/);
-        assert.match(body, /Weekly office hours for applicants/);
+        const blocks = body.trim().split('\n\n').filter(Boolean);
+        assert.ok(blocks.length >= 1);
+        for (const block of blocks) {
+            assert.match(block, /^Question\n/);
+            assert.equal(block.startsWith('Expert'), false);
+            assert.equal(block.startsWith('Seminar'), false);
+        }
+        assert.equal(/^Expert$/m.test(body), false);
+        assert.equal(/^Seminar$/m.test(body), false);
         assert.match(body, /How do I find a seminar\?/);
         assert.match(body, /Open Seminars and pick a session/);
-        assert.match(body, /majors: \["Civil Engineering"\]/);
-        assert.match(body, /hourlyRate: 40/);
-        assert.match(body, /"minutes":30/);
-        assert.match(body, /"dollars":20/);
-        assert.match(body, /price: 25/);
-        assert.match(body, /seats: /);
         assert.equal(body.includes('public-expert.png'), false);
         assert.equal(body.includes('public-cover.png'), false);
         assert.equal(body.includes('hostImage'), false);

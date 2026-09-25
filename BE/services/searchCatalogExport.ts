@@ -1,6 +1,5 @@
 const chatBotQA = require('../models/chatBotQA');
 const storage = require('./profileImageStorage');
-const { listPublicExpertCards, listPublicSeminarCards } = require('../controllers/search.controller');
 
 /**
  * Shared catalog for paraphrase, how, why, 怎么, 如何, 怎样, other Chinese
@@ -13,9 +12,6 @@ const { listPublicExpertCards, listPublicSeminarCards } = require('../controller
  */
 const INDEXING_JOBS_URL = 'https://api.digitalocean.com/v2/gen-ai/indexing_jobs';
 const PENDING_ANSWER = 'Pending answer...';
-
-const EXPERT_FIELDS = ['id', 'name', 'title', 'bio', 'bookable', 'majors', 'hourlyRate', 'sessionPrices'];
-const SEMINAR_FIELDS = ['id', 'name', 'description', 'price', 'full', 'seats'];
 
 const FORBIDDEN_KEY_PARTS = new Set([
     'profile',
@@ -60,49 +56,10 @@ const renderRecord = (label: string, source: any, fields: string[]): string => {
     return lines.join('\n');
 };
 
-const byId = (a: any, b: any) => String(a?.id ?? '').localeCompare(String(b?.id ?? ''));
-
-const publicExpertRecord = (card: any) => {
-    const name = String(card?.name ?? '');
-    if (name.includes('@')) return null;
-    return {
-        id: card?.id,
-        name,
-        title: card?.title,
-        bio: card?.bio,
-        bookable: card?.bookable,
-        majors: card?.keywords,
-        hourlyRate: card?.hourlyRate,
-        sessionPrices: card?.sessionPrices,
-    };
-};
-
-const publicSeminarRecord = (card: any) => ({
-    id: card?.id,
-    name: card?.name,
-    description: card?.description,
-    price: card?.price,
-    full: card?.full,
-    seats: card?.seats,
-});
-
 const buildCatalogText = async (): Promise<string> => {
-    const [experts, seminars, questions] = await Promise.all([
-        listPublicExpertCards(),
-        listPublicSeminarCards(),
-        chatBotQA.find({ role: 'user' }).select('question answer role').lean(),
-    ]);
+    const questions = await chatBotQA.find({ role: 'user' }).select('question answer role').lean();
 
     const records: string[] = [];
-    for (const card of (Array.isArray(experts) ? experts : []).slice().sort(byId)) {
-        const record = publicExpertRecord(card);
-        if (!record) continue;
-        records.push(renderRecord('Expert', record, EXPERT_FIELDS));
-    }
-    for (const card of (Array.isArray(seminars) ? seminars : []).slice().sort(byId)) {
-        records.push(renderRecord('Seminar', publicSeminarRecord(card), SEMINAR_FIELDS));
-    }
-
     const answered = (Array.isArray(questions) ? questions : [])
         .filter(isAnsweredPublicQuestion)
         .map((row: any) => ({
