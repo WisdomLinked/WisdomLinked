@@ -846,6 +846,7 @@ export default function UpcomingSessionModal({
                   {...briefSession.detail}
                   theme="light"
                   hideParticipants={role === 'student'}
+                  adminLabel="Expert"
                 />
               </div>
             ) : (
