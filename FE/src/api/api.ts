@@ -1021,8 +1021,13 @@ export const searchSite = async (q: string) => {
 };
 
 /** POST /api/ask through the shared client so the CSRF header is sent. */
-export const askSite = async (question: string) => {
-    const res = await api.post('ask', { question });
+export const askSite = async (
+    question: string,
+    messages?: Array<{ role: 'user' | 'assistant'; content: string }>,
+) => {
+    const body: { question: string; messages?: Array<{ role: 'user' | 'assistant'; content: string }> } = { question };
+    if (Array.isArray(messages) && messages.length) body.messages = messages;
+    const res = await api.post('ask', body);
     return res.data;
 };
 

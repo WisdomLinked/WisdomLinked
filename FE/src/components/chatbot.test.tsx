@@ -38,7 +38,7 @@ describe('HelpBot', () => {
     askSite.mockReset();
   });
 
-  it('keeps the transcript in component state and sends only the current question', async () => {
+  it('keeps the transcript in component state and sends the last completed turns', async () => {
     askSite.mockImplementation(async (question: string) => {
       if (question === 'How do I book?') return { answer: 'Grounded one', similarQuestions: [] };
       if (question === 'Where are seminars?') {
@@ -65,7 +65,14 @@ describe('HelpBot', () => {
     expect(screen.getByText('How do I book?')).toBeInTheDocument();
     expect(screen.getByText('Where are seminars?')).toBeInTheDocument();
     expect(askSite.mock.calls.map((call) => call[0])).toEqual(['How do I book?', 'Where are seminars?']);
-    expect(askSite.mock.calls[1]).toEqual(['Where are seminars?']);
+    expect(askSite.mock.calls[0]).toEqual(['How do I book?']);
+    expect(askSite.mock.calls[1]).toEqual([
+      'Where are seminars?',
+      [
+        { role: 'user', content: 'How do I book?' },
+        { role: 'assistant', content: 'Grounded one' },
+      ],
+    ]);
   });
 
   it('does not read response.answer when ask throws', async () => {

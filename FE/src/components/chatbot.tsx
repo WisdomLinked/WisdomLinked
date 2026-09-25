@@ -14,6 +14,7 @@ const Chatbot = () => {
     const [chat, setChat] = useState<ChatItem[]>([]);
     const [pending, setPending] = useState<boolean>(false);
     const pendingRef = useRef(false);
+    const historyRef = useRef<ChatItem[]>([]);
     const chatHistoryRef = useRef<HTMLDivElement | null>(null);
 
     const primaryBlue = "#234C6A";
@@ -45,13 +46,21 @@ const Chatbot = () => {
     const sendQuestion = async (question: string) => {
         const current = question.trim();
         if (!current || pendingRef.current) return;
+        const prior = historyRef.current
+            .filter((item) => !item.pending && item.question.trim() && item.answer.trim())
+            .flatMap((item) => [
+                { role: "user" as const, content: item.question },
+                { role: "assistant" as const, content: item.answer },
+            ])
+            .slice(-8);
         pendingRef.current = true;
         setPending(true);
         setInput("");
         setChat((prev) => [...prev, { question: current, answer: "", pending: true }]);
         try {
-            const response = await askSite(current);
+            const response = prior.length ? await askSite(current, prior) : await askSite(current);
             const answer = typeof response?.answer === "string" ? response.answer : "";
+            historyRef.current = [...historyRef.current, { question: current, answer, pending: false }];
             finishPending(answer);
         } catch {
             finishPending("I couldn't reach HelpBot just now. Please try again.");
