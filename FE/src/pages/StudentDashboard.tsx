@@ -40,10 +40,11 @@ import ExpertProfile from '../components/dashboard/ExpertProfile';
 import StudentBookingCheckout, { completeStudentBookingFromStorage } from '../components/dashboard/StudentBookingCheckout';
 import { getExpertById, doFollowExpert, doUnfollowExpert, acceptIndividualAppointment, cancelIndividualAppointment, getMySeatRequests } from '../api/api';
 import { studentSearchActions } from '../utils/siteSearch';
-import { updateMe } from '../actions/authActions';
+import { logoutUser, updateMe } from '../actions/authActions';
 import type { ExpertCardProps } from '../components/ExpertCard';
 import { mapExpertToMentorWithImage } from '../utils/mapExpertToMentor';
 import StudentChat from '../components/dashboard/StudentChat';
+import LogoutConfirmModal from '../components/dashboard/LogoutConfirmModal';
 import {
   type ChatSection,
   CHAT_SECTION_DEFAULT,
@@ -499,7 +500,9 @@ export default function StudentDashboard() {
     setChatSection(sectionForChatTarget(target));
   }, []);
   const goToDashboardTab = useCallback(() => setActiveItem('dashboard'), []);
-  useBackToDashboard(activeItem, goToDashboardTab);
+  const [showBackLogoutConfirm, setShowBackLogoutConfirm] = useState(false);
+  const confirmLogoutOnBack = useCallback(() => setShowBackLogoutConfirm(true), []);
+  useBackToDashboard(activeItem, goToDashboardTab, 'dashboard', confirmLogoutOnBack);
   const [paymentReturnSuccess, setPaymentReturnSuccess] = useState(false);
   const [bookingReturnError, setBookingReturnError] = useState<string | null>(null);
   const [paySuccessToast, setPaySuccessToast] = useState(false);
@@ -1836,6 +1839,14 @@ export default function StudentDashboard() {
           </div>
         )}
       </div>
+      <LogoutConfirmModal
+        open={showBackLogoutConfirm}
+        onCancel={() => setShowBackLogoutConfirm(false)}
+        onConfirm={() => {
+          setShowBackLogoutConfirm(false);
+          dispatch(logoutUser() as any);
+        }}
+      />
     </div>
   );
 }
