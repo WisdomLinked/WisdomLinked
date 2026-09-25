@@ -697,7 +697,7 @@ export default function UpcomingSessionModal({
                                 type="button"
                                 disabled={cancelBusyId === session.id}
                                 onClick={() => setCancelConfirmId(null)}
-                                className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-60"
+                                className="inline-flex items-center rounded-lg border border-slate-200 bg-white px-2 py-1 text-[10px] font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-60"
                               >
                                 Keep
                               </button>
@@ -705,7 +705,7 @@ export default function UpcomingSessionModal({
                                 type="button"
                                 disabled={cancelBusyId === session.id}
                                 onClick={() => cancelRequest(session)}
-                                className="rounded-lg bg-rose-600 px-3 py-1.5 text-[11px] font-semibold text-white hover:bg-rose-700 disabled:opacity-60"
+                                className="inline-flex items-center rounded-lg border border-transparent bg-rose-600 px-2 py-1 text-[10px] font-semibold text-white hover:bg-rose-700 disabled:opacity-60"
                               >
                                 {cancelBusyId === session.id ? 'Cancelling…' : 'Confirm cancel'}
                               </button>
@@ -715,7 +715,7 @@ export default function UpcomingSessionModal({
                               type="button"
                               aria-label="Cancel this request"
                               onClick={() => setCancelConfirmId(session.id)}
-                              className="rounded-lg border border-rose-200 bg-white px-3 py-1.5 text-[11px] font-semibold text-rose-600 hover:bg-rose-50"
+                              className="inline-flex items-center rounded-lg border border-rose-200 bg-white px-2 py-1 text-[10px] font-semibold text-rose-600 hover:bg-rose-50"
                             >
                               Cancel
                             </button>
