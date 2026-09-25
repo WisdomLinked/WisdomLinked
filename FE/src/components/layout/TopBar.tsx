@@ -3,15 +3,15 @@ import {
   Bell,
   ChevronDown,
   UserCircle2,
-  MessageSquare,
-  Users,
-  BookOpen,
   X,
   Settings,
 } from 'lucide-react';
 import { useDispatch } from 'react-redux';
 import { logoutUser } from '../../actions/authActions';
 import { syncHeaderHeight } from '../../hooks/useSyncHeaderHeight';
+import { useAppSelector } from '../../store';
+import SiteSearchBox from '../search/SiteSearchBox';
+import { siteSearchAudienceForRole } from '../../utils/siteSearch';
 
 export type TopBarNotificationItem = {
   id: string;
@@ -31,26 +31,7 @@ export function getTopBarNotificationCount(items: TopBarNotificationItem[]): num
   return (items || []).length;
 }
 
-const defaultNotifications: TopBarNotificationItem[] = [
-  {
-    id: 'n1',
-    title: 'New seminar added by Prof. Emily Chen',
-    meta: '2 hours ago',
-    icon: <BookOpen className="h-3.5 w-3.5 text-[#1A3A4A]" aria-hidden />,
-  },
-  {
-    id: 'n2',
-    title: 'New expert joined: Dr. Liam Carter',
-    meta: 'Today',
-    icon: <Users className="h-3.5 w-3.5 text-[#1A3A4A]" aria-hidden />,
-  },
-  {
-    id: 'n3',
-    title: 'New chat message from Prof. Daniel Ortiz',
-    meta: '5 mins ago',
-    icon: <MessageSquare className="h-3.5 w-3.5 text-[#1A3A4A]" aria-hidden />,
-  },
-];
+const defaultNotifications: TopBarNotificationItem[] = [];
 
 export default function TopBar({
   title = 'Student Dashboard',
@@ -70,6 +51,7 @@ export default function TopBar({
   notificationsEnabled?: boolean;
 }) {
   const dispatch = useDispatch();
+  const role = useAppSelector((state) => state.auth?.userDetails?.role);
   const [openMenu, setOpenMenu] = useState(false);
   const [menuVisible, setMenuVisible] = useState(false);
   const [openNotifications, setOpenNotifications] = useState(false);
@@ -100,11 +82,14 @@ export default function TopBar({
       style={{ top: 'var(--wl-banner-offset, 0px)' }}
     >
       {/* pl-14 on small screens reserves room for the fixed menu button (Sidebar.tsx). */}
-      <div className="flex h-14 items-center justify-between pl-14 pr-6 lg:px-6">
-        <span className="font-sans text-[14px] font-semibold text-slate-800">
+      <div className="flex h-14 items-center justify-between gap-3 pl-14 pr-6 lg:px-6">
+        <span className="shrink-0 font-sans text-[14px] font-semibold text-slate-800">
           {title}
         </span>
-        <div className="relative flex items-center gap-2.5">
+        <div className="min-w-0 flex-1 max-w-md">
+          <SiteSearchBox audience={siteSearchAudienceForRole(role)} />
+        </div>
+        <div className="relative flex shrink-0 items-center gap-2.5">
           <button
             type="button"
             onClick={() => {
@@ -123,7 +108,7 @@ export default function TopBar({
             ) : null}
           </button>
           {openNotifications && notificationsEnabled && (
-            <div className="absolute right-16 top-10 z-[120] w-[320px] rounded-xl border border-[#E5E2DB] bg-white shadow-[0_16px_40px_rgba(0,0,0,0.14)]">
+            <div className="absolute right-0 sm:right-16 top-10 z-[120] w-[320px] max-w-[calc(100vw-2rem)] rounded-xl border border-[#E5E2DB] bg-white shadow-[0_16px_40px_rgba(0,0,0,0.14)]">
               <div className="border-b border-[#E5E2DB] px-4 py-3 flex items-center justify-between">
                 <p className="text-[12px] font-semibold uppercase tracking-[0.16em] text-[#7A7A72]">
                   Notifications

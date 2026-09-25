@@ -7,3 +7,6 @@ docs/
 AGENTS.md
 .cursor/
 .cursor/tickets/
+
+# Deploy copies FE/src/content/publicPages.ts here for the backend image
+BE/search/publicPageCatalog.ts

@@ -11,6 +11,7 @@ import {
   Menu,
   X,
   CreditCard,
+  ChevronDown,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import NavBadge from './NavBadge';
@@ -40,6 +41,9 @@ export default function Sidebar({
   avatarUrl,
   roleLabel = 'Student',
   notifications = {},
+  subItems,
+  activeSubItem,
+  onNavigateSub,
 }: {
   navItems?: { id: string; label: string; icon: React.ComponentType<{ className?: string }> }[];
   activeItem: string;
@@ -48,9 +52,13 @@ export default function Sidebar({
   avatarUrl?: string;
   roleLabel?: string;
   notifications?: Record<string, boolean | number>;
+  subItems?: Record<string, { id: string; label: string }[]>;
+  activeSubItem?: string;
+  onNavigateSub?: (navId: string, subId: string) => void;
 }) {
   const [openMobile, setOpenMobile] = useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+  const [expandedNavId, setExpandedNavId] = useState<string | null>(null);
   const navigate = useNavigate();
   const { count: pendingContactCount } = usePendingContactRequestsCount();
 
@@ -87,15 +95,20 @@ export default function Sidebar({
             typeof notificationValue === 'number' && Number.isFinite(notificationValue)
               ? Math.max(0, Math.floor(notificationValue))
               : 0;
+          const itemSubItems = subItems?.[item.id];
+          const isExpanded = expandedNavId === item.id;
           return (
+            <div key={item.id}>
+            <div className="relative">
             <button
-              key={item.id}
               type="button"
               onClick={() => {
                 onNavigate(item.id);
-                setOpenMobile(false);
+                if (!itemSubItems) setOpenMobile(false);
               }}
               className={`nav-btn flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-[13px] font-medium transition-colors focus:outline-none border-l-4 ${
+                itemSubItems ? 'pr-9' : ''
+              } ${
                 isActive
                   ? 'bg-white text-slate-900 border-[#234C6A] shadow-sm'
                   : 'text-slate-600 hover:bg-white hover:text-slate-900 border-transparent'
@@ -115,6 +128,48 @@ export default function Sidebar({
                 />
               ) : null}
             </button>
+            {itemSubItems ? (
+              <button
+                type="button"
+                onClick={() => setExpandedNavId(isExpanded ? null : item.id)}
+                aria-label={`${isExpanded ? 'Hide' : 'Show'} ${item.label} sections`}
+                aria-expanded={isExpanded}
+                className={`absolute right-1.5 top-1/2 -translate-y-1/2 rounded-md p-1 transition-colors ${
+                  isActive ? 'text-slate-500 hover:bg-slate-100' : 'text-slate-400 hover:bg-white hover:text-slate-700'
+                }`}
+              >
+                <ChevronDown
+                  className={`h-3.5 w-3.5 transition-transform ${isExpanded ? 'rotate-180' : ''}`}
+                  aria-hidden="true"
+                />
+              </button>
+            ) : null}
+            </div>
+            {itemSubItems && isExpanded ? (
+              <div className="mt-0.5 mb-1 space-y-0.5 pl-9">
+                {itemSubItems.map(sub => {
+                  const subActive = isActive && sub.id === activeSubItem;
+                  return (
+                    <button
+                      key={sub.id}
+                      type="button"
+                      onClick={() => {
+                        onNavigateSub?.(item.id, sub.id);
+                        setOpenMobile(false);
+                      }}
+                      className={`flex w-full items-center rounded-md px-2.5 py-1.5 text-left text-[11px] font-semibold uppercase tracking-[0.08em] transition-colors focus:outline-none ${
+                        subActive
+                          ? 'bg-white text-[#234C6A] shadow-sm'
+                          : 'text-slate-500 hover:bg-white hover:text-slate-800'
+                      }`}
+                    >
+                      {sub.label}
+                    </button>
+                  );
+                })}
+              </div>
+            ) : null}
+            </div>
           );
         })}
       </nav>

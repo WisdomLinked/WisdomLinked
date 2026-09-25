@@ -330,8 +330,47 @@ const adminAuth = async (req, res, next) => {
     }
 };
 
+// Public routes (keyword search) must succeed with no cookie. A valid session
+// still attaches req.user; a missing or unusable token continues anonymously.
+const optionalAuth = async (req, res, next) => {
+    try {
+        const accessToken = readAccessToken(req);
+        if (!accessToken) return next();
+
+        const decodedAccessToken = jwt.verify(accessToken, process.env.JWT_SECRET);
+        const now = Math.floor((new Date()).getTime() / 1000);
+        if (now >= decodedAccessToken.exp) return next();
+
+        const user = await UserModel.findOne({
+            email: decodedAccessToken.email
+        }).select("+token");
+        if (!user || !user.token || user.status === 'blocked') return next();
+
+        const decodedUserToken = jwt.verify(user.token, process.env.JWT_SECRET);
+        if (decodedUserToken.email !== decodedAccessToken.email) return next();
+        if (now >= decodedUserToken.exp) return next();
+
+        req.user = {
+            userId: user._id.toString(),
+            ...user._doc,
+            password: null,
+            token: null
+        };
+        try {
+            const newToken = await user.generateAuthToken();
+            res.cookie('accessToken', newToken, authCookieOptions());
+        } catch (_refreshErr) {
+            // The session already checked out; search can still use req.user.
+        }
+        return next();
+    } catch (_err) {
+        return next();
+    }
+};
+
 module.exports = {
     requireAuth,
+    optionalAuth,
     customerAuth,
     expertAuth,
     getFullUserData,

@@ -1,6 +1,15 @@
 import { Request, Response } from 'express';
 const chatBotQA = require('../models/chatBotQA');
+const searchCatalog = require('../services/searchCatalogExport');
 import { safeErrorMessage } from '../utils/httpUserFacingCopy';
+
+const PENDING_ANSWER = "Pending answer...";
+const SAVED_QUESTION_FOR_REVIEW = "I’ve saved your question for review - please check back later.";
+
+const rebuildPublicCatalog = () =>
+    searchCatalog.rebuildSearchCatalog().catch(() => {
+        console.error('[search-catalog] rebuild failed');
+    });
 
 const createChatBotQA = async (req, res) => {
     try {
@@ -22,6 +31,7 @@ const createChatBotQA = async (req, res) => {
             role
         })
         await newChatBotQA.save();
+        await rebuildPublicCatalog();
         return res.status(200).json({
             success: true,
             message: "ChatBotQA created successfully",
@@ -52,14 +62,14 @@ const getChatBotAnswer = async (req, res) => {
         if (!mainMatch) {
             const newChatBotQA = new chatBotQA({
                 question,
-                answer: "Pending answer...",
+                answer: PENDING_ANSWER,
                 role: role || "user"
             });
             await newChatBotQA.save();
 
             return res.status(200).json({
                 success: true,
-                answer: "I’ve saved your question for review - please check back later.",
+                answer: SAVED_QUESTION_FOR_REVIEW,
                 similarQuestions: [],
                 saved: true,
                 newChatBotQA
@@ -94,7 +104,7 @@ const UNANSWERED_FILTER = {
     $or: [
         { answer: { $exists: false } },
         { answer: "" },
-        { answer: "Pending answer..." },
+        { answer: PENDING_ANSWER },
     ],
 };
 
@@ -162,6 +172,7 @@ const updateChatBotQA = async (req, res) => {
 
         // Save the updated document
         await chatBotQAItem.save();
+        await rebuildPublicCatalog();
 
         return res.status(200).json({
             success: true,
@@ -184,6 +195,10 @@ const deleteChatBotQA = async (req, res) => {
                 message: "ChatBotQA not found"
             });
         }
+        // findByIdAndDelete does not bump updatedAt, so rebuild from this handler.
+        await searchCatalog.rebuildSearchCatalog().catch(() => {
+            console.error('[search-catalog] rebuild failed');
+        });
         return res.status(200).json({
             success: true,
             message: "ChatBotQA deleted successfully",
@@ -200,5 +215,7 @@ module.exports = {
     getChatBotAnswer,
     getChatBotQA,
     updateChatBotQA,
-    deleteChatBotQA
+    deleteChatBotQA,
+    PENDING_ANSWER,
+    SAVED_QUESTION_FOR_REVIEW,
 }

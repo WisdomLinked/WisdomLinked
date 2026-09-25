@@ -42,6 +42,13 @@ import { useAppSelector } from '../store';
 import { logoutUser } from '../actions/authActions';
 
 import AdminChat from './AdminChat';
+import {
+  type ChatSection,
+  CHAT_SECTION_DEFAULT,
+  CHAT_SECTION_ITEMS,
+  normalizeChatSection,
+} from '../utils/chatSections';
+import { resetChatAction } from '../actions/chatActions';
 import Feedback from '../components/getFeedback';
 import GetContactedUs from '../components/getContactedUs';
 import RegisterUserByAdmin from '../components/registerUserByAdmin';
@@ -521,6 +528,14 @@ export default function AdminDashboard() {
                             ? 'Settings'
                           : 'Admin Dashboard';
 
+  // The chat page lists one section at a time, picked from the Chat dropdown.
+  const [chatSection, setChatSection] = useState<ChatSection>(() =>
+    normalizeChatSection(window.localStorage.getItem('adminChatSection')),
+  );
+  useEffect(() => {
+    window.localStorage.setItem('adminChatSection', chatSection);
+  }, [chatSection]);
+
   const handleSidebarNavigate = (id: string) => {
     if (id === 'logout') {
       dispatch(logoutUser());
@@ -531,6 +546,10 @@ export default function AdminDashboard() {
       return;
     }
     setExtraView(null);
+    if (id === 'chat') {
+      setChatSection(CHAT_SECTION_DEFAULT);
+      dispatch(resetChatAction() as any);
+    }
     goToSection(id === 'dashboard' ? 'dashboard' : id);
   };
 
@@ -564,6 +583,14 @@ export default function AdminDashboard() {
           navItems={adminNavItems}
           activeItem={sidebarActive}
           onNavigate={handleSidebarNavigate}
+          subItems={{ chat: CHAT_SECTION_ITEMS }}
+          activeSubItem={chatSection}
+          onNavigateSub={(navId, subId) => {
+            setExtraView(null);
+            goToSection(navId);
+            setChatSection(normalizeChatSection(subId));
+            dispatch(resetChatAction() as any);
+          }}
           studentName={adminName}
           avatarUrl={avatarUrl}
           roleLabel="Admin"
@@ -592,7 +619,7 @@ export default function AdminDashboard() {
           ) : extraView === 'settings' || section === 'settings' ? (
             <AdminSettings />
           ) : section === 'chat' ? (
-            <AdminChat />
+            <AdminChat section={chatSection} />
           ) : (
             mainScroll
           )}

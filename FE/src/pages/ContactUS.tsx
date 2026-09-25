@@ -6,6 +6,7 @@ import { validateEmail } from "../actions/common";
 import {doContactUs, sendEmailToAdmin} from "../api/api"; // Import the new function
 import { SetLoadingStatus } from "../actions/appActions";
 import { notify } from '../utils/notify';
+import { contactPage } from '../content/publicPages';
 
 const ContactUS = () => {
     const CONTACT_MESSAGE_MAX_LENGTH = 100;
@@ -149,12 +150,12 @@ The WisdomLinked.com Team
         <div className="w-full main_container py-[40px] lg:py-[60px]">
             <div className="w-fit mx-auto flex items-center space-x-[10px] bg-darkgrey rounded-[80px] p-[5px] px-[25px]">
                 <div className="text-white text-[12px] leading-[15px] lg:text-[14px] lg:leading-[21px]">
-                    Become a member 🤟🏻
+                    {contactPage.snippet}
                 </div>
             </div>
-            <div className="max-w-[1060px] mx-auto mt-3 text-center text-white font-bold text-[32px] leading-[48px] lg:text-[56px] lg:leading-[78px]">
-                Please contact us
-            </div>
+            <h1 className="m-0 max-w-[1060px] mx-auto mt-3 text-center text-white font-bold text-[32px] leading-[48px] lg:text-[56px] lg:leading-[78px]">
+                {contactPage.title}
+            </h1>
             <div className="w-full max-w-[734px] mx-auto mt-[55px] lg:mt-12">
                 {/* Full Name Field */}
                 <div className="text-lightgrey text-[12px] leading-[19px]">Full Name *</div>

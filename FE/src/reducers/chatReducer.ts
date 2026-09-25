@@ -259,7 +259,6 @@ const chatReducer: Reducer<ChatState, ChatActions> = (
                 conversationId: null,
                 rcChannelId: null,
                 messages: [],
-                dmUnreadByRid: {},
                 currentPage: 0,
                 gotAllChats: false,
                 isNewMessage: false

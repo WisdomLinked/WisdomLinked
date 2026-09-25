@@ -17,6 +17,9 @@ import type { ReplyDraft } from "./ChatDetails";
 import ReplyQuoteCard from "../../../components/messenger/ReplyQuoteCard";
 import { buildReplyQuoteHtml, flattenReplyTextForNextQuote } from "../../../utils/chatReplyLayout";
 import { isQuillComposerEmpty, normalizeQuillHtmlForSend } from "../../../utils/quillSendHtml";
+import { chatDraftKey, clearDraft, readDraft, writeDraft } from "../../../utils/chatDraftStore";
+
+const DRAFT_SAVE_DEBOUNCE_MS = 400;
 
 const MAX_CHAT_FILE_SIZE_BYTES = 1024 * 1024; // 1 MB per file
 const ALLOWED_CHAT_FILE_EXTENSIONS = [
@@ -133,16 +136,68 @@ const NewMessageInput: React.FC<any> = ({
     const rcTypingName = userDetails?.email ? toRocketChatUsername(userDetails.email) : '';
     const typingStopTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const sentTypingOnRef = useRef(false);
+    const typingRoomRef = useRef<string | null>(null);
+
+    const ownerId = userDetails?._id ?? userDetails?.id ?? userDetails?.userId ?? null;
+    const draftKey = chatDraftKey(ownerId, chosenChatDetails, chosenGroupChatDetails);
+
+    const messageRef = useRef("");
+    messageRef.current = _message;
+    const draftKeyRef = useRef<string | null>(null);
+    const draftSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const restoredTextRef = useRef("");
+
+    const stopTypingBroadcast = () => {
+        if (typingStopTimerRef.current) {
+            clearTimeout(typingStopTimerRef.current);
+            typingStopTimerRef.current = null;
+        }
+        const room = typingRoomRef.current;
+        if (sentTypingOnRef.current && room && rcTypingName) {
+            sendRoomTyping(room, rcTypingName, false);
+        }
+        sentTypingOnRef.current = false;
+        typingRoomRef.current = null;
+    };
+
+    const flushDraft = () => {
+        if (draftSaveTimerRef.current) {
+            clearTimeout(draftSaveTimerRef.current);
+            draftSaveTimerRef.current = null;
+        }
+        writeDraft(draftKeyRef.current, messageRef.current);
+    };
+
+    const scheduleDraftSave = () => {
+        if (draftSaveTimerRef.current) clearTimeout(draftSaveTimerRef.current);
+        const key = draftKeyRef.current;
+        draftSaveTimerRef.current = setTimeout(() => {
+            draftSaveTimerRef.current = null;
+            writeDraft(key, messageRef.current);
+        }, DRAFT_SAVE_DEBOUNCE_MS);
+    };
+
+    const onComposerChange = (value: string) => {
+        set_message(value);
+        messageRef.current = value;
+        scheduleDraftSave();
+        requestAnimationFrame(resizeQuillEditor);
+    };
 
     const onBlur = () => {
-        if (rcChannelId && rcTypingName) {
-            sendRoomTyping(rcChannelId, rcTypingName, false);
-            sentTypingOnRef.current = false;
-            if (typingStopTimerRef.current) {
-                clearTimeout(typingStopTimerRef.current);
-                typingStopTimerRef.current = null;
-            }
+        stopTypingBroadcast();
+        flushDraft();
+    };
+
+    const clearComposer = () => {
+        if (draftSaveTimerRef.current) {
+            clearTimeout(draftSaveTimerRef.current);
+            draftSaveTimerRef.current = null;
         }
+        set_message("");
+        messageRef.current = "";
+        restoredTextRef.current = "";
+        clearDraft(draftKeyRef.current);
     };
 
     const dispatchOutgoingHtml = async (message: string) => {
@@ -155,7 +210,7 @@ const NewMessageInput: React.FC<any> = ({
             : "";
         const safeMessage = sanitizeMessageHtml(`${replyHtml}${message}`);
         if (!safeMessage.trim()) {
-            set_message("");
+            clearComposer();
             return;
         }
         if (chosenChatDetails) {
@@ -186,14 +241,14 @@ const NewMessageInput: React.FC<any> = ({
                 dispatch(addNewMessage(result.message));
             }
         }
-        set_message("");
+        clearComposer();
         onCancelReply?.();
     };
 
     const sendMessage = () => {
         const message = normalizeQuillHtmlForSend(_message);
         if (!message) {
-            set_message("");
+            clearComposer();
             return;
         }
         void dispatchOutgoingHtml(message);
@@ -224,14 +279,17 @@ const NewMessageInput: React.FC<any> = ({
             .trim();
 
         if (plain) {
+            if (_message === restoredTextRef.current) return;
             if (!sentTypingOnRef.current) {
                 sendRoomTyping(rcChannelId, rcTypingName, true);
                 sentTypingOnRef.current = true;
+                typingRoomRef.current = rcChannelId;
             }
             if (typingStopTimerRef.current) clearTimeout(typingStopTimerRef.current);
             typingStopTimerRef.current = setTimeout(() => {
                 sendRoomTyping(rcChannelId, rcTypingName, false);
                 sentTypingOnRef.current = false;
+                typingRoomRef.current = null;
                 typingStopTimerRef.current = null;
             }, 2000);
         } else {
@@ -242,6 +300,7 @@ const NewMessageInput: React.FC<any> = ({
             if (sentTypingOnRef.current) {
                 sendRoomTyping(rcChannelId, rcTypingName, false);
                 sentTypingOnRef.current = false;
+                typingRoomRef.current = null;
             }
         }
 
@@ -251,22 +310,26 @@ const NewMessageInput: React.FC<any> = ({
         };
     }, [_message, rcChannelId, rcTypingName]);
 
-    const [prevChosenChatDetails, set_prevChosenChatDetails] = useState(chosenChatDetails)
-    const [prevChosenGroupChatDetails, set_prevChosenGroupChatDetails] = useState(chosenGroupChatDetails)
-
     useEffect(() => {
-        set_message('');
-        if (rcChannelId && userDetails?.email) {
-            sendRoomTyping(rcChannelId, toRocketChatUsername(userDetails.email), false);
-            sentTypingOnRef.current = false;
-            if (typingStopTimerRef.current) {
-                clearTimeout(typingStopTimerRef.current);
-                typingStopTimerRef.current = null;
-            }
-        }
-        set_prevChosenChatDetails(chosenChatDetails);
-        set_prevChosenGroupChatDetails(chosenGroupChatDetails);
-    }, [chosenChatDetails, chosenGroupChatDetails, rcChannelId, userDetails?.email]);
+        if (draftKeyRef.current === draftKey) return;
+
+        flushDraft();
+        stopTypingBroadcast();
+
+        draftKeyRef.current = draftKey;
+        const restored = readDraft(draftKey);
+        restoredTextRef.current = restored;
+        messageRef.current = restored;
+        set_message(restored);
+        requestAnimationFrame(resizeQuillEditor);
+    }, [draftKey]);
+
+    const onUnmountRef = useRef<() => void>(() => {});
+    onUnmountRef.current = () => {
+        flushDraft();
+        stopTypingBroadcast();
+    };
+    useEffect(() => () => onUnmountRef.current(), []);
 
     useEffect(() => {
         const uploadFile = async () => {
@@ -301,7 +364,7 @@ const NewMessageInput: React.FC<any> = ({
                     const result = await apiSendGroup(chosenGroupChatDetails.groupId, message);
                     if (result?.message) dispatch(addNewMessage(result.message));
                 }
-                set_message("");
+                clearComposer();
             } catch (e: any) {
                 notify.error(resolveUploadErrorMessage(e));
             } finally {
@@ -317,6 +380,7 @@ const NewMessageInput: React.FC<any> = ({
     const handleEmojiSelect = (emoji: any) => {
         set_message((prev) => prev + emoji.native);
         setShowEmojiPicker(false);
+        scheduleDraftSave();
     };
 
     // Standard toolbar configuration
@@ -394,10 +458,7 @@ const NewMessageInput: React.FC<any> = ({
                         theme="snow"
                         className="chat-composer-quill chat-composer-quill-light w-full"
                         value={_message}
-                        onChange={(value) => {
-                            set_message(value);
-                            requestAnimationFrame(resizeQuillEditor);
-                        }}
+                        onChange={onComposerChange}
                         onKeyDown={handleSendMessage}
                         onBlur={onBlur}
                         placeholder="Type a message…"
@@ -450,10 +511,7 @@ const NewMessageInput: React.FC<any> = ({
                     theme="snow"
                     className="chat-composer-quill flex w-full flex-col-reverse rounded-md bg-black"
                     value={_message}
-                    onChange={(value) => {
-                        set_message(value);
-                        requestAnimationFrame(resizeQuillEditor);
-                    }}
+                    onChange={onComposerChange}
                     onKeyDown={handleSendMessage}
                     onBlur={onBlur}
                     modules={modules}
