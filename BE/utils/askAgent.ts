@@ -287,7 +287,10 @@ const complete = async (
         body: JSON.stringify(body),
         signal: AbortSignal.timeout(TIMEOUT_MS),
     });
-    if (!response.ok) throw new Error('inference unavailable');
+    if (!response.ok) {
+        console.error(`[ask] inference status ${response.status}`);
+        throw new Error('inference unavailable');
+    }
     const payload = await response.json();
     return payload?.choices?.[0]?.message ?? {};
 };
