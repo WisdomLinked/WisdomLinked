@@ -23,7 +23,7 @@ test("chat upload rejects unknown or missing extensions", () => {
 });
 
 test("chat and general size limits stay isolated", () => {
-  assert.equal(MAX_CHAT_FILE_SIZE_BYTES, 1 * 1024 * 1024);
+  assert.equal(MAX_CHAT_FILE_SIZE_BYTES, 10 * 1024 * 1024);
   assert.equal(MAX_GENERAL_FILE_SIZE_BYTES, 20 * 1024 * 1024);
   assert.ok(MAX_GENERAL_FILE_SIZE_BYTES > MAX_CHAT_FILE_SIZE_BYTES);
 });

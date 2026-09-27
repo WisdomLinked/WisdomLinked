@@ -34,6 +34,7 @@ export default function StatCard({
   onClick,
   className,
   alignStart,
+  labelClassName,
 }: {
   label: string;
   value: string | number;
@@ -46,6 +47,8 @@ export default function StatCard({
   className?: string;
   /** Left-align label and value (icon stays on the right). */
   alignStart?: boolean;
+  /** Overrides the default label font size. */
+  labelClassName?: string;
 }) {
   const colors = colorMap[color] || colorMap.primary;
 
@@ -67,7 +70,7 @@ export default function StatCard({
       aria-label={onClick ? `Open ${label}` : undefined}
     >
       <div className={`flex min-w-0 flex-1 flex-col ${alignStart ? 'items-start' : ''}`}>
-        <span className="font-sans text-[14px] font-semibold text-wl-ink">
+        <span className={`font-sans font-semibold text-wl-ink ${labelClassName || 'text-[14px]'}`}>
           {label}
         </span>
         <div

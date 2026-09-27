@@ -81,12 +81,21 @@ function Group({ title, children }: { title: string; children: React.ReactNode }
 export default function SiteSearchBox({
   audience,
   tone = 'light',
+  variant = 'default',
+  placeholder = 'Search',
+  showShortcutHint = false,
+  autoFocus = false,
 }: {
   audience: SiteSearchAudience;
   tone?: 'light' | 'dark';
+  variant?: 'default' | 'nav';
+  placeholder?: string;
+  showShortcutHint?: boolean;
+  autoFocus?: boolean;
 }) {
   const navigate = useNavigate();
   const rootRef = useRef<HTMLDivElement | null>(null);
+  const inputRef = useRef<HTMLInputElement | null>(null);
   const requestRef = useRef(0);
   const [query, setQuery] = useState('');
   // Keyword cards stay until a search response replaces them.
@@ -96,10 +105,12 @@ export default function SiteSearchBox({
   const [asking, setAsking] = useState(false);
   const askRequestRef = useRef(0);
   const [open, setOpen] = useState(false);
+  const [isMac, setIsMac] = useState(false);
 
   const trimmed = query.trim();
   const adminEmail = audience === 'admin' && isEmailQuery(trimmed);
   const canAsk = trimmed.length >= 2 && !adminEmail;
+  const isNav = variant === 'nav' && tone === 'light';
 
   const askInFlightRef = useRef(false);
 
@@ -123,6 +134,32 @@ export default function SiteSearchBox({
       }
     }
   };
+
+  useEffect(() => {
+    setIsMac(/Mac|iPhone|iPad|iPod/i.test(navigator.platform || navigator.userAgent || ''));
+  }, []);
+
+  useEffect(() => {
+    if (!autoFocus) return undefined;
+    const id = window.setTimeout(() => inputRef.current?.focus(), 0);
+    return () => window.clearTimeout(id);
+  }, [autoFocus]);
+
+  useEffect(() => {
+    if (!showShortcutHint) return undefined;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (!(event.metaKey || event.ctrlKey) || event.key.toLowerCase() !== 'k') return;
+      const target = event.target as HTMLElement | null;
+      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) {
+        if (target !== inputRef.current) return;
+      }
+      event.preventDefault();
+      inputRef.current?.focus();
+      setOpen(true);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [showShortcutHint]);
 
   useEffect(() => {
     if (trimmed.length < 2) return undefined;
@@ -168,24 +205,39 @@ export default function SiteSearchBox({
       cards.yours.length > 0 ||
       cards.pages.length > 0);
 
-  const inputClass =
-    tone === 'dark'
-      ? 'w-full bg-transparent text-sm text-white placeholder:text-white/60 outline-none'
-      : 'w-full bg-transparent text-sm text-slate-800 placeholder:text-slate-400 outline-none';
-  const shellClass =
-    tone === 'dark'
+  const shellClass = isNav
+    ? 'relative flex h-10 w-full items-center rounded-full border border-[#BCCCDC] bg-white/80 pl-10 pr-2 transition-shadow focus-within:border-[#234C6A] focus-within:ring-2 focus-within:ring-[#234C6A]/15'
+    : tone === 'dark'
       ? 'flex items-center gap-2 rounded-full border border-white/30 bg-white/10 px-3 py-1.5'
       : 'flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5';
 
+  const inputClass = isNav
+    ? 'h-full w-full min-w-0 flex-1 bg-transparent text-sm text-slate-800 placeholder:text-slate-400 outline-none focus:outline-none'
+    : tone === 'dark'
+      ? 'w-full bg-transparent text-sm text-white placeholder:text-white/60 outline-none'
+      : 'w-full bg-transparent text-sm text-slate-800 placeholder:text-slate-400 outline-none';
+
+  const iconClass = isNav
+    ? 'pointer-events-none absolute left-3 top-1/2 h-[18px] w-[18px] -translate-y-1/2 text-slate-400'
+    : `h-3.5 w-3.5 shrink-0 ${tone === 'dark' ? 'text-white/70' : 'text-slate-400'}`;
+
   return (
     <div ref={rootRef} className="relative w-full min-w-0" data-site-search={audience}>
-      <div className={shellClass}>
-        <Search className={`h-3.5 w-3.5 shrink-0 ${tone === 'dark' ? 'text-white/70' : 'text-slate-400'}`} aria-hidden />
+      <form
+        role="search"
+        className={shellClass}
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (canAsk && !askInFlightRef.current) void askQuestion(trimmed);
+        }}
+      >
+        <Search className={iconClass} aria-hidden />
         <input
+          ref={inputRef}
           type="search"
           value={query}
           aria-label="Search WisdomLinked"
-          placeholder="Search"
+          placeholder={placeholder}
           onChange={(event) => {
             setQuery(event.target.value);
             setOpen(true);
@@ -204,15 +256,24 @@ export default function SiteSearchBox({
           }}
           className={inputClass}
         />
+        {showShortcutHint && !canAsk ? (
+          <kbd
+            className="pointer-events-none hidden shrink-0 select-none items-center rounded-md border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[10px] font-medium text-slate-400 xl:inline-flex"
+            aria-hidden
+          >
+            {isMac ? '⌘K' : 'Ctrl K'}
+          </kbd>
+        ) : null}
         {canAsk ? (
           <button
-            type="button"
-            onClick={() => {
-              void askQuestion(trimmed);
-            }}
+            type="submit"
             disabled={asking}
             aria-label={asking ? 'Asking' : undefined}
-            className="shrink-0 rounded-full bg-[#234C6A] px-2.5 py-1 text-[11px] font-semibold text-white disabled:opacity-60"
+            className={
+              isNav
+                ? 'shrink-0 rounded-full bg-[#234C6A] px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-60'
+                : 'shrink-0 rounded-full bg-[#234C6A] px-2.5 py-1 text-[11px] font-semibold text-white disabled:opacity-60'
+            }
           >
             {asking ? (
               <span
@@ -224,7 +285,7 @@ export default function SiteSearchBox({
             )}
           </button>
         ) : null}
-      </div>
+      </form>
       {showPanel ? (
         <div
           data-testid="site-search-results"

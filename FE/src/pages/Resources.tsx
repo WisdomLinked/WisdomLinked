@@ -24,7 +24,7 @@ export default function Resources() {
 
   return (
     <PublicPageShell>
-      <section className="px-4 sm:px-6 pb-16 sm:pb-24" style={{ backgroundColor: '#F0F4F8' }}>
+      <section className="flex-1 px-4 sm:px-6 pb-16 sm:pb-24" style={{ backgroundColor: '#F0F4F8' }}>
         <div className="max-w-7xl mx-auto pt-10 sm:pt-16">
           <div className="text-center mb-10 sm:mb-14">
             <div className="section-label text-[#234C6A] mb-4">Resources</div>

@@ -60,6 +60,8 @@ export const homePage = {
     },
     pricing: {
         title: 'Fair, transparent, expert driven rates',
+        titleLead: 'Fair, transparent,',
+        titleNoWrap: 'expert driven rates',
         snippet:
             'Every expert sets their own rate based on their field, seniority, and demand. You see the full cost before you commit, no hidden fees, no surprises.',
     },
@@ -149,11 +151,11 @@ const homeImpactSnippet = joinText(
 );
 
 const homePricingSnippet = joinText(
-    'Pre-payment is fully refunded if your expert declines the request.',
-    'Expert-set rates. Each consultant independently sets their hourly or per-session rate based on their expertise, institutional standing, and field. Browse by budget to find the right fit for you.',
-    "Client gratuity. For high-demand experts, you may add a custom tip on top of the session rate. It's entirely optional, a way to show appreciation or secure a preferred slot.",
+    'You are charged only if your expert accepts your booking request.',
+    'Expert-set rates. Each consultant independently sets their hourly rate for 1:1 sessions and their own rate for seminars, based on their expertise, institutional standing, and field. Browse by budget to find the right fit for you.',
+    "Client gratuity (coming soon). For high-demand experts, you may add a custom tip on top of the session rate. It's entirely optional, a way to show appreciation or secure a preferred slot.",
     'Request & confirm. Your booking is a proposal. The expert reviews your request and background before officially accepting, ensuring every session is a genuine match.',
-    'Flexible rescheduling. Plans change. You can request a time shift at any point. The new slot becomes confirmed once your expert approves — no automatic cancellations.',
+    'Flexible rescheduling (coming soon). Plans change. You can request a time shift at any point. The new slot becomes confirmed once your expert approves — no automatic cancellations.',
     'Two-way ratings. After every session, both expert and client leave a rating. This mutual accountability is how we maintain a community of excellence, and why our average sits at 4.9 out of 5.',
     'Full refund if the expert declines. Pre-payment is returned in full if the expert declines your request.',
 );

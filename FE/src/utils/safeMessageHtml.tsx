@@ -122,6 +122,27 @@ function anchorProps(attribs: Record<string, string | undefined>) {
 
 export function sanitizeMessageHtml(html: string | undefined | null): string {
   let cleaned = String(html || "");
+  // Plain text (no tags): escape, preserve newlines, auto-link URLs.
+  if (cleaned && !/<[a-z][\s\S]*>/i.test(cleaned)) {
+    const escapeTextLocal = (value: string) =>
+      value
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+    return cleaned
+      .split(/\r\n|\r|\n/)
+      .map((line) => {
+        const escaped = escapeTextLocal(line);
+        return escaped.replace(
+          /(https?:\/\/[^\s<&]+)/gi,
+          (url) => `<a href="${url}" target="_blank" rel="noopener noreferrer nofollow">${url}</a>`,
+        );
+      })
+      .join("<br>");
+  }
+
   let previous: string;
   do {
     previous = cleaned;

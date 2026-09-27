@@ -12,27 +12,25 @@ const uploadsGeneral = multer({
   limits: { fileSize: MAX_GENERAL_FILE_SIZE_BYTES },
 }).single("media");
 
-const MAX_CHAT_FILE_SIZE_BYTES = 1024 * 1024; // 1 MB per file
+const MAX_CHAT_FILE_SIZE_BYTES = 10 * 1024 * 1024; // 10 MB per file
 const ALLOWED_CHAT_FILE_EXTENSIONS = new Set([
   "pdf",
   "doc",
   "docx",
   "txt",
-  "csv",
   "jpg",
   "jpeg",
   "png",
   "webp",
-  "gif",
   "xls",
   "xlsx",
   "ppt",
   "pptx",
 ]);
 const CHAT_FILE_REQUIREMENTS_MESSAGE =
-  "Unsupported file. Allowed formats: PDF, DOC, DOCX, TXT, CSV, JPG, JPEG, PNG, WEBP, GIF, XLS, XLSX, PPT, PPTX. Max size: 1 MB per file.";
+  "Unsupported file. Allowed formats: JPG, PNG, WEBP, PDF, DOC, DOCX, PPT, PPTX, XLS, XLSX, TXT. Max size: 10 MB per file.";
 const CHAT_FILE_SIZE_EXCEEDED_MESSAGE =
-  "File is too large. Max size: 1 MB per file.";
+  "File is too large. Max size: 10 MB per file.";
 
 const isAllowedChatFileExtension = (originalName: unknown): boolean => {
   const name = String(originalName || "");

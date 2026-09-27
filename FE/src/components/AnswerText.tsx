@@ -72,6 +72,29 @@ function parseInline(text: string, keyPrefix: string): React.ReactNode[] {
         plain = '';
     };
 
+    const linkMatchAt = (start: number): { url: string; length: number } | null => {
+        // Markdown [label](https://...)
+        if (text.startsWith('[', start)) {
+            const labelEnd = text.indexOf(']', start + 1);
+            if (labelEnd !== -1 && text[labelEnd + 1] === '(') {
+                const urlEnd = text.indexOf(')', labelEnd + 2);
+                if (urlEnd !== -1) {
+                    const url = text.slice(labelEnd + 2, urlEnd).trim();
+                    if (/^https?:\/\//i.test(url)) {
+                        return { url, length: urlEnd + 1 - start };
+                    }
+                }
+            }
+        }
+        // Bare https://...
+        const rest = text.slice(start);
+        const bare = rest.match(/^https?:\/\/[^\s<>)"']+/i);
+        if (bare) {
+            return { url: bare[0].replace(/[.,;:!?)]+$/, ''), length: bare[0].length };
+        }
+        return null;
+    };
+
     while (index < text.length) {
         if (text[index] === '`') {
             const end = text.indexOf('`', index + 1);
@@ -113,6 +136,28 @@ function parseInline(text: string, keyPrefix: string): React.ReactNode[] {
                 index = end + 1;
                 continue;
             }
+        }
+
+        const link = linkMatchAt(index);
+        if (link) {
+            flush(`${keyPrefix}-t-${index}`);
+            const label =
+                text.startsWith('[', index) && text.indexOf(']', index) !== -1
+                    ? text.slice(index + 1, text.indexOf(']', index))
+                    : link.url;
+            nodes.push(
+                <a
+                    key={`${keyPrefix}-a-${index}`}
+                    href={link.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="break-words font-medium text-[#234C6A] underline underline-offset-2"
+                >
+                    {label}
+                </a>,
+            );
+            index += link.length;
+            continue;
         }
 
         plain += text[index];

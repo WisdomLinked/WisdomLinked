@@ -40,7 +40,7 @@ const PaymentReceipt = React.lazy(() => import('./pages/PaymentReceipt'));
 const Resources = React.lazy(() => import('./pages/Resources'));
 const ResourceGuide = React.lazy(() => import('./pages/ResourceGuide'));
 
-// Heavy dashboard chunks — MUI, calendars, quill, etc. only load after login
+// Heavy dashboard chunks — MUI, calendars, messenger, etc. only load after login
 const LegacyExpertDashboard = React.lazy(() => import('./pages/Dashboard/_ExpertDashboard'));
 const CustomerDashboard = React.lazy(() => import('./pages/Dashboard/_CustomerDashboard'));
 const AdminDashboard = React.lazy(() => import('./pages/AdminDashboard'));

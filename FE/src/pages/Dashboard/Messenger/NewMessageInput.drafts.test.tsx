@@ -10,6 +10,10 @@ vi.mock("react-redux", () => ({
     useSelector: (fn: any) => fn(storeState),
 }));
 
+vi.mock("../../../store", () => ({
+    useAppSelector: (fn: any) => fn(storeState),
+}));
+
 const sendRoomTyping = vi.fn((..._args: any[]) => {});
 vi.mock("../../../services/rcRealtime", () => ({
     sendRoomTyping: (...args: any[]) => sendRoomTyping(...args),
@@ -27,18 +31,6 @@ vi.mock("../../../api/api", () => ({ callApi: vi.fn() }));
 vi.mock("../../../utils/notify", () => ({ notify: { error: vi.fn(), success: vi.fn() } }));
 vi.mock("@emoji-mart/data", () => ({ default: {} }));
 vi.mock("@emoji-mart/react", () => ({ default: () => null }));
-vi.mock("react-quill", () => ({
-    default: React.forwardRef((props: any, ref: any) => (
-        <textarea
-            ref={ref}
-            aria-label="composer"
-            value={props.value}
-            onChange={(e) => props.onChange?.(e.target.value)}
-            onBlur={props.onBlur}
-            onKeyDown={props.onKeyDown}
-        />
-    )),
-}));
 
 import NewMessageInput from "./NewMessageInput";
 import { readDraft } from "../../../utils/chatDraftStore";
@@ -55,7 +47,7 @@ const withGroup = (groupId: string, rcChannelId = `rc-${groupId}`) => ({
     auth: { userDetails: ME },
 });
 
-const composer = () => screen.getByLabelText("composer") as HTMLTextAreaElement;
+const composer = () => screen.getByLabelText("Message") as HTMLTextAreaElement;
 
 const typeInto = (text: string) => fireEvent.change(composer(), { target: { value: text } });
 
