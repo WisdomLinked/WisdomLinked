@@ -10,14 +10,12 @@ import { toRocketChatUsername } from '../../../utils/rocketchatUsername';
 import { sanitizeMessageHtml } from '../../../utils/safeMessageHtml';
 import type { ReplyDraft } from './ChatDetails';
 import ReplyQuoteCard from '../../../components/messenger/ReplyQuoteCard';
-import MessageComposer from '../../../components/messenger/MessageComposer';
+import MessageComposer, { type ComposerSendPayload } from '../../../components/chat/composer/MessageComposer';
 import { buildReplyQuoteHtml, flattenReplyTextForNextQuote } from '../../../utils/chatReplyLayout';
 import { chatDraftKey, clearDraft, readDraft, writeDraft } from '../../../utils/chatDraftStore';
 import {
   CHAT_FILE_REQUIREMENTS_MESSAGE,
   CHAT_FILE_SIZE_EXCEEDED_MESSAGE,
-  isComposerTextEmpty,
-  plainTextToSafeMessageHtml,
 } from '../../../utils/chatAttachments';
 
 const DRAFT_SAVE_DEBOUNCE_MS = 400;
@@ -159,7 +157,7 @@ const NewMessageInput: React.FC<{
   };
 
   const uploadAndSendFile = async (file: File) => {
-    const response = await callApi('POST', 'auth/uploadChatFile', { email: userDetails.email }, file);
+    const response: any = await callApi('POST', 'auth/uploadChatFile', { email: userDetails.email }, file);
     if (response?.status !== 'SUCCESS' || !response?.chatFile) {
       throw new Error(resolveUploadErrorMessage(response));
     }
@@ -176,10 +174,10 @@ const NewMessageInput: React.FC<{
     }
   };
 
-  const handleSend = async ({ text, attachments }: { text: string; attachments: File[] }) => {
+  const handleSend = async ({ html, text, attachments }: ComposerSendPayload) => {
     try {
-      if (!isComposerTextEmpty(text)) {
-        await dispatchOutgoingHtml(plainTextToSafeMessageHtml(text));
+      if (text.trim() && html) {
+        await dispatchOutgoingHtml(html);
       }
       for (const file of attachments) {
         await uploadAndSendFile(file);
@@ -267,7 +265,7 @@ const NewMessageInput: React.FC<{
       ) : null}
       <MessageComposer
         value={_message}
-        onTextChange={onComposerChange}
+        onChange={onComposerChange}
         onBlur={onBlur}
         onSend={handleSend}
         placeholder="Write a message…"

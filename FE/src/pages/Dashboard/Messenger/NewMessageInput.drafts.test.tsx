@@ -32,6 +32,20 @@ vi.mock("../../../utils/notify", () => ({ notify: { error: vi.fn(), success: vi.
 vi.mock("@emoji-mart/data", () => ({ default: {} }));
 vi.mock("@emoji-mart/react", () => ({ default: () => null }));
 
+// Stand-in with the same controlled contract (value / onChange / onBlur / onSend) as the TipTap composer.
+vi.mock("../../../components/chat/composer/MessageComposer", () => ({
+    default: ({ value, onChange, onBlur, onSend }: any) => (
+        <>
+            <textarea aria-label="Message" value={value ?? ""} onChange={(e) => onChange?.(e.target.value)} onBlur={onBlur} />
+            <button
+                type="button"
+                aria-label="Send message"
+                onClick={() => void Promise.resolve(onSend({ html: value, text: value, attachments: [] })).catch(() => {})}
+            />
+        </>
+    ),
+}));
+
 import NewMessageInput from "./NewMessageInput";
 import { readDraft } from "../../../utils/chatDraftStore";
 

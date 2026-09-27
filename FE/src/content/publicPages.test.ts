@@ -8,8 +8,19 @@ import {
     searchPublicPages,
 } from './publicPages';
 
-const PAGE_FILES: { file: string; route: (typeof PUBLIC_ROUTES)[number]; stripModals?: boolean }[] = [
-    { file: 'TOEConsulting.tsx', route: '/', stripModals: true },
+const PAGE_FILES: {
+    file: string;
+    route: (typeof PUBLIC_ROUTES)[number];
+    stripModals?: boolean;
+    /** Section components (relative to pages/) whose headings render on this route. */
+    sectionFiles?: string[];
+}[] = [
+    {
+        file: 'TOEConsulting.tsx',
+        route: '/',
+        stripModals: true,
+        sectionFiles: ['../components/landing/pricing/PricingSection.tsx'],
+    },
     { file: 'AboutUS.tsx', route: '/aboutus' },
     { file: 'Services.tsx', route: '/services' },
     { file: 'Ruels.tsx', route: '/rules' },
@@ -122,6 +133,10 @@ describe('public page index', () => {
             const raw = readFileSync(path.join(pagesDir, spec.file), 'utf8');
             const source = stripBlockComments(spec.stripModals ? stripHomeModals(raw) : raw);
             const headings = publicHeadings(source, bindImports(raw));
+            for (const sectionFile of spec.sectionFiles ?? []) {
+                const sectionRaw = readFileSync(path.join(pagesDir, sectionFile), 'utf8');
+                headings.push(...publicHeadings(stripBlockComments(sectionRaw), bindImports(sectionRaw)));
+            }
             expect(headings.length, spec.file).toBeGreaterThan(0);
             const indexed = PUBLIC_PAGES.filter((row) => row.route === spec.route).map((row) => normalize(row.title));
             for (const heading of headings) {

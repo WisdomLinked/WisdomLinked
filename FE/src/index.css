@@ -74,6 +74,14 @@ code {
   -webkit-box-orient: vertical;
 }
 
+.chat-composer-editor p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
+  color: #94a3b8;
+  pointer-events: none;
+}
+
 .chat-message-rich {
   white-space: normal;
 }

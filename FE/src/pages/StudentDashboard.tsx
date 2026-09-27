@@ -25,7 +25,6 @@ import TopBar, { TopBarNotificationItem } from '../components/layout/TopBar';
 import StatsGrid from '../components/dashboard/StatsGrid';
 import AccountReviewBanner from '../components/dashboard/AccountReviewBanner';
 import CarouselSection from '../components/dashboard/CarouselSection';
-import YourTodosCard from '../components/dashboard/YourTodosCard';
 import StudentProfile from '../components/dashboard/StudentProfile';
 import StudentSettings from '../components/dashboard/StudentSettings';
 import DecisionNotices from '../components/dashboard/DecisionNotices';
@@ -46,13 +45,10 @@ import type { ExpertCardProps } from '../components/ExpertCard';
 import { mapExpertToMentorWithImage } from '../utils/mapExpertToMentor';
 import {
   filterPublicExperts,
-  findRecentRateCandidates,
   getRecommendedExperts,
-  getStudentTodos,
   getUpcomingSeminarsForStudent,
   type DiscoveryExpert,
   type DiscoverySeminar,
-  type StudentTodo,
 } from '../utils/studentDiscovery';
 import { isDisplayImageUrl } from '../utils/profileImage';
 import StudentChat from '../components/dashboard/StudentChat';
@@ -1354,50 +1350,6 @@ export default function StudentDashboard() {
     [filteredUnreadByRid],
   );
 
-  const studentTodos = useMemo(() => {
-    const paymentItems = pendingSeatRequests
-      .filter((r: any) => String(r?.status || '').toLowerCase() === 'awaiting_payment')
-      .map((r: any) => ({
-        id: String(r._id),
-        label: r?.groupChat?.name || 'seminar seat',
-      }));
-    const rateItems = findRecentRateCandidates(userDetails);
-    return getStudentTodos({
-      user: userDetails,
-      unreadCount: totalUnreadDm,
-      paymentItems,
-      rateItems,
-    });
-  }, [userDetails, pendingSeatRequests, totalUnreadDm]);
-
-  const handleTodoSelect = useCallback(
-    (todo: StudentTodo) => {
-      if (todo.kind === 'profile') {
-        setActiveItem('profile');
-        return;
-      }
-      if (todo.kind === 'messages') {
-        setActiveItem('chat');
-        return;
-      }
-      if (todo.kind === 'payment') {
-        setUpcomingModal({ kind: 'seminar', status: 'pending' });
-        void loadMySeatRequests();
-        return;
-      }
-      if (todo.kind === 'rate') {
-        const rateId = todo.id.replace(/^rate-/, '');
-        const candidate = findRecentRateCandidates(userDetails).find((r) => r.id === rateId);
-        if (candidate?.expertId) {
-          dispatch({ type: 'SetFeedbackModalShow', payload: candidate.expertId });
-        } else {
-          setActiveItem('calendar');
-        }
-      }
-    },
-    [dispatch, userDetails, loadMySeatRequests],
-  );
-
   const chatNotifications = useMemo<TopBarNotificationItem[]>(
     () =>
       Object.entries(filteredUnreadByRid)
@@ -1723,10 +1675,6 @@ export default function StudentDashboard() {
                     }
                   />
                 </div>
-              </div>
-
-              <div className="mt-6">
-                <YourTodosCard todos={studentTodos} onSelect={handleTodoSelect} />
               </div>
 
               <CarouselSection
