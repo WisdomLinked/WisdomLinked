@@ -56,6 +56,7 @@ import ExpertProfile from './Dashboard/_ExpertDashboard/profile';
 import ExpertRevenue from './Dashboard/_ExpertDashboard/ExpertRevenue';
 import ContactAdmin from './Dashboard/_ExpertDashboard/ContactAdmin';
 import StudentChat from '../components/dashboard/StudentChat';
+import LogoutConfirmModal from '../components/dashboard/LogoutConfirmModal';
 import {
   type ChatSection,
   CHAT_SECTION_DEFAULT,
@@ -271,7 +272,9 @@ export default function ExpertDashboard() {
     setChatSection(sectionForChatTarget(target));
   }, []);
   const goToDashboardTab = useCallback(() => setActiveItem('dashboard'), []);
-  useBackToDashboard(activeItem, goToDashboardTab);
+  const [showBackLogoutConfirm, setShowBackLogoutConfirm] = useState(false);
+  const confirmLogoutOnBack = useCallback(() => setShowBackLogoutConfirm(true), []);
+  useBackToDashboard(activeItem, goToDashboardTab, 'dashboard', confirmLogoutOnBack);
   // Child views (e.g. the calendar) request the chat tab by firing this event.
   useEffect(() => {
     const onNav = () => setActiveItem('chat');
@@ -1624,6 +1627,14 @@ export default function ExpertDashboard() {
           </div>
         ) : null}
       </div>
+      <LogoutConfirmModal
+        open={showBackLogoutConfirm}
+        onCancel={() => setShowBackLogoutConfirm(false)}
+        onConfirm={() => {
+          setShowBackLogoutConfirm(false);
+          dispatch(logoutUser() as any);
+        }}
+      />
     </div>
   );
 }

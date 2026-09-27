@@ -12,6 +12,11 @@ import { useAppSelector } from '../../store';
 import { onSubscriptionChanged, onNewMessage, normalizeRcStreamRoomMessage, subscribeToRoom } from '../../services/rcRealtime';
 import { toRocketChatUsername } from '../../utils/rocketchatUsername';
 import {
+  sortByRecentActivity,
+  withRoomActivity,
+  type RoomActivityMap,
+} from '../../utils/chatListOrder';
+import {
   doGetMyEvents,
   getAllCommunityChats,
   profileImageFetch,
@@ -88,6 +93,7 @@ type PrivateRow =
       rcChannelId?: string;
       /** Mongo Conversation id — needed for DM clear/delete actions. */
       conversationId?: string;
+      lastMessageAt?: string | null;
     }
   /** Expert: customer from directory search (not necessarily in friends yet). */
   | { kind: 'expertCustomer'; id: string; title: string; lastLine: string; raw: any }
@@ -113,6 +119,7 @@ const StudentChat: React.FC<{ section?: ChatSection }> = ({ section = CHAT_SECTI
   const [events, setEvents] = useState<any[]>([]);
   const [resetCurrentEventFlag, setResetCurrentEventFlag] = useState(false);
   const [rcUnreadByRid, setRcUnreadByRid] = useState<Record<string, number>>({});
+  const [liveActivityByRid, setLiveActivityByRid] = useState<RoomActivityMap>({});
 
   const isCustomer =
     userDetails && String(userDetails.role || '').toLowerCase() === 'customer';
@@ -164,6 +171,7 @@ const StudentChat: React.FC<{ section?: ChatSection }> = ({ section = CHAT_SECTI
       peerRole?: string;
       rcChannelId?: string;
       conversationId?: string;
+      lastMessageAt?: string | null;
     }> = [];
 
     const dcs = userDetails.directConversations ?? [];
@@ -184,6 +192,7 @@ const StudentChat: React.FC<{ section?: ChatSection }> = ({ section = CHAT_SECTI
         peerRole,
         rcChannelId: conv.rcChannelId ? String(conv.rcChannelId) : undefined,
         conversationId: convId,
+        lastMessageAt: conv?.lastMessageAt ?? null,
       });
     }
 
@@ -394,6 +403,21 @@ const StudentChat: React.FC<{ section?: ChatSection }> = ({ section = CHAT_SECTI
       ? toRocketChatUsername(userDetails.email).toLowerCase()
       : '';
   }, [userDetails?.email]);
+  useEffect(() => {
+    if (!isCustomer && !isExpert && !isAdmin) return;
+    const unsub = onNewMessage((raw: any) => {
+      const msg = normalizeRcStreamRoomMessage(raw);
+      const t = String(msg?.t || '');
+      if (t === 'rm' || t === 'message_removed') return;
+      const rid = msg?.rid ? String(msg.rid) : '';
+      if (!rid) return;
+      const at = msg?.ts ? new Date(msg.ts).getTime() : Date.now();
+      setLiveActivityByRid(prev =>
+        withRoomActivity(prev, rid, Number.isNaN(at) ? Date.now() : at),
+      );
+    });
+    return unsub;
+  }, [isCustomer, isExpert, isAdmin]);
 
   useEffect(() => {
     if (!isCustomer && !isExpert && !isAdmin) return;
@@ -440,6 +464,7 @@ const StudentChat: React.FC<{ section?: ChatSection }> = ({ section = CHAT_SECTI
             peerRole: p.peerRole,
             rcChannelId: p.rcChannelId,
             conversationId: p.conversationId,
+            lastMessageAt: p.lastMessageAt ?? null,
           })),
         );
         if (!cancelled) setPrivateRows(rows);
@@ -470,6 +495,7 @@ const StudentChat: React.FC<{ section?: ChatSection }> = ({ section = CHAT_SECTI
             peerRole: p.peerRole,
             rcChannelId: p.rcChannelId,
             conversationId: p.conversationId,
+            lastMessageAt: p.lastMessageAt ?? null,
           })),
         );
         if (!cancelled) setPrivateRows([...friendRows, ...dmRows]);
@@ -486,6 +512,7 @@ const StudentChat: React.FC<{ section?: ChatSection }> = ({ section = CHAT_SECTI
             peerRole: p.peerRole,
             rcChannelId: p.rcChannelId,
             conversationId: p.conversationId,
+            lastMessageAt: p.lastMessageAt ?? null,
           })),
         );
         if (!cancelled) setPrivateRows(rows);
@@ -754,24 +781,46 @@ const StudentChat: React.FC<{ section?: ChatSection }> = ({ section = CHAT_SECTI
 
   const filteredCommunity = useMemo(() => {
     const q = communityQuery.trim().toLowerCase();
-    if (!q) return communityChats;
-    return communityChats.filter(
-      c =>
-        c.name.toLowerCase().includes(q) ||
-        c.lastLine.toLowerCase().includes(q),
+    const matched = !q
+      ? communityChats
+      : communityChats.filter(
+          c =>
+            c.name.toLowerCase().includes(q) ||
+            c.lastLine.toLowerCase().includes(q),
+        );
+    return sortByRecentActivity(
+      matched,
+      c => ({ roomId: c.raw?.rcChannelId, storedAt: c.raw?.lastMessageAt }),
+      liveActivityByRid,
     );
-  }, [communityChats, communityQuery]);
+  }, [communityChats, communityQuery, liveActivityByRid]);
 
   const filteredSeminars = useMemo(() => {
     const q = seminarQuery.trim().toLowerCase();
-    if (!q) return seminarRows;
-    return seminarRows.filter(
-      s => s.name.toLowerCase().includes(q) || s.lastLine.toLowerCase().includes(q),
+    const matched = !q
+      ? seminarRows
+      : seminarRows.filter(
+          s => s.name.toLowerCase().includes(q) || s.lastLine.toLowerCase().includes(q),
+        );
+    return sortByRecentActivity(
+      matched,
+      s => ({ roomId: s.rcChannelId, storedAt: s.raw?.lastMessageAt }),
+      liveActivityByRid,
     );
-  }, [seminarRows, seminarQuery]);
+  }, [seminarRows, seminarQuery, liveActivityByRid]);
+
+  const privateRowActivity = React.useCallback(
+    (r: PrivateRow) =>
+      r.kind === 'privateDm'
+        ? { roomId: r.rcChannelId, storedAt: r.lastMessageAt }
+        : {},
+    [],
+  );
 
   const filteredPrivate = useMemo(() => {
     const q = privateQuery.trim().toLowerCase();
+    const ordered = (rows: PrivateRow[]) =>
+      sortByRecentActivity(rows, privateRowActivity, liveActivityByRid);
 
     if (isExpert) {
       const friendRows = privateRows.filter((r): r is Extract<PrivateRow, { kind: 'friend' }> => r.kind === 'friend');
@@ -796,7 +845,7 @@ const StudentChat: React.FC<{ section?: ChatSection }> = ({ section = CHAT_SECTI
         (r): r is Extract<PrivateRow, { kind: 'expertCustomer' }> =>
           r.kind === 'expertCustomer' && !friendIds.has(r.id) && !dmIds.has(r.id),
       );
-      return [...friendFiltered, ...dmFiltered, ...extras];
+      return [...ordered([...friendFiltered, ...dmFiltered]), ...extras];
     }
 
     if (isCustomer || isAdmin) {
@@ -811,7 +860,7 @@ const StudentChat: React.FC<{ section?: ChatSection }> = ({ section = CHAT_SECTI
             }
             return row.title.toLowerCase().includes(q) || row.lastLine.toLowerCase().includes(q);
           });
-      if (!q) return localFiltered;
+      if (!q) return ordered(localFiltered);
       const existingIds = new Set(
         localFiltered.map(r => (r.kind === 'privateDm' ? r.otherUserId : r.id)),
       );
@@ -819,11 +868,11 @@ const StudentChat: React.FC<{ section?: ChatSection }> = ({ section = CHAT_SECTI
         (r): r is Extract<PrivateRow, { kind: 'studentSearchedExpert' | 'adminSearchedExpert' }> =>
           (r.kind === 'studentSearchedExpert' || r.kind === 'adminSearchedExpert') && !existingIds.has(r.id),
       );
-      return [...localFiltered, ...extras];
+      return [...ordered(localFiltered), ...extras];
     }
 
-    if (!q) return privateRows;
-    return privateRows.filter(row => {
+    if (!q) return ordered(privateRows);
+    return ordered(privateRows.filter(row => {
       if (row.kind === 'friend') {
         return (
           row.title.toLowerCase().includes(q) ||
@@ -831,8 +880,18 @@ const StudentChat: React.FC<{ section?: ChatSection }> = ({ section = CHAT_SECTI
         );
       }
       return row.title.toLowerCase().includes(q) || row.lastLine.toLowerCase().includes(q);
-    });
-  }, [privateRows, privateQuery, isExpert, isCustomer, isAdmin, expertCustomerSearchRows, studentExpertSearchRows]);
+    }));
+  }, [
+    privateRows,
+    privateQuery,
+    isExpert,
+    isCustomer,
+    isAdmin,
+    expertCustomerSearchRows,
+    studentExpertSearchRows,
+    liveActivityByRid,
+    privateRowActivity,
+  ]);
 
   const openCommunity = React.useCallback(
     async (row: CommunityRow) => {
