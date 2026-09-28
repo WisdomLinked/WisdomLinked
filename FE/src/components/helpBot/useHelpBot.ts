@@ -14,7 +14,7 @@ type StoredState = {
 };
 
 function newId() {
-  return `hb-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+  return `hb-${crypto.randomUUID()}`;
 }
 
 function readStored(): StoredState {
