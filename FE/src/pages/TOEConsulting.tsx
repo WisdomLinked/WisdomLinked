@@ -7,10 +7,11 @@ import FeaturedExperts from '../components/FeaturedExperts';
 import { SERVICE_LABELS } from '../constants/serviceOptions';
 import { homePage } from '../content/publicPages';
 import SiteSearchBox from '../components/search/SiteSearchBox';
+import PricingSection from '../components/landing/pricing/PricingSection';
 import {
   Star, Users, Briefcase, GraduationCap, TrendingUp, MessageCircle, CheckCircle,
   ArrowRight, Sparkles, Menu, X, BookOpen, Globe, ChevronDown, ChevronUp, Phone, Mail, User,
-  FileText, Send, AlertCircle, Lock, Upload, Calendar
+  FileText, Send, AlertCircle, Lock, Upload, Search
 } from 'lucide-react';
 
 const COUNTRY_CODES = [
@@ -1356,6 +1357,7 @@ export default function TOEConsulting() {
   const [isVisible, setIsVisible] = useState(false);
   const [activeTestimonial, setActiveTestimonial] = useState(0);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
   const [showContactModal, setShowContactModal] = useState(false);
   const [showSignupModal, setShowSignupModal] = useState(false);
@@ -1586,41 +1588,90 @@ export default function TOEConsulting() {
         className={`fixed left-0 right-0 z-40 transition-all duration-300 ${scrolled ? 'bg-[#F8FAFC]/95 backdrop-blur-md shadow-sm border-b border-[#BCCCDC]' : 'bg-[#F8FAFC]/80 backdrop-blur-sm'}`}
         style={{ top: 'var(--wl-banner-offset, 0px)' }}
       >
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 flex items-center justify-between h-16 sm:h-[4.5rem] py-3 sm:py-4">
-          <button type="button" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })} className="flex items-center gap-3 group">
+        <div className="grid h-16 w-full grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-4 px-6 sm:h-[4.5rem] lg:px-8 2xl:px-12">
+          <button
+            type="button"
+            onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+            className="flex shrink-0 items-center gap-3 group"
+          >
             <img src="/logos/main_gold_blue.svg" alt="WisdomLinked" className="h-10 w-auto max-w-[200px] object-contain object-left" />
             <div className="leading-none">
               <div className="font-display font-bold text-[1.35rem] text-slate-900">WisdomLinked</div>
             </div>
           </button>
-          <nav className="hidden lg:flex items-center gap-8">
-            {([["About Us", () => scrollTo(aboutRef)], ["Services", () => scrollTo(servicesRef)], ["Guidelines", () => scrollTo(guidelinesRef)], ["Pricing", () => scrollTo(pricingRef)], ["Resources", () => navigate('/resources')], ["Contact Us", openContact]] as const).map(([label, action]) => (
-              <button key={label as string} onClick={action as () => void} className="nav-link text-slate-900 hover:text-[#234C6A] transition-colors text-sm font-semibold tracking-wide">{label}</button>
-            ))}
-          </nav>
-          <div className="hidden lg:flex items-center gap-3">
-            <div className="w-36 xl:w-52">
-              <SiteSearchBox audience="public" />
+
+          <div className="hidden min-w-0 items-center justify-center gap-4 lg:flex xl:gap-5 2xl:gap-6">
+            <nav className="flex shrink-0 items-center gap-4 xl:gap-5 2xl:gap-6" aria-label="Main">
+              {([["About Us", () => scrollTo(aboutRef)], ["Services", () => scrollTo(servicesRef)], ["Guidelines", () => scrollTo(guidelinesRef)], ["Pricing", () => scrollTo(pricingRef)], ["Resources", () => navigate('/resources')], ["Contact Us", openContact]] as const).map(([label, action]) => (
+                <button key={label as string} type="button" onClick={action as () => void} className="nav-link whitespace-nowrap text-sm font-semibold tracking-wide text-slate-900 transition-colors hover:text-[#234C6A]">{label}</button>
+              ))}
+            </nav>
+            <div className="min-w-[220px] max-w-[380px] flex-1 xl:min-w-[260px] xl:max-w-[440px]">
+              <SiteSearchBox
+                audience="public"
+                variant="nav"
+                showShortcutHint
+                placeholder="Search mentors, universities, or topics"
+              />
             </div>
-            <button onClick={() => navigate('/login')} className="px-5 py-2.5 rounded-full border border-[#BCCCDC] text-slate-900 hover:border-[#9AA6B2] hover:text-[#234C6A] transition-all text-sm font-semibold bg-white/85">Login</button>
-            <button onClick={() => setShowSignupModal(true)} className="btn-primary px-5 py-2.5 rounded-full text-white font-semibold text-sm shadow-md shadow-[#BCCCDC]">Sign Up</button>
           </div>
-          <button className="lg:hidden p-2 rounded-xl border border-slate-200 hover:bg-slate-100 transition" onClick={() => setMobileMenuOpen(v => !v)}>
-            {mobileMenuOpen ? <X className="w-5 h-5 text-slate-600" /> : <Menu className="w-5 h-5 text-slate-600" />}
-          </button>
+
+          <div className="flex shrink-0 items-center justify-end gap-2">
+            <div className="hidden items-center gap-3 lg:flex">
+              <button type="button" onClick={() => navigate('/login')} className="h-10 px-5 rounded-full border border-[#BCCCDC] text-slate-900 hover:border-[#9AA6B2] hover:text-[#234C6A] transition-all text-sm font-semibold bg-white/85">Login</button>
+              <button type="button" onClick={() => setShowSignupModal(true)} className="btn-primary h-10 px-5 rounded-full text-white font-semibold text-sm shadow-md shadow-[#BCCCDC]">Sign Up</button>
+            </div>
+            <div className="flex items-center gap-2 lg:hidden">
+              <button
+                type="button"
+                className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white/85 text-slate-600 transition hover:bg-slate-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#234C6A]/40"
+                aria-label={mobileSearchOpen ? 'Close search' : 'Open search'}
+                aria-expanded={mobileSearchOpen}
+                onClick={() => {
+                  setMobileSearchOpen(open => !open);
+                  setMobileMenuOpen(false);
+                }}
+              >
+                <Search className="h-[18px] w-[18px]" aria-hidden />
+              </button>
+              <button
+                type="button"
+                className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 hover:bg-slate-100 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-[#234C6A]/40"
+                aria-label={mobileMenuOpen ? 'Close menu' : 'Open menu'}
+                aria-expanded={mobileMenuOpen}
+                onClick={() => {
+                  setMobileMenuOpen(v => !v);
+                  setMobileSearchOpen(false);
+                }}
+              >
+                {mobileMenuOpen ? <X className="w-5 h-5 text-slate-600" /> : <Menu className="w-5 h-5 text-slate-600" />}
+              </button>
+            </div>
+          </div>
         </div>
-        {mobileMenuOpen && (
-          <div className="lg:hidden border-t border-[#BCCCDC] bg-[#F8FAFC] px-4 sm:px-6 py-4 space-y-3">
-            <SiteSearchBox audience="public" />
+
+        {mobileSearchOpen ? (
+          <div className="border-t border-[#BCCCDC] bg-[#F8FAFC] px-6 py-3 lg:hidden">
+            <SiteSearchBox
+              audience="public"
+              variant="nav"
+              autoFocus
+              placeholder="Search mentors, universities, or topics"
+            />
+          </div>
+        ) : null}
+
+        {mobileMenuOpen ? (
+          <div className="space-y-3 border-t border-[#BCCCDC] bg-[#F8FAFC] px-6 py-4 lg:hidden">
             {([["About Us", () => { setMobileMenuOpen(false); scrollTo(aboutRef); }], ["Services", () => { setMobileMenuOpen(false); scrollTo(servicesRef); }], ["Guidelines", () => { setMobileMenuOpen(false); scrollTo(guidelinesRef); }], ["Pricing", () => { setMobileMenuOpen(false); scrollTo(pricingRef); }], ["Resources", () => { setMobileMenuOpen(false); navigate('/resources'); }], ["Contact Us", () => { setMobileMenuOpen(false); openContact(); }]] as const).map(([label, action]) => (
-              <button key={label as string} onClick={action as () => void} className="block w-full text-left text-slate-700 hover:text-[#234C6A] font-semibold py-1 transition-colors">{label}</button>
+              <button key={label as string} type="button" onClick={action as () => void} className="block w-full py-1 text-left font-semibold text-slate-700 transition-colors hover:text-[#234C6A]">{label}</button>
             ))}
             <div className="flex gap-3 pt-2">
-              <button onClick={() => { setMobileMenuOpen(false); navigate('/login'); }} className="flex-1 py-2.5 rounded-full border border-slate-300 text-slate-700 text-sm font-semibold">Login</button>
-              <button onClick={() => { setMobileMenuOpen(false); setShowSignupModal(true); }} className="flex-1 py-2.5 btn-primary rounded-full text-white text-sm font-semibold">Sign Up</button>
+              <button type="button" onClick={() => { setMobileMenuOpen(false); navigate('/login'); }} className="flex-1 py-2.5 rounded-full border border-slate-300 text-sm font-semibold text-slate-700">Login</button>
+              <button type="button" onClick={() => { setMobileMenuOpen(false); setShowSignupModal(true); }} className="flex-1 py-2.5 btn-primary rounded-full text-sm font-semibold text-white">Sign Up</button>
             </div>
           </div>
-        )}
+        ) : null}
       </header>
 
       {/* Scroll down — right bottom, next section */}
@@ -1957,186 +2008,7 @@ export default function TOEConsulting() {
         </section>
 
         {/* PRICING / HOW IT WORKS */}
-        <section ref={pricingRef} className="relative py-24 px-4 sm:px-6 scroll-mt-20" style={{ backgroundColor: '#F8FAFC' }}>
-          <div className="page-dots-layer page-dots-layer--animated" aria-hidden="true" />
-          <div className="relative z-10 max-w-7xl mx-auto">
-            <div className="max-w-3xl">
-              <div className="inline-block section-label text-[#234C6A] mb-4">How pricing works</div>
-              <h2 className="font-display text-3xl sm:text-4xl md:text-5xl font-bold text-slate-900 mb-4">
-                {homePage.pricing.title}
-              </h2>
-              <p className="text-slate-600 text-base sm:text-lg leading-relaxed mb-4">
-                {homePage.pricing.snippet}
-              </p>
-              <div className="inline-flex items-center gap-2 px-3 py-2 rounded-full bg-emerald-50 border border-emerald-200 text-xs sm:text-sm text-emerald-800 font-semibold">
-                <CheckCircle className="w-4 h-4" />
-                <span>Pre-payment is fully refunded if your expert declines the request</span>
-              </div>
-            </div>
-
-            {/* Pricing explanation cards */}
-            <div className="mt-10 grid gap-5 md:gap-6 lg:grid-cols-3">
-              {/* Card 1 — wide, featured */}
-              <div className="lg:col-span-2">
-                <div className="card-hover h-full rounded-2xl border border-slate-200 bg-white/90 p-5 sm:p-6 flex flex-col gap-3 sm:gap-4">
-                  <div className="flex items-center justify-between gap-3">
-                    <h3 className="font-display text-xl sm:text-2xl font-bold text-slate-900">
-                      Expert-set rates
-                    </h3>
-                    <span className="inline-flex items-center px-2.5 py-1 rounded-full border border-[#234C6A]/20 bg-[#E8EEF4] text-[10px] sm:text-xs font-semibold text-[#234C6A]">
-                      Transparent pricing
-                    </span>
-                  </div>
-                  <p className="text-slate-600 text-sm sm:text-base leading-relaxed">
-                    Each consultant independently sets their hourly or per-session rate based on their expertise, institutional standing, and field. Browse by budget to find the right fit for you.
-                  </p>
-                  <div className="mt-1 rounded-xl border border-dashed border-slate-200 bg-slate-50 px-4 py-3 text-xs sm:text-sm text-slate-700 flex flex-col gap-1.5">
-                    <div className="flex items-center justify-between flex-wrap gap-2">
-                      <span className="font-semibold text-slate-800">$0</span>
-                      <span className="text-slate-500 text-[11px] sm:text-xs">Intro or scholarship supported</span>
-                    </div>
-                    <div className="flex items-center justify-between flex-wrap gap-2">
-                      <span className="font-semibold text-slate-800">$5</span>
-                      <span className="text-slate-500 text-[11px] sm:text-xs">Standard session</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Card 2 — client gratuity */}
-              <div>
-                <div className="card-hover h-full rounded-2xl border border-slate-200 bg-white/90 p-5 sm:p-6 flex flex-col gap-3">
-                  <div className="flex items-center justify-between gap-3">
-                    <h3 className="font-display text-lg sm:text-xl font-bold text-slate-900">
-                      Client gratuity
-                    </h3>
-                    <span className="inline-flex items-center px-2.5 py-1 rounded-full border border-slate-200 bg-slate-50 text-[10px] sm:text-xs font-semibold text-slate-600">
-                      Optional
-                    </span>
-                  </div>
-                  <p className="text-slate-600 text-sm leading-relaxed">
-                    For high-demand experts, you may add a custom tip on top of the session rate. It&apos;s entirely optional, a way to show appreciation or secure a preferred slot.
-                  </p>
-                </div>
-              </div>
-
-              {/* Card 3 — request & confirm */}
-              <div>
-                <div className="card-hover h-full rounded-2xl border border-[#234C6A] bg-[#234C6A]/95 p-5 sm:p-6 flex flex-col gap-3 text-white">
-                  <div className="flex items-center justify-between gap-3">
-                    <h3 className="font-display text-lg sm:text-xl font-bold">
-                      Request &amp; confirm
-                    </h3>
-                    <span className="inline-flex items-center px-2.5 py-1 rounded-full border border-white/30 bg-white/10 text-[10px] sm:text-xs font-semibold">
-                      Expert approved
-                    </span>
-                  </div>
-                  <p className="text-sm leading-relaxed text-[#E5EDF5]">
-                    Your booking is a proposal. The expert reviews your request and background before officially accepting, ensuring every session is a genuine match.
-                  </p>
-                </div>
-              </div>
-
-              {/* Card 4 — flexible rescheduling */}
-              <div>
-                <div className="card-hover h-full rounded-2xl border border-slate-200 bg-white/90 p-5 sm:p-6 flex flex-col gap-3">
-                  <div className="flex items-center justify-between gap-3">
-                    <h3 className="font-display text-lg sm:text-xl font-bold text-slate-900">
-                      Flexible rescheduling
-                    </h3>
-                    <span className="inline-flex items-center px-2.5 py-1 rounded-full border border-slate-200 bg-slate-50 text-[10px] sm:text-xs font-semibold text-slate-600">
-                      No pressure
-                    </span>
-                  </div>
-                  <p className="text-slate-600 text-sm leading-relaxed">
-                    Plans change. You can request a time shift at any point. The new slot becomes confirmed once your expert approves — no automatic cancellations.
-                  </p>
-                </div>
-              </div>
-
-              {/* Card 5 — wide ratings card */}
-              <div className="lg:col-span-3">
-                <div className="card-hover rounded-2xl border border-slate-200 bg-white p-5 sm:p-6 md:p-7 flex flex-col md:flex-row gap-4 md:gap-6 items-start md:items-center">
-                  <div className="flex-1">
-                    <div className="flex items-center justify-between gap-3 mb-2">
-                      <h3 className="font-display text-xl sm:text-2xl font-bold text-slate-900">
-                        Two-way ratings
-                      </h3>
-                      <span className="inline-flex items-center px-2.5 py-1 rounded-full border border-amber-200 bg-amber-50 text-[10px] sm:text-xs font-semibold text-amber-700">
-                        Community standard
-                      </span>
-                    </div>
-                    <p className="text-slate-600 text-sm sm:text-base leading-relaxed">
-                      After every session, both expert and client leave a rating. This mutual accountability is how we maintain a community of excellence, and why our average sits at 4.9 out of 5.
-                    </p>
-                  </div>
-                  <div className="w-full md:w-auto md:min-w-[220px] rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs sm:text-sm text-slate-700 space-y-2">
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="font-semibold">Expert → Client</span>
-                      <span className="flex items-center gap-1 text-amber-500 text-xs">
-                        ★★★★★
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="font-semibold">Client → Expert</span>
-                      <span className="flex items-center gap-1 text-amber-500 text-xs">
-                        ★★★★★
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between gap-2 pt-1 border-t border-slate-200">
-                      <span className="text-slate-500">Platform avg</span>
-                      <span className="font-semibold text-slate-900">
-                        4.9 / 5.0
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Bottom guarantee bar */}
-            <div className="mt-10 rounded-2xl border border-slate-200 bg-white/95 px-4 sm:px-6 py-5 sm:py-6">
-              <div className="grid gap-4 sm:gap-5 md:grid-cols-2 lg:grid-cols-4">
-                <div className="flex items-start gap-3">
-                  <div className="mt-0.5 w-8 h-8 rounded-full bg-emerald-50 flex items-center justify-center text-emerald-600">
-                    <CheckCircle className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <div className="text-sm font-semibold text-slate-900">Full refund guarantee</div>
-                    <p className="text-xs text-slate-600 mt-1">Pre-payment is returned in full if the expert declines your request.</p>
-                  </div>
-                </div>
-                <div className="flex items-start gap-3">
-                  <div className="mt-0.5 w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-700">
-                    <Lock className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <div className="text-sm font-semibold text-slate-900">Secure payments</div>
-                    <p className="text-xs text-slate-600 mt-1">All transactions are encrypted and processed securely.</p>
-                  </div>
-                </div>
-                <div className="flex items-start gap-3">
-                  <div className="mt-0.5 w-8 h-8 rounded-full bg-sky-50 flex items-center justify-center text-sky-700">
-                    <Calendar className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <div className="text-sm font-semibold text-slate-900">Appointment-only</div>
-                    <p className="text-xs text-slate-600 mt-1">No on-demand or drop-in sessions; every meeting is intentional.</p>
-                  </div>
-                </div>
-                <div className="flex items-start gap-3">
-                  <div className="mt-0.5 w-8 h-8 rounded-full bg-amber-50 flex items-center justify-center text-amber-700">
-                    <AlertCircle className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <div className="text-sm font-semibold text-slate-900">Complaint resolution</div>
-                    <p className="text-xs text-slate-600 mt-1">Issues are reviewed and responded to within 5 business days.</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </section>
+        <PricingSection sectionRef={pricingRef} onBrowseExperts={() => setShowSignupModal(true)} />
 
         {/* FOOTER */}
         <footer className="footer-bg text-white overflow-x-hidden">

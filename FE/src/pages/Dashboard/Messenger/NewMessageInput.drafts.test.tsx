@@ -10,6 +10,10 @@ vi.mock("react-redux", () => ({
     useSelector: (fn: any) => fn(storeState),
 }));
 
+vi.mock("../../../store", () => ({
+    useAppSelector: (fn: any) => fn(storeState),
+}));
+
 const sendRoomTyping = vi.fn((..._args: any[]) => {});
 vi.mock("../../../services/rcRealtime", () => ({
     sendRoomTyping: (...args: any[]) => sendRoomTyping(...args),
@@ -27,17 +31,19 @@ vi.mock("../../../api/api", () => ({ callApi: vi.fn() }));
 vi.mock("../../../utils/notify", () => ({ notify: { error: vi.fn(), success: vi.fn() } }));
 vi.mock("@emoji-mart/data", () => ({ default: {} }));
 vi.mock("@emoji-mart/react", () => ({ default: () => null }));
-vi.mock("react-quill", () => ({
-    default: React.forwardRef((props: any, ref: any) => (
-        <textarea
-            ref={ref}
-            aria-label="composer"
-            value={props.value}
-            onChange={(e) => props.onChange?.(e.target.value)}
-            onBlur={props.onBlur}
-            onKeyDown={props.onKeyDown}
-        />
-    )),
+
+// Stand-in with the same controlled contract (value / onChange / onBlur / onSend) as the TipTap composer.
+vi.mock("../../../components/chat/composer/MessageComposer", () => ({
+    default: ({ value, onChange, onBlur, onSend }: any) => (
+        <>
+            <textarea aria-label="Message" value={value ?? ""} onChange={(e) => onChange?.(e.target.value)} onBlur={onBlur} />
+            <button
+                type="button"
+                aria-label="Send message"
+                onClick={() => void Promise.resolve(onSend({ html: value, text: value, attachments: [] })).catch(() => {})}
+            />
+        </>
+    ),
 }));
 
 import NewMessageInput from "./NewMessageInput";
@@ -55,7 +61,7 @@ const withGroup = (groupId: string, rcChannelId = `rc-${groupId}`) => ({
     auth: { userDetails: ME },
 });
 
-const composer = () => screen.getByLabelText("composer") as HTMLTextAreaElement;
+const composer = () => screen.getByLabelText("Message") as HTMLTextAreaElement;
 
 const typeInto = (text: string) => fireEvent.change(composer(), { target: { value: text } });
 

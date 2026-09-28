@@ -5,7 +5,6 @@ import Message from "../pages/Dashboard/Messenger/Messages/Message";
 import { peelWisdomLinkedReplyQuotes } from "./chatReplyLayout";
 import { decodeRichHtmlWire } from "./chatRichHtmlWire";
 import { RICH_FORMATTING_SAMPLES } from "./chatRichFormatting.fixtures";
-import { normalizeQuillHtmlForSend } from "./quillSendHtml";
 import { renderSafeMessageHtml, sanitizeMessageHtml } from "./safeMessageHtml";
 
 /** Mirrors BE encodeRichHtmlWire for integration simulation. */
@@ -44,8 +43,7 @@ describe("chat rich formatting integration (FE)", () => {
   it.each(RICH_FORMATTING_SAMPLES.map((s) => [s.id, s] as const))(
     "%s: sanitize → wire → decode preserves content",
     (_id, sample) => {
-      const normalized = normalizeQuillHtmlForSend(sample.quillHtml);
-      const sanitized = sanitizeMessageHtml(normalized);
+      const sanitized = sanitizeMessageHtml(sample.quillHtml);
       const stored = simulateOutgoingStorage(sanitized);
 
       if (sample.expectPlainStorage) {
@@ -66,7 +64,7 @@ describe("chat rich formatting integration (FE)", () => {
       (s) => [s.id, s] as const,
     ),
   )("%s: stored wire renders expected DOM in Message bubble", (_id, sample) => {
-    const sanitized = sanitizeMessageHtml(normalizeQuillHtmlForSend(sample.quillHtml));
+    const sanitized = sanitizeMessageHtml(sample.quillHtml);
     const wire = simulateOutgoingStorage(sanitized);
 
     const { container } = render(
@@ -97,7 +95,7 @@ describe("chat rich formatting integration (FE)", () => {
       (s) => [s.id, s] as const,
     ),
   )("%s: peel + renderSafeMessageHtml preserves structure", (_id, sample) => {
-    const sanitized = sanitizeMessageHtml(normalizeQuillHtmlForSend(sample.quillHtml));
+    const sanitized = sanitizeMessageHtml(sample.quillHtml);
     const wire = simulateOutgoingStorage(sanitized);
     const { bodyHtml } = peelWisdomLinkedReplyQuotes(wire);
 

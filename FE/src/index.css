@@ -74,83 +74,12 @@ code {
   -webkit-box-orient: vertical;
 }
 
-/* React Quill */
-.ql-toolbar {
-  background-color: #000 !important;
-  border-top: 1px solid #292929 !important;
-  border-left: 0px !important;
-  border-right: 0px !important;
-  border-bottom: 0px !important;
-}
-
-.ql-container {
-  background-color: #000 !important;
-  color: white;
-  border-width: 0px !important;
-  max-height: 300px !important;
-  overflow-y: auto;
-}
-
-.chat-composer-quill .ql-container {
-  height: auto !important;
-  max-height: 220px !important;
-  overflow-y: visible !important;
-}
-
-.chat-composer-quill .ql-editor {
-  min-height: 44px;
-  max-height: 180px;
-  overflow-y: auto;
-}
-
-.chat-composer-quill-light .ql-editor {
-  min-height: 40px;
-  max-height: 160px;
-  overflow-y: auto;
-  color: #1e293b;
-  padding: 8px 12px;
-}
-
-.chat-composer-quill-light .ql-toolbar {
-  background-color: #f8fafc !important;
-  border: 0 !important;
-  border-bottom: 1px solid #e2e8f0 !important;
-  border-radius: 0.75rem 0.75rem 0 0;
-  padding: 4px 6px;
-}
-
-.chat-composer-quill-light .ql-container {
-  background-color: #fff !important;
-  color: #1e293b;
-  border: 0 !important;
-  font-size: 14px;
-}
-
-.chat-composer-quill-light .ql-container.ql-snow {
-  border-top: 0 !important;
-}
-
-.chat-composer-quill-light .ql-editor.ql-blank::before {
+.chat-composer-editor p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
   color: #94a3b8;
-  font-style: normal;
-}
-
-.chat-composer-quill-light .ql-picker-options {
-  background-color: #fff !important;
-  color: #1e293b;
-  transform: none;
-}
-
-.chat-composer-quill-light .ql-stroke {
-  stroke: #475569;
-}
-
-.chat-composer-quill-light .ql-fill {
-  fill: #475569;
-}
-
-.chat-composer-quill-light .ql-picker-label {
-  color: #475569;
+  pointer-events: none;
 }
 
 .chat-message-rich {
@@ -217,16 +146,6 @@ code {
 
 .chat-message-rich s {
   text-decoration: line-through;
-}
-
-.ql-container img {
-  max-height: 270px;
-}
-
-.ql-picker-options {
-  background-color: #292929 !important;
-  color: white;
-  transform: translateY(-115%);
 }
 
 .chat_value_container img {
@@ -723,6 +642,44 @@ code {
 
 .react-tel-input .country-list {
   color: black;
+}
+
+/* Expert profile phone — match PROFILE_INPUT_CLASS chrome */
+.wl-phone-input .react-tel-input {
+  width: 100%;
+}
+.wl-phone-input .react-tel-input .form-control {
+  height: 2.75rem !important;
+  border: none !important;
+  border-radius: 0.75rem !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  font-size: 0.875rem !important;
+}
+.wl-phone-input .react-tel-input .flag-dropdown {
+  background: transparent !important;
+  border: none !important;
+  border-radius: 0.75rem 0 0 0.75rem !important;
+}
+.wl-phone-input .react-tel-input .selected-flag {
+  border-radius: 0.75rem 0 0 0.75rem !important;
+  background: transparent !important;
+  width: 52px;
+}
+.wl-phone-input .react-tel-input .selected-flag:hover,
+.wl-phone-input .react-tel-input .selected-flag:focus,
+.wl-phone-input .react-tel-input .flag-dropdown.open .selected-flag {
+  background: transparent !important;
+}
+.wl-phone-input .react-tel-input .flag-dropdown:before {
+  content: '';
+  position: absolute;
+  top: 10px;
+  bottom: 10px;
+  right: 0;
+  width: 1px;
+  background: #e2e8f0;
+  pointer-events: none;
 }
 
 .MuiRating-iconEmpty {

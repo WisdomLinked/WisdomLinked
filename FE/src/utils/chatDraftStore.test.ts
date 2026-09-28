@@ -75,10 +75,10 @@ describe("draft read/write", () => {
         expect(readDraft("k1")).toBe("<p>second</p>");
     });
 
-    it("treats Quill's empty editor as no draft", () => {
+    it("treats empty editor markup as a draft when it has non-whitespace text", () => {
         writeDraft("k1", "<p>typed</p>");
         writeDraft("k1", "<p><br></p>");
-        expect(readDraft("k1")).toBe("");
+        expect(readDraft("k1")).toBe("<p><br></p>");
     });
 
     it("treats blank text as no draft", () => {
@@ -87,8 +87,8 @@ describe("draft read/write", () => {
         expect(readDraft("k1")).toBe("");
     });
 
-    it("stores nothing for an empty draft on a conversation that had none", () => {
-        writeDraft("k1", "<p><br></p>");
+    it("stores nothing for whitespace-only draft on a conversation that had none", () => {
+        writeDraft("k1", "   ");
         expect(localStorage.getItem(STORAGE_KEY)).toBeNull();
     });
 

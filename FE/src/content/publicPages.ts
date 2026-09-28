@@ -59,9 +59,11 @@ export const homePage = {
             'Share your decades of experience with the next generation. Make a meaningful impact while building your global network and earning for your expertise.',
     },
     pricing: {
-        title: 'Fair, transparent, expert driven rates',
+        title: 'Clear pricing. Expert-set rates.',
+        titleLead: 'Clear pricing.',
+        titleNoWrap: 'Expert-set rates.',
         snippet:
-            'Every expert sets their own rate based on their field, seniority, and demand. You see the full cost before you commit, no hidden fees, no surprises.',
+            "Experts set their own rates for consultations and seminars. You'll see the full price before you commit — no hidden fees, no surprises.",
     },
 };
 
@@ -149,13 +151,11 @@ const homeImpactSnippet = joinText(
 );
 
 const homePricingSnippet = joinText(
-    'Pre-payment is fully refunded if your expert declines the request.',
-    'Expert-set rates. Each consultant independently sets their hourly or per-session rate based on their expertise, institutional standing, and field. Browse by budget to find the right fit for you.',
-    "Client gratuity. For high-demand experts, you may add a custom tip on top of the session rate. It's entirely optional, a way to show appreciation or secure a preferred slot.",
-    'Request & confirm. Your booking is a proposal. The expert reviews your request and background before officially accepting, ensuring every session is a genuine match.',
-    'Flexible rescheduling. Plans change. You can request a time shift at any point. The new slot becomes confirmed once your expert approves — no automatic cancellations.',
-    'Two-way ratings. After every session, both expert and client leave a rating. This mutual accountability is how we maintain a community of excellence, and why our average sits at 4.9 out of 5.',
-    'Full refund if the expert declines. Pre-payment is returned in full if the expert declines your request.',
+    "You're charged only after your expert accepts your request.",
+    'Expert-set rates. Each expert sets their own rates: an hourly rate for 1:1 consultations and a per-seminar price for each seminar. Compare expertise, availability, and rates.',
+    "From request to consultation. Request first. Pay only when accepted. Six simple steps, and you only pay once your expert says yes: find an expert by field and rate, request a time and share your goals, the expert accepts, pay only after acceptance, meet for your 1:1 session or seminar, then rate each other. If your expert declines, you won't be charged.",
+    'Flexible rescheduling (coming soon). Request a different time. Changes take effect after expert approval — no automatic cancellations.',
+    "Client gratuity (coming soon). For high-demand experts, you may add a custom tip on top of the session rate. It's entirely optional — a way to show appreciation or secure a preferred slot.",    'Two-way ratings. Clients rate experts. Experts rate clients. Mutual feedback helps maintain a professional community.',
 );
 
 const servicesPaymentSnippet =

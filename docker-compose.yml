@@ -4,7 +4,8 @@ services:
 
   backend:
     build:
-      context: ./BE
+      context: .
+      dockerfile: BE/Dockerfile
     container_name: wisdomlinked_backend
     ports:
       - "5000:5000"

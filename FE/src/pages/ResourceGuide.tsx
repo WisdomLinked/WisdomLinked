@@ -31,7 +31,7 @@ export default function ResourceGuide() {
 
   return (
     <PublicPageShell>
-      <article className="px-4 sm:px-6 pb-16 sm:pb-24" style={{ backgroundColor: '#F8FAFC' }}>
+      <article className="flex-1 px-4 sm:px-6 pb-16 sm:pb-24" style={{ backgroundColor: '#F8FAFC' }}>
         <div className="max-w-3xl mx-auto pt-10 sm:pt-16">
           <Link
             to="/resources"

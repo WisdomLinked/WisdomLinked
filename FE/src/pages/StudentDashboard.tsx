@@ -24,7 +24,7 @@ import Sidebar from '../components/layout/Sidebar';
 import TopBar, { TopBarNotificationItem } from '../components/layout/TopBar';
 import StatsGrid from '../components/dashboard/StatsGrid';
 import AccountReviewBanner from '../components/dashboard/AccountReviewBanner';
-import CarouselSection, { type CarouselSectionData } from '../components/dashboard/CarouselSection';
+import CarouselSection from '../components/dashboard/CarouselSection';
 import StudentProfile from '../components/dashboard/StudentProfile';
 import StudentSettings from '../components/dashboard/StudentSettings';
 import DecisionNotices from '../components/dashboard/DecisionNotices';
@@ -43,6 +43,14 @@ import { studentSearchActions } from '../utils/siteSearch';
 import { logoutUser, updateMe } from '../actions/authActions';
 import type { ExpertCardProps } from '../components/ExpertCard';
 import { mapExpertToMentorWithImage } from '../utils/mapExpertToMentor';
+import {
+  filterPublicExperts,
+  getRecommendedExperts,
+  getUpcomingSeminarsForStudent,
+  type DiscoveryExpert,
+  type DiscoverySeminar,
+} from '../utils/studentDiscovery';
+import { isDisplayImageUrl } from '../utils/profileImage';
 import StudentChat from '../components/dashboard/StudentChat';
 import LogoutConfirmModal from '../components/dashboard/LogoutConfirmModal';
 import {
@@ -940,7 +948,10 @@ export default function StudentDashboard() {
     () => deriveUpcomingSessions(userDetails),
     [userDetails],
   );
-  const [carouselSections, setCarouselSections] = useState<CarouselSectionData[]>([]);
+  const [newExperts, setNewExperts] = useState<DiscoveryExpert[]>([]);
+  const [upcomingSeminars, setUpcomingSeminars] = useState<DiscoverySeminar[]>([]);
+  const [recommendedExperts, setRecommendedExperts] = useState<DiscoveryExpert[]>([]);
+  const [recommendedNeedsProfile, setRecommendedNeedsProfile] = useState(false);
   const [carouselLoading, setCarouselLoading] = useState(true);
   const studentName =
     (userDetails?.username as string | undefined) ||
@@ -994,77 +1005,98 @@ export default function StudentDashboard() {
     };
   }, [dispatch, eventsReloadKey]);
 
-  // Carousel ("What's New For You") — real experts + seminars from the BE.
+  // Carousel ("What's New For You") — new experts, upcoming seminars, recommendations.
   useEffect(() => {
     let cancelled = false;
     (async () => {
       setCarouselLoading(true);
       try {
-        // Carousel highlights the newest experts — BE "Recently joined" sorts by createdAt desc.
-        const expertFilter = { username: '', name: '', keywords: [], services: [], sortBy: 'Recently joined' };
-        const seminarFilter = { username: '', name: '', keywords: [], services: [], sortBy: 'Name in ASC' };
+        const expertFilter = {
+          username: '',
+          name: '',
+          keywords: [],
+          services: [],
+          sortBy: 'Recently joined',
+        };
+        const seminarFilter = {
+          username: '',
+          name: '',
+          keywords: [],
+          services: [],
+          sortBy: 'Name in ASC',
+        };
         const [expertRes, seminarRes]: [any, any] = await Promise.all([
           doFilterExperts(expertFilter),
           doFilterSeminars(seminarFilter),
         ]);
         if (cancelled) return;
 
-        const sections: CarouselSectionData[] = [];
+        const expertsRaw = filterPublicExperts(
+          Array.isArray(expertRes?.result) ? expertRes.result : [],
+        );
+        const mentors = await Promise.all(
+          expertsRaw.slice(0, 5).map((e: any) => mapExpertToMentorWithImage(e, 'small')),
+        );
+        if (cancelled) return;
 
-        const experts = Array.isArray(expertRes?.result) ? expertRes.result : [];
-        if (experts.length) {
-          const mentors = await Promise.all(
-            experts
-              .slice(0, 5)
-              .map((e: any) => mapExpertToMentorWithImage(e, 'small')),
+        const newExpertItems: DiscoveryExpert[] = mentors.map((m) => ({
+          id: m.id,
+          name: m.name,
+          title: m.title,
+          institution: m.institution,
+          field: m.field,
+          image: m.image,
+          isNew: m.isNew,
+          tags: (m.majors || []).map((x) => x.label).slice(0, 3),
+        }));
+        const newIds = new Set(newExpertItems.map((e) => e.id));
+
+        const seminarsRaw = Array.isArray(seminarRes?.result) ? seminarRes.result : [];
+        const seminars = getUpcomingSeminarsForStudent(seminarsRaw, userDetails?._id);
+        const seminarsWithImages: DiscoverySeminar[] = await Promise.all(
+          seminars.map(async (s) => {
+            if (s.expertImage && isDisplayImageUrl(s.expertImage)) return s;
+            const src = await resolveProfileImageSrc(
+              s.expertImage,
+              'small',
+              profileImageFetch as any,
+            );
+            return { ...s, expertImage: src };
+          }),
+        );
+        if (cancelled) return;
+
+        const rec = getRecommendedExperts(expertsRaw, userDetails, newIds, 5);
+        let recommendedItems: DiscoveryExpert[] = [];
+        if (!rec.needsProfile && rec.items.length) {
+          const mapped = await Promise.all(
+            rec.items.map((e: any) => mapExpertToMentorWithImage(e, 'small')),
           );
-          if (cancelled) return;
-          sections.push({
-            id: 'experts',
-            category: 'Expert',
-            icon: Users,
-            items: mentors.map((m) => ({
-              sectionTitle: 'New experts',
-              title: m.name,
-              description: m.institution,
-              tag: m.isNew ? 'New expert' : 'Expert',
-              metaLabel: 'Field',
-              experience: m.field,
-              cta: 'View profile',
-              image: m.image || undefined,
-              onSelect: () => {
-                setSelectedExpert(m);
-                setActiveItem('expert-profile');
-              },
-            })),
-          });
+          recommendedItems = mapped.map((m, i) => ({
+            id: m.id,
+            name: m.name,
+            title: m.title,
+            institution: m.institution,
+            field: m.field,
+            image: m.image,
+            isNew: m.isNew,
+            tags: (m.majors || []).map((x) => x.label).slice(0, 3),
+            reason: rec.items[i]?.reason,
+          }));
         }
+        if (cancelled) return;
 
-        const seminars = Array.isArray(seminarRes?.result) ? seminarRes.result : [];
-        if (seminars.length) {
-          sections.push({
-            id: 'seminars',
-            category: 'Seminar',
-            icon: BookOpen,
-            items: seminars.slice(0, 8).map((s: any) => ({
-              sectionTitle: 'Seminars for you',
-              title: s?.name || 'Seminar',
-              description: s?.description || 'Live seminar on WisdomLinked.',
-              tag: 'Seminar',
-              metaLabel: 'Starts',
-              experience: s?.start
-                ? new Date(s.start).toLocaleDateString()
-                : undefined,
-              location: typeof s?.price === 'number' ? `$${s.price}` : undefined,
-              cta: 'View seminars',
-              onSelect: () => setActiveItem('seminars'),
-            })),
-          });
-        }
-
-        if (!cancelled) setCarouselSections(sections);
+        setNewExperts(newExpertItems);
+        setUpcomingSeminars(seminarsWithImages);
+        setRecommendedExperts(recommendedItems);
+        setRecommendedNeedsProfile(rec.needsProfile);
       } catch {
-        if (!cancelled) setCarouselSections([]);
+        if (!cancelled) {
+          setNewExperts([]);
+          setUpcomingSeminars([]);
+          setRecommendedExperts([]);
+          setRecommendedNeedsProfile(false);
+        }
       } finally {
         if (!cancelled) setCarouselLoading(false);
       }
@@ -1072,6 +1104,26 @@ export default function StudentDashboard() {
     return () => {
       cancelled = true;
     };
+  }, [userDetails]);
+
+  const handleDiscoveryExpert = useCallback(
+    async (id: string) => {
+      try {
+        const res: any = await getExpertById(id);
+        if (res?.result) {
+          setSelectedExpert(await mapExpertToMentorWithImage(res.result, 'medium'));
+          setActiveItem('expert-profile');
+        }
+      } catch {
+        /* noop */
+      }
+    },
+    [],
+  );
+
+  const handleOpenSeminarDiscovery = useCallback((id: string) => {
+    setOpenSeminarId(id);
+    setActiveItem('seminars');
   }, []);
 
   const loadCommunityNotificationRooms = useCallback(async () => {
@@ -1297,6 +1349,7 @@ export default function StudentDashboard() {
     () => Object.values(filteredUnreadByRid).reduce((sum, n) => sum + (Number(n) || 0), 0),
     [filteredUnreadByRid],
   );
+
   const chatNotifications = useMemo<TopBarNotificationItem[]>(
     () =>
       Object.entries(filteredUnreadByRid)
@@ -1597,47 +1650,46 @@ export default function StudentDashboard() {
           ) : activeItem === 'history' ? (
             <StudentPaymentHistory />
           ) : (
-            <div className="px-6 py-7">
-              <AccountReviewBanner className="mb-6" />
-              <div className="grid gap-6 lg:grid-cols-[1fr_380px]">
-                <section className="min-w-0">
-                  <h2 className="text-3xl font-semibold text-slate-900">
-                    {greeting}, {studentName.split(' ')[0]}!
-                  </h2>
-                  <p className="mt-1 max-w-xl font-sans text-[13px] text-slate-500">
-                    Here&apos;s what&apos;s happening with your WisdomLinked sessions today.
-                  </p>
-                  <StatsGrid cards={cards} />
-                </section>
+            <div className="px-6 pt-4 pb-7">
+              <AccountReviewBanner className="mb-4" />
+              <header className="mb-5">
+                <h2 className="text-3xl font-semibold text-slate-900">
+                  {greeting}, {studentName.split(' ')[0]}!
+                </h2>
+                <p className="mt-1 max-w-xl font-sans text-[13px] text-slate-500">
+                  Here&apos;s what&apos;s happening with your WisdomLinked sessions today.
+                </p>
+              </header>
 
-                <div className="hidden lg:block">
-                  <div className="mt-16">
-                    <UpcomingCountdownCard
-                      nextSeminar={nextSeminar}
-                      nextOneToOne={nextOneToOne}
-                      onJoinSeminar={() => openSeminarChat(nextSeminar?.id)}
-                      onJoinOneToOne={() =>
-                        openMentorDm(nextOneToOne?.peerUserId, nextOneToOne?.title)
-                      }
-                    />
-                  </div>
+              <div className="grid items-stretch gap-5 lg:grid-cols-[1fr_380px]">
+                <section className="min-w-0">
+                  <StatsGrid cards={cards} fill />
+                </section>
+                <div className="min-w-0">
+                  <UpcomingCountdownCard
+                    nextSeminar={nextSeminar}
+                    nextOneToOne={nextOneToOne}
+                    onJoinSeminar={() => openSeminarChat(nextSeminar?.id)}
+                    onJoinOneToOne={() =>
+                      openMentorDm(nextOneToOne?.peerUserId, nextOneToOne?.title)
+                    }
+                  />
                 </div>
               </div>
 
-              <div className="mt-6 lg:hidden">
-                <UpcomingCountdownCard
-                  nextSeminar={nextSeminar}
-                  nextOneToOne={nextOneToOne}
-                  onJoinSeminar={() => openSeminarChat(nextSeminar?.id)}
-                  onJoinOneToOne={() =>
-                    openMentorDm(nextOneToOne?.peerUserId, nextOneToOne?.title)
-                  }
-                />
-              </div>
-
               <CarouselSection
-                sections={carouselSections}
                 loading={carouselLoading}
+                newExperts={newExperts}
+                upcomingSeminars={upcomingSeminars}
+                recommended={recommendedExperts}
+                recommendedNeedsProfile={recommendedNeedsProfile}
+                onViewExpert={(id) => void handleDiscoveryExpert(id)}
+                onOpenSeminar={handleOpenSeminarDiscovery}
+                onBrowseSeminars={() => {
+                  setOpenSeminarId(null);
+                  setActiveItem('seminars');
+                }}
+                onCompleteProfile={() => setActiveItem('profile')}
               />
             </div>
           )}

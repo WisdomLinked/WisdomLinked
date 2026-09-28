@@ -1,6 +1,11 @@
-import React from 'react';
-import CarouselCard from '../ui/CarouselCard';
+import type { ComponentType } from 'react';
+import NewExpertsCard from './discovery/NewExpertsCard';
+import UpcomingSeminarsCard from './discovery/UpcomingSeminarsCard';
+import RecommendedForYouCard from './discovery/RecommendedForYouCard';
+import { DiscoveryCardSkeleton } from './discovery/DiscoveryCarouselShell';
+import type { DiscoveryExpert, DiscoverySeminar } from '../../utils/studentDiscovery';
 
+/** @deprecated Kept for any lingering imports; discovery now uses typed props. */
 export type CarouselItem = {
   sectionTitle: string;
   title: string;
@@ -14,61 +19,69 @@ export type CarouselItem = {
   onSelect?: () => void;
 };
 
+/** @deprecated */
 export type CarouselSectionData = {
   id: string;
   category: string;
-  icon: React.ComponentType<{ size?: number; className?: string; 'aria-hidden'?: boolean }>;
+  icon: ComponentType<{ size?: number; className?: string; 'aria-hidden'?: boolean }>;
   items: CarouselItem[];
 };
 
-export default function CarouselSection({
-  sections = [],
-  loading = false,
-}: {
-  sections?: CarouselSectionData[];
+export type DiscoverySectionProps = {
   loading?: boolean;
-}) {
+  newExperts: DiscoveryExpert[];
+  upcomingSeminars: DiscoverySeminar[];
+  recommended: DiscoveryExpert[];
+  recommendedNeedsProfile: boolean;
+  onViewExpert: (id: string) => void;
+  onOpenSeminar: (id: string) => void;
+  onBrowseSeminars: () => void;
+  onCompleteProfile: () => void;
+};
+
+export default function CarouselSection({
+  loading = false,
+  newExperts = [],
+  upcomingSeminars = [],
+  recommended = [],
+  recommendedNeedsProfile = false,
+  onViewExpert,
+  onOpenSeminar,
+  onBrowseSeminars,
+  onCompleteProfile,
+}: DiscoverySectionProps) {
   return (
-    <section className="mt-10">
-      <div className="mb-4 flex items-start justify-between gap-4">
+    <section className="mt-8">
+      <div className="mb-3 flex items-start justify-between gap-4">
         <div>
-          <h2 className="text-2xl font-semibold text-slate-900">
-            What's New For You
-          </h2>
-          <p className="text-sm text-slate-500">
+          <h2 className="text-3xl font-semibold text-slate-900">What&apos;s New For You</h2>
+          <p className="mt-0.5 text-sm text-slate-500">
             Personalized updates and opportunities based on your activity.
           </p>
         </div>
       </div>
 
       {loading ? (
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          {Array.from({ length: 2 }).map((_, i) => (
-            <div
-              key={i}
-              className="min-h-[18rem] animate-pulse rounded-2xl border border-slate-200 bg-white/60"
-            />
-          ))}
-        </div>
-      ) : sections.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-slate-300 bg-white/60 p-8 text-center">
-          <p className="text-sm font-medium text-slate-700">
-            Nothing new to show yet.
-          </p>
-          <p className="mt-1 text-[13px] text-slate-500">
-            New experts and seminars will appear here as they become available.
-          </p>
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3">
+          <DiscoveryCardSkeleton />
+          <DiscoveryCardSkeleton />
+          <DiscoveryCardSkeleton />
         </div>
       ) : (
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          {sections.map(section => (
-            <CarouselCard
-              key={section.id}
-              category={section.category}
-              icon={section.icon}
-              items={section.items}
-            />
-          ))}
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3 items-stretch">
+          <NewExpertsCard items={newExperts} onViewProfile={onViewExpert} />
+          <UpcomingSeminarsCard
+            items={upcomingSeminars}
+            onRegister={onOpenSeminar}
+            onViewDetails={onOpenSeminar}
+            onBrowseAll={onBrowseSeminars}
+          />
+          <RecommendedForYouCard
+            items={recommended}
+            needsProfile={recommendedNeedsProfile}
+            onViewProfile={onViewExpert}
+            onCompleteProfile={onCompleteProfile}
+          />
         </div>
       )}
     </section>
