@@ -5,6 +5,7 @@ import { Card, CardContent, Typography } from "@mui/material";
 import FilePreviewModal from "../../FilePreviewModal";
 import { renderSafeMessageHtml } from "../../../../utils/safeMessageHtml";
 import { resolveSafeChatFileUrl } from "../../../../utils/safeFileUrl";
+import { isInlineImageAttachment } from "../../../../utils/chatAttachments";
 import ReplyQuoteCard from "../../../../components/messenger/ReplyQuoteCard";
 import { resolveReplyAuthorLabel } from "../../../../utils/displayName";
 import { immediateReplyQuote, peelWisdomLinkedReplyQuotes } from "../../../../utils/chatReplyLayout";
@@ -139,6 +140,7 @@ const Message = ({
     };
 
     const [showPreview, setShowPreview] = useState(false);
+    const [imageUnavailable, setImageUnavailable] = useState(false);
     const [deleting, setDeleting] = useState(false);
     const [showDeleteOptions, setShowDeleteOptions] = useState(false);
 
@@ -189,6 +191,68 @@ const Message = ({
 
     const useThreadBubble =
         Boolean(threadBubbleShellClassName) && !isFile && !isCallDurationMessage;
+
+    const showInlineImage =
+        isFile && !!safeFileUrl && !imageUnavailable && isInlineImageAttachment(fileName || fileUrl);
+
+    const renderFilePreviewModal = () =>
+        showPreview ? (
+            <FilePreviewModal
+                fileUrl={safeFileUrl || ""}
+                fileName={fileName}
+                documentType="File Preview"
+                onClose={() => setShowPreview(false)}
+            />
+        ) : null;
+        
+    const renderFileBody = () => {
+        if (showInlineImage) {
+            return (
+                <>
+                    <button
+                        type="button"
+                        onClick={() => setShowPreview(true)}
+                        title={fileName}
+                        aria-label={`Open image ${fileName}`}
+                        className="block overflow-hidden rounded-lg shadow-md transition hover:brightness-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#234C6A]/40"
+                    >
+                        <img
+                            src={safeFileUrl || ""}
+                            alt={fileName}
+                            loading="lazy"
+                            onError={() => setImageUnavailable(true)}
+                            className="block max-h-[320px] max-w-[min(70vw,260px)] object-contain"
+                        />
+                    </button>
+                    {renderFilePreviewModal()}
+                </>
+            );
+        }
+        return (
+            <>
+                <button
+                    onClick={() => safeFileUrl && setShowPreview(true)}
+                    disabled={!safeFileUrl}
+                    style={{ backgroundColor: '#227768' }}
+                    className="flex items-center gap-2 text-white font-semibold px-4 py-1.5 rounded-l-lg shadow-md hover:brightness-90 transition text-sm"
+                >
+                    📄 {fileName}
+                </button>
+
+                <button
+                    onClick={handleDownload}
+                    disabled={!safeFileUrl}
+                    style={{ backgroundColor: '#227768' }}
+                    className="flex items-center px-3 py-1.5 text-white font-semibold rounded-r-lg shadow-md hover:brightness-90 transition text-sm"
+                    title="Download file"
+                >
+                    ⬇
+                </button>
+
+                {renderFilePreviewModal()}
+            </>
+        );
+    };
 
     const renderReplyAction = () => {
         if (!onReplyMessage || !messageId || String(messageId).startsWith('temp-')) return null;
@@ -288,35 +352,7 @@ const Message = ({
                     <div className="flex items-end gap-1">
                         {renderDeleteActions()}
                         <div className="flex">
-                            {/* Preview section */}
-                            <button
-                            onClick={() => safeFileUrl && setShowPreview(true)}
-                            disabled={!safeFileUrl}
-                            style={{ backgroundColor: '#227768' }}
-                            className="flex items-center gap-2 text-white font-semibold px-4 py-1.5 rounded-l-lg shadow-md hover:brightness-90 transition text-sm"
-                            >
-                                📄 {fileName}
-                            </button>
-                            
-                            {/* Download section */}
-                            <button
-                            onClick={handleDownload}
-                            disabled={!safeFileUrl}
-                            style={{ backgroundColor: '#227768' }}
-                            className="flex items-center px-3 py-1.5 text-white font-semibold rounded-r-lg shadow-md hover:brightness-90 transition text-sm"
-                            title="Download file"
-                            >
-                                ⬇                        
-                            </button>
-
-                            {showPreview && (
-                            <FilePreviewModal
-                                fileUrl={safeFileUrl || ""}
-                                fileName={fileName}
-                                documentType="File Preview"
-                                onClose={() => setShowPreview(false)}
-                            />
-                            )}
+                            {renderFileBody()}
                         </div>
                         <DeliveryTicks status={deliveryStatus} theme={theme} />
                     </div>
@@ -441,35 +477,7 @@ const Message = ({
                     ) : isFile ? (
                         <div className="chat_value_container flex flex-col items-start px-1 py-1">
                             <div className="flex items-end gap-1">
-                                {/* Preview section */}
-                                <button
-                                onClick={() => safeFileUrl && setShowPreview(true)}
-                                disabled={!safeFileUrl}
-                                style={{ backgroundColor: '#227768' }}
-                                className="flex items-center gap-2 text-white font-semibold px-4 py-1.5 rounded-l-lg shadow-md hover:brightness-90 transition text-sm"
-                                >
-                                    📄 {fileName}
-                                </button>
-                                
-                                {/* Download section */}
-                                <button
-                                onClick={handleDownload}
-                                disabled={!safeFileUrl}
-                                style={{ backgroundColor: '#227768' }}
-                                className="flex items-center px-3 py-1.5 text-white font-semibold rounded-r-lg shadow-md hover:brightness-90 transition text-sm"
-                                title="Download file"
-                                >
-                                    ⬇                        
-                                </button>
-
-                                {showPreview && (
-                                <FilePreviewModal
-                                    fileUrl={safeFileUrl || ""}
-                                    fileName={fileName}
-                                    documentType="File Preview"
-                                    onClose={() => setShowPreview(false)}
-                                />
-                                )}
+                                {renderFileBody()}
                                 {renderDeleteActions()}
                                 {renderReplyAction()}
                             </div>

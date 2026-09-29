@@ -70,3 +70,14 @@ export function plainTextToSafeMessageHtml(text: string): string {
 export function isComposerTextEmpty(text: string): boolean {
   return !String(text || '').trim();
 }
+
+export const INLINE_IMAGE_EXTENSIONS = ['jpg', 'jpeg', 'png', 'webp', 'gif'] as const;
+
+export function isInlineImageAttachment(nameOrUrl: unknown): boolean {
+  const value = String(nameOrUrl ?? '').trim();
+  if (!value) return false;
+  const withoutQuery = value.split(/[?#]/)[0];
+  const lastSegment = withoutQuery.split('/').pop() || '';
+  const ext = getChatFileExtension(lastSegment);
+  return !!ext && (INLINE_IMAGE_EXTENSIONS as readonly string[]).includes(ext);
+}
