@@ -69,6 +69,12 @@ function getRefId(ref: unknown): string {
   return '';
 }
 
+function enrolledCountOf(seminar: any): number {
+  const adminId = getRefId(seminar?.admin);
+  const participants = Array.isArray(seminar?.participants) ? seminar.participants : [];
+  return participants.filter((p: unknown) => getRefId(p) !== adminId).length;
+}
+
 function labelsFromMixed(arr: unknown[] | undefined): string[] {
   if (!arr?.length) return [];
   return arr
@@ -804,25 +810,11 @@ function SeminarDetailPane({
                 </button>
               ) : null}
               {confirmDelete ? (
-                hasEnrolledStudents ? (
-                  <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-3">
-                    <p className="text-xs text-amber-800">
-                      You cannot delete this seminar right now since students are
-                      already enrolled in it. If you still want to delete it,
-                      please contact admin.
-                    </p>
-                    <button
-                      type="button"
-                      onClick={() => setConfirmDelete(false)}
-                      className="mt-3 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50"
-                    >
-                      Close
-                    </button>
-                  </div>
-                ) : (
                   <div className="mt-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-3">
                     <p className="text-xs text-rose-700">
-                      {isRecurring
+                      {hasEnrolledStudents
+                        ? 'I have approval from all the participants to delete this seminar.'
+                        : isRecurring
                         ? 'This is a recurring seminar. Choose what to delete — it will be removed from everyone’s calendars. This cannot be undone.'
                         : 'Delete this seminar? It will be removed from everyone’s calendars. This cannot be undone.'}
                     </p>
@@ -869,7 +861,6 @@ function SeminarDetailPane({
                       </div>
                     )}
                   </div>
-                )
               ) : null}
               {seminar?._id ? <SeatRequestsPanel seminarId={String(seminar._id)} /> : null}
             </>
@@ -1027,6 +1018,7 @@ export default function ExpertSeminarHub() {
       <ExpertSeminar
         key={`hub-edit-${editPayload.groupId}`}
         selectedSeminar={editPayload}
+        enrolledCount={enrolledCountOf(detailSeminar)}
         onCancel={() => {
           setEditPayload(null);
           setScreen('detail');

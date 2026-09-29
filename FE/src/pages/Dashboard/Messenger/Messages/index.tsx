@@ -122,6 +122,14 @@ const Messages = ({ theme = "dark", onReplyMessage }: { theme?: string; onReplyM
     const loadingOlderRef = useRef(false);
     const { chat, auth: { userDetails },  friends: { friends } } = useAppSelector((state) => state);
     const { chosenChatDetails, messages, chosenGroupChatDetails, gotAllChats, isNewMessage, conversationId, rcChannelId } = chat;
+    const seminarEnrolledCount = (() => {
+        const adminRef = (chosenGroupChatDetails as any)?.admin;
+        const adminId = String(adminRef?._id ?? adminRef?.id ?? adminRef ?? '');
+        const participants = (chosenGroupChatDetails as any)?.participants;
+        return (Array.isArray(participants) ? participants : []).filter(
+            (p: any) => String(p?._id ?? p?.id ?? p) !== adminId,
+        ).length;
+    })();
 
     const dmOtherWlUserId = chosenChatDetails?.userId != null ? String(chosenChatDetails.userId) : null;
 
@@ -958,16 +966,17 @@ const Messages = ({ theme = "dark", onReplyMessage }: { theme?: string; onReplyM
                 editSeminarModalShow ?
                     <div className={`absolute top-0 left-0 w-full h-full z-[1000] p-4 sm:p-8 ${theme === "light" ? "bg-black/30 backdrop-blur-sm" : "bg-white bg-opacity-10 backdrop-blur-sm"}`}>
                         <div className={`w-full h-full relative rounded-md p-6 flex flex-col ${theme === "light" ? "bg-white text-slate-900 shadow-xl" : "bg-black text-white"}`}>
-                            <div className={`text-center text-2xl mb-6 font-semibold ${theme === "light" ? "text-slate-900" : "text-white"}`}>Edit Seminar Details</div>
+                            <div className={`shrink-0 text-center text-2xl mb-6 font-semibold ${theme === "light" ? "text-slate-900" : "text-white"}`}>Edit Seminar Details</div>
                             <button
-                                className={theme === "light" ? "absolute right-2 top-2 rounded-md hover:bg-slate-100 p-1" : "absolute right-2 top-2 rounded-md hover:bg-grey"}
+                                className={theme === "light" ? "absolute right-2 top-2 z-10 rounded-md hover:bg-slate-100 p-1" : "absolute right-2 top-2 z-10 rounded-md hover:bg-grey"}
                                 onClick={() => set_editSeminarModalShow(false)}
                             >
                                 <CloseIcon />
                             </button>
-                            <div className="w-full h-[calc(100%-60px)]">
+                            <div className="w-full min-h-0 flex-1 overflow-y-auto">
                                 <ExpertSeminar
                                     selectedSeminar={chosenGroupChatDetails}
+                                    enrolledCount={seminarEnrolledCount}
                                 />
                             </div>
                         </div>
