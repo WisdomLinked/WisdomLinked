@@ -41,6 +41,7 @@ import {
 } from '../../actions/chatActions';
 import { notify } from '../../utils/notify';
 import { updateMe } from '../../actions/authActions';
+import { showErrorAlert, showSuccessAlert } from '../../actions/alertActions';
 import { leaveGroupAction } from '../../actions/groupChatActions';
 import { actionTypes } from '../../actions/types';
 import { isTheEventGoingOn } from '../../actions/common';
@@ -69,6 +70,7 @@ type CommunityRow = {
   name: string;
   missedChats?: number;
   lastLine: string;
+  description: string;
 };
 
 type PrivateRow =
@@ -143,6 +145,7 @@ const StudentChat: React.FC<{ section?: ChatSection }> = ({ section = CHAT_SECTI
   const [addToCommunityTarget, setAddToCommunityTarget] = useState<Extract<PrivateRow, { kind: 'privateDm' }> | null>(null);
   const [addingToCommunityId, setAddingToCommunityId] = useState<string | null>(null);
   const [newName, setNewName] = useState('');
+  const [newTitleLine, setNewTitleLine] = useState('');
   const [newDescription, setNewDescription] = useState('');
   const [newOpenToAll, setNewOpenToAll] = useState(true);
   const [newOpenToFollowers, setNewOpenToFollowers] = useState(false);
@@ -240,7 +243,8 @@ const StudentChat: React.FC<{ section?: ChatSection }> = ({ section = CHAT_SECTI
             _id: chat._id,
             name: chat.name || 'Community chat',
             missedChats: missed,
-            lastLine: chat.description || 'Community room',
+            lastLine: chat.titleLine || '',
+            description: chat.description || '',
           };
         });
         setCommunityChats(rows);
@@ -939,6 +943,10 @@ const StudentChat: React.FC<{ section?: ChatSection }> = ({ section = CHAT_SECTI
       notify.error('Community name is required');
       return;
     }
+    if (!newTitleLine.trim()) {
+      notify.error('Title line is required');
+      return;
+    }
     if (!newOpenToAll && communityInviteSelected.length === 0) {
       notify.error('Add at least one member, or turn on “Open to all users”.');
       return;
@@ -947,6 +955,7 @@ const StudentChat: React.FC<{ section?: ChatSection }> = ({ section = CHAT_SECTI
     try {
       const res: any = await createCommunityChat({
         name: newName.trim(),
+        titleLine: newTitleLine.trim(),
         description: newDescription.trim() || undefined,
         isOpenToAll: newOpenToAll,
         participants: !newOpenToAll ? communityInviteSelected.map(p => p.id) : undefined,
@@ -955,6 +964,7 @@ const StudentChat: React.FC<{ section?: ChatSection }> = ({ section = CHAT_SECTI
         notify.success('Community created');
         setCreateOpen(false);
         setNewName('');
+        setNewTitleLine('');
         setNewDescription('');
         setNewOpenToAll(true);
         setNewOpenToFollowers(false);
@@ -1828,8 +1838,18 @@ const StudentChat: React.FC<{ section?: ChatSection }> = ({ section = CHAT_SECTI
                 {pendingJoinCommunity.name}
               </p>
             </div>
-            <div className="flex flex-1 items-center justify-center p-6">
-              <div className="flex flex-col items-center gap-4">
+            <div className="flex flex-1 flex-col overflow-y-auto p-6">
+              <div className="m-auto flex flex-col items-center gap-4">
+                {pendingJoinCommunity.description.trim() ? (
+                  <div className="max-w-2xl rounded-xl border border-slate-200 bg-white p-4">
+                    <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-[#234C6A]">
+                      Description
+                    </div>
+                    <p className="whitespace-pre-wrap break-words text-[13px] leading-relaxed text-slate-700">
+                      {pendingJoinCommunity.description}
+                    </p>
+                  </div>
+                ) : null}
                 <p className="max-w-full text-center text-[14px] text-slate-600 xl:whitespace-nowrap">
                   Click on &ldquo;Join&rdquo; Button below to be a part of the community and post your thoughts.
                 </p>
@@ -1969,12 +1989,21 @@ const StudentChat: React.FC<{ section?: ChatSection }> = ({ section = CHAT_SECTI
                 />
               </div>
               <div>
-                <div className="mb-1 text-xs font-semibold text-slate-600">Description (optional)</div>
+                <div className="mb-1 text-xs font-semibold text-slate-600">Title Line</div>
+                <input
+                  className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 outline-none focus:border-[#234C6A] focus:ring-2 focus:ring-[#234C6A]/60"
+                  value={newTitleLine}
+                  onChange={e => setNewTitleLine(e.target.value)}
+                  placeholder="This will be displayed under the community name"
+                />
+              </div>
+              <div>
+                <div className="mb-1 text-xs font-semibold text-slate-600">Description (Encouraged)</div>
                 <textarea
                   className="min-h-[90px] w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 outline-none focus:border-[#234C6A] focus:ring-2 focus:ring-[#234C6A]/60"
                   value={newDescription}
                   onChange={e => setNewDescription(e.target.value)}
-                  placeholder="What is this community for?"
+                  placeholder="Please fill detailed description in order to bring right students to join the community."
                 />
               </div>
               <div className="flex flex-wrap items-center gap-x-5 gap-y-2">

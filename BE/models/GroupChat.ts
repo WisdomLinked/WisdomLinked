@@ -10,6 +10,10 @@ const groupChatSchema = new mongoose.Schema(
         description: {
             type: String,
         },
+        titleLine: {
+            type: String,
+            default: '',
+        },
         image: { type: String },
         keywords: [{ type: mongoose.Schema.Types.ObjectId, ref: "Keyword" }],
         customKeywords: [{ type: String }],

@@ -214,7 +214,7 @@ const createGeneralChatAndJoinGlobalChat = async (expertId) => {
 const createCommunityChat = async (req, res) => {
     try {
         const { userId } = req.user;
-        const { name, description, participants, isOpenToAll } = req.body;
+        const { name, titleLine, description, participants, isOpenToAll } = req.body;
 
         // Validate name
         if (!name || !name.trim()) {
@@ -271,6 +271,7 @@ const createCommunityChat = async (req, res) => {
         const now = new Date();
         const communityChat = await GroupChat.create({
             name: name.trim(),
+            titleLine: (titleLine || '').trim(),
             description: description || '',
             type: 'community',
             status: 'active',
