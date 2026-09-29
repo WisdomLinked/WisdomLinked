@@ -42,6 +42,7 @@ export default function Sidebar({
   roleLabel = 'Student',
   notifications = {},
   subItems,
+  subItemCounts,
   activeSubItem,
   onNavigateSub,
 }: {
@@ -53,6 +54,8 @@ export default function Sidebar({
   roleLabel?: string;
   notifications?: Record<string, boolean | number>;
   subItems?: Record<string, { id: string; label: string }[]>;
+  /** Unread counts per sub-item, keyed nav id then sub id. Absent or 0 renders no badge. */
+  subItemCounts?: Record<string, Record<string, number>>;
   activeSubItem?: string;
   onNavigateSub?: (navId: string, subId: string) => void;
 }) {
@@ -158,13 +161,17 @@ export default function Sidebar({
                         onNavigateSub?.(item.id, sub.id);
                         setOpenMobile(false);
                       }}
-                      className={`flex w-full items-center rounded-md px-2.5 py-1.5 text-left text-[11px] font-semibold uppercase tracking-[0.08em] transition-colors focus:outline-none ${
+                      className={`flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-[11px] font-semibold uppercase tracking-[0.08em] transition-colors focus:outline-none ${
                         subActive
                           ? 'bg-white text-[#234C6A] shadow-sm'
                           : 'text-slate-500 hover:bg-white hover:text-slate-800'
                       }`}
                     >
-                      {sub.label}
+                      <span className="min-w-0 flex-1 truncate">{sub.label}</span>
+                      <NavBadge
+                        count={subItemCounts?.[item.id]?.[sub.id] ?? 0}
+                        label={`unread in ${sub.label.toLowerCase()}`}
+                      />
                     </button>
                   );
                 })}

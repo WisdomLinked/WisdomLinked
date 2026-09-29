@@ -34,6 +34,7 @@ import {
 import { resolveProfileImageSrc } from '../utils/profileImage';
 import { displayRoomLabel } from '../utils/chatRoomLabel';
 import { chatTargetsByRid } from '../utils/chatNavTarget';
+import { unreadByChatSection } from '../utils/chatSectionUnread';
 import { seminarEnrollmentLabel } from '../utils/seminarCapacityLabel';
 import { fetchDmUnreadSnapshot, fetchChatUserProfile } from '../api/chatApi';
 import ProfileModal from './Dashboard/Messenger/Messages/ProfileModal';
@@ -644,6 +645,11 @@ export default function ExpertDashboard() {
   const totalUnreadDm = useMemo(
     () => Object.values(filteredUnreadByRid).reduce((sum, n) => sum + (Number(n) || 0), 0),
     [filteredUnreadByRid],
+  );
+
+  const chatSectionUnread = useMemo(
+    () => unreadByChatSection(filteredUnreadByRid, chatTargetByRid),
+    [filteredUnreadByRid, chatTargetByRid],
   );
   const chatNotifications = useMemo<TopBarNotificationItem[]>(
     () =>
@@ -1511,6 +1517,7 @@ export default function ExpertDashboard() {
           roleLabel="Expert"
           notifications={{ chat: activeItem === 'chat' ? 0 : totalUnreadDm }}
           subItems={{ chat: CHAT_SECTION_ITEMS }}
+          subItemCounts={{ chat: chatSectionUnread }}
           activeSubItem={chatSection}
           onNavigateSub={(navId, subId) => {
             setActiveItem(navId);

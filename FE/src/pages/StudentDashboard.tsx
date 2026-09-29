@@ -16,6 +16,7 @@ import {
 import { paymentWindowOpen } from '../utils/bookingLifecycle';
 import { displayRoomLabel } from '../utils/chatRoomLabel';
 import { chatTargetsByRid } from '../utils/chatNavTarget';
+import { unreadByChatSection } from '../utils/chatSectionUnread';
 import { fetchDmUnreadSnapshot, fetchChatUserProfile } from '../api/chatApi';
 import ProfileModal from './Dashboard/Messenger/Messages/ProfileModal';
 import { seatWalletOption } from '../utils/seatCheckoutOptions';
@@ -1350,6 +1351,11 @@ export default function StudentDashboard() {
     [filteredUnreadByRid],
   );
 
+  const chatSectionUnread = useMemo(
+    () => unreadByChatSection(filteredUnreadByRid, chatTargetByRid),
+    [filteredUnreadByRid, chatTargetByRid],
+  );
+
   const chatNotifications = useMemo<TopBarNotificationItem[]>(
     () =>
       Object.entries(filteredUnreadByRid)
@@ -1499,6 +1505,7 @@ export default function StudentDashboard() {
           avatarUrl={avatarUrl}
           notifications={{ chat: activeItem === 'chat' ? 0 : totalUnreadDm }}
           subItems={{ chat: CHAT_SECTION_ITEMS }}
+          subItemCounts={{ chat: chatSectionUnread }}
           activeSubItem={chatSection}
           onNavigateSub={(navId, subId) => {
             setActiveItem(navId);
