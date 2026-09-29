@@ -5403,20 +5403,6 @@ const deleteGroup = async (req, res) => {
                 ? await GroupChat.find({ seriesId: groupChat.seriesId })
                 : [groupChat];
 
-        if (groupChat.type === 'seminar') {
-            const enrolled = new Set<string>();
-            for (const g of seriesDocs) {
-                enrolledStudentIds(g).forEach((id) => enrolled.add(id));
-            }
-            if (enrolled.size > 0) {
-                return res.status(409).json({
-                    status: 'FAIL',
-                    error:
-                        'You cannot delete this seminar right now since students are already enrolled in it. If you still want to delete it, please contact admin.',
-                });
-            }
-        }
-
         const groupChats =
             scope === 'occurrence' ? [groupChat] : seriesDocs;
 
