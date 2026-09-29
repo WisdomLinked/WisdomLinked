@@ -3,7 +3,7 @@ import { formatDateYYYY_MM_DD_h_m } from "../../actions/common";
 import Avatar from "../../components/Avatar";
 import GroupParticipantsDialog from "./Messenger/Messages/GroupParticipantsDialog";
 import { useAppSelector } from "../../store";
-import { Calendar, Clock3, DollarSign, Users, Sparkles, UserRound, Repeat } from "lucide-react";
+import { Calendar, Clock3, DollarSign, Users, Sparkles, UserRound, Repeat, Info } from "lucide-react";
 import { SERVICE_OPTIONS, matchesServiceOption } from "../../constants/serviceOptions";
 import { resolveProfileImageSrc } from "../../utils/profileImage";
 import { profileImageFetch } from "../../api/api";
@@ -13,6 +13,8 @@ import { recurrenceLabel as describeRecurrence, type RecurrenceFields } from "..
 interface SeminarDetailsProps {
     title: string;
     description?: string;
+    /** Communities show this under the name instead of the description, matching the chat list row. */
+    titleLine?: string;
     start?: string;
     end?: string;
     duration?: number;
@@ -39,6 +41,7 @@ interface SeminarDetailsProps {
 const SeminarDetails = ({
     title,
     description,
+    titleLine,
     start,
     end,
     duration,
@@ -136,6 +139,11 @@ const SeminarDetails = ({
         { Icon: DollarSign, label: "Price", value: `$${price ?? 0}` },
     ];
 
+    const descriptionText = typeof description === "string" ? description.trim() : "";
+    const headerSubtitle = isCommunityChat
+        ? (typeof titleLine === "string" ? titleLine.trim() : "")
+        : (description || "No description provided.");
+
     const purposeText = typeof purposeOther === "string" ? purposeOther.trim() : "";
     const dedupedServices = (services || []).filter(
         (service: any) => serviceChipLabel(service).trim() !== purposeText,
@@ -155,9 +163,11 @@ const SeminarDetails = ({
                                 </span>
                             ) : null}
                         </div>
-                        <div className={`mt-1.5 border-t pt-1.5 text-[13px] leading-relaxed ${isLight ? "border-slate-200/70 text-slate-600" : "border-slate-700 text-lightgrey"}`}>
-                            {description || "No description provided."}
-                        </div>
+                        {headerSubtitle ? (
+                            <div className={`mt-1.5 border-t pt-1.5 text-[13px] leading-relaxed break-words ${isLight ? "border-slate-200/70 text-slate-600" : "border-slate-700 text-lightgrey"}`}>
+                                {headerSubtitle}
+                            </div>
+                        ) : null}
                     </div>
                 </div>
 
@@ -299,6 +309,18 @@ const SeminarDetails = ({
                     ) : (
                         <div className={`text-sm ${isLight ? "text-slate-500" : "text-grey"}`}>No participants</div>
                     )}
+                </div>
+                ) : null}
+
+                {isCommunityChat ? (
+                <div className={`rounded-xl border p-3 ${isLight ? "border-slate-200 bg-white" : "border-slate-700 bg-[#141414]"}`}>
+                    <div className={`mb-2 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.12em] ${isLight ? "text-[#234C6A]" : "text-slate-300"}`}>
+                        <Info className="h-3.5 w-3.5" />
+                        Description
+                    </div>
+                    <div className={`whitespace-pre-wrap break-words text-[13px] leading-relaxed ${isLight ? "text-slate-700" : "text-slate-300"}`}>
+                        {descriptionText || "No description provided."}
+                    </div>
                 </div>
                 ) : null}
 

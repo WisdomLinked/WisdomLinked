@@ -910,20 +910,22 @@ const Messages = ({ theme = "dark", onReplyMessage }: { theme?: string; onReplyM
                             className="absolute top-0 left-0 w-full h-full cursor-pointer"
                             onClick={() => set_seminarDetailsModalShow(false)}
                         />
-                        <div className={`w-full max-w-[620px] rounded-2xl p-6 relative shadow-xl border ${theme === "light" ? "bg-white text-slate-900 border-slate-200" : "bg-black text-white border-slate-700"}`}>
+                        <div className={`w-full max-w-[620px] max-h-full flex flex-col rounded-2xl p-6 relative shadow-xl border ${theme === "light" ? "bg-white text-slate-900 border-slate-200" : "bg-black text-white border-slate-700"}`}>
                             <div className={`h-1.5 w-full absolute left-0 top-0 rounded-t-2xl ${theme === "light" ? "bg-gradient-to-r from-[#234C6A] via-[#456882] to-[#234C6A]" : "bg-gradient-to-r from-slate-600 via-slate-500 to-slate-600"}`} />
-                            <div className={`text-center text-2xl mb-6 font-semibold ${theme === "light" ? "text-slate-900" : "text-white"}`}>
+                            <div className={`shrink-0 text-center text-2xl mb-6 font-semibold ${theme === "light" ? "text-slate-900" : "text-white"}`}>
                                 {chosenGroupChatDetails?.type === "community" ? "Chat Details" : "Seminar Details"}
                             </div>
                             <button
-                                className={theme === "light" ? "absolute right-2 top-2 rounded-md hover:bg-slate-100 p-1" : "absolute right-2 top-2 rounded-md hover:bg-grey"}
+                                className={theme === "light" ? "absolute right-2 top-2 rounded-md hover:bg-slate-100 p-1 z-10" : "absolute right-2 top-2 rounded-md hover:bg-grey z-10"}
                                 onClick={() => set_seminarDetailsModalShow(false)}
                             >
                                 <CloseIcon />
                             </button>
+                            <div className="min-h-0 flex-1 overflow-y-auto">
                             <SeminarDetails
                                 title={chosenGroupChatDetails?.groupName}
                                 description={chosenGroupChatDetails?.description}
+                                titleLine={chosenGroupChatDetails?.titleLine}
                                 start={chosenGroupChatDetails?.start}
                                 duration={chosenGroupChatDetails?.duration}
                                 price={chosenGroupChatDetails?.price}
@@ -947,6 +949,7 @@ const Messages = ({ theme = "dark", onReplyMessage }: { theme?: string; onReplyM
                                 onDeleteCommunityChat={handleDeleteCommunityChat}
                                 theme={theme}
                             />
+                            </div>
                         </div>
                     </div> :
                     null
