@@ -104,7 +104,8 @@ export default function Sidebar({
               type="button"
               onClick={() => {
                 onNavigate(item.id);
-                if (!itemSubItems) setOpenMobile(false);
+                if (itemSubItems) setExpandedNavId(isExpanded ? null : item.id);
+                else setOpenMobile(false);
               }}
               className={`nav-btn flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-[13px] font-medium transition-colors focus:outline-none border-l-4 ${
                 itemSubItems ? 'pr-9' : ''
