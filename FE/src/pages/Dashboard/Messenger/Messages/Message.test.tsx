@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { vi } from 'vitest';
 import Message from './Message';
@@ -117,3 +117,78 @@ describe('Message outgoing rendering', () => {
     });
 });
 
+
+describe('Message image attachments', () => {
+    const IMG = 'https://wl.blr1.digitaloceanspaces.com/chatFiles/1_shot.png';
+    const PDF = 'https://wl.blr1.digitaloceanspaces.com/chatFiles/1_report.pdf';
+    const imageContent = `Chatfile: ${IMG}#####shot.png`;
+    const pdfContent = `Chatfile: ${PDF}#####report.pdf`;
+
+    const baseProps = {
+        hideDate: true,
+        date: new Date().toISOString(),
+        theme: 'light',
+        messageId: 'm9',
+        roomId: 'r9',
+    };
+
+    it('renders an outgoing picture as a picture, not a file chip', () => {
+        render(<Message {...baseProps} incomingMessage={false} content={imageContent} />);
+
+        const img = screen.getByAltText('shot.png') as HTMLImageElement;
+        expect(img).toBeInTheDocument();
+        expect(img.src).toBe(IMG);
+        expect(screen.queryByText(/📄/)).not.toBeInTheDocument();
+    });
+
+    it('renders an incoming picture as a picture', () => {
+        render(<Message {...baseProps} incomingMessage content={imageContent} />);
+
+        expect(screen.getByAltText('shot.png')).toBeInTheDocument();
+        expect(screen.queryByText(/📄/)).not.toBeInTheDocument();
+    });
+
+    it('keeps the file chip for documents', () => {
+        render(<Message {...baseProps} incomingMessage={false} content={pdfContent} />);
+
+        expect(screen.queryByAltText('report.pdf')).not.toBeInTheDocument();
+        expect(screen.getByText(/📄/)).toBeInTheDocument();
+        expect(screen.getByTitle('Download file')).toBeInTheDocument();
+    });
+
+    it('opens the preview when the picture is clicked', async () => {
+        const user = userEvent.setup();
+        render(<Message {...baseProps} incomingMessage={false} content={imageContent} />);
+
+        await user.click(screen.getByLabelText('Open image shot.png'));
+
+        expect(screen.getByText('File Preview')).toBeInTheDocument();
+    });
+
+    it('falls back to the file chip when the picture cannot load', () => {
+        render(<Message {...baseProps} incomingMessage={false} content={imageContent} />);
+
+        fireEvent.error(screen.getByAltText('shot.png'));
+
+        expect(screen.queryByAltText('shot.png')).not.toBeInTheDocument();
+        expect(screen.getByText(/📄/)).toBeInTheDocument();
+        expect(screen.getByTitle('Download file')).toBeInTheDocument();
+    });
+
+    it('still offers delete and reply on a picture message', () => {
+        render(
+            <Message
+                {...baseProps}
+                incomingMessage
+                content={imageContent}
+                canDelete
+                onDeleteMessage={async () => undefined}
+                onReplyMessage={() => undefined}
+            />,
+        );
+
+        expect(screen.getByAltText('shot.png')).toBeInTheDocument();
+        expect(screen.getByLabelText('Delete message')).toBeInTheDocument();
+        expect(screen.getByLabelText('Reply to message')).toBeInTheDocument();
+    });
+});
