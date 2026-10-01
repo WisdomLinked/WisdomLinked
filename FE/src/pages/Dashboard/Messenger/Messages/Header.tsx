@@ -368,6 +368,7 @@ const MessagesHeader = ({ events, openCalendarModal, openSeminarModal, openEditS
     const peerRoleLower = String(chosenChatDetails?.peerRole || "").toLowerCase();
     const viewerIsStudent = String(userDetails?.role || "").toLowerCase() === "customer";
     const isCommunityChat = chosenGroupChatDetails?.type === "community";
+    const isAppointmentChat = chosenGroupChatDetails?.type === "individual";
     const canInviteToSeminar = !isCommunityChat
         && !!chosenGroupChatDetails
         && chosenGroupChatDetails?.type !== 'individual'
@@ -683,7 +684,13 @@ const MessagesHeader = ({ events, openCalendarModal, openSeminarModal, openEditS
                                 chosenGroupChatDetails && (
                                     <button
                                         className="mr-4 rounded-xl bg-[#234C6A] px-4 py-1 text-sm font-semibold text-white shadow-sm transition hover:bg-[#1b3c53] disabled:cursor-not-allowed disabled:bg-[#89A6BC] disabled:text-white disabled:shadow-none"
-                                        title={!enabledEvent ? 'Seminar not started' : kickedFromSeminar ? 'You are blocked from this seminar by the expert' : 'Join a seminar'}
+                                        title={
+                                            isAppointmentChat
+                                                ? !enabledEvent
+                                                    ? 'This appointment has not started yet'
+                                                    : 'Join this appointment call'
+                                                : !enabledEvent ? 'Seminar not started' : kickedFromSeminar ? 'You are blocked from this seminar by the expert' : 'Join a seminar'
+                                        }
                                         disabled={
                                             !enabledEvent ||
                                             kickedFromSeminar
@@ -852,6 +859,7 @@ const MessagesHeader = ({ events, openCalendarModal, openSeminarModal, openEditS
                                             </button>
                                         ) : null}
                                         {
+                                            isAppointmentChat ? null :
                                             (isGroupAdmin || isCommunityModerator) ?
                                                 (
                                                     <>
@@ -1310,7 +1318,11 @@ const MessagesHeader = ({ events, openCalendarModal, openSeminarModal, openEditS
                         >
                             <CloseIcon fontSize="small" />
                         </button>
-                        <div className={theme === "light" ? "font-semibold pr-7" : "pr-7"}>Join a seminar once the button gets available.</div>
+                        <div className={theme === "light" ? "font-semibold pr-7" : "pr-7"}>
+                            {isAppointmentChat
+                                ? "Join this appointment when the button becomes available."
+                                : "Join a seminar once the button gets available."}
+                        </div>
                         <div className="flex items-center space-x-2 mt-2">
                             <button
                                 className={`w-3 h-3 lg:w-4 lg:h-4 rounded-[4px] ${

@@ -1,6 +1,19 @@
+const normalizedGroupType = (value: unknown): string =>
+    String(value ?? "").trim().toLowerCase();
+
+export const isOneToOneGroupScope = (
+    meetingLike: any,
+    opts: { groupChatType?: unknown } = {},
+): boolean => {
+    const explicit = normalizedGroupType(opts.groupChatType);
+    if (explicit) return explicit === "individual";
+    return normalizedGroupType(meetingLike?.groupChatId?.type) === "individual";
+};
+
 export const resolveMeetingRatingTargetUserId = (
     meetingLike: any,
     requesterUserId: string,
+    opts: { groupChatType?: unknown } = {},
 ): string | null => {
     const requester = String(requesterUserId || "").trim();
     if (!requester) return null;
@@ -15,13 +28,11 @@ export const resolveMeetingRatingTargetUserId = (
     const inMeeting = participants.includes(requester) || startedBy === requester;
     if (!inMeeting) return null;
 
-    // Seminar/group calls: everyone rates the moderator only.
-    if (meetingLike?.groupChatId) {
+    if (meetingLike?.groupChatId && !isOneToOneGroupScope(meetingLike, opts)) {
         if (!startedBy || startedBy === requester) return null;
         return startedBy;
     }
 
-    // 1:1 calls: each participant rates the other participant.
     const unique = Array.from(new Set(participants));
     if (!unique.includes(requester)) unique.push(requester);
     const other = unique.find((uid) => uid !== requester);

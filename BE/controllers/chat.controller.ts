@@ -23,6 +23,19 @@ import { prepareMessageForRocketChat } from '../utils/chatReplyPlainText';
 import { safeErrorMessage } from '../utils/httpUserFacingCopy';
 import { searchableRolesFor } from '../utils/chatSearchRoles';
 
+const PREVIEW_SOURCE_MAX_CHARS = 1000;
+
+const truncatePreviewSource = (value: unknown): string | null => {
+    const raw = String(value ?? '');
+    if (!raw) return null;
+    return raw.length > PREVIEW_SOURCE_MAX_CHARS ? raw.slice(0, PREVIEW_SOURCE_MAX_CHARS) : raw;
+};
+
+const asUserObjectId = (value: unknown): string | null => {
+    const raw = String(value ?? '').trim();
+    return /^[0-9a-fA-F]{24}$/.test(raw) ? raw : null;
+};
+
 const Conversation = require('../models/Conversation');
 const GroupChat = require('../models/GroupChat');
 const User = require('../models/User');
@@ -381,13 +394,20 @@ export const sendMessage = async (req: any, res: Response) => {
             }
         }
 
+        const storedContent = prepareMessageForRocketChat(content);
+
         await Conversation.updateOne(
             { _id: conversation._id },
-            { $set: { lastMessageAt: new Date() } },
+            {
+                $set: {
+                    lastMessageAt: new Date(),
+                    lastMessageText: truncatePreviewSource(storedContent),
+                    lastMessageFrom: me._id,
+                },
+            },
             { timestamps: false },
         ).exec();
 
-        const storedContent = prepareMessageForRocketChat(content);
         // Build a fake message object just to satisfy the frontend's optimistic update
         const populatedMessage = {
             _id: sentId,
@@ -474,6 +494,27 @@ export const getDirectHistory = async (req: any, res: Response) => {
                             { $max: { lastMessageAt: new Date(maxMs) } },
                             { timestamps: false },
                         ).exec();
+
+                        const newest = messages[messages.length - 1];
+                        const newestText = truncatePreviewSource(newest?.content);
+                        if (newestText) {
+                            await Conversation.updateOne(
+                                {
+                                    _id: conversation._id,
+                                    $or: [
+                                        { lastMessageAt: null },
+                                        { lastMessageAt: { $lte: new Date(maxMs) } },
+                                    ],
+                                },
+                                {
+                                    $set: {
+                                        lastMessageText: newestText,
+                                        lastMessageFrom: asUserObjectId(newest?.author?._id),
+                                    },
+                                },
+                                { timestamps: false },
+                            ).exec();
+                        }
                     }
                 }
 

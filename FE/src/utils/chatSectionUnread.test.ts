@@ -12,14 +12,23 @@ describe('unreadByChatSection', () => {
         expect(out).toEqual({ communities: 2 });
     });
 
-    it('files a DM under 1:1 appointments, which is where DM rows actually live', () => {
+    it('files a DM under direct messages, where DM rows now live', () => {
         const out = unreadByChatSection({ 'rid-d': 1 }, { 'rid-d': 'dm' });
-        expect(out).toEqual({ appointments: 1 });
+        expect(out).toEqual({ direct: 1 });
     });
 
-    it('never reports a direct section, because that list is still an empty placeholder', () => {
-        const out = unreadByChatSection({ 'rid-d': 4 }, { 'rid-d': 'dm' });
+    it('files a 1:1 appointment room under appointments, not under direct messages', () => {
+        const out = unreadByChatSection({ 'rid-a': 4 }, { 'rid-a': 'appointment' });
+        expect(out).toEqual({ appointments: 4 });
         expect(out.direct).toBeUndefined();
+    });
+
+    it('keeps a DM and an appointment with the same person in separate sections', () => {
+        const out = unreadByChatSection(
+            { 'rid-d': 2, 'rid-a': 3 },
+            { 'rid-d': 'dm', 'rid-a': 'appointment' },
+        );
+        expect(out).toEqual({ direct: 2, appointments: 3 });
     });
 
     it('adds up several rooms in the same section', () => {

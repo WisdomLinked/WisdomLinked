@@ -33,7 +33,7 @@ import {
 } from '../api/api';
 import { resolveProfileImageSrc } from '../utils/profileImage';
 import { displayRoomLabel } from '../utils/chatRoomLabel';
-import { chatTargetsByRid } from '../utils/chatNavTarget';
+import { chatTargetsByRid, type ChatNavTarget } from '../utils/chatNavTarget';
 import { unreadByChatSection } from '../utils/chatSectionUnread';
 import { seminarEnrollmentLabel } from '../utils/seminarCapacityLabel';
 import { fetchDmUnreadSnapshot, fetchChatUserProfile } from '../api/chatApi';
@@ -269,7 +269,7 @@ export default function ExpertDashboard() {
   useEffect(() => {
     window.localStorage.setItem('expertChatSection', chatSection);
   }, [chatSection]);
-  const openChatSection = useCallback((target: 'dm' | 'community' | 'seminar') => {
+  const openChatSection = useCallback((target: ChatNavTarget) => {
     setChatSection(sectionForChatTarget(target));
   }, []);
   const goToDashboardTab = useCallback(() => setActiveItem('dashboard'), []);
@@ -669,6 +669,7 @@ export default function ExpertDashboard() {
             onClick: () => {
               if (target === 'dm') localStorage.setItem('wl_open_dm_rid', rid);
               else if (target === 'seminar') localStorage.setItem('wl_open_seminar_rc_rid', rid);
+              else if (target === 'appointment') localStorage.setItem('wl_open_appointment_rc_rid', rid);
               else localStorage.setItem('wl_open_community_rc_rid', rid);
               window.dispatchEvent(new Event('wl-open-chat-nav'));
               openChatSection(target);
@@ -1081,7 +1082,7 @@ export default function ExpertDashboard() {
       } as any)
     );
     setExpertUpcomingModal(null);
-    openChatSection(booked ? 'dm' : 'seminar');
+    openChatSection(booked ? 'appointment' : 'seminar');
     setActiveItem('chat');
   };
 
