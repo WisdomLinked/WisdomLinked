@@ -1,7 +1,12 @@
-/** Which chat list can open a given Rocket.Chat room. */
-export type ChatNavTarget = 'dm' | 'seminar' | 'community';
+import { isChatableAppointment } from './appointmentChatRows';
 
-type GroupChatLike = { rcChannelId?: unknown; type?: unknown } | null | undefined;
+/** Which chat list can open a given Rocket.Chat room. */
+export type ChatNavTarget = 'dm' | 'seminar' | 'community' | 'appointment';
+
+type GroupChatLike =
+    | { rcChannelId?: unknown; type?: unknown; status?: unknown }
+    | null
+    | undefined;
 
 /** Both Set and Array expose forEach, which avoids needing downlevelIteration. */
 type RidList = { forEach(fn: (rid: string) => void): void } | null | undefined;
@@ -26,6 +31,9 @@ export function chatTargetsByRid(
         const type = String(chat?.type ?? '').toLowerCase();
         if (type === 'seminar') out[rid] = 'seminar';
         else if (type === 'community') out[rid] = 'community';
+        // Guarded by the same predicate the list uses, so an unread count can never point
+        // at an appointment that has no row to open.
+        else if (isChatableAppointment(chat)) out[rid] = 'appointment';
     });
 
     communityRids?.forEach(raw => {

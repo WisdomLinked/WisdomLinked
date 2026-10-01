@@ -55,8 +55,14 @@ import {
   isChatSectionUnset,
   showsAppointments,
   showsCommunities,
+  showsDirect,
   showsSeminars,
 } from '../../utils/chatSections';
+import {
+  appointmentChatRows,
+  matchesAppointmentQuery,
+  type AppointmentChatRow,
+} from '../../utils/appointmentChatRows';
 import { resolveProfileImageSrc } from '../../utils/profileImage';
 import { shouldShowMobileMessenger } from '../../utils/mobileChatLayout';
 import { buildOnlineUserIdSet, hasOnlineUserId } from '../../utils/onlinePresence';
@@ -114,6 +120,7 @@ const StudentChat: React.FC<{ section?: ChatSection }> = ({ section = CHAT_SECTI
 
   const [communityQuery, setCommunityQuery] = useState('');
   const [privateQuery, setPrivateQuery] = useState('');
+  const [appointmentQuery, setAppointmentQuery] = useState('');
   const [seminarQuery, setSeminarQuery] = useState('');
   const [communityChats, setCommunityChats] = useState<CommunityRow[]>([]);
   const [joiningCommunity, setJoiningCommunity] = useState(false);
@@ -228,6 +235,11 @@ const StudentChat: React.FC<{ section?: ChatSection }> = ({ section = CHAT_SECTI
     }
     return rows;
   }, [userDetails?.groupChats]);
+
+  const appointmentRows = useMemo(
+    () => appointmentChatRows(userDetails?.groupChats, currentUserId),
+    [userDetails?.groupChats, currentUserId],
+  );
 
   const loadCommunityChats = React.useCallback(async () => {
     const uid = userDetails?._id ?? userDetails?.id ?? userDetails?.userId;
@@ -373,6 +385,12 @@ const StudentChat: React.FC<{ section?: ChatSection }> = ({ section = CHAT_SECTI
     });
   }, [seminarRows]);
 
+  useEffect(() => {
+    appointmentRows.forEach(a => {
+      if (a.rcChannelId) subscribeToRoom(String(a.rcChannelId));
+    });
+  }, [appointmentRows]);
+
   /**
    * Live unread for seminar + community rooms, counted from the RC message stream.
    * RC's per-subscription `unread` (onSubscriptionChanged / snapshot) is reliable for 1:1 DMs
@@ -391,8 +409,11 @@ const StudentChat: React.FC<{ section?: ChatSection }> = ({ section = CHAT_SECTI
     seminarRows.forEach(r => {
       if (r.rcChannelId) s.add(String(r.rcChannelId));
     });
+    appointmentRows.forEach(r => {
+      if (r.rcChannelId) s.add(String(r.rcChannelId));
+    });
     groupRidSetRef.current = s;
-  }, [communityChats, seminarRows]);
+  }, [communityChats, seminarRows, appointmentRows]);
 
   const activeGroupRidRef = React.useRef<string>('');
   useEffect(() => {
@@ -813,6 +834,15 @@ const StudentChat: React.FC<{ section?: ChatSection }> = ({ section = CHAT_SECTI
     );
   }, [seminarRows, seminarQuery, liveActivityByRid]);
 
+  const filteredAppointments = useMemo(() => {
+    const matched = appointmentRows.filter(r => matchesAppointmentQuery(r, appointmentQuery));
+    return sortByRecentActivity(
+      matched,
+      a => ({ roomId: a.rcChannelId, storedAt: a.raw?.lastMessageAt }),
+      liveActivityByRid,
+    );
+  }, [appointmentRows, appointmentQuery, liveActivityByRid]);
+
   const privateRowActivity = React.useCallback(
     (r: PrivateRow) =>
       r.kind === 'privateDm'
@@ -1032,6 +1062,30 @@ const StudentChat: React.FC<{ section?: ChatSection }> = ({ section = CHAT_SECTI
     [dispatch],
   );
 
+  const openAppointment = React.useCallback(
+    (row: AppointmentChatRow) => {
+      const rid = row.rcChannelId;
+      if (rid) {
+        dispatch(clearDmUnreadRid(rid));
+        setRcUnreadByRid(prev => {
+          const next = { ...prev };
+          delete next[rid];
+          return next;
+        });
+        clearLiveGroupUnread(rid);
+      }
+      dispatch(
+        setChosenGroupChatDetails({
+          ...row.raw,
+          groupId: row._id,
+          groupName: row.name,
+          name: row.name,
+        } as any),
+      );
+    },
+    [dispatch, clearLiveGroupUnread],
+  );
+
   /** Open a seminar group chat, lazily provisioning its RC channel for older seminars. */
   const openSeminar = React.useCallback(
     async (row: { _id: string; name: string; rcChannelId?: string; raw: any }) => {
@@ -1103,6 +1157,24 @@ const StudentChat: React.FC<{ section?: ChatSection }> = ({ section = CHAT_SECTI
         localStorage.removeItem('wl_open_seminar_rc_rid');
       }
     }
+    const appointmentId = localStorage.getItem('wl_open_appointment_id');
+    if (appointmentId) {
+      const row = appointmentRows.find(a => String(a._id) === String(appointmentId));
+      if (row) {
+        openAppointment(row);
+        localStorage.removeItem('wl_open_appointment_id');
+      }
+    }
+    const appointmentRid = localStorage.getItem('wl_open_appointment_rc_rid');
+    if (appointmentRid) {
+      const row = appointmentRows.find(
+        a => String(a.rcChannelId || '') === String(appointmentRid),
+      );
+      if (row) {
+        openAppointment(row);
+        localStorage.removeItem('wl_open_appointment_rc_rid');
+      }
+    }
     const dmUserRaw = localStorage.getItem('wl_open_dm_userid');
     if (dmUserRaw) {
       try {
@@ -1115,7 +1187,7 @@ const StudentChat: React.FC<{ section?: ChatSection }> = ({ section = CHAT_SECTI
       }
       localStorage.removeItem('wl_open_dm_userid');
     }
-  }, [privateRows, communityChats, seminarRows, openPrivateDm, openCommunity, openSeminar, openDmByUserId]);
+  }, [privateRows, communityChats, seminarRows, appointmentRows, openPrivateDm, openCommunity, openSeminar, openAppointment, openDmByUserId]);
 
   useEffect(() => {
     consumeStorageChatNav();
@@ -1512,7 +1584,7 @@ const StudentChat: React.FC<{ section?: ChatSection }> = ({ section = CHAT_SECTI
           </div>
           ) : null}
 
-          {showsAppointments(section) ? (
+          {showsDirect(section) ? (
           <div className="flex min-h-0 flex-1 flex-col pt-1">
             <div className="mb-2 flex items-center justify-end gap-2">
               {(() => {
@@ -1733,6 +1805,86 @@ const StudentChat: React.FC<{ section?: ChatSection }> = ({ section = CHAT_SECTI
                     className={`mb-1 flex w-full items-start gap-2 rounded-xl px-3 py-2 text-left text-xs transition-colors ${rowTone}`}
                   >
                     {inner}
+                  </button>
+                );
+              })
+            )}
+            </div>
+          </div>
+          ) : null}
+
+          {showsAppointments(section) ? (
+          <div className="flex min-h-0 flex-1 flex-col pt-1">
+            <div className="shrink-0 rounded-lg bg-slate-100 px-3 py-2 mb-2 flex items-center gap-2 text-xs text-slate-500">
+              <MessageCircle className="h-3.5 w-3.5 text-slate-500 shrink-0" aria-hidden />
+              <input
+                type="text"
+                value={appointmentQuery}
+                onChange={e => setAppointmentQuery(e.target.value)}
+                placeholder="Search by appointment or person…"
+                aria-label="Search 1:1 appointments by name or person"
+                className="flex-1 min-w-0 bg-transparent outline-none text-xs text-slate-700 placeholder:text-slate-400"
+              />
+            </div>
+            <div className="wl-chat-scroll min-h-0 flex-1 overflow-y-auto pr-1">
+            {filteredAppointments.length === 0 ? (
+              <p className="px-2 py-3 text-[11px] text-slate-500">
+                {appointmentQuery.trim()
+                  ? 'No 1:1 appointments match your search.'
+                  : 'No 1:1 appointment chats yet. A chat opens here once an appointment is confirmed.'}
+              </p>
+            ) : (
+              filteredAppointments.map(row => {
+                const active = isCommunityActive(row._id);
+                const arid = row.rcChannelId ? String(row.rcChannelId) : '';
+                const unreadCount = arid
+                  ? Math.max(
+                      Number(dmUnreadByRid?.[arid] || 0),
+                      Number(rcUnreadByRid?.[arid] || 0),
+                      Number(liveGroupUnread?.[arid] || 0),
+                    )
+                  : 0;
+                const hasUnread = unreadCount > 0;
+                const rowTone = active
+                  ? 'bg-[#E8EEF4] text-slate-900'
+                  : hasUnread
+                    ? 'bg-amber-50/80 text-slate-900 ring-1 ring-amber-200/80 hover:bg-amber-50'
+                    : 'hover:bg-slate-100 text-slate-700';
+                const initials = getInitials(row.withName || row.name);
+                const palette = getAvatarPalette(initials);
+                return (
+                  <button
+                    key={row._id}
+                    type="button"
+                    onClick={() => openAppointment(row)}
+                    className={`mb-1 flex w-full items-start gap-2 rounded-xl px-3 py-2 text-left text-xs transition-colors ${rowTone}`}
+                  >
+                    <div className="mt-0.5 shrink-0">
+                      <div
+                        className="flex h-9 w-9 items-center justify-center rounded-full text-xs font-semibold"
+                        style={{ background: palette.bg, color: palette.text }}
+                      >
+                        {initials}
+                      </div>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="truncate font-semibold text-[11px]">{row.name}</p>
+                        {hasUnread ? (
+                          <span
+                            className="ml-1 shrink-0 rounded-full bg-amber-500/20 px-1.5 text-[10px] font-semibold text-amber-800"
+                            title="New appointment messages"
+                            aria-label={`${unreadCount > 99 ? '99+' : unreadCount} new appointment messages`}
+                          >
+                            {unreadCount > 99 ? '99+' : `${unreadCount}+`}
+                          </span>
+                        ) : null}
+                      </div>
+                      {/* The person is identity, not a preview, so unread never replaces it. */}
+                      <p className="mt-0.5 truncate text-[10px] text-slate-500">
+                        {row.withName ? `With ${row.withName}` : '1:1 appointment'}
+                      </p>
+                    </div>
                   </button>
                 );
               })

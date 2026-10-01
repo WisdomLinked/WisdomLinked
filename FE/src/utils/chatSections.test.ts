@@ -10,6 +10,7 @@ import {
   sectionForChatTarget,
   showsAppointments,
   showsCommunities,
+  showsDirect,
   showsSeminars,
 } from './chatSections';
 
@@ -44,10 +45,16 @@ describe('selecting one section', () => {
     expect(all.filter(fn => fn(section))).toHaveLength(1);
   });
 
-  it('shows none of the three on direct messages, which is a placeholder for now', () => {
+  it('shows only the people list on direct messages', () => {
+    expect(showsDirect('direct')).toBe(true);
     expect(showsCommunities('direct')).toBe(false);
     expect(showsAppointments('direct')).toBe(false);
     expect(showsSeminars('direct')).toBe(false);
+  });
+
+  it('keeps direct messages and appointments as separate lists', () => {
+    expect(showsDirect('appointments')).toBe(false);
+    expect(showsAppointments('direct')).toBe(false);
   });
 
   it('prompts to pick a chat once a section is open', () => {
@@ -81,7 +88,10 @@ describe('panel copy', () => {
   it('matches the empty-state line to what the section opens', () => {
     expect(chatSectionEmptySubtitle('communities')).toBe('Community rooms open in this panel.');
     expect(chatSectionEmptySubtitle('seminars')).toBe('Seminar chats open in this panel.');
-    expect(chatSectionEmptySubtitle('appointments')).toBe('Direct messages open in this panel.');
+    expect(chatSectionEmptySubtitle('appointments')).toBe(
+      'Your 1:1 appointment chats open in this panel.',
+    );
+    expect(chatSectionEmptySubtitle('direct')).toBe('Direct messages open in this panel.');
   });
 
   it('heads the list panel with the selected section', () => {
@@ -93,8 +103,12 @@ describe('panel copy', () => {
 });
 
 describe('deep links land where their conversation is listed', () => {
-  it('sends a DM handoff to 1:1 appointments', () => {
-    expect(sectionForChatTarget('dm')).toBe('appointments');
+  it('sends a DM handoff to direct messages, not to appointments', () => {
+    expect(sectionForChatTarget('dm')).toBe('direct');
+  });
+
+  it('sends an appointment handoff to 1:1 appointments', () => {
+    expect(sectionForChatTarget('appointment')).toBe('appointments');
   });
 
   it('sends a community handoff to communities', () => {
@@ -106,10 +120,17 @@ describe('deep links land where their conversation is listed', () => {
   });
 
   it('never drops a handoff on a section that would hide its row', () => {
-    for (const target of ['dm', 'community', 'seminar'] as const) {
+    const listsTheRow = {
+      dm: showsDirect,
+      appointment: showsAppointments,
+      seminar: showsSeminars,
+      community: showsCommunities,
+    } as const;
+
+    for (const target of ['dm', 'appointment', 'community', 'seminar'] as const) {
       const landed = sectionForChatTarget(target);
       expect(isChatSectionUnset(landed)).toBe(false);
-      expect(landed).not.toBe('direct');
+      expect(listsTheRow[target](landed)).toBe(true);
     }
   });
 });

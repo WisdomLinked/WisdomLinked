@@ -16,9 +16,35 @@ describe('chatTargetsByRid', () => {
     expect(chatTargetsByRid(['rid-dm'], [], [])).toEqual({ 'rid-dm': 'dm' });
   });
 
-  it('omits 1:1 appointment chats, which have no row to open', () => {
-    const map = chatTargetsByRid([], [{ rcChannelId: 'rid-appt', type: 'individual' }], []);
-    expect(map['rid-appt']).toBeUndefined();
+  it('routes a confirmed 1:1 appointment room to the appointments list', () => {
+    const map = chatTargetsByRid(
+      [],
+      [{ rcChannelId: 'rid-appt', type: 'individual', status: 'active' }],
+      [],
+    );
+    expect(map).toEqual({ 'rid-appt': 'appointment' });
+  });
+
+  it('omits an appointment that has no row to open, so no dead badge is shown', () => {
+    const map = chatTargetsByRid(
+      [],
+      [
+        { rcChannelId: 'rid-pending', type: 'individual', status: 'pending' },
+        { rcChannelId: 'rid-cancelled', type: 'individual', status: 'cancelled' },
+        { rcChannelId: 'rid-nostatus', type: 'individual' },
+      ],
+      [],
+    );
+    expect(map).toEqual({});
+  });
+
+  it('keeps a DM and an appointment as separate rooms', () => {
+    const map = chatTargetsByRid(
+      ['rid-dm'],
+      [{ rcChannelId: 'rid-appt', type: 'individual', status: 'active' }],
+      [],
+    );
+    expect(map).toEqual({ 'rid-dm': 'dm', 'rid-appt': 'appointment' });
   });
 
   it('omits a room the user has no chat for, so no dead notification is shown', () => {

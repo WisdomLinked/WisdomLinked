@@ -15,7 +15,7 @@ import {
 } from '../utils/sessionDuration';
 import { paymentWindowOpen } from '../utils/bookingLifecycle';
 import { displayRoomLabel } from '../utils/chatRoomLabel';
-import { chatTargetsByRid } from '../utils/chatNavTarget';
+import { chatTargetsByRid, type ChatNavTarget } from '../utils/chatNavTarget';
 import { unreadByChatSection } from '../utils/chatSectionUnread';
 import { fetchDmUnreadSnapshot, fetchChatUserProfile } from '../api/chatApi';
 import ProfileModal from './Dashboard/Messenger/Messages/ProfileModal';
@@ -453,6 +453,7 @@ function deriveUpcomingSessions(u: any): {
       };
     } else if (isSession) {
       considerOneToOne({
+        id: String(g?._id ?? ''),
         title: g?.name || '1:1 session',
         startAt,
         durationMinutes: sessionDurationMinutes(g) ?? undefined,
@@ -505,7 +506,7 @@ export default function StudentDashboard() {
   useEffect(() => {
     window.localStorage.setItem('studentChatSection', chatSection);
   }, [chatSection]);
-  const openChatSection = useCallback((target: 'dm' | 'community' | 'seminar') => {
+  const openChatSection = useCallback((target: ChatNavTarget) => {
     setChatSection(sectionForChatTarget(target));
   }, []);
   const goToDashboardTab = useCallback(() => setActiveItem('dashboard'), []);
@@ -1374,6 +1375,7 @@ export default function StudentDashboard() {
             onClick: () => {
               if (target === 'dm') localStorage.setItem('wl_open_dm_rid', rid);
               else if (target === 'seminar') localStorage.setItem('wl_open_seminar_rc_rid', rid);
+              else if (target === 'appointment') localStorage.setItem('wl_open_appointment_rc_rid', rid);
               else localStorage.setItem('wl_open_community_rc_rid', rid);
               window.dispatchEvent(new Event('wl-open-chat-nav'));
               openChatSection(target);
@@ -1384,8 +1386,6 @@ export default function StudentDashboard() {
     [filteredUnreadByRid, roomLabelByRid, chatTargetByRid],
   );
 
-  // Calendar "Join" routing: seminars open their seminar group chat; 1:1s open a
-  // private chat with the expert. StudentChat consumes these signals on entry.
   const handleJoinMeeting = (meeting: CalendarMeeting) => {
     if (meeting.type === 'seminar') {
       if (meeting.groupId) {
@@ -1396,19 +1396,11 @@ export default function StudentDashboard() {
       setActiveItem('chat');
       return;
     }
-    if (meeting.peerUserId) {
-      localStorage.setItem(
-        'wl_open_dm_userid',
-        JSON.stringify({
-          id: meeting.peerUserId,
-          title: meeting.peerName || 'Expert',
-          image: meeting.peerImage ?? null,
-        }),
-      );
-      window.dispatchEvent(new Event('wl-open-chat-nav'));
+    if (meeting.raw?.type === 'individual') {
+      openAppointmentChat(meeting.status === 'confirmed' ? meeting.id : undefined);
+    } else {
+      openMentorDm(meeting.peerUserId, meeting.peerName);
     }
-    openChatSection('dm');
-    setActiveItem('chat');
   };
 
   const openSeminarChat = (seminarId?: string) => {
@@ -1417,6 +1409,21 @@ export default function StudentDashboard() {
       window.dispatchEvent(new Event('wl-open-chat-nav'));
     }
     openChatSection('seminar');
+    setActiveItem('chat');
+  };
+
+  /**
+   * A confirmed 1:1 appointment has its own chat room, so it opens there rather than in a
+   * DM with the expert. Routing it to a DM is also what created one: `joinPrivateChat`
+   * provisions a Conversation on first open, which is how appointment talk and direct
+   * messages ended up in the same thread.
+   */
+  const openAppointmentChat = (appointmentId?: string) => {
+    if (appointmentId) {
+      localStorage.setItem('wl_open_appointment_id', String(appointmentId));
+      window.dispatchEvent(new Event('wl-open-chat-nav'));
+    }
+    openChatSection('appointment');
     setActiveItem('chat');
   };
 
@@ -1461,6 +1468,7 @@ export default function StudentDashboard() {
   const handleUpcomingJoinSession = (session: UpcomingModalSession) => {
     setUpcomingModal(null);
     if (upcomingModal?.kind === 'seminar') openSeminarChat(session.id);
+    else if (session.detail?.type === 'individual') openAppointmentChat(session.id);
     else openMentorDm(session.peerUserId, session.with);
   };
 
@@ -1677,9 +1685,12 @@ export default function StudentDashboard() {
                     nextSeminar={nextSeminar}
                     nextOneToOne={nextOneToOne}
                     onJoinSeminar={() => openSeminarChat(nextSeminar?.id)}
-                    onJoinOneToOne={() =>
-                      openMentorDm(nextOneToOne?.peerUserId, nextOneToOne?.title)
-                    }
+                    onJoinOneToOne={() => {
+                      if (nextOneToOne?.id) openAppointmentChat(
+                        nextOneToOne.pending ? undefined : nextOneToOne.id,
+                      );
+                      else openMentorDm(nextOneToOne?.peerUserId, nextOneToOne?.title);
+                    }}
                   />
                 </div>
               </div>

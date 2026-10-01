@@ -1,3 +1,5 @@
+import type { ChatNavTarget } from './chatNavTarget';
+
 export type ChatSection = 'none' | 'direct' | 'appointments' | 'communities' | 'seminars';
 
 export const CHAT_SECTION_DEFAULT: ChatSection = 'none';
@@ -20,6 +22,8 @@ export const isChatSectionUnset = (section: ChatSection): boolean => section ===
 export const showsCommunities = (section: ChatSection): boolean => section === 'communities';
 
 export const showsAppointments = (section: ChatSection): boolean => section === 'appointments';
+
+export const showsDirect = (section: ChatSection): boolean => section === 'direct';
 
 export const showsSeminars = (section: ChatSection): boolean => section === 'seminars';
 
@@ -50,6 +54,7 @@ export const chatSectionEmptySubtitle = (section: ChatSection): string => {
         case 'seminars':
             return 'Seminar chats open in this panel.';
         case 'appointments':
+            return 'Your 1:1 appointment chats open in this panel.';
         case 'direct':
             return 'Direct messages open in this panel.';
         default:
@@ -57,13 +62,15 @@ export const chatSectionEmptySubtitle = (section: ChatSection): string => {
     }
 };
 
-export const sectionForChatTarget = (target: 'dm' | 'community' | 'seminar'): ChatSection => {
+export const sectionForChatTarget = (target: ChatNavTarget): ChatSection => {
     switch (target) {
         case 'community':
             return 'communities';
         case 'seminar':
             return 'seminars';
-        default:
+        case 'appointment':
             return 'appointments';
+        default:
+            return 'direct';
     }
 };
