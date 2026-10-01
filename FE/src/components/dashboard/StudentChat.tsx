@@ -16,6 +16,7 @@ import {
   withRoomActivity,
   type RoomActivityMap,
 } from '../../utils/chatListOrder';
+import { chatRowPreviewLine } from '../../utils/chatMessagePreview';
 import {
   doGetMyEvents,
   getAllCommunityChats,
@@ -102,6 +103,9 @@ type PrivateRow =
       /** Mongo Conversation id — needed for DM clear/delete actions. */
       conversationId?: string;
       lastMessageAt?: string | null;
+      /** Raw wire text of the newest message, decoded for the row preview. */
+      lastMessageText?: string | null;
+      lastMessageFromMe?: boolean;
     }
   /** Expert: customer from directory search (not necessarily in friends yet). */
   | { kind: 'expertCustomer'; id: string; title: string; lastLine: string; raw: any }
@@ -129,6 +133,9 @@ const StudentChat: React.FC<{ section?: ChatSection }> = ({ section = CHAT_SECTI
   const [resetCurrentEventFlag, setResetCurrentEventFlag] = useState(false);
   const [rcUnreadByRid, setRcUnreadByRid] = useState<Record<string, number>>({});
   const [liveActivityByRid, setLiveActivityByRid] = useState<RoomActivityMap>({});
+  const [livePreviewByRid, setLivePreviewByRid] = useState<
+    Record<string, { text: string; fromMe: boolean }>
+  >({});
 
   const isCustomer =
     userDetails && String(userDetails.role || '').toLowerCase() === 'customer';
@@ -182,6 +189,8 @@ const StudentChat: React.FC<{ section?: ChatSection }> = ({ section = CHAT_SECTI
       rcChannelId?: string;
       conversationId?: string;
       lastMessageAt?: string | null;
+      lastMessageText?: string | null;
+      lastMessageFromMe?: boolean;
     }> = [];
 
     const dcs = userDetails.directConversations ?? [];
@@ -203,6 +212,8 @@ const StudentChat: React.FC<{ section?: ChatSection }> = ({ section = CHAT_SECTI
         rcChannelId: conv.rcChannelId ? String(conv.rcChannelId) : undefined,
         conversationId: convId,
         lastMessageAt: conv?.lastMessageAt ?? null,
+        lastMessageText: conv?.lastMessageText ?? null,
+        lastMessageFromMe: pid(conv?.lastMessageFrom?._id ?? conv?.lastMessageFrom) === me,
       });
     }
 
@@ -440,6 +451,12 @@ const StudentChat: React.FC<{ section?: ChatSection }> = ({ section = CHAT_SECTI
       setLiveActivityByRid(prev =>
         withRoomActivity(prev, rid, Number.isNaN(at) ? Date.now() : at),
       );
+      const body = typeof msg?.msg === 'string' ? msg.msg : '';
+      if (body) {
+        const author = String(msg?.u?.username || '').toLowerCase();
+        const mine = !!author && !!myRcUsernameRef.current && author === myRcUsernameRef.current;
+        setLivePreviewByRid(prev => ({ ...prev, [rid]: { text: body, fromMe: mine } }));
+      }
     });
     return unsub;
   }, [isCustomer, isExpert, isAdmin]);
@@ -490,6 +507,8 @@ const StudentChat: React.FC<{ section?: ChatSection }> = ({ section = CHAT_SECTI
             rcChannelId: p.rcChannelId,
             conversationId: p.conversationId,
             lastMessageAt: p.lastMessageAt ?? null,
+            lastMessageText: p.lastMessageText ?? null,
+            lastMessageFromMe: p.lastMessageFromMe ?? false,
           })),
         );
         if (!cancelled) setPrivateRows(rows);
@@ -521,6 +540,8 @@ const StudentChat: React.FC<{ section?: ChatSection }> = ({ section = CHAT_SECTI
             rcChannelId: p.rcChannelId,
             conversationId: p.conversationId,
             lastMessageAt: p.lastMessageAt ?? null,
+            lastMessageText: p.lastMessageText ?? null,
+            lastMessageFromMe: p.lastMessageFromMe ?? false,
           })),
         );
         if (!cancelled) setPrivateRows([...friendRows, ...dmRows]);
@@ -538,6 +559,8 @@ const StudentChat: React.FC<{ section?: ChatSection }> = ({ section = CHAT_SECTI
             rcChannelId: p.rcChannelId,
             conversationId: p.conversationId,
             lastMessageAt: p.lastMessageAt ?? null,
+            lastMessageText: p.lastMessageText ?? null,
+            lastMessageFromMe: p.lastMessageFromMe ?? false,
           })),
         );
         if (!cancelled) setPrivateRows(rows);
@@ -1663,9 +1686,16 @@ const StudentChat: React.FC<{ section?: ChatSection }> = ({ section = CHAT_SECTI
                   row.kind === 'privateDm' && row.rcChannelId
                     ? Math.max(Number(dmUnreadByRid?.[row.rcChannelId] || 0), Number(rcUnreadByRid?.[row.rcChannelId] || 0))
                     : 0;
+                const livePreview =
+                  row.kind === 'privateDm' && row.rcChannelId
+                    ? livePreviewByRid[row.rcChannelId]
+                    : undefined;
                 const lastLine =
-                  row.kind === 'privateDm' && unreadCount > 0
-                    ? `${unreadCount > 99 ? '99+' : unreadCount}+ new message${unreadCount > 1 ? 's' : ''}`
+                  row.kind === 'privateDm'
+                    ? chatRowPreviewLine(livePreview ? livePreview.text : row.lastMessageText, {
+                        fromMe: livePreview ? livePreview.fromMe : !!row.lastMessageFromMe,
+                        fallback: row.lastLine,
+                      })
                     : row.lastLine;
                 const rowKey =
                   row.kind === 'friend'
@@ -1731,8 +1761,11 @@ const StudentChat: React.FC<{ section?: ChatSection }> = ({ section = CHAT_SECTI
                             {row.missedChats}
                           </span>
                         ) : row.kind === 'privateDm' && unreadCount > 0 ? (
-                          <span className="ml-1 shrink-0 rounded-full bg-amber-500/20 px-1.5 text-[10px] font-semibold text-amber-800">
-                            {(unreadCount > 99 ? '99+' : unreadCount) + '+'}
+                          <span
+                            className="ml-1 shrink-0 rounded-full bg-amber-500/20 px-1.5 text-[10px] font-semibold text-amber-800"
+                            aria-label={`${unreadCount} unread message${unreadCount > 1 ? 's' : ''}`}
+                          >
+                            {unreadCount > 99 ? '99+' : unreadCount}
                           </span>
                         ) : null}
                       </div>
