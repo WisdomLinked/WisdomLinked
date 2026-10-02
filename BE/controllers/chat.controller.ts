@@ -21,6 +21,20 @@ import {
 import { wlDisplayName } from '../utils/wlDisplayName';
 import { prepareMessageForRocketChat } from '../utils/chatReplyPlainText';
 import { safeErrorMessage } from '../utils/httpUserFacingCopy';
+import { searchableRolesFor } from '../utils/chatSearchRoles';
+
+const PREVIEW_SOURCE_MAX_CHARS = 1000;
+
+const truncatePreviewSource = (value: unknown): string | null => {
+    const raw = String(value ?? '');
+    if (!raw) return null;
+    return raw.length > PREVIEW_SOURCE_MAX_CHARS ? raw.slice(0, PREVIEW_SOURCE_MAX_CHARS) : raw;
+};
+
+const asUserObjectId = (value: unknown): string | null => {
+    const raw = String(value ?? '').trim();
+    return /^[0-9a-fA-F]{24}$/.test(raw) ? raw : null;
+};
 
 const Conversation = require('../models/Conversation');
 const GroupChat = require('../models/GroupChat');
@@ -381,6 +395,19 @@ export const sendMessage = async (req: any, res: Response) => {
         }
 
         const storedContent = prepareMessageForRocketChat(content);
+
+        await Conversation.updateOne(
+            { _id: conversation._id },
+            {
+                $set: {
+                    lastMessageAt: new Date(),
+                    lastMessageText: truncatePreviewSource(storedContent),
+                    lastMessageFrom: me._id,
+                },
+            },
+            { timestamps: false },
+        ).exec();
+
         // Build a fake message object just to satisfy the frontend's optimistic update
         const populatedMessage = {
             _id: sentId,
@@ -454,6 +481,43 @@ export const getDirectHistory = async (req: any, res: Response) => {
                     return true;
                 });
                 const messages = await mapRCMessagesToWL(visible, { me, other });
+
+                if (visible.length > 0) {
+                    let maxMs = 0;
+                    for (const m of visible) {
+                        const ms = new Date(normalizeRcMessageTs((m as any).ts)).getTime();
+                        if (!Number.isNaN(ms) && ms > maxMs) maxMs = ms;
+                    }
+                    if (maxMs > 0) {
+                        await Conversation.updateOne(
+                            { _id: conversation._id },
+                            { $max: { lastMessageAt: new Date(maxMs) } },
+                            { timestamps: false },
+                        ).exec();
+
+                        const newest = messages[messages.length - 1];
+                        const newestText = truncatePreviewSource(newest?.content);
+                        if (newestText) {
+                            await Conversation.updateOne(
+                                {
+                                    _id: conversation._id,
+                                    $or: [
+                                        { lastMessageAt: null },
+                                        { lastMessageAt: { $lte: new Date(maxMs) } },
+                                    ],
+                                },
+                                {
+                                    $set: {
+                                        lastMessageText: newestText,
+                                        lastMessageFrom: asUserObjectId(newest?.author?._id),
+                                    },
+                                },
+                                { timestamps: false },
+                            ).exec();
+                        }
+                    }
+                }
+
                 return res.status(200).json({ messages });
             }
         }
@@ -637,10 +701,8 @@ export const sendGroupMessage = async (req: any, res: Response) => {
             }
         }
 
-        if (String((groupChat as any).type) === 'community') {
-            const activityAt = new Date();
-            await GroupChat.updateOne({ _id: groupChat._id }, { $set: { lastMessageAt: activityAt } }).exec();
-        }
+        const activityAt = new Date();
+        await GroupChat.updateOne({ _id: groupChat._id }, { $set: { lastMessageAt: activityAt } }).exec();
 
         const populatedMessage = {
             _id: sentId,
@@ -728,7 +790,7 @@ export const getGroupHistory = async (req: any, res: Response) => {
                 }
                 const messages = await mapRCMessagesToWL(visible, undefined, parts);
 
-                if (String((groupChat as any).type) === 'community' && visible.length > 0) {
+                if (visible.length > 0) {
                     let maxMs = 0;
                     for (const m of visible) {
                         const ms = new Date(normalizeRcMessageTs((m as any).ts)).getTime();
@@ -1026,7 +1088,7 @@ export const getDmUnreadSnapshot = async (req: any, res: Response) => {
     }
 };
 
-/** Authenticated private-chat target search (cross-role): experts + students, excluding self/blocked/admin. */
+/** Authenticated private-chat target search: students only see students; experts keep the cross-role result. */
 export const searchPrivateChatUsers = async (req: any, res: Response) => {
     try {
         const { userId } = req.user;
@@ -1035,7 +1097,7 @@ export const searchPrivateChatUsers = async (req: any, res: Response) => {
         const safe = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
         const users = await User.find({
             _id: { $ne: userId },
-            role: { $in: ['expert', 'customer'] },
+            role: { $in: searchableRolesFor(req.user?.role) },
             status: { $ne: 'blocked' },
             $or: [
                 { username: { $regex: safe, $options: 'i' } },

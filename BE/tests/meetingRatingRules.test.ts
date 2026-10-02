@@ -153,3 +153,57 @@ test("meeting duration in seconds is stored as whole minutes", () => {
     assert.equal(mk(0), 0);
     assert.equal(mk(undefined as any), 0);
 });
+
+
+import { isOneToOneGroupScope } from "../utils/meetingRatingRules";
+
+test("1:1 appointment meeting rates mutually, not host-only", () => {
+    const appointment = { groupChatId: "g1", participants: ["expert1", "student1"], startedBy: "expert1" };
+
+    assert.equal(
+        resolveMeetingRatingTargetUserId(appointment, "expert1", { groupChatType: "individual" }),
+        "student1",
+        "the hosting expert rates the student",
+    );
+    assert.equal(
+        resolveMeetingRatingTargetUserId(appointment, "student1", { groupChatType: "individual" }),
+        "expert1",
+        "the student rates the expert",
+    );
+});
+
+test("appointment type is read from a populated groupChatId", () => {
+    const target = resolveMeetingRatingTargetUserId(
+        { groupChatId: { _id: "g1", type: "individual" }, participants: ["expert1", "student1"], startedBy: "expert1" },
+        "expert1",
+    );
+    assert.equal(target, "student1");
+});
+
+test("seminar and community calls stay host-only", () => {
+    const seminar = { groupChatId: "g1", participants: ["u1", "u2", "u3"], startedBy: "u1" };
+    assert.equal(resolveMeetingRatingTargetUserId(seminar, "u1", { groupChatType: "seminar" }), null);
+    assert.equal(resolveMeetingRatingTargetUserId(seminar, "u2", { groupChatType: "seminar" }), "u1");
+    assert.equal(resolveMeetingRatingTargetUserId(seminar, "u1", { groupChatType: "community" }), null);
+});
+
+test("a non-participant still cannot rate an appointment", () => {
+    const target = resolveMeetingRatingTargetUserId(
+        { groupChatId: "g1", participants: ["expert1", "student1"], startedBy: "expert1" },
+        "stranger",
+        { groupChatType: "individual" },
+    );
+    assert.equal(target, null);
+});
+
+test("isOneToOneGroupScope normalizes the type and prefers the explicit one", () => {
+    assert.equal(isOneToOneGroupScope({}, { groupChatType: " Individual " }), true);
+    assert.equal(isOneToOneGroupScope({}, { groupChatType: "seminar" }), false);
+    assert.equal(isOneToOneGroupScope({ groupChatId: { type: "INDIVIDUAL" } }), true);
+    assert.equal(isOneToOneGroupScope({ groupChatId: "g1" }), false, "a bare id tells us nothing");
+    assert.equal(
+        isOneToOneGroupScope({ groupChatId: { type: "individual" } }, { groupChatType: "seminar" }),
+        false,
+        "an explicit type wins over the populated document",
+    );
+});

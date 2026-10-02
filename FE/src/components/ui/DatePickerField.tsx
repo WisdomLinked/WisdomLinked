@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { ChevronLeft, ChevronRight, Calendar as CalendarIcon } from 'lucide-react';
+import { FILTER_CONTROL_CLASS } from './ClearableInput';
 import {
   format,
   parseISO,
@@ -24,6 +25,8 @@ type Props = {
   min?: string;
   id?: string;
   placeholder?: string;
+  /** `filter` matches ClearableInput admin filter height/type. */
+  size?: 'default' | 'filter';
 };
 
 const WEEKDAYS = [
@@ -47,6 +50,7 @@ export default function DatePickerField({
   min,
   id,
   placeholder = 'Select a date',
+  size = 'default',
 }: Props) {
   const [open, setOpen] = useState(false);
   const selected = value ? parseISO(value) : null;
@@ -95,9 +99,13 @@ export default function DatePickerField({
         type="button"
         id={id}
         onClick={() => setOpen(v => !v)}
-        className="flex w-full items-center justify-between rounded-lg border border-gray-200 px-4 py-2.5 text-sm text-gray-800 focus:border-transparent focus:outline-none focus:ring-2 focus:ring-[#234C6A]"
+        className={
+          size === 'filter'
+            ? `flex items-center justify-between ${FILTER_CONTROL_CLASS}`
+            : 'flex w-full items-center justify-between rounded-lg border border-gray-200 px-4 py-2.5 text-sm text-gray-800 focus:border-transparent focus:outline-none focus:ring-2 focus:ring-[#234C6A]'
+        }
       >
-        <span className={selected ? 'text-gray-800' : 'text-gray-400'}>
+        <span className={`min-w-0 truncate ${selected ? 'text-gray-800' : 'text-gray-400'}`}>
           {selected ? format(selected, 'EEE, MMM d, yyyy') : placeholder}
         </span>
         <CalendarIcon className="h-4 w-4 text-[#234C6A]" aria-hidden />

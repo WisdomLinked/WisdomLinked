@@ -6,11 +6,18 @@ import DialogTitle from '@mui/material/DialogTitle';
 import DialogContent from '@mui/material/DialogContent';
 import DialogActions from '@mui/material/DialogActions';
 import Button from '@mui/material/Button';
-import { MessageCircle, Plus, X, CheckCircle2, MoreVertical, UserPlus, ArrowLeft } from 'lucide-react';
+import { MessageCircle, Plus, X, CheckCircle2, MoreVertical, UserPlus, ArrowLeft, Users } from 'lucide-react';
 import Messenger from '../../pages/Dashboard/Messenger/Messenger';
 import { useAppSelector } from '../../store';
 import { onSubscriptionChanged, onNewMessage, normalizeRcStreamRoomMessage, subscribeToRoom } from '../../services/rcRealtime';
 import { toRocketChatUsername } from '../../utils/rocketchatUsername';
+import {
+  sortByRecentActivity,
+  withRoomActivity,
+  type RoomActivityMap,
+} from '../../utils/chatListOrder';
+import { chatRowPreviewLine } from '../../utils/chatMessagePreview';
+import { useResolvedProfileImages } from '../../hooks/useResolvedProfileImages';
 import {
   doGetMyEvents,
   getAllCommunityChats,
@@ -34,16 +41,34 @@ import {
   clearDmUnreadRid,
   resetChatAction,
 } from '../../actions/chatActions';
-import { showErrorAlert, showSuccessAlert, showWarningAlert } from '../../actions/alertActions';
+import { notify } from '../../utils/notify';
 import { updateMe } from '../../actions/authActions';
+import { showErrorAlert, showSuccessAlert } from '../../actions/alertActions';
 import { leaveGroupAction } from '../../actions/groupChatActions';
 import { actionTypes } from '../../actions/types';
 import { isTheEventGoingOn } from '../../actions/common';
 import { pickLiveOrNextOccurrence } from '../../utils/seminarSeriesOccurrence';
+import {
+  type ChatSection,
+  CHAT_SECTION_DEFAULT,
+  chatSectionEmptySubtitle,
+  chatSectionEmptyTitle,
+  chatSectionHeading,
+  isChatSectionUnset,
+  showsAppointments,
+  showsCommunities,
+  showsDirect,
+  showsSeminars,
+} from '../../utils/chatSections';
+import {
+  appointmentChatRows,
+  matchesAppointmentQuery,
+  type AppointmentChatRow,
+} from '../../utils/appointmentChatRows';
 import { resolveProfileImageSrc } from '../../utils/profileImage';
 import { shouldShowMobileMessenger } from '../../utils/mobileChatLayout';
 import { buildOnlineUserIdSet, hasOnlineUserId } from '../../utils/onlinePresence';
-import { getAvatarPalette, getInitials, getPrivateDmStatusDotClass } from '../../utils/avatarColor';
+import { getAvatarPalette, getInitials } from '../../utils/avatarColor';
 import { CommunityRoomAvatar } from './ChatSidebar';
 import { canAdminInitiateDmWithRole } from '../../utils/adminChatRules';
 
@@ -53,6 +78,7 @@ type CommunityRow = {
   name: string;
   missedChats?: number;
   lastLine: string;
+  description: string;
 };
 
 type PrivateRow =
@@ -77,6 +103,10 @@ type PrivateRow =
       rcChannelId?: string;
       /** Mongo Conversation id — needed for DM clear/delete actions. */
       conversationId?: string;
+      lastMessageAt?: string | null;
+      /** Raw wire text of the newest message, decoded for the row preview. */
+      lastMessageText?: string | null;
+      lastMessageFromMe?: boolean;
     }
   /** Expert: customer from directory search (not necessarily in friends yet). */
   | { kind: 'expertCustomer'; id: string; title: string; lastLine: string; raw: any }
@@ -85,7 +115,7 @@ type PrivateRow =
   /** Admin: expert from directory search (admins cannot initiate with students). */
   | { kind: 'adminSearchedExpert'; id: string; title: string; lastLine: string; raw: any };
 
-const StudentChat: React.FC = () => {
+const StudentChat: React.FC<{ section?: ChatSection }> = ({ section = CHAT_SECTION_DEFAULT }) => {
   const dispatch = useDispatch();
   const {
     auth: { userDetails },
@@ -95,12 +125,18 @@ const StudentChat: React.FC = () => {
 
   const [communityQuery, setCommunityQuery] = useState('');
   const [privateQuery, setPrivateQuery] = useState('');
+  const [appointmentQuery, setAppointmentQuery] = useState('');
   const [seminarQuery, setSeminarQuery] = useState('');
   const [communityChats, setCommunityChats] = useState<CommunityRow[]>([]);
+  const [joiningCommunity, setJoiningCommunity] = useState(false);
   const [privateRows, setPrivateRows] = useState<PrivateRow[]>([]);
   const [events, setEvents] = useState<any[]>([]);
   const [resetCurrentEventFlag, setResetCurrentEventFlag] = useState(false);
   const [rcUnreadByRid, setRcUnreadByRid] = useState<Record<string, number>>({});
+  const [liveActivityByRid, setLiveActivityByRid] = useState<RoomActivityMap>({});
+  const [livePreviewByRid, setLivePreviewByRid] = useState<
+    Record<string, { text: string; fromMe: boolean }>
+  >({});
 
   const isCustomer =
     userDetails && String(userDetails.role || '').toLowerCase() === 'customer';
@@ -124,6 +160,7 @@ const StudentChat: React.FC = () => {
   const [addToCommunityTarget, setAddToCommunityTarget] = useState<Extract<PrivateRow, { kind: 'privateDm' }> | null>(null);
   const [addingToCommunityId, setAddingToCommunityId] = useState<string | null>(null);
   const [newName, setNewName] = useState('');
+  const [newTitleLine, setNewTitleLine] = useState('');
   const [newDescription, setNewDescription] = useState('');
   const [newOpenToAll, setNewOpenToAll] = useState(true);
   const [newOpenToFollowers, setNewOpenToFollowers] = useState(false);
@@ -152,6 +189,9 @@ const StudentChat: React.FC = () => {
       peerRole?: string;
       rcChannelId?: string;
       conversationId?: string;
+      lastMessageAt?: string | null;
+      lastMessageText?: string | null;
+      lastMessageFromMe?: boolean;
     }> = [];
 
     const dcs = userDetails.directConversations ?? [];
@@ -172,6 +212,9 @@ const StudentChat: React.FC = () => {
         peerRole,
         rcChannelId: conv.rcChannelId ? String(conv.rcChannelId) : undefined,
         conversationId: convId,
+        lastMessageAt: conv?.lastMessageAt ?? null,
+        lastMessageText: conv?.lastMessageText ?? null,
+        lastMessageFromMe: pid(conv?.lastMessageFrom?._id ?? conv?.lastMessageFrom) === me,
       });
     }
 
@@ -205,6 +248,17 @@ const StudentChat: React.FC = () => {
     return rows;
   }, [userDetails?.groupChats]);
 
+  const appointmentRows = useMemo(
+    () => appointmentChatRows(userDetails?.groupChats, currentUserId),
+    [userDetails?.groupChats, currentUserId],
+  );
+
+  const appointmentPeople = useMemo(
+    () => appointmentRows.map(row => ({ image: row.withImage })),
+    [appointmentRows],
+  );
+  const appointmentImages = useResolvedProfileImages(appointmentPeople);
+
   const loadCommunityChats = React.useCallback(async () => {
     const uid = userDetails?._id ?? userDetails?.id ?? userDetails?.userId;
     if (!uid) return;
@@ -219,15 +273,16 @@ const StudentChat: React.FC = () => {
             _id: chat._id,
             name: chat.name || 'Community chat',
             missedChats: missed,
-            lastLine: chat.description || 'Community room',
+            lastLine: chat.titleLine || '',
+            description: chat.description || '',
           };
         });
         setCommunityChats(rows);
       } else if (response?.error || response?.message) {
-        dispatch(showErrorAlert(response.error || response.message));
+        notify.error(response.error || response.message);
       }
     } catch (e: any) {
-      dispatch(showErrorAlert(e?.message || 'Failed to fetch community chats'));
+      notify.error(e?.message || 'Failed to fetch community chats');
     }
   }, [currentUserId, userDetails?.missedChats, dispatch]);
 
@@ -348,6 +403,12 @@ const StudentChat: React.FC = () => {
     });
   }, [seminarRows]);
 
+  useEffect(() => {
+    appointmentRows.forEach(a => {
+      if (a.rcChannelId) subscribeToRoom(String(a.rcChannelId));
+    });
+  }, [appointmentRows]);
+
   /**
    * Live unread for seminar + community rooms, counted from the RC message stream.
    * RC's per-subscription `unread` (onSubscriptionChanged / snapshot) is reliable for 1:1 DMs
@@ -366,8 +427,11 @@ const StudentChat: React.FC = () => {
     seminarRows.forEach(r => {
       if (r.rcChannelId) s.add(String(r.rcChannelId));
     });
+    appointmentRows.forEach(r => {
+      if (r.rcChannelId) s.add(String(r.rcChannelId));
+    });
     groupRidSetRef.current = s;
-  }, [communityChats, seminarRows]);
+  }, [communityChats, seminarRows, appointmentRows]);
 
   const activeGroupRidRef = React.useRef<string>('');
   useEffect(() => {
@@ -382,6 +446,27 @@ const StudentChat: React.FC = () => {
       ? toRocketChatUsername(userDetails.email).toLowerCase()
       : '';
   }, [userDetails?.email]);
+  useEffect(() => {
+    if (!isCustomer && !isExpert && !isAdmin) return;
+    const unsub = onNewMessage((raw: any) => {
+      const msg = normalizeRcStreamRoomMessage(raw);
+      const t = String(msg?.t || '');
+      if (t === 'rm' || t === 'message_removed') return;
+      const rid = msg?.rid ? String(msg.rid) : '';
+      if (!rid) return;
+      const at = msg?.ts ? new Date(msg.ts).getTime() : Date.now();
+      setLiveActivityByRid(prev =>
+        withRoomActivity(prev, rid, Number.isNaN(at) ? Date.now() : at),
+      );
+      const body = typeof msg?.msg === 'string' ? msg.msg : '';
+      if (body) {
+        const author = String(msg?.u?.username || '').toLowerCase();
+        const mine = !!author && !!myRcUsernameRef.current && author === myRcUsernameRef.current;
+        setLivePreviewByRid(prev => ({ ...prev, [rid]: { text: body, fromMe: mine } }));
+      }
+    });
+    return unsub;
+  }, [isCustomer, isExpert, isAdmin]);
 
   useEffect(() => {
     if (!isCustomer && !isExpert && !isAdmin) return;
@@ -428,6 +513,9 @@ const StudentChat: React.FC = () => {
             peerRole: p.peerRole,
             rcChannelId: p.rcChannelId,
             conversationId: p.conversationId,
+            lastMessageAt: p.lastMessageAt ?? null,
+            lastMessageText: p.lastMessageText ?? null,
+            lastMessageFromMe: p.lastMessageFromMe ?? false,
           })),
         );
         if (!cancelled) setPrivateRows(rows);
@@ -458,6 +546,9 @@ const StudentChat: React.FC = () => {
             peerRole: p.peerRole,
             rcChannelId: p.rcChannelId,
             conversationId: p.conversationId,
+            lastMessageAt: p.lastMessageAt ?? null,
+            lastMessageText: p.lastMessageText ?? null,
+            lastMessageFromMe: p.lastMessageFromMe ?? false,
           })),
         );
         if (!cancelled) setPrivateRows([...friendRows, ...dmRows]);
@@ -474,6 +565,9 @@ const StudentChat: React.FC = () => {
             peerRole: p.peerRole,
             rcChannelId: p.rcChannelId,
             conversationId: p.conversationId,
+            lastMessageAt: p.lastMessageAt ?? null,
+            lastMessageText: p.lastMessageText ?? null,
+            lastMessageFromMe: p.lastMessageFromMe ?? false,
           })),
         );
         if (!cancelled) setPrivateRows(rows);
@@ -609,11 +703,11 @@ const StudentChat: React.FC = () => {
         return [...prev, ...followers.filter((f: { id: string }) => !seen.has(f.id))];
       });
       if (followers.length === 0) {
-        dispatch(showWarningAlert('You have no followers yet. Add members manually below.'));
+        notify.warning('You have no followers yet. Add members manually below.');
       }
     } catch {
       setNewOpenToFollowers(false);
-      dispatch(showErrorAlert('Failed to load your followers. Please try again.'));
+      notify.error('Failed to load your followers. Please try again.');
     } finally {
       setLoadingFollowers(false);
     }
@@ -742,24 +836,55 @@ const StudentChat: React.FC = () => {
 
   const filteredCommunity = useMemo(() => {
     const q = communityQuery.trim().toLowerCase();
-    if (!q) return communityChats;
-    return communityChats.filter(
-      c =>
-        c.name.toLowerCase().includes(q) ||
-        c.lastLine.toLowerCase().includes(q),
+    const matched = !q
+      ? communityChats
+      : communityChats.filter(
+          c =>
+            c.name.toLowerCase().includes(q) ||
+            c.lastLine.toLowerCase().includes(q),
+        );
+    return sortByRecentActivity(
+      matched,
+      c => ({ roomId: c.raw?.rcChannelId, storedAt: c.raw?.lastMessageAt }),
+      liveActivityByRid,
     );
-  }, [communityChats, communityQuery]);
+  }, [communityChats, communityQuery, liveActivityByRid]);
 
   const filteredSeminars = useMemo(() => {
     const q = seminarQuery.trim().toLowerCase();
-    if (!q) return seminarRows;
-    return seminarRows.filter(
-      s => s.name.toLowerCase().includes(q) || s.lastLine.toLowerCase().includes(q),
+    const matched = !q
+      ? seminarRows
+      : seminarRows.filter(
+          s => s.name.toLowerCase().includes(q) || s.lastLine.toLowerCase().includes(q),
+        );
+    return sortByRecentActivity(
+      matched,
+      s => ({ roomId: s.rcChannelId, storedAt: s.raw?.lastMessageAt }),
+      liveActivityByRid,
     );
-  }, [seminarRows, seminarQuery]);
+  }, [seminarRows, seminarQuery, liveActivityByRid]);
+
+  const filteredAppointments = useMemo(() => {
+    const matched = appointmentRows.filter(r => matchesAppointmentQuery(r, appointmentQuery));
+    return sortByRecentActivity(
+      matched,
+      a => ({ roomId: a.rcChannelId, storedAt: a.raw?.lastMessageAt }),
+      liveActivityByRid,
+    );
+  }, [appointmentRows, appointmentQuery, liveActivityByRid]);
+
+  const privateRowActivity = React.useCallback(
+    (r: PrivateRow) =>
+      r.kind === 'privateDm'
+        ? { roomId: r.rcChannelId, storedAt: r.lastMessageAt }
+        : {},
+    [],
+  );
 
   const filteredPrivate = useMemo(() => {
     const q = privateQuery.trim().toLowerCase();
+    const ordered = (rows: PrivateRow[]) =>
+      sortByRecentActivity(rows, privateRowActivity, liveActivityByRid);
 
     if (isExpert) {
       const friendRows = privateRows.filter((r): r is Extract<PrivateRow, { kind: 'friend' }> => r.kind === 'friend');
@@ -784,7 +909,7 @@ const StudentChat: React.FC = () => {
         (r): r is Extract<PrivateRow, { kind: 'expertCustomer' }> =>
           r.kind === 'expertCustomer' && !friendIds.has(r.id) && !dmIds.has(r.id),
       );
-      return [...friendFiltered, ...dmFiltered, ...extras];
+      return [...ordered([...friendFiltered, ...dmFiltered]), ...extras];
     }
 
     if (isCustomer || isAdmin) {
@@ -799,7 +924,7 @@ const StudentChat: React.FC = () => {
             }
             return row.title.toLowerCase().includes(q) || row.lastLine.toLowerCase().includes(q);
           });
-      if (!q) return localFiltered;
+      if (!q) return ordered(localFiltered);
       const existingIds = new Set(
         localFiltered.map(r => (r.kind === 'privateDm' ? r.otherUserId : r.id)),
       );
@@ -807,11 +932,11 @@ const StudentChat: React.FC = () => {
         (r): r is Extract<PrivateRow, { kind: 'studentSearchedExpert' | 'adminSearchedExpert' }> =>
           (r.kind === 'studentSearchedExpert' || r.kind === 'adminSearchedExpert') && !existingIds.has(r.id),
       );
-      return [...localFiltered, ...extras];
+      return [...ordered(localFiltered), ...extras];
     }
 
-    if (!q) return privateRows;
-    return privateRows.filter(row => {
+    if (!q) return ordered(privateRows);
+    return ordered(privateRows.filter(row => {
       if (row.kind === 'friend') {
         return (
           row.title.toLowerCase().includes(q) ||
@@ -819,8 +944,18 @@ const StudentChat: React.FC = () => {
         );
       }
       return row.title.toLowerCase().includes(q) || row.lastLine.toLowerCase().includes(q);
-    });
-  }, [privateRows, privateQuery, isExpert, isCustomer, isAdmin, expertCustomerSearchRows, studentExpertSearchRows]);
+    }));
+  }, [
+    privateRows,
+    privateQuery,
+    isExpert,
+    isCustomer,
+    isAdmin,
+    expertCustomerSearchRows,
+    studentExpertSearchRows,
+    liveActivityByRid,
+    privateRowActivity,
+  ]);
 
   const openCommunity = React.useCallback(
     async (row: CommunityRow) => {
@@ -841,7 +976,7 @@ const StudentChat: React.FC = () => {
             dispatch(updateMe() as any);
             await loadCommunityChats();
           } else if (res?.error) {
-            dispatch(showErrorAlert(res.error));
+            notify.error(res.error);
           }
         } catch {
           /* may already be a member */
@@ -860,30 +995,36 @@ const StudentChat: React.FC = () => {
         payload: { receiverId: row._id, count: 0 },
       });
     },
-    [dispatch, isExpert, loadCommunityChats, clearLiveGroupUnread],
+    [dispatch, clearLiveGroupUnread, isExpert, loadCommunityChats],
   );
 
   const onCreateCommunity = async () => {
     if (!newName.trim()) {
-      dispatch(showErrorAlert('Community name is required'));
+      notify.error('Community name is required');
+      return;
+    }
+    if (!newTitleLine.trim()) {
+      notify.error('Title line is required');
       return;
     }
     if (!newOpenToAll && communityInviteSelected.length === 0) {
-      dispatch(showErrorAlert('Add at least one member, or turn on “Open to all users”.'));
+      notify.error('Add at least one member, or turn on “Open to all users”.');
       return;
     }
     setCreating(true);
     try {
       const res: any = await createCommunityChat({
         name: newName.trim(),
+        titleLine: newTitleLine.trim(),
         description: newDescription.trim() || undefined,
         isOpenToAll: newOpenToAll,
         participants: !newOpenToAll ? communityInviteSelected.map(p => p.id) : undefined,
       });
       if (res?.status === 'SUCCESS') {
-        dispatch(showSuccessAlert('Community created'));
+        notify.success('Community created');
         setCreateOpen(false);
         setNewName('');
+        setNewTitleLine('');
         setNewDescription('');
         setNewOpenToAll(true);
         setNewOpenToFollowers(false);
@@ -894,7 +1035,7 @@ const StudentChat: React.FC = () => {
         dispatch(updateMe() as any);
         await loadCommunityChats();
       } else {
-        dispatch(showErrorAlert(res?.error || 'Failed to create community'));
+        notify.error(res?.error || 'Failed to create community');
       }
     } finally {
       setCreating(false);
@@ -945,10 +1086,34 @@ const StudentChat: React.FC = () => {
           }),
         );
       } catch (e: any) {
-        dispatch(showErrorAlert(e?.message || 'Failed to start private chat'));
+        notify.error(e?.message || 'Failed to start private chat');
       }
     },
     [dispatch],
+  );
+
+  const openAppointment = React.useCallback(
+    (row: AppointmentChatRow) => {
+      const rid = row.rcChannelId;
+      if (rid) {
+        dispatch(clearDmUnreadRid(rid));
+        setRcUnreadByRid(prev => {
+          const next = { ...prev };
+          delete next[rid];
+          return next;
+        });
+        clearLiveGroupUnread(rid);
+      }
+      dispatch(
+        setChosenGroupChatDetails({
+          ...row.raw,
+          groupId: row._id,
+          groupName: row.name,
+          name: row.name,
+        } as any),
+      );
+    },
+    [dispatch, clearLiveGroupUnread],
   );
 
   /** Open a seminar group chat, lazily provisioning its RC channel for older seminars. */
@@ -1014,6 +1179,32 @@ const StudentChat: React.FC = () => {
         localStorage.removeItem('wl_open_seminar_id');
       }
     }
+    const seminarRid = localStorage.getItem('wl_open_seminar_rc_rid');
+    if (seminarRid) {
+      const row = seminarRows.find(s => String(s.rcChannelId || '') === String(seminarRid));
+      if (row) {
+        void openSeminar(row);
+        localStorage.removeItem('wl_open_seminar_rc_rid');
+      }
+    }
+    const appointmentId = localStorage.getItem('wl_open_appointment_id');
+    if (appointmentId) {
+      const row = appointmentRows.find(a => String(a._id) === String(appointmentId));
+      if (row) {
+        openAppointment(row);
+        localStorage.removeItem('wl_open_appointment_id');
+      }
+    }
+    const appointmentRid = localStorage.getItem('wl_open_appointment_rc_rid');
+    if (appointmentRid) {
+      const row = appointmentRows.find(
+        a => String(a.rcChannelId || '') === String(appointmentRid),
+      );
+      if (row) {
+        openAppointment(row);
+        localStorage.removeItem('wl_open_appointment_rc_rid');
+      }
+    }
     const dmUserRaw = localStorage.getItem('wl_open_dm_userid');
     if (dmUserRaw) {
       try {
@@ -1026,7 +1217,7 @@ const StudentChat: React.FC = () => {
       }
       localStorage.removeItem('wl_open_dm_userid');
     }
-  }, [privateRows, communityChats, seminarRows, openPrivateDm, openCommunity, openSeminar, openDmByUserId]);
+  }, [privateRows, communityChats, seminarRows, appointmentRows, openPrivateDm, openCommunity, openSeminar, openAppointment, openDmByUserId]);
 
   useEffect(() => {
     consumeStorageChatNav();
@@ -1116,13 +1307,13 @@ const StudentChat: React.FC = () => {
     const row = privateDmMenuRow;
     closePrivateDmMenu();
     if (!row?.conversationId) {
-      dispatch(showErrorAlert('This chat cannot be removed yet. Open it once so it syncs, then try again.'));
+      notify.error('This chat cannot be removed yet. Open it once so it syncs, then try again.');
       return;
     }
     // "Delete chat" in sidebar = clear thread for me + remove row from sidebar.
     const clearRes = await clearDmThread(row.conversationId);
     if (!clearRes?.success) {
-      dispatch(showErrorAlert((clearRes as { error?: string })?.error || 'Could not delete chat'));
+      notify.error((clearRes as { error?: string })?.error || 'Could not delete chat');
       return;
     }
     const hideRes = await hideDmFromList(row.conversationId);
@@ -1132,9 +1323,9 @@ const StudentChat: React.FC = () => {
         dispatch(resetChatAction());
       }
       dispatch(updateMe() as any);
-      dispatch(showSuccessAlert('Chat deleted for you'));
+      notify.success('Chat deleted for you');
     } else {
-      dispatch(showErrorAlert((hideRes as { error?: string })?.error || 'Chat was cleared, but removing from list failed'));
+      notify.error((hideRes as { error?: string })?.error || 'Chat was cleared, but removing from list failed');
     }
   };
 
@@ -1168,15 +1359,15 @@ const StudentChat: React.FC = () => {
         participantIds: [String(target.otherUserId)],
       });
       if (res?.status === 'SUCCESS' || res?.success) {
-        dispatch(showSuccessAlert(`Added ${target.title} to ${chat.name}`));
+        notify.success(`Added ${target.title} to ${chat.name}`);
         await loadCommunityChats();
         dispatch(updateMe() as any);
         closeAddToCommunityDialog();
       } else {
-        dispatch(showErrorAlert(res?.error || res?.message || 'Could not add member to community'));
+        notify.error(res?.error || res?.message || 'Could not add member to community');
       }
     } catch (e: any) {
-      dispatch(showErrorAlert(e?.response?.data?.error || e?.message || 'Could not add member to community'));
+      notify.error(e?.response?.data?.error || e?.message || 'Could not add member to community');
     } finally {
       setAddingToCommunityId(null);
     }
@@ -1221,7 +1412,7 @@ const StudentChat: React.FC = () => {
         }),
       );
     } catch (e: any) {
-      dispatch(showErrorAlert(e?.message || 'Failed to start private chat'));
+      notify.error(e?.message || 'Failed to start private chat');
     }
   };
 
@@ -1246,15 +1437,45 @@ const StudentChat: React.FC = () => {
   };
   const showMobileMessenger = shouldShowMobileMessenger(chosenChatDetails, chosenGroupChatDetails);
 
+  const pendingJoinCommunity = useMemo(() => {
+    const openId = String(
+      (chosenGroupChatDetails as any)?.groupId ?? (chosenGroupChatDetails as any)?._id ?? '',
+    );
+    if (!openId) return null;
+    const row = communityChats.find(c => String(c._id) === openId);
+    if (!row) return null;
+    return row.raw?.isJoined ? null : row;
+  }, [chosenGroupChatDetails, communityChats]);
+
+  const onJoinCommunity = async () => {
+    if (!pendingJoinCommunity || joiningCommunity) return;
+    setJoiningCommunity(true);
+    try {
+      const res: any = await joinCommunityChat(pendingJoinCommunity._id);
+      if (res?.status === 'SUCCESS') {
+        dispatch(showSuccessAlert('You have joined the community'));
+        dispatch(updateMe() as any);
+        await loadCommunityChats();
+      } else {
+        dispatch(showErrorAlert(res?.error || 'Could not join this community'));
+      }
+    } catch {
+      dispatch(showErrorAlert('Could not join this community'));
+    } finally {
+      setJoiningCommunity(false);
+    }
+  };
+
   return (
     <div className="flex h-full min-h-0 overflow-hidden bg-wl-page text-slate-900">
+      {isChatSectionUnset(section) ? null : (
       <aside className={`${showMobileMessenger ? 'hidden md:flex' : 'flex'} w-full md:w-80 lg:w-96 min-h-0 flex-col border-r border-slate-200 bg-white`}>
         <div className="px-4 pt-4 pb-3 border-b border-slate-200">
           <div className="flex items-center justify-between gap-2">
             <p className="text-xs font-bold uppercase tracking-[0.12em] text-slate-600">
-              Communities
+              {chatSectionHeading(section)}
             </p>
-            {isExpert ? (
+            {isExpert && showsCommunities(section) ? (
               <button
                 type="button"
                 onClick={() => {
@@ -1273,21 +1494,24 @@ const StudentChat: React.FC = () => {
               </button>
             ) : null}
           </div>
-          <div className="mt-2 rounded-lg bg-slate-100 px-3 py-2 flex items-center gap-2 text-xs text-slate-500">
-            <MessageCircle className="h-3.5 w-3.5 text-slate-500 shrink-0" aria-hidden />
-            <input
-              type="text"
-              value={communityQuery}
-              onChange={e => setCommunityQuery(e.target.value)}
-              placeholder="Search by name or last message…"
-              aria-label="Search community chats by title or last message"
-              className="flex-1 min-w-0 bg-transparent outline-none text-xs text-slate-700 placeholder:text-slate-400"
-            />
-          </div>
+          {showsCommunities(section) ? (
+            <div className="mt-2 rounded-lg bg-slate-100 px-3 py-2 flex items-center gap-2 text-xs text-slate-500">
+              <MessageCircle className="h-3.5 w-3.5 text-slate-500 shrink-0" aria-hidden />
+              <input
+                type="text"
+                value={communityQuery}
+                onChange={e => setCommunityQuery(e.target.value)}
+                placeholder="Search by name or last message…"
+                aria-label="Search community chats by title or last message"
+                className="flex-1 min-w-0 bg-transparent outline-none text-xs text-slate-700 placeholder:text-slate-400"
+              />
+            </div>
+          ) : null}
         </div>
-        <div className="wl-chat-scroll flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-3 py-3">
-          <div className="shrink-0">
-            <div className="wl-chat-scroll min-h-[3rem] max-h-[15rem] overflow-y-auto pr-1">
+        <div className="wl-chat-scroll flex min-h-0 flex-1 flex-col gap-4 overflow-hidden px-3 py-3">
+          {showsCommunities(section) ? (
+          <div className="flex min-h-0 flex-1 flex-col">
+            <div className="wl-chat-scroll min-h-0 flex-1 overflow-y-auto pr-1">
             {filteredCommunity.length === 0 ? (
               <p className="px-2 py-3 text-[11px] text-slate-500">
                 {communityQuery.trim()
@@ -1388,10 +1612,11 @@ const StudentChat: React.FC = () => {
             )}
             </div>
           </div>
+          ) : null}
 
-          <div className="shrink-0 pt-1 border-t border-slate-200">
-            <div className="mb-2 flex items-center justify-between gap-2">
-              <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-slate-600">1:1 Appointments</p>
+          {showsDirect(section) ? (
+          <div className="flex min-h-0 flex-1 flex-col pt-1">
+            <div className="mb-2 flex items-center justify-end gap-2">
               {(() => {
                 const n = privateRows.reduce((acc, r) => {
                   if (r.kind === 'privateDm' && r.rcChannelId) {
@@ -1422,7 +1647,7 @@ const StudentChat: React.FC = () => {
                 className="flex-1 min-w-0 bg-transparent outline-none text-xs text-slate-700 placeholder:text-slate-400"
               />
             </div>
-            <div className="wl-chat-scroll min-h-[3rem] max-h-[15rem] overflow-y-auto pr-1">
+            <div className="wl-chat-scroll min-h-0 flex-1 overflow-y-auto pr-1">
             {filteredPrivate.length === 0 ? (
               <p className="px-2 py-3 text-[11px] text-slate-500">
                 {privateQuery.trim()
@@ -1458,7 +1683,6 @@ const StudentChat: React.FC = () => {
                 const displayName = title || '';
                 const initials = getInitials(displayName);
                 const palette = getAvatarPalette(initials);
-                const dmStatusDotClass = getPrivateDmStatusDotClass(online ? 'online' : 'offline');
                 const rowPortrait =
                   row.kind === 'friend' && row.image
                     ? row.image
@@ -1469,9 +1693,16 @@ const StudentChat: React.FC = () => {
                   row.kind === 'privateDm' && row.rcChannelId
                     ? Math.max(Number(dmUnreadByRid?.[row.rcChannelId] || 0), Number(rcUnreadByRid?.[row.rcChannelId] || 0))
                     : 0;
+                const livePreview =
+                  row.kind === 'privateDm' && row.rcChannelId
+                    ? livePreviewByRid[row.rcChannelId]
+                    : undefined;
                 const lastLine =
-                  row.kind === 'privateDm' && unreadCount > 0
-                    ? `${unreadCount > 99 ? '99+' : unreadCount}+ new message${unreadCount > 1 ? 's' : ''}`
+                  row.kind === 'privateDm'
+                    ? chatRowPreviewLine(livePreview ? livePreview.text : row.lastMessageText, {
+                        fromMe: livePreview ? livePreview.fromMe : !!row.lastMessageFromMe,
+                        fallback: row.lastLine,
+                      })
                     : row.lastLine;
                 const rowKey =
                   row.kind === 'friend'
@@ -1518,12 +1749,7 @@ const StudentChat: React.FC = () => {
                           </div>
                         )}
 
-                        {row.kind === 'privateDm' ? (
-                          <span
-                            className={`absolute bottom-0 right-0 z-10 h-2.5 w-2.5 rounded-full border-2 border-white ${dmStatusDotClass}`}
-                            aria-hidden
-                          />
-                        ) : online ? (
+                        {online ? (
                           <span
                             className="pointer-events-none absolute bottom-0 right-0 z-10 h-2.5 w-2.5 rounded-full border-2 border-white bg-[#1D9E75]"
                             aria-hidden
@@ -1542,8 +1768,11 @@ const StudentChat: React.FC = () => {
                             {row.missedChats}
                           </span>
                         ) : row.kind === 'privateDm' && unreadCount > 0 ? (
-                          <span className="ml-1 shrink-0 rounded-full bg-amber-500/20 px-1.5 text-[10px] font-semibold text-amber-800">
-                            {(unreadCount > 99 ? '99+' : unreadCount) + '+'}
+                          <span
+                            className="ml-1 shrink-0 rounded-full bg-amber-500/20 px-1.5 text-[10px] font-semibold text-amber-800"
+                            aria-label={`${unreadCount} unread message${unreadCount > 1 ? 's' : ''}`}
+                          >
+                            {unreadCount > 99 ? '99+' : unreadCount}
                           </span>
                         ) : null}
                       </div>
@@ -1622,11 +1851,101 @@ const StudentChat: React.FC = () => {
             )}
             </div>
           </div>
+          ) : null}
 
-          <div className="flex shrink-0 flex-col pt-1 border-t border-slate-200">
-            <div className="mb-2 flex items-center justify-between gap-2">
-              <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-slate-600">Seminars</p>
+          {showsAppointments(section) ? (
+          <div className="flex min-h-0 flex-1 flex-col pt-1">
+            <div className="shrink-0 rounded-lg bg-slate-100 px-3 py-2 mb-2 flex items-center gap-2 text-xs text-slate-500">
+              <MessageCircle className="h-3.5 w-3.5 text-slate-500 shrink-0" aria-hidden />
+              <input
+                type="text"
+                value={appointmentQuery}
+                onChange={e => setAppointmentQuery(e.target.value)}
+                placeholder="Search by appointment or person…"
+                aria-label="Search 1:1 appointments by name or person"
+                className="flex-1 min-w-0 bg-transparent outline-none text-xs text-slate-700 placeholder:text-slate-400"
+              />
             </div>
+            <div className="wl-chat-scroll min-h-0 flex-1 overflow-y-auto pr-1">
+            {filteredAppointments.length === 0 ? (
+              <p className="px-2 py-3 text-[11px] text-slate-500">
+                {appointmentQuery.trim()
+                  ? 'No 1:1 appointments match your search.'
+                  : 'No 1:1 appointment chats yet. A chat opens here once an appointment is confirmed.'}
+              </p>
+            ) : (
+              filteredAppointments.map(row => {
+                const active = isCommunityActive(row._id);
+                const arid = row.rcChannelId ? String(row.rcChannelId) : '';
+                const unreadCount = arid
+                  ? Math.max(
+                      Number(dmUnreadByRid?.[arid] || 0),
+                      Number(rcUnreadByRid?.[arid] || 0),
+                      Number(liveGroupUnread?.[arid] || 0),
+                    )
+                  : 0;
+                const hasUnread = unreadCount > 0;
+                const rowTone = active
+                  ? 'bg-[#E8EEF4] text-slate-900'
+                  : hasUnread
+                    ? 'bg-amber-50/80 text-slate-900 ring-1 ring-amber-200/80 hover:bg-amber-50'
+                    : 'hover:bg-slate-100 text-slate-700';
+                const initials = getInitials(row.withName || row.name);
+                const palette = getAvatarPalette(initials);
+                const rawPortrait =
+                  typeof row.withImage === 'string' ? row.withImage.trim() : '';
+                const portrait = rawPortrait ? appointmentImages.get(rawPortrait) ?? null : null;
+                return (
+                  <button
+                    key={row._id}
+                    type="button"
+                    onClick={() => openAppointment(row)}
+                    className={`mb-1 flex w-full items-start gap-2 rounded-xl px-3 py-2 text-left text-xs transition-colors ${rowTone}`}
+                  >
+                    <div className="mt-0.5 shrink-0">
+                      {portrait ? (
+                        <img
+                          src={portrait}
+                          alt={row.withName || row.name}
+                          className="h-9 w-9 rounded-full object-cover"
+                        />
+                      ) : (
+                        <div
+                          className="flex h-9 w-9 items-center justify-center rounded-full text-xs font-semibold"
+                          style={{ background: palette.bg, color: palette.text }}
+                        >
+                          {initials}
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="truncate font-semibold text-[11px]">{row.name}</p>
+                        {hasUnread ? (
+                          <span
+                            className="ml-1 shrink-0 rounded-full bg-amber-500/20 px-1.5 text-[10px] font-semibold text-amber-800"
+                            title="New appointment messages"
+                            aria-label={`${unreadCount > 99 ? '99+' : unreadCount} new appointment messages`}
+                          >
+                            {unreadCount > 99 ? '99+' : `${unreadCount}+`}
+                          </span>
+                        ) : null}
+                      </div>
+                      {/* The person is identity, not a preview, so unread never replaces it. */}
+                      <p className="mt-0.5 truncate text-[10px] text-slate-500">
+                        {row.withName ? `With ${row.withName}` : '1:1 appointment'}
+                      </p>
+                    </div>
+                  </button>
+                );
+              })
+            )}
+            </div>
+          </div>
+          ) : null}
+
+          {showsSeminars(section) ? (
+          <div className="flex min-h-0 flex-1 flex-col pt-1">
             <div className="shrink-0 rounded-lg bg-slate-100 px-3 py-2 mb-2 flex items-center gap-2 text-xs text-slate-500">
               <MessageCircle className="h-3.5 w-3.5 text-slate-500 shrink-0" aria-hidden />
               <input
@@ -1638,7 +1957,7 @@ const StudentChat: React.FC = () => {
                 className="flex-1 min-w-0 bg-transparent outline-none text-xs text-slate-700 placeholder:text-slate-400"
               />
             </div>
-            <div className="wl-chat-scroll min-h-[3rem] max-h-[15rem] overflow-y-auto pr-1">
+            <div className="wl-chat-scroll min-h-0 flex-1 overflow-y-auto pr-1">
             {filteredSeminars.length === 0 ? (
               <p className="px-2 py-3 text-[11px] text-slate-500">
                 {seminarQuery.trim()
@@ -1697,11 +2016,13 @@ const StudentChat: React.FC = () => {
             )}
             </div>
           </div>
+          ) : null}
         </div>
       </aside>
+      )}
 
-      <section className={`${showMobileMessenger ? 'flex' : 'hidden md:flex'} flex-1 flex-col min-h-0 min-w-0 bg-wl-page`}>
-        <div className="md:hidden border-b border-slate-200 bg-white px-3 py-2">
+      <section className={`${isChatSectionUnset(section) || showMobileMessenger ? 'flex' : 'hidden md:flex'} flex-1 flex-col min-h-0 min-w-0 bg-wl-page`}>
+        <div className={`${isChatSectionUnset(section) ? 'hidden' : ''} md:hidden border-b border-slate-200 bg-white px-3 py-2`}>
           <button
             type="button"
             className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-[12px] font-semibold text-[#234C6A] hover:bg-slate-100"
@@ -1712,7 +2033,49 @@ const StudentChat: React.FC = () => {
             Chats
           </button>
         </div>
-        <Messenger videoChaton={false} theme="light" />
+        {pendingJoinCommunity ? (
+          <div className="flex flex-1 flex-col min-h-0">
+            <div className="flex items-center gap-2 border-b border-slate-200 bg-white px-4 py-3">
+              <Users className="h-5 w-5 text-[#234C6A]" aria-hidden />
+              <p className="truncate text-[15px] font-semibold text-slate-900">
+                {pendingJoinCommunity.name}
+              </p>
+            </div>
+            <div className="flex flex-1 flex-col overflow-y-auto p-6">
+              <div className="m-auto flex flex-col items-center gap-4">
+                {pendingJoinCommunity.description.trim() ? (
+                  <div className="max-w-2xl rounded-xl border border-slate-200 bg-white p-4">
+                    <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-[#234C6A]">
+                      Description
+                    </div>
+                    <p className="whitespace-pre-wrap break-words text-[13px] leading-relaxed text-slate-700">
+                      {pendingJoinCommunity.description}
+                    </p>
+                  </div>
+                ) : null}
+                <p className="max-w-full text-center text-[14px] text-slate-600 xl:whitespace-nowrap">
+                  Click on &ldquo;Join&rdquo; Button below to be a part of the community and post your thoughts.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => void onJoinCommunity()}
+                  disabled={joiningCommunity}
+                  aria-label="Join community"
+                  className="inline-flex items-center gap-2 rounded-xl bg-[#234C6A] px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-[#1b3c53] disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {joiningCommunity ? 'Joining…' : 'Join'}
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <Messenger
+            videoChaton={false}
+            theme="light"
+            emptyTitle={chatSectionEmptyTitle(section)}
+            emptySubtitle={chatSectionEmptySubtitle(section)}
+          />
+        )}
       </section>
 
       <Dialog
@@ -1829,12 +2192,21 @@ const StudentChat: React.FC = () => {
                 />
               </div>
               <div>
-                <div className="mb-1 text-xs font-semibold text-slate-600">Description (optional)</div>
+                <div className="mb-1 text-xs font-semibold text-slate-600">Title Line</div>
+                <input
+                  className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 outline-none focus:border-[#234C6A] focus:ring-2 focus:ring-[#234C6A]/60"
+                  value={newTitleLine}
+                  onChange={e => setNewTitleLine(e.target.value)}
+                  placeholder="This will be displayed under the community name"
+                />
+              </div>
+              <div>
+                <div className="mb-1 text-xs font-semibold text-slate-600">Description (Encouraged)</div>
                 <textarea
                   className="min-h-[90px] w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 outline-none focus:border-[#234C6A] focus:ring-2 focus:ring-[#234C6A]/60"
                   value={newDescription}
                   onChange={e => setNewDescription(e.target.value)}
-                  placeholder="What is this community for?"
+                  placeholder="Please fill detailed description in order to bring right students to join the community."
                 />
               </div>
               <div className="flex flex-wrap items-center gap-x-5 gap-y-2">

@@ -1,69 +1,94 @@
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 
-const Pagination = ({
+export const DEFAULT_PAGE_SIZE_OPTIONS = [5, 10, 25, 50];
+
+export function paginationRangeLabel(currentPage: number, pageSize: number, totalCount: number): string {
+  if (!totalCount || pageSize <= 0) return '0 of 0';
+  const from = currentPage * pageSize + 1;
+  const to = Math.min((currentPage + 1) * pageSize, totalCount);
+  return `${from}–${to} of ${totalCount}`;
+}
+
+export function lastPageIndex(totalCount: number, pageSize: number): number {
+  if (!totalCount || pageSize <= 0) return 0;
+  return Math.max(0, Math.ceil(totalCount / pageSize) - 1);
+}
+
+const navBtn =
+  'inline-flex h-10 w-10 shrink-0 items-center justify-center text-slate-500 transition hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-wl-brand/40 disabled:pointer-events-none disabled:opacity-35';
+
+export default function Pagination({
   currentPage,
-  totalPage,
-  goPrev,
-  goNext,
-  goFirst,
-  goLast,
+  totalCount,
+  pageSize,
+  onPage,
+  onPageSize,
+  pageSizeOptions = DEFAULT_PAGE_SIZE_OPTIONS,
+  id = 'rows-per-page',
 }: {
   currentPage: number;
-  totalPage: number;
-  goPrev: () => void;
-  goNext: () => void;
-  goFirst: () => void;
-  goLast: () => void;
-}) => {
-  const iconNav =
-    'inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-wl-line bg-white text-wl-brand shadow-sm transition hover:bg-wl-brandSoft focus:outline-none focus-visible:ring-2 focus-visible:ring-wl-brand/25 disabled:pointer-events-none disabled:opacity-35';
-  const textNav =
-    'inline-flex h-9 items-center rounded-lg border border-wl-line bg-white px-3 text-[13px] font-semibold text-wl-brand shadow-sm transition hover:bg-wl-brandSoft focus:outline-none focus-visible:ring-2 focus-visible:ring-wl-brand/25 disabled:pointer-events-none disabled:opacity-35';
+  totalCount: number;
+  pageSize: number;
+  onPage: (page: number) => void;
+  onPageSize?: (size: number) => void;
+  pageSizeOptions?: number[];
+  id?: string;
+}) {
+  const lastPage = lastPageIndex(totalCount, pageSize);
+  const atStart = currentPage <= 0;
+  const atEnd = currentPage >= lastPage;
+  const range = paginationRangeLabel(currentPage, pageSize, totalCount);
 
   return (
-    <div
-      className="inline-flex flex-wrap items-center gap-1 rounded-xl border border-wl-line bg-wl-card p-1 shadow-[0_1px_3px_rgba(35,76,106,0.08)]"
-      role="navigation"
+    <nav
+      className="flex min-h-[44px] flex-col gap-3 border-t border-wl-line px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
       aria-label="Pagination"
     >
-      <button type="button" className={textNav} disabled={currentPage === 0} onClick={goFirst}>
-        First
-      </button>
-      <button
-        type="button"
-        className={iconNav}
-        disabled={currentPage === 0}
-        onClick={goPrev}
-        aria-label="Previous page"
-      >
-        <ChevronLeft className="h-4 w-4" strokeWidth={2.25} />
-      </button>
-      <div className="flex min-h-9 min-w-[8.5rem] items-center justify-center rounded-lg bg-wl-brandSoft/80 px-3">
-        <span className="text-[12px] font-medium tabular-nums text-wl-ink">
-          Page <span className="font-semibold text-wl-brand">{currentPage + 1}</span>
-          <span className="text-wl-muted"> of </span>
-          <span className="font-semibold text-wl-brand">{totalPage + 1}</span>
-        </span>
-      </div>
-      <button
-        type="button"
-        className={iconNav}
-        disabled={currentPage >= totalPage}
-        onClick={goNext}
-        aria-label="Next page"
-      >
-        <ChevronRight className="h-4 w-4" strokeWidth={2.25} />
-      </button>
-      <button
-        type="button"
-        className={textNav}
-        disabled={currentPage >= totalPage}
-        onClick={goLast}
-      >
-        Last
-      </button>
-    </div>
-  );
-};
+      {onPageSize ? (
+        <label htmlFor={id} className="flex items-center gap-2 text-sm text-slate-600">
+          <span className="shrink-0">Rows per page</span>
+          <select
+            id={id}
+            className="h-10 rounded-lg border border-wl-line bg-white px-2.5 text-sm text-slate-800 outline-none focus:border-wl-brand focus:ring-2 focus:ring-wl-brand/30"
+            value={pageSize}
+            onChange={e => onPageSize(Number(e.target.value))}
+          >
+            {pageSizeOptions.map(size => (
+              <option key={size} value={size}>
+                {size}
+              </option>
+            ))}
+          </select>
+        </label>
+      ) : (
+        <span className="hidden sm:block" />
+      )}
 
-export default Pagination;
+      <div className="flex items-center justify-between gap-3 sm:justify-end">
+        <span className="text-sm tabular-nums text-slate-600" aria-live="polite">
+          {range}
+        </span>
+        <div className="inline-flex overflow-hidden rounded-lg border border-wl-line bg-white">
+          <button
+            type="button"
+            className={`${navBtn} border-r border-wl-line`}
+            disabled={atStart}
+            onClick={() => onPage(Math.max(0, currentPage - 1))}
+            aria-label="Previous page"
+          >
+            <ChevronLeft className="h-4 w-4" strokeWidth={2.25} aria-hidden />
+          </button>
+          <button
+            type="button"
+            className={navBtn}
+            disabled={atEnd}
+            onClick={() => onPage(Math.min(lastPage, currentPage + 1))}
+            aria-label="Next page"
+          >
+            <ChevronRight className="h-4 w-4" strokeWidth={2.25} aria-hidden />
+          </button>
+        </div>
+      </div>
+    </nav>
+  );
+}

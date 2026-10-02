@@ -188,7 +188,10 @@ export default function ExpertDrawer() {
                     </div>
                 </div>
             </div>
-            <div className={`w-full ${location === 'expertchat' ? 'lg:w-[calc(100%-370px)]' : 'lg:w-[calc(100%-70px)]'} h-full min-h-0 flex flex-col`}>
+            <div
+                className={`w-full ${location === 'expertchat' ? 'lg:w-[calc(100%-370px)]' : 'lg:w-[calc(100%-70px)]'} h-full min-h-0 flex flex-col`}
+                style={{ '--wl-shell-left-inset': '70px' } as React.CSSProperties}
+            >
                 <Routes>
                     <Route path="/timeslots" element={<Availability />} />
                     <Route path="/calendar" element={<Calendar />} />

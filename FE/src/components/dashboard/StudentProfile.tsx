@@ -13,7 +13,7 @@ import {
 } from 'lucide-react';
 import { useAppSelector } from '../../store';
 import { useDispatch } from 'react-redux';
-import { showErrorAlert, showSuccessAlert } from '../../actions/alertActions';
+import { notify } from '../../utils/notify';
 import { updateMe } from '../../actions/authActions';
 import { doUpdateProfile, profileImageFetch, passwordResetRequest, confirmPasswordResetByCode } from '../../api/api';
 import FormAlert from '../FormAlert';
@@ -246,13 +246,11 @@ export default function StudentProfile() {
         profileImageFetch as any,
       );
       setPhotoUrl(src);
-      dispatch(showSuccessAlert('Profile photo saved'));
+      notify.success('Profile photo saved');
     } catch (err: any) {
-      dispatch(
-        showErrorAlert(
+      notify.error(
           err?.response?.data?.error || err?.message || 'Could not save profile photo',
-        ),
-      );
+        );
     } finally {
       setPhotoSaving(false);
     }
@@ -261,7 +259,7 @@ export default function StudentProfile() {
   const handleSavePersonal = async () => {
     const trimmedName = name.trim();
     if (!trimmedName) {
-      dispatch(showErrorAlert('Name is required'));
+      notify.error('Name is required');
       return;
     }
 
@@ -275,12 +273,12 @@ export default function StudentProfile() {
         setPersonalDirty(false);
         if (userDetails?.email) setEmail(userDetails.email);
         await dispatch(updateMe() as any);
-        dispatch(showSuccessAlert('Profile saved'));
+        notify.success('Profile saved');
       } else {
-        dispatch(showErrorAlert('Could not save profile'));
+        notify.error('Could not save profile');
       }
     } catch (err: any) {
-      dispatch(showErrorAlert(err?.message || 'Could not save profile'));
+      notify.error(err?.message || 'Could not save profile');
     } finally {
       setPersonalSaving(false);
     }
@@ -308,12 +306,12 @@ export default function StudentProfile() {
       });
       if (ok) {
         setAcademicDirty(false);
-        dispatch(showSuccessAlert('Academic background saved'));
+        notify.success('Academic background saved');
       } else {
-        dispatch(showErrorAlert('Could not save academic background'));
+        notify.error('Could not save academic background');
       }
     } catch (err: any) {
-      dispatch(showErrorAlert(err?.message || 'Could not save academic background'));
+      notify.error(err?.message || 'Could not save academic background');
     } finally {
       setAcademicSaving(false);
     }
@@ -327,12 +325,12 @@ export default function StudentProfile() {
       const ok = await doUpdateProfile({ services });
       if (ok) {
         setPreferencesDirty(false);
-        dispatch(showSuccessAlert('Preferences saved'));
+        notify.success('Preferences saved');
       } else {
-        dispatch(showErrorAlert('Could not save preferences'));
+        notify.error('Could not save preferences');
       }
     } catch (err: any) {
-      dispatch(showErrorAlert(err?.message || 'Could not save preferences'));
+      notify.error(err?.message || 'Could not save preferences');
     } finally {
       setPreferencesSaving(false);
     }
@@ -345,12 +343,12 @@ export default function StudentProfile() {
       const ok = await doUpdateProfile({ keywords: interests });
       if (ok) {
         setInterestsDirty(false);
-        dispatch(showSuccessAlert('Interests saved'));
+        notify.success('Interests saved');
       } else {
-        dispatch(showErrorAlert('Could not save interests'));
+        notify.error('Could not save interests');
       }
     } catch (err: any) {
-      dispatch(showErrorAlert(err?.message || 'Could not save interests'));
+      notify.error(err?.message || 'Could not save interests');
     } finally {
       setInterestsSaving(false);
     }

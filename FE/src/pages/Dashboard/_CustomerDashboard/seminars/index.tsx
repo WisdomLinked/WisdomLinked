@@ -10,7 +10,7 @@ import { useDispatch } from "react-redux";
 import { Swiper, SwiperSlide } from "swiper/react";
 import { Pagination, Navigation } from "swiper";
 import { SetLoadingStatus } from "../../../../actions/appActions";
-import { showErrorAlert, showWarningAlert } from '../../../../actions/alertActions';
+import { notify } from '../../../../utils/notify';
 import FormAlert from '../../../../components/FormAlert';
 
 const Seminars = () => {
@@ -56,7 +56,7 @@ const Seminars = () => {
             const response = await registerForSeminar(details);
             if (response === false) return;
             if (response?.status === 'FAIL' || response?.error) {
-                dispatch(showErrorAlert(response?.error || 'Could not complete seminar registration.'));
+                notify.error(response?.error || 'Could not complete seminar registration.');
                 set_paymentFailed(true);
                 return;
             }
@@ -67,11 +67,11 @@ const Seminars = () => {
                 })
                 set_step(2)
             } else {
-                dispatch(showErrorAlert('Could not complete seminar registration.'));
+                notify.error('Could not complete seminar registration.');
                 set_paymentFailed(true);
             }
         } catch {
-            dispatch(showErrorAlert('Could not complete seminar registration.'));
+            notify.error('Could not complete seminar registration.');
             set_paymentFailed(true);
         }
         SetLoadingStatus(false)
@@ -79,7 +79,7 @@ const Seminars = () => {
 
     useEffect(() => {
         if (userDetails.status === 'review') {
-            dispatch(showWarningAlert("This feature isn't available under review"))
+            notify.warning("This feature isn't available under review")
             navigate(-1)
         }
         let temp = userDetails.events.map((event: any) => {

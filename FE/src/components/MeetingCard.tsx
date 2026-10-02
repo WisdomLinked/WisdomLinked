@@ -9,7 +9,7 @@ import {
 import { formatMessageTime } from '../utils/formatMessageTime';
 import { trackMeetingJoin } from '../utils/meetingSession';
 import { useDispatch } from 'react-redux';
-import { showErrorAlert, showSuccessAlert } from '../actions/alertActions';
+import { notify } from '../utils/notify';
 
 const MEET_EXPIRY_MS = 2 * 60 * 60 * 1000; // 2 hours
 
@@ -90,7 +90,7 @@ const MeetingCard: React.FC<MeetingCardProps> = ({
             if (pendingWindow && !pendingWindow.closed) {
                 pendingWindow.close();
             }
-            dispatch(showErrorAlert(info.ok ? 'Could not join call. Please retry from chat.' : info.error));
+            notify.error(info.ok ? 'Could not join call. Please retry from chat.' : info.error);
             return;
         }
         const joinData = info.data;
@@ -170,12 +170,12 @@ const MeetingCard: React.FC<MeetingCardProps> = ({
             })();
             try {
                 await navigator.clipboard.writeText(normalizedInviteUrl);
-                dispatch(showSuccessAlert('Guest invite link copied (valid up to 2 hours).'));
+                notify.success('Guest invite link copied (valid up to 2 hours).');
             } catch {
-                dispatch(showSuccessAlert(normalizedInviteUrl));
+                notify.success(normalizedInviteUrl);
             }
         } else {
-            dispatch(showErrorAlert(res?.error || 'Could not create guest invite link'));
+            notify.error(res?.error || 'Could not create guest invite link');
         }
     };
 

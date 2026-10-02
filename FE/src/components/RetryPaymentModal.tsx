@@ -1,133 +1,130 @@
-import React, { useState, useEffect } from "react";
-import CloseIcon from '@mui/icons-material/Close';
-import { store } from '../store';
-import { showErrorAlert } from '../actions/alertActions';
+import React, { useState, useEffect } from 'react';
+import { notify } from '../utils/notify';
+import AdminPaymentDialog, {
+  paymentDialogDisabledFieldClass,
+  paymentDialogFieldClass,
+  paymentDialogHintClass,
+  paymentDialogLabelClass,
+  paymentDialogPrimaryButtonClass,
+  paymentDialogSecondaryButtonClass,
+  paymentDialogTextareaClass,
+} from './ui/AdminPaymentDialog';
 
 interface RetryPaymentModalProps {
-    paymentItem: any;
-    isOpen: boolean;
-    onClose: () => void;
-    onConfirm: (customizedPayment: {
-        amount: number;
-        description: string;
-        customerEmail: string;
-    }) => void;
+  paymentItem: any;
+  isOpen: boolean;
+  onClose: () => void;
+  onConfirm: (customizedPayment: {
+    amount: number;
+    description: string;
+    customerEmail: string;
+  }) => void;
 }
 
 const RetryPaymentModal: React.FC<RetryPaymentModalProps> = ({
-    paymentItem,
-    isOpen,
-    onClose,
-    onConfirm
+  paymentItem,
+  isOpen,
+  onClose,
+  onConfirm,
 }) => {
-    const [customAmount, setCustomAmount] = useState<number>(0);
-    const [customDescription, setCustomDescription] = useState<string>('');
-    const [customerEmail, setCustomerEmail] = useState<string>('');
+  const [customAmount, setCustomAmount] = useState<number>(0);
+  const [customDescription, setCustomDescription] = useState<string>('');
+  const [customerEmail, setCustomerEmail] = useState<string>('');
 
-    useEffect(() => {
-        if (paymentItem && isOpen) {
-            setCustomAmount(paymentItem.amount / 100);
-            setCustomDescription(paymentItem.description || '');
-            setCustomerEmail(paymentItem.customer?.email || '');
-        }
-    }, [paymentItem, isOpen]);
+  useEffect(() => {
+    if (paymentItem && isOpen) {
+      setCustomAmount(paymentItem.amount / 100);
+      setCustomDescription(paymentItem.description || '');
+      setCustomerEmail(paymentItem.customer?.email || '');
+    }
+  }, [paymentItem, isOpen]);
 
-    const handleConfirm = () => {
-        if (!customAmount || customAmount <= 0) {
-            store.dispatch(showErrorAlert('Please enter a valid amount'));
-            return;
-        }
-        
-        if (!customDescription.trim()) {
-            store.dispatch(showErrorAlert('Please enter a description'));
-            return;
-        }
+  const handleConfirm = () => {
+    if (!customAmount || customAmount <= 0) {
+      notify.error('Please enter a valid amount');
+      return;
+    }
 
-        if (!customerEmail.trim()) {
-            store.dispatch(showErrorAlert('Customer email is required'));
-            return;
-        }
+    if (!customDescription.trim()) {
+      notify.error('Please enter a description');
+      return;
+    }
 
-        onConfirm({
-            amount: customAmount,
-            description: customDescription.trim(),
-            customerEmail: customerEmail.trim()
-        });
-    };
+    if (!customerEmail.trim()) {
+      notify.error('Customer email is required');
+      return;
+    }
 
-    if (!isOpen) return null;
+    onConfirm({
+      amount: customAmount,
+      description: customDescription.trim(),
+      customerEmail: customerEmail.trim(),
+    });
+  };
 
-    return (
-        <div className="fixed top-0 left-0 w-full h-full bg-black bg-opacity-50 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
-            <div 
-                className="absolute top-0 left-0 w-full h-full cursor-pointer"
-                onClick={onClose}
-            />
-            <div className="relative bg-black border border-lightgrey rounded-lg w-full max-w-md p-6 text-white">
-                <button 
-                    className="absolute right-2 top-2 rounded-md hover:bg-grey p-1"
-                    onClick={onClose}
-                >
-                    <CloseIcon fontSize="small" />
-                </button>
-                
-                <h2 className="text-xl font-semibold mb-6 text-center">Customize Retry Payment</h2>
-                
-                <div className="space-y-4">
-                    <div>
-                        <label className="block text-grey mb-1 text-sm">Amount ($)</label>
-                        <input
-                            type="number"
-                            value={customAmount}
-                            onChange={(e) => setCustomAmount(parseFloat(e.target.value) || 0)}
-                            className="w-full rounded-lg h-12 bg-transparent border border-lightgrey text-white px-4 text-sm focus:outline-none focus:border-green"
-                            placeholder="Enter amount"
-                            min="0.01"
-                            step="0.01"
-                        />
-                    </div>
-                    
-                    <div>
-                        <label className="block text-grey mb-1 text-sm">Description</label>
-                        <textarea
-                            value={customDescription}
-                            onChange={(e) => setCustomDescription(e.target.value)}
-                            className="w-full rounded-lg bg-transparent border border-lightgrey text-white px-4 py-3 text-sm focus:outline-none focus:border-green resize-none"
-                            placeholder="Enter payment description"
-                            rows={3}
-                        />
-                    </div>
-                    
-                    <div>
-                        <label className="block text-grey mb-1 text-sm">Customer Email</label>
-                        <input
-                            type="email"
-                            value={customerEmail}
-                            readOnly
-                            className="w-full rounded-lg h-12 bg-grey/20 border border-lightgrey text-grey px-4 text-sm cursor-not-allowed"
-                            placeholder="Customer email"
-                        />
-                        <p className="text-xs text-grey mt-1">This email cannot be changed</p>
-                    </div>
-                </div>
-                
-                <div className="flex gap-3 mt-6">
-                    <button
-                        onClick={onClose}
-                        className="flex-1 bg-transparent border border-lightgrey text-white py-2 px-4 rounded-lg hover:bg-grey/20 transition-colors text-sm font-medium"
-                    >
-                        Cancel
-                    </button>
-                    <button
-                        onClick={handleConfirm}
-                        className="flex-1 bg-green hover:bg-green/80 text-white py-2 px-4 rounded-lg transition-colors text-sm font-medium"
-                    >
-                        Send Payment Link
-                    </button>
-                </div>
-            </div>
-        </div>
-    );
+  return (
+    <AdminPaymentDialog
+      isOpen={isOpen}
+      onClose={onClose}
+      title="Customize Retry Payment"
+      titleId="retry-payment-title"
+      footer={
+        <>
+          <button type="button" onClick={onClose} className={paymentDialogSecondaryButtonClass}>
+            Cancel
+          </button>
+          <button type="button" onClick={handleConfirm} className={paymentDialogPrimaryButtonClass}>
+            Send Payment Link
+          </button>
+        </>
+      }
+    >
+      <div>
+        <label htmlFor="retry-amount" className={paymentDialogLabelClass}>
+          Amount ($)
+        </label>
+        <input
+          id="retry-amount"
+          type="number"
+          value={customAmount}
+          onChange={e => setCustomAmount(parseFloat(e.target.value) || 0)}
+          className={paymentDialogFieldClass}
+          placeholder="Enter amount"
+          min="0.01"
+          step="0.01"
+        />
+      </div>
+
+      <div>
+        <label htmlFor="retry-description" className={paymentDialogLabelClass}>
+          Description
+        </label>
+        <textarea
+          id="retry-description"
+          value={customDescription}
+          onChange={e => setCustomDescription(e.target.value)}
+          className={paymentDialogTextareaClass}
+          placeholder="Enter payment description"
+          rows={3}
+        />
+      </div>
+
+      <div>
+        <label htmlFor="retry-email" className={paymentDialogLabelClass}>
+          Customer Email
+        </label>
+        <input
+          id="retry-email"
+          type="email"
+          value={customerEmail}
+          readOnly
+          className={paymentDialogDisabledFieldClass}
+          placeholder="Customer email"
+        />
+        <p className={paymentDialogHintClass}>This email cannot be changed</p>
+      </div>
+    </AdminPaymentDialog>
+  );
 };
 
 export default RetryPaymentModal;

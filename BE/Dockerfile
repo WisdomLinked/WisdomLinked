@@ -1,7 +1,8 @@
 # Stage 1: Install dependencies
+# Build context is the repo root (see docker-compose.yml).
 FROM node:22-alpine AS deps
 WORKDIR /app
-COPY package*.json ./
+COPY BE/package*.json ./
 # tsx is in devDependencies but needed at runtime, so install all deps
 # then prune in a later stage if needed
 RUN npm ci
@@ -14,7 +15,11 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 
 # Copy application source code
-COPY . .
+COPY BE/ ./
+
+# CI and local Docker both need FE public page catalog inside BE/
+# (search/publicPages.ts loads ./publicPageCatalog when FE isn't on disk).
+COPY FE/src/content/publicPages.ts ./search/publicPageCatalog.ts
 
 # Expose the backend port
 EXPOSE 5000

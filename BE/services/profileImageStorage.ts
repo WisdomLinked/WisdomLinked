@@ -140,9 +140,48 @@ async function getProfileImageFromSpaces(
   return null;
 }
 
+async function putSpacesObject(
+  key: string,
+  body: string | Buffer,
+  contentType = "application/octet-stream",
+): Promise<void> {
+  if (!isProfileImageStorageConfigured()) {
+    throw new Error("Spaces storage is not configured.");
+  }
+  const bucket = String(process.env.DO_SPACES_BUCKET).trim();
+  await getS3Client().send(
+    new PutObjectCommand({
+      Bucket: bucket,
+      Key: key,
+      Body: body,
+      ACL: "public-read",
+      ContentType: contentType,
+    }),
+  );
+}
+
+async function getSpacesObjectText(key: string): Promise<string | null> {
+  if (!isProfileImageStorageConfigured()) return null;
+  const bucket = String(process.env.DO_SPACES_BUCKET).trim();
+  try {
+    const obj = await getS3Client().send(
+      new GetObjectCommand({ Bucket: bucket, Key: key }),
+    );
+    const data = await streamToBuffer(obj.Body);
+    return data.toString("utf8");
+  } catch (err: any) {
+    const status = err?.$metadata?.httpStatusCode;
+    const name = String(err?.name || err?.Code || "");
+    if (status === 404 || name === "NoSuchKey" || name === "NotFound") return null;
+    throw err;
+  }
+}
+
 module.exports = {
   isProfileImageStorageConfigured,
   buildStoredProfileFilename,
   uploadProfileImageToSpaces,
   getProfileImageFromSpaces,
+  putSpacesObject,
+  getSpacesObjectText,
 };

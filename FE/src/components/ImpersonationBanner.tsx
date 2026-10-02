@@ -83,23 +83,20 @@ export default function ImpersonationBanner() {
     };
 
     return (
-        <>
-            <div className="fixed top-0 inset-x-0 z-[9999] bg-amber-500 text-wl-ink shadow-md">
-                <div className="mx-auto max-w-[1400px] px-4 py-2 flex flex-wrap items-center justify-between gap-2 text-sm font-medium">
-                    <span>
-                        Impersonating <strong>{info.username || info.email}</strong>
-                        {info.role ? ` (${info.role})` : ""} — you are viewing the app as this user.
-                    </span>
-                    <button
-                        type="button"
-                        onClick={handleExit}
-                        className="rounded-lg bg-wl-ink text-white px-3 py-1.5 text-xs font-semibold hover:opacity-90"
-                    >
-                        Exit impersonation
-                    </button>
-                </div>
+        <div className="bg-amber-500 text-wl-ink shadow-md">
+            <div className="mx-auto max-w-[1400px] px-4 py-2 flex flex-wrap items-center justify-between gap-2 text-sm font-medium">
+                <span>
+                    Impersonating <strong>{info.username || info.email}</strong>
+                    {info.role ? ` (${info.role})` : ""} — you are viewing the app as this user.
+                </span>
+                <button
+                    type="button"
+                    onClick={handleExit}
+                    className="rounded-lg bg-wl-ink text-white px-3 py-1.5 text-xs font-semibold hover:opacity-90"
+                >
+                    Exit impersonation
+                </button>
             </div>
-            <div aria-hidden className="h-11" />
-        </>
+        </div>
     );
 }

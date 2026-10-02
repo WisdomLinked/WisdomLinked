@@ -1,7 +1,5 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import ReactImagePickerEditor from "react-image-picker-editor";
-import { useDispatch } from "react-redux";
-import { showErrorAlert, showSuccessAlert, showWarningAlert } from '../actions/alertActions';
 import ShowFieldError from "./ShowFieldError";
 import { MAX_IMAGE_SIZE_IN_MB } from "../utils/constants";
 

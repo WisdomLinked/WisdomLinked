@@ -11,8 +11,11 @@ import {
   Menu,
   X,
   CreditCard,
+  ChevronDown,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import NavBadge from './NavBadge';
+import { usePendingContactRequestsCount } from '../../hooks/usePendingContactRequestsCount';
 
 const VideoCallNavIcon = ({ className }: { className?: string }) => (
   <Video aria-hidden="true" className={className || 'h-5 w-5'} />
@@ -38,6 +41,10 @@ export default function Sidebar({
   avatarUrl,
   roleLabel = 'Student',
   notifications = {},
+  subItems,
+  subItemCounts,
+  activeSubItem,
+  onNavigateSub,
 }: {
   navItems?: { id: string; label: string; icon: React.ComponentType<{ className?: string }> }[];
   activeItem: string;
@@ -46,10 +53,17 @@ export default function Sidebar({
   avatarUrl?: string;
   roleLabel?: string;
   notifications?: Record<string, boolean | number>;
+  subItems?: Record<string, { id: string; label: string }[]>;
+  /** Unread counts per sub-item, keyed nav id then sub id. Absent or 0 renders no badge. */
+  subItemCounts?: Record<string, Record<string, number>>;
+  activeSubItem?: string;
+  onNavigateSub?: (navId: string, subId: string) => void;
 }) {
   const [openMobile, setOpenMobile] = useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+  const [expandedNavId, setExpandedNavId] = useState<string | null>(null);
   const navigate = useNavigate();
+  const { count: pendingContactCount } = usePendingContactRequestsCount();
 
   const mainNavItems = navItems.filter(item => item.id !== 'profile');
 
@@ -77,21 +91,28 @@ export default function Sidebar({
         {mainNavItems.map(item => {
           const Icon = item.icon;
           const isActive = item.id === activeItem;
-          const notificationValue = notifications[item.id];
+          const notificationValue =
+            item.id === 'contactedus' ? pendingContactCount : notifications[item.id];
           const hasDot = notificationValue === true;
           const count =
             typeof notificationValue === 'number' && Number.isFinite(notificationValue)
               ? Math.max(0, Math.floor(notificationValue))
               : 0;
+          const itemSubItems = subItems?.[item.id];
+          const isExpanded = expandedNavId === item.id;
           return (
+            <div key={item.id}>
+            <div className="relative">
             <button
-              key={item.id}
               type="button"
               onClick={() => {
                 onNavigate(item.id);
-                setOpenMobile(false);
+                if (itemSubItems) setExpandedNavId(isExpanded ? null : item.id);
+                else setOpenMobile(false);
               }}
               className={`nav-btn flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-[13px] font-medium transition-colors focus:outline-none border-l-4 ${
+                itemSubItems ? 'pr-9' : ''
+              } ${
                 isActive
                   ? 'bg-white text-slate-900 border-[#234C6A] shadow-sm'
                   : 'text-slate-600 hover:bg-white hover:text-slate-900 border-transparent'
@@ -101,23 +122,62 @@ export default function Sidebar({
                 className={item.id === 'join-meeting' ? 'h-5 w-5' : 'h-4 w-4'}
                 aria-hidden="true"
               />
-              <span className="font-sans inline-flex items-center gap-2">
-                {item.label}
-                {count > 0 ? (
-                  <span
-                    className="inline-flex min-w-[18px] items-center justify-center rounded-full bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-semibold text-amber-800"
-                    aria-label={`${item.label} has ${count} unread messages`}
-                  >
-                    {count > 99 ? '99+' : count}
-                  </span>
-                ) : hasDot ? (
-                  <span
-                    className="inline-block h-2.5 w-2.5 rounded-full bg-emerald-500"
-                    aria-label={`${item.label} has new notification`}
-                  />
-                ) : null}
-              </span>
+              <span className="font-sans min-w-0 flex-1 truncate text-left">{item.label}</span>
+              {count > 0 ? (
+                <NavBadge count={count} label={`unread ${item.label.toLowerCase()}`} />
+              ) : hasDot ? (
+                <span
+                  className="inline-block h-2.5 w-2.5 shrink-0 rounded-full bg-emerald-500"
+                  aria-label={`${item.label} has new notification`}
+                />
+              ) : null}
             </button>
+            {itemSubItems ? (
+              <button
+                type="button"
+                onClick={() => setExpandedNavId(isExpanded ? null : item.id)}
+                aria-label={`${isExpanded ? 'Hide' : 'Show'} ${item.label} sections`}
+                aria-expanded={isExpanded}
+                className={`absolute right-1.5 top-1/2 -translate-y-1/2 rounded-md p-1 transition-colors ${
+                  isActive ? 'text-slate-500 hover:bg-slate-100' : 'text-slate-400 hover:bg-white hover:text-slate-700'
+                }`}
+              >
+                <ChevronDown
+                  className={`h-3.5 w-3.5 transition-transform ${isExpanded ? 'rotate-180' : ''}`}
+                  aria-hidden="true"
+                />
+              </button>
+            ) : null}
+            </div>
+            {itemSubItems && isExpanded ? (
+              <div className="mt-0.5 mb-1 space-y-0.5 pl-9">
+                {itemSubItems.map(sub => {
+                  const subActive = isActive && sub.id === activeSubItem;
+                  return (
+                    <button
+                      key={sub.id}
+                      type="button"
+                      onClick={() => {
+                        onNavigateSub?.(item.id, sub.id);
+                        setOpenMobile(false);
+                      }}
+                      className={`flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-[11px] font-semibold uppercase tracking-[0.08em] transition-colors focus:outline-none ${
+                        subActive
+                          ? 'bg-white text-[#234C6A] shadow-sm'
+                          : 'text-slate-500 hover:bg-white hover:text-slate-800'
+                      }`}
+                    >
+                      <span className="min-w-0 flex-1 truncate">{sub.label}</span>
+                      <NavBadge
+                        count={subItemCounts?.[item.id]?.[sub.id] ?? 0}
+                        label={`unread in ${sub.label.toLowerCase()}`}
+                      />
+                    </button>
+                  );
+                })}
+              </div>
+            ) : null}
+            </div>
           );
         })}
       </nav>
@@ -190,42 +250,45 @@ export default function Sidebar({
 
   return (
     <>
-      <aside className="hidden lg:block fixed left-0 top-0 h-screen w-[220px] z-30">
+      <aside
+        className="hidden lg:block fixed left-0 w-[220px] z-30"
+        style={{ top: 'var(--wl-banner-offset, 0px)', height: 'calc(100vh - var(--wl-banner-offset, 0px))' }}
+      >
         {content}
       </aside>
 
+      {/* Sits above TopBar (sticky, z-50, opaque) or the header paints over it and
+          the menu is unreachable until the page is scrolled. Above the drawer too
+          (z-[70]) so the same button closes what it opened. TopBar reserves space
+          on the left so the two never overlap. */}
       <button
         type="button"
-        className="fixed top-3 left-3 z-40 inline-flex h-9 w-9 items-center justify-center rounded-full border border-slate-300 bg-white text-slate-700 shadow lg:hidden"
-        onClick={() => setOpenMobile(true)}
-        aria-label="Open navigation"
+        className="fixed left-3 z-[80] inline-flex h-9 w-9 items-center justify-center rounded-full border border-slate-300 bg-white text-slate-700 shadow lg:hidden"
+        style={{ top: 'calc(var(--wl-banner-offset, 0px) + 0.75rem)' }}
+        onClick={() => setOpenMobile(open => !open)}
+        aria-label={openMobile ? 'Close navigation' : 'Open navigation'}
+        aria-expanded={openMobile}
       >
-        <Menu className="h-4 w-4" />
+        {openMobile ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
       </button>
 
       {openMobile && (
-        <div className="fixed inset-0 z-40 lg:hidden">
+        <div className="fixed inset-0 z-[70] lg:hidden">
           <div
             className="absolute inset-0 bg-slate-900/50"
             aria-hidden="true"
             onClick={() => setOpenMobile(false)}
           />
-          <div className="relative h-full w-72 max-w-full shadow-2xl">
-            <button
-              type="button"
-              className="absolute top-3 right-3 flex h-8 w-8 items-center justify-center rounded-full border border-slate-300 bg-white text-slate-700"
-              onClick={() => setOpenMobile(false)}
-              aria-label="Close navigation"
-            >
-              <X className="h-4 w-4" />
-            </button>
+          <div className="relative h-full w-72 max-w-full shadow-2xl pt-12">
             {content}
           </div>
         </div>
       )}
 
+      {/* Logout dialog sits above the mobile drawer (z-[70]) and its toggle (z-[80]):
+          it is opened from inside the drawer, so anything lower is unreachable. */}
       {showLogoutConfirm && (
-        <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-900/40 px-4">
+        <div className="fixed inset-0 z-[90] flex items-center justify-center bg-slate-900/40 px-4">
           <div className="w-full max-w-sm rounded-2xl bg-white shadow-xl border border-slate-200 p-5">
             <h2 className="text-base font-semibold text-slate-900 mb-2">
               Sign out?

@@ -5,7 +5,7 @@ import { SetLoadingStatus } from "../actions/appActions";
 import { login, confirmLoginByCode } from "../api/api";
 import { persistUserDetails } from "../utils/safeLocalStorage";
 import { useDispatch } from "react-redux";
-import { showSuccessAlert } from "../actions/alertActions";
+import { notify } from '../utils/notify';
 import FormAlert from "./FormAlert";
 import { useFormAlert } from "../hooks/useFormAlert";
 import ReactCodeInput from "react-code-input";
@@ -60,11 +60,9 @@ const ConfirmCode = ({ email, password }: any) => {
                 payload: response.userDetails
             })
 
-            dispatch(
-                showSuccessAlert(
-                    `Hi, ${response.userDetails.username} 👋. Welcome back.`
-                )
-            );
+            notify.success(`Welcome back, ${response.userDetails.username}`, {
+                description: "You're signed in and ready to go.",
+            });
         } else {
             setFormError(response.error || 'Verification failed. Please try again.');
         }

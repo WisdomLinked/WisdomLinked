@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import { Bell, Globe2, Shield, Mail, Smartphone } from 'lucide-react';
+import { Bell, Globe2, Megaphone, Shield, Mail, Smartphone } from 'lucide-react';
 import { useAppSelector } from '../../store';
-import { doUpdateProfile } from '../../api/api';
+import { doUpdateProfile, getActiveAnnouncement, setSiteAnnouncement } from '../../api/api';
 import { detectUserTimeZone } from '../../utils/schedulingTimezone';
 
 const TIME_ZONES = [
@@ -83,9 +83,11 @@ export default function AdminSettings() {
       <div className="mb-6">
         <h1 className="text-2xl font-semibold text-wl-ink">Admin settings</h1>
         <p className="mt-1 text-sm text-wl-muted">
-          Time zone, notification preferences, and account security.
+          Time zone, notification preferences, account security, and the site announcement banner.
         </p>
       </div>
+
+      <SiteAnnouncementCard />
 
       <div className="grid gap-6 lg:grid-cols-2">
         <section className={cardClass}>
@@ -207,5 +209,145 @@ export default function AdminSettings() {
         ) : null}
       </div>
     </div>
+  );
+}
+
+function SiteAnnouncementCard() {
+  const [message, setMessage] = useState('');
+  const [link, setLink] = useState('');
+  const [linkLabel, setLinkLabel] = useState('');
+  const [isLive, setIsLive] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+  const [status, setStatus] = useState('');
+
+  useEffect(() => {
+    let cancelled = false;
+    getActiveAnnouncement().then(data => {
+      if (cancelled || !data) return;
+      setMessage(data.message || '');
+      setLink(data.link || '');
+      setLinkLabel(data.linkLabel || '');
+      setIsLive(true);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const inputClass =
+    'w-full rounded-lg border border-wl-line bg-white px-3 py-2 text-sm text-wl-ink outline-none focus:ring-2 focus:ring-wl-brand/20';
+
+  const persist = async (active: boolean) => {
+    setError('');
+    setStatus('');
+    if (active && !message.trim()) {
+      setError('Announcement message is required.');
+      return;
+    }
+    setSaving(true);
+    try {
+      const res = await setSiteAnnouncement({
+        message: message.trim(),
+        link: link.trim(),
+        linkLabel: linkLabel.trim(),
+        active,
+      });
+      if (!res || res.result !== 'SUCCESS') {
+        setError(res && typeof res === 'object' && res.error ? res.error : 'Could not save the announcement.');
+        return;
+      }
+      setIsLive(active);
+      setStatus(active ? 'Announcement published.' : 'Announcement deactivated.');
+      window.dispatchEvent(new Event('wl-announcement-change'));
+      window.setTimeout(() => setStatus(''), 2200);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <section className="mb-6 rounded-2xl border border-wl-line bg-wl-card p-5 shadow-[0_10px_30px_rgba(35,76,106,0.08)]">
+      <div className="mb-4 flex items-center gap-2">
+        <Megaphone className="h-4 w-4 text-wl-brand" aria-hidden />
+        <h2 className="text-sm font-semibold uppercase tracking-wider text-wl-ink">
+          Site announcement
+        </h2>
+        <span
+          className={`ml-auto rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${
+            isLive ? 'bg-green/15 text-green' : 'bg-wl-brandSoft text-wl-muted'
+          }`}
+        >
+          {isLive ? 'Live' : 'Off'}
+        </span>
+      </div>
+      <p className="mb-4 text-xs text-wl-muted">
+        Shown as a thin bar above the nav on every page. Publishing always creates a new
+        announcement so previously dismissed visitors see it again.
+      </p>
+      <div className="space-y-3">
+        <div>
+          <label htmlFor="site-announcement-message" className="mb-1 block text-xs font-semibold text-wl-ink">
+            Message
+          </label>
+          <textarea
+            id="site-announcement-message"
+            value={message}
+            onChange={e => setMessage(e.target.value)}
+            rows={2}
+            className={inputClass}
+            placeholder="New mentor Dr. Chen just joined WisdomLinked."
+          />
+        </div>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div>
+            <label htmlFor="site-announcement-link" className="mb-1 block text-xs font-semibold text-wl-ink">
+              Link (optional)
+            </label>
+            <input
+              id="site-announcement-link"
+              type="text"
+              value={link}
+              onChange={e => setLink(e.target.value)}
+              className={inputClass}
+              placeholder="/expertregister or https://…"
+            />
+          </div>
+          <div>
+            <label htmlFor="site-announcement-link-label" className="mb-1 block text-xs font-semibold text-wl-ink">
+              Link label (optional)
+            </label>
+            <input
+              id="site-announcement-link-label"
+              type="text"
+              value={linkLabel}
+              onChange={e => setLinkLabel(e.target.value)}
+              className={inputClass}
+              placeholder="Learn more"
+            />
+          </div>
+        </div>
+      </div>
+      <div className="mt-4 flex flex-wrap items-center gap-3">
+        <button
+          type="button"
+          disabled={saving}
+          onClick={() => persist(true)}
+          className="rounded-xl bg-wl-brand px-4 py-2 text-sm font-semibold text-white hover:brightness-95 disabled:opacity-60"
+        >
+          Publish
+        </button>
+        <button
+          type="button"
+          disabled={saving || !isLive}
+          onClick={() => persist(false)}
+          className="rounded-xl border border-wl-line bg-white px-4 py-2 text-sm font-semibold text-wl-ink hover:bg-wl-pageAlt disabled:opacity-60"
+        >
+          Deactivate
+        </button>
+        {error ? <p className="text-sm font-semibold text-red-600">{error}</p> : null}
+        {status ? <p className="text-sm font-semibold text-emerald-700">{status}</p> : null}
+      </div>
+    </section>
   );
 }

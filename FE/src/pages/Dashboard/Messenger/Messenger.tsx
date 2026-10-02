@@ -41,6 +41,8 @@ import { ensureChatNotificationsEnabled } from "../../../utils/chatBrowserNotifi
 const Messenger = ({
   videoChaton,
   theme = "dark",
+  emptyTitle,
+  emptySubtitle,
 }: any) => {
   // Extract relevant data from the store
   const {
@@ -94,7 +96,7 @@ const Messenger = ({
           {chosenChatDetails?.userId || chosenGroupChatDetails?.groupId ? (
               <ChatDetails videoChaton = {videoChaton} theme={theme}/>
           ) : (
-              <WelcomeMessage theme={theme} />
+              <WelcomeMessage theme={theme} title={emptyTitle} subtitle={emptySubtitle} />
           )}
         </div>
       </div>

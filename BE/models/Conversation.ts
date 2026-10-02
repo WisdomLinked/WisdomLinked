@@ -5,6 +5,12 @@ const conversationSchema = new mongoose.Schema(
         /** Rocket.Chat DM / channel room id — persisted for unread badges and delete. */
         rcChannelId: { type: String, default: null },
 
+        lastMessageAt: { type: Date, default: null },
+
+        lastMessageText: { type: String, default: null },
+
+        lastMessageFrom: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
+
         participants: [
             {
                 type: mongoose.Schema.Types.ObjectId,

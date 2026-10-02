@@ -30,7 +30,7 @@ import {
     removeChatMessage,
     setDmUnreadByRidBulk,
 } from "../../../../actions/chatActions";
-import { showErrorAlert, showSuccessAlert, showWarningAlert } from '../../../../actions/alertActions';
+import { notify } from '../../../../utils/notify';
 import { store } from "../../../../store";
 import {
     connectToRC,
@@ -122,6 +122,14 @@ const Messages = ({ theme = "dark", onReplyMessage }: { theme?: string; onReplyM
     const loadingOlderRef = useRef(false);
     const { chat, auth: { userDetails },  friends: { friends } } = useAppSelector((state) => state);
     const { chosenChatDetails, messages, chosenGroupChatDetails, gotAllChats, isNewMessage, conversationId, rcChannelId } = chat;
+    const seminarEnrolledCount = (() => {
+        const adminRef = (chosenGroupChatDetails as any)?.admin;
+        const adminId = String(adminRef?._id ?? adminRef?.id ?? adminRef ?? '');
+        const participants = (chosenGroupChatDetails as any)?.participants;
+        return (Array.isArray(participants) ? participants : []).filter(
+            (p: any) => String(p?._id ?? p?.id ?? p) !== adminId,
+        ).length;
+    })();
 
     const dmOtherWlUserId = chosenChatDetails?.userId != null ? String(chosenChatDetails.userId) : null;
 
@@ -174,11 +182,11 @@ const Messages = ({ theme = "dark", onReplyMessage }: { theme?: string; onReplyM
                 }
             }
             if (mode === 'both' && !rid) {
-                dispatch(showErrorAlert('Chat room not ready — try again.'));
+                notify.error('Chat room not ready — try again.');
                 return;
             }
             if (mode === 'me' && !cid && !groupIdStr) {
-                dispatch(showErrorAlert('Chat is not ready — try again.'));
+                notify.error('Chat is not ready — try again.');
                 return;
             }
             const r = await deleteChatMessage({
@@ -189,7 +197,7 @@ const Messages = ({ theme = "dark", onReplyMessage }: { theme?: string; onReplyM
                 groupChatId: groupIdStr || undefined,
             });
             if (!r?.success) {
-                dispatch(showErrorAlert((r as { error?: string })?.error || 'Could not delete message'));
+                notify.error((r as { error?: string })?.error || 'Could not delete message');
                 return;
             }
             if (groupIdStr) {
@@ -239,7 +247,7 @@ const Messages = ({ theme = "dark", onReplyMessage }: { theme?: string; onReplyM
                     d.code === 'rc_missing_token_secret'
                         ? 'Chat realtime is unavailable (server config). Messages may not update live — contact support if this persists.'
                         : 'Chat connection failed. Try refreshing the page.';
-                dispatch(showWarningAlert(hint));
+                notify.warning(hint);
             }
         });
         return () => {
@@ -910,20 +918,22 @@ const Messages = ({ theme = "dark", onReplyMessage }: { theme?: string; onReplyM
                             className="absolute top-0 left-0 w-full h-full cursor-pointer"
                             onClick={() => set_seminarDetailsModalShow(false)}
                         />
-                        <div className={`w-full max-w-[620px] rounded-2xl p-6 relative shadow-xl border ${theme === "light" ? "bg-white text-slate-900 border-slate-200" : "bg-black text-white border-slate-700"}`}>
+                        <div className={`w-full max-w-[620px] max-h-full flex flex-col rounded-2xl p-6 relative shadow-xl border ${theme === "light" ? "bg-white text-slate-900 border-slate-200" : "bg-black text-white border-slate-700"}`}>
                             <div className={`h-1.5 w-full absolute left-0 top-0 rounded-t-2xl ${theme === "light" ? "bg-gradient-to-r from-[#234C6A] via-[#456882] to-[#234C6A]" : "bg-gradient-to-r from-slate-600 via-slate-500 to-slate-600"}`} />
-                            <div className={`text-center text-2xl mb-6 font-semibold ${theme === "light" ? "text-slate-900" : "text-white"}`}>
+                            <div className={`shrink-0 text-center text-2xl mb-6 font-semibold ${theme === "light" ? "text-slate-900" : "text-white"}`}>
                                 {chosenGroupChatDetails?.type === "community" ? "Chat Details" : "Seminar Details"}
                             </div>
                             <button
-                                className={theme === "light" ? "absolute right-2 top-2 rounded-md hover:bg-slate-100 p-1" : "absolute right-2 top-2 rounded-md hover:bg-grey"}
+                                className={theme === "light" ? "absolute right-2 top-2 rounded-md hover:bg-slate-100 p-1 z-10" : "absolute right-2 top-2 rounded-md hover:bg-grey z-10"}
                                 onClick={() => set_seminarDetailsModalShow(false)}
                             >
                                 <CloseIcon />
                             </button>
+                            <div className="min-h-0 flex-1 overflow-y-auto">
                             <SeminarDetails
                                 title={chosenGroupChatDetails?.groupName}
                                 description={chosenGroupChatDetails?.description}
+                                titleLine={chosenGroupChatDetails?.titleLine}
                                 start={chosenGroupChatDetails?.start}
                                 duration={chosenGroupChatDetails?.duration}
                                 price={chosenGroupChatDetails?.price}
@@ -947,6 +957,7 @@ const Messages = ({ theme = "dark", onReplyMessage }: { theme?: string; onReplyM
                                 onDeleteCommunityChat={handleDeleteCommunityChat}
                                 theme={theme}
                             />
+                            </div>
                         </div>
                     </div> :
                     null
@@ -955,16 +966,17 @@ const Messages = ({ theme = "dark", onReplyMessage }: { theme?: string; onReplyM
                 editSeminarModalShow ?
                     <div className={`absolute top-0 left-0 w-full h-full z-[1000] p-4 sm:p-8 ${theme === "light" ? "bg-black/30 backdrop-blur-sm" : "bg-white bg-opacity-10 backdrop-blur-sm"}`}>
                         <div className={`w-full h-full relative rounded-md p-6 flex flex-col ${theme === "light" ? "bg-white text-slate-900 shadow-xl" : "bg-black text-white"}`}>
-                            <div className={`text-center text-2xl mb-6 font-semibold ${theme === "light" ? "text-slate-900" : "text-white"}`}>Edit Seminar Details</div>
+                            <div className={`shrink-0 text-center text-2xl mb-6 font-semibold ${theme === "light" ? "text-slate-900" : "text-white"}`}>Edit Seminar Details</div>
                             <button
-                                className={theme === "light" ? "absolute right-2 top-2 rounded-md hover:bg-slate-100 p-1" : "absolute right-2 top-2 rounded-md hover:bg-grey"}
+                                className={theme === "light" ? "absolute right-2 top-2 z-10 rounded-md hover:bg-slate-100 p-1" : "absolute right-2 top-2 z-10 rounded-md hover:bg-grey"}
                                 onClick={() => set_editSeminarModalShow(false)}
                             >
                                 <CloseIcon />
                             </button>
-                            <div className="w-full h-[calc(100%-60px)]">
+                            <div className="w-full min-h-0 flex-1 overflow-y-auto">
                                 <ExpertSeminar
                                     selectedSeminar={chosenGroupChatDetails}
+                                    enrolledCount={seminarEnrolledCount}
                                 />
                             </div>
                         </div>

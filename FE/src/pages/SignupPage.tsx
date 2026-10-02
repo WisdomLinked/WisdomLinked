@@ -1,6 +1,7 @@
 import React, { FormEvent, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Mail, Lock, AlertCircle, User, GraduationCap } from 'lucide-react';
+import BrandWordmark from '../components/BrandWordmark';
 
 const BTN_PRIMARY_STYLE = { background: 'linear-gradient(135deg, #234C6A 0%, #456882 100%)' };
 const FOCUS_RING = 'focus:ring-2 focus:ring-[#234C6A]/60 focus:border-[#234C6A]';
@@ -76,9 +77,7 @@ export default function SignupPage() {
                   className="h-10 w-10 object-contain"
                 />
               </div>
-              <span className="font-black text-2xl tracking-[0.12em] uppercase text-slate-900">
-                WisdomLinked
-              </span>
+              <BrandWordmark />
             </div>
 
             <h2 className="font-display text-2xl font-bold text-slate-800 mb-1">

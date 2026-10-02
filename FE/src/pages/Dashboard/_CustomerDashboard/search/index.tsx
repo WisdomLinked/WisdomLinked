@@ -14,7 +14,7 @@ import { Swiper, SwiperSlide } from "swiper/react";
 import { Pagination, Navigation } from "swiper";
 import { SetLoadingStatus } from "../../../../actions/appActions";
 import ShowFieldError from "../../../../components/ShowFieldError";
-import { showErrorAlert, showSuccessAlert, showWarningAlert } from '../../../../actions/alertActions';
+import { notify } from '../../../../utils/notify';
 import FormAlert from '../../../../components/FormAlert';
 import { de } from "date-fns/locale";
 
@@ -83,7 +83,7 @@ const Search = () => {
 
     const selectExpert = (expert: any) => {
         if (!expert) {
-            dispatch(showWarningAlert("Expert isn't available"));
+            notify.warning("Expert isn't available");
             navigate(-1);
             return;
         }
@@ -132,7 +132,7 @@ const Search = () => {
             const response = await createGroupChatByUser(details);
             if (response === false) return;
             if (response?.status === 'FAIL' || response?.error) {
-                dispatch(showErrorAlert(response?.error || 'Could not complete booking.'));
+                notify.error(response?.error || 'Could not complete booking.');
                 set_paymentFailed(true);
                 return;
             }
@@ -144,7 +144,7 @@ const Search = () => {
                     goToStep(3);
                 }
             } else {
-                dispatch(showErrorAlert('Could not complete booking.'));
+                notify.error('Could not complete booking.');
                 set_paymentFailed(true);
             }
 
@@ -216,7 +216,7 @@ const Search = () => {
 
     useEffect(() => {
         if (userDetails.status === 'review') {
-            dispatch(showWarningAlert("This feature isn't available under review"));
+            notify.warning("This feature isn't available under review");
             navigate(-1);
         }
         let temp: any[] = userDetails.events.map((ev: any) => ({

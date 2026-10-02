@@ -4,6 +4,7 @@ import Pagination from '../../../components/Pagination'
 import { getChatBotQA, createChatBotQA, updateChatBotQA, deleteChatBotQA } from '../../../api/api'
 import { SetLoadingStatus } from '../../../actions/appActions'
 import { Plus, Edit, Trash2, Save, X, Search } from 'lucide-react'
+import ClearableInput from '../../../components/ui/ClearableInput'
 
 const ChatBotQA = () => {
     const [searchParams, setSearchParams] = useSearchParams()
@@ -12,7 +13,6 @@ const ChatBotQA = () => {
     const [numPerPage, setNumPerPage] = useState(5)
     const [currentPage, setCurrentPage] = useState(0)
     const [totalCount, setTotalCount] = useState(0)
-    const [totalPage, setTotalPage] = useState(0)
     interface QAItem {
         _id : string,
         role: string;
@@ -52,9 +52,7 @@ const ChatBotQA = () => {
             unansweredOnly,
         })
         setQAndA(Array.isArray(result?.chatBotQAs) ? result.chatBotQAs : [])
-        const total = result?.total ?? 0
-        setTotalCount(total)
-        setTotalPage(Math.max(0, Math.ceil(total / numPerPage) - 1))
+        setTotalCount(result?.total ?? 0)
         SetLoadingStatus(false)
     }
 
@@ -131,13 +129,14 @@ const ChatBotQA = () => {
                             </div>
                             
                             <div className="relative">
-                                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-wl-muted" size={18} />
-                                <input
+                                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-wl-muted z-10" size={18} />
+                                <ClearableInput
                                     type="text"
                                     placeholder="Search questions, answers, or roles..."
                                     value={searchTerm}
                                     onChange={(e) => setSearchTerm(e.target.value)}
-                                    className="pl-10 pr-4 py-2 bg-white border border-wl-line rounded-lg text-wl-ink placeholder:text-grey focus:outline-none focus:ring-2 focus:ring-wl-brand/30 w-full sm:w-80"
+                                    wrapperClassName="relative w-full sm:w-80"
+                                    className="pl-10"
                                 />
                             </div>
 
@@ -160,17 +159,6 @@ const ChatBotQA = () => {
                             <Plus size={20} />
                             Add New Q&A
                         </button>
-                    </div>
-
-                    <div className="flex justify-end p-4 border-b border-wl-line">
-                        <Pagination
-                            currentPage={currentPage}
-                            totalPage={totalPage}
-                            goFirst={() => setCurrentPage(0)}
-                            goPrev={() => setCurrentPage((currentPage - 1) || 0)}
-                            goNext={() => setCurrentPage(currentPage < totalPage ? currentPage + 1 : totalPage)}
-                            goLast={() => setCurrentPage(totalPage)}
-                        />
                     </div>
 
                     <div className="relative overflow-x-auto">
@@ -253,32 +241,16 @@ const ChatBotQA = () => {
                         </table>
                     </div>
 
-                    <div className="w-full flex flex-col sm:flex-row sm:justify-between sm:items-center p-6 gap-4 border-t border-wl-line">
-                        <div className="flex items-center gap-4">
-                            <label className="text-sm text-wl-muted">Show rows:</label>
-                            <select
-                                className="bg-wl-card text-wl-ink border border-wl-line rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-wl-brand/30"
-                                value={numPerPage}
-                                onChange={(e) => {
-                                    setNumPerPage(parseInt(e.target.value))
-                                    setCurrentPage(0)
-                                }}
-                            >
-                                <option value={5}>5</option>
-                                <option value={10}>10</option>
-                                <option value={25}>25</option>
-                                <option value={50}>50</option>
-                            </select>
-                        </div>
-                        <Pagination
-                            currentPage={currentPage}
-                            totalPage={totalPage}
-                            goFirst={() => setCurrentPage(0)}
-                            goPrev={() => setCurrentPage((currentPage - 1) || 0)}
-                            goNext={() => setCurrentPage(currentPage < totalPage ? currentPage + 1 : totalPage)}
-                            goLast={() => setCurrentPage(totalPage)}
-                        />
-                    </div>
+                    <Pagination
+                        currentPage={currentPage}
+                        totalCount={totalCount}
+                        pageSize={numPerPage}
+                        onPage={setCurrentPage}
+                        onPageSize={size => {
+                            setNumPerPage(size)
+                            setCurrentPage(0)
+                        }}
+                    />
                 </div>
             </div>
 

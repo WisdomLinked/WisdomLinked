@@ -140,13 +140,40 @@ test("DM participant may end via end-call when last_participant", async () => {
   }
 });
 
-test("DM participant may end via POST /end with last_participant_return", async () => {
+test("messenger-tab last_participant_return is refused while the room is unverified", async () => {
   const originalFindByIdMeeting = MeetingThread.findById;
   const originalFindByIdConversation = Conversation.findById;
   const originalFindByIdUser = User.findById;
 
   try {
     const meeting = stubDmMeetingEnd();
+
+    const req: any = {
+      user: { userId: "other-participant" },
+      body: { meetingThreadId: "meeting-dm", endReason: "last_participant_return" },
+    };
+    const res = createRes();
+
+    await endMeeting(req, res);
+
+    assert.equal(res.statusCode, 409);
+    assert.equal(meeting.status, "active");
+  } finally {
+    MeetingThread.findById = originalFindByIdMeeting;
+    Conversation.findById = originalFindByIdConversation;
+    User.findById = originalFindByIdUser;
+  }
+});
+
+test("messenger-tab last_participant_return is honoured once the room reports it empty", async () => {
+  const originalFindByIdMeeting = MeetingThread.findById;
+  const originalFindByIdConversation = Conversation.findById;
+  const originalFindByIdUser = User.findById;
+
+  try {
+    const meeting = stubDmMeetingEnd();
+    meeting.lastHeartbeatAt = new Date();
+    meeting.lastReportedRemoteCount = 0;
 
     const req: any = {
       user: { userId: "other-participant" },

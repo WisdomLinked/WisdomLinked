@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useDispatch } from 'react-redux';
 import { Search, CalendarDays, Clock, MapPin, ArrowLeft, User, Users, Repeat, Check, MessageSquare } from 'lucide-react';
 import FilterDropdown, { type FilterOption } from '../ui/FilterDropdown';
@@ -21,7 +21,7 @@ import {
   seatRequestWindowShortLabel,
 } from '../../utils/seatRequestWindow';
 import { SetLoadingStatus } from '../../actions/appActions';
-import { showSuccessAlert } from '../../actions/alertActions';
+import { notify } from '../../utils/notify';
 import { paymentBannerMessage, stripeTransactionId } from '../../utils/paymentBanner';
 import { updateMe } from '../../actions/authActions';
 import StudentBookingCheckout from './StudentBookingCheckout';
@@ -146,8 +146,12 @@ const containerClass = 'min-h-screen bg-[#F5F3EF] px-6 py-8 text-[#1A3A4A]';
 
 export default function StudentSeminars({
   onEnterSeminarChat,
+  initialQuery,
+  openSeminarId,
 }: {
   onEnterSeminarChat?: (seminarId: string) => void;
+  initialQuery?: string;
+  openSeminarId?: string | null;
 } = {}) {
   const { auth: { userDetails } } = useAppSelector((state: any) => state);
   const userInterests = useMemo(
@@ -159,7 +163,7 @@ export default function StudentSeminars({
   const [catalogMajors, setCatalogMajors] = useState<string[]>([]);
   const [catalogTopics, setCatalogTopics] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
-  const [searchQuery, setSearchQuery] = useState('');
+  const [searchQuery, setSearchQuery] = useState(initialQuery ?? '');
   const [majorFilter, setMajorFilter] = useState<string>('all');
   const [tagFilter, setTagFilter] = useState<string>('all');
   const [selectedSeminar, setSelectedSeminar] = useState<Seminar | null>(null);
@@ -226,15 +230,13 @@ export default function StudentSeminars({
           return;
         }
         window.localStorage.removeItem('pendingDetails');
-        dispatch(
-          showSuccessAlert(
+        notify.success(
             paymentBannerMessage({
               kind: 'withheld',
               amount: selectedSeminar.price,
               deciderName: selectedSeminar.expertName,
             }),
-          ),
-        );
+          );
         setCheckout(null);
         setSeatRequested(true);
         return;
@@ -248,15 +250,13 @@ export default function StudentSeminars({
         return;
       }
       window.localStorage.removeItem('pendingDetails');
-      dispatch(
-        showSuccessAlert(
+      notify.success(
           paymentBannerMessage({
             kind: 'paid',
             forWhat: `you are registered for ${selectedSeminar.title}`,
             transactionId: stripeTransactionId(paymentIntentId),
           }),
-        ),
-      );
+        );
       dispatch(updateMe() as any);
       setCheckout(null);
       setBookingDone(true);
@@ -296,15 +296,13 @@ export default function StudentSeminars({
         return;
       }
       window.localStorage.removeItem('pendingDetails');
-      dispatch(
-        showSuccessAlert(
+      notify.success(
           paymentBannerMessage({
             kind: 'paid',
             forWhat: 'your seat is confirmed',
             transactionId: stripeTransactionId(paymentIntentId),
           }),
-        ),
-      );
+        );
       dispatch(updateMe() as any);
       setCheckout(null);
       setBookingDone(true);
@@ -353,6 +351,24 @@ export default function StudentSeminars({
     setSeatRequested(false);
     setBookingError(null);
   };
+
+  // Global search prefills the existing query and leaves major/topic filters alone.
+  useEffect(() => {
+    if (initialQuery == null) return;
+    setSearchQuery(initialQuery);
+  }, [initialQuery]);
+
+  const openedSeminarIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!openSeminarId || loading) return;
+    if (openedSeminarIdRef.current === openSeminarId) return;
+    const match = seminars.find(
+      (seminar) => seminar.id === openSeminarId || seminar.seriesId === openSeminarId,
+    );
+    if (!match) return;
+    openedSeminarIdRef.current = openSeminarId;
+    openSeminar(match);
+  }, [openSeminarId, loading, seminars]);
 
   useEffect(() => {
     let cancelled = false;

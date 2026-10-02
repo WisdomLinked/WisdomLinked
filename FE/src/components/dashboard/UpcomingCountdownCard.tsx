@@ -125,7 +125,7 @@ export default function UpcomingCountdownCard({
   }, []);
 
   return (
-    <aside className="flex flex-col min-h-0 rounded-2xl border border-slate-200 bg-white p-6 shadow-[0_10px_30px_rgba(0,0,0,0.06)]">
+    <aside className="flex h-full flex-col min-h-0 rounded-2xl border border-slate-200 bg-white p-6 shadow-[0_10px_30px_rgba(0,0,0,0.06)]">
       <div className="flex items-start justify-between gap-4">
         <div>
           <h3 className="text-lg font-semibold text-slate-900">

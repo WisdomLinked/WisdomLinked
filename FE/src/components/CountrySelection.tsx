@@ -1,172 +1,177 @@
-import React, { useEffect, useState } from "react";
-import Select, { components } from "react-select";
-import { Country, State, City } from "country-state-city";
-import ShowFieldError from "./ShowFieldError";
+import { useEffect, useMemo, useState } from 'react';
+import { Country, State, City, type ICountry, type IState, type ICity } from 'country-state-city';
+import ShowFieldError from './ShowFieldError';
+import FieldLabel from './ui/FieldLabel';
+import SearchableSelect from './ui/SearchableSelect';
+import { PROFILE_INPUT_CLASS } from './ui/profileFieldStyles';
 
-const InputOption = ({
-    getStyles,
-    Icon,
-    isDisabled,
-    isFocused,
-    isSelected,
-    children,
-    innerProps,
-    ...rest
-}: any) => {
-    const [isActive, set_isActive] = useState(false);
-    const onMouseDown = () => set_isActive(true);
-    const onMouseUp = () => set_isActive(false);
-    const onMouseLeave = () => set_isActive(false);
-
-    // styles
-    let bg = "white";
-    if (isFocused) bg = "#eee";
-    if (isActive) bg = "#B2D4FF";
-
-    const style = {
-        alignItems: "center",
-        backgroundColor: bg,
-        display: "flex "
-    };
-
-    // prop assignment
-    const props = {
-        ...innerProps,
-        onMouseDown,
-        onMouseUp,
-        onMouseLeave,
-        style
-    };
-
-    return (
-        <components.Option
-            {...rest}
-            isDisabled={isDisabled}
-            isFocused={isFocused}
-            isSelected={isSelected}
-            getStyles={getStyles}
-            innerProps={props}
-        >
-            <input type="checkbox" className="mr-2" defaultChecked={isSelected} />
-            <span className="text-wl-ink">{children}</span>
-        </components.Option>
-    );
+type CountrySelectProps = {
+  selectedCountry: ICountry | null | undefined;
+  set_selectedCountry: (c: ICountry | null) => void;
+  selectedState: IState | { name: string } | null | undefined;
+  set_selectedState: (s: IState | { name: string } | null) => void;
+  selectedCity: ICity | null | undefined;
+  set_selectedCity: (c: ICity | null) => void;
+  stateAvailable: boolean;
+  set_stateAvailable: (v: boolean) => void;
+  cityAvailable: boolean;
+  set_cityAvailable: (v: boolean) => void;
+  /** Legacy alias — same as forceShow. */
+  showError?: boolean;
+  /** Show validation before blur (e.g. after Save). */
+  forceShow?: boolean;
 };
+
+function countryFlag(country: ICountry | null | undefined) {
+  if (!country) return null;
+  const flag = (country as ICountry & { flag?: string }).flag;
+  return flag ? <span className="mr-2" aria-hidden>{flag}</span> : null;
+}
+
 const CountrySelect = ({
-    selectedCountry,
-    set_selectedCountry,
-    selectedState,
-    set_selectedState,
-    selectedCity,
-    set_selectedCity,
-    showError,
-    stateAvailable,
-    set_stateAvailable,
-    cityAvailable,
-    set_cityAvailable
-}: any) => {
+  selectedCountry,
+  set_selectedCountry,
+  selectedState,
+  set_selectedState,
+  selectedCity,
+  set_selectedCity,
+  showError = false,
+  forceShow,
+  stateAvailable,
+  set_stateAvailable,
+  cityAvailable,
+  set_cityAvailable,
+}: CountrySelectProps) => {
+  const showForced = forceShow ?? showError;
 
-    useEffect(() => {
-        set_stateAvailable(State?.getStatesOfCountry(selectedCountry?.isoCode)?.length > 0)
-        set_cityAvailable(City.getCitiesOfState(selectedState?.countryCode, selectedState?.isoCode)?.length > 0)
-    }, [selectedCountry, selectedState])
+  const [countryTouched, setCountryTouched] = useState(false);
+  const [stateTouched, setStateTouched] = useState(false);
+  const [cityTouched, setCityTouched] = useState(false);
 
-    return (
-        <>
-            <div className="mt-8 text-wl-muted text-[12px] leading-[19px]">Country *</div>
-            <Select
-                className="MultiSelection mt-0.5 flex w-full min-h-[50px] flex-col justify-center rounded-[15px] border-0 py-[5px] text-[14px] leading-[21px] text-wl-ink"
-                classNamePrefix="wl-select"
-                placeholder='Select country'
-                options={Country.getAllCountries()}
-                getOptionLabel={(options) => {
-                    return options["name"];
-                }}
-                getOptionValue={(options) => {
-                    return options["name"];
-                }}
-                value={selectedCountry}
-                onChange={(item) => {
-                    set_selectedCountry(item);
-                    set_selectedState(null)
-                    set_selectedCity(null)
-                }}
-                components={{
-                    Option: InputOption
-                }}
+  const countries = useMemo(() => Country.getAllCountries(), []);
+  const states = useMemo(
+    () => (selectedCountry?.isoCode ? State.getStatesOfCountry(selectedCountry.isoCode) : []),
+    [selectedCountry?.isoCode],
+  );
+  const cities = useMemo(() => {
+    const st = selectedState as IState | undefined;
+    if (!st?.countryCode || !st?.isoCode) return [];
+    return City.getCitiesOfState(st.countryCode, st.isoCode) || [];
+  }, [selectedState]);
+
+  useEffect(() => {
+    const hasStates = (State.getStatesOfCountry(selectedCountry?.isoCode)?.length ?? 0) > 0;
+    set_stateAvailable(hasStates);
+    const st = selectedState as IState | undefined;
+    const hasCities =
+      !!st?.countryCode &&
+      !!st?.isoCode &&
+      (City.getCitiesOfState(st.countryCode, st.isoCode)?.length ?? 0) > 0;
+    set_cityAvailable(hasCities);
+  }, [selectedCountry, selectedState, set_stateAvailable, set_cityAvailable]);
+
+  const countryInvalid = !selectedCountry;
+  const stateInvalid = stateAvailable && !selectedState;
+  const cityInvalid = cityAvailable && !selectedCity;
+  const freeTextState = !stateAvailable && !!selectedCountry;
+  const freeTextValue =
+    freeTextState && selectedState && 'name' in selectedState ? selectedState.name : '';
+
+  return (
+    <div className="space-y-5">
+      <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+        <div>
+          <FieldLabel required>Country</FieldLabel>
+          <SearchableSelect<ICountry>
+            aria-label="Country"
+            options={countries}
+            value={selectedCountry ?? null}
+            getOptionLabel={(o) => o.name}
+            getOptionValue={(o) => o.isoCode}
+            formatOptionLabel={(option) => (
+              <span className="inline-flex items-center">
+                {countryFlag(option)}
+                {option.name}
+              </span>
+            )}
+            placeholder="Select country"
+            hasError={(countryTouched || showForced) && countryInvalid}
+            onBlur={() => setCountryTouched(true)}
+            onChange={(item) => {
+              set_selectedCountry(item);
+              set_selectedState(null);
+              set_selectedCity(null);
+              setStateTouched(false);
+              setCityTouched(false);
+            }}
+          />
+          <ShowFieldError
+            show={(countryTouched || showForced) && countryInvalid}
+            label="Please select your country"
+          />
+        </div>
+
+        <div>
+          <FieldLabel required={stateAvailable}>State</FieldLabel>
+          {freeTextState ? (
+            <input
+              className={PROFILE_INPUT_CLASS}
+              placeholder="State / region (optional)"
+              value={freeTextValue}
+              onBlur={() => setStateTouched(true)}
+              onChange={(e) => {
+                const name = e.target.value;
+                set_selectedState(name.length ? { name } : null);
+              }}
+              aria-label="State"
             />
-            <ShowFieldError
-                show={!selectedCountry && showError}
-                label='Select country'
+          ) : (
+            <SearchableSelect<IState>
+              aria-label="State"
+              options={states}
+              value={(selectedState as IState) ?? null}
+              getOptionLabel={(o) => o.name}
+              getOptionValue={(o) => o.isoCode}
+              placeholder={selectedCountry ? 'Select state' : 'Select a country first'}
+              isDisabled={!selectedCountry || !stateAvailable}
+              hasError={(stateTouched || showForced) && stateInvalid}
+              onBlur={() => setStateTouched(true)}
+              onChange={(item) => {
+                set_selectedState(item);
+                set_selectedCity(null);
+                setCityTouched(false);
+              }}
             />
+          )}
+          <ShowFieldError
+            show={!freeTextState && (stateTouched || showForced) && stateInvalid}
+            label="Please select your state"
+          />
+        </div>
+      </div>
 
-            {
-                stateAvailable ?
-                    <>
-                        <div className="mt-8 text-wl-muted text-[12px] leading-[19px]">State *</div>
-                        <Select
-                            className="MultiSelection mt-0.5 flex w-full min-h-[50px] flex-col justify-center rounded-[15px] border-0 py-[5px] text-[14px] leading-[21px] text-wl-ink"
-                            classNamePrefix="wl-select"
-                            placeholder='Select state'
-                            options={State?.getStatesOfCountry(selectedCountry?.isoCode)}
-                            getOptionLabel={(options) => {
-                                return options["name"];
-                            }}
-                            getOptionValue={(options) => {
-                                return options["name"];
-                            }}
-                            value={selectedState}
-                            onChange={(item) => {
-                                set_selectedState(item);
-                                set_selectedCity(null)
-                            }}
-                            components={{
-                                Option: InputOption
-                            }}
-                        />
-                        <ShowFieldError
-                            show={!selectedState && showError}
-                            label='Select state'
-                        />
-                    </> :
-                    null
-            }
-
-            {
-                cityAvailable ?
-                    <>
-                        <div className="mt-8 text-wl-muted text-[12px] leading-[19px]">City *</div>
-                        <Select
-                            className="MultiSelection mt-0.5 flex w-full min-h-[50px] flex-col justify-center rounded-[15px] border-0 py-[5px] text-[14px] leading-[21px] text-wl-ink"
-                            classNamePrefix="wl-select"
-                            placeholder='Select city'
-                            options={City.getCitiesOfState(
-                                selectedState?.countryCode,
-                                selectedState?.isoCode
-                            )}
-                            getOptionLabel={(options) => {
-                                return options["name"];
-                            }}
-                            getOptionValue={(options) => {
-                                return options["name"];
-                            }}
-                            value={selectedCity}
-                            onChange={(item) => {
-                                set_selectedCity(item);
-                            }}
-                            components={{
-                                Option: InputOption
-                            }}
-                        />
-                        <ShowFieldError
-                            show={!selectedCity && showError}
-                            label='Select city'
-                        />
-                    </> :
-                    null
-            }
-        </>
-    );
+      {cityAvailable ? (
+        <div>
+          <FieldLabel required>City</FieldLabel>
+          <SearchableSelect<ICity>
+            aria-label="City"
+            options={cities}
+            value={selectedCity ?? null}
+            getOptionLabel={(o) => o.name}
+            getOptionValue={(o) => o.name}
+            placeholder="Select city"
+            hasError={(cityTouched || showForced) && cityInvalid}
+            onBlur={() => setCityTouched(true)}
+            onChange={(item) => set_selectedCity(item)}
+          />
+          <ShowFieldError
+            show={(cityTouched || showForced) && cityInvalid}
+            label="Please select your city"
+          />
+        </div>
+      ) : null}
+    </div>
+  );
 };
 
-export default CountrySelect
+export default CountrySelect;

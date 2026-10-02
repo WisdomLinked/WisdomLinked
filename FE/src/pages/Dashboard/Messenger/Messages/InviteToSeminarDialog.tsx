@@ -1,9 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import Dialog from '@mui/material/Dialog';
 import { Search, UserPlus, Loader2, Plus, X } from 'lucide-react';
-import { useDispatch } from 'react-redux';
 import { getMyFollowers, inviteToSeminar } from '../../../../api/api';
-import { showErrorAlert, showSuccessAlert } from '../../../../actions/alertActions';
+import { notify } from '../../../../utils/notify';
 import Avatar from '../../../../components/Avatar';
 
 type Follower = { id: string; username: string; email: string; image?: string };
@@ -46,7 +45,6 @@ export const summarizeOutcomes = (results: Array<{ outcome: InviteOutcome }>): s
 };
 
 export default function InviteToSeminarDialog({ open, onClose, groupDetails, theme = 'light' }: Props) {
-    const dispatch = useDispatch();
     const [followers, setFollowers] = useState<Follower[]>([]);
     const [selected, setSelected] = useState<Set<string>>(new Set());
     const [search, setSearch] = useState('');
@@ -146,13 +144,13 @@ export default function InviteToSeminarDialog({ open, onClose, groupDetails, the
                 emails,
             });
             if (!res?.success || !Array.isArray(res?.results)) {
-                dispatch(showErrorAlert(typeof res === 'string' ? res : 'Could not send the invitations.'));
+                notify.error(typeof res === 'string' ? res : 'Could not send the invitations.');
                 return;
             }
             setResults(res.results);
             const done = res.results.filter((r: any) => r.outcome === 'invited' || r.outcome === 'enrolled').length;
             if (done) {
-                dispatch(showSuccessAlert(res.free ? `${done} added to this seminar.` : `${done} invited.`));
+                notify.success(res.free ? `${done} added to this seminar.` : `${done} invited.`);
             }
             setFollowers((prev) => prev.filter((f) => !selected.has(f.id)));
             setSelected(new Set());
@@ -164,7 +162,7 @@ export default function InviteToSeminarDialog({ open, onClose, groupDetails, the
 
     const submit = () => {
         if (!seminarId || totalPicked === 0) {
-            dispatch(showErrorAlert('Pick a follower or enter an email address.'));
+            notify.error('Pick a follower or enter an email address.');
             return;
         }
         // A free seminar enrols on the spot, so the host sees the consequence first.

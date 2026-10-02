@@ -11,7 +11,7 @@ import React, {
   import { useAppSelector } from '../../../store';
   import { createGroupChat, updateGroupChat, uploadSeminarCover } from '../../../api/api';
   import { SetLoadingStatus } from '../../../actions/appActions';
-  import { showErrorAlert, showSuccessAlert, showWarningAlert } from '../../../actions/alertActions';
+  import { notify } from '../../../utils/notify';
   import { updateMe } from '../../../actions/authActions';
   import { SERVICE_LABELS } from '../../../constants/serviceOptions';
   import MajorSelect from '../../../components/MajorSelect';
@@ -128,6 +128,7 @@ import React, {
     onAfterSeminarSave?: (status: 'active' | 'draft') => void;
     /** Return to seminar list without saving */
     onCancel?: () => void;
+    enrolledCount?: number;
   }
   
   type MultiSelectField = 'majors' | 'services';
@@ -231,6 +232,7 @@ import React, {
     selectedSeminar,
     onAfterSeminarSave,
     onCancel,
+    enrolledCount = 0,
   }) => {
     const dispatch = useDispatch();
     const navigate = useNavigate();
@@ -264,6 +266,7 @@ import React, {
       timezone: detectUserTimeZone(),
     }));
     const [openDropdown, setOpenDropdown] = useState<DropdownId>(null);
+    const [confirmPublishOpen, setConfirmPublishOpen] = useState(false);
     const [tagInput, setTagInput] = useState<string>('');
     const [errors, setErrors] = useState<SeminarErrors>({});
     const [coverPreview, setCoverPreview] = useState<string | null>(null);
@@ -389,7 +392,7 @@ import React, {
   
     useEffect(() => {
       if (userDetails?.status === 'review') {
-        dispatch(showWarningAlert("This feature isn't available while your profile is under review."));
+        notify.warning("This feature isn't available while your profile is under review.");
       }
     }, [userDetails?.status, dispatch]);
   
@@ -448,7 +451,7 @@ import React, {
     const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
       const file = e.target.files?.[0] || null;
       if (file && file.size > 5 * 1024 * 1024) {
-        dispatch(showErrorAlert('Cover image must be less than 5MB'));
+        notify.error('Cover image must be less than 5MB');
         return;
       }
       updateFormField('coverImage', file);
@@ -477,7 +480,7 @@ import React, {
       const raw = tagInput.trim();
       if (!raw) return;
       if (formData.tags.length >= 5) {
-        dispatch(showWarningAlert('You can add up to 5 tags'));
+        notify.warning('You can add up to 5 tags');
         return;
       }
       if (formData.tags.includes(raw)) {
@@ -613,11 +616,9 @@ import React, {
       // A hard clash with an existing booking blocks saving at any status.
       if (scheduleCheck.conflict) {
         setCurrentStep(2);
-        dispatch(
-          showErrorAlert(
+        notify.error(
             `This time clashes with ${scheduleCheck.conflict.name}. Pick a different time.`,
-          ),
-        );
+          );
         return;
       }
 
@@ -687,7 +688,7 @@ import React, {
               : savedGroupId
                 ? 'Seminar updated successfully'
                 : 'Seminar created successfully';
-          dispatch(showSuccessAlert(msg));
+          notify.success(msg);
 
           // After a create, remember the new id (and keep the uploaded cover) so
           // further edits on this editor update the same seminar.
@@ -707,13 +708,23 @@ import React, {
           }
         }
       } catch {
-        dispatch(showErrorAlert('Failed to save seminar. Please try again.'));
+        notify.error('Failed to save seminar. Please try again.');
       } finally {
         SetLoadingStatus(false);
       }
     };
 
-    const handlePublish = () => persistSeminar('active');
+    const handlePublish = () => {
+      if (enrolledCount > 0) {
+        setConfirmPublishOpen(true);
+        return;
+      }
+      void persistSeminar('active');
+    };
+    const confirmPublishWithApproval = () => {
+      setConfirmPublishOpen(false);
+      void persistSeminar('active');
+    };
     const handleSaveDraft = () => persistSeminar('draft');
   
     const renderStepper = () => (
@@ -1496,6 +1507,38 @@ import React, {
             </div>
           </div>
         </div>
+
+        {confirmPublishOpen ? (
+          <div
+            className="fixed inset-0 z-[1100] flex items-center justify-center bg-slate-900/40 px-4"
+            onClick={(e) => {
+              if (e.target === e.currentTarget) setConfirmPublishOpen(false);
+            }}
+          >
+            <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-5 shadow-xl">
+              <h2 className="text-base font-semibold text-slate-900">Publish these changes?</h2>
+              <p className="mt-3 text-sm font-semibold text-rose-600">
+                I have the approval from all the participants for these particular seminar settings
+              </p>
+              <div className="mt-5 flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setConfirmPublishOpen(false)}
+                  className="rounded-lg border border-gray-200 px-5 py-2.5 text-sm font-medium text-gray-600 hover:bg-gray-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={confirmPublishWithApproval}
+                  className="rounded-lg bg-[#234C6A] px-6 py-2.5 text-sm font-medium text-white hover:bg-[#1b3c53]"
+                >
+                  Publish Seminar
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : null}
       </div>
     );
   };

@@ -1,0 +1,403 @@
+import React, { useEffect, useRef, useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import { Search } from 'lucide-react';
+import { askSite, profileImageFetch, searchSite } from '../../api/api';
+import AnswerText from '../AnswerText';
+import { isDisplayImageUrl } from '../../utils/profileImage';
+import {
+  SITE_SEARCH_DEBOUNCE_MS,
+  adminUserMgmtEmailHref,
+  hrefForExpertHit,
+  hrefForFindExperts,
+  hrefForSeminarHit,
+  hrefForStudentSeminars,
+  isEmailQuery,
+  isSeminarCoverUrl,
+  normalizeSiteSearchResponse,
+  type SiteSearchAudience,
+  type SiteSearchResponse,
+} from '../../utils/siteSearch';
+
+function ProfileFilenameImage({
+  filename,
+  alt,
+}: {
+  filename?: string;
+  alt: string;
+}) {
+  const [src, setSrc] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    const name = typeof filename === 'string' ? filename.trim() : '';
+    setSrc(null);
+    if (!name || isSeminarCoverUrl(name) || isDisplayImageUrl(name)) return undefined;
+    profileImageFetch(name, 'small').then((fetched) => {
+      if (cancelled) return;
+      const url = typeof fetched === 'string' ? fetched.trim() : '';
+      setSrc(isDisplayImageUrl(url) ? url : null);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [filename]);
+
+  if (!src) return null;
+  return <img src={src} alt={alt} className="h-10 w-10 shrink-0 rounded-full object-cover" />;
+}
+
+function SeminarCover({ image, alt }: { image?: string; alt: string }) {
+  if (!isSeminarCoverUrl(image)) return null;
+  return <img src={image} alt={alt} className="h-10 w-14 shrink-0 rounded-md object-cover" />;
+}
+
+function ResultShell({
+  href,
+  children,
+}: {
+  href: string | null;
+  children: React.ReactNode;
+}) {
+  const className = 'flex w-full items-center gap-3 rounded-lg px-2 py-2 text-left hover:bg-[#F5F3EF]';
+  if (!href) return <div className={className}>{children}</div>;
+  return (
+    <Link to={href} className={className}>
+      {children}
+    </Link>
+  );
+}
+
+function Group({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <section className="mb-2">
+      <h2 className="px-2 pb-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-[#7A7A72]">
+        {title}
+      </h2>
+      <div className="space-y-0.5">{children}</div>
+    </section>
+  );
+}
+
+export default function SiteSearchBox({
+  audience,
+  tone = 'light',
+  variant = 'default',
+  placeholder = 'Search',
+  showShortcutHint = false,
+  autoFocus = false,
+}: {
+  audience: SiteSearchAudience;
+  tone?: 'light' | 'dark';
+  variant?: 'default' | 'nav';
+  placeholder?: string;
+  showShortcutHint?: boolean;
+  autoFocus?: boolean;
+}) {
+  const navigate = useNavigate();
+  const rootRef = useRef<HTMLDivElement | null>(null);
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  const requestRef = useRef(0);
+  const [query, setQuery] = useState('');
+  // Keyword cards stay until a search response replaces them.
+  // A later ask must not clear this list, and a new search must not wipe it before it returns.
+  const [searchCards, setSearchCards] = useState<SiteSearchResponse | null>(null);
+  const [askAnswer, setAskAnswer] = useState<string | null>(null);
+  const [asking, setAsking] = useState(false);
+  const askRequestRef = useRef(0);
+  const [open, setOpen] = useState(false);
+  const [isMac, setIsMac] = useState(false);
+
+  const trimmed = query.trim();
+  const adminEmail = audience === 'admin' && isEmailQuery(trimmed);
+  const canAsk = trimmed.length >= 2 && !adminEmail;
+  const isNav = variant === 'nav' && tone === 'light';
+
+  const askInFlightRef = useRef(false);
+
+  const askQuestion = async (value: string) => {
+    const current = value.trim();
+    if (current.length < 2 || askInFlightRef.current) return;
+    askInFlightRef.current = true;
+    const requestId = ++askRequestRef.current;
+    setAsking(true);
+    setOpen(true);
+    try {
+      const response = await askSite(current);
+      if (requestId !== askRequestRef.current) return;
+      setAskAnswer(typeof response?.answer === 'string' ? response.answer : '');
+    } catch {
+      if (requestId !== askRequestRef.current) return;
+    } finally {
+      if (requestId === askRequestRef.current) {
+        askInFlightRef.current = false;
+        setAsking(false);
+      }
+    }
+  };
+
+  useEffect(() => {
+    setIsMac(/Mac|iPhone|iPad|iPod/i.test(navigator.platform || navigator.userAgent || ''));
+  }, []);
+
+  useEffect(() => {
+    if (!autoFocus) return undefined;
+    const id = window.setTimeout(() => inputRef.current?.focus(), 0);
+    return () => window.clearTimeout(id);
+  }, [autoFocus]);
+
+  useEffect(() => {
+    if (!showShortcutHint) return undefined;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (!(event.metaKey || event.ctrlKey) || event.key.toLowerCase() !== 'k') return;
+      const target = event.target as HTMLElement | null;
+      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) {
+        if (target !== inputRef.current) return;
+      }
+      event.preventDefault();
+      inputRef.current?.focus();
+      setOpen(true);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [showShortcutHint]);
+
+  useEffect(() => {
+    if (trimmed.length < 2) return undefined;
+    if (adminEmail) {
+      const timer = window.setTimeout(() => {
+        navigate(adminUserMgmtEmailHref(trimmed));
+      }, SITE_SEARCH_DEBOUNCE_MS);
+      return () => window.clearTimeout(timer);
+    }
+    const timer = window.setTimeout(() => {
+      const requestId = ++requestRef.current;
+      searchSite(trimmed)
+        .then((data) => {
+          if (requestId !== requestRef.current) return;
+          setSearchCards(normalizeSiteSearchResponse(data));
+          setOpen(true);
+        })
+        .catch(() => {
+          // Keep the cards already on screen.
+        });
+    }, SITE_SEARCH_DEBOUNCE_MS);
+    return () => window.clearTimeout(timer);
+  }, [trimmed, adminEmail, navigate]);
+
+  useEffect(() => {
+    const onPointerDown = (event: MouseEvent) => {
+      const target = event.target as Node | null;
+      if (!target || !rootRef.current?.contains(target)) setOpen(false);
+    };
+    document.addEventListener('mousedown', onPointerDown);
+    return () => document.removeEventListener('mousedown', onPointerDown);
+  }, []);
+
+  const cards = searchCards;
+  const showPanel = open && trimmed.length >= 2 && !adminEmail && cards != null;
+  const findExpertsHref = hrefForFindExperts(audience, trimmed);
+  const seminarsHref = hrefForStudentSeminars(audience, trimmed);
+  const hasAny =
+    !!cards &&
+    (cards.experts.length > 0 ||
+      cards.seminars.length > 0 ||
+      cards.students.length > 0 ||
+      cards.yours.length > 0 ||
+      cards.pages.length > 0);
+
+  const shellClass = isNav
+    ? 'relative flex h-10 w-full items-center rounded-full border border-[#BCCCDC] bg-white/80 pl-10 pr-2 transition-shadow focus-within:border-[#234C6A] focus-within:ring-2 focus-within:ring-[#234C6A]/15'
+    : tone === 'dark'
+      ? 'flex items-center gap-2 rounded-full border border-white/30 bg-white/10 px-3 py-1.5'
+      : 'flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5';
+
+  const inputClass = isNav
+    ? 'h-full w-full min-w-0 flex-1 bg-transparent text-sm text-slate-800 placeholder:text-slate-400 outline-none focus:outline-none'
+    : tone === 'dark'
+      ? 'w-full bg-transparent text-sm text-white placeholder:text-white/60 outline-none'
+      : 'w-full bg-transparent text-sm text-slate-800 placeholder:text-slate-400 outline-none';
+
+  const iconClass = isNav
+    ? 'pointer-events-none absolute left-3 top-1/2 h-[18px] w-[18px] -translate-y-1/2 text-slate-400'
+    : `h-3.5 w-3.5 shrink-0 ${tone === 'dark' ? 'text-white/70' : 'text-slate-400'}`;
+
+  return (
+    <div ref={rootRef} className="relative w-full min-w-0" data-site-search={audience}>
+      <form
+        role="search"
+        className={shellClass}
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (canAsk && !askInFlightRef.current) void askQuestion(trimmed);
+        }}
+      >
+        <Search className={iconClass} aria-hidden />
+        <input
+          ref={inputRef}
+          type="search"
+          value={query}
+          aria-label="Search WisdomLinked"
+          placeholder={placeholder}
+          onChange={(event) => {
+            setQuery(event.target.value);
+            setOpen(true);
+            askRequestRef.current += 1;
+            askInFlightRef.current = false;
+            setAsking(false);
+            setAskAnswer(null);
+          }}
+          onFocus={() => setOpen(true)}
+          onKeyDown={(event) => {
+            if (event.key === 'Escape') setOpen(false);
+            if (event.key === 'Enter' && canAsk && !askInFlightRef.current) {
+              event.preventDefault();
+              void askQuestion(trimmed);
+            }
+          }}
+          className={inputClass}
+        />
+        {showShortcutHint && !canAsk ? (
+          <kbd
+            className="pointer-events-none hidden shrink-0 select-none items-center rounded-md border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[10px] font-medium text-slate-400 xl:inline-flex"
+            aria-hidden
+          >
+            {isMac ? '⌘K' : 'Ctrl K'}
+          </kbd>
+        ) : null}
+        {canAsk ? (
+          <button
+            type="submit"
+            disabled={asking}
+            aria-label={asking ? 'Asking' : undefined}
+            className={
+              isNav
+                ? 'shrink-0 rounded-full bg-[#234C6A] px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-60'
+                : 'shrink-0 rounded-full bg-[#234C6A] px-2.5 py-1 text-[11px] font-semibold text-white disabled:opacity-60'
+            }
+          >
+            {asking ? (
+              <span
+                className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-white/40 border-t-white"
+                aria-hidden
+              />
+            ) : (
+              'Ask'
+            )}
+          </button>
+        ) : null}
+      </form>
+      {showPanel ? (
+        <div
+          data-testid="site-search-results"
+          className="absolute left-0 right-0 top-full z-[80] mt-1 max-h-96 overflow-y-auto rounded-xl border border-[#E5E2DB] bg-white p-2 text-slate-800 shadow-[0_16px_40px_rgba(0,0,0,0.14)]"
+        >
+          {asking ? (
+            <div className="mb-2 flex items-center px-2 py-2" role="status" aria-label="Asking">
+              <span
+                className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-[#E5E2DB] border-t-[#234C6A]"
+                aria-hidden
+              />
+            </div>
+          ) : null}
+          {askAnswer ? (
+            <div data-testid="site-search-answer" className="mb-2 min-w-0 rounded-lg bg-[#F5F3EF] px-2 py-2 text-[13px] text-slate-800 whitespace-pre-wrap">
+              <AnswerText text={askAnswer} />
+            </div>
+          ) : null}
+          {cards!.experts.length > 0 ? (
+            <Group title="Experts">
+              {cards!.experts.map((expert) => (
+                <ResultShell key={expert.id} href={hrefForExpertHit(audience, expert.id)}>
+                  <ProfileFilenameImage filename={expert.image} alt={expert.name} />
+                  <span className="min-w-0">
+                    <span className="block truncate text-[13px] font-semibold text-slate-900">{expert.name}</span>
+                    {expert.title ? (
+                      <span className="block truncate text-[11px] text-[#7A7A72]">{expert.title}</span>
+                    ) : null}
+                  </span>
+                </ResultShell>
+              ))}
+            </Group>
+          ) : null}
+          {cards!.seminars.length > 0 ? (
+            <Group title="Seminars">
+              {cards!.seminars.map((seminar) => (
+                <ResultShell key={seminar.id} href={hrefForSeminarHit(audience, seminar.id)}>
+                  <SeminarCover image={seminar.image} alt={`${seminar.name} cover`} />
+                  <ProfileFilenameImage filename={seminar.hostImage} alt={`${seminar.name} host`} />
+                  <span className="min-w-0">
+                    <span className="block truncate text-[13px] font-semibold text-slate-900">{seminar.name}</span>
+                    {seminar.description ? (
+                      <span className="block truncate text-[11px] text-[#7A7A72]">{seminar.description}</span>
+                    ) : null}
+                  </span>
+                </ResultShell>
+              ))}
+            </Group>
+          ) : null}
+          {cards!.students.length > 0 ? (
+            <Group title="Students">
+              {cards!.students.map((student) => (
+                <ResultShell key={student.id} href={null}>
+                  <ProfileFilenameImage filename={student.image} alt={student.name} />
+                  <span className="min-w-0">
+                    <span className="block truncate text-[13px] font-semibold text-slate-900">{student.name}</span>
+                    <span className="block truncate text-[11px] text-[#7A7A72]">
+                      {[student.degreeSought, student.currentUniversity].filter(Boolean).join(' · ')}
+                    </span>
+                  </span>
+                </ResultShell>
+              ))}
+            </Group>
+          ) : null}
+          {cards!.yours.length > 0 ? (
+            <Group title="Your sessions">
+              {cards!.yours.map((session) => (
+                <ResultShell key={session.id} href={null}>
+                  <ProfileFilenameImage filename={session.expert?.image} alt={session.expert?.name || 'Expert'} />
+                  <span className="min-w-0">
+                    <span className="block truncate text-[13px] font-semibold text-slate-900">{session.name}</span>
+                    <span className="block truncate text-[11px] text-[#7A7A72]">
+                      {[session.student?.name, session.expert?.name].filter(Boolean).join(' · ')}
+                    </span>
+                  </span>
+                </ResultShell>
+              ))}
+            </Group>
+          ) : null}
+          {cards!.pages.length > 0 ? (
+            <Group title="Pages">
+              {cards!.pages.map((page) => (
+                <ResultShell key={`${page.route}-${page.title}`} href={page.route}>
+                  <span className="min-w-0">
+                    <span className="block truncate text-[13px] font-semibold text-slate-900">{page.title}</span>
+                    {page.snippet ? (
+                      <span className="block truncate text-[11px] text-[#7A7A72]">{page.snippet}</span>
+                    ) : null}
+                  </span>
+                </ResultShell>
+              ))}
+            </Group>
+          ) : null}
+          {!hasAny ? (
+            <p className="px-2 py-3 text-center text-[12px] text-slate-500">No matches</p>
+          ) : null}
+          {findExpertsHref || seminarsHref ? (
+            <div className="mt-1 flex gap-2 border-t border-[#E5E2DB] px-2 pt-2">
+              {findExpertsHref ? (
+                <Link to={findExpertsHref} className="text-[12px] font-semibold text-[#234C6A] hover:underline">
+                  Find experts
+                </Link>
+              ) : null}
+              {seminarsHref ? (
+                <Link to={seminarsHref} className="text-[12px] font-semibold text-[#234C6A] hover:underline">
+                  Seminars
+                </Link>
+              ) : null}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+    </div>
+  );
+}

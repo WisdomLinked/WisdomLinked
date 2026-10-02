@@ -44,7 +44,6 @@ function metaSummary(meta?: Record<string, unknown>): string {
 export default function AdminAuditLog() {
     const [rows, setRows] = useState<AuditRow[]>([]);
     const [currentPage, setCurrentPage] = useState(0);
-    const [totalPage, setTotalPage] = useState(0);
     const [totalCount, setTotalCount] = useState(0);
     const [loaded, setLoaded] = useState(false);
 
@@ -55,15 +54,11 @@ export default function AdminAuditLog() {
             const res = await getAdminAuditLogs({ numPerPage: PAGE_SIZE, currentPage: page });
             const list = Array.isArray(res?.result) ? res.result : [];
             setRows(list);
-            const total = res?.totalCount || 0;
-            setTotalCount(total);
-            const pages = total === 0 ? 0 : Math.ceil(total / PAGE_SIZE) - 1;
-            setTotalPage(pages < 0 ? 0 : pages);
+            setTotalCount(res?.totalCount || 0);
         } catch (err) {
             console.error(err);
             setRows([]);
             setTotalCount(0);
-            setTotalPage(0);
         } finally {
             setLoaded(true);
             SetLoadingStatus(false);
@@ -125,16 +120,12 @@ export default function AdminAuditLog() {
                 </div>
 
                 {totalCount > PAGE_SIZE ? (
-                    <div className="mt-4 flex justify-center">
-                        <Pagination
-                            currentPage={currentPage}
-                            totalPage={totalPage}
-                            goPrev={() => load(Math.max(0, currentPage - 1))}
-                            goNext={() => load(Math.min(totalPage, currentPage + 1))}
-                            goFirst={() => load(0)}
-                            goLast={() => load(totalPage)}
-                        />
-                    </div>
+                    <Pagination
+                        currentPage={currentPage}
+                        totalCount={totalCount}
+                        pageSize={PAGE_SIZE}
+                        onPage={page => load(page)}
+                    />
                 ) : null}
             </div>
         </div>

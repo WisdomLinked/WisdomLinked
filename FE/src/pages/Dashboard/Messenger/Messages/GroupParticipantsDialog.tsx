@@ -5,11 +5,11 @@ import DialogTitle from "@mui/material/DialogTitle";
 import DialogActions from "@mui/material/DialogActions";
 import Button from "@mui/material/Button";
 import Avatar from "../../../../components/Avatar";
-import { Crown, Mail, UserMinus, Users, X } from "lucide-react";
+import { Crown, UserMinus, Users, X } from "lucide-react";
 import { useDispatch, useSelector } from "react-redux";
 import { RootState } from "../../../../store";
 import { removeCommunityMember } from "../../../../api/api";
-import { showErrorAlert, showSuccessAlert, showWarningAlert } from '../../../../actions/alertActions';
+import { notify } from '../../../../utils/notify';
 import { setChosenGroupChatDetails } from "../../../../actions/chatActions";
 import { updateMe } from "../../../../actions/authActions";
 import { fetchChatUserProfile } from "../../../../api/chatApi";
@@ -124,13 +124,13 @@ const GroupParticipantsDialog = ({
                         participants: nextParticipants,
                     }),
                 );
-                dispatch(showSuccessAlert("Member removed from the community"));
+                notify.success("Member removed from the community");
                 dispatch(updateMe() as any);
             } else {
-                dispatch(showErrorAlert(res?.error || "Could not remove member"));
+                notify.error(res?.error || "Could not remove member");
             }
         } catch (e: any) {
-            dispatch(showErrorAlert(e?.response?.data?.error || e?.message || "Could not remove member"));
+            notify.error(e?.response?.data?.error || e?.message || "Could not remove member");
         } finally {
             setRemovingId(null);
         }
@@ -213,7 +213,7 @@ const GroupParticipantsDialog = ({
                                     }}
                                     className={`cursor-pointer rounded-xl border px-3 py-2.5 transition-colors ${isLight ? "border-slate-200 bg-white hover:bg-slate-50" : "border-slate-700 bg-slate-800/70 hover:bg-slate-800"}`}
                                 >
-                                    <div className="flex items-start gap-3">
+                                    <div className="flex items-center gap-3">
                                         <Avatar
                                             username={participant.username}
                                             image={
@@ -228,7 +228,7 @@ const GroupParticipantsDialog = ({
                                         />
                                         <div className="min-w-0 flex-1">
                                             <div className="flex flex-wrap items-center gap-1.5">
-                                                <p className={`truncate text-sm font-semibold ${isLight ? "text-slate-900" : "text-slate-100"}`}>
+                                                <p className={`truncate text-base font-semibold ${isLight ? "text-slate-900" : "text-slate-100"}`}>
                                                     {participant.username}
                                                 </p>
                                                 {isMe ? (
@@ -247,10 +247,6 @@ const GroupParticipantsDialog = ({
                                                         Co-moderator
                                                     </span>
                                                 ) : null}
-                                            </div>
-                                            <div className={`mt-1 flex items-center gap-1.5 text-xs ${isLight ? "text-slate-500" : "text-slate-400"}`}>
-                                                <Mail className="h-3.5 w-3.5 shrink-0" />
-                                                <span className="truncate">{participant.email}</span>
                                             </div>
                                         </div>
                                         {canRemove ? (

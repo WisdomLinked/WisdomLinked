@@ -16,10 +16,14 @@ import { useNavigate } from "react-router-dom";
 import { SetLoadingStatus } from "../../../actions/appActions";
 import CountrySelect from "../../../components/CountrySelection";
 import FileBrowser from "../../../components/fileBrowser";
+import FieldLabel from "../../../components/ui/FieldLabel";
+import { PROFILE_INPUT_CLASS } from "../../../components/ui/profileFieldStyles";
 import { useDispatch } from "react-redux";
-import { showErrorAlert, showSuccessAlert, showWarningAlert } from '../../../actions/alertActions';
+import { notify } from '../../../utils/notify';
 import { updateMe } from "../../../actions/authActions";
 import { SERVICE_OPTIONS, matchesServiceOption } from "../../../constants/serviceOptions";
+
+const isPhoneValid = (value: string) => (value || '').replace(/\D/g, '').length >= 8;
 
 /** react-select options for the three canonical services (value === label for clean round-trips). */
 const SERVICE_SELECT_OPTIONS = SERVICE_OPTIONS.map((o) => ({ value: o.label, label: o.label }));
@@ -81,13 +85,7 @@ const SectionHeader = ({ icon, title, subtitle }: { icon: React.ReactNode; title
     </div>
 );
 
-const FieldLabel = ({ children, required }: { children: React.ReactNode; required?: boolean }) => (
-    <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-500">
-        {children}{required && <span className="ml-0.5 text-rose-400">*</span>}
-    </label>
-);
-
-const inputClass = "w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 outline-none transition focus:border-[#234C6A] focus:bg-white focus:ring-2 focus:ring-[#234C6A]/10";
+const inputClass = PROFILE_INPUT_CLASS;
 const photoBtnOutline =
     "rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-[11px] font-semibold text-slate-700 hover:bg-slate-50 transition";
 const photoBtnSave =
@@ -125,7 +123,9 @@ const ExpertProfile = ({
     const [stateAvailable, set_stateAvailable] = useState(false);
     const [cityAvailable, set_cityAvailable] = useState(false);
     const [phoneNumber, set_phoneNumber] = useState<any>('');
+    const [phoneTouched, set_phoneTouched] = useState(false);
     const [showError, set_showError] = useState(false);
+    const [saveAttempted, set_saveAttempted] = useState(false);
     const [enableToUpdate, set_enableToUpdate] = useState(false);
     const [photoSaving, set_photoSaving] = useState(false);
     const photoFileInputRef = useRef<HTMLInputElement>(null);
@@ -151,6 +151,8 @@ const ExpertProfile = ({
         set_state(userDetails.state || null);
         set_city(userDetails.city || null);
         set_phoneNumber(userDetails.phoneNumber || '');
+        set_phoneTouched(false);
+        set_saveAttempted(false);
         set_resume(userDetails.resume || '');
         set_specialNote(userDetails.specialNote || '');
     };
@@ -178,6 +180,8 @@ const ExpertProfile = ({
         set_state(userDetails.state || null);
         set_city(userDetails.city || null);
         set_phoneNumber(userDetails.phoneNumber || '');
+        set_phoneTouched(false);
+        set_saveAttempted(false);
         set_resume(userDetails.resume || '');
         set_specialNote(userDetails.specialNote || '');
     };
@@ -189,16 +193,16 @@ const ExpertProfile = ({
             const ok = await doUpdateProfile({ email: userDetails.email, specialNote: trimmed });
             if (ok) {
                 set_specialNote(trimmed);
-                dispatch(showSuccessAlert('Notes saved'));
+                notify.success('Notes saved');
             }
         } else {
             const res = await doUpdateProfileByAdmin({ email: userDetails.email, specialNote: trimmed });
             if (res?.result) {
                 updateOneUser(res.result);
                 set_specialNote(trimmed);
-                dispatch(showSuccessAlert('Notes saved'));
+                notify.success('Notes saved');
             } else {
-                dispatch(showErrorAlert('Could not save notes'));
+                notify.error('Could not save notes');
             }
         }
         set_savingSpecialNote(false);
@@ -235,13 +239,13 @@ const ExpertProfile = ({
             set_currFileName(filename);
             await dispatch(updateMe() as any);
             await loadData();
-            dispatch(showSuccessAlert('Profile photo saved'));
+            notify.success('Profile photo saved');
         } catch (error: any) {
             const msg =
                 error?.response?.data?.error ||
                 error?.message ||
                 'Could not save profile photo';
-            dispatch(showErrorAlert(String(msg)));
+            notify.error(String(msg));
         } finally {
             set_photoSaving(false);
         }
@@ -254,7 +258,7 @@ const ExpertProfile = ({
         !!country &&
         (!stateAvailable || (stateAvailable && !!state)) &&
         (!cityAvailable || (cityAvailable && !!city)) &&
-        !!phoneNumber;
+        isPhoneValid(phoneNumber);
 
     const updateProfile = async () => {
         const hasFormChanges = hasExpertProfileUnsavedChanges({
@@ -272,12 +276,13 @@ const ExpertProfile = ({
             userDetails,
         });
         if (!hasFormChanges) {
-            dispatch(showErrorAlert('No profile changes to save.'));
+            notify.error('No profile changes to save.');
             return;
         }
         if (!isProfileFormValid()) {
             set_showError(true);
-            dispatch(showErrorAlert('Please complete all required fields before saving.'));
+            set_saveAttempted(true);
+            notify.error('Please complete all required fields before saving.');
             return;
         }
         SetLoadingStatus(true);
@@ -296,20 +301,22 @@ const ExpertProfile = ({
         if (!isFromAdminPanel) {
             const ok = await doUpdateProfile(updates);
             if (ok) {
+                set_saveAttempted(false);
                 await dispatch(updateMe() as any);
-                dispatch(showSuccessAlert('Profile saved'));
+                notify.success('Profile saved');
                 await loadData();
             } else {
-                dispatch(showErrorAlert('Could not save profile'));
+                notify.error('Could not save profile');
             }
         } else {
             const res = await doUpdateProfileByAdmin(updates);
             if (res) {
+                set_saveAttempted(false);
                 updateOneUser(res.result);
-                dispatch(showSuccessAlert('Profile saved'));
+                notify.success('Profile saved');
                 await loadData();
             } else {
-                dispatch(showErrorAlert('Could not save profile'));
+                notify.error('Could not save profile');
             }
         }
         SetLoadingStatus(false);
@@ -322,7 +329,7 @@ const ExpertProfile = ({
             set_resume(response.newResume);
             set_file('');
         } else {
-            dispatch(showErrorAlert(response.error));
+            notify.error(response.error);
         }
         SetLoadingStatus(false);
     };
@@ -611,7 +618,7 @@ const ExpertProfile = ({
                             subtitle="Where you're based and how to reach you"
                         />
 
-                        <div className="space-y-4">
+                        <div className="space-y-5">
                             <CountrySelect
                                 selectedCountry={country}
                                 set_selectedCountry={set_country}
@@ -623,21 +630,39 @@ const ExpertProfile = ({
                                 set_stateAvailable={set_stateAvailable}
                                 cityAvailable={cityAvailable}
                                 set_cityAvailable={set_cityAvailable}
-                                showError={showError}
+                                forceShow={saveAttempted}
                             />
 
                             <div>
                                 <FieldLabel required>Phone number</FieldLabel>
-                                <div className="rounded-xl border border-slate-200 bg-slate-50 px-2 py-1 transition focus-within:border-[#234C6A] focus-within:bg-white focus-within:ring-2 focus-within:ring-[#234C6A]/10">
+                                <div
+                                    className={`wl-phone-input rounded-xl border bg-slate-50 transition focus-within:border-[#234C6A] focus-within:bg-white focus-within:ring-2 focus-within:ring-[#234C6A]/10 ${
+                                        (phoneTouched || saveAttempted) && !isPhoneValid(phoneNumber)
+                                            ? 'border-rose-300'
+                                            : 'border-slate-200'
+                                    }`}
+                                    onBlur={(e) => {
+                                        if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+                                            set_phoneTouched(true);
+                                        }
+                                    }}
+                                >
                                     <PhoneInput
                                         specialLabel=""
                                         placeholder="Enter number"
                                         value={phoneNumber}
+                                        country={(country?.isoCode || 'us').toLowerCase()}
                                         onChange={(data) => set_phoneNumber(data)}
-                                        inputStyle={{ border: "none", width: "100%", background: "transparent", fontSize: "14px" }}
+                                        inputClass="!w-full !h-11 !border-0 !bg-transparent !text-sm !text-slate-900 !pl-[52px]"
+                                        buttonClass="!border-0 !bg-transparent"
+                                        containerClass="!w-full"
+                                        dropdownClass="!rounded-xl !border-slate-200 !shadow-lg"
                                     />
                                 </div>
-                                <ShowFieldError show={!phoneNumber.length && showError} label="Required field." />
+                                <ShowFieldError
+                                    show={(phoneTouched || saveAttempted) && !isPhoneValid(phoneNumber)}
+                                    label="Enter a valid phone number"
+                                />
                             </div>
                         </div>
                     </div>

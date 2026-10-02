@@ -29,6 +29,7 @@ jobs:
           filters: |
             backend:
               - 'BE/**'
+              - '.github/workflows/deploy-staging.yml'
             frontend:
               - 'FE/**'
 
@@ -90,6 +91,9 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Stage public page index for the backend image
+        run: cp FE/src/content/publicPages.ts BE/search/publicPageCatalog.ts
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
@@ -103,7 +107,8 @@ jobs:
       - name: Build and push Backend Image
         uses: docker/build-push-action@v5
         with:
-          context: ./BE
+          context: .
+          file: BE/Dockerfile
           push: true
           tags: ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE }}:staging
           cache-from: type=gha
@@ -220,6 +225,9 @@ jobs:
               -e STRIPE_WEBHOOK_SECRET="${{ secrets.STRIPE_WEBHOOK_SECRET }}" \
               -e COOKIE_EXPIRED_TIME="86400000" \
               -e SENDGRID_API_KEY="${{ secrets.SENDGRID_API_KEY }}" \
+              -e GRADIENT_API_TOKEN="${{ secrets.GRADIENT_API_TOKEN }}" \
+              -e GRADIENT_KNOWLEDGE_BASE_UUID="${{ secrets.GRADIENT_KNOWLEDGE_BASE_UUID }}" \
+              -e GRADIENT_MODEL_ACCESS_KEY="${{ secrets.GRADIENT_MODEL_ACCESS_KEY }}" \
               -e GOOGLE_EMAIL="${{ secrets.GOOGLE_EMAIL }}" \
               -e GOOGLE_PASSWORD="${{ secrets.GOOGLE_PASSWORD }}" \
               -e ZOHONOREPLY_USER="${{ secrets.ZOHONOREPLY_USER }}" \

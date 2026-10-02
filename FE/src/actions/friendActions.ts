@@ -1,6 +1,6 @@
 import { Dispatch } from "redux";
 import { acceptFriendRequest, inviteFriendRequest, rejectFriendRequest, removeFriend } from "../api/api";
-import { showErrorAlert, showSuccessAlert } from "./alertActions";
+import { notify } from '../utils/notify';
 import { resetChatAction } from "./chatActions";
 import { actionTypes, PendingInvitation, Friend, OnlineUser, GroupChatDetails, ResetFriends } from "./types";
 
@@ -12,11 +12,11 @@ export const inviteFriend = (email: string, closeDialogHandler: () => void) => {
         if (response === false) return;
         if (response === "Invitation has been sent successfully") {
             closeDialogHandler();
-            dispatch(showSuccessAlert(response));
+            notify.success(response);
         } else if (typeof response === 'string' && response.length > 0) {
-            dispatch(showErrorAlert(response));
+            notify.error(response);
         } else {
-            dispatch(showErrorAlert('Could not send invitation. Please try again.'));
+            notify.error('Could not send invitation. Please try again.');
         }
     };
 };
@@ -65,9 +65,9 @@ export const rejectInvitation = (invitationId: string) => {
 
         if (response === false) return;
         if (response === "Invitation rejected successfully!") {
-            dispatch(showSuccessAlert(response));
+            notify.success(response);
         } else if (typeof response === 'string' && response.length > 0) {
-            dispatch(showErrorAlert(response));
+            notify.error(response);
         }
     };
 };
@@ -79,9 +79,9 @@ export const acceptInvitation = (invitationId: string) => {
 
         if (response === false) return;
         if (response === "Invitation accepted successfully!") {
-            dispatch(showSuccessAlert(response));
+            notify.success(response);
         } else if (typeof response === 'string' && response.length > 0) {
-            dispatch(showErrorAlert(response));
+            notify.error(response);
         }
     };
 };
@@ -94,10 +94,10 @@ export const removeFriendAction = ({ friendId, friendName }: { friendId: string;
 
         if (response === false) return;
         if (response === "Friend removed successfully!") {
-            dispatch(showSuccessAlert(`You removed ${friendName} from your list of friends!`));
+            notify.success(`You removed ${friendName} from your list of friends!`);
             dispatch(resetChatAction())
         } else if (typeof response === 'string' && response.length > 0) {
-            dispatch(showErrorAlert(response));
+            notify.error(response);
         }
     };
 };

@@ -10,7 +10,7 @@ import { SetLoadingStatus } from "../../../actions/appActions";
 import { localizer } from "../../../actions/common";
 import { useNavigate } from "react-router-dom";
 import { updateMe } from "../../../actions/authActions";
-import { showErrorAlert, showSuccessAlert, showWarningAlert } from '../../../actions/alertActions';
+import { notify } from '../../../utils/notify';
 import { useAppSelector } from "../../../store";
 import {setChosenChatDetails,setChosenGroupChatDetails} from "../../../actions/chatActions";
 
@@ -161,7 +161,7 @@ const CustomerCalendar = () => {
         if (response) {
             dispatch(updateMe())
             getEvents()
-            dispatch(showSuccessAlert('Appointment Cancelled and your money refunded'))
+            notify.success('Appointment Cancelled and your money refunded')
         }
         set_seminarModalShow(false)
         set_selectedEvent(null)
@@ -174,7 +174,7 @@ const CustomerCalendar = () => {
         if (response) {
             dispatch(updateMe())
             getEvents()
-            dispatch(showSuccessAlert('You left a seminar and your money refunded'))
+            notify.success('You left a seminar and your money refunded')
         }
         set_seminarModalShow(false)
         set_selectedEvent(null)
@@ -195,7 +195,7 @@ const CustomerCalendar = () => {
         if (response) {
             dispatch(updateMe())
             getEvents()
-            dispatch(showSuccessAlert('Event Appointment Cancelled and your money refunded'))
+            notify.success('Event Appointment Cancelled and your money refunded')
         }
         set_eventModalShow(false)
         set_selectedEvent(null)

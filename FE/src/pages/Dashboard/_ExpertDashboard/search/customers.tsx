@@ -26,7 +26,7 @@ import { proposeIndividualAppointment } from "../../../../api/api";
 import { proposedTimeNeedsOverride, hasBookingConflict, presetAvailabilityRanges } from "../../../../utils/proposeAvailability";
 import { normalizeExpertPrice } from "../../../../utils/schedulingSlots";
 import { updateMe } from "../../../../actions/authActions";
-import { showErrorAlert, showSuccessAlert, showWarningAlert } from "../../../../actions/alertActions";
+import { notify } from '../../../../utils/notify';
 
 const Customers = ({
     qCustomerId,
@@ -214,36 +214,36 @@ const Customers = ({
 
     const submitPropose = async (override = false) => {
         if (!proposeTitle.trim()) {
-            dispatch(showWarningAlert("Add a title for the session."));
+            notify.warning("Add a title for the session.");
             return;
         }
         if (!proposeDate || !proposeStart) {
-            dispatch(showWarningAlert("Pick a date and start time."));
+            notify.warning("Pick a date and start time.");
             return;
         }
         if (!proposeCustomerEmail) {
-            dispatch(showErrorAlert("Still resolving the student — try again in a moment."));
+            notify.error("Still resolving the student — try again in a moment.");
             return;
         }
         const start = new Date(`${proposeDate}T${proposeStart}:00`);
         if (Number.isNaN(start.getTime())) {
-            dispatch(showErrorAlert("That date/time isn't valid."));
+            notify.error("That date/time isn't valid.");
             return;
         }
         if (start.getTime() <= Date.now()) {
-            dispatch(showWarningAlert("Pick a time in the future."));
+            notify.warning("Pick a time in the future.");
             return;
         }
         const end = new Date(start.getTime() + proposeDuration * 60000);
         const price = Math.round(Number(proposePrice) * 100) / 100;
         if (Number.isNaN(price) || price < 0) {
-            dispatch(showWarningAlert("Enter a valid price for the session."));
+            notify.warning("Enter a valid price for the session.");
             return;
         }
 
         if (hasBookingConflict(userDetails, start, end)) {
             setOutsideConfirm(false);
-            dispatch(showWarningAlert("You already have a session at this time. Pick another time."));
+            notify.warning("You already have a session at this time. Pick another time.");
             return;
         }
 
@@ -273,7 +273,7 @@ const Customers = ({
             } else {
                 dispatch(updateMe() as any);
             }
-            dispatch(showSuccessAlert("Session proposed — the student will be notified to accept."));
+            notify.success("Session proposed — the student will be notified to accept.");
             setProposeFor(null);
         }
     };

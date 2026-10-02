@@ -35,7 +35,7 @@ const DashboardHeader = ({ userDetails }: any) => {
     }
 
     return (
-        <div className="w-full h-[63px] bg-black flex justify-between items-center px-5 drop-shadow-sm text-white">
+        <div data-wl-header className="w-full h-[63px] bg-black flex justify-between items-center px-5 drop-shadow-sm text-white">
 
             {
                 userDetails.role==="admin"? <Link to='/user/admindashboard' className={`w-fit flex items-center gap-2.5 font-black text-2xl ml-10 lg:ml-0`}>

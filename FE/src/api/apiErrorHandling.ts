@@ -1,5 +1,5 @@
 import { store } from '../store';
-import { showErrorAlert } from '../actions/alertActions';
+import { notify } from '../utils/notify';
 import { logoutUser } from '../actions/authActions';
 import { SetLoadingStatus } from '../actions/appActions';
 import { resolveUserFacingError } from '../utils/resolveUserFacingError';
@@ -70,7 +70,7 @@ export function handleApiFailure(
     error: unknown,
     options: HandleApiFailureOptions = {},
 ): ApiFailure {
-    const notify = options.notify !== false;
+    const shouldNotify = options.notify !== false;
     const logoutOnAuth = options.logoutOnAuth !== false;
 
     const err = error as { response?: { status?: number; data?: unknown }; status?: number };
@@ -83,8 +83,8 @@ export function handleApiFailure(
         return false;
     }
 
-    if (notify) {
-        store.dispatch(showErrorAlert(resolveUserFacingError(error)));
+    if (shouldNotify) {
+        notify.error(resolveUserFacingError(error));
     }
 
     SetLoadingStatus(false);

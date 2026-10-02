@@ -44,7 +44,7 @@ import {
 } from '../../utils/appointmentDurations';
 import { detectUserTimeZone, formatPickedSlotWhenDisplay } from '../../utils/schedulingTimezone';
 import { SetLoadingStatus } from '../../actions/appActions';
-import { showSuccessAlert } from '../../actions/alertActions';
+import { notify } from '../../utils/notify';
 import { paymentBannerMessage, stripeTransactionId } from '../../utils/paymentBanner';
 
 type BookingStep = 'pick' | 'review' | 'pay' | 'success';
@@ -306,15 +306,13 @@ export default function ExpertProfile({
         window.localStorage.removeItem('pendingDetails');
         dispatch({ type: 'updateUserDetails', payload: (response as any).result });
         setBookingAwaitsWalletPayment(paymentMode === 'wallet');
-        dispatch(
-          showSuccessAlert(
+        notify.success(
             paymentBannerMessage(
               paymentMode === 'wallet'
                 ? { kind: 'requestSent', deciderName: mentor.name }
                 : { kind: 'withheld', amount: oneToOneSessionPrice, deciderName: mentor.name },
             ),
-          ),
-        );
+          );
         setBookingStep('success');
       } catch (err: unknown) {
         const message = err instanceof Error ? err.message : 'Booking failed. Please try again.';
@@ -478,28 +476,24 @@ export default function ExpertProfile({
         }
         window.localStorage.removeItem('pendingDetails');
         if (res?.status === 'pending_approval') {
-          dispatch(
-            showSuccessAlert(
+          notify.success(
               paymentBannerMessage({
                 kind: 'withheld',
                 amount: target.price,
                 deciderName: mentor.name,
               }),
-            ),
-          );
+            );
           setSeminarSeatRequestedId(target.id);
           setSeminarCheckout(null);
           return;
         }
-        dispatch(
-          showSuccessAlert(
+        notify.success(
             paymentBannerMessage({
               kind: 'paid',
               forWhat: `you are registered for ${target.name}`,
               transactionId: stripeTransactionId(paymentIntentId),
             }),
-          ),
-        );
+          );
         setSeminarBookingSuccessId(target.id);
         setSeminarCheckout(null);
         void loadExpertDetails();
@@ -537,15 +531,13 @@ export default function ExpertProfile({
         return;
       }
       window.localStorage.removeItem('pendingDetails');
-      dispatch(
-        showSuccessAlert(
+      notify.success(
           paymentBannerMessage({
             kind: 'paid',
             forWhat: 'your seat is confirmed',
             transactionId: stripeTransactionId(paymentIntentId),
           }),
-        ),
-      );
+        );
       setSeminarBookingSuccessId(seatPayTarget.groupChatId);
       setSeatPayTarget(null);
       void loadExpertDetails();

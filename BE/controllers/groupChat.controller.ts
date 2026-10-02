@@ -89,8 +89,9 @@ const groupMemberIds = (groupChat: any): string[] => [
     ...(Array.isArray(groupChat?.coModerators) ? groupChat.coModerators.map((p: any) => normalizeId(p)) : []),
 ].filter(Boolean);
 
+import { hasJoinedCommunity } from '../utils/communityMembership';
 import { enrolledStudentIds, seminarIsFull, computeSeatRequestDeadline, seatRequestWindowOpen, seatRequestUnavailableMessage, resolveSeatApprovalBlock } from '../utils/seminarCapacity';
-import { describeSeminarChanges } from '../utils/seminarChanges';
+import { describeSeminarChanges, seminarDetailPairs } from '../utils/seminarChanges';
 import {
     normalizePaymentMode,
     isWallet,
@@ -172,7 +173,7 @@ const {
     studentNote: emailStudentNote,
     escapeHtml: emailEscape,
 } = require('../services/emailTemplate')
-const { scheduleEmailReminder, sendEmailMeetingRequestToCustomer, sendEmailMeetingRequestToExpert, sendEmailSessionPaidToExpert, sendEmailSessionOfferSentToExpert, sendEmailMeetingAcceptance, sendNotificationEmail } = require('../services/notifications')
+const { sendEmailMeetingRequestToCustomer, sendEmailMeetingRequestToExpert, sendEmailSessionPaidToExpert, sendEmailSessionOfferSentToExpert, sendEmailMeetingAcceptance, sendNotificationEmail } = require('../services/notifications')
 const { assertBookingLeadTime } = require("../utils/bookingLeadTime");
 const { assertBookingSlotValid, assertDurationAllowed } = require("../utils/bookingValidation");
 import { buildRemovedUserNotice, normalizeModerationReason } from '../utils/videoModerationNotice';
@@ -213,7 +214,7 @@ const createGeneralChatAndJoinGlobalChat = async (expertId) => {
 const createCommunityChat = async (req, res) => {
     try {
         const { userId } = req.user;
-        const { name, description, participants, isOpenToAll } = req.body;
+        const { name, titleLine, description, participants, isOpenToAll } = req.body;
 
         // Validate name
         if (!name || !name.trim()) {
@@ -270,6 +271,7 @@ const createCommunityChat = async (req, res) => {
         const now = new Date();
         const communityChat = await GroupChat.create({
             name: name.trim(),
+            titleLine: (titleLine || '').trim(),
             description: description || '',
             type: 'community',
             status: 'active',
@@ -284,10 +286,9 @@ const createCommunityChat = async (req, res) => {
             lastMessageAt: now,
         });
 
-        // Add chat to the creator and any explicitly invited participants (not to all users).
         const participantsToUpdate = finalParticipants;
-        await User.updateMany(
-            { _id: { $in: participantsToUpdate } },
+        await User.updateOne(
+            { _id: userId },
             { $addToSet: { generalChats: communityChat._id } }
         );
 
@@ -384,11 +385,6 @@ const addParticipantsToCommunityChat = async (req, res) => {
 
         await syncGroupRocketChannel(String(communityChat._id));
 
-        // Add chat to new participants' generalChats arrays
-        await User.updateMany(
-            { _id: { $in: newParticipantIds } },
-            { $addToSet: { generalChats: communityChat._id } }
-        );
 
         // Update all participants' chat lists via socket
         newParticipantIds.forEach(participantId => {
@@ -534,7 +530,6 @@ const getAllCommunityChats = async (req, res) => {
 
         // Add isJoined flag to each chat
         const chatsWithJoinStatus = communityChats.map(chat => {
-            const chatId = chat._id.toString();
             const participantIds = (chat.participants || []).map((p) => {
                 if (typeof p === 'string') return p;
                 if (p && p._id) return p._id.toString();
@@ -543,7 +538,7 @@ const getAllCommunityChats = async (req, res) => {
 
             return {
                 ...chat,
-                isJoined: userChatIds.includes(chatId) || participantIds.includes(userId.toString()),
+                isJoined: hasJoinedCommunity(chat, userId, userChatIds),
                 participantCount: participantIds.length
             };
         });
@@ -1395,7 +1390,7 @@ const joinGroupChat = async (req, res) => {
             // [REMOVED] updateUsersGroupChatList(participantId.toString());
         })
 
-        scheduleEmailReminder(currentUser.email, currentUser.username, groupChat.name, groupChat.start, groupChat.duration, currentUser.timeZone);
+        // Reminders: see services/sessionReminderSweep.ts
 
         return res.status(200).json({
             success: true,
@@ -1415,11 +1410,15 @@ const joinGroupChat = async (req, res) => {
 // Emails every enrolled student (never the host) when a seminar's time/length/price
 // changes, so a reschedule or re-price is never silent. Best-effort; a failed send
 // must not fail the host's edit.
-const notifySeminarChangeToStudents = async (before: any, changes: string[]) => {
+const notifySeminarChangeToStudents = async (before: any, changes: string[], updateFields: Record<string, any> = {}) => {
     const studentIds = enrolledStudentIds(before);
     if (!studentIds.length || !changes.length) return;
     const students = await User.find({ _id: { $in: studentIds } }).select('email username');
-    const changeList = changes.map((c) => `<li style="margin:4px 0;">${c}</li>`).join('');
+    const host = await User.findById(before?.admin).select('username email');
+    const details: Array<[string, string]> = [
+        ...seminarDetailPairs(before, updateFields),
+        ['Host', host?.username || host?.email || 'Your host'],
+    ];
     for (const student of students) {
         if (!student?.email) continue;
         await sendSeminarEmail(
@@ -1430,10 +1429,68 @@ const notifySeminarChangeToStudents = async (before: any, changes: string[]) => 
                 previewText: 'Your registration remains confirmed.',
                 blocks: [
                     emailParagraph(`The host has updated <strong>${emailEscape(before?.name || 'your seminar')}</strong>, for which you are registered.`),
+                    emailParagraph('<strong>What changed</strong>'),
                     emailBullets(changes.map((c: string) => String(c))),
+                    emailParagraph('<strong>Current seminar details</strong>'),
+                    emailFacts(details),
                     emailCallout('Your registration remains confirmed. No action is required unless these changes affect your plans.'),
                     emailParagraph('If the updated details no longer work for you, you can withdraw from the seminar through your dashboard, subject to the applicable cancellation and refund policy.'),
                     emailButton('View the seminar'),
+                ],
+            },
+        );
+    }
+};
+
+const notifySeminarCancelledToStudents = async (docs: any[]) => {
+    const seminars = (docs || []).filter((d: any) => d?.type === 'seminar');
+    if (!seminars.length) return;
+
+    const anchor = seminars[0];
+    const studentIds = new Set<string>();
+    for (const doc of seminars) enrolledStudentIds(doc).forEach((id: string) => studentIds.add(String(id)));
+    if (!studentIds.size) return;
+
+    const students = await User.find({ _id: { $in: Array.from(studentIds) } }).select('email username');
+    const host = await User.findById(anchor?.admin).select('username email');
+    const hostName = host?.username || host?.email || 'the host';
+    const title = anchor?.name || 'Seminar';
+    const tz = anchor?.timezone || undefined;
+    const whenOf = (d: any) => (d?.start
+        ? new Date(d.start).toLocaleString('en-US', tz ? { timeZone: tz } : undefined)
+        : 'a previously scheduled time');
+    const sessionTimes = seminars
+        .map(whenOf)
+        .filter((v, i, arr) => arr.indexOf(v) === i);
+
+    for (const student of students) {
+        if (!student?.email) continue;
+        await sendSeminarEmail(
+            student.email,
+            `Your seminar ${title} has been cancelled`,
+            {
+                heading: 'Your seminar has been cancelled',
+                previewText: `${title} will no longer take place.`,
+                blocks: [
+                    emailParagraph(
+                        `<strong>${emailEscape(title)}</strong> by <strong>${emailEscape(hostName)}</strong>, `
+                        + `originally scheduled for <strong>${emailEscape(sessionTimes[0])}</strong>, has been cancelled `
+                        + 'and will no longer take place.',
+                    ),
+                    ...(sessionTimes.length > 1
+                        ? [
+                            emailParagraph('<strong>Cancelled sessions</strong>'),
+                            emailBullets(sessionTimes),
+                        ]
+                        : []),
+                    emailFacts([
+                        ['Seminar', title],
+                        ['Host', hostName],
+                        ['Was scheduled for', sessionTimes[0]],
+                        ['Duration', `${Number(anchor?.duration || 0)} min`],
+                    ]),
+                    emailCallout('It has been removed from your calendar. You do not need to do anything.'),
+                    emailParagraph('If you have any questions about this cancellation, please contact your host or WisdomLinked support.'),
                 ],
             },
         );
@@ -1478,7 +1535,7 @@ const updateGroupChat = async (req, res) => {
         // Allow flipping a draft to a published seminar (or saving back as draft).
         if (typeof status === 'string' && ['draft', 'active', 'pending'].includes(status)) {
             if (groupChat.type === 'seminar' && status !== 'active' && seminarEnrolledCount > 0) {
-                return res.status(409).send("You can't unpublish a seminar while students are enrolled. Please contact an admin to cancel and refund it.");
+                return res.status(409).send("Saving a draft would unpublish this seminar, and students have already enrolled in it. Your changes have not been saved yet — continue to the last step and select \"Publish Seminar\" to save them and keep the seminar live.");
             }
             updateFields.status = status;
         }
@@ -1616,7 +1673,7 @@ const updateGroupChat = async (req, res) => {
             const changes = describeSeminarChanges(groupChat, updateFields);
             if (changes.length) {
                 try {
-                    await notifySeminarChangeToStudents(groupChat, changes);
+                    await notifySeminarChangeToStudents(groupChat, changes, updateFields);
                 } catch (notifyErr) {
                     console.log('[updateGroupChat] change notification failed', notifyErr);
                 }
@@ -1903,11 +1960,9 @@ const enrollAndConfirmSeminar = async ({ groupChat, customer, expert, charge, pa
         }
     }
 
-    try {
-        scheduleEmailReminder(customer.email, customer.username, groupChat.name, groupChat.start, groupChat.duration, customer.timeZone);
-    } catch (reminderErr) {
-        console.log('[enrollAndConfirmSeminar] reminder scheduling failed after enrollment', reminderErr);
-    }
+    // Reminders: see services/sessionReminderSweep.ts. Note this path only ever
+    // reminded the student — the expert hosting the seminar got nothing. The sweep
+    // reminds both.
 };
 
 const registerForSeminar = async (req, res) => {
@@ -4989,7 +5044,7 @@ const acceptIndividualAppointment = async (req, res) => {
         try {
             const activated = await GroupChat.findOneAndUpdate(
                 { _id: groupChat._id, status: { $ne: 'cancelled' } },
-                { $set: decisionNote ? { status: 'active', decisionNote, decisionNoteAt: new Date(), decisionNoteReadAt: null } : { status: 'active' } },
+                { $set: decisionNote ? { status: 'active', confirmedAt: new Date(), decisionNote, decisionNoteAt: new Date(), decisionNoteReadAt: null } : { status: 'active', confirmedAt: new Date() } },
             );
             if (!activated) {
                 if (charge && held) {
@@ -5038,9 +5093,12 @@ const acceptIndividualAppointment = async (req, res) => {
             const restore = async () => {
                 await GroupChat.updateOne(
                     { _id: groupChat._id, status: 'active' },
-                    { $set: { status: previousStatus } },
+                    // confirmedAt is cleared with the status it was stamped alongside:
+                    // a session that fell back to pending was never confirmed.
+                    { $set: { status: previousStatus, confirmedAt: null } },
                 ).catch(() => null);
                 groupChat.status = previousStatus;
+                groupChat.confirmedAt = null;
             };
 
             if (parkedRow) {
@@ -5130,7 +5188,6 @@ const acceptIndividualAppointment = async (req, res) => {
 
         void (async () => {
             try {
-                const expertUser = await User.findById(userId);
                 const customerUser = await User.findById(groupChat.createdBy);
                 if (customerUser?.email && !charge) {
                     await sendEmailMeetingAcceptance(
@@ -5161,26 +5218,7 @@ const acceptIndividualAppointment = async (req, res) => {
                         );
                     }
                 }
-                if (expertUser?.email) {
-                    await scheduleEmailReminder(
-                        expertUser.email,
-                        expertUser.username,
-                        groupChat.name,
-                        groupChat.start,
-                        groupChat.duration,
-                        expertUser.timeZone,
-                    );
-                }
-                if (customerUser?.email) {
-                    await scheduleEmailReminder(
-                        customerUser.email,
-                        customerUser.username,
-                        groupChat.name,
-                        groupChat.start,
-                        groupChat.duration,
-                        customerUser.timeZone,
-                    );
-                }
+                // Reminders: see services/sessionReminderSweep.ts
             } catch (notifyErr) {
                 console.error('[acceptIndividualAppointment] notification failed:', notifyErr?.message || notifyErr);
             }
@@ -5427,20 +5465,6 @@ const deleteGroup = async (req, res) => {
                 ? await GroupChat.find({ seriesId: groupChat.seriesId })
                 : [groupChat];
 
-        if (groupChat.type === 'seminar') {
-            const enrolled = new Set<string>();
-            for (const g of seriesDocs) {
-                enrolledStudentIds(g).forEach((id) => enrolled.add(id));
-            }
-            if (enrolled.size > 0) {
-                return res.status(409).json({
-                    status: 'FAIL',
-                    error:
-                        'You cannot delete this seminar right now since students are already enrolled in it. If you still want to delete it, please contact admin.',
-                });
-            }
-        }
-
         const groupChats =
             scope === 'occurrence' ? [groupChat] : seriesDocs;
 
@@ -5470,6 +5494,12 @@ const deleteGroup = async (req, res) => {
         }
 
         await GroupChat.deleteMany({ _id: { $in: groupChats.map((g: any) => g._id) } });
+
+        try {
+            await notifySeminarCancelledToStudents(groupChats);
+        } catch (notifyErr) {
+            console.log('[deleteGroup] cancellation notification failed', notifyErr);
+        }
 
         return res.status(200).send("Group deleted successfully!");
     } catch (err: any) {
@@ -5557,6 +5587,7 @@ const cancelIndividualAppointment = async (req, res) => {
         const sessionName = groupChat.name || '1:1 session';
         const startLabel = groupChat.start ? new Date(groupChat.start).toLocaleString() : '';
         const declinedProposal = expertProposed && !cancelledByExpert;
+        const cancelledOwnRequest = !cancelledByExpert && !expertProposed;
 
         const noteBlock = decisionNoteEmailBlock(decisionNote);
         // The note is the only channel the student has once the cancelled session
@@ -5720,6 +5751,21 @@ const cancelIndividualAppointment = async (req, res) => {
                     },
                 );
             }
+        }
+
+        if (cancelledOwnRequest && expertUser?.email) {
+            await sendSeminarEmail(
+                expertUser.email,
+                `A session request was cancelled — ${sessionName}`,
+                {
+                    heading: 'A session request was cancelled',
+                    blocks: [
+                        emailParagraph(`${emailEscape(student?.username || 'The student')} cancelled the session they requested, <strong>${emailEscape(sessionName)}</strong>${startLabel ? ` on ${emailEscape(startLabel)}` : ''}.`),
+                        emailCallout('Your time is free again. Nothing was paid out for this request.'),
+                        emailButton('View your calendar'),
+                    ],
+                },
+            );
         }
 
         for (const participantId of groupChat.participants) {

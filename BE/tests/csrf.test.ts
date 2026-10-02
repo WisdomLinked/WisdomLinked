@@ -45,3 +45,59 @@ test('GET requests pass without any token', async () => {
     const res = await request(buildApp()).get('/read');
     assert.equal(res.status, 200);
 });
+
+function buildMeetingApp() {
+    const app = express();
+    app.use(express.json());
+    app.use(cookieParser());
+    app.use(csrfProtection);
+    app.post('/api/meeting/chat-sync', (_req: any, res: any) => res.json({ ok: true }));
+    app.post('/api/meeting/heartbeat', (_req: any, res: any) => res.json({ ok: true }));
+    app.post('/api/meeting/end-call', (_req: any, res: any) => res.json({ ok: true }));
+    app.post('/api/meeting/rate', (_req: any, res: any) => res.json({ ok: true }));
+    app.use(csrfErrorHandler);
+    return app;
+}
+
+test('meeting chat-sync from the Jitsi tab is no longer blocked by CSRF', async () => {
+    const res = await request(buildMeetingApp())
+        .post('/api/meeting/chat-sync')
+        .set('Authorization', 'Bearer some-meeting-token')
+        .send({ meetingThreadId: 'm1', content: 'hello from the call' });
+    assert.equal(res.status, 200);
+    assert.deepEqual(res.body, { ok: true });
+});
+
+test('heartbeat and end-call are exempt too, so meetings track real presence', async () => {
+    for (const path of ['/api/meeting/heartbeat', '/api/meeting/end-call']) {
+        const res = await request(buildMeetingApp())
+            .post(path)
+            .set('Authorization', 'Bearer some-meeting-token')
+            .send({ meetingThreadId: 'm1' });
+        assert.equal(res.status, 200, `${path} should skip CSRF for bearer callers`);
+    }
+});
+
+test('the same route still demands CSRF when called with cookies instead of a bearer', async () => {
+    const res = await request(buildMeetingApp())
+        .post('/api/meeting/chat-sync')
+        .send({ meetingThreadId: 'm1', content: 'hi' });
+    assert.equal(res.status, 403);
+    assert.equal(res.body.code, 'EBADCSRFTOKEN');
+});
+
+test('an empty bearer value does not buy a CSRF exemption', async () => {
+    const res = await request(buildMeetingApp())
+        .post('/api/meeting/chat-sync')
+        .set('Authorization', 'Bearer   ')
+        .send({ meetingThreadId: 'm1', content: 'hi' });
+    assert.equal(res.status, 403);
+});
+
+test('a bearer header does not exempt routes outside the meeting callback list', async () => {
+    const res = await request(buildMeetingApp())
+        .post('/api/meeting/rate')
+        .set('Authorization', 'Bearer some-meeting-token')
+        .send({ score: 5 });
+    assert.equal(res.status, 403, 'only the Jitsi-called routes may skip CSRF');
+});

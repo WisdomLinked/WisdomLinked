@@ -10,6 +10,7 @@ import ConfirmEmail from '../components/ConfirmEmail';
 import logo from '../assets/images/logo.png';
 import { SERVICE_LABELS } from '../constants/serviceOptions';
 import MajorSelect from '../components/MajorSelect';
+import BrandWordmark from '../components/BrandWordmark';
 
 const BTN_PRIMARY_STYLE = { background: 'linear-gradient(135deg, #234C6A 0%, #456882 100%)' };
 const FOCUS_RING = 'focus:ring-2 focus:ring-[#234C6A]/60 focus:border-[#234C6A]';
@@ -265,9 +266,7 @@ export default function WLExpertRegister() {
                                     className="h-10 w-10 object-contain"
                                 />
                             </div>
-                            <span className="font-black text-2xl tracking-[0.12em] uppercase text-slate-900">
-                                WisdomLinked
-                            </span>
+                            <BrandWordmark />
                         </div>
 
                         <h2 className="font-display text-2xl font-bold text-slate-800 mb-1">Expert sign up</h2>

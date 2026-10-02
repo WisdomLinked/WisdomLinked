@@ -1,26 +1,30 @@
 import { actionTypes } from './types';
-import type { AlertVariant } from '../types/alert';
+import type { AlertVariant, EnqueueToastPayload, NotifyOptions } from '../types/alert';
 import { DEFAULT_ALERT_VARIANT } from '../types/alert';
 
-export type ShowAlertPayload = {
-    message: string;
-    variant?: AlertVariant;
-};
-
-export const showAlert = (
-    message: string,
-    variant: AlertVariant = DEFAULT_ALERT_VARIANT,
-) => ({
+export const enqueueToast = (payload: EnqueueToastPayload) => ({
     type: actionTypes.showAlert,
-    payload: { message, variant },
+    payload,
 });
 
-export const showErrorAlert = (message: string) => showAlert(message, 'error');
-
-export const showSuccessAlert = (message: string) => showAlert(message, 'success');
-
-export const showWarningAlert = (message: string) => showAlert(message, 'warning');
-
-export const hideAlert = () => ({
+export const dismissToast = (id?: string) => ({
     type: actionTypes.hideAlert,
+    payload: id ? { id } : undefined,
 });
+
+/** @deprecated Prefer notify.* at call sites. Kept for tests and the notify wrapper. */
+export const showAlert = (
+    title: string,
+    variant: AlertVariant = DEFAULT_ALERT_VARIANT,
+    opts?: NotifyOptions,
+) => enqueueToast({ title, variant, ...opts });
+
+export const showErrorAlert = (title: string, opts?: NotifyOptions) => showAlert(title, 'error', opts);
+
+export const showSuccessAlert = (title: string, opts?: NotifyOptions) => showAlert(title, 'success', opts);
+
+export const showWarningAlert = (title: string, opts?: NotifyOptions) => showAlert(title, 'warning', opts);
+
+export const showInfoAlert = (title: string, opts?: NotifyOptions) => showAlert(title, 'info', opts);
+
+export const hideAlert = () => dismissToast();

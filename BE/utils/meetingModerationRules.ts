@@ -29,3 +29,27 @@ export const canStartGroupMeeting = (groupChatLike: any, meLike: any): boolean =
     return adminId === meId;
 };
 
+export const canEndMeetingAsLastParticipant = (
+    meetingLike: {
+        lastHeartbeatAt?: Date | string | number | null;
+        lastReportedRemoteCount?: number | null;
+    } | null | undefined,
+    nowMs: number = Date.now(),
+    heartbeatFreshMs: number = 90_000,
+): boolean => {
+    if (!meetingLike) return false;
+
+    const raw = meetingLike.lastHeartbeatAt;
+    const lastAt = raw ? new Date(raw as any).getTime() : 0;
+    if (!lastAt || !Number.isFinite(lastAt)) return false;
+    if (nowMs - lastAt > heartbeatFreshMs) return false;
+
+    // Guard the null/undefined case explicitly: Number(null) is 0, which would read a
+    // missing head count as "the room is empty" — the very claim we are verifying.
+    const remoteRaw = meetingLike.lastReportedRemoteCount;
+    if (remoteRaw === null || remoteRaw === undefined) return false;
+    const remote = Number(remoteRaw);
+    if (!Number.isFinite(remote)) return false;
+
+    return remote <= 0;
+};

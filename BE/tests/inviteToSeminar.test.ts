@@ -7,7 +7,7 @@ stripeController.sendBookingReceiptAndConfirmation = async () => {};
 const notifications = require("../services/notifications");
 notifications.sendNotificationEmail = async () => {};
 (globalThis as any).sendNotificationEmail = async () => {};
-notifications.scheduleEmailReminder = async () => {};
+notifications.sendSessionReminderEmail = async () => {};
 
 const groupController = require("../controllers/groupChat.controller");
 const GroupChat = require("../models/GroupChat");

@@ -4,6 +4,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import queryString from 'query-string';
 import { BookOpen, UserCheck, AlertCircle, MessageSquare, Users } from 'lucide-react';
 import { useAppSelector } from '../store';
+import { useBackToDashboard } from '../hooks/useBackToDashboard';
 import { doGetMyEvents, getAllCommunityChats, profileImageFetch, doFilterExperts, doFilterSeminars } from '../api/api';
 import { resolveProfileImageSrc } from '../utils/profileImage';
 import {
@@ -13,7 +14,9 @@ import {
   sessionEndMs,
 } from '../utils/sessionDuration';
 import { paymentWindowOpen } from '../utils/bookingLifecycle';
-import { displayRoomLabel, shouldNotifyRoom } from '../utils/chatRoomLabel';
+import { displayRoomLabel } from '../utils/chatRoomLabel';
+import { chatTargetsByRid, type ChatNavTarget } from '../utils/chatNavTarget';
+import { unreadByChatSection } from '../utils/chatSectionUnread';
 import { fetchDmUnreadSnapshot, fetchChatUserProfile } from '../api/chatApi';
 import ProfileModal from './Dashboard/Messenger/Messages/ProfileModal';
 import { seatWalletOption } from '../utils/seatCheckoutOptions';
@@ -21,7 +24,8 @@ import { buildFallbackChatProfile, mergeChatProfile } from '../utils/chatProfile
 import Sidebar from '../components/layout/Sidebar';
 import TopBar, { TopBarNotificationItem } from '../components/layout/TopBar';
 import StatsGrid from '../components/dashboard/StatsGrid';
-import CarouselSection, { type CarouselSectionData } from '../components/dashboard/CarouselSection';
+import AccountReviewBanner from '../components/dashboard/AccountReviewBanner';
+import CarouselSection from '../components/dashboard/CarouselSection';
 import StudentProfile from '../components/dashboard/StudentProfile';
 import StudentSettings from '../components/dashboard/StudentSettings';
 import DecisionNotices from '../components/dashboard/DecisionNotices';
@@ -36,10 +40,27 @@ import UpcomingSessionModal, { type UpcomingModalSession } from '../components/d
 import ExpertProfile from '../components/dashboard/ExpertProfile';
 import StudentBookingCheckout, { completeStudentBookingFromStorage } from '../components/dashboard/StudentBookingCheckout';
 import { getExpertById, doFollowExpert, doUnfollowExpert, acceptIndividualAppointment, cancelIndividualAppointment, getMySeatRequests } from '../api/api';
-import { updateMe } from '../actions/authActions';
+import { studentSearchActions } from '../utils/siteSearch';
+import { logoutUser, updateMe } from '../actions/authActions';
 import type { ExpertCardProps } from '../components/ExpertCard';
 import { mapExpertToMentorWithImage } from '../utils/mapExpertToMentor';
+import {
+  filterPublicExperts,
+  getRecommendedExperts,
+  getUpcomingSeminarsForStudent,
+  type DiscoveryExpert,
+  type DiscoverySeminar,
+} from '../utils/studentDiscovery';
+import { isDisplayImageUrl } from '../utils/profileImage';
 import StudentChat from '../components/dashboard/StudentChat';
+import LogoutConfirmModal from '../components/dashboard/LogoutConfirmModal';
+import {
+  type ChatSection,
+  CHAT_SECTION_DEFAULT,
+  CHAT_SECTION_ITEMS,
+  normalizeChatSection,
+  sectionForChatTarget,
+} from '../utils/chatSections';
 import StudentPaymentHistory from '../components/dashboard/StudentPaymentHistory';
 import { detectUserTimeZone, toYMDInTimeZone } from '../utils/schedulingTimezone';
 import {
@@ -47,7 +68,7 @@ import {
   onSubscriptionChanged,
   subscribeToRoom,
 } from '../services/rcRealtime';
-import { patchDmUnreadRid, setDmUnreadByRidBulk } from '../actions/chatActions';
+import { patchDmUnreadRid, resetChatAction, setDmUnreadByRidBulk } from '../actions/chatActions';
 import { canonicalLabelsFromMixedServiceEntries } from '../constants/serviceOptions';
 import { useEndMeetingOnReturn } from '../hooks/useEndMeetingOnReturn';
 import { pendingRequestIsLive } from '../utils/bookingLifecycle';
@@ -318,6 +339,7 @@ function deriveModalSessions(
         windowOpen &&
         (expertProposed || walletWindowOpen);
       const canDecline = status === 'pending' && !expired && expertProposed;
+      const canCancel = status === 'pending' && !expired && !expertProposed && !payable;
       const metaLines: string[] = [];
       if (expertProposed && g?.paymentDeadline) {
         metaLines.push(
@@ -340,6 +362,7 @@ function deriveModalSessions(
         peerUserId: String(g?.admin?._id ?? g?.admin ?? ''),
         payable,
         canDecline,
+        canCancel,
         metaLines: metaLines.length ? metaLines : undefined,
         price,
         paymentMode: g?.paymentMode,
@@ -430,6 +453,7 @@ function deriveUpcomingSessions(u: any): {
       };
     } else if (isSession) {
       considerOneToOne({
+        id: String(g?._id ?? ''),
         title: g?.name || '1:1 session',
         startAt,
         durationMinutes: sessionDurationMinutes(g) ?? undefined,
@@ -476,6 +500,19 @@ export default function StudentDashboard() {
   useEffect(() => {
     window.localStorage.setItem('studentDashboardView', activeItem);
   }, [activeItem]);
+  const [chatSection, setChatSection] = useState<ChatSection>(() =>
+    normalizeChatSection(window.localStorage.getItem('studentChatSection')),
+  );
+  useEffect(() => {
+    window.localStorage.setItem('studentChatSection', chatSection);
+  }, [chatSection]);
+  const openChatSection = useCallback((target: ChatNavTarget) => {
+    setChatSection(sectionForChatTarget(target));
+  }, []);
+  const goToDashboardTab = useCallback(() => setActiveItem('dashboard'), []);
+  const [showBackLogoutConfirm, setShowBackLogoutConfirm] = useState(false);
+  const confirmLogoutOnBack = useCallback(() => setShowBackLogoutConfirm(true), []);
+  useBackToDashboard(activeItem, goToDashboardTab, 'dashboard', confirmLogoutOnBack);
   const [paymentReturnSuccess, setPaymentReturnSuccess] = useState(false);
   const [bookingReturnError, setBookingReturnError] = useState<string | null>(null);
   const [paySuccessToast, setPaySuccessToast] = useState(false);
@@ -499,9 +536,13 @@ export default function StudentDashboard() {
   /** Same source as chat sidebar — RC room id → community name (DMs use directConversations only). */
   const [communityRidToName, setCommunityRidToName] = useState<Record<string, string>>({});
   const [selectedExpert, setSelectedExpert] = useState<ExpertCardProps | null>(null);
+  const [expertsQueryPrefill, setExpertsQueryPrefill] = useState<string | undefined>(undefined);
+  const [seminarsQueryPrefill, setSeminarsQueryPrefill] = useState<string | undefined>(undefined);
+  const [openSeminarId, setOpenSeminarId] = useState<string | null>(null);
   const [followedMentorIds, setFollowedMentorIds] = useState<string[]>([]);
   const [followerCounts, setFollowerCounts] = useState<Record<string, number>>({});
   const { auth: { userDetails } } = useAppSelector((state: any) => state);
+  const storeUnreadByRid = useAppSelector((state: any) => state.chat?.dmUnreadByRid);
 
   useEffect(() => {
     if (selectedExpert?.id != null) {
@@ -556,6 +597,39 @@ export default function StudentDashboard() {
     window.addEventListener('wl-open-expert-profile', onOpenExpertProfile);
     return () => window.removeEventListener('wl-open-expert-profile', onOpenExpertProfile);
   }, []);
+
+  // Global search lands here with expert or seminar inside the query.
+  // Seminar ids open StudentSeminars detail and are not passed to getExpertById.
+  // This does not set wl_open_seminar_id or student_booking.
+  useEffect(() => {
+    const actions = studentSearchActions(location.search);
+    if (!actions.length) return;
+    for (const action of actions) {
+      if (action.type === 'open-expert') {
+        window.localStorage.setItem('studentDashboardExpertId', action.expertId);
+        window.dispatchEvent(new Event('wl-open-expert-profile'));
+      } else if (action.type === 'open-seminar') {
+        setOpenSeminarId(action.seminarId);
+        setActiveItem('seminars');
+      } else if (action.type === 'prefill-experts') {
+        setExpertsQueryPrefill(action.query);
+        setActiveItem('experts');
+      } else if (action.type === 'prefill-seminars') {
+        setSeminarsQueryPrefill(action.query);
+        setActiveItem('seminars');
+      }
+    }
+    const next = new URLSearchParams(location.search);
+    next.delete('expert');
+    next.delete('seminar');
+    next.delete('expertsQuery');
+    next.delete('seminarsQuery');
+    const search = next.toString();
+    navigate(
+      { pathname: location.pathname, search: search ? `?${search}` : '' },
+      { replace: true },
+    );
+  }, [location.search, location.pathname, navigate]);
   // Derived from the store so the stat cards recompute live as bookings change
   // (booking dispatches updateUserDetails; reloads refetch via doGetMyEvents).
   const sessionStats = useMemo(() => deriveSessionCounts(userDetails), [userDetails]);
@@ -876,7 +950,10 @@ export default function StudentDashboard() {
     () => deriveUpcomingSessions(userDetails),
     [userDetails],
   );
-  const [carouselSections, setCarouselSections] = useState<CarouselSectionData[]>([]);
+  const [newExperts, setNewExperts] = useState<DiscoveryExpert[]>([]);
+  const [upcomingSeminars, setUpcomingSeminars] = useState<DiscoverySeminar[]>([]);
+  const [recommendedExperts, setRecommendedExperts] = useState<DiscoveryExpert[]>([]);
+  const [recommendedNeedsProfile, setRecommendedNeedsProfile] = useState(false);
   const [carouselLoading, setCarouselLoading] = useState(true);
   const studentName =
     (userDetails?.username as string | undefined) ||
@@ -930,77 +1007,98 @@ export default function StudentDashboard() {
     };
   }, [dispatch, eventsReloadKey]);
 
-  // Carousel ("What's New For You") — real experts + seminars from the BE.
+  // Carousel ("What's New For You") — new experts, upcoming seminars, recommendations.
   useEffect(() => {
     let cancelled = false;
     (async () => {
       setCarouselLoading(true);
       try {
-        // Carousel highlights the newest experts — BE "Recently joined" sorts by createdAt desc.
-        const expertFilter = { username: '', name: '', keywords: [], services: [], sortBy: 'Recently joined' };
-        const seminarFilter = { username: '', name: '', keywords: [], services: [], sortBy: 'Name in ASC' };
+        const expertFilter = {
+          username: '',
+          name: '',
+          keywords: [],
+          services: [],
+          sortBy: 'Recently joined',
+        };
+        const seminarFilter = {
+          username: '',
+          name: '',
+          keywords: [],
+          services: [],
+          sortBy: 'Name in ASC',
+        };
         const [expertRes, seminarRes]: [any, any] = await Promise.all([
           doFilterExperts(expertFilter),
           doFilterSeminars(seminarFilter),
         ]);
         if (cancelled) return;
 
-        const sections: CarouselSectionData[] = [];
+        const expertsRaw = filterPublicExperts(
+          Array.isArray(expertRes?.result) ? expertRes.result : [],
+        );
+        const mentors = await Promise.all(
+          expertsRaw.slice(0, 5).map((e: any) => mapExpertToMentorWithImage(e, 'small')),
+        );
+        if (cancelled) return;
 
-        const experts = Array.isArray(expertRes?.result) ? expertRes.result : [];
-        if (experts.length) {
-          const mentors = await Promise.all(
-            experts
-              .slice(0, 5)
-              .map((e: any) => mapExpertToMentorWithImage(e, 'small')),
+        const newExpertItems: DiscoveryExpert[] = mentors.map((m) => ({
+          id: m.id,
+          name: m.name,
+          title: m.title,
+          institution: m.institution,
+          field: m.field,
+          image: m.image,
+          isNew: m.isNew,
+          tags: (m.majors || []).map((x) => x.label).slice(0, 3),
+        }));
+        const newIds = new Set(newExpertItems.map((e) => e.id));
+
+        const seminarsRaw = Array.isArray(seminarRes?.result) ? seminarRes.result : [];
+        const seminars = getUpcomingSeminarsForStudent(seminarsRaw, userDetails?._id);
+        const seminarsWithImages: DiscoverySeminar[] = await Promise.all(
+          seminars.map(async (s) => {
+            if (s.expertImage && isDisplayImageUrl(s.expertImage)) return s;
+            const src = await resolveProfileImageSrc(
+              s.expertImage,
+              'small',
+              profileImageFetch as any,
+            );
+            return { ...s, expertImage: src };
+          }),
+        );
+        if (cancelled) return;
+
+        const rec = getRecommendedExperts(expertsRaw, userDetails, newIds, 5);
+        let recommendedItems: DiscoveryExpert[] = [];
+        if (!rec.needsProfile && rec.items.length) {
+          const mapped = await Promise.all(
+            rec.items.map((e: any) => mapExpertToMentorWithImage(e, 'small')),
           );
-          if (cancelled) return;
-          sections.push({
-            id: 'experts',
-            category: 'Expert',
-            icon: Users,
-            items: mentors.map((m) => ({
-              sectionTitle: 'New experts',
-              title: m.name,
-              description: m.institution,
-              tag: m.isNew ? 'New expert' : 'Expert',
-              metaLabel: 'Field',
-              experience: m.field,
-              cta: 'View profile',
-              image: m.image || undefined,
-              onSelect: () => {
-                setSelectedExpert(m);
-                setActiveItem('expert-profile');
-              },
-            })),
-          });
+          recommendedItems = mapped.map((m, i) => ({
+            id: m.id,
+            name: m.name,
+            title: m.title,
+            institution: m.institution,
+            field: m.field,
+            image: m.image,
+            isNew: m.isNew,
+            tags: (m.majors || []).map((x) => x.label).slice(0, 3),
+            reason: rec.items[i]?.reason,
+          }));
         }
+        if (cancelled) return;
 
-        const seminars = Array.isArray(seminarRes?.result) ? seminarRes.result : [];
-        if (seminars.length) {
-          sections.push({
-            id: 'seminars',
-            category: 'Seminar',
-            icon: BookOpen,
-            items: seminars.slice(0, 8).map((s: any) => ({
-              sectionTitle: 'Seminars for you',
-              title: s?.name || 'Seminar',
-              description: s?.description || 'Live seminar on WisdomLinked.',
-              tag: 'Seminar',
-              metaLabel: 'Starts',
-              experience: s?.start
-                ? new Date(s.start).toLocaleDateString()
-                : undefined,
-              location: typeof s?.price === 'number' ? `$${s.price}` : undefined,
-              cta: 'View seminars',
-              onSelect: () => setActiveItem('seminars'),
-            })),
-          });
-        }
-
-        if (!cancelled) setCarouselSections(sections);
+        setNewExperts(newExpertItems);
+        setUpcomingSeminars(seminarsWithImages);
+        setRecommendedExperts(recommendedItems);
+        setRecommendedNeedsProfile(rec.needsProfile);
       } catch {
-        if (!cancelled) setCarouselSections([]);
+        if (!cancelled) {
+          setNewExperts([]);
+          setUpcomingSeminars([]);
+          setRecommendedExperts([]);
+          setRecommendedNeedsProfile(false);
+        }
       } finally {
         if (!cancelled) setCarouselLoading(false);
       }
@@ -1008,6 +1106,26 @@ export default function StudentDashboard() {
     return () => {
       cancelled = true;
     };
+  }, [userDetails]);
+
+  const handleDiscoveryExpert = useCallback(
+    async (id: string) => {
+      try {
+        const res: any = await getExpertById(id);
+        if (res?.result) {
+          setSelectedExpert(await mapExpertToMentorWithImage(res.result, 'medium'));
+          setActiveItem('expert-profile');
+        }
+      } catch {
+        /* noop */
+      }
+    },
+    [],
+  );
+
+  const handleOpenSeminarDiscovery = useCallback((id: string) => {
+    setOpenSeminarId(id);
+    setActiveItem('seminars');
   }, []);
 
   const loadCommunityNotificationRooms = useCallback(async () => {
@@ -1147,33 +1265,26 @@ export default function StudentDashboard() {
     return s;
   }, [userDetails?.directConversations]);
 
-  const knownRidSet = useMemo(() => new Set(knownRids.map(String)), [knownRids]);
+  /** Community rids come from getAllCommunityChats, which the user payload often omits. */
+  const chatTargetByRid = useMemo(
+    () =>
+      chatTargetsByRid(
+        dmRidSet,
+        [...(userDetails?.groupChats ?? []), ...(userDetails?.generalChats ?? [])],
+        Object.keys(communityRidToName),
+      ),
+    [dmRidSet, userDetails?.groupChats, userDetails?.generalChats, communityRidToName],
+  );
 
-  /** Same idea as DM rids from directConversations — include community rids from getAllCommunityChats (often missing on user payload). */
-  const allowedChatRidSet = useMemo(() => {
-    const s = new Set<string>();
-    dmRidSet.forEach(rid => s.add(rid));
-    /** Include unread snapshot rooms only when the backend matched them to a WL chat (an unidentified room is one we cannot open). */
-    Object.entries(dmUnreadByRid || {}).forEach(([rid]) => {
-      if (shouldNotifyRoom(rid, knownRidSet, rcRoomNameByRid?.[rid], roomNamesUnresolved)) s.add(String(rid));
-    });
-    (userDetails?.generalChats ?? []).forEach((g: any) => {
-      if (g?.rcChannelId) s.add(String(g.rcChannelId));
-    });
-    (userDetails?.groupChats ?? []).forEach((g: any) => {
-      if (g?.rcChannelId) s.add(String(g.rcChannelId));
-    });
-    Object.keys(communityRidToName).forEach(rid => s.add(rid));
-    return s;
-  }, [dmRidSet, dmUnreadByRid, rcRoomNameByRid, knownRidSet, roomNamesUnresolved, userDetails?.generalChats, userDetails?.groupChats, communityRidToName]);
+  const allowedChatRidSet = useMemo(() => new Set(Object.keys(chatTargetByRid)), [chatTargetByRid]);
 
   const filteredUnreadByRid = useMemo(() => {
     const out: Record<string, number> = {};
-    Object.entries(dmUnreadByRid).forEach(([rid, n]) => {
+    Object.entries(storeUnreadByRid || {}).forEach(([rid, n]) => {
       if (allowedChatRidSet.has(String(rid))) out[rid] = Number(n) || 0;
     });
     return out;
-  }, [dmUnreadByRid, allowedChatRidSet]);
+  }, [storeUnreadByRid, allowedChatRidSet]);
 
   /** WisdomLinked group/community names by RC room id (overrides RC internal slugs like wl_*). */
   const groupNameByRid = useMemo(() => {
@@ -1240,13 +1351,20 @@ export default function StudentDashboard() {
     () => Object.values(filteredUnreadByRid).reduce((sum, n) => sum + (Number(n) || 0), 0),
     [filteredUnreadByRid],
   );
+
+  const chatSectionUnread = useMemo(
+    () => unreadByChatSection(filteredUnreadByRid, chatTargetByRid),
+    [filteredUnreadByRid, chatTargetByRid],
+  );
+
   const chatNotifications = useMemo<TopBarNotificationItem[]>(
     () =>
       Object.entries(filteredUnreadByRid)
         .filter(([, count]) => Number(count) > 0)
         .map(([rid, count]) => {
           const n = Number(count) || 0;
-          const isDm = dmRidSet.has(rid);
+          const target = chatTargetByRid[rid] ?? 'community';
+          const isDm = target === 'dm';
           const label = displayRoomLabel(roomLabelByRid[rid], isDm ? 'Someone' : 'a group chat');
           return {
             id: `chat-${rid}`,
@@ -1255,39 +1373,34 @@ export default function StudentDashboard() {
             unreadCount: n,
             icon: <MessageSquare className="h-3.5 w-3.5 text-[#1A3A4A]" aria-hidden />,
             onClick: () => {
-              if (isDm) localStorage.setItem('wl_open_dm_rid', rid);
+              if (target === 'dm') localStorage.setItem('wl_open_dm_rid', rid);
+              else if (target === 'seminar') localStorage.setItem('wl_open_seminar_rc_rid', rid);
+              else if (target === 'appointment') localStorage.setItem('wl_open_appointment_rc_rid', rid);
               else localStorage.setItem('wl_open_community_rc_rid', rid);
               window.dispatchEvent(new Event('wl-open-chat-nav'));
+              openChatSection(target);
               setActiveItem('chat');
             },
           };
         }),
-    [filteredUnreadByRid, roomLabelByRid, dmRidSet],
+    [filteredUnreadByRid, roomLabelByRid, chatTargetByRid],
   );
 
-  // Calendar "Join" routing: seminars open their seminar group chat; 1:1s open a
-  // private chat with the expert. StudentChat consumes these signals on entry.
   const handleJoinMeeting = (meeting: CalendarMeeting) => {
     if (meeting.type === 'seminar') {
       if (meeting.groupId) {
         localStorage.setItem('wl_open_seminar_id', meeting.groupId);
         window.dispatchEvent(new Event('wl-open-chat-nav'));
       }
+      openChatSection('seminar');
       setActiveItem('chat');
       return;
     }
-    if (meeting.peerUserId) {
-      localStorage.setItem(
-        'wl_open_dm_userid',
-        JSON.stringify({
-          id: meeting.peerUserId,
-          title: meeting.peerName || 'Expert',
-          image: meeting.peerImage ?? null,
-        }),
-      );
-      window.dispatchEvent(new Event('wl-open-chat-nav'));
+    if (meeting.raw?.type === 'individual') {
+      openAppointmentChat(meeting.status === 'confirmed' ? meeting.id : undefined);
+    } else {
+      openMentorDm(meeting.peerUserId, meeting.peerName);
     }
-    setActiveItem('chat');
   };
 
   const openSeminarChat = (seminarId?: string) => {
@@ -1295,6 +1408,22 @@ export default function StudentDashboard() {
       localStorage.setItem('wl_open_seminar_id', String(seminarId));
       window.dispatchEvent(new Event('wl-open-chat-nav'));
     }
+    openChatSection('seminar');
+    setActiveItem('chat');
+  };
+
+  /**
+   * A confirmed 1:1 appointment has its own chat room, so it opens there rather than in a
+   * DM with the expert. Routing it to a DM is also what created one: `joinPrivateChat`
+   * provisions a Conversation on first open, which is how appointment talk and direct
+   * messages ended up in the same thread.
+   */
+  const openAppointmentChat = (appointmentId?: string) => {
+    if (appointmentId) {
+      localStorage.setItem('wl_open_appointment_id', String(appointmentId));
+      window.dispatchEvent(new Event('wl-open-chat-nav'));
+    }
+    openChatSection('appointment');
     setActiveItem('chat');
   };
 
@@ -1310,6 +1439,7 @@ export default function StudentDashboard() {
       );
       window.dispatchEvent(new Event('wl-open-chat-nav'));
     }
+    openChatSection('dm');
     setActiveItem('chat');
   };
 
@@ -1324,9 +1454,21 @@ export default function StudentDashboard() {
     [dispatch],
   );
 
+  const handleCancelRequest = useCallback(
+    async (session: UpcomingModalSession): Promise<boolean> => {
+      const res: any = await cancelIndividualAppointment(session.id);
+      if (res === false || res?.status === 'FAIL') return false;
+      dispatch(updateMe() as any);
+      setEventsReloadKey((k) => k + 1);
+      return true;
+    },
+    [dispatch],
+  );
+
   const handleUpcomingJoinSession = (session: UpcomingModalSession) => {
     setUpcomingModal(null);
     if (upcomingModal?.kind === 'seminar') openSeminarChat(session.id);
+    else if (session.detail?.type === 'individual') openAppointmentChat(session.id);
     else openMentorDm(session.peerUserId, session.with);
   };
 
@@ -1360,10 +1502,24 @@ export default function StudentDashboard() {
       <div className="flex min-h-screen">
         <Sidebar
           activeItem={activeItem}
-          onNavigate={setActiveItem}
+          onNavigate={(id) => {
+            if (id === 'chat') {
+              setChatSection(CHAT_SECTION_DEFAULT);
+              dispatch(resetChatAction() as any);
+            }
+            setActiveItem(id);
+          }}
           studentName={studentName}
           avatarUrl={avatarUrl}
           notifications={{ chat: activeItem === 'chat' ? 0 : totalUnreadDm }}
+          subItems={{ chat: CHAT_SECTION_ITEMS }}
+          subItemCounts={{ chat: chatSectionUnread }}
+          activeSubItem={chatSection}
+          onNavigateSub={(navId, subId) => {
+            setActiveItem(navId);
+            setChatSection(normalizeChatSection(subId));
+            dispatch(resetChatAction() as any);
+          }}
         />
         <main className="flex-1 min-w-0 lg:ml-[220px]">
           <TopBar
@@ -1436,7 +1592,7 @@ export default function StudentDashboard() {
           ) : null}
           {activeItem === 'chat' ? (
             <div className="h-[calc(100vh-56px)] bg-wl-page">
-              <StudentChat />
+              <StudentChat section={chatSection} />
             </div>
           ) : activeItem === 'profile' ? (
             <StudentProfile />
@@ -1474,6 +1630,7 @@ export default function StudentDashboard() {
               <FindExpertsPage
                 followedMentorIds={followedMentorIds}
                 followerCounts={followerCounts}
+                initialQuery={expertsQueryPrefill}
                 onToggleFollow={toggleExpertFollow}
                 onViewExpert={mentor => {
                   setSelectedExpert(mentor);
@@ -1500,50 +1657,57 @@ export default function StudentDashboard() {
           ) : activeItem === 'contact-admin' ? (
             <ContactAdmin />
           ) : activeItem === 'seminars' ? (
-            <StudentSeminars onEnterSeminarChat={openSeminarChat} />
+            <StudentSeminars
+              onEnterSeminarChat={openSeminarChat}
+              initialQuery={seminarsQueryPrefill}
+              openSeminarId={openSeminarId}
+            />
           ) : activeItem === 'history' ? (
             <StudentPaymentHistory />
           ) : (
-            <div className="px-6 py-7">
-              <div className="grid gap-6 lg:grid-cols-[1fr_380px]">
-                <section className="min-w-0">
-                  <h2 className="text-3xl font-semibold text-slate-900">
-                    {greeting}, {studentName.split(' ')[0]}!
-                  </h2>
-                  <p className="mt-1 max-w-xl font-sans text-[13px] text-slate-500">
-                    Here&apos;s what&apos;s happening with your WisdomLinked sessions today.
-                  </p>
-                  <StatsGrid cards={cards} />
-                </section>
+            <div className="px-6 pt-4 pb-7">
+              <AccountReviewBanner className="mb-4" />
+              <header className="mb-5">
+                <h2 className="text-3xl font-semibold text-slate-900">
+                  {greeting}, {studentName.split(' ')[0]}!
+                </h2>
+                <p className="mt-1 max-w-xl font-sans text-[13px] text-slate-500">
+                  Here&apos;s what&apos;s happening with your WisdomLinked sessions today.
+                </p>
+              </header>
 
-                <div className="hidden lg:block">
-                  <div className="mt-16">
-                    <UpcomingCountdownCard
-                      nextSeminar={nextSeminar}
-                      nextOneToOne={nextOneToOne}
-                      onJoinSeminar={() => openSeminarChat(nextSeminar?.id)}
-                      onJoinOneToOne={() =>
-                        openMentorDm(nextOneToOne?.peerUserId, nextOneToOne?.title)
-                      }
-                    />
-                  </div>
+              <div className="grid items-stretch gap-5 lg:grid-cols-[1fr_380px]">
+                <section className="min-w-0">
+                  <StatsGrid cards={cards} fill />
+                </section>
+                <div className="min-w-0">
+                  <UpcomingCountdownCard
+                    nextSeminar={nextSeminar}
+                    nextOneToOne={nextOneToOne}
+                    onJoinSeminar={() => openSeminarChat(nextSeminar?.id)}
+                    onJoinOneToOne={() => {
+                      if (nextOneToOne?.id) openAppointmentChat(
+                        nextOneToOne.pending ? undefined : nextOneToOne.id,
+                      );
+                      else openMentorDm(nextOneToOne?.peerUserId, nextOneToOne?.title);
+                    }}
+                  />
                 </div>
               </div>
 
-              <div className="mt-6 lg:hidden">
-                <UpcomingCountdownCard
-                  nextSeminar={nextSeminar}
-                  nextOneToOne={nextOneToOne}
-                  onJoinSeminar={() => openSeminarChat(nextSeminar?.id)}
-                  onJoinOneToOne={() =>
-                    openMentorDm(nextOneToOne?.peerUserId, nextOneToOne?.title)
-                  }
-                />
-              </div>
-
               <CarouselSection
-                sections={carouselSections}
                 loading={carouselLoading}
+                newExperts={newExperts}
+                upcomingSeminars={upcomingSeminars}
+                recommended={recommendedExperts}
+                recommendedNeedsProfile={recommendedNeedsProfile}
+                onViewExpert={(id) => void handleDiscoveryExpert(id)}
+                onOpenSeminar={handleOpenSeminarDiscovery}
+                onBrowseSeminars={() => {
+                  setOpenSeminarId(null);
+                  setActiveItem('seminars');
+                }}
+                onCompleteProfile={() => setActiveItem('profile')}
               />
             </div>
           )}
@@ -1596,6 +1760,7 @@ export default function StudentDashboard() {
             onJoinSession={handleUpcomingJoinSession}
             onViewProfile={handleViewPeerProfile}
             onDeclineProposal={handleDeclineProposal}
+            onCancelRequest={handleCancelRequest}
             onPay={(session) => {
               setUpcomingModal(null);
               // Seat requests are listed by request id, so they settle on their own route.
@@ -1744,6 +1909,14 @@ export default function StudentDashboard() {
           </div>
         )}
       </div>
+      <LogoutConfirmModal
+        open={showBackLogoutConfirm}
+        onCancel={() => setShowBackLogoutConfirm(false)}
+        onConfirm={() => {
+          setShowBackLogoutConfirm(false);
+          dispatch(logoutUser() as any);
+        }}
+      />
     </div>
   );
 }

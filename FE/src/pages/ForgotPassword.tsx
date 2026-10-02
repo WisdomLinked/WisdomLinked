@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Mail, Lock, RefreshCw, AlertCircle, Eye, EyeOff, ArrowLeft, ArrowRight, ShieldCheck, CheckCircle } from 'lucide-react';
 import { passwordResetRequest, verifyPasswordResetOTP, confirmPasswordResetByCode } from '../api/api';
 import { refreshCsrfToken } from '../api/csrf';
+import BrandWordmark from '../components/BrandWordmark';
 
 const BTN_PRIMARY_STYLE = { background: 'linear-gradient(135deg, #234C6A 0%, #456882 100%)' };
 const FOCUS_RING = 'focus:ring-2 focus:ring-[#234C6A]/60 focus:border-[#234C6A]';
@@ -227,9 +228,7 @@ export default function ForgotPassword() {
                     <div className="w-10 h-10 rounded-2xl bg-slate-50 border border-slate-200 flex items-center justify-center overflow-hidden">
                         <img src="/logo.png" className="w-8 h-8 object-contain" alt="WisdomLinked" />
                     </div>
-                    <span className="font-black text-2xl tracking-[0.12em] uppercase text-slate-900">
-                        WisdomLinked
-                    </span>
+                    <BrandWordmark />
                 </div>
 
                 {/* ═══ STEP 1: EMAIL ═══ */}

@@ -381,6 +381,44 @@ code {
   color: black;
 }
 
+/* Expert profile phone — match PROFILE_INPUT_CLASS chrome */
+.wl-phone-input .react-tel-input {
+  width: 100%;
+}
+.wl-phone-input .react-tel-input .form-control {
+  height: 2.75rem !important;
+  border: none !important;
+  border-radius: 0.75rem !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  font-size: 0.875rem !important;
+}
+.wl-phone-input .react-tel-input .flag-dropdown {
+  background: transparent !important;
+  border: none !important;
+  border-radius: 0.75rem 0 0 0.75rem !important;
+}
+.wl-phone-input .react-tel-input .selected-flag {
+  border-radius: 0.75rem 0 0 0.75rem !important;
+  background: transparent !important;
+  width: 52px;
+}
+.wl-phone-input .react-tel-input .selected-flag:hover,
+.wl-phone-input .react-tel-input .selected-flag:focus,
+.wl-phone-input .react-tel-input .flag-dropdown.open .selected-flag {
+  background: transparent !important;
+}
+.wl-phone-input .react-tel-input .flag-dropdown:before {
+  content: '';
+  position: absolute;
+  top: 10px;
+  bottom: 10px;
+  right: 0;
+  width: 1px;
+  background: #e2e8f0;
+  pointer-events: none;
+}
+
 .MuiRating-iconEmpty {
   color: grey !important;
 }

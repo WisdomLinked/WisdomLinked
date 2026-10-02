@@ -29,3 +29,10 @@ export const MEETING_CANNOT_REVOKE_HOST_ROLE =
 
 export const MEETING_NOT_DELEGATED_EXPERT =
     'User is not a delegated expert';
+
+export const MEETING_STILL_IN_PROGRESS =
+    'This meeting is still in progress, so it was not ended.';
+
+/** Non-host clicked Join/Start before the group admin opened the call. */
+export const MEETING_WAITING_FOR_HOST =
+    'Waiting for the host to start the call. You can join once it is in progress.';
