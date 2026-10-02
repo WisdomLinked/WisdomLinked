@@ -17,6 +17,7 @@ import {
   type RoomActivityMap,
 } from '../../utils/chatListOrder';
 import { chatRowPreviewLine } from '../../utils/chatMessagePreview';
+import { useResolvedProfileImages } from '../../hooks/useResolvedProfileImages';
 import {
   doGetMyEvents,
   getAllCommunityChats,
@@ -251,6 +252,12 @@ const StudentChat: React.FC<{ section?: ChatSection }> = ({ section = CHAT_SECTI
     () => appointmentChatRows(userDetails?.groupChats, currentUserId),
     [userDetails?.groupChats, currentUserId],
   );
+
+  const appointmentPeople = useMemo(
+    () => appointmentRows.map(row => ({ image: row.withImage })),
+    [appointmentRows],
+  );
+  const appointmentImages = useResolvedProfileImages(appointmentPeople);
 
   const loadCommunityChats = React.useCallback(async () => {
     const uid = userDetails?._id ?? userDetails?.id ?? userDetails?.userId;
@@ -1885,6 +1892,9 @@ const StudentChat: React.FC<{ section?: ChatSection }> = ({ section = CHAT_SECTI
                     : 'hover:bg-slate-100 text-slate-700';
                 const initials = getInitials(row.withName || row.name);
                 const palette = getAvatarPalette(initials);
+                const rawPortrait =
+                  typeof row.withImage === 'string' ? row.withImage.trim() : '';
+                const portrait = rawPortrait ? appointmentImages.get(rawPortrait) ?? null : null;
                 return (
                   <button
                     key={row._id}
@@ -1893,12 +1903,20 @@ const StudentChat: React.FC<{ section?: ChatSection }> = ({ section = CHAT_SECTI
                     className={`mb-1 flex w-full items-start gap-2 rounded-xl px-3 py-2 text-left text-xs transition-colors ${rowTone}`}
                   >
                     <div className="mt-0.5 shrink-0">
-                      <div
-                        className="flex h-9 w-9 items-center justify-center rounded-full text-xs font-semibold"
-                        style={{ background: palette.bg, color: palette.text }}
-                      >
-                        {initials}
-                      </div>
+                      {portrait ? (
+                        <img
+                          src={portrait}
+                          alt={row.withName || row.name}
+                          className="h-9 w-9 rounded-full object-cover"
+                        />
+                      ) : (
+                        <div
+                          className="flex h-9 w-9 items-center justify-center rounded-full text-xs font-semibold"
+                          style={{ background: palette.bg, color: palette.text }}
+                        >
+                          {initials}
+                        </div>
+                      )}
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between gap-2">

@@ -1535,7 +1535,7 @@ const updateGroupChat = async (req, res) => {
         // Allow flipping a draft to a published seminar (or saving back as draft).
         if (typeof status === 'string' && ['draft', 'active', 'pending'].includes(status)) {
             if (groupChat.type === 'seminar' && status !== 'active' && seminarEnrolledCount > 0) {
-                return res.status(409).send("You can't unpublish a seminar while students are enrolled. Please contact an admin to cancel and refund it.");
+                return res.status(409).send("Saving a draft would unpublish this seminar, and students have already enrolled in it. Your changes have not been saved yet — continue to the last step and select \"Publish Seminar\" to save them and keep the seminar live.");
             }
             updateFields.status = status;
         }
