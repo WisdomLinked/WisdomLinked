@@ -87,7 +87,7 @@ test('get_my_bookings ignores a model-supplied user id', async () => {
         assert.equal(result.answer, 'Ada Seminar is yours.');
         assert.equal(calls.length, 2);
         assert.equal(calls[0].url, INFERENCE_URL);
-        assert.equal(calls[0].body.model, 'deepseek-4-flash');
+        assert.equal(calls[0].body.model, 'deepseek-v4.1-flash');
         const names = calls[0].body.tools.map((item: any) => item.function.name).sort();
         assert.deepEqual(names, [
             'get_experts',

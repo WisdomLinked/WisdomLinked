@@ -415,7 +415,7 @@ describe('POST /api/ask', { concurrency: false }, () => {
             const call = fetchCalls[fetchCalls.length - 1];
             assert.equal(call.url, INFERENCE_URL);
             const body = JSON.parse(call.options.body);
-            assert.equal(body.model, 'deepseek-4-flash');
+            assert.equal(body.model, 'deepseek-v4.1-flash');
             assert.equal(body.tool_choice, 'auto');
             assert.equal(call.options.headers.Authorization, `Bearer ${MODEL_KEY}`);
             assert.equal(JSON.stringify(call.options).includes(INDEXING_TOKEN), false);
