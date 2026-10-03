@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Country, State, City, type ICountry, type IState, type ICity } from 'country-state-city';
 import ShowFieldError from './ShowFieldError';
+import CountryFlag from './ui/CountryFlag';
 import FieldLabel from './ui/FieldLabel';
 import SearchableSelect from './ui/SearchableSelect';
 import { PROFILE_INPUT_CLASS } from './ui/profileFieldStyles';
@@ -22,10 +23,12 @@ type CountrySelectProps = {
   forceShow?: boolean;
 };
 
-function countryFlag(country: ICountry | null | undefined) {
-  if (!country) return null;
-  const flag = (country as ICountry & { flag?: string }).flag;
-  return flag ? <span className="mr-2" aria-hidden>{flag}</span> : null;
+const US_COUNTY_LEVEL = / (County|Parish|Borough|Census Area)$/;
+
+function citiesOf(state: IState | undefined): ICity[] {
+  if (!state?.countryCode || !state?.isoCode) return [];
+  const all = City.getCitiesOfState(state.countryCode, state.isoCode) || [];
+  return state.countryCode === 'US' ? all.filter((c) => !US_COUNTY_LEVEL.test(c.name)) : all;
 }
 
 const CountrySelect = ({
@@ -53,21 +56,12 @@ const CountrySelect = ({
     () => (selectedCountry?.isoCode ? State.getStatesOfCountry(selectedCountry.isoCode) : []),
     [selectedCountry?.isoCode],
   );
-  const cities = useMemo(() => {
-    const st = selectedState as IState | undefined;
-    if (!st?.countryCode || !st?.isoCode) return [];
-    return City.getCitiesOfState(st.countryCode, st.isoCode) || [];
-  }, [selectedState]);
+  const cities = useMemo(() => citiesOf(selectedState as IState | undefined), [selectedState]);
 
   useEffect(() => {
     const hasStates = (State.getStatesOfCountry(selectedCountry?.isoCode)?.length ?? 0) > 0;
     set_stateAvailable(hasStates);
-    const st = selectedState as IState | undefined;
-    const hasCities =
-      !!st?.countryCode &&
-      !!st?.isoCode &&
-      (City.getCitiesOfState(st.countryCode, st.isoCode)?.length ?? 0) > 0;
-    set_cityAvailable(hasCities);
+    set_cityAvailable(citiesOf(selectedState as IState | undefined).length > 0);
   }, [selectedCountry, selectedState, set_stateAvailable, set_cityAvailable]);
 
   const countryInvalid = !selectedCountry;
@@ -89,8 +83,8 @@ const CountrySelect = ({
             getOptionLabel={(o) => o.name}
             getOptionValue={(o) => o.isoCode}
             formatOptionLabel={(option) => (
-              <span className="inline-flex items-center">
-                {countryFlag(option)}
+              <span className="inline-flex items-center gap-2.5">
+                <CountryFlag code={option.isoCode} size="md" />
                 {option.name}
               </span>
             )}

@@ -289,7 +289,7 @@ export default function SiteSearchBox({
       {showPanel ? (
         <div
           data-testid="site-search-results"
-          className="absolute left-0 right-0 top-full z-[80] mt-1 max-h-96 overflow-y-auto rounded-xl border border-[#E5E2DB] bg-white p-2 text-slate-800 shadow-[0_16px_40px_rgba(0,0,0,0.14)]"
+          className="absolute left-0 right-0 top-full z-[80] mt-1 scrollbar-thin max-h-96 overflow-y-auto rounded-xl border border-[#E5E2DB] bg-white p-2 text-slate-800 shadow-[0_16px_40px_rgba(0,0,0,0.14)]"
         >
           {asking ? (
             <div className="mb-2 flex items-center px-2 py-2" role="status" aria-label="Asking">

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState, type FormEvent, type KeyboardEvent, type RefObject } from 'react';
-import { Link } from 'react-router-dom';
 import { SendHorizontal } from 'lucide-react';
+import ContactFormModal from '../ContactFormModal';
 
 type Props = {
   inputRef: RefObject<HTMLTextAreaElement | null>;
@@ -10,6 +10,7 @@ type Props = {
 
 export default function HelpBotInput({ inputRef, responding, onSend }: Props) {
   const [value, setValue] = useState('');
+  const [showContact, setShowContact] = useState(false);
 
   const resize = useCallback(() => {
     const el = inputRef.current;
@@ -72,13 +73,15 @@ export default function HelpBotInput({ inputRef, responding, onSend }: Props) {
       </form>
       <p className="mt-2 text-center text-[11px] text-slate-400">
         AI can make mistakes. Need a person?{' '}
-        <Link
-          to="/contactus"
+        <button
+          type="button"
+          onClick={() => setShowContact(true)}
           className="rounded font-medium text-[#234C6A] underline-offset-2 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-[#234C6A]/40"
         >
           Contact support
-        </Link>
+        </button>
       </p>
+      {showContact && <ContactFormModal onClose={() => setShowContact(false)} />}
     </div>
   );
 }

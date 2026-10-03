@@ -27,6 +27,7 @@ import {
   type AppointmentDurationMinutes,
 } from '../../../utils/appointmentDurations';
 import { computeAvailabilityChanges } from '../../../utils/availabilityDirty';
+import { DASHBOARD_PAGE_TITLE } from '../../../components/dashboard/pageTitle';
 
 /** Allow wrap after en-dashes so labels like 11:00 AM–12:00 PM stay inside the cell. */
 function allowWrapAtDashes(text: string): string {
@@ -637,7 +638,7 @@ const AvailabilityPage: React.FC = () => {
       {/* Bottom padding keeps the save button clear of the fixed hint bar and the HelpBot. */}
       <div className="mx-auto max-w-6xl px-6 py-8 pb-40 sm:pb-36 bg-[#F5F3EF] rounded-2xl">
         <div className="mb-4">
-          <h1 className="text-2xl font-semibold text-gray-900">Your Availability</h1>
+          <h1 className={DASHBOARD_PAGE_TITLE}>Your Availability</h1>
           <p className="mt-1 text-sm text-gray-500">
             Set your hourly rate and weekly time slots, then use the calendar below to
             view bookings and block full days or individual time slots when needed.

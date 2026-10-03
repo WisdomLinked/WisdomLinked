@@ -3,6 +3,7 @@ import { Bell, Globe2, Shield, Mail, Smartphone, Moon } from 'lucide-react';
 import { useAppSelector } from '../../store';
 import { doUpdateProfile } from '../../api/api';
 import { detectUserTimeZone } from '../../utils/schedulingTimezone';
+import { DASHBOARD_PAGE_TITLE } from './pageTitle';
 
 export default function StudentSettings() {
   const { auth: { userDetails } } = useAppSelector((s: any) => s);
@@ -66,7 +67,7 @@ export default function StudentSettings() {
   return (
     <div className="h-[calc(100vh-56px)] overflow-y-auto bg-[#F5F3EF] px-6 py-7">
       <div className="mb-6">
-        <h1 className="text-2xl font-semibold text-slate-900">Settings</h1>
+        <h1 className={DASHBOARD_PAGE_TITLE}>Settings</h1>
         <p className="mt-1 text-sm text-[#7A7A72]">
           Manage notifications, time zone, and account preferences.
         </p>

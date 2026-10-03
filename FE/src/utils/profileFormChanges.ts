@@ -1,4 +1,5 @@
 import { arraysEqual } from '../actions/common';
+import { phoneDigits } from './phone';
 
 const keywordToKey = (item: unknown): string => {
   if (typeof item === 'string') return item.trim().toLowerCase();
@@ -71,7 +72,7 @@ export function hasExpertProfileUnsavedChanges(
     profileLocationChanged(u.country, form.country) ||
     profileLocationChanged(u.state, form.state) ||
     profileLocationChanged(u.city, form.city) ||
-    form.phoneNumber !== (u.phoneNumber ?? '')
+    phoneDigits(form.phoneNumber) !== phoneDigits(u.phoneNumber)
   );
 }
 

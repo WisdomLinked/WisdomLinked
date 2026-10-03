@@ -24,6 +24,7 @@ import { saveProfilePhotoFile } from '../../utils/profileImageUpload';
 import { SERVICE_OPTIONS, canonicalLabelsFromMixedServiceEntries } from '../../constants/serviceOptions';
 import MajorSelect from '../MajorSelect';
 import OptionSelect from '../ui/OptionSelect';
+import { DASHBOARD_PAGE_TITLE } from './pageTitle';
 
 const PREFERENCE_OPTIONS = SERVICE_OPTIONS.map((o) => ({ id: o.value, label: o.label }));
 
@@ -442,7 +443,7 @@ export default function StudentProfile() {
   return (
     <div className="h-[calc(100vh-56px)] overflow-y-auto bg-[#F5F3EF] px-4 py-8 sm:px-6">
       <div className="mx-auto w-full max-w-3xl">
-      <h1 className="text-2xl font-semibold text-slate-900 mb-1">Profile</h1>
+      <h1 className={`${DASHBOARD_PAGE_TITLE} mb-1`}>Profile</h1>
       <p className="text-sm text-slate-500 mb-6">
         Manage your account details, preferences, and security.
       </p>

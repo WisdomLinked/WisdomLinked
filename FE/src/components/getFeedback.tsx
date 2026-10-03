@@ -240,7 +240,7 @@ export default function Feedback() {
                             />
 
                             {showDropdown && !selectedUserId && (
-                                <div className="absolute z-10 w-full bg-white mt-1 rounded-xl border border-lightgrey shadow-md max-h-48 overflow-y-auto">
+                                <div className="absolute z-10 w-full bg-white mt-1 rounded-xl border border-lightgrey shadow-md scrollbar-thin max-h-72 overflow-y-auto py-1 pr-1">
                                     {isSearching ? (
                                         <div className="px-3 py-2 text-sm text-wl-muted">Searching…</div>
                                     ) : users.length === 0 ? (

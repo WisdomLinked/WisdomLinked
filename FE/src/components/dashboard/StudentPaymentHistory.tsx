@@ -1,5 +1,6 @@
 import { BookOpen, Receipt, RefreshCw, Users, Wallet } from 'lucide-react';
 import { usePaymentHistory, PaymentHistoryTable } from './PaymentHistoryTable';
+import { DASHBOARD_PAGE_TITLE } from './pageTitle';
 
 const money = (cents: number) =>
   new Intl.NumberFormat(undefined, { style: 'currency', currency: 'USD' }).format(cents / 100);
@@ -58,7 +59,7 @@ export default function StudentPaymentHistory() {
       <div className="mx-auto max-w-6xl space-y-8">
         <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <h1 className="font-serif text-2xl font-bold text-slate-900 md:text-3xl">
+            <h1 className={DASHBOARD_PAGE_TITLE}>
               Payment History
             </h1>
             <p className="mt-1 max-w-xl text-[14px] text-slate-600">

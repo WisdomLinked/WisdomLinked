@@ -3,6 +3,7 @@ import { CalendarDays, Clock, MapPin, X, AlertCircle, Repeat } from 'lucide-reac
 import { toYMDLocal } from '../../utils/schedulingTimezone';
 import SeminarDetails from '../../pages/Dashboard/seminarDetails';
 import { sessionEndMs } from '../../utils/sessionDuration';
+import { DASHBOARD_PAGE_TITLE } from './pageTitle';
 
 export type Meeting = {
   id: string;
@@ -252,7 +253,7 @@ export default function StudentCalendar({
     <div className={containerClass}>
       <div className="mb-5 flex flex-col gap-1 md:flex-row md:items-end md:justify-between">
         <div>
-          <h1 className="text-2xl font-semibold text-slate-900 mb-1">
+          <h1 className={`${DASHBOARD_PAGE_TITLE} mb-1`}>
             {title}
           </h1>
           <p className="text-sm text-slate-500">

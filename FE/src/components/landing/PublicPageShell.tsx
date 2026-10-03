@@ -13,7 +13,13 @@ const sectionLinks = [
   { label: 'Contact Us', to: '/' },
 ] as const;
 
-export default function PublicPageShell({ children }: { children: React.ReactNode }) {
+export default function PublicPageShell({
+  children,
+  contentClassName = '',
+}: {
+  children: React.ReactNode;
+  contentClassName?: string;
+}) {
   const navigate = useNavigate();
   const location = useLocation();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -217,7 +223,7 @@ export default function PublicPageShell({ children }: { children: React.ReactNod
         ) : null}
       </header>
 
-      <div className="flex-1 flex flex-col pt-20 sm:pt-24">{children}</div>
+      <div className={`flex-1 flex flex-col pt-20 sm:pt-24 ${contentClassName}`}>{children}</div>
 
       <footer className="footer-bg text-white mt-auto">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-5 sm:py-6">

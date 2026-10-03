@@ -3,6 +3,7 @@ import { Loader2, RefreshCw, GitMerge, History } from 'lucide-react';
 import { doGetCustomMajors, doConsolidateMajors, doGetKeywordsAndServices, doGetMajorConsolidations } from '../../../api/api';
 import { notify } from '../../../utils/notify';
 import SelectField from '../../../components/ui/SelectField';
+import { DASHBOARD_PAGE_TITLE } from '../../../components/dashboard/pageTitle';
 
 type CustomMajorRow = {
   value: string;
@@ -105,7 +106,7 @@ export default function AdminMajors() {
     <div className="mx-auto w-full max-w-4xl px-4 py-6">
       <div className="mb-4 flex items-center justify-between">
         <div>
-          <h2 className="text-xl font-semibold text-wl-brand">Custom majors</h2>
+          <h2 className={DASHBOARD_PAGE_TITLE}>Custom majors</h2>
           <p className="mt-1 text-sm text-gray-500">
             Entries users and experts typed under "Other" (from profiles and seminars). Select the
             similar ones, then assign them to an existing official major — or add a new one from the

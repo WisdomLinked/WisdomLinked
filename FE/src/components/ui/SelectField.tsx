@@ -84,7 +84,7 @@ export default function SelectField({
 
       {open && (
         <div className="absolute left-0 top-full z-50 mt-2 flex w-max min-w-full max-w-[18rem] flex-col overflow-hidden rounded-xl border border-[#E5E2DB] bg-white shadow-[0_20px_50px_rgba(26,58,74,0.15)]">
-          <div className="max-h-60 overflow-y-auto p-1.5">
+          <div className="scrollbar-thin max-h-72 overflow-y-auto py-1 pl-1.5 pr-2">
             {options.map(opt => {
               const isSelected = opt.value === value;
               return (

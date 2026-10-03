@@ -12,25 +12,6 @@ code {
     monospace;
 }
 
-::-webkit-scrollbar {
-  width: 5px;
-  height: 5px;
-}
-
-::-webkit-scrollbar-track {
-  background: rgb(39, 38, 38);
-}
-
-::-webkit-scrollbar-thumb {
-  background: #6c7278;
-  border-radius: 12px;
-  transition: all 0.3s ease;
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background: #6c7278aa;
-}
-
 .gradient_text {
   background: linear-gradient(114.9deg, #3bdbbe 9.79%, #76d1f7 71.23%), #ffffff;
   -webkit-background-clip: text;

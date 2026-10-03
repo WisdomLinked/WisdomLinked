@@ -6,6 +6,7 @@ import { doFilterExperts, doGetKeywordsAndServices } from '../api/api';
 import { serviceDropdownRowsFromApi } from '../constants/serviceOptions';
 import { SetLoadingStatus } from '../actions/appActions';
 import { mapExpertToMentorWithImage } from '../utils/mapExpertToMentor';
+import { DASHBOARD_PAGE_TITLE } from '../components/dashboard/pageTitle';
 
 export default function FindExpertsPage({
   onViewExpert,
@@ -109,7 +110,7 @@ export default function FindExpertsPage({
   return (
     <div className="min-h-screen bg-[#F5F3EF] px-6 py-8 text-[#1A3A4A]">
       <header className="mb-6 border-b border-[#E5E2DB] pb-5">
-        <h1 className="font-serif text-[2.5rem] font-medium leading-tight text-[#1A3A4A]">
+        <h1 className={DASHBOARD_PAGE_TITLE}>
           Find Experts
         </h1>
         <p className="mt-2 max-w-xl text-sm font-sans text-[#7A7A72]">

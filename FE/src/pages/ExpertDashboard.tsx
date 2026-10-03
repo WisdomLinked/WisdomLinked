@@ -78,6 +78,7 @@ import { sessionDurationLabel, sessionDurationMinutes, sessionEndMs } from '../u
 import FollowersModal, {
   type FollowerEntry,
 } from '../components/dashboard/FollowersModal';
+import { DASHBOARD_PAGE_TITLE } from '../components/dashboard/pageTitle';
 
 function refIdOf(ref: unknown): string {
   if (!ref) return '';
@@ -1152,7 +1153,7 @@ export default function ExpertDashboard() {
         {/* Stats row */}
         <section>
           <div className="mb-3 flex items-center justify-between gap-3">
-            <h2 className="text-2xl font-semibold text-slate-900">
+            <h2 className={DASHBOARD_PAGE_TITLE}>
               Overview
             </h2>
             <button
