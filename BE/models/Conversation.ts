@@ -7,6 +7,10 @@ const conversationSchema = new mongoose.Schema(
 
         lastMessageAt: { type: Date, default: null },
 
+        lastMessageText: { type: String, default: null },
+
+        lastMessageFrom: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
+
         participants: [
             {
                 type: mongoose.Schema.Types.ObjectId,

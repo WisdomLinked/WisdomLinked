@@ -13,7 +13,7 @@ const Event = require('../models/Event');
 const SeminarSeatRequest = require('../models/SeminarSeatRequest');
 
 const INFERENCE_URL = 'https://inference.do-ai.run/v1/chat/completions';
-const MODEL_ID = 'deepseek-4-flash';
+const MODEL_ID = 'deepseek-v4.1-flash';
 const TIMEOUT_MS = 15000;
 const MAX_TOOL_ROUNDS = 4;
 const PENDING_ANSWER = 'Pending answer...';

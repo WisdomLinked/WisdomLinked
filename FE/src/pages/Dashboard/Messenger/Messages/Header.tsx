@@ -87,6 +87,7 @@ const MessagesHeader = ({ events, openCalendarModal, openSeminarModal, openEditS
     const [manageCommunityMembersOpen, setManageCommunityMembersOpen] = useState(false);
     const [headerLeaveCommunityOpen, setHeaderLeaveCommunityOpen] = useState(false);
     const [deleteCommunityConfirmOpen, setDeleteCommunityConfirmOpen] = useState(false);
+    const [deleteSeminarConfirmOpen, setDeleteSeminarConfirmOpen] = useState(false);
     const [addCommunityMembersOpen, setAddCommunityMembersOpen] = useState(false);
     const [callHistoryOpen, setCallHistoryOpen] = useState(false);
     const [callHistoryLoading, setCallHistoryLoading] = useState(false);
@@ -210,6 +211,10 @@ const MessagesHeader = ({ events, openCalendarModal, openSeminarModal, openEditS
             set_buttonsModalShow(false);
             const isCommunity = chosenGroupChatDetails?.type === "community";
             const label = isCommunity ? "community" : "seminar";
+            if (!skipConfirm && !isCommunity && seminarEnrolledCount > 0) {
+                setDeleteSeminarConfirmOpen(true);
+                return;
+            }
             if (!skipConfirm && !window.confirm(`Delete this ${label} for everyone? This cannot be undone.`)) return;
             dispatch(
                 deleteGroupAction({
@@ -227,6 +232,11 @@ const MessagesHeader = ({ events, openCalendarModal, openSeminarModal, openEditS
 
     const confirmDeleteCommunityFromHeader = () => {
         setDeleteCommunityConfirmOpen(false);
+        handleDeleteGroup(true);
+    };
+
+    const confirmDeleteSeminarFromHeader = () => {
+        setDeleteSeminarConfirmOpen(false);
         handleDeleteGroup(true);
     };
 
@@ -351,10 +361,14 @@ const MessagesHeader = ({ events, openCalendarModal, openSeminarModal, openEditS
     const isGroupAdmin = !!groupAdminId && String(groupAdminId) === String(userDetails?._id);
     const isCommunityModerator = chosenGroupChatDetails?.type === "community"
         && (isGroupAdmin || groupCoModeratorIds.has(String(userDetails?._id || "")));
+    const seminarEnrolledCount = (chosenGroupChatDetails?.participants || []).filter(
+        (p: any) => String(p?._id ?? p?.id ?? p) !== String(groupAdminId),
+    ).length;
 
     const peerRoleLower = String(chosenChatDetails?.peerRole || "").toLowerCase();
     const viewerIsStudent = String(userDetails?.role || "").toLowerCase() === "customer";
     const isCommunityChat = chosenGroupChatDetails?.type === "community";
+    const isAppointmentChat = chosenGroupChatDetails?.type === "individual";
     const canInviteToSeminar = !isCommunityChat
         && !!chosenGroupChatDetails
         && chosenGroupChatDetails?.type !== 'individual'
@@ -670,7 +684,13 @@ const MessagesHeader = ({ events, openCalendarModal, openSeminarModal, openEditS
                                 chosenGroupChatDetails && (
                                     <button
                                         className="mr-4 rounded-xl bg-[#234C6A] px-4 py-1 text-sm font-semibold text-white shadow-sm transition hover:bg-[#1b3c53] disabled:cursor-not-allowed disabled:bg-[#89A6BC] disabled:text-white disabled:shadow-none"
-                                        title={!enabledEvent ? 'Seminar not started' : kickedFromSeminar ? 'You are blocked from this seminar by the expert' : 'Join a seminar'}
+                                        title={
+                                            isAppointmentChat
+                                                ? !enabledEvent
+                                                    ? 'This appointment has not started yet'
+                                                    : 'Join this appointment call'
+                                                : !enabledEvent ? 'Seminar not started' : kickedFromSeminar ? 'You are blocked from this seminar by the expert' : 'Join a seminar'
+                                        }
                                         disabled={
                                             !enabledEvent ||
                                             kickedFromSeminar
@@ -839,6 +859,7 @@ const MessagesHeader = ({ events, openCalendarModal, openSeminarModal, openEditS
                                             </button>
                                         ) : null}
                                         {
+                                            isAppointmentChat ? null :
                                             (isGroupAdmin || isCommunityModerator) ?
                                                 (
                                                     <>
@@ -848,7 +869,7 @@ const MessagesHeader = ({ events, openCalendarModal, openSeminarModal, openEditS
                                                                     className={`mt-0.5 flex w-full items-center justify-between gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-medium ${
                                                                         theme === "light" ? "text-slate-800 hover:bg-slate-50" : "hover:bg-white/10"
                                                                     } disabled:opacity-50`}
-                                                                    disabled={(chosenGroupChatDetails?.participants?.length ?? 0) > 1 || seminarHasEnded}
+                                                                    disabled={seminarHasEnded}
                                                                     title={seminarHasEnded ? "This seminar has already finished and can no longer be edited." : undefined}
                                                                     onClick={() => {
                                                                         set_buttonsModalShow(false)
@@ -929,8 +950,7 @@ const MessagesHeader = ({ events, openCalendarModal, openSeminarModal, openEditS
                                                                             ? "text-rose-700 hover:bg-rose-50"
                                                                             : "text-rose-300 hover:bg-white/10"
                                                                     } disabled:opacity-50`}
-                                                                    disabled={(chosenGroupChatDetails?.participants?.length ?? 0) > 1}
-                                                                    onClick={handleDeleteGroup}
+                                                                    onClick={() => handleDeleteGroup()}
                                                                 >
                                                                     <span>Delete Seminar</span>
                                                                     <ClearIcon fontSize="small" className="shrink-0 opacity-90" />
@@ -1035,6 +1055,25 @@ const MessagesHeader = ({ events, openCalendarModal, openSeminarModal, openEditS
                     </Dialog>
                 </>
             )}
+            <Dialog
+                open={deleteSeminarConfirmOpen}
+                onClose={() => setDeleteSeminarConfirmOpen(false)}
+                maxWidth="xs"
+                fullWidth
+            >
+                <DialogTitle>Delete this seminar?</DialogTitle>
+                <DialogContent>
+                    <p className="text-sm font-semibold text-rose-600">
+                        I have approval from all the participants to delete this seminar
+                    </p>
+                </DialogContent>
+                <DialogActions sx={{ px: 3, pb: 2, gap: 1 }}>
+                    <Button onClick={() => setDeleteSeminarConfirmOpen(false)}>Cancel</Button>
+                    <Button variant="contained" color="error" onClick={confirmDeleteSeminarFromHeader}>
+                        Delete Seminar
+                    </Button>
+                </DialogActions>
+            </Dialog>
             <Dialog
                 open={callHistoryOpen}
                 onClose={() => setCallHistoryOpen(false)}
@@ -1279,7 +1318,11 @@ const MessagesHeader = ({ events, openCalendarModal, openSeminarModal, openEditS
                         >
                             <CloseIcon fontSize="small" />
                         </button>
-                        <div className={theme === "light" ? "font-semibold pr-7" : "pr-7"}>Join a seminar once the button gets available.</div>
+                        <div className={theme === "light" ? "font-semibold pr-7" : "pr-7"}>
+                            {isAppointmentChat
+                                ? "Join this appointment when the button becomes available."
+                                : "Join a seminar once the button gets available."}
+                        </div>
                         <div className="flex items-center space-x-2 mt-2">
                             <button
                                 className={`w-3 h-3 lg:w-4 lg:h-4 rounded-[4px] ${

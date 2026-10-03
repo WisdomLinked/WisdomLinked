@@ -300,7 +300,7 @@ export const joinPrivateChat = async (personId: string) => {
     }
 };
 
-export const createCommunityChat = async (data: { name: string; description?: string; participants?: string[]; isOpenToAll?: boolean }) => {
+export const createCommunityChat = async (data: { name: string; titleLine?: string; description?: string; participants?: string[]; isOpenToAll?: boolean }) => {
     try {
         const res = await api.post("group-chat/create-community-chat", data);
         return res.data;

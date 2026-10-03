@@ -1007,6 +1007,12 @@ export const getMeetingThread = async (req: any, res: Response) => {
     }
 };
 
+const ratingScopeOptsFor = async (meeting: any): Promise<{ groupChatType?: unknown }> => {
+    if (!meeting?.groupChatId) return {};
+    const scope = await GroupChat.findById(String(meeting.groupChatId)).select('type').lean();
+    return { groupChatType: scope?.type };
+};
+
 /**
  * GET /api/meeting/:meetingThreadId/rating-state
  * Return whether the current user can rate and if already rated.
@@ -1020,7 +1026,11 @@ export const getMeetingRatingState = async (req: any, res: Response) => {
             .populate('participants', 'username _id');
         if (!meeting) return res.status(404).json({ error: 'Meeting not found' });
         await expireStaleMeetingIfNeeded(meeting);
-        const targetId = resolveMeetingRatingTargetUserId(meeting, String(userId));
+        const targetId = resolveMeetingRatingTargetUserId(
+            meeting,
+            String(userId),
+            await ratingScopeOptsFor(meeting),
+        );
         const hasPresence = !!targetId && hasJoinedMeeting(meeting, String(userId)) && hasJoinedMeeting(meeting, String(targetId));
         const existing = (meeting.ratings || []).find(
             (r: any) => String(r?.rater?._id ?? r?.rater) === String(userId),
@@ -1073,7 +1083,11 @@ export const submitMeetingRating = async (req: any, res: Response) => {
         if (!meeting) return res.status(404).json({ error: 'Meeting not found' });
         await expireStaleMeetingIfNeeded(meeting);
         if (meeting.status !== 'ended') return res.status(400).json({ error: 'Meeting must be ended before rating' });
-        const targetId = resolveMeetingRatingTargetUserId(meeting, String(userId));
+        const targetId = resolveMeetingRatingTargetUserId(
+            meeting,
+            String(userId),
+            await ratingScopeOptsFor(meeting),
+        );
         if (!targetId) return res.status(403).json({ error: 'You cannot rate this meeting' });
         if (!hasJoinedMeeting(meeting, String(userId)) || !hasJoinedMeeting(meeting, String(targetId))) {
             return res.status(403).json({ error: 'Both users must join the Jitsi call before rating' });

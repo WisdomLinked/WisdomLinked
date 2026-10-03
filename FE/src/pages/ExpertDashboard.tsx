@@ -33,7 +33,8 @@ import {
 } from '../api/api';
 import { resolveProfileImageSrc } from '../utils/profileImage';
 import { displayRoomLabel } from '../utils/chatRoomLabel';
-import { chatTargetsByRid } from '../utils/chatNavTarget';
+import { chatTargetsByRid, type ChatNavTarget } from '../utils/chatNavTarget';
+import { unreadByChatSection } from '../utils/chatSectionUnread';
 import { seminarEnrollmentLabel } from '../utils/seminarCapacityLabel';
 import { fetchDmUnreadSnapshot, fetchChatUserProfile } from '../api/chatApi';
 import ProfileModal from './Dashboard/Messenger/Messages/ProfileModal';
@@ -268,7 +269,7 @@ export default function ExpertDashboard() {
   useEffect(() => {
     window.localStorage.setItem('expertChatSection', chatSection);
   }, [chatSection]);
-  const openChatSection = useCallback((target: 'dm' | 'community' | 'seminar') => {
+  const openChatSection = useCallback((target: ChatNavTarget) => {
     setChatSection(sectionForChatTarget(target));
   }, []);
   const goToDashboardTab = useCallback(() => setActiveItem('dashboard'), []);
@@ -645,6 +646,11 @@ export default function ExpertDashboard() {
     () => Object.values(filteredUnreadByRid).reduce((sum, n) => sum + (Number(n) || 0), 0),
     [filteredUnreadByRid],
   );
+
+  const chatSectionUnread = useMemo(
+    () => unreadByChatSection(filteredUnreadByRid, chatTargetByRid),
+    [filteredUnreadByRid, chatTargetByRid],
+  );
   const chatNotifications = useMemo<TopBarNotificationItem[]>(
     () =>
       Object.entries(filteredUnreadByRid)
@@ -663,6 +669,7 @@ export default function ExpertDashboard() {
             onClick: () => {
               if (target === 'dm') localStorage.setItem('wl_open_dm_rid', rid);
               else if (target === 'seminar') localStorage.setItem('wl_open_seminar_rc_rid', rid);
+              else if (target === 'appointment') localStorage.setItem('wl_open_appointment_rc_rid', rid);
               else localStorage.setItem('wl_open_community_rc_rid', rid);
               window.dispatchEvent(new Event('wl-open-chat-nav'));
               openChatSection(target);
@@ -1075,7 +1082,7 @@ export default function ExpertDashboard() {
       } as any)
     );
     setExpertUpcomingModal(null);
-    openChatSection(booked ? 'dm' : 'seminar');
+    openChatSection(booked ? 'appointment' : 'seminar');
     setActiveItem('chat');
   };
 
@@ -1511,6 +1518,7 @@ export default function ExpertDashboard() {
           roleLabel="Expert"
           notifications={{ chat: activeItem === 'chat' ? 0 : totalUnreadDm }}
           subItems={{ chat: CHAT_SECTION_ITEMS }}
+          subItemCounts={{ chat: chatSectionUnread }}
           activeSubItem={chatSection}
           onNavigateSub={(navId, subId) => {
             setActiveItem(navId);

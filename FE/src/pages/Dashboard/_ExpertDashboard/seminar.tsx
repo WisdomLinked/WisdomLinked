@@ -128,6 +128,7 @@ import React, {
     onAfterSeminarSave?: (status: 'active' | 'draft') => void;
     /** Return to seminar list without saving */
     onCancel?: () => void;
+    enrolledCount?: number;
   }
   
   type MultiSelectField = 'majors' | 'services';
@@ -231,6 +232,7 @@ import React, {
     selectedSeminar,
     onAfterSeminarSave,
     onCancel,
+    enrolledCount = 0,
   }) => {
     const dispatch = useDispatch();
     const navigate = useNavigate();
@@ -264,6 +266,7 @@ import React, {
       timezone: detectUserTimeZone(),
     }));
     const [openDropdown, setOpenDropdown] = useState<DropdownId>(null);
+    const [confirmPublishOpen, setConfirmPublishOpen] = useState(false);
     const [tagInput, setTagInput] = useState<string>('');
     const [errors, setErrors] = useState<SeminarErrors>({});
     const [coverPreview, setCoverPreview] = useState<string | null>(null);
@@ -711,7 +714,17 @@ import React, {
       }
     };
 
-    const handlePublish = () => persistSeminar('active');
+    const handlePublish = () => {
+      if (enrolledCount > 0) {
+        setConfirmPublishOpen(true);
+        return;
+      }
+      void persistSeminar('active');
+    };
+    const confirmPublishWithApproval = () => {
+      setConfirmPublishOpen(false);
+      void persistSeminar('active');
+    };
     const handleSaveDraft = () => persistSeminar('draft');
   
     const renderStepper = () => (
@@ -1494,6 +1507,38 @@ import React, {
             </div>
           </div>
         </div>
+
+        {confirmPublishOpen ? (
+          <div
+            className="fixed inset-0 z-[1100] flex items-center justify-center bg-slate-900/40 px-4"
+            onClick={(e) => {
+              if (e.target === e.currentTarget) setConfirmPublishOpen(false);
+            }}
+          >
+            <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-5 shadow-xl">
+              <h2 className="text-base font-semibold text-slate-900">Publish these changes?</h2>
+              <p className="mt-3 text-sm font-semibold text-rose-600">
+                I have the approval from all the participants for these particular seminar settings
+              </p>
+              <div className="mt-5 flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setConfirmPublishOpen(false)}
+                  className="rounded-lg border border-gray-200 px-5 py-2.5 text-sm font-medium text-gray-600 hover:bg-gray-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={confirmPublishWithApproval}
+                  className="rounded-lg bg-[#234C6A] px-6 py-2.5 text-sm font-medium text-white hover:bg-[#1b3c53]"
+                >
+                  Publish Seminar
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : null}
       </div>
     );
   };

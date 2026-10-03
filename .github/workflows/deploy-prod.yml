@@ -29,6 +29,7 @@ jobs:
           filters: |
             backend:
               - 'BE/**'
+              - '.github/workflows/deploy-prod.yml'
             frontend:
               - 'FE/**'
 
@@ -106,7 +107,8 @@ jobs:
       - name: Build and push Backend Image
         uses: docker/build-push-action@v5
         with:
-          context: ./BE
+          context: .
+          file: BE/Dockerfile
           push: true
           tags: ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE }}:latest
           cache-from: type=gha

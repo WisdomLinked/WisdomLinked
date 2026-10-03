@@ -16,6 +16,8 @@ import {
   withRoomActivity,
   type RoomActivityMap,
 } from '../../utils/chatListOrder';
+import { chatRowPreviewLine } from '../../utils/chatMessagePreview';
+import { useResolvedProfileImages } from '../../hooks/useResolvedProfileImages';
 import {
   doGetMyEvents,
   getAllCommunityChats,
@@ -41,6 +43,7 @@ import {
 } from '../../actions/chatActions';
 import { notify } from '../../utils/notify';
 import { updateMe } from '../../actions/authActions';
+import { showErrorAlert, showSuccessAlert } from '../../actions/alertActions';
 import { leaveGroupAction } from '../../actions/groupChatActions';
 import { actionTypes } from '../../actions/types';
 import { isTheEventGoingOn } from '../../actions/common';
@@ -54,8 +57,14 @@ import {
   isChatSectionUnset,
   showsAppointments,
   showsCommunities,
+  showsDirect,
   showsSeminars,
 } from '../../utils/chatSections';
+import {
+  appointmentChatRows,
+  matchesAppointmentQuery,
+  type AppointmentChatRow,
+} from '../../utils/appointmentChatRows';
 import { resolveProfileImageSrc } from '../../utils/profileImage';
 import { shouldShowMobileMessenger } from '../../utils/mobileChatLayout';
 import { buildOnlineUserIdSet, hasOnlineUserId } from '../../utils/onlinePresence';
@@ -69,6 +78,7 @@ type CommunityRow = {
   name: string;
   missedChats?: number;
   lastLine: string;
+  description: string;
 };
 
 type PrivateRow =
@@ -94,6 +104,9 @@ type PrivateRow =
       /** Mongo Conversation id — needed for DM clear/delete actions. */
       conversationId?: string;
       lastMessageAt?: string | null;
+      /** Raw wire text of the newest message, decoded for the row preview. */
+      lastMessageText?: string | null;
+      lastMessageFromMe?: boolean;
     }
   /** Expert: customer from directory search (not necessarily in friends yet). */
   | { kind: 'expertCustomer'; id: string; title: string; lastLine: string; raw: any }
@@ -112,6 +125,7 @@ const StudentChat: React.FC<{ section?: ChatSection }> = ({ section = CHAT_SECTI
 
   const [communityQuery, setCommunityQuery] = useState('');
   const [privateQuery, setPrivateQuery] = useState('');
+  const [appointmentQuery, setAppointmentQuery] = useState('');
   const [seminarQuery, setSeminarQuery] = useState('');
   const [communityChats, setCommunityChats] = useState<CommunityRow[]>([]);
   const [joiningCommunity, setJoiningCommunity] = useState(false);
@@ -120,6 +134,9 @@ const StudentChat: React.FC<{ section?: ChatSection }> = ({ section = CHAT_SECTI
   const [resetCurrentEventFlag, setResetCurrentEventFlag] = useState(false);
   const [rcUnreadByRid, setRcUnreadByRid] = useState<Record<string, number>>({});
   const [liveActivityByRid, setLiveActivityByRid] = useState<RoomActivityMap>({});
+  const [livePreviewByRid, setLivePreviewByRid] = useState<
+    Record<string, { text: string; fromMe: boolean }>
+  >({});
 
   const isCustomer =
     userDetails && String(userDetails.role || '').toLowerCase() === 'customer';
@@ -143,6 +160,7 @@ const StudentChat: React.FC<{ section?: ChatSection }> = ({ section = CHAT_SECTI
   const [addToCommunityTarget, setAddToCommunityTarget] = useState<Extract<PrivateRow, { kind: 'privateDm' }> | null>(null);
   const [addingToCommunityId, setAddingToCommunityId] = useState<string | null>(null);
   const [newName, setNewName] = useState('');
+  const [newTitleLine, setNewTitleLine] = useState('');
   const [newDescription, setNewDescription] = useState('');
   const [newOpenToAll, setNewOpenToAll] = useState(true);
   const [newOpenToFollowers, setNewOpenToFollowers] = useState(false);
@@ -172,6 +190,8 @@ const StudentChat: React.FC<{ section?: ChatSection }> = ({ section = CHAT_SECTI
       rcChannelId?: string;
       conversationId?: string;
       lastMessageAt?: string | null;
+      lastMessageText?: string | null;
+      lastMessageFromMe?: boolean;
     }> = [];
 
     const dcs = userDetails.directConversations ?? [];
@@ -193,6 +213,8 @@ const StudentChat: React.FC<{ section?: ChatSection }> = ({ section = CHAT_SECTI
         rcChannelId: conv.rcChannelId ? String(conv.rcChannelId) : undefined,
         conversationId: convId,
         lastMessageAt: conv?.lastMessageAt ?? null,
+        lastMessageText: conv?.lastMessageText ?? null,
+        lastMessageFromMe: pid(conv?.lastMessageFrom?._id ?? conv?.lastMessageFrom) === me,
       });
     }
 
@@ -226,6 +248,17 @@ const StudentChat: React.FC<{ section?: ChatSection }> = ({ section = CHAT_SECTI
     return rows;
   }, [userDetails?.groupChats]);
 
+  const appointmentRows = useMemo(
+    () => appointmentChatRows(userDetails?.groupChats, currentUserId),
+    [userDetails?.groupChats, currentUserId],
+  );
+
+  const appointmentPeople = useMemo(
+    () => appointmentRows.map(row => ({ image: row.withImage })),
+    [appointmentRows],
+  );
+  const appointmentImages = useResolvedProfileImages(appointmentPeople);
+
   const loadCommunityChats = React.useCallback(async () => {
     const uid = userDetails?._id ?? userDetails?.id ?? userDetails?.userId;
     if (!uid) return;
@@ -240,7 +273,8 @@ const StudentChat: React.FC<{ section?: ChatSection }> = ({ section = CHAT_SECTI
             _id: chat._id,
             name: chat.name || 'Community chat',
             missedChats: missed,
-            lastLine: chat.description || 'Community room',
+            lastLine: chat.titleLine || '',
+            description: chat.description || '',
           };
         });
         setCommunityChats(rows);
@@ -369,6 +403,12 @@ const StudentChat: React.FC<{ section?: ChatSection }> = ({ section = CHAT_SECTI
     });
   }, [seminarRows]);
 
+  useEffect(() => {
+    appointmentRows.forEach(a => {
+      if (a.rcChannelId) subscribeToRoom(String(a.rcChannelId));
+    });
+  }, [appointmentRows]);
+
   /**
    * Live unread for seminar + community rooms, counted from the RC message stream.
    * RC's per-subscription `unread` (onSubscriptionChanged / snapshot) is reliable for 1:1 DMs
@@ -387,8 +427,11 @@ const StudentChat: React.FC<{ section?: ChatSection }> = ({ section = CHAT_SECTI
     seminarRows.forEach(r => {
       if (r.rcChannelId) s.add(String(r.rcChannelId));
     });
+    appointmentRows.forEach(r => {
+      if (r.rcChannelId) s.add(String(r.rcChannelId));
+    });
     groupRidSetRef.current = s;
-  }, [communityChats, seminarRows]);
+  }, [communityChats, seminarRows, appointmentRows]);
 
   const activeGroupRidRef = React.useRef<string>('');
   useEffect(() => {
@@ -415,6 +458,12 @@ const StudentChat: React.FC<{ section?: ChatSection }> = ({ section = CHAT_SECTI
       setLiveActivityByRid(prev =>
         withRoomActivity(prev, rid, Number.isNaN(at) ? Date.now() : at),
       );
+      const body = typeof msg?.msg === 'string' ? msg.msg : '';
+      if (body) {
+        const author = String(msg?.u?.username || '').toLowerCase();
+        const mine = !!author && !!myRcUsernameRef.current && author === myRcUsernameRef.current;
+        setLivePreviewByRid(prev => ({ ...prev, [rid]: { text: body, fromMe: mine } }));
+      }
     });
     return unsub;
   }, [isCustomer, isExpert, isAdmin]);
@@ -465,6 +514,8 @@ const StudentChat: React.FC<{ section?: ChatSection }> = ({ section = CHAT_SECTI
             rcChannelId: p.rcChannelId,
             conversationId: p.conversationId,
             lastMessageAt: p.lastMessageAt ?? null,
+            lastMessageText: p.lastMessageText ?? null,
+            lastMessageFromMe: p.lastMessageFromMe ?? false,
           })),
         );
         if (!cancelled) setPrivateRows(rows);
@@ -496,6 +547,8 @@ const StudentChat: React.FC<{ section?: ChatSection }> = ({ section = CHAT_SECTI
             rcChannelId: p.rcChannelId,
             conversationId: p.conversationId,
             lastMessageAt: p.lastMessageAt ?? null,
+            lastMessageText: p.lastMessageText ?? null,
+            lastMessageFromMe: p.lastMessageFromMe ?? false,
           })),
         );
         if (!cancelled) setPrivateRows([...friendRows, ...dmRows]);
@@ -513,6 +566,8 @@ const StudentChat: React.FC<{ section?: ChatSection }> = ({ section = CHAT_SECTI
             rcChannelId: p.rcChannelId,
             conversationId: p.conversationId,
             lastMessageAt: p.lastMessageAt ?? null,
+            lastMessageText: p.lastMessageText ?? null,
+            lastMessageFromMe: p.lastMessageFromMe ?? false,
           })),
         );
         if (!cancelled) setPrivateRows(rows);
@@ -809,6 +864,15 @@ const StudentChat: React.FC<{ section?: ChatSection }> = ({ section = CHAT_SECTI
     );
   }, [seminarRows, seminarQuery, liveActivityByRid]);
 
+  const filteredAppointments = useMemo(() => {
+    const matched = appointmentRows.filter(r => matchesAppointmentQuery(r, appointmentQuery));
+    return sortByRecentActivity(
+      matched,
+      a => ({ roomId: a.rcChannelId, storedAt: a.raw?.lastMessageAt }),
+      liveActivityByRid,
+    );
+  }, [appointmentRows, appointmentQuery, liveActivityByRid]);
+
   const privateRowActivity = React.useCallback(
     (r: PrivateRow) =>
       r.kind === 'privateDm'
@@ -939,6 +1003,10 @@ const StudentChat: React.FC<{ section?: ChatSection }> = ({ section = CHAT_SECTI
       notify.error('Community name is required');
       return;
     }
+    if (!newTitleLine.trim()) {
+      notify.error('Title line is required');
+      return;
+    }
     if (!newOpenToAll && communityInviteSelected.length === 0) {
       notify.error('Add at least one member, or turn on “Open to all users”.');
       return;
@@ -947,6 +1015,7 @@ const StudentChat: React.FC<{ section?: ChatSection }> = ({ section = CHAT_SECTI
     try {
       const res: any = await createCommunityChat({
         name: newName.trim(),
+        titleLine: newTitleLine.trim(),
         description: newDescription.trim() || undefined,
         isOpenToAll: newOpenToAll,
         participants: !newOpenToAll ? communityInviteSelected.map(p => p.id) : undefined,
@@ -955,6 +1024,7 @@ const StudentChat: React.FC<{ section?: ChatSection }> = ({ section = CHAT_SECTI
         notify.success('Community created');
         setCreateOpen(false);
         setNewName('');
+        setNewTitleLine('');
         setNewDescription('');
         setNewOpenToAll(true);
         setNewOpenToFollowers(false);
@@ -1020,6 +1090,30 @@ const StudentChat: React.FC<{ section?: ChatSection }> = ({ section = CHAT_SECTI
       }
     },
     [dispatch],
+  );
+
+  const openAppointment = React.useCallback(
+    (row: AppointmentChatRow) => {
+      const rid = row.rcChannelId;
+      if (rid) {
+        dispatch(clearDmUnreadRid(rid));
+        setRcUnreadByRid(prev => {
+          const next = { ...prev };
+          delete next[rid];
+          return next;
+        });
+        clearLiveGroupUnread(rid);
+      }
+      dispatch(
+        setChosenGroupChatDetails({
+          ...row.raw,
+          groupId: row._id,
+          groupName: row.name,
+          name: row.name,
+        } as any),
+      );
+    },
+    [dispatch, clearLiveGroupUnread],
   );
 
   /** Open a seminar group chat, lazily provisioning its RC channel for older seminars. */
@@ -1093,6 +1187,24 @@ const StudentChat: React.FC<{ section?: ChatSection }> = ({ section = CHAT_SECTI
         localStorage.removeItem('wl_open_seminar_rc_rid');
       }
     }
+    const appointmentId = localStorage.getItem('wl_open_appointment_id');
+    if (appointmentId) {
+      const row = appointmentRows.find(a => String(a._id) === String(appointmentId));
+      if (row) {
+        openAppointment(row);
+        localStorage.removeItem('wl_open_appointment_id');
+      }
+    }
+    const appointmentRid = localStorage.getItem('wl_open_appointment_rc_rid');
+    if (appointmentRid) {
+      const row = appointmentRows.find(
+        a => String(a.rcChannelId || '') === String(appointmentRid),
+      );
+      if (row) {
+        openAppointment(row);
+        localStorage.removeItem('wl_open_appointment_rc_rid');
+      }
+    }
     const dmUserRaw = localStorage.getItem('wl_open_dm_userid');
     if (dmUserRaw) {
       try {
@@ -1105,7 +1217,7 @@ const StudentChat: React.FC<{ section?: ChatSection }> = ({ section = CHAT_SECTI
       }
       localStorage.removeItem('wl_open_dm_userid');
     }
-  }, [privateRows, communityChats, seminarRows, openPrivateDm, openCommunity, openSeminar, openDmByUserId]);
+  }, [privateRows, communityChats, seminarRows, appointmentRows, openPrivateDm, openCommunity, openSeminar, openAppointment, openDmByUserId]);
 
   useEffect(() => {
     consumeStorageChatNav();
@@ -1502,7 +1614,7 @@ const StudentChat: React.FC<{ section?: ChatSection }> = ({ section = CHAT_SECTI
           </div>
           ) : null}
 
-          {showsAppointments(section) ? (
+          {showsDirect(section) ? (
           <div className="flex min-h-0 flex-1 flex-col pt-1">
             <div className="mb-2 flex items-center justify-end gap-2">
               {(() => {
@@ -1581,9 +1693,16 @@ const StudentChat: React.FC<{ section?: ChatSection }> = ({ section = CHAT_SECTI
                   row.kind === 'privateDm' && row.rcChannelId
                     ? Math.max(Number(dmUnreadByRid?.[row.rcChannelId] || 0), Number(rcUnreadByRid?.[row.rcChannelId] || 0))
                     : 0;
+                const livePreview =
+                  row.kind === 'privateDm' && row.rcChannelId
+                    ? livePreviewByRid[row.rcChannelId]
+                    : undefined;
                 const lastLine =
-                  row.kind === 'privateDm' && unreadCount > 0
-                    ? `${unreadCount > 99 ? '99+' : unreadCount}+ new message${unreadCount > 1 ? 's' : ''}`
+                  row.kind === 'privateDm'
+                    ? chatRowPreviewLine(livePreview ? livePreview.text : row.lastMessageText, {
+                        fromMe: livePreview ? livePreview.fromMe : !!row.lastMessageFromMe,
+                        fallback: row.lastLine,
+                      })
                     : row.lastLine;
                 const rowKey =
                   row.kind === 'friend'
@@ -1649,8 +1768,11 @@ const StudentChat: React.FC<{ section?: ChatSection }> = ({ section = CHAT_SECTI
                             {row.missedChats}
                           </span>
                         ) : row.kind === 'privateDm' && unreadCount > 0 ? (
-                          <span className="ml-1 shrink-0 rounded-full bg-amber-500/20 px-1.5 text-[10px] font-semibold text-amber-800">
-                            {(unreadCount > 99 ? '99+' : unreadCount) + '+'}
+                          <span
+                            className="ml-1 shrink-0 rounded-full bg-amber-500/20 px-1.5 text-[10px] font-semibold text-amber-800"
+                            aria-label={`${unreadCount} unread message${unreadCount > 1 ? 's' : ''}`}
+                          >
+                            {unreadCount > 99 ? '99+' : unreadCount}
                           </span>
                         ) : null}
                       </div>
@@ -1723,6 +1845,97 @@ const StudentChat: React.FC<{ section?: ChatSection }> = ({ section = CHAT_SECTI
                     className={`mb-1 flex w-full items-start gap-2 rounded-xl px-3 py-2 text-left text-xs transition-colors ${rowTone}`}
                   >
                     {inner}
+                  </button>
+                );
+              })
+            )}
+            </div>
+          </div>
+          ) : null}
+
+          {showsAppointments(section) ? (
+          <div className="flex min-h-0 flex-1 flex-col pt-1">
+            <div className="shrink-0 rounded-lg bg-slate-100 px-3 py-2 mb-2 flex items-center gap-2 text-xs text-slate-500">
+              <MessageCircle className="h-3.5 w-3.5 text-slate-500 shrink-0" aria-hidden />
+              <input
+                type="text"
+                value={appointmentQuery}
+                onChange={e => setAppointmentQuery(e.target.value)}
+                placeholder="Search by appointment or person…"
+                aria-label="Search 1:1 appointments by name or person"
+                className="flex-1 min-w-0 bg-transparent outline-none text-xs text-slate-700 placeholder:text-slate-400"
+              />
+            </div>
+            <div className="wl-chat-scroll min-h-0 flex-1 overflow-y-auto pr-1">
+            {filteredAppointments.length === 0 ? (
+              <p className="px-2 py-3 text-[11px] text-slate-500">
+                {appointmentQuery.trim()
+                  ? 'No 1:1 appointments match your search.'
+                  : 'No 1:1 appointment chats yet. A chat opens here once an appointment is confirmed.'}
+              </p>
+            ) : (
+              filteredAppointments.map(row => {
+                const active = isCommunityActive(row._id);
+                const arid = row.rcChannelId ? String(row.rcChannelId) : '';
+                const unreadCount = arid
+                  ? Math.max(
+                      Number(dmUnreadByRid?.[arid] || 0),
+                      Number(rcUnreadByRid?.[arid] || 0),
+                      Number(liveGroupUnread?.[arid] || 0),
+                    )
+                  : 0;
+                const hasUnread = unreadCount > 0;
+                const rowTone = active
+                  ? 'bg-[#E8EEF4] text-slate-900'
+                  : hasUnread
+                    ? 'bg-amber-50/80 text-slate-900 ring-1 ring-amber-200/80 hover:bg-amber-50'
+                    : 'hover:bg-slate-100 text-slate-700';
+                const initials = getInitials(row.withName || row.name);
+                const palette = getAvatarPalette(initials);
+                const rawPortrait =
+                  typeof row.withImage === 'string' ? row.withImage.trim() : '';
+                const portrait = rawPortrait ? appointmentImages.get(rawPortrait) ?? null : null;
+                return (
+                  <button
+                    key={row._id}
+                    type="button"
+                    onClick={() => openAppointment(row)}
+                    className={`mb-1 flex w-full items-start gap-2 rounded-xl px-3 py-2 text-left text-xs transition-colors ${rowTone}`}
+                  >
+                    <div className="mt-0.5 shrink-0">
+                      {portrait ? (
+                        <img
+                          src={portrait}
+                          alt={row.withName || row.name}
+                          className="h-9 w-9 rounded-full object-cover"
+                        />
+                      ) : (
+                        <div
+                          className="flex h-9 w-9 items-center justify-center rounded-full text-xs font-semibold"
+                          style={{ background: palette.bg, color: palette.text }}
+                        >
+                          {initials}
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="truncate font-semibold text-[11px]">{row.name}</p>
+                        {hasUnread ? (
+                          <span
+                            className="ml-1 shrink-0 rounded-full bg-amber-500/20 px-1.5 text-[10px] font-semibold text-amber-800"
+                            title="New appointment messages"
+                            aria-label={`${unreadCount > 99 ? '99+' : unreadCount} new appointment messages`}
+                          >
+                            {unreadCount > 99 ? '99+' : `${unreadCount}+`}
+                          </span>
+                        ) : null}
+                      </div>
+                      {/* The person is identity, not a preview, so unread never replaces it. */}
+                      <p className="mt-0.5 truncate text-[10px] text-slate-500">
+                        {row.withName ? `With ${row.withName}` : '1:1 appointment'}
+                      </p>
+                    </div>
                   </button>
                 );
               })
@@ -1828,8 +2041,18 @@ const StudentChat: React.FC<{ section?: ChatSection }> = ({ section = CHAT_SECTI
                 {pendingJoinCommunity.name}
               </p>
             </div>
-            <div className="flex flex-1 items-center justify-center p-6">
-              <div className="flex flex-col items-center gap-4">
+            <div className="flex flex-1 flex-col overflow-y-auto p-6">
+              <div className="m-auto flex flex-col items-center gap-4">
+                {pendingJoinCommunity.description.trim() ? (
+                  <div className="max-w-2xl rounded-xl border border-slate-200 bg-white p-4">
+                    <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-[#234C6A]">
+                      Description
+                    </div>
+                    <p className="whitespace-pre-wrap break-words text-[13px] leading-relaxed text-slate-700">
+                      {pendingJoinCommunity.description}
+                    </p>
+                  </div>
+                ) : null}
                 <p className="max-w-full text-center text-[14px] text-slate-600 xl:whitespace-nowrap">
                   Click on &ldquo;Join&rdquo; Button below to be a part of the community and post your thoughts.
                 </p>
@@ -1969,12 +2192,21 @@ const StudentChat: React.FC<{ section?: ChatSection }> = ({ section = CHAT_SECTI
                 />
               </div>
               <div>
-                <div className="mb-1 text-xs font-semibold text-slate-600">Description (optional)</div>
+                <div className="mb-1 text-xs font-semibold text-slate-600">Title Line</div>
+                <input
+                  className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 outline-none focus:border-[#234C6A] focus:ring-2 focus:ring-[#234C6A]/60"
+                  value={newTitleLine}
+                  onChange={e => setNewTitleLine(e.target.value)}
+                  placeholder="This will be displayed under the community name"
+                />
+              </div>
+              <div>
+                <div className="mb-1 text-xs font-semibold text-slate-600">Description (Encouraged)</div>
                 <textarea
                   className="min-h-[90px] w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 outline-none focus:border-[#234C6A] focus:ring-2 focus:ring-[#234C6A]/60"
                   value={newDescription}
                   onChange={e => setNewDescription(e.target.value)}
-                  placeholder="What is this community for?"
+                  placeholder="Please fill detailed description in order to bring right students to join the community."
                 />
               </div>
               <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
