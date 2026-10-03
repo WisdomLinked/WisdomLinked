@@ -38,7 +38,8 @@ const WLProfileCompletion = React.lazy(() => import('./pages/WLProfileCompletion
 const MeetingGuestInvite = React.lazy(() => import('./pages/MeetingGuestInvite'));
 const PaymentReceipt = React.lazy(() => import('./pages/PaymentReceipt'));
 const Resources = React.lazy(() => import('./pages/Resources'));
-const ResourceGuide = React.lazy(() => import('./pages/ResourceGuide'));
+const ResourceGuides = React.lazy(() => import('./pages/ResourceGuides'));
+const ResourceGuideRedirect = React.lazy(() => import('./pages/ResourceGuideRedirect'));
 
 // Heavy dashboard chunks — MUI, calendars, messenger, etc. only load after login
 const LegacyExpertDashboard = React.lazy(() => import('./pages/Dashboard/_ExpertDashboard'));
@@ -96,7 +97,8 @@ const UnauthenticatedRoutes = () => {
           </React.Fragment>
         } />
         <Route path="/resources" element={<Resources />} />
-        <Route path="/resources/:slug" element={<ResourceGuide />} />
+        <Route path="/resources/guides" element={<ResourceGuides />} />
+        <Route path="/resources/:slug" element={<ResourceGuideRedirect />} />
         <Route path="/*" element={<TOEConsulting />} />
       </Routes>
     </React.Fragment>

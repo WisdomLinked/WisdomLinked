@@ -6,6 +6,8 @@
  * durable flag and filter it here when available.
  */
 
+import { isDisplayImageUrl } from './profileImage';
+
 export type DiscoveryExpert = {
   id: string;
   name: string;
@@ -16,13 +18,28 @@ export type DiscoveryExpert = {
   isNew?: boolean;
   tags: string[];
   reason?: string;
+  services?: string[];
+  country?: string;
+  rating?: number;
+  joinedAt?: number;
 };
+
+/** Extra display fields read straight from the raw expert document. */
+export function expertExtras(expert: any): Pick<DiscoveryExpert, 'country' | 'rating' | 'joinedAt'> {
+  const joined = expert?.createdAt ? new Date(expert.createdAt).getTime() : NaN;
+  return {
+    country: coerceString(expert?.country) || undefined,
+    rating: typeof expert?.rating === 'number' && expert.rating > 0 ? expert.rating : undefined,
+    joinedAt: Number.isFinite(joined) ? joined : undefined,
+  };
+}
 
 export type DiscoverySeminar = {
   id: string;
   title: string;
   expertName: string;
   expertImage?: string | null;
+  coverImage?: string | null;
   startAt: number;
   seatsLeft: number | null;
   price: number;
@@ -131,6 +148,7 @@ export function getUpcomingSeminarsForStudent(
       title: g.name || 'Seminar',
       expertName: host?.username || host?.email || 'WisdomLinked expert',
       expertImage: host?.image ?? null,
+      coverImage: isDisplayImageUrl(g.image) ? String(g.image).trim() : null,
       startAt: startMs,
       seatsLeft,
       price: typeof g.price === 'number' ? g.price : 0,
@@ -151,19 +169,29 @@ export function studentHasMatchSignals(user: any): boolean {
   return services.some((s: unknown) => Boolean(entryLabel(s)));
 }
 
+/** Keywords shorter than this only match exactly, so e.g. "Co" can't match "Computer Engineering". */
+const MIN_PARTIAL_MATCH_LENGTH = 4;
+
+function keywordsMatch(a: string, b: string): boolean {
+  if (a === b) return true;
+  const [shorter, longer] = a.length <= b.length ? [a, b] : [b, a];
+  if (shorter.length < MIN_PARTIAL_MATCH_LENGTH) return false;
+  return new RegExp(`\\b${shorter.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`).test(longer);
+}
+
 function scoreExpert(expert: any, user: any): { score: number; reason: string } {
-  const studentKeys = keywordLabels(user).map((k) => k.toLowerCase());
+  const studentKeys = keywordLabels(user);
+  const expertKeysLower = keywordLabels(expert).map((k) => k.toLowerCase());
   const expertKeys = keywordLabels(expert);
-  const expertKeysLower = expertKeys.map((k) => k.toLowerCase());
 
   let score = 0;
   let reason = '';
 
-  for (const sk of studentKeys) {
-    const hit = expertKeys.find((ek, i) => expertKeysLower[i] === sk || expertKeysLower[i].includes(sk) || sk.includes(expertKeysLower[i]));
-    if (hit) {
+  for (const studentKey of studentKeys) {
+    const sk = studentKey.toLowerCase();
+    if (expertKeysLower.some((ek) => keywordsMatch(ek, sk))) {
       score += 3;
-      if (!reason) reason = `Matches your interest in ${hit}`;
+      if (!reason) reason = `Matches your interest in ${studentKey}`;
     }
   }
 
@@ -196,6 +224,29 @@ function scoreExpert(expert: any, user: any): { score: number; reason: string } 
   if (!reason) reason = 'Recommended based on your profile';
 
   return { score, reason };
+}
+
+function followerCount(expert: any): number {
+  if (typeof expert?.followerCount === 'number') return expert.followerCount;
+  return Array.isArray(expert?.followers) ? expert.followers.length : 0;
+}
+
+/**
+ * Fallback for "Recommended for you" when there are no personal matches: public
+ * experts ordered by rating, then followers. Prefers experts not in `excludeIds`,
+ * but falls back to them rather than returning nothing.
+ */
+export function getPopularExperts(
+  experts: any[],
+  excludeIds: Set<string> | string[] = [],
+  limit = 5,
+): any[] {
+  const exclude = excludeIds instanceof Set ? excludeIds : new Set(excludeIds.map(String));
+  const ranked = filterPublicExperts(experts).sort(
+    (a, b) => (Number(b?.rating) || 0) - (Number(a?.rating) || 0) || followerCount(b) - followerCount(a),
+  );
+  const fresh = ranked.filter((e) => !exclude.has(String(e._id)));
+  return (fresh.length ? fresh : ranked).slice(0, limit);
 }
 
 /**

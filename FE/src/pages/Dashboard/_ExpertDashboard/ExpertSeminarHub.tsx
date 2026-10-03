@@ -29,6 +29,7 @@ import DecisionNoteField from '../../../components/dashboard/DecisionNoteField';
 import GroupParticipantsDialog from '../Messenger/Messages/GroupParticipantsDialog';
 import ExpertSeminar from './seminar';
 import { recurrenceLabel } from '../../../utils/recurrenceLabel';
+import { DASHBOARD_PAGE_TITLE } from '../../../components/dashboard/pageTitle';
 
 type HubScreen = 'list' | 'create' | 'edit' | 'detail';
 
@@ -1052,7 +1053,7 @@ export default function ExpertSeminarHub() {
     <div className="min-h-full text-[#1A3A4A] px-4 py-6 md:px-8 pb-12">
       <header className="max-w-6xl mx-auto flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between mb-8">
         <div>
-          <h1 className="text-2xl font-semibold text-slate-900">Seminars</h1>
+          <h1 className={DASHBOARD_PAGE_TITLE}>Seminars</h1>
           <p className="mt-1 text-sm text-slate-600 max-w-xl">
             Discover sessions hosted by other experts, then manage your own seminars below.
           </p>

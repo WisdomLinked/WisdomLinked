@@ -46,6 +46,8 @@ import type { ExpertCardProps } from '../components/ExpertCard';
 import { mapExpertToMentorWithImage } from '../utils/mapExpertToMentor';
 import {
   filterPublicExperts,
+  expertExtras,
+  getPopularExperts,
   getRecommendedExperts,
   getUpcomingSeminarsForStudent,
   type DiscoveryExpert,
@@ -73,6 +75,7 @@ import { canonicalLabelsFromMixedServiceEntries } from '../constants/serviceOpti
 import { useEndMeetingOnReturn } from '../hooks/useEndMeetingOnReturn';
 import { pendingRequestIsLive } from '../utils/bookingLifecycle';
 import { recurrenceLabel } from '../utils/recurrenceLabel';
+import { DASHBOARD_PAGE_TITLE } from '../components/dashboard/pageTitle';
 
 function deriveSessionCounts(u: any) {
   if (!u) {
@@ -953,7 +956,7 @@ export default function StudentDashboard() {
   const [newExperts, setNewExperts] = useState<DiscoveryExpert[]>([]);
   const [upcomingSeminars, setUpcomingSeminars] = useState<DiscoverySeminar[]>([]);
   const [recommendedExperts, setRecommendedExperts] = useState<DiscoveryExpert[]>([]);
-  const [recommendedNeedsProfile, setRecommendedNeedsProfile] = useState(false);
+  const [recommendedPopular, setRecommendedPopular] = useState(false);
   const [carouselLoading, setCarouselLoading] = useState(true);
   const studentName =
     (userDetails?.username as string | undefined) ||
@@ -1041,15 +1044,17 @@ export default function StudentDashboard() {
         );
         if (cancelled) return;
 
-        const newExpertItems: DiscoveryExpert[] = mentors.map((m) => ({
-          id: m.id,
+        const newExpertItems: DiscoveryExpert[] = mentors.map((m, i) => ({
+          id: String(m.id),
           name: m.name,
           title: m.title,
           institution: m.institution,
           field: m.field,
           image: m.image,
           isNew: m.isNew,
-          tags: (m.majors || []).map((x) => x.label).slice(0, 3),
+          tags: (m.majors || []).map((x) => x.label),
+          services: m.services,
+          ...expertExtras(expertsRaw[i]),
         }));
         const newIds = new Set(newExpertItems.map((e) => e.id));
 
@@ -1069,35 +1074,36 @@ export default function StudentDashboard() {
         if (cancelled) return;
 
         const rec = getRecommendedExperts(expertsRaw, userDetails, newIds, 5);
-        let recommendedItems: DiscoveryExpert[] = [];
-        if (!rec.needsProfile && rec.items.length) {
-          const mapped = await Promise.all(
-            rec.items.map((e: any) => mapExpertToMentorWithImage(e, 'small')),
-          );
-          recommendedItems = mapped.map((m, i) => ({
-            id: m.id,
-            name: m.name,
-            title: m.title,
-            institution: m.institution,
-            field: m.field,
-            image: m.image,
-            isNew: m.isNew,
-            tags: (m.majors || []).map((x) => x.label).slice(0, 3),
-            reason: rec.items[i]?.reason,
-          }));
-        }
+        const personal = !rec.needsProfile && rec.items.length > 0;
+        const recRaw: any[] = personal ? rec.items : getPopularExperts(expertsRaw, newIds, 5);
+        const recMapped = await Promise.all(
+          recRaw.map((e: any) => mapExpertToMentorWithImage(e, 'small')),
+        );
+        const recommendedItems: DiscoveryExpert[] = recMapped.map((m, i) => ({
+          id: String(m.id),
+          name: m.name,
+          title: m.title,
+          institution: m.institution,
+          field: m.field,
+          image: m.image,
+          isNew: m.isNew,
+          tags: (m.majors || []).map((x) => x.label),
+          reason: personal ? recRaw[i]?.reason : 'Popular in your field',
+          services: m.services,
+          ...expertExtras(recRaw[i]),
+        }));
         if (cancelled) return;
 
         setNewExperts(newExpertItems);
         setUpcomingSeminars(seminarsWithImages);
         setRecommendedExperts(recommendedItems);
-        setRecommendedNeedsProfile(rec.needsProfile);
+        setRecommendedPopular(!personal);
       } catch {
         if (!cancelled) {
           setNewExperts([]);
           setUpcomingSeminars([]);
           setRecommendedExperts([]);
-          setRecommendedNeedsProfile(false);
+          setRecommendedPopular(false);
         }
       } finally {
         if (!cancelled) setCarouselLoading(false);
@@ -1668,7 +1674,7 @@ export default function StudentDashboard() {
             <div className="px-6 pt-4 pb-7">
               <AccountReviewBanner className="mb-4" />
               <header className="mb-5">
-                <h2 className="text-3xl font-semibold text-slate-900">
+                <h2 className={DASHBOARD_PAGE_TITLE}>
                   {greeting}, {studentName.split(' ')[0]}!
                 </h2>
                 <p className="mt-1 max-w-xl font-sans text-[13px] text-slate-500">
@@ -1700,7 +1706,7 @@ export default function StudentDashboard() {
                 newExperts={newExperts}
                 upcomingSeminars={upcomingSeminars}
                 recommended={recommendedExperts}
-                recommendedNeedsProfile={recommendedNeedsProfile}
+                recommendedPopular={recommendedPopular}
                 onViewExpert={(id) => void handleDiscoveryExpert(id)}
                 onOpenSeminar={handleOpenSeminarDiscovery}
                 onBrowseSeminars={() => {

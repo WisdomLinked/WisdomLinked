@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { getAdminAuditLogs } from "../../../api/api";
 import Pagination from "../../../components/Pagination";
 import { SetLoadingStatus } from "../../../actions/appActions";
+import { DASHBOARD_PAGE_TITLE } from '../../../components/dashboard/pageTitle';
 
 type AuditRow = {
     _id: string;
@@ -72,7 +73,7 @@ export default function AdminAuditLog() {
     return (
         <div className="w-full min-h-full bg-wl-page text-wl-ink px-[18px] pt-10 pb-10">
             <div className="mx-auto max-w-[1200px]">
-                <h2 className="text-2xl font-semibold text-wl-brand mb-1">Audit log</h2>
+                <h2 className={`${DASHBOARD_PAGE_TITLE} mb-1`}>Audit log</h2>
                 <p className="text-sm text-wl-muted mb-6">
                     Recent admin actions across the portal ({totalCount} total).
                 </p>

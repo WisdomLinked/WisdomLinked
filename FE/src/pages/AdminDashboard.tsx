@@ -61,6 +61,7 @@ import AdminExpertsManager from '../components/dashboard/AdminExpertsManager';
 import Chatbot from '../components/chatbot';
 import { usePeerProfileModal } from '../hooks/usePeerProfileModal';
 import { PendingContactRequestsProvider } from '../hooks/usePendingContactRequestsCount';
+import { DASHBOARD_PAGE_TITLE } from '../components/dashboard/pageTitle';
 
 const AUTH_BASE = process.env.REACT_APP_AUTH_URL || '/user/';
 
@@ -131,7 +132,7 @@ function AdminOverview({ go }: { go: (id: string, search?: string) => void }) {
     <div className="px-4 py-7 sm:px-6">
       <div className="mx-auto max-w-[1400px] space-y-8">
         <section className="text-left">
-          <h2 className="text-2xl font-semibold text-wl-brand">Overview</h2>
+          <h2 className={DASHBOARD_PAGE_TITLE}>Overview</h2>
           <p className="mt-1 text-sm text-wl-muted">
             Manage users, billing, contact requests, and platform configuration from one place.
           </p>

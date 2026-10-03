@@ -29,7 +29,9 @@ const selectStyles: StylesConfig<any, boolean> = {
   }),
   menuList: (base) => ({
     ...base,
-    padding: 6,
+    maxHeight: 288,
+    overflowY: "auto",
+    padding: "4px 8px 4px 6px",
     backgroundColor: "#ffffff",
   }),
   option: (base, state) => ({
@@ -138,6 +140,7 @@ export default function SelectionWithCheckBox({
       options={options}
       value={selectedOptions}
       styles={selectStyles}
+      classNames={{ menuList: () => "scrollbar-thin" }}
       components={{
         Option: InputOption,
       }}

@@ -137,7 +137,7 @@ export default function MajorSelect({
       </button>
       {open && (
         <div className="absolute z-50 mt-1 w-full max-w-xl rounded-2xl border border-slate-200 bg-white shadow-xl overflow-hidden flex flex-col">
-          <div className="max-h-56 overflow-y-auto">
+          <div className="scrollbar-thin max-h-72 overflow-y-auto py-1 pr-1">
             {options.map((m) => {
               const selected = value.some((x) => x.toLowerCase() === m.toLowerCase());
               return (

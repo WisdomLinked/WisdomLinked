@@ -16,6 +16,14 @@ export function getAvatarPalette(initials: string): { bg: string; text: string }
   return { bg: palette.bg, text: palette.text };
 }
 
+/** Stable tint per user id, so two people with the same initials can still differ. */
+export function getAvatarPaletteForId(id: string): { bg: string; text: string } {
+  let hash = 0;
+  for (let i = 0; i < id.length; i += 1) hash = (hash * 31 + id.charCodeAt(i)) >>> 0;
+  const palette = AVATAR_PALETTES[hash % AVATAR_PALETTES.length];
+  return { bg: palette.bg, text: palette.text };
+}
+
 export function getInitials(name: string): string {
   const parts = name.trim().split(/\s+/).filter(part => part.length > 0);
   if (parts.length === 0) {

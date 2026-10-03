@@ -1,3 +1,5 @@
+import { RESOURCES_HEADER, RESOURCES_TIMELINE, richTextToPlain } from './resourcesTimeline';
+
 export const PUBLIC_ROUTES = [
     '/',
     '/aboutus',
@@ -5,8 +7,7 @@ export const PUBLIC_ROUTES = [
     '/rules',
     '/contactus',
     '/resources',
-    '/resources/graduate-school-guide',
-    '/resources/scholarship-guide',
+    '/resources/guides',
 ] as const;
 
 export type PublicRoute = (typeof PUBLIC_ROUTES)[number];
@@ -153,22 +154,21 @@ const homeImpactSnippet = joinText(
 const homePricingSnippet = joinText(
     "You're charged only after your expert accepts your request.",
     'Expert-set rates. Each expert sets their own rates: an hourly rate for 1:1 consultations and a per-seminar price for each seminar. Compare expertise, availability, and rates.',
-    "From request to consultation. Request first. Pay only when accepted. Six simple steps, and you only pay once your expert says yes: find an expert by field and rate, request a time and share your goals, the expert accepts, pay only after acceptance, meet for your 1:1 session or seminar, then rate each other. If your expert declines, you won't be charged.",
-    'Flexible rescheduling (coming soon). Request a different time. Changes take effect after expert approval — no automatic cancellations.',
-    "Client gratuity (coming soon). For high-demand experts, you may add a custom tip on top of the session rate. It's entirely optional — a way to show appreciation or secure a preferred slot.",    'Two-way ratings. Clients rate experts. Experts rate clients. Mutual feedback helps maintain a professional community.',
+    "From request to consultation. Request first. Pay only when accepted. Six simple steps, with payment only after your expert accepts: find an expert by field and rate, request a time and share your goals, the expert accepts and your request is confirmed, pay only after acceptance, meet for your 1:1 session or seminar, then rate each other. If your expert declines, you won't be charged.",
+    'Flexible rescheduling (coming soon). Request to change an existing appointment to a different time. Plans change. You can request to reschedule your appointment when needed. Your original appointment remains unchanged until the expert approves the new time.',
+    "Client gratuity (coming soon). For high-demand experts, you may add a custom tip on top of the session rate. It's entirely optional — a way to show appreciation.",
+    'Two-way ratings. Clients rate experts. Experts rate clients. Mutual feedback helps maintain a professional community.',
 );
 
 const servicesPaymentSnippet =
     "We arrange one-to-one consulting conversation for a fee. Customers must register first through the website and provide necessary information for us to find matches of top experts. The registration is free of charge. Clients will decide whether to consult with an expert suggested by the services. This is mainly an appointment-based service. Once an available time slot is identified for both the expert and the client, an appointment will be made AFTER the client has paid online at the expert's asking price.";
 
 const resourceGuides: {
-    route: '/resources/graduate-school-guide' | '/resources/scholarship-guide';
     title: string;
     description: string;
     sections: { title: string; body: string }[];
 }[] = [
     {
-        route: '/resources/graduate-school-guide',
         title: 'Graduate School Guide',
         description:
             'Everything you need to know about applying to grad school — from choosing a program to letters of recommendation.',
@@ -192,7 +192,6 @@ const resourceGuides: {
         ],
     },
     {
-        route: '/resources/scholarship-guide',
         title: 'Scholarship Guide',
         description:
             'How to find awards that fit your profile, write a competitive application, and avoid the mistakes that get strong candidates skipped.',
@@ -218,15 +217,16 @@ const resourceGuides: {
 ];
 
 const resourcePages: PublicPageRecord[] = [
+    page('/resources', RESOURCES_HEADER.heading, RESOURCES_HEADER.subtext),
+    ...RESOURCES_TIMELINE.map((stage) => page('/resources', stage.title, richTextToPlain(stage.intro))),
     page(
-        '/resources',
+        '/resources/guides',
         'Guides for students',
         'Practical advice on graduate school, scholarships, and building a stronger application.',
     ),
     ...resourceGuides.flatMap((guide) => [
-        page('/resources', guide.title, guide.description),
-        page(guide.route, guide.title, guide.description),
-        ...guide.sections.map((section) => page(guide.route, section.title, section.body)),
+        page('/resources/guides', guide.title, guide.description),
+        ...guide.sections.map((section) => page('/resources/guides', section.title, section.body)),
     ]),
 ];
 

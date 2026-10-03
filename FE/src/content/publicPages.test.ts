@@ -34,7 +34,7 @@ function stripBlockComments(source: string): string {
 }
 
 function stripHomeModals(source: string): string {
-    const start = source.indexOf('function ContactFormModal');
+    const start = source.indexOf('function StudentSignupForm');
     const end = source.indexOf('function GlobeCanvas');
     if (start < 0 || end < 0 || end <= start) {
         throw new Error('could not locate TOEConsulting modal region');

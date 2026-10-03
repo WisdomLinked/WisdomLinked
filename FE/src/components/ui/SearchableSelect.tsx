@@ -50,7 +50,7 @@ function ClearIndicator<Option>(
   );
 }
 
-function OptionRow<Option>(props: OptionProps<Option, false, GroupBase<Option>>) {
+export function OptionRow<Option>(props: OptionProps<Option, false, GroupBase<Option>>) {
   return (
     <components.Option {...props}>
       <div className="flex w-full items-center justify-between gap-2">
@@ -62,6 +62,16 @@ function OptionRow<Option>(props: OptionProps<Option, false, GroupBase<Option>>)
     </components.Option>
   );
 }
+
+export const optionClass = ({ isFocused, isSelected }: { isFocused: boolean; isSelected: boolean }) =>
+  [
+    'cursor-pointer rounded-lg px-3 py-2 text-sm',
+    isSelected ? 'font-medium text-[#234C6A]' : 'text-slate-800',
+    isFocused && !isSelected ? 'bg-[#234C6A]/[0.08] text-[#234C6A]' : '',
+    isFocused && isSelected ? 'bg-[#234C6A]/[0.08]' : '',
+  ]
+    .filter(Boolean)
+    .join(' ');
 
 /**
  * Brand-styled searchable select (react-select unstyled + Tailwind).
@@ -86,6 +96,7 @@ export default function SearchableSelect<Option>({
   return (
     <Select<Option, false>
       unstyled
+      maxMenuHeight={288}
       inputId={inputId}
       aria-label={ariaLabel}
       options={options as Option[]}
@@ -121,16 +132,8 @@ export default function SearchableSelect<Option>({
         clearIndicator: () => 'p-0.5',
         menu: () =>
           'z-50 mt-1.5 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-lg',
-        menuList: () => 'max-h-72 p-1',
-        option: ({ isFocused, isSelected }) =>
-          [
-            'cursor-pointer rounded-lg px-3 py-2 text-sm',
-            isSelected ? 'font-medium text-[#234C6A]' : 'text-slate-800',
-            isFocused && !isSelected ? 'bg-[#234C6A]/[0.08] text-[#234C6A]' : '',
-            isFocused && isSelected ? 'bg-[#234C6A]/[0.08]' : '',
-          ]
-            .filter(Boolean)
-            .join(' '),
+        menuList: () => 'scrollbar-thin overflow-y-auto py-1 pl-1 pr-1.5',
+        option: optionClass,
         noOptionsMessage: () => 'px-3 py-2 text-sm text-slate-500',
       }}
       components={{

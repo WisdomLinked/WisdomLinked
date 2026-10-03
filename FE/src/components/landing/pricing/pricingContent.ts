@@ -35,7 +35,7 @@ export const RATES_CARD = {
 export const RESCHEDULING_CARD = {
   title: 'Flexible rescheduling',
   badge: { label: 'No pressure', tone: 'neutral' as BadgeTone },
-  body: 'Request a different time. Changes take effect after expert approval — no automatic cancellations.',
+  body: 'Request to change an existing appointment to a different time. Plans change. You can request to reschedule your appointment when needed. Your original appointment remains unchanged until the expert approves the new time.',
   /** Remove once rescheduling ships. */
   comingSoon: true,
 };
@@ -43,7 +43,7 @@ export const RESCHEDULING_CARD = {
 export const GRATUITY_CARD = {
   title: 'Client gratuity',
   badge: { label: 'Optional', tone: 'neutral' as BadgeTone },
-  body: "For high-demand experts, you may add a custom tip on top of the session rate. It's entirely optional — a way to show appreciation or secure a preferred slot.",
+  body: "For high-demand experts, you may add a custom tip on top of the session rate. It's entirely optional — a way to show appreciation.",
   /** Remove once gratuity ships. */
   comingSoon: true,
 };
@@ -67,11 +67,11 @@ export const JOURNEY_CARD = {
   eyebrow: 'From request to consultation',
   title: 'Request first. Pay only when accepted.',
   note: "If your expert declines, you won't be charged.",
-  subtext: 'Six simple steps, and you only pay once your expert says yes.',
+  subtext: 'Six simple steps, with payment only after your expert accepts.',
   steps: [
-    { id: 'find', label: 'Find expert', description: 'Browse by field and rate', icon: Search },
+    { id: 'find', label: 'Find an expert', description: 'Browse by field and rate', icon: Search },
     { id: 'request', label: 'Request', description: 'Pick a time and share your goals', icon: Send },
-    { id: 'accept', label: 'Expert accepts', description: 'Reviewed and confirmed', icon: UserCheck, highlight: true },
+    { id: 'accept', label: 'Expert accepts', description: 'Your request is confirmed', icon: UserCheck, highlight: true },
     { id: 'pay', label: 'Pay', description: 'Charged only after acceptance', icon: CreditCard, highlight: true },
     { id: 'meet', label: 'Meet', description: 'Your 1:1 session or seminar', icon: Video },
     { id: 'rate', label: 'Rate', description: 'Leave feedback for each other', icon: Star },
