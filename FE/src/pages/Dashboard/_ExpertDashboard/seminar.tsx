@@ -5,6 +5,7 @@ import React, {
     ChangeEvent,
     KeyboardEvent,
   } from 'react';
+import { DASHBOARD_PAGE_TITLE } from '../../../components/dashboard/pageTitle';
   import { Check, ImagePlus } from 'lucide-react';
   import { useDispatch } from 'react-redux';
   import { useNavigate } from 'react-router-dom';
@@ -1444,7 +1445,7 @@ import React, {
         <div className="mx-auto max-w-2xl px-6 py-8">
           <header className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div>
-              <h1 className="text-2xl font-semibold text-gray-900">
+              <h1 className={DASHBOARD_PAGE_TITLE}>
                 {selectedSeminar?.groupId ? 'Edit seminar' : 'Create a seminar'}
               </h1>
               <p className="mt-1 text-sm text-gray-500">

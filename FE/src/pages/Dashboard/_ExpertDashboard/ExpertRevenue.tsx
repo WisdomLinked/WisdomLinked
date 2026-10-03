@@ -3,6 +3,7 @@ import StripeReference from '../../../components/dashboard/StripeReference';
 import { Wallet, Users, BookOpen, Receipt, RefreshCw } from 'lucide-react';
 import { doGetExpertPaymentHistory } from '../../../api/api';
 import StatCard from '../../../components/ui/StatCard';
+import { DASHBOARD_PAGE_TITLE } from '../../../components/dashboard/pageTitle';
 
 const ZERO_DECIMAL = new Set([
   'bif',
@@ -161,7 +162,7 @@ export default function ExpertRevenue() {
       <div className="mx-auto max-w-6xl space-y-8">
         <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <h1 className="font-serif text-2xl font-bold text-slate-900 md:text-3xl">
+            <h1 className={DASHBOARD_PAGE_TITLE}>
               Revenue
             </h1>
             <p className="mt-1 max-w-xl text-[14px] text-slate-600">

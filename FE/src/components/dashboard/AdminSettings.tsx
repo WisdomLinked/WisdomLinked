@@ -3,6 +3,7 @@ import { Bell, Globe2, Megaphone, Shield, Mail, Smartphone } from 'lucide-react'
 import { useAppSelector } from '../../store';
 import { doUpdateProfile, getActiveAnnouncement, setSiteAnnouncement } from '../../api/api';
 import { detectUserTimeZone } from '../../utils/schedulingTimezone';
+import { DASHBOARD_PAGE_TITLE } from './pageTitle';
 
 const TIME_ZONES = [
   'UTC',
@@ -81,7 +82,7 @@ export default function AdminSettings() {
   return (
     <div className="h-[calc(100vh-56px)] overflow-y-auto bg-wl-page px-6 py-7">
       <div className="mb-6">
-        <h1 className="text-2xl font-semibold text-wl-ink">Admin settings</h1>
+        <h1 className={DASHBOARD_PAGE_TITLE}>Admin settings</h1>
         <p className="mt-1 text-sm text-wl-muted">
           Time zone, notification preferences, account security, and the site announcement banner.
         </p>

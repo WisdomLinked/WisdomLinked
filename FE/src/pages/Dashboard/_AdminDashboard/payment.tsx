@@ -31,6 +31,7 @@ import {
   type HistoryFilters,
   type PaymentHistoryRow as HistoryRow,
 } from './payment/paymentHistoryUtils';
+import { DASHBOARD_PAGE_TITLE } from '../../../components/dashboard/pageTitle';
 
 const Payment = () => {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -297,7 +298,7 @@ const Payment = () => {
     <div className="h-full w-full overflow-y-auto px-[18px] pt-10 pb-10 text-wl-ink">
       <div className="mx-auto w-full max-w-[1500px] space-y-6">
         <header className="flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-center">
-          <h2 className="text-2xl font-semibold text-wl-brand">Payment Management</h2>
+          <h2 className={DASHBOARD_PAGE_TITLE}>Payment Management</h2>
           <div className="flex items-center gap-3">
             <span className="text-sm font-medium text-wl-muted">Stripe mode</span>
             <div className="overflow-hidden rounded-full border border-wl-line bg-wl-card shadow-sm">

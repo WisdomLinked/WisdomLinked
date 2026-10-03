@@ -8,6 +8,7 @@ const { askSite } = vi.hoisted(() => ({
 
 vi.mock('../api/api', () => ({
   askSite: (...args: unknown[]) => askSite(...args),
+  doContactUs: vi.fn(),
 }));
 
 import Chatbot from './chatbot';
@@ -180,5 +181,13 @@ describe('HelpBot', () => {
     expect(screen.getByText('Hi there 👋')).toBeInTheDocument();
     expect(screen.queryByText('Done')).not.toBeInTheDocument();
     expect(screen.getByText('How to accept a meeting?')).toBeInTheDocument();
+  });
+
+  it('opens the Contact Us form from Contact support', () => {
+    renderBot();
+    fireEvent.click(screen.getByRole('button', { name: 'Open HelpBot' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Contact support' }));
+    expect(screen.getByRole('heading', { name: 'Contact Us' })).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('you@example.com')).toBeInTheDocument();
   });
 });

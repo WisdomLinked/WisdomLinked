@@ -10,7 +10,8 @@ import {
 import ShowFieldError from "../../../components/ShowFieldError";
 import MajorSelect from "../../../components/MajorSelect";
 import SelectionWithCheckBox from "../../../components/SelectionWithCheckBox";
-import PhoneInput from "react-phone-input-2";
+import PhoneField from "../../../components/ui/PhoneField";
+import { initialPhoneCountry, phoneDigits, toE164, toStoredPhone } from "../../../utils/phone";
 import { checkTitleNameInvalid } from "../../../actions/common";
 import { useNavigate } from "react-router-dom";
 import { SetLoadingStatus } from "../../../actions/appActions";
@@ -22,6 +23,7 @@ import { useDispatch } from "react-redux";
 import { notify } from '../../../utils/notify';
 import { updateMe } from "../../../actions/authActions";
 import { SERVICE_OPTIONS, matchesServiceOption } from "../../../constants/serviceOptions";
+import { DASHBOARD_PAGE_TITLE } from '../../../components/dashboard/pageTitle';
 
 const isPhoneValid = (value: string) => (value || '').replace(/\D/g, '').length >= 8;
 
@@ -122,7 +124,8 @@ const ExpertProfile = ({
     const [city, set_city] = useState<any>();
     const [stateAvailable, set_stateAvailable] = useState(false);
     const [cityAvailable, set_cityAvailable] = useState(false);
-    const [phoneNumber, set_phoneNumber] = useState<any>('');
+    const [phoneNumber, set_phoneNumber] = useState('');
+    const [phoneCountry, set_phoneCountry] = useState<string>();
     const [phoneTouched, set_phoneTouched] = useState(false);
     const [showError, set_showError] = useState(false);
     const [saveAttempted, set_saveAttempted] = useState(false);
@@ -150,7 +153,8 @@ const ExpertProfile = ({
         set_country(userDetails.country || null);
         set_state(userDetails.state || null);
         set_city(userDetails.city || null);
-        set_phoneNumber(userDetails.phoneNumber || '');
+        set_phoneNumber(toE164(userDetails.phoneNumber) ?? '');
+        set_phoneCountry(initialPhoneCountry(userDetails.phoneNumber, userDetails.country?.isoCode));
         set_phoneTouched(false);
         set_saveAttempted(false);
         set_resume(userDetails.resume || '');
@@ -179,7 +183,8 @@ const ExpertProfile = ({
         set_country(userDetails.country || null);
         set_state(userDetails.state || null);
         set_city(userDetails.city || null);
-        set_phoneNumber(userDetails.phoneNumber || '');
+        set_phoneNumber(toE164(userDetails.phoneNumber) ?? '');
+        set_phoneCountry(initialPhoneCountry(userDetails.phoneNumber, userDetails.country?.isoCode));
         set_phoneTouched(false);
         set_saveAttempted(false);
         set_resume(userDetails.resume || '');
@@ -296,7 +301,10 @@ const ExpertProfile = ({
             country,
             state,
             city,
-            phoneNumber,
+            phoneNumber:
+                phoneDigits(phoneNumber) === phoneDigits(userDetails.phoneNumber)
+                    ? userDetails.phoneNumber
+                    : toStoredPhone(phoneNumber),
         };
         if (!isFromAdminPanel) {
             const ok = await doUpdateProfile(updates);
@@ -403,7 +411,7 @@ const ExpertProfile = ({
                             </svg>
                         </button>
                         <div>
-                            <h1 className="text-xl font-bold text-slate-900">Expert Profile</h1>
+                            <h1 className={DASHBOARD_PAGE_TITLE}>Expert Profile</h1>
                             <p className="text-xs text-slate-400">Manage how you appear to students and mentees</p>
                         </div>
                     </div>
@@ -636,27 +644,18 @@ const ExpertProfile = ({
                             <div>
                                 <FieldLabel required>Phone number</FieldLabel>
                                 <div
-                                    className={`wl-phone-input rounded-xl border bg-slate-50 transition focus-within:border-[#234C6A] focus-within:bg-white focus-within:ring-2 focus-within:ring-[#234C6A]/10 ${
-                                        (phoneTouched || saveAttempted) && !isPhoneValid(phoneNumber)
-                                            ? 'border-rose-300'
-                                            : 'border-slate-200'
-                                    }`}
                                     onBlur={(e) => {
                                         if (!e.currentTarget.contains(e.relatedTarget as Node)) {
                                             set_phoneTouched(true);
                                         }
                                     }}
                                 >
-                                    <PhoneInput
-                                        specialLabel=""
-                                        placeholder="Enter number"
+                                    <PhoneField
                                         value={phoneNumber}
-                                        country={(country?.isoCode || 'us').toLowerCase()}
-                                        onChange={(data) => set_phoneNumber(data)}
-                                        inputClass="!w-full !h-11 !border-0 !bg-transparent !text-sm !text-slate-900 !pl-[52px]"
-                                        buttonClass="!border-0 !bg-transparent"
-                                        containerClass="!w-full"
-                                        dropdownClass="!rounded-xl !border-slate-200 !shadow-lg"
+                                        onChange={set_phoneNumber}
+                                        country={phoneCountry}
+                                        onCountryChange={set_phoneCountry}
+                                        invalid={(phoneTouched || saveAttempted) && !isPhoneValid(phoneNumber)}
                                     />
                                 </div>
                                 <ShowFieldError

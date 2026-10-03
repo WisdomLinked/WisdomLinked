@@ -122,7 +122,7 @@ export default function TopBar({
                   <X className="h-4 w-4" aria-hidden />
                 </button>
               </div>
-              <div className="max-h-72 overflow-y-auto p-2">
+              <div className="scrollbar-thin max-h-72 overflow-y-auto p-2">
                 {notifications.length === 0 ? (
                   <div className="rounded-lg px-2 py-4 text-center text-[12px] text-slate-500">
                     No new notifications

@@ -28,6 +28,7 @@ import StudentBookingCheckout from './StudentBookingCheckout';
 import { usePeerProfileModal } from '../../hooks/usePeerProfileModal';
 import seminarFallbackImg from '../../assets/images/dashboard_img1.png';
 import { recurrenceLabel } from '../../utils/recurrenceLabel';
+import { DASHBOARD_PAGE_TITLE } from './pageTitle';
 
 
 
@@ -1082,7 +1083,7 @@ export default function StudentSeminars({
     <div className={containerClass}>
       {/* Page header */}
       <header className="mb-6 border-b border-[#E5E2DB] pb-5">
-        <h1 className="font-serif text-[2.2rem] font-medium leading-tight text-[#1A3A4A]">
+        <h1 className={DASHBOARD_PAGE_TITLE}>
           Seminars
         </h1>
         <p className="mt-2 max-w-xl text-sm font-sans text-[#7A7A72]">

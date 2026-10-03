@@ -141,7 +141,7 @@ export default function StudentSelect({
           ref={listRef}
           tabIndex={-1}
           onKeyDown={onPanelKeyDown}
-          className={`absolute left-0 right-0 top-[calc(100%+6px)] z-30 max-h-64 overflow-y-auto rounded-xl border border-[#E5E2DB] bg-white p-1 shadow-[0_14px_28px_rgba(26,58,74,0.12)] transition-all duration-200 ${
+          className={`absolute left-0 right-0 top-[calc(100%+6px)] z-30 scrollbar-thin max-h-72 overflow-y-auto rounded-xl border border-[#E5E2DB] bg-white py-1 pl-1 pr-1.5 shadow-[0_14px_28px_rgba(26,58,74,0.12)] transition-all duration-200 ${
             open
               ? 'pointer-events-auto translate-y-0 opacity-100'
               : 'pointer-events-none -translate-y-1 opacity-0'
