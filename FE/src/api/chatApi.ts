@@ -297,10 +297,13 @@ export const hideDmFromList = async (conversationId: string) => {
     }
 };
 
-/** Rocket.Chat `chat.getMessageReadReceipts` batched (server uses your RC session). */
-export const fetchReadReceiptsBatch = async (messageIds: string[], conversationId?: string) => {
+export const fetchReadReceiptsBatch = async (
+    messageIds: string[],
+    conversationId?: string,
+    roomId?: string,
+) => {
     try {
-        const res = await api.post('chat/rc-read-receipts', { messageIds, conversationId });
+        const res = await api.post('chat/rc-read-receipts', { messageIds, conversationId, roomId });
         return res.data as {
             success?: boolean;
             myRcUserId?: string;

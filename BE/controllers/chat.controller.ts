@@ -10,7 +10,6 @@ import {
     RC_URL,
     markRoomReadAsUser,
     syncRocketGroupChannelMembers,
-    getRoomLastSeenAsUser,
     getChatUnreadSnapshotAsUser,
     ensureBothWlUsersSyncedToRocketChat,
     deleteMessageAsUser,
@@ -22,6 +21,12 @@ import { wlDisplayName } from '../utils/wlDisplayName';
 import { prepareMessageForRocketChat } from '../utils/chatReplyPlainText';
 import { safeErrorMessage } from '../utils/httpUserFacingCopy';
 import { searchableRolesFor } from '../utils/chatSearchRoles';
+import {
+    distinctMemberIds,
+    isGroupSeenTrackable,
+    lastReadMsForMembers,
+    resolveRoomSeenMs,
+} from '../utils/readReceipts';
 
 const PREVIEW_SOURCE_MAX_CHARS = 1000;
 
@@ -40,6 +45,7 @@ const Conversation = require('../models/Conversation');
 const GroupChat = require('../models/GroupChat');
 const User = require('../models/User');
 const MeetingThread = require('../models/MeetingThread');
+const RoomRead = require('../models/RoomRead');
 const { sendExpertResumeFormatReminderEmail } = require('../services/notifications');
 
 /** RC REST may return `ts` as ISO string or `{ $date: n }` — normalize for the React app. */
@@ -819,12 +825,12 @@ export const getGroupHistory = async (req: any, res: Response) => {
     }
 };
 
-/** POST body: { messageIds: string[] } — Rocket.Chat message ids (max 50). Returns RC read receipts per id. */
 export const getReadReceiptsBatch = async (req: any, res: Response) => {
     try {
         const { userId } = req.user;
         const messageIds = req.body?.messageIds;
         const conversationId = req.body?.conversationId ? String(req.body.conversationId) : null;
+        const roomId = req.body?.roomId ? String(req.body.roomId) : null;
         if (!Array.isArray(messageIds) || messageIds.length === 0) {
             return res.status(400).json({ error: 'messageIds must be a non-empty array (max 15)' });
         }
@@ -832,53 +838,52 @@ export const getReadReceiptsBatch = async (req: any, res: Response) => {
             .slice(0, 15)
             .map((x: any) => String(x ?? '').trim())
             .filter(Boolean);
-        const me = await User.findById(userId);
+        const me = await User.findById(userId).select('email').lean();
         if (!me?.email) return res.status(400).json({ error: 'User not found' });
-        const reader = { email: me.email, username: me.username, name: me.username };
-        const tok = await generateUserToken(reader);
-        const myRcUserId = tok?.userId || '';
         let peerLastSeenMs: number | null = null;
+        let seenMemberIds: string[] = [];
+        let rid = String(roomId || '');
         if (conversationId) {
-            const conv = await Conversation.findById(conversationId);
-            if (conv?.participants?.some((p: any) => String(p) === String(userId))) {
-                let rid = String((conv as any).rcChannelId || '');
-                const otherUserId = conv.participants.find((p: any) => String(p) !== String(userId));
-                const other = otherUserId ? await User.findById(otherUserId) : null;
-                if (!rid && other?.email) {
-                    rid =
-                        (await getOrCreateDMChannel(
-                            toRocketChatUsername(me.email),
-                            toRocketChatUsername(other.email),
-                        )) || '';
-                    if (rid) {
-                        await Conversation.updateOne({ _id: conv._id }, { $set: { rcChannelId: rid } }).exec();
-                    }
-                }
-                if (rid && other?.email) {
-                    peerLastSeenMs = await getRoomLastSeenAsUser(rid, {
-                        email: other.email,
-                        username: other.username,
-                        name: other.username,
-                    });
-                }
+            const conv = await Conversation.findById(conversationId)
+                .select('participants rcChannelId')
+                .lean();
+            if (conv?.participants?.some((p: any) => normalizeId(p) === String(userId))) {
+                const otherUserId = conv.participants.find((p: any) => normalizeId(p) !== String(userId));
+                if (otherUserId) seenMemberIds = [normalizeId(otherUserId)];
+                if (!rid) rid = String(conv.rcChannelId || '');
             }
+        } else if (rid) {
+            const groupChat = await GroupChat.findOne({ rcChannelId: rid })
+                .select('admin participants coModerators')
+                .lean();
+            const memberIds = groupChat ? groupUserIds(groupChat) : [];
+            if (memberIds.includes(String(userId))) {
+                const otherIds = memberIds.filter((id: string) => id !== String(userId));
+                if (isGroupSeenTrackable(otherIds.length)) seenMemberIds = otherIds;
+            }
+        }
+        if (rid && seenMemberIds.length > 0) {
+            const rows = await RoomRead.find({ roomId: rid, userId: { $in: seenMemberIds } })
+                .select('userId lastReadAt')
+                .lean();
+            peerLastSeenMs = resolveRoomSeenMs(lastReadMsForMembers(rows, seenMemberIds));
         }
         // We intentionally avoid per-message RC receipt calls here to prevent rate-limit storms.
         // Frontend derives `seen` by comparing message.createdAt with peerLastSeenMs.
         const byMessageId: Record<string, { hasPeerRead: boolean; receipts: any[] }> = {};
         for (const mid of ids) byMessageId[mid] = { hasPeerRead: false, receipts: [] };
-        return res.status(200).json({ success: true, myRcUserId, byMessageId, peerLastSeenMs });
+        return res.status(200).json({ success: true, myRcUserId: '', byMessageId, peerLastSeenMs });
     } catch (err: any) {
         console.error('[chat.getReadReceiptsBatch]', err.message);
         return res.status(500).json({ error: safeErrorMessage(err) });
     }
 };
 
-const groupUserIds = (groupChat: any): string[] => [
+const groupUserIds = (groupChat: any): string[] => distinctMemberIds([
     normalizeId(groupChat?.admin),
     ...(Array.isArray(groupChat?.participants) ? groupChat.participants.map((p: any) => normalizeId(p)) : []),
     ...(Array.isArray(groupChat?.coModerators) ? groupChat.coModerators.map((p: any) => normalizeId(p)) : []),
-].filter(Boolean);
+]);
 
 const userCanAccessRocketRoom = async (
     userId: string,
@@ -1055,6 +1060,11 @@ export const markChatRead = async (req: any, res: Response) => {
         if (!canAccessRoom) return res.status(403).json({ error: 'You do not have access to this chat room' });
         const me = await User.findById(userId);
         if (!me?.email) return res.status(400).json({ error: 'User not found' });
+        await RoomRead.updateOne(
+            { roomId: String(roomId), userId },
+            { $set: { lastReadAt: new Date() } },
+            { upsert: true },
+        ).exec();
         const ok = await markRoomReadAsUser(String(roomId), {
             email: me.email,
             username: me.username,

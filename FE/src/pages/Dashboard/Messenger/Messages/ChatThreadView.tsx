@@ -1,7 +1,7 @@
 import React, { useCallback, useMemo, useState } from 'react';
 import type { Message as MessageModel } from '../../../../actions/types';
 import { formatDividerDate, formatMessageTime } from '../../../../utils/formatMessageTime';
-import Message from './Message';
+import Message, { DeliveryTicks } from './Message';
 import MeetingCard from '../../../../components/MeetingCard';
 import ChatSystemNotice from './ChatSystemNotice';
 import { parseMeetingMessageContent } from '../../../../utils/meetingMessage';
@@ -19,7 +19,7 @@ export type ChatThreadViewProps = {
     displayMessages: DisplayMessage[];
     theme: string;
     isOutgoingMessage: (message: DisplayMessage) => boolean;
-    deliveryForMessage: (message: DisplayMessage) => 'sending' | 'sent' | 'delivered' | 'seen' | undefined;
+    deliveryForMessage: (message: DisplayMessage) => 'delivered' | 'seen' | undefined;
     groupSenderLabel: (message: DisplayMessage) => string;
     chosenGroupChatDetails: unknown;
     chosenChatDetails: unknown;
@@ -159,12 +159,11 @@ function replyDraftFromMessage(message: DisplayMessage, fallbackName: string): R
 
 function toChatMessage(
     src: DisplayMessage,
-    delivery: 'sending' | 'sent' | 'delivered' | 'seen' | undefined,
+    delivery: 'delivered' | 'seen' | undefined,
 ): ChatMessage {
     let status: ChatMessage['status'];
     if (delivery === 'seen') status = 'read';
     else if (delivery === 'delivered') status = 'delivered';
-    else if (delivery === 'sent' || delivery === 'sending') status = 'sent';
 
     return {
         id: String(src._id),
@@ -204,7 +203,7 @@ function buildTimeline(
     displayMessages: DisplayMessage[],
     selfSenderIds: ReadonlySet<string>,
     isOutgoingMessage: (m: DisplayMessage) => boolean,
-    deliveryForMessage: (m: DisplayMessage) => 'sending' | 'sent' | 'delivered' | 'seen' | undefined,
+    deliveryForMessage: (m: DisplayMessage) => 'delivered' | 'seen' | undefined,
 ): TimelineItem[] {
     const timeline: TimelineItem[] = [];
     let buffer: DisplayMessage[] = [];
@@ -483,8 +482,6 @@ const ChatThreadView: React.FC<ChatThreadViewProps> = ({
 
                 if (group.isSelf) {
                     const lastStatus = deliveryForMessage(lastSrc);
-                    const showTicks =
-                        lastStatus === 'delivered' || lastStatus === 'seen' || lastStatus === 'sent';
 
                     return (
                         <div key={key} className={`flex w-full justify-end px-2 sm:px-3 ${mb}`}>
@@ -529,7 +526,7 @@ const ChatThreadView: React.FC<ChatThreadViewProps> = ({
                                 })}
                                 <p className="text-xs text-gray-400 mt-1 self-end flex items-center gap-1">
                                     {timeLabel}
-                                    {showTicks ? <span className="text-[#C9A84C]">✓✓</span> : null}
+                                    <DeliveryTicks status={lastStatus} theme={theme} />
                                 </p>
                             </div>
                         </div>

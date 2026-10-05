@@ -17,6 +17,7 @@ import { deleteGroupAction } from "../../../../actions/groupChatActions";
 import ExpertSeminar from "../../_ExpertDashboard/seminar";
 // Chat API + realtime
 import { getOrCreateDM, fetchDirectHistory, fetchGroupHistory, fetchGroupMemberByRcSlug, markChatRead, getRCToken, deleteChatMessage, fetchReadReceiptsBatch, fetchDmUnreadSnapshot } from "../../../../api/chatApi";
+import { markReadDelayMs } from "../../../../utils/markReadSchedule";
 import { notifyChatMessage, stripChatHtml } from "../../../../utils/chatBrowserNotifications";
 import { seriesKey } from "../../../../utils/seminarSeriesOccurrence";
 import {
@@ -94,7 +95,6 @@ function isOutgoingAuthor(
     return false;
 }
 
-/** Single-tick “sent” only — Rocket.Chat read receipts are often unavailable on OSS / without enterprise. */
 function deliveryStatusForMessage(
     message: any,
     me: any,
@@ -102,10 +102,8 @@ function deliveryStatusForMessage(
     dmOtherWlUserId?: string | null,
     hasPeerRead?: boolean,
     opts?: { isGroupChat?: boolean }
-): "sending" | "sent" | "delivered" | "seen" | undefined {
+): "delivered" | "seen" | undefined {
     if (!message || !isOutgoingAuthor(message, me, myRcUserId, dmOtherWlUserId, opts)) return undefined;
-    const id = String(message._id ?? "");
-    if (id.startsWith("temp-")) return "sending";
     if (hasPeerRead) return "seen";
     return "delivered";
 }
@@ -450,7 +448,7 @@ const Messages = ({ theme = "dark", onReplyMessage }: { theme?: string; onReplyM
         if (!last) return;
         const incomingLast = !isOutgoingAuthor(last, userDetails, myRcUserId, dmOtherWlUserId, groupAuthorOpts);
         if (!incomingLast) return;
-        if (Date.now() - lastMarkReadAtRef.current < 8000) return;
+        const delay = markReadDelayMs(Date.now() - lastMarkReadAtRef.current);
         if (markReadTimerRef.current) clearTimeout(markReadTimerRef.current);
         markReadTimerRef.current = setTimeout(() => {
             void (async () => {
@@ -460,7 +458,7 @@ const Messages = ({ theme = "dark", onReplyMessage }: { theme?: string; onReplyM
                     lastMarkReadAtRef.current = Date.now();
                 }
             })();
-        }, 1200);
+        }, delay);
         return () => {
             if (markReadTimerRef.current) clearTimeout(markReadTimerRef.current);
         };
@@ -468,7 +466,7 @@ const Messages = ({ theme = "dark", onReplyMessage }: { theme?: string; onReplyM
 
     // Event/dependency-driven receipt refresh (no polling interval).
     useEffect(() => {
-        if (!chosenChatDetails || !rcChannelId) {
+        if (!rcChannelId) {
             setPeerReadByMessageId({});
             setPeerLastSeenMs(null);
             return;
@@ -486,7 +484,11 @@ const Messages = ({ theme = "dark", onReplyMessage }: { theme?: string; onReplyM
 
         let cancelled = false;
         const fetchOnce = async () => {
-            const res = await fetchReadReceiptsBatch(pendingIds, conversationId || undefined);
+            const res = await fetchReadReceiptsBatch(
+                pendingIds,
+                conversationId || undefined,
+                rcChannelId || undefined,
+            );
             if (cancelled || !res?.byMessageId) return;
             const next: Record<string, boolean> = {};
             Object.entries(res.byMessageId).forEach(([mid, data]: any) => {

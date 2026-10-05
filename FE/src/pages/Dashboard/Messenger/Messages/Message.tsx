@@ -10,36 +10,17 @@ import ReplyQuoteCard from "../../../../components/messenger/ReplyQuoteCard";
 import { resolveReplyAuthorLabel } from "../../../../utils/displayName";
 import { immediateReplyQuote, peelWisdomLinkedReplyQuotes } from "../../../../utils/chatReplyLayout";
 
-function DeliveryTicks({ status, theme }: { status?: string; theme?: string }) {
+export function DeliveryTicks({ status, theme }: { status?: string; theme?: string }) {
     if (!status) return null;
     const mutedCls = theme === "light" ? "text-slate-400" : "text-slate-500";
-    const seenCls = "text-sky-500";
-    if (status === "sending") {
-        return (
-            <span className={`shrink-0 text-[11px] leading-none ${mutedCls}`} aria-hidden>
-                …
-            </span>
-        );
-    }
-    if (status === "sent") {
-        return (
-            <span className={`shrink-0 ${mutedCls}`} aria-label="Sent">
-                <Check className="h-3.5 w-3.5" strokeWidth={2.5} />
-            </span>
-        );
-    }
-    if (status === "delivered" || status === "seen") {
-        const cls = status === "seen" ? seenCls : mutedCls;
-        return (
-            <span className={`relative inline-flex h-3.5 w-5 shrink-0 ${cls}`} aria-label={status === "seen" ? "Seen" : "Delivered"}>
-                <Check className="absolute left-0 h-3.5 w-3.5" strokeWidth={2.5} />
-                <Check className="absolute right-0 h-3.5 w-3.5" strokeWidth={2.5} />
-            </span>
-        );
-    }
+    const seen = status === "seen";
     return (
-        <span className={`shrink-0 ${mutedCls}`} aria-label="Sent">
-            <Check className="h-3.5 w-3.5" strokeWidth={2.5} />
+        <span
+            className={`relative inline-flex h-3.5 w-5 shrink-0 ${seen ? "text-green" : mutedCls}`}
+            aria-label={seen ? "Seen" : "Delivered"}
+        >
+            <Check className="absolute left-0 h-3.5 w-3.5" strokeWidth={2.5} />
+            <Check className="absolute right-0 h-3.5 w-3.5" strokeWidth={2.5} />
         </span>
     );
 }
