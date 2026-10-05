@@ -7,14 +7,15 @@ export type ResourceLink = { monogram: string; name: string; description: string
 export type Exam = { category: string; name: string; description: string };
 export type GuidePreview = { title: string; description: string };
 export type Step = { title: string; description: string };
-export type ExpertPromoContent = { label: string; heading: string; text: string; cta: string };
+export type ExpertPromoContent = { label: string; heading: string; text: string; cta: string; disclaimer?: string };
 
 export type StageBody =
-  | { type: 'links'; items: ResourceLink[] }
+  | { type: 'links'; items: ResourceLink[]; note?: string }
   | { type: 'exams'; items: Exam[] }
   | { type: 'guides'; items: GuidePreview[]; footnote: string }
   | { type: 'steps'; items: Step[]; note?: RichText }
-  | { type: 'expertPromo'; promo: ExpertPromoContent };
+  | { type: 'expertPromo'; promo: ExpertPromoContent }
+  | { type: 'checklist'; label: string; items: string[] };
 
 export type TimelineStage = {
   id: string;
@@ -26,7 +27,8 @@ export type TimelineStage = {
   monthsTo: number;
   title: string;
   keyFact: { value: string; caption: string };
-  intro: RichText;
+  /** One entry per paragraph. */
+  intro: RichText[];
   body?: StageBody[];
 };
 
@@ -36,7 +38,7 @@ export const RESOURCES_HEADER = {
   eyebrow: 'Resources',
   heading: 'Your path to graduate study in the U.S.',
   subtext:
-    'What to do and when, from your first shortlist to your first week on campus. Seven stages over about eighteen months, with the official sources for each.',
+    'What to do and when—from building your first shortlist to your first week on campus. Seven stages over about eighteen months, with authoritative resources to guide you at each step.',
   startCta: 'Start with stage 1',
   expertCta: 'Talk to an expert',
   timelineLabel: 'Your timeline',
@@ -45,7 +47,7 @@ export const RESOURCES_HEADER = {
 export const PLAN_CHART = {
   ariaLabel: '18-month plan',
   title: 'Your 18-month plan',
-  note: 'For a fall start',
+  note: 'For a typical Fall start',
   axis: ['Mar', 'Jun', 'Sep', 'Dec', 'Mar', 'Jun', 'Start'],
 };
 
@@ -71,9 +73,11 @@ export const RESOURCES_TIMELINE: TimelineStage[] = [
     monthsFrom: -18,
     monthsTo: -12,
     title: 'Shortlist programs',
-    keyFact: { value: '6–10', caption: 'programs on a balanced list' },
+    keyFact: { value: '6–10', caption: 'a useful starting range for many applicants' },
     intro: [
-      'Rank the department, not the university. A school with three active faculty in your area is a better fit than a famous one with none.',
+      [
+        "Look beyond the university's overall ranking. For graduate study—especially research degrees—faculty fit, departmental strength, research activity, funding, and program structure may matter more than the university's overall reputation.",
+      ],
     ],
     body: [
       {
@@ -112,9 +116,11 @@ export const RESOURCES_TIMELINE: TimelineStage[] = [
     monthsFrom: -15,
     monthsTo: -9,
     title: 'Find a supervisor',
-    keyFact: { value: '2–3 yrs', caption: "how recent a professor's last grant should be" },
+    keyFact: { value: 'Look for recent activity', caption: 'publications, projects, students & funding' },
     intro: [
-      'For research degrees, the professor matters more than the school. Look for recent papers and a recent grant: funded professors are the ones hiring.',
+      [
+        "For research degrees, your prospective advisor and research fit can matter as much as—or more than—the university's reputation. Review the professor's recent publications, projects, lab members, and funding, and check whether they're accepting new students. A recent grant can signal openings for graduate research assistants.",
+      ],
     ],
     body: [
       {
@@ -122,7 +128,7 @@ export const RESOURCES_TIMELINE: TimelineStage[] = [
         promo: {
           label: WISDOMLINKED,
           heading: 'Talk to someone in your field',
-          text: 'Our experts are faculty and researchers at U.S. universities. Ask which labs fit your background before you email anyone.',
+          text: 'Connect with faculty, researchers, and experienced professionals who can help you understand which programs, research groups, or advisors may fit your background and goals.',
           cta: 'Find an expert',
         },
       },
@@ -151,6 +157,7 @@ export const RESOURCES_TIMELINE: TimelineStage[] = [
             href: 'https://reporter.nih.gov',
           },
         ],
+        note: 'Web accessibility may vary across regions or countries.',
       },
     ],
   },
@@ -164,7 +171,9 @@ export const RESOURCES_TIMELINE: TimelineStage[] = [
     title: 'Tests and credentials',
     keyFact: { value: '2 years', caption: 'how long TOEFL and IELTS scores stay valid' },
     intro: [
-      "Requirements differ by program, and many have dropped the GRE. Check each program's admissions page before you book anything.",
+      [
+        "Requirements vary by program, and many programs no longer require the GRE. Check each program's official admissions requirements before registering for a test or ordering a credential evaluation.",
+      ],
     ],
     body: [
       {
@@ -173,28 +182,29 @@ export const RESOURCES_TIMELINE: TimelineStage[] = [
           {
             category: 'English',
             name: 'TOEFL iBT',
-            description: 'The most widely accepted English test at U.S. graduate schools.',
+            description: 'Widely accepted by U.S. graduate programs.',
           },
           {
             category: 'English',
             name: 'IELTS Academic',
-            description: 'Accepted by most U.S. graduate schools as an alternative to TOEFL.',
+            description: 'Accepted by many U.S. graduate programs as proof of English proficiency.',
           },
           {
             category: 'English',
             name: 'Duolingo English Test',
-            description: 'Taken online at home. Accepted by a growing number of programs.',
+            description:
+              "Taken online at home. Accepted by a growing number of programs. Check each program's policy before registering.",
           },
           {
             category: 'Admissions',
             name: 'GRE General Test',
-            description: 'Required by some programs, optional or ignored by others.',
+            description: 'Required by some programs, optional or not considered by others.',
           },
           { category: 'Admissions', name: 'GMAT', description: 'For business programs. Many also accept the GRE.' },
           {
             category: 'Transcripts',
             name: 'Credential evaluation',
-            description: 'Only order one, from an agency such as WES, if a school requires it.',
+            description: 'Order a credential evaluation, such as one from WES, only if your program requires it.',
           },
         ],
       },
@@ -208,9 +218,11 @@ export const RESOURCES_TIMELINE: TimelineStage[] = [
     monthsFrom: -12,
     monthsTo: -8,
     title: 'Prepare your application',
-    keyFact: { value: 'Dec 1 – Jan 15', caption: 'when most Ph.D. deadlines fall' },
+    keyFact: { value: 'Dec. 1–Jan. 15', caption: 'a common deadline window for many U.S. Ph.D. programs' },
     intro: [
-      'Ask recommenders at least six weeks ahead, and send them your CV, statement draft and deadlines in one email.',
+      [
+        'Ask references at least six weeks in advance. Provide your CV, statement draft, program list, and submission deadlines in one organized message.',
+      ],
     ],
     body: [
       {
@@ -225,7 +237,7 @@ export const RESOURCES_TIMELINE: TimelineStage[] = [
             description: 'When an email helps, what to include, and when not to write at all.',
           },
         ],
-        footnote: 'CVs, recommendation letters, school lists and timelines',
+        footnote: 'Get guidance tailored to your goals, background, and application stage.',
       },
     ],
   },
@@ -237,14 +249,33 @@ export const RESOURCES_TIMELINE: TimelineStage[] = [
     monthsFrom: -8,
     monthsTo: -4.5,
     title: 'Funding and offers',
-    keyFact: { value: 'April 15', caption: 'the usual deadline to accept a funded offer' },
+    keyFact: { value: 'April 15', caption: 'a common decision date for many funded graduate offers' },
     intro: [
-      "For international Ph.D. students, funding usually comes from the department as a research or teaching assistantship. At most U.S. universities you don't have to accept a funded offer before ",
+      [
+        'Funding for Ph.D. students may include research or teaching assistantships, fellowships, tuition support, and stipends. Compare the full funding package—not just the stipend—including tuition coverage, fees, health insurance, duration, and renewal conditions.',
+      ],
+      [
+        {
+          text: 'April 15',
+          href: 'https://cgsnet.org/resources/for-current-prospective-graduate-students/april-15-resolution',
+        },
+        ' is a common decision date for many funded graduate offers at participating U.S. institutions. Always confirm the deadline and conditions stated in your individual offer.',
+      ],
+    ],
+    body: [
       {
-        text: 'April 15',
-        href: 'https://cgsnet.org/resources/for-current-prospective-graduate-students/april-15-resolution',
+        type: 'checklist',
+        label: 'Compare:',
+        items: [
+          'stipend',
+          'tuition & fees',
+          'health insurance',
+          'guaranteed years',
+          'summer funding',
+          'teaching load',
+          'cost of living',
+        ],
       },
-      ', so take the time to compare.',
     ],
   },
   {
@@ -255,8 +286,8 @@ export const RESOURCES_TIMELINE: TimelineStage[] = [
     monthsFrom: -5,
     monthsTo: -1,
     title: 'Student visa',
-    keyFact: { value: '30 days', caption: 'the earliest you can enter before your start date' },
-    intro: ['The F-1 process happens in a fixed order. Each step needs the one before it.'],
+    keyFact: { value: '30 days', caption: 'earliest entry before your program start date' },
+    intro: [['The F-1 visa process follows a sequence. Complete each required step before moving to the next.']],
     body: [
       {
         type: 'steps',
@@ -281,8 +312,9 @@ export const RESOURCES_TIMELINE: TimelineStage[] = [
         promo: {
           label: WISDOMLINKED,
           heading: "Prepare with someone who's done it",
-          text: 'Practice your interview and ask about your situation with an expert who went through the F-1 process.',
+          text: 'Practice for your visa interview and discuss practical questions with someone familiar with the F-1 student experience.',
           cta: 'Book a session',
+          disclaimer: 'For official visa requirements, always rely on U.S. government sources.',
         },
       },
     ],
@@ -295,12 +327,16 @@ export const RESOURCES_TIMELINE: TimelineStage[] = [
     monthsFrom: -1,
     monthsTo: 0,
     title: 'Arrive and settle in',
-    keyFact: { value: 'Week 1', caption: 'check in with your international student office' },
+    keyFact: { value: 'Week 1', caption: 'Complete your international-student check-in' },
     intro: [
-      "Your school's international office must confirm your arrival in SEVIS, so visit them in your first days on campus. Download your I-94 arrival record and make sure it shows F-1. Then come the practical steps: a bank account, a phone plan, housing, and a Social Security number once you have an on-campus job.",
+      [
+        "Follow your school's international-student check-in instructions soon after arrival so your school can complete the required SEVIS registration. Review your I-94 arrival record and verify that your admission information is correct. Then take care of practical needs such as housing, banking, a mobile phone plan, transportation, and—if eligible—a Social Security number.",
+      ],
     ],
   },
 ];
 
 export const richTextToPlain = (parts: RichText): string =>
   parts.map((p) => (typeof p === 'string' ? p : p.text)).join('');
+
+export const introToPlain = (paragraphs: RichText[]): string => paragraphs.map(richTextToPlain).join(' ');
