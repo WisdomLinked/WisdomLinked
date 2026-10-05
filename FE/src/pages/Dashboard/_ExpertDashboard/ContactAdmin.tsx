@@ -4,6 +4,7 @@ import { Send, MessageSquare } from 'lucide-react';
 import { doContactUs } from '../../../api/api';
 import { useAppSelector } from '../../../store';
 import { notify } from '../../../utils/notify';
+import { DASHBOARD_PAGE_TITLE } from '../../../components/dashboard/pageTitle';
 
 export default function ContactAdmin() {
   const MAX_CONTACT_MESSAGE_LENGTH = 100;
@@ -73,7 +74,7 @@ export default function ContactAdmin() {
               <MessageSquare className="h-5 w-5" aria-hidden />
             </div>
             <div>
-              <h1 className="text-xl font-semibold text-slate-900">Contact admin</h1>
+              <h1 className={DASHBOARD_PAGE_TITLE}>Contact admin</h1>
               <p className="text-sm text-slate-600">
                 Share issues, recommendations, or any platform feedback.
               </p>

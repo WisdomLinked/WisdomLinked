@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   filterPublicExperts,
   findRecentRateCandidates,
+  getPopularExperts,
   getRecommendedExperts,
   getStudentTodos,
   getUpcomingSeminarsForStudent,
@@ -105,6 +106,28 @@ describe('studentDiscovery', () => {
     expect(rec.needsProfile).toBe(false);
     expect(rec.items.map((e) => String(e._id))).toEqual(['keep']);
     expect(rec.items[0].reason).toMatch(/Transportation Engineering/i);
+  });
+
+  it('ranks popular experts by rating then followers, preferring ones not excluded', () => {
+    const experts = [
+      { _id: 'a', role: 'expert', status: 'active', email: 'a@x.com', rating: 4.2, followers: [1] },
+      { _id: 'b', role: 'expert', status: 'active', email: 'b@x.com', rating: 4.9 },
+      { _id: 'c', role: 'expert', status: 'active', email: 'c@x.com', rating: 4.2, followers: [1, 2] },
+      { _id: 'admin', role: 'admin', status: 'active', email: 'x@x.com', rating: 5 },
+    ];
+    expect(getPopularExperts(experts, ['b']).map((e) => e._id)).toEqual(['c', 'a']);
+    expect(getPopularExperts(experts, ['a', 'b', 'c']).map((e) => e._id)).toEqual(['b', 'c', 'a']);
+  });
+
+  it('names the full student interest and ignores short partial keyword matches', () => {
+    const user = { keywords: [{ value: 'Computer Engineering' }] };
+    const experts = [
+      { _id: 'short', role: 'expert', status: 'active', email: 's@x.com', keywords: [{ value: 'Co' }] },
+      { _id: 'partial', role: 'expert', status: 'active', email: 'p@x.com', keywords: [{ value: 'Computer' }] },
+    ];
+    const rec = getRecommendedExperts(experts, user);
+    expect(rec.items.map((e) => String(e._id))).toEqual(['partial']);
+    expect(rec.items[0].reason).toBe('Matches your interest in Computer Engineering');
   });
 
   it('computes profile completion and gates todos', () => {

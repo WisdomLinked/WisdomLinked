@@ -11,6 +11,7 @@ import logo from '../assets/images/logo.png';
 import { SERVICE_LABELS } from '../constants/serviceOptions';
 import MajorSelect from '../components/MajorSelect';
 import BrandWordmark from '../components/BrandWordmark';
+import CountryFlag from '../components/ui/CountryFlag';
 
 const BTN_PRIMARY_STYLE = { background: 'linear-gradient(135deg, #234C6A 0%, #456882 100%)' };
 const FOCUS_RING = 'focus:ring-2 focus:ring-[#234C6A]/60 focus:border-[#234C6A]';
@@ -18,13 +19,13 @@ const ACCENT_BG = 'hover:bg-[#D9EAFD]/60';
 const ACCENT_SELECTED = 'bg-[#D9EAFD]/70 text-[#234C6A]';
 
 const COUNTRY_CODES = [
-    { code: '+1', country: 'US/CA', flag: '🇺🇸' }, { code: '+44', country: 'UK', flag: '🇬🇧' },
-    { code: '+86', country: 'China', flag: '🇨🇳' }, { code: '+81', country: 'Japan', flag: '🇯🇵' },
-    { code: '+91', country: 'India', flag: '🇮🇳' }, { code: '+49', country: 'Germany', flag: '🇩🇪' },
-    { code: '+33', country: 'France', flag: '🇫🇷' }, { code: '+61', country: 'Australia', flag: '🇦🇺' },
-    { code: '+55', country: 'Brazil', flag: '🇧🇷' }, { code: '+82', country: 'Korea', flag: '🇰🇷' },
-    { code: '+65', country: 'Singapore', flag: '🇸🇬' }, { code: '+971', country: 'UAE', flag: '🇦🇪' },
-    { code: '+92', country: 'Pakistan', flag: '🇵🇰' }, { code: '+234', country: 'Nigeria', flag: '🇳🇬' },
+    { code: '+1', country: 'US/CA', iso: 'US' }, { code: '+44', country: 'UK', iso: 'GB' },
+    { code: '+86', country: 'China', iso: 'CN' }, { code: '+81', country: 'Japan', iso: 'JP' },
+    { code: '+91', country: 'India', iso: 'IN' }, { code: '+49', country: 'Germany', iso: 'DE' },
+    { code: '+33', country: 'France', iso: 'FR' }, { code: '+61', country: 'Australia', iso: 'AU' },
+    { code: '+55', country: 'Brazil', iso: 'BR' }, { code: '+82', country: 'Korea', iso: 'KR' },
+    { code: '+65', country: 'Singapore', iso: 'SG' }, { code: '+971', country: 'UAE', iso: 'AE' },
+    { code: '+92', country: 'Pakistan', iso: 'PK' }, { code: '+234', country: 'Nigeria', iso: 'NG' },
 ];
 
 
@@ -292,7 +293,7 @@ export default function WLCustomerRegister() {
                                     <ChevronDown size={16} className={`text-slate-400 transition-transform ${showServiceDrop ? 'rotate-180' : ''}`} />
                                 </button>
                                 {showServiceDrop && (
-                                    <div className="absolute z-50 mt-1 w-full max-w-xl rounded-2xl border border-slate-200 bg-white shadow-xl overflow-hidden flex flex-col max-h-56 overflow-y-auto">
+                                    <div className="absolute z-50 mt-1 w-full max-w-xl rounded-2xl border border-slate-200 bg-white shadow-xl overflow-hidden flex flex-col scrollbar-thin max-h-72 overflow-y-auto py-1 pr-1">
                                         {SERVICE_LABELS.map(s => (
                                             <button key={s} type="button" onClick={() => {
                                                 const newServices = form.services.includes(s) ? form.services.filter(x => x !== s) : [...form.services, s];
@@ -315,7 +316,7 @@ export default function WLCustomerRegister() {
                                     <ChevronDown size={16} className={`text-slate-400 transition-transform ${showCountryDrop ? 'rotate-180' : ''}`} />
                                 </button>
                                 {showCountryDrop && (
-                                    <div className="absolute z-50 mt-1 w-full max-w-xl rounded-2xl border border-slate-200 bg-white shadow-xl overflow-hidden max-h-56 overflow-y-auto">
+                                    <div className="absolute z-50 mt-1 w-full max-w-xl rounded-2xl border border-slate-200 bg-white shadow-xl overflow-hidden scrollbar-thin max-h-72 overflow-y-auto py-1 pr-1">
                                         {COUNTRIES.map(c => (
                                             <button key={c} type="button" onClick={() => { handleChange('country', c); setShowCountryDrop(false); }}
                                                 className={`w-full px-4 py-2.5 text-sm text-left ${ACCENT_BG} transition-colors text-slate-700`}>{c}</button>
@@ -331,16 +332,16 @@ export default function WLCustomerRegister() {
                                     <div className="relative" ref={codeRef}>
                                         <button type="button" onClick={() => setShowCodeDrop(v => !v)}
                                             className="flex items-center gap-1.5 h-full px-3 py-3 rounded-xl border border-slate-200 bg-white text-sm text-slate-700 hover:border-[#456882] min-w-[90px]">
-                                            <span>{selectedCode.flag}</span>
+                                            <CountryFlag code={selectedCode.iso} size="sm" />
                                             <span className="font-medium">{selectedCode.code}</span>
                                             <ChevronDown size={12} className={`text-slate-400 transition-transform ${showCodeDrop ? 'rotate-180' : ''}`} />
                                         </button>
                                         {showCodeDrop && (
-                                            <div className="absolute top-full left-0 mt-1 z-50 bg-white border border-slate-200 rounded-2xl shadow-xl overflow-hidden w-52 max-h-56 overflow-y-auto">
+                                            <div className="absolute top-full left-0 mt-1 z-50 bg-white border border-slate-200 rounded-2xl shadow-xl overflow-hidden w-52 scrollbar-thin max-h-72 overflow-y-auto py-1 pr-1">
                                                 {COUNTRY_CODES.map(c => (
                                                     <button key={c.code + c.country} type="button" onClick={() => { handleChange('countryCode', c.code); setShowCodeDrop(false); }}
                                                         className={`w-full flex items-center gap-3 px-4 py-2.5 text-sm text-left ${form.countryCode === c.code ? `${ACCENT_SELECTED} font-semibold` : `text-slate-700 ${ACCENT_BG}`}`}>
-                                                        <span>{c.flag}</span><span className="font-medium w-10">{c.code}</span><span className="text-slate-500 text-xs">{c.country}</span>
+                                                        <CountryFlag code={c.iso} size="sm" /><span className="font-medium w-10">{c.code}</span><span className="text-slate-500 text-xs">{c.country}</span>
                                                     </button>
                                                 ))}
                                             </div>

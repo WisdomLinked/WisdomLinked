@@ -69,6 +69,36 @@ describe('profileFormChanges', () => {
     ).toBe(true);
   });
 
+  it('compares expert phone numbers by digits so E.164 form state matches stored values', () => {
+    const base = {
+      imageSrc: 'x',
+      oldImageSrc: 'x',
+      name: 'Jane',
+      title: 'Dr',
+      description: 'Bio',
+      selectedKeywords: [],
+      selectedServices: [],
+      country: { name: 'USA' },
+      state: null,
+      city: null,
+    };
+    const user = { username: 'Jane', title: 'Dr', description: 'Bio', country: { name: 'USA' } };
+    expect(
+      hasExpertProfileUnsavedChanges({
+        ...base,
+        phoneNumber: '+15454545454',
+        userDetails: { ...user, phoneNumber: '15454545454' },
+      }),
+    ).toBe(false);
+    expect(
+      hasExpertProfileUnsavedChanges({
+        ...base,
+        phoneNumber: '+15454545455',
+        userDetails: { ...user, phoneNumber: '15454545454' },
+      }),
+    ).toBe(true);
+  });
+
   it('detects customer phone number changes', () => {
     expect(
       hasCustomerProfileUnsavedChanges({

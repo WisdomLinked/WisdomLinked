@@ -70,7 +70,7 @@ export default function OptionSelect({
           role="listbox"
           className="absolute z-50 mt-1 w-full max-w-xl rounded-2xl border border-slate-200 bg-white shadow-xl overflow-hidden"
         >
-          <div className="max-h-56 overflow-y-auto">
+          <div className="scrollbar-thin max-h-72 overflow-y-auto py-1 pr-1">
             {options.map(opt => {
               const selected = value.toLowerCase() === opt.toLowerCase();
               return (

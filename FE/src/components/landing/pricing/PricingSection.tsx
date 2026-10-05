@@ -1,6 +1,7 @@
 import type { Ref } from 'react';
 import { ArrowRight, Check } from 'lucide-react';
 import { homePage } from '../../../content/publicPages';
+import Container, { CARD_INSET_X } from '../Container';
 import JourneySteps from './JourneySteps';
 import PricingCard, { CARD_BODY_TEXT } from './PricingCard';
 import RateOption from './RateOption';
@@ -29,7 +30,7 @@ export default function PricingSection({ sectionRef, onBrowseExperts }: Props) {
       style={{ backgroundColor: '#F8FAFC' }}
     >
       <div className="page-dots-layer page-dots-layer--animated" aria-hidden="true" />
-      <div className="relative z-10 mx-auto max-w-6xl px-4 sm:px-6">
+      <Container className="relative z-10">
         <header className="max-w-3xl">
           <p className="section-label mb-4 tracking-widest text-[#234C6A]">{PRICING_EYEBROW}</p>
           <h2 className="mb-4 font-display text-3xl font-bold text-slate-900 sm:text-4xl md:text-5xl">
@@ -93,7 +94,7 @@ export default function PricingSection({ sectionRef, onBrowseExperts }: Props) {
             </div>
           </PricingCard>        </div>
 
-        <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-6 md:p-8">
+        <div className={`mt-6 rounded-2xl border border-slate-200 bg-white py-6 md:py-8 ${CARD_INSET_X}`}>
           <ul className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
             {GUARANTEES.map(({ icon: Icon, iconClass, title, text }) => (
               <li key={title} className="flex items-start gap-3">
@@ -108,7 +109,7 @@ export default function PricingSection({ sectionRef, onBrowseExperts }: Props) {
             ))}
           </ul>
         </div>
-      </div>
+      </Container>
     </section>
   );
 }
