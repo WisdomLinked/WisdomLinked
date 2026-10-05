@@ -9,7 +9,7 @@ describe("ChatThreadView message delete", () => {
 
     const baseProps = {
         theme: "light",
-        deliveryForMessage: () => "sent" as const,
+        deliveryForMessage: () => "delivered" as const,
         groupSenderLabel: (m: { author?: { username?: string } }) =>
             String(m.author?.username ?? "User"),
         chosenGroupChatDetails: null,
