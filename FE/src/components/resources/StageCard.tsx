@@ -1,6 +1,7 @@
 import React from 'react';
 import { FileText, IdCard, ListChecks, PencilLine, Plane, UserSearch, Wallet, type LucideIcon } from 'lucide-react';
 import type { StageBody, StageIcon, TimelineStage } from '../../content/resourcesTimeline';
+import Checklist from './Checklist';
 import ExamGrid from './ExamGrid';
 import ExpertPromo from './ExpertPromo';
 import GuideCards from './GuideCards';
@@ -24,7 +25,7 @@ function Body({ body }: { body: StageBody }) {
   const links = useResourceLinks();
   switch (body.type) {
     case 'links':
-      return <LinkList items={body.items} />;
+      return <LinkList items={body.items} note={body.note} />;
     case 'exams':
       return <ExamGrid items={body.items} />;
     case 'guides':
@@ -35,6 +36,8 @@ function Body({ body }: { body: StageBody }) {
       return <StepFlow items={body.items} note={body.note} />;
     case 'expertPromo':
       return <ExpertPromo promo={body.promo} href={links.expertHref} />;
+    case 'checklist':
+      return <Checklist label={body.label} items={body.items} />;
     default:
       return null;
   }
@@ -60,16 +63,20 @@ export default function StageCard({ stage }: { stage: TimelineStage }) {
           </h2>
         </div>
         <div className="col-span-2 rounded-xl bg-res-gold-soft px-4 py-3 text-left sm:col-span-1 sm:text-right">
-          <p className="whitespace-nowrap font-display text-[1.35rem] font-bold leading-tight text-res-gold">
+          <p className="font-display sm:whitespace-nowrap text-[1.35rem] font-bold leading-tight text-res-gold">
             {stage.keyFact.value}
           </p>
           <p className="mt-0.5 max-w-[13rem] text-xs leading-snug text-slate-600 sm:ml-auto">{stage.keyFact.caption}</p>
         </div>
       </div>
 
-      <p className="mt-5 max-w-[64ch] leading-relaxed text-slate-600">
-        <RichText parts={stage.intro} />
-      </p>
+      <div className="mt-5 max-w-[64ch] space-y-3 leading-relaxed text-slate-600">
+        {stage.intro.map((paragraph, i) => (
+          <p key={i}>
+            <RichText parts={paragraph} />
+          </p>
+        ))}
+      </div>
 
       {stage.body?.length ? (
         <div className="mt-5 space-y-4">

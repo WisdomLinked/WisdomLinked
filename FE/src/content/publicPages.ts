@@ -1,4 +1,4 @@
-import { RESOURCES_HEADER, RESOURCES_TIMELINE, richTextToPlain } from './resourcesTimeline';
+import { RESOURCES_HEADER, RESOURCES_TIMELINE, introToPlain } from './resourcesTimeline';
 
 export const PUBLIC_ROUTES = [
     '/',
@@ -218,7 +218,7 @@ const resourceGuides: {
 
 const resourcePages: PublicPageRecord[] = [
     page('/resources', RESOURCES_HEADER.heading, RESOURCES_HEADER.subtext),
-    ...RESOURCES_TIMELINE.map((stage) => page('/resources', stage.title, richTextToPlain(stage.intro))),
+    ...RESOURCES_TIMELINE.map((stage) => page('/resources', stage.title, introToPlain(stage.intro))),
     page(
         '/resources/guides',
         'Guides for students',
