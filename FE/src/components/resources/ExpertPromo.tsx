@@ -4,7 +4,7 @@ import type { ExpertPromoContent } from '../../content/resourcesTimeline';
 import { BUTTON_ON_DARK } from './styles';
 
 export default function ExpertPromo({ promo, href }: { promo: ExpertPromoContent; href: string }) {
-  return (
+  const card = (
     <aside className="relative overflow-hidden rounded-[14px] bg-wl-brand p-6 text-white sm:p-7" aria-label={promo.heading}>
       <span
         className="pointer-events-none absolute -right-20 -top-24 h-64 w-64 rounded-full border border-white/5"
@@ -21,5 +21,12 @@ export default function ExpertPromo({ promo, href }: { promo: ExpertPromoContent
         </Link>
       </div>
     </aside>
+  );
+  if (!promo.disclaimer) return card;
+  return (
+    <div>
+      {card}
+      <p className="mt-2 text-xs italic text-slate-600">{promo.disclaimer}</p>
+    </div>
   );
 }
