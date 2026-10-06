@@ -3669,15 +3669,22 @@ const inviteToSeminar = async (req, res) => {
             return res.status(409).send("This seminar has been cancelled.");
         }
         const startMs = groupChat.start ? new Date(groupChat.start).getTime() : 0;
-        if (startMs && startMs <= Date.now()) {
+        const priceCents = dollarsToCents(groupChat.price);
+        const durationMin = Number(groupChat.duration) || 0;
+        const endMs = startMs && durationMin > 0 ? startMs + durationMin * 60_000 : 0;
+        const now = Date.now();
+        // Paid invites need a pre-start payment window. Free adds are allowed during the live session.
+        if (priceCents > 0 && startMs && startMs <= now) {
             return res.status(409).send("This seminar has already started, so it can no longer be shared.");
+        }
+        if (priceCents <= 0 && endMs && endMs <= now) {
+            return res.status(409).send("This seminar has ended, so people can no longer be added.");
         }
 
         const expert = await User.findById(String(userId)).select('_id username email timeZone');
         if (!expert) {
             return res.status(404).send("Host not found.");
         }
-        const priceCents = dollarsToCents(groupChat.price);
         const appState = await AppState.findOne();
         const payBy = priceCents > 0
             ? paymentWindowDeadline({ sessionStartMs: startMs, windowHours: paymentWindowHours(appState) })
