@@ -294,8 +294,8 @@ describe('POST /api/ask', { concurrency: false }, () => {
         assert.equal(filtered.includes('$999'), false);
     });
 
-    test('NODE_ENV=staging still returns 429 after 20 requests from the same IP', async () => {
-        process.env.NODE_ENV = 'staging';
+    test('Ask limiter is disabled and never returns 429', async () => {
+        process.env.NODE_ENV = 'production';
         const express = require('express');
         const request = require('supertest');
         const app = express();
@@ -307,25 +307,13 @@ describe('POST /api/ask', { concurrency: false }, () => {
 
         try {
             const ip = '203.0.113.44';
-            for (let i = 0; i < 20; i += 1) {
+            for (let i = 0; i < 21; i += 1) {
                 const response = await request(app)
                     .post('/api/ask')
                     .set('X-Forwarded-For', ip)
                     .send({ question: 'How do I book?' });
                 assert.equal(response.status, 200, `request ${i + 1}`);
             }
-            const limited = await request(app)
-                .post('/api/ask')
-                .set('X-Forwarded-For', ip)
-                .send({ question: 'How do I book?' });
-            assert.equal(process.env.NODE_ENV, 'staging');
-            assert.equal(limited.status, 429);
-
-            const otherIp = await request(app)
-                .post('/api/ask')
-                .set('X-Forwarded-For', '203.0.113.45')
-                .send({ question: 'How do I book?' });
-            assert.equal(otherIp.status, 200);
         } finally {
             restoreEnv();
         }

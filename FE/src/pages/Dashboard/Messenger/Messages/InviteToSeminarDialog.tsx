@@ -1,11 +1,11 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import Dialog from '@mui/material/Dialog';
 import { Search, UserPlus, Loader2, Plus, X } from 'lucide-react';
-import { getMyFollowers, inviteToSeminar } from '../../../../api/api';
+import { doFilterCustomers, inviteToSeminar } from '../../../../api/api';
 import { notify } from '../../../../utils/notify';
 import Avatar from '../../../../components/Avatar';
 
-type Follower = { id: string; username: string; email: string; image?: string };
+type Student = { id: string; username: string; email: string; image?: string };
 
 export type InviteOutcome =
     | 'invited'
@@ -45,7 +45,7 @@ export const summarizeOutcomes = (results: Array<{ outcome: InviteOutcome }>): s
 };
 
 export default function InviteToSeminarDialog({ open, onClose, groupDetails, theme = 'light' }: Props) {
-    const [followers, setFollowers] = useState<Follower[]>([]);
+    const [students, setStudents] = useState<Student[]>([]);
     const [selected, setSelected] = useState<Set<string>>(new Set());
     const [search, setSearch] = useState('');
     const [loading, setLoading] = useState(false);
@@ -58,6 +58,7 @@ export default function InviteToSeminarDialog({ open, onClose, groupDetails, the
     const seminarId = groupDetails?.groupId || groupDetails?._id;
     const price = Number(groupDetails?.price);
     const isFree = Number.isFinite(price) && price <= 0;
+    const emailPlaceholder = isFree ? 'Add by email address' : 'Invite by email address';
 
     const enrolledIds = useMemo(() => {
         const ids = new Set<string>();
@@ -82,18 +83,28 @@ export default function InviteToSeminarDialog({ open, onClose, groupDetails, the
         setEmails([]);
         setLoading(true);
         (async () => {
-            const res: any = await getMyFollowers();
-            if (cancelled) return;
-            const rows: Follower[] = (Array.isArray(res?.result) ? res.result : [])
-                .map((f: any) => ({
-                    id: String(f?._id ?? f?.id ?? ''),
-                    username: f?.username || f?.email || 'Student',
-                    email: f?.email || '',
-                    image: f?.image,
-                }))
-                .filter((f: Follower) => f.id && !enrolledIds.has(f.id));
-            setFollowers(rows);
-            setLoading(false);
+            try {
+                const res: any = await doFilterCustomers({
+                    username: '',
+                    keywords: [],
+                    services: [],
+                    sortBy: 'Name in ASC',
+                });
+                if (cancelled) return;
+                const rows: Student[] = (Array.isArray(res?.result) ? res.result : [])
+                    .map((c: any) => ({
+                        id: String(c?._id ?? c?.id ?? ''),
+                        username: c?.username || c?.email || 'Student',
+                        email: c?.email || '',
+                        image: c?.image,
+                    }))
+                    .filter((s: Student) => s.id && !enrolledIds.has(s.id));
+                setStudents(rows);
+            } catch {
+                if (!cancelled) setStudents([]);
+            } finally {
+                if (!cancelled) setLoading(false);
+            }
         })();
         return () => {
             cancelled = true;
@@ -102,11 +113,13 @@ export default function InviteToSeminarDialog({ open, onClose, groupDetails, the
 
     const visible = useMemo(() => {
         const q = search.trim().toLowerCase();
-        if (!q) return followers;
-        return followers.filter(
-            (f) => f.username.toLowerCase().includes(q) || f.email.toLowerCase().includes(q),
+        if (!q) return students;
+        return students.filter(
+            (s) => s.username.toLowerCase().includes(q) || s.email.toLowerCase().includes(q),
         );
-    }, [followers, search]);
+    }, [students, search]);
+
+    const showDropdown = search.trim().length > 0;
 
     const toggle = (id: string) =>
         setSelected((prev) => {
@@ -116,12 +129,12 @@ export default function InviteToSeminarDialog({ open, onClose, groupDetails, the
             return next;
         });
 
-    const allVisibleSelected = visible.length > 0 && visible.every((f) => selected.has(f.id));
+    const allVisibleSelected = visible.length > 0 && visible.every((s) => selected.has(s.id));
     const toggleAllVisible = () =>
         setSelected((prev) => {
             const next = new Set(prev);
-            if (allVisibleSelected) visible.forEach((f) => next.delete(f.id));
-            else visible.forEach((f) => next.add(f.id));
+            if (allVisibleSelected) visible.forEach((s) => next.delete(s.id));
+            else visible.forEach((s) => next.add(s.id));
             return next;
         });
 
@@ -143,6 +156,7 @@ export default function InviteToSeminarDialog({ open, onClose, groupDetails, the
                 followerIds: Array.from(selected),
                 emails,
             });
+            if (res === false) return;
             if (!res?.success || !Array.isArray(res?.results)) {
                 notify.error(typeof res === 'string' ? res : 'Could not send the invitations.');
                 return;
@@ -152,7 +166,7 @@ export default function InviteToSeminarDialog({ open, onClose, groupDetails, the
             if (done) {
                 notify.success(res.free ? `${done} added to this seminar.` : `${done} invited.`);
             }
-            setFollowers((prev) => prev.filter((f) => !selected.has(f.id)));
+            setStudents((prev) => prev.filter((s) => !selected.has(s.id)));
             setSelected(new Set());
             setEmails([]);
         } finally {
@@ -162,10 +176,9 @@ export default function InviteToSeminarDialog({ open, onClose, groupDetails, the
 
     const submit = () => {
         if (!seminarId || totalPicked === 0) {
-            notify.error('Pick a follower or enter an email address.');
+            notify.error('Pick a student or enter an email address.');
             return;
         }
-        // A free seminar enrols on the spot, so the host sees the consequence first.
         if (isFree) {
             setConfirmingFree(true);
             return;
@@ -176,13 +189,16 @@ export default function InviteToSeminarDialog({ open, onClose, groupDetails, the
     const isLight = theme === 'light';
     const panel = isLight ? 'bg-white text-slate-900' : 'bg-[#141414] text-white';
     const rowHover = isLight ? 'hover:bg-slate-50' : 'hover:bg-white/10';
+    const dropdownBg = isLight ? 'bg-white border-slate-200' : 'bg-[#1c1c1c] border-white/10';
 
     return (
         <Dialog open={open} onClose={onClose} maxWidth="xs" fullWidth>
             <div className={`${panel} p-5`}>
                 <div className="flex items-center gap-2">
                     <UserPlus className="h-4 w-4 text-[#234C6A]" aria-hidden />
-                    <h2 className="text-sm font-semibold">Invite to this seminar</h2>
+                    <h2 className="text-sm font-semibold">
+                        {isFree ? 'Add to this seminar' : 'Invite to this seminar'}
+                    </h2>
                 </div>
                 <p className="mt-1 text-xs text-slate-500">
                     {isFree
@@ -244,8 +260,8 @@ export default function InviteToSeminarDialog({ open, onClose, groupDetails, the
                                         addEmail();
                                     }
                                 }}
-                                placeholder="Invite by email address"
-                                aria-label="Invite by email address"
+                                placeholder={emailPlaceholder}
+                                aria-label={emailPlaceholder}
                                 className="flex-1 bg-transparent text-xs outline-none"
                             />
                             <button
@@ -278,32 +294,74 @@ export default function InviteToSeminarDialog({ open, onClose, groupDetails, the
                             </div>
                         ) : null}
                         <p className="mt-2 text-[11px] text-slate-400">
-                            They need a WisdomLinked student account — invitations are paid for and joined
-                            from their dashboard, so there is nowhere to send one otherwise.
+                            {isFree
+                                ? 'They need a WisdomLinked student account to be added.'
+                                : 'They need a WisdomLinked student account — invitations are paid for and joined from their dashboard, so there is nowhere to send one otherwise.'}
                         </p>
 
-                        <div className="mt-3 flex items-center gap-2 rounded-lg border border-slate-200 px-2 py-1.5">
-                            <Search className="h-3.5 w-3.5 text-slate-400" aria-hidden />
-                            <input
-                                value={search}
-                                onChange={(e) => setSearch(e.target.value)}
-                                placeholder="Search your followers"
-                                aria-label="Search your followers"
-                                className="flex-1 bg-transparent text-xs outline-none"
-                            />
+                        <div className="relative mt-3">
+                            <div className="flex items-center gap-2 rounded-lg border border-slate-200 px-2 py-1.5">
+                                <Search className="h-3.5 w-3.5 text-slate-400" aria-hidden />
+                                <input
+                                    value={search}
+                                    onChange={(e) => setSearch(e.target.value)}
+                                    placeholder="Search students by name"
+                                    aria-label="Search students by name"
+                                    className="flex-1 bg-transparent text-xs outline-none"
+                                />
+                            </div>
+                            {showDropdown ? (
+                                <div
+                                    className={`absolute z-10 mt-1 max-h-48 w-full overflow-y-auto rounded-lg border shadow-md ${dropdownBg}`}
+                                    role="listbox"
+                                    aria-label="Matching students"
+                                >
+                                    {loading ? (
+                                        <p className="px-3 py-2 text-xs text-slate-400">Searching…</p>
+                                    ) : visible.length === 0 ? (
+                                        <p className="px-3 py-2 text-xs text-slate-400">
+                                            No students match — try email above.
+                                        </p>
+                                    ) : (
+                                        visible.slice(0, 40).map((s) => (
+                                            <button
+                                                key={s.id}
+                                                type="button"
+                                                role="option"
+                                                aria-selected={selected.has(s.id)}
+                                                onClick={() => toggle(s.id)}
+                                                className={`flex w-full items-center gap-3 px-2 py-2 text-left ${rowHover}`}
+                                            >
+                                                <input
+                                                    type="checkbox"
+                                                    readOnly
+                                                    checked={selected.has(s.id)}
+                                                    className="h-4 w-4"
+                                                    tabIndex={-1}
+                                                />
+                                                <Avatar username={s.username} image={s.image} size="small" />
+                                                <span className="min-w-0 flex-1">
+                                                    <span className="block truncate text-xs font-medium">{s.username}</span>
+                                                    <span className="block truncate text-[11px] text-slate-400">{s.email}</span>
+                                                </span>
+                                            </button>
+                                        ))
+                                    )}
+                                </div>
+                            ) : null}
                         </div>
 
                         <p className="mt-4 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-400">
-                            Or pick from your followers
+                            Or pick a student
                         </p>
                         {loading ? (
                             <p className="py-8 text-center text-xs text-slate-400">
                                 <Loader2 className="mx-auto mb-1 h-4 w-4 animate-spin" aria-hidden />
-                                Loading your followers…
+                                Loading students…
                             </p>
-                        ) : followers.length === 0 ? (
+                        ) : students.length === 0 ? (
                             <p className="py-8 text-center text-xs text-slate-400">
-                                No followers left to pick — invite by email above instead.
+                                No students left to pick — use email above instead.
                             </p>
                         ) : (
                             <>
@@ -315,21 +373,21 @@ export default function InviteToSeminarDialog({ open, onClose, groupDetails, the
                                     {allVisibleSelected ? 'Clear selection' : `Select all (${visible.length})`}
                                 </button>
                                 <div className="mt-2 max-h-64 overflow-y-auto">
-                                    {visible.map((f) => (
+                                    {visible.map((s) => (
                                         <label
-                                            key={f.id}
+                                            key={s.id}
                                             className={`flex cursor-pointer items-center gap-3 rounded-lg px-2 py-2 ${rowHover}`}
                                         >
                                             <input
                                                 type="checkbox"
-                                                checked={selected.has(f.id)}
-                                                onChange={() => toggle(f.id)}
+                                                checked={selected.has(s.id)}
+                                                onChange={() => toggle(s.id)}
                                                 className="h-4 w-4"
                                             />
-                                            <Avatar username={f.username} image={f.image} size="small" />
+                                            <Avatar username={s.username} image={s.image} size="small" />
                                             <span className="min-w-0 flex-1">
-                                                <span className="block truncate text-xs font-medium">{f.username}</span>
-                                                <span className="block truncate text-[11px] text-slate-400">{f.email}</span>
+                                                <span className="block truncate text-xs font-medium">{s.username}</span>
+                                                <span className="block truncate text-[11px] text-slate-400">{s.email}</span>
                                             </span>
                                         </label>
                                     ))}

@@ -7,10 +7,8 @@ const keyByUserOrIp = (req: any): string => {
     return userId ? `u:${userId}` : `ip:${ipKeyGenerator(req.ip)}`;
 };
 
-const RATE_LIMIT_DISABLED =
-    process.env.RATE_LIMIT_DISABLED === 'true' || process.env.NODE_ENV === 'staging';
-
-const shouldSkipRateLimit = () => RATE_LIMIT_DISABLED;
+/** Disabled in all environments — chat polling + shared IP keys caused prod 429s. */
+const shouldSkipRateLimit = () => true;
 
 const message = { success: false, message: 'Too many requests, please try again later.' };
 
