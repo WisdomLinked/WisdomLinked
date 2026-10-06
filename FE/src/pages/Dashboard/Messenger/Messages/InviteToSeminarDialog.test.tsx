@@ -8,6 +8,7 @@ import { notify } from "../../../../utils/notify";
 vi.mock("../../../../api/api", () => ({
   doFilterCustomers: vi.fn(async () => ({ result: [] })),
   inviteToSeminar: vi.fn(async () => ({ success: true, free: false, results: [] })),
+  profileImageFetch: vi.fn(async () => null),
 }));
 vi.mock("../../../../utils/notify", () => ({
   notify: {
@@ -22,7 +23,7 @@ const mockDispatch = vi.fn();
 vi.mock("react-redux", () => ({ useDispatch: () => mockDispatch }));
 
 const students = [
-  { _id: "s1", username: "Mei Chen", email: "mei@x.com" },
+  { _id: "s1", username: "Mei Chen", email: "mei@x.com", image: "mei-photo.jpg" },
   { _id: "s2", username: "Araavind", email: "araavind@x.com" },
 ];
 
@@ -51,6 +52,9 @@ describe("InviteToSeminarDialog", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(api.doFilterCustomers).mockResolvedValue({ result: students } as any);
+    vi.mocked(api.profileImageFetch).mockImplementation(async (ref: string) =>
+      ref === "mei-photo.jpg" ? "https://cdn.example/mei.jpg" : null,
+    );
   });
 
   it("lists students who are not already in the seminar", async () => {
@@ -58,6 +62,31 @@ describe("InviteToSeminarDialog", () => {
 
     await waitFor(() => expect(screen.getByText("Mei Chen")).toBeInTheDocument());
     expect(screen.getByText("Araavind")).toBeInTheDocument();
+  });
+
+  it("resolves storage image refs before rendering Avatar photos", async () => {
+    render(<InviteToSeminarDialog open onClose={() => {}} groupDetails={seminar()} />);
+
+    await waitFor(() => expect(screen.getByText("Mei Chen")).toBeInTheDocument());
+    expect(api.profileImageFetch).toHaveBeenCalledWith("mei-photo.jpg", "small");
+    const photo = screen.getByRole("img");
+    expect(photo).toHaveAttribute("src", "https://cdn.example/mei.jpg");
+    // No image ref → initials fallback, not a broken img
+    expect(screen.getByText("AR")).toBeInTheDocument();
+  });
+
+  it("shows resolved photos in the search dropdown too", async () => {
+    render(<InviteToSeminarDialog open onClose={() => {}} groupDetails={seminar()} />);
+    await waitFor(() => expect(screen.getByText("Mei Chen")).toBeInTheDocument());
+
+    fireEvent.change(screen.getByLabelText(/Search students by name/i), {
+      target: { value: "Mei" },
+    });
+
+    await waitFor(() => {
+      const imgs = screen.getAllByRole("img");
+      expect(imgs.some((img) => img.getAttribute("src") === "https://cdn.example/mei.jpg")).toBe(true);
+    });
   });
 
   it("hides a student who is already enrolled", async () => {
