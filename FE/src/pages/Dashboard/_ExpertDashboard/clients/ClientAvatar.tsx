@@ -4,6 +4,7 @@ import { getAvatarPaletteForId } from '../../../../utils/avatarColor';
 
 const SIZE = {
   lg: 'h-20 w-20 text-2xl',
+  md: 'h-14 w-14 text-lg',
   sm: 'h-9 w-9 text-xs',
 } as const;
 

@@ -14,6 +14,7 @@ export function buildAvailabilitySaveSuccessMessage(opts: {
   rateChanged: boolean;
   slotsChanged: boolean;
   durationsChanged?: boolean;
+  bufferChanged?: boolean;
   hourlyRate?: number;
 }): string {
   const suffix = opts.rateChanged ? rateSuffix(opts.hourlyRate) : '';
@@ -21,6 +22,7 @@ export function buildAvailabilitySaveSuccessMessage(opts: {
   if (opts.rateChanged) changedParts.push('hourly rate');
   if (opts.slotsChanged) changedParts.push('weekly availability');
   if (opts.durationsChanged) changedParts.push('appointment durations');
+  if (opts.bufferChanged) changedParts.push('buffer time');
 
   if (changedParts.length > 1) {
     const list =
@@ -37,6 +39,9 @@ export function buildAvailabilitySaveSuccessMessage(opts: {
   }
   if (opts.durationsChanged) {
     return 'Appointment durations saved. Students will only see the session lengths you offer when booking.';
+  }
+  if (opts.bufferChanged) {
+    return 'Buffer time saved.';
   }
   return 'Availability settings saved.';
 }

@@ -5,11 +5,18 @@ export type BookingNoticeHours = 24 | 48 | 72;
 /** Half-hour index 0–47 within a nominal local day (00:00 = 0, 00:30 = 1, …). */
 export type HalfHourSlotIndex = number;
 
+export type BufferMinutes = 0 | 15 | 30;
+
 export interface ExpertSchedulingFields {
   timeSlots?: HalfHourSlotIndex[];
   dailyTimeSlots?: number[];
+  availabilityMode?: 'common' | 'daily';
+  weeklyTimeSlots?: Partial<Record<'Mon' | 'Tue' | 'Wed' | 'Thu' | 'Fri' | 'Sat' | 'Sun', HalfHourSlotIndex[]>> | null;
   blockedBookingDates?: string[];
   bookingNoticeHours?: BookingNoticeHours | number;
+  /** Unset until the expert picks a buffer. */
+  bufferMinutes?: BufferMinutes | number | null;
+  appointmentDurations?: number[];
   price?: number | number[];
   timeZone?: string;
 }

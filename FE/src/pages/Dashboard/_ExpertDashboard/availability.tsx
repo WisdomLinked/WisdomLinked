@@ -26,7 +26,7 @@ import {
   previewDurationForSlots,
   type AppointmentDurationMinutes,
 } from '../../../utils/appointmentDurations';
-import { computeAvailabilityChanges } from '../../../utils/availabilityDirty';
+import { computeAvailabilityChanges, normalizeBufferMinutes } from '../../../utils/availabilityDirty';
 import { DASHBOARD_PAGE_TITLE } from '../../../components/dashboard/pageTitle';
 
 /** Allow wrap after en-dashes so labels like 11:00 AM–12:00 PM stay inside the cell. */
@@ -99,7 +99,7 @@ interface DailyAvailability {
 interface AvailabilityFormState {
   hourlyRate: string;
   appointmentDurations: AppointmentDurationMinutes[];
-  bufferTime: number;        // minutes: 0 | 15 | 30
+  bufferTime: number | null; // minutes: 0 | 15 | 30; null until the expert picks one
   mode: AvailabilityMode;
   commonSlots: number[];     // selected hours for Common mode
   dailyAvailability: DailyAvailability[];
@@ -146,7 +146,7 @@ const initialDailyAvailability: DailyAvailability[] = [
 const initialFormState: AvailabilityFormState = {
   hourlyRate: '',
   appointmentDurations: [30, 60, 90],
-  bufferTime: 15,
+  bufferTime: null,
   mode: 'common',
   commonSlots: [],
   dailyAvailability: initialDailyAvailability,
@@ -182,6 +182,7 @@ const AvailabilityPage: React.FC = () => {
         : [];
     const price = normalizeExpertPrice(userDetails?.price);
     const durations = normalizeAppointmentDurations(userDetails?.appointmentDurations);
+    const savedBuffer = normalizeBufferMinutes(userDetails?.bufferMinutes);
 
     const savedMode: AvailabilityMode =
       userDetails?.availabilityMode === 'daily' ? 'daily' : 'common';
@@ -205,12 +206,14 @@ const AvailabilityPage: React.FC = () => {
       commonSlots: hours.length ? hours : prev.commonSlots,
       hourlyRate: price != null ? String(price) : prev.hourlyRate,
       appointmentDurations: durations,
+      bufferTime: savedBuffer,
       dailyAvailability: dailyFromSaved ?? prev.dailyAvailability,
     }));
   }, [
     userDetails?.timeSlots,
     userDetails?.price,
     userDetails?.appointmentDurations,
+    userDetails?.bufferMinutes,
     userDetails?.availabilityMode,
     userDetails?.weeklyTimeSlots,
   ]);
@@ -374,6 +377,7 @@ const AvailabilityPage: React.FC = () => {
       timeSlots: hoursToHalfHourIndices(selectedHours),
       weeklyTimeSlots: buildWeeklyTimeSlots(form.dailyAvailability),
       appointmentDurations: form.appointmentDurations,
+      bufferMinutes: form.bufferTime,
     };
   }, [form]);
 
@@ -403,7 +407,7 @@ const AvailabilityPage: React.FC = () => {
     const { timeSlots, weeklyTimeSlots } = draftAvailability;
     const timeZone = detectUserTimeZone();
 
-    const { rateChanged, durationsChanged, availabilityChanged } = changes;
+    const { rateChanged, durationsChanged, bufferChanged, availabilityChanged } = changes;
 
     if (!changes.anyChanged) {
       setBanner({
@@ -424,17 +428,20 @@ const AvailabilityPage: React.FC = () => {
           throw new Error('Could not save time slots.');
         }
       }
-      if (rateChanged || durationsChanged) {
+      if (rateChanged || durationsChanged || bufferChanged) {
         const profilePayload: Record<string, unknown> = {};
         if (rateChanged) profilePayload.price = numRate;
         if (durationsChanged) profilePayload.appointmentDurations = form.appointmentDurations;
+        if (bufferChanged) profilePayload.bufferMinutes = form.bufferTime;
         if (rateChanged) profilePayload.timeZone = timeZone;
         const profileOk = await doUpdateProfile(profilePayload);
         if (!profileOk) {
           throw new Error(
-            durationsChanged && !rateChanged
-              ? 'Could not save appointment durations.'
-              : 'Could not save rate or timezone.',
+            rateChanged
+              ? 'Could not save rate or timezone.'
+              : durationsChanged
+                ? 'Could not save appointment durations.'
+                : 'Could not save buffer time.',
           );
         }
       }
@@ -445,6 +452,7 @@ const AvailabilityPage: React.FC = () => {
           rateChanged,
           slotsChanged: availabilityChanged,
           durationsChanged,
+          bufferChanged,
           hourlyRate: numRate,
         }),
       });
@@ -813,7 +821,7 @@ const AvailabilityPage: React.FC = () => {
         </div>
 
         {/* Section 2: Time Availability */}
-        <div className="mb-6 rounded-xl border border-gray-100 bg-white p-6">
+        <div id="time-availability" className="mb-6 scroll-mt-4 rounded-xl border border-gray-100 bg-white p-6">
           <div className="mb-4 flex items-center justify-between">
             <h2 className="text-base font-semibold text-gray-800">Time Availability</h2>
             <div className="inline-flex rounded-full bg-gray-50 p-1 text-xs font-medium text-gray-600">

@@ -261,6 +261,9 @@ const register = async (req: Request, res: Response) => {
         }
 
         const file = req.file
+        if (role === 'expert' && !file) {
+            return res.status(200).json({ status: 'FAIL', error: 'Resume is required for expert registration.' });
+        }
         let resumeUrl = file ? await uploadFileToS3(file, 'resumes') : '';
 
         const { officialIds: _keywords, customValues: _customKeywords } = await classifyMajors(keywords);
@@ -945,6 +948,14 @@ const updateProfile = async (req: any, res: Response) => {
         if (appointmentDurationsRaw !== undefined && appointmentDurationsRaw !== null) {
             const { parseAppointmentDurationsInput } = require("../utils/appointmentDurations");
             updates.appointmentDurations = parseAppointmentDurationsInput(appointmentDurationsRaw);
+        }
+
+        if (req.body.bufferMinutes !== undefined && req.body.bufferMinutes !== null && req.body.bufferMinutes !== '') {
+            const bufferMinutes = Number(req.body.bufferMinutes);
+            if (![0, 15, 30].includes(bufferMinutes)) {
+                return res.status(400).json({ status: 'FAIL', error: 'bufferMinutes must be 0, 15, or 30' });
+            }
+            updates.bufferMinutes = bufferMinutes;
         }
         
         const file = req.file
