@@ -264,11 +264,33 @@ test("a full seminar still invites, and says so", async () => {
   });
 });
 
-test("a seminar that already started can no longer be shared", async () => {
+test("a paid seminar that already started can no longer be shared", async () => {
   await withStubs(seminar({ start: new Date(Date.now() - 3600_000) }), async () => {
     const res = await invite({ groupChatId: "seminar-1", followerIds: ["student-1"] });
     assert.equal(res.statusCode, 409);
   });
+});
+
+test("a free seminar can still add people after it has started", async () => {
+  await withStubs(
+    seminar({ price: 0, start: new Date(Date.now() - 10 * 60_000), duration: 90 }),
+    async () => {
+      const res = await invite({ groupChatId: "seminar-1", followerIds: ["student-1"] });
+      assert.equal(res.statusCode, 200);
+      assert.equal(res.body.free, true);
+      assert.equal(res.body.results[0].outcome, "enrolled");
+    },
+  );
+});
+
+test("a free seminar that has ended can no longer add people", async () => {
+  await withStubs(
+    seminar({ price: 0, start: new Date(Date.now() - 3 * 3600_000), duration: 90 }),
+    async () => {
+      const res = await invite({ groupChatId: "seminar-1", followerIds: ["student-1"] });
+      assert.equal(res.statusCode, 409);
+    },
+  );
 });
 
 test("a cancelled seminar cannot be shared", async () => {
