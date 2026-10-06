@@ -1518,6 +1518,13 @@ const updateGroupChat = async (req, res) => {
             return res.status(403).send("Forbidden");
         }
 
+        if (groupChat.type === 'seminar' && (
+            (status === 'draft' && !['draft', 'pending'].includes(groupChat.status)) ||
+            (status === 'pending' && groupChat.status === 'active')
+        )) {
+            return res.status(409).send("A published seminar cannot be saved as a draft. Continue to the last step and select \"Publish Seminar\" to save your changes and keep it published.");
+        }
+
         let seminarEnrolledCount = 0;
         if (groupChat.type === 'seminar') {
             const seriesDocs = groupChat.seriesId
@@ -1532,7 +1539,7 @@ const updateGroupChat = async (req, res) => {
         if (typeof name === 'string') updateFields.name = name;
         if (typeof description === 'string') updateFields.description = description;
         if (typeof image === 'string') updateFields.image = image;
-        // Allow flipping a draft to a published seminar (or saving back as draft).
+        // Unpublished drafts can be saved again or published.
         if (typeof status === 'string' && ['draft', 'active', 'pending'].includes(status)) {
             if (groupChat.type === 'seminar' && status !== 'active' && seminarEnrolledCount > 0) {
                 return res.status(409).send("Saving a draft would unpublish this seminar, and students have already enrolled in it. Your changes have not been saved yet — continue to the last step and select \"Publish Seminar\" to save them and keep the seminar live.");
