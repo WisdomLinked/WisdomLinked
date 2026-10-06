@@ -262,6 +262,30 @@ test('system prompt caps list items and forbids markdown headers', async () => {
     }
 });
 
+test('system prompt leads with found results instead of missing categories', async () => {
+    const originalFetch = global.fetch;
+    let system = '';
+    global.fetch = (async (_url: string, options: any) => {
+        const body = JSON.parse(options.body);
+        system = body.messages.find((message: any) => message.role === 'system')?.content ?? '';
+        return inferenceMessage({ content: 'Ok.', tool_calls: [] });
+    }) as typeof fetch;
+    try {
+        await runAskAgent({
+            messages: [{ role: 'user', content: 'hi' }],
+            modelKey: 'test-key',
+        });
+        assert.match(system, /Lead with what you found/);
+        assert.match(
+            system,
+            /Do not open with a missing category when another tool returned matches/,
+        );
+        assert.doesNotMatch(system, /If a tool returns nothing, say so/);
+    } finally {
+        global.fetch = originalFetch;
+    }
+});
+
 test('a missing model key does not call inference', async () => {
     const originalFetch = global.fetch;
     let calls = 0;
