@@ -1,8 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import Dialog from '@mui/material/Dialog';
 import { Search, UserPlus, Loader2, Plus, X } from 'lucide-react';
-import { doFilterCustomers, inviteToSeminar } from '../../../../api/api';
+import { doFilterCustomers, inviteToSeminar, profileImageFetch } from '../../../../api/api';
 import { notify } from '../../../../utils/notify';
+import { resolveProfileImageSrc } from '../../../../utils/profileImage';
 import Avatar from '../../../../components/Avatar';
 
 type Student = { id: string; username: string; email: string; image?: string };
@@ -99,7 +100,18 @@ export default function InviteToSeminarDialog({ open, onClose, groupDetails, the
                         image: c?.image,
                     }))
                     .filter((s: Student) => s.id && !enrolledIds.has(s.id));
-                setStudents(rows);
+                const withPhotos = await Promise.all(
+                    rows.map(async (s) => {
+                        const resolved = await resolveProfileImageSrc(
+                            s.image,
+                            'small',
+                            profileImageFetch as any,
+                        );
+                        return { ...s, image: resolved || undefined };
+                    }),
+                );
+                if (cancelled) return;
+                setStudents(withPhotos);
             } catch {
                 if (!cancelled) setStudents([]);
             } finally {
