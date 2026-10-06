@@ -19,7 +19,9 @@ COPY BE/ ./
 
 # CI and local Docker both need FE public page catalog inside BE/
 # (search/publicPages.ts loads ./publicPageCatalog when FE isn't on disk).
+# publicPages imports ./resourcesTimeline, so both files must land in search/.
 COPY FE/src/content/publicPages.ts ./search/publicPageCatalog.ts
+COPY FE/src/content/resourcesTimeline.ts ./search/resourcesTimeline.ts
 
 # Expose the backend port
 EXPOSE 5000
