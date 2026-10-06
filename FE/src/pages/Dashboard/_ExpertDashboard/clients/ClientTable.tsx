@@ -2,7 +2,7 @@ import React from 'react';
 import { MessageSquare } from 'lucide-react';
 import ClientAvatar from './ClientAvatar';
 import StatusBadge from './StatusBadge';
-import { UnreadBadge } from './ClientCard';
+import { UnreadBadge } from './StudentCard';
 import { formatLastSession, formatNextSession, type ClientRow } from './clientModel';
 import { FOCUS_RING, ICON_BUTTON, PRIMARY_BUTTON, type ClientActions } from './ui';
 

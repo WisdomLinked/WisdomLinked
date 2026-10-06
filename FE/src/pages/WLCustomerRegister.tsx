@@ -11,37 +11,23 @@ import logo from '../assets/images/logo.png';
 import { SERVICE_LABELS } from '../constants/serviceOptions';
 import MajorSelect from '../components/MajorSelect';
 import BrandWordmark from '../components/BrandWordmark';
-import CountryFlag from '../components/ui/CountryFlag';
+import type { ICountry } from 'country-state-city';
+import CountryField, { COUNTRY_REQUIRED_MESSAGE } from '../components/ui/CountryField';
+import PhoneField from '../components/ui/PhoneField';
+import { PHONE_INVALID_MESSAGE, isPhoneValid, toStoredPhone } from '../utils/phone';
 
 const BTN_PRIMARY_STYLE = { background: 'linear-gradient(135deg, #234C6A 0%, #456882 100%)' };
 const FOCUS_RING = 'focus:ring-2 focus:ring-[#234C6A]/60 focus:border-[#234C6A]';
 const ACCENT_BG = 'hover:bg-[#D9EAFD]/60';
 const ACCENT_SELECTED = 'bg-[#D9EAFD]/70 text-[#234C6A]';
 
-const COUNTRY_CODES = [
-    { code: '+1', country: 'US/CA', iso: 'US' }, { code: '+44', country: 'UK', iso: 'GB' },
-    { code: '+86', country: 'China', iso: 'CN' }, { code: '+81', country: 'Japan', iso: 'JP' },
-    { code: '+91', country: 'India', iso: 'IN' }, { code: '+49', country: 'Germany', iso: 'DE' },
-    { code: '+33', country: 'France', iso: 'FR' }, { code: '+61', country: 'Australia', iso: 'AU' },
-    { code: '+55', country: 'Brazil', iso: 'BR' }, { code: '+82', country: 'Korea', iso: 'KR' },
-    { code: '+65', country: 'Singapore', iso: 'SG' }, { code: '+971', country: 'UAE', iso: 'AE' },
-    { code: '+92', country: 'Pakistan', iso: 'PK' }, { code: '+234', country: 'Nigeria', iso: 'NG' },
-];
-
-
-const COUNTRIES = [
-    'United States', 'United Kingdom', 'Canada', 'Australia', 'Germany', 'France',
-    'India', 'China', 'Japan', 'South Korea', 'Singapore', 'UAE', 'Brazil', 'Mexico',
-    'Netherlands', 'Switzerland', 'Sweden', 'Italy', 'Spain', 'Pakistan', 'Nigeria',
-    'Egypt', 'Kenya', 'South Africa', 'Argentina', 'Thailand', 'Malaysia', 'Other',
-];
-
 export default function WLCustomerRegister() {
     const navigate = useNavigate();
     const { message: formBannerMessage, variant: formBannerVariant, setFormError, clearFormAlert } = useFormAlert();
     const [form, setForm] = useState({
-        fullName: '', majors: [] as string[], services: [] as string[], country: '', countryCode: '+1', phone: '', email: '', password: '', confirmPassword: '', specialNote: '', terms: false
+        fullName: '', majors: [] as string[], services: [] as string[], country: null as ICountry | null, phone: '', email: '', password: '', confirmPassword: '', specialNote: '', terms: false
     });
+    const [phoneCountry, setPhoneCountry] = useState('US');
     const [errors, setErrors] = useState<Record<string, string>>({});
     const [touched, setTouched] = useState<Record<string, boolean>>({});
     
@@ -52,12 +38,8 @@ export default function WLCustomerRegister() {
     const [showTermsModal, setShowTermsModal] = useState(false);
     
     const [showServiceDrop, setShowServiceDrop] = useState(false);
-    const [showCountryDrop, setShowCountryDrop] = useState(false);
-    const [showCodeDrop, setShowCodeDrop] = useState(false);
     
     const serviceRef = useRef<HTMLDivElement>(null);
-    const countryRef = useRef<HTMLDivElement>(null);
-    const codeRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
         refreshCsrfToken();
@@ -80,10 +62,7 @@ export default function WLCustomerRegister() {
                 if (!value.trim()) error = 'Email is required';
                 else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) error = 'Enter a valid email address';
                 break;
-            case 'phone':
-                if (!value.trim()) error = 'Phone number is required';
-                else if (!/^\d{6,15}$/.test(value.replace(/\s/g, ''))) error = 'Enter a valid phone number (6-15 digits)';
-                break;
+            case 'phone': if (!isPhoneValid(value)) error = PHONE_INVALID_MESSAGE; break;
             case 'password':
                 if (!value) error = 'Password is required';
                 else {
@@ -97,7 +76,7 @@ export default function WLCustomerRegister() {
                 break;
             case 'majors': if (value.length === 0) error = 'Select at least one major'; break;
             case 'services': if (value.length === 0) error = 'Select at least one service'; break;
-            case 'country': if (!value) error = 'Country is required'; break;
+            case 'country': if (!value) error = COUNTRY_REQUIRED_MESSAGE; break;
             case 'terms': if (!value) error = 'You must accept the terms and conditions'; break;
             case 'specialNote': if (value.trim().length > 50) error = 'Special note must be 50 characters or less'; break;
         }
@@ -126,15 +105,10 @@ export default function WLCustomerRegister() {
                 if (showServiceDrop) handleBlur('services');
                 setShowServiceDrop(false);
             }
-            if (countryRef.current && !countryRef.current.contains(e.target as Node)) {
-                if (showCountryDrop) handleBlur('country');
-                setShowCountryDrop(false);
-            }
-            if (codeRef.current && !codeRef.current.contains(e.target as Node)) setShowCodeDrop(false);
         };
         document.addEventListener('mousedown', handler);
         return () => document.removeEventListener('mousedown', handler);
-    }, [showServiceDrop, showCountryDrop, form]);
+    }, [showServiceDrop, form]);
 
     const validate = () => {
         const e: Record<string, string> = {};
@@ -176,7 +150,7 @@ export default function WLCustomerRegister() {
                 state: '',
                 country: form.country,
                 city: '',
-                phoneNumber: form.countryCode + form.phone,
+                phoneNumber: toStoredPhone(form.phone),
                 email: form.email,
                 password: form.password,
                 timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
@@ -197,7 +171,6 @@ export default function WLCustomerRegister() {
         setSubmitting(false);
     };
 
-    const selectedCode = COUNTRY_CODES.find(c => c.code === form.countryCode) || COUNTRY_CODES[0];
     const inputBase = `w-full rounded-xl border bg-white px-4 py-3 text-sm text-slate-800 placeholder-slate-400 outline-none transition-all duration-200 ${FOCUS_RING}`;
     const inputNormal = `${inputBase} border-slate-200`;
     const inputError = `${inputBase} border-red-300 focus:ring-red-300 focus:border-red-400 bg-red-50/30`;
@@ -261,6 +234,7 @@ export default function WLCustomerRegister() {
 
                         <h2 className="font-display text-2xl font-bold text-slate-800 mb-1">Student sign up</h2>
                         <p className="text-slate-500 text-sm mb-6">Fill in your details to create an account</p>
+                        <SocialAuthBlock role="customer" placement="top" />
                         <FormAlert
                             variant={formBannerVariant}
                             message={formBannerMessage}
@@ -308,50 +282,31 @@ export default function WLCustomerRegister() {
                                 {(touched.services && errors.services) && <p className="mt-1.5 text-xs text-red-500 flex items-center gap-1"><AlertCircle size={11} />{errors.services}</p>}
                             </div>
 
-                            <div ref={countryRef} className="relative">
-                                <label className="block text-xs font-semibold text-slate-600 mb-1.5">Country</label>
-                                <button type="button" onClick={() => setShowCountryDrop(v => !v)}
-                                    className={`w-full flex items-center justify-between rounded-xl border px-4 py-3 text-sm text-left ${(touched.country && errors.country) ? 'border-red-300 bg-red-50/30' : 'border-slate-200 bg-white'} ${FOCUS_RING} outline-none`}>
-                                    <span className={form.country ? 'text-slate-800' : 'text-slate-400'}>{form.country || 'Select country'}</span>
-                                    <ChevronDown size={16} className={`text-slate-400 transition-transform ${showCountryDrop ? 'rotate-180' : ''}`} />
-                                </button>
-                                {showCountryDrop && (
-                                    <div className="absolute z-50 mt-1 w-full max-w-xl rounded-2xl border border-slate-200 bg-white shadow-xl overflow-hidden scrollbar-thin max-h-72 overflow-y-auto py-1 pr-1">
-                                        {COUNTRIES.map(c => (
-                                            <button key={c} type="button" onClick={() => { handleChange('country', c); setShowCountryDrop(false); }}
-                                                className={`w-full px-4 py-2.5 text-sm text-left ${ACCENT_BG} transition-colors text-slate-700`}>{c}</button>
-                                        ))}
-                                    </div>
-                                )}
+                            <div>
+                                <label htmlFor="register-country" className="block text-xs font-semibold text-slate-600 mb-1.5">Country</label>
+                                <CountryField
+                                    id="register-country"
+                                    className="!bg-white"
+                                    value={form.country}
+                                    onChange={(c) => handleChange('country', c)}
+                                    onBlur={() => handleBlur('country')}
+                                    error={!!(touched.country && errors.country)}
+                                />
                                 {(touched.country && errors.country) && <p className="mt-1.5 text-xs text-red-500 flex items-center gap-1"><AlertCircle size={11} />{errors.country}</p>}
                             </div>
 
-                            <div>
-                                <label className="block text-xs font-semibold text-slate-600 mb-1.5"><span className="flex items-center gap-1.5"><Phone size={12} /> Phone number</span></label>
-                                <div className="flex gap-2">
-                                    <div className="relative" ref={codeRef}>
-                                        <button type="button" onClick={() => setShowCodeDrop(v => !v)}
-                                            className="flex items-center gap-1.5 h-full px-3 py-3 rounded-xl border border-slate-200 bg-white text-sm text-slate-700 hover:border-[#456882] min-w-[90px]">
-                                            <CountryFlag code={selectedCode.iso} size="sm" />
-                                            <span className="font-medium">{selectedCode.code}</span>
-                                            <ChevronDown size={12} className={`text-slate-400 transition-transform ${showCodeDrop ? 'rotate-180' : ''}`} />
-                                        </button>
-                                        {showCodeDrop && (
-                                            <div className="absolute top-full left-0 mt-1 z-50 bg-white border border-slate-200 rounded-2xl shadow-xl overflow-hidden w-52 scrollbar-thin max-h-72 overflow-y-auto py-1 pr-1">
-                                                {COUNTRY_CODES.map(c => (
-                                                    <button key={c.code + c.country} type="button" onClick={() => { handleChange('countryCode', c.code); setShowCodeDrop(false); }}
-                                                        className={`w-full flex items-center gap-3 px-4 py-2.5 text-sm text-left ${form.countryCode === c.code ? `${ACCENT_SELECTED} font-semibold` : `text-slate-700 ${ACCENT_BG}`}`}>
-                                                        <CountryFlag code={c.iso} size="sm" /><span className="font-medium w-10">{c.code}</span><span className="text-slate-500 text-xs">{c.country}</span>
-                                                    </button>
-                                                ))}
-                                            </div>
-                                        )}
-                                    </div>
-                                    <input type="tel" placeholder="Phone number" value={form.phone}
-                                        onChange={(e) => handleChange('phone', e.target.value)}
-                                        onBlur={() => handleBlur('phone')}
-                                        className={`flex-1 ${(touched.phone && errors.phone) ? inputError : inputNormal}`} />
-                                </div>
+                            <div onBlur={() => handleBlur('phone')}>
+                                <label htmlFor="register-phone" className="block text-xs font-semibold text-slate-600 mb-1.5"><span className="flex items-center gap-1.5"><Phone size={12} /> Phone number</span></label>
+                                <PhoneField
+                                    id="register-phone"
+                                    name="phone"
+                                    className="!bg-white"
+                                    value={form.phone}
+                                    onChange={(v) => handleChange('phone', v)}
+                                    country={phoneCountry}
+                                    onCountryChange={setPhoneCountry}
+                                    invalid={!!(touched.phone && errors.phone)}
+                                />
                                 {(touched.phone && errors.phone) && <p className="mt-1.5 text-xs text-red-500 flex items-center gap-1"><AlertCircle size={11} />{errors.phone}</p>}
                             </div>
 
@@ -438,7 +393,6 @@ export default function WLCustomerRegister() {
                             style={submitting ? { background: '#9AA6B2' } : BTN_PRIMARY_STYLE}>
                             {submitting ? (<><svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" /></svg>Creating account...</>) : 'Sign Up'}
                         </button>
-                        <SocialAuthBlock role="customer" />
                         <p className="text-center text-slate-500 text-sm mt-4">
                             Already have an account? <button type="button" onClick={() => navigate('/login')} className="font-semibold hover:underline" style={{ color: '#234C6A' }}>Log in</button>
                         </p>

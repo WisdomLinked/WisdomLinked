@@ -16,6 +16,18 @@ export const toE164 = (stored: string | null | undefined) => {
 /** Input value → the digits-only format the profile has always saved. */
 export const toStoredPhone = (e164: string | null | undefined) => phoneDigits(e164);
 
+export const isPhoneValid = (value: string | null | undefined) => phoneDigits(value).length >= 8;
+
+export const PHONE_INVALID_MESSAGE = 'Enter a valid phone number';
+
+/** E.164 → "+44" and national digits, for records that store the two apart. */
+export const splitPhone = (e164: string | null | undefined) => {
+  const parsed = e164 ? parsePhoneNumberFromString(e164) : undefined;
+  return parsed
+    ? { countryCode: `+${parsed.countryCallingCode}`, national: String(parsed.nationalNumber) }
+    : { countryCode: '', national: phoneDigits(e164) };
+};
+
 /** "+1", "+355": a calling code with no national digits (calling codes are prefix-free). */
 export const isBareCallingCode = (value: string | null | undefined) =>
   !!value && /^\+\d{1,3}$/.test(value) && !!metadata.country_calling_codes[value.slice(1)];

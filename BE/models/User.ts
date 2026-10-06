@@ -79,6 +79,8 @@ const userSchema = new mongoose.Schema(
         blockedBookingSlots: { type: Map, of: [Number], default: undefined },
         /** Minimum hours before session start that students may book (24, 48, or 72). */
         bookingNoticeHours: { type: Number, default: 24 },
+        /** Gap in minutes between 1:1 bookings (0, 15, or 30). No default: unset means the expert hasn't chosen. */
+        bufferMinutes: { type: Number },
         /** Session lengths (minutes) this expert offers for 1:1 bookings: 30, 60, and/or 90. */
         appointmentDurations: { type: [Number], default: [30, 60, 90] },
         price: [{ type: Number, default: 5 }],

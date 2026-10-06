@@ -69,6 +69,7 @@ import JoinMeeting from '../components/dashboard/JoinMeeting';
 import DecisionNoteField from '../components/dashboard/DecisionNoteField';
 import StatCard from '../components/ui/StatCard';
 import AccountReviewBanner from '../components/dashboard/AccountReviewBanner';
+import ExpertSetupCard from '../components/dashboard/expertSetup/ExpertSetupCard';
 import { awaitsExpertDecision, awaitsWalletPayment, pendingSessionState } from '../utils/bookingLifecycle';
 import Chatbot from '../components/chatbot';
 import UpcomingSessionModal, {
@@ -274,6 +275,18 @@ export default function ExpertDashboard() {
     setChatSection(sectionForChatTarget(target));
   }, []);
   const goToDashboardTab = useCallback(() => setActiveItem('dashboard'), []);
+  const [scrollToTimeAvailability, setScrollToTimeAvailability] = useState(false);
+  const openTimeAvailability = useCallback(() => {
+    setActiveItem('availability');
+    setScrollToTimeAvailability(true);
+  }, []);
+  useEffect(() => {
+    if (!scrollToTimeAvailability || activeItem !== 'availability') return;
+    document
+      .getElementById('time-availability')
+      ?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
+    setScrollToTimeAvailability(false);
+  }, [scrollToTimeAvailability, activeItem]);
   const [showBackLogoutConfirm, setShowBackLogoutConfirm] = useState(false);
   const confirmLogoutOnBack = useCallback(() => setShowBackLogoutConfirm(true), []);
   useBackToDashboard(activeItem, goToDashboardTab, 'dashboard', confirmLogoutOnBack);
@@ -1150,6 +1163,7 @@ export default function ExpertDashboard() {
     ) : (
       <div className="px-6 py-7 space-y-6">
         <AccountReviewBanner />
+        <ExpertSetupCard onOpenAvailability={openTimeAvailability} />
         {/* Stats row */}
         <section>
           <div className="mb-3 flex items-center justify-between gap-3">

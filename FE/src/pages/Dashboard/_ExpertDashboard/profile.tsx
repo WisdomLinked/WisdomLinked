@@ -11,7 +11,14 @@ import ShowFieldError from "../../../components/ShowFieldError";
 import MajorSelect from "../../../components/MajorSelect";
 import SelectionWithCheckBox from "../../../components/SelectionWithCheckBox";
 import PhoneField from "../../../components/ui/PhoneField";
-import { initialPhoneCountry, phoneDigits, toE164, toStoredPhone } from "../../../utils/phone";
+import {
+    PHONE_INVALID_MESSAGE,
+    initialPhoneCountry,
+    isPhoneValid,
+    phoneDigits,
+    toE164,
+    toStoredPhone,
+} from "../../../utils/phone";
 import { checkTitleNameInvalid } from "../../../actions/common";
 import { useNavigate } from "react-router-dom";
 import { SetLoadingStatus } from "../../../actions/appActions";
@@ -24,8 +31,6 @@ import { notify } from '../../../utils/notify';
 import { updateMe } from "../../../actions/authActions";
 import { SERVICE_OPTIONS, matchesServiceOption } from "../../../constants/serviceOptions";
 import { DASHBOARD_PAGE_TITLE } from '../../../components/dashboard/pageTitle';
-
-const isPhoneValid = (value: string) => (value || '').replace(/\D/g, '').length >= 8;
 
 /** react-select options for the three canonical services (value === label for clean round-trips). */
 const SERVICE_SELECT_OPTIONS = SERVICE_OPTIONS.map((o) => ({ value: o.label, label: o.label }));
@@ -660,7 +665,7 @@ const ExpertProfile = ({
                                 </div>
                                 <ShowFieldError
                                     show={(phoneTouched || saveAttempted) && !isPhoneValid(phoneNumber)}
-                                    label="Enter a valid phone number"
+                                    label={PHONE_INVALID_MESSAGE}
                                 />
                             </div>
                         </div>

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Country, State, City, type ICountry, type IState, type ICity } from 'country-state-city';
+import { State, City, type ICountry, type IState, type ICity } from 'country-state-city';
 import ShowFieldError from './ShowFieldError';
-import CountryFlag from './ui/CountryFlag';
+import CountryField, { COUNTRY_REQUIRED_MESSAGE } from './ui/CountryField';
 import FieldLabel from './ui/FieldLabel';
 import SearchableSelect from './ui/SearchableSelect';
 import { PROFILE_INPUT_CLASS } from './ui/profileFieldStyles';
@@ -51,7 +51,6 @@ const CountrySelect = ({
   const [stateTouched, setStateTouched] = useState(false);
   const [cityTouched, setCityTouched] = useState(false);
 
-  const countries = useMemo(() => Country.getAllCountries(), []);
   const states = useMemo(
     () => (selectedCountry?.isoCode ? State.getStatesOfCountry(selectedCountry.isoCode) : []),
     [selectedCountry?.isoCode],
@@ -76,20 +75,9 @@ const CountrySelect = ({
       <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
         <div>
           <FieldLabel required>Country</FieldLabel>
-          <SearchableSelect<ICountry>
-            aria-label="Country"
-            options={countries}
-            value={selectedCountry ?? null}
-            getOptionLabel={(o) => o.name}
-            getOptionValue={(o) => o.isoCode}
-            formatOptionLabel={(option) => (
-              <span className="inline-flex items-center gap-2.5">
-                <CountryFlag code={option.isoCode} size="md" />
-                {option.name}
-              </span>
-            )}
-            placeholder="Select country"
-            hasError={(countryTouched || showForced) && countryInvalid}
+          <CountryField
+            value={selectedCountry}
+            error={(countryTouched || showForced) && countryInvalid}
             onBlur={() => setCountryTouched(true)}
             onChange={(item) => {
               set_selectedCountry(item);
@@ -101,7 +89,7 @@ const CountrySelect = ({
           />
           <ShowFieldError
             show={(countryTouched || showForced) && countryInvalid}
-            label="Please select your country"
+            label={COUNTRY_REQUIRED_MESSAGE}
           />
         </div>
 
