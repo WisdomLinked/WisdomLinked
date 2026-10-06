@@ -3,6 +3,7 @@ import { Calendar, Clock, MapPin, BookOpen, UserCheck } from 'lucide-react';
 import SeminarDetails from '../../pages/Dashboard/seminarDetails';
 import { formatSessionDuration } from '../../utils/sessionDuration';
 import DecisionNoteField from './DecisionNoteField';
+import RecurrenceInfoButton from './RecurrenceInfoButton';
 import type { PendingSessionState } from '../../utils/bookingLifecycle';
 
 type SessionKind = 'seminar' | 'oneToOne';
@@ -63,6 +64,12 @@ export type UpcomingModalSession = {
   /** Extra small lines under the date (e.g. "$20.00 held", "Decide by …"). */
   metaLines?: string[];
   pendingState?: PendingSessionState;
+  recurrence?: {
+    cadence?: string;
+    sessionsLabel?: string;
+    nextWhen?: string;
+    range?: string;
+  };
 };
 
 const pad2 = (n: number) => String(n).padStart(2, '0');
@@ -78,6 +85,20 @@ function formatDuration(ms: number) {
   return days > 0
     ? `${days}d ${pad2(hours)}:${pad2(minutes)}:${pad2(seconds)}`
     : `${pad2(hours)}:${pad2(minutes)}:${pad2(seconds)}`;
+}
+
+function recurrenceLines(
+  recurrence: NonNullable<UpcomingModalSession['recurrence']>,
+): string[] {
+  const sessionsLabel = recurrence.sessionsLabel?.replace(/\s+/g, '\u00a0');
+  const schedule = [recurrence.cadence, sessionsLabel]
+    .filter(Boolean)
+    .join(' · ');
+  return [
+    schedule,
+    recurrence.nextWhen ? `Next session: ${recurrence.nextWhen}` : '',
+    recurrence.range ? `Runs ${recurrence.range}` : '',
+  ].filter(Boolean) as string[];
 }
 
 const pendingStateLabel = (state?: PendingSessionState) => {
@@ -474,21 +495,29 @@ export default function UpcomingSessionModal({
                         {content.icon}
                       </span>
                       <div className="min-w-0">
-                        {session.detail ||
-                        (session.studentBrief && session.studentBrief.length > 0) ? (
-                          <button
-                            type="button"
-                            onClick={() => setBriefSession(session)}
-                            className="block max-w-full truncate text-left text-sm font-semibold text-slate-900 hover:underline"
-                            title={session.detail ? 'View session details' : 'View details'}
-                          >
-                            {session.title}
-                          </button>
-                        ) : (
-                          <p className="text-sm font-semibold text-slate-900 truncate">
-                            {session.title}
-                          </p>
-                        )}
+                        <div className="flex min-w-0 items-center gap-1">
+                          {session.detail ||
+                          (session.studentBrief && session.studentBrief.length > 0) ? (
+                            <button
+                              type="button"
+                              onClick={() => setBriefSession(session)}
+                              className="block max-w-full truncate text-left text-sm font-semibold text-slate-900 hover:underline"
+                              title={session.detail ? 'View session details' : 'View details'}
+                            >
+                              {session.title}
+                            </button>
+                          ) : (
+                            <p className="text-sm font-semibold text-slate-900 truncate">
+                              {session.title}
+                            </p>
+                          )}
+                          {session.recurrence ? (
+                            <RecurrenceInfoButton
+                              title="Recurring seminar"
+                              lines={recurrenceLines(session.recurrence)}
+                            />
+                          ) : null}
+                        </div>
                         {session.with && onViewProfile && session.peerUserId ? (
                           <button
                             type="button"
@@ -867,4 +896,3 @@ export default function UpcomingSessionModal({
     </div>
   );
 }
-
