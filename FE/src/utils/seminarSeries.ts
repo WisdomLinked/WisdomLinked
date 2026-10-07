@@ -104,3 +104,15 @@ export function formatSeriesRange(
 
 export const sessionCountLabel = (count: number): string =>
   `${count} ${count === 1 ? 'session' : 'sessions'}`;
+
+export function seminarSeriesIndex<T extends SeminarLike>(
+  seminars: T[] | null | undefined,
+  now: Date = new Date(),
+): Map<string, SeminarSeriesInfo> {
+  const byKey = new Map<string, SeminarSeriesInfo>();
+  for (const { doc, series } of collapseSeminarSeries(seminars, now)) {
+    const key = seriesKey(doc as any);
+    if (series && key) byKey.set(key, series);
+  }
+  return byKey;
+}

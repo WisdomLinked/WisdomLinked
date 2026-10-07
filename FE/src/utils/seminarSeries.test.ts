@@ -2,8 +2,10 @@ import { describe, expect, it } from 'vitest';
 import {
   collapseSeminarSeries,
   formatSeriesRange,
+  seminarSeriesIndex,
   sessionCountLabel,
 } from './seminarSeries';
+import { seriesKey } from './seminarSeriesOccurrence';
 
 const NOW = new Date('2026-10-05T12:00:00.000Z');
 
@@ -242,5 +244,73 @@ describe('sessionCountLabel', () => {
   it('pluralises', () => {
     expect(sessionCountLabel(1)).toBe('1 session');
     expect(sessionCountLabel(12)).toBe('12 sessions');
+  });
+});
+
+describe('seminarSeriesIndex', () => {
+  it('returns nothing for an empty or missing list', () => {
+    expect(seminarSeriesIndex([], NOW).size).toBe(0);
+    expect(seminarSeriesIndex(null, NOW).size).toBe(0);
+    expect(seminarSeriesIndex(undefined, NOW).size).toBe(0);
+  });
+
+  it('keys a multi-occurrence series by its seriesId', () => {
+    const index = seminarSeriesIndex(
+      [
+        occ({ _id: 'a', start: '2026-10-01T18:00:00.000Z', end: '2026-10-01T19:00:00.000Z' }),
+        occ({ _id: 'b', start: '2026-10-08T18:00:00.000Z', end: '2026-10-08T19:00:00.000Z' }),
+        occ({ _id: 'c', start: '2026-10-15T18:00:00.000Z', end: '2026-10-15T19:00:00.000Z' }),
+      ],
+      NOW,
+    );
+    expect(index.size).toBe(1);
+    expect(index.get('series-1')?.occurrenceCount).toBe(3);
+  });
+
+  it('is reachable from any occurrence of the series, not only the representative one', () => {
+    const occurrences = [
+      occ({ _id: 'a', start: '2026-10-01T18:00:00.000Z', end: '2026-10-01T19:00:00.000Z' }),
+      occ({ _id: 'b', start: '2026-10-08T18:00:00.000Z', end: '2026-10-08T19:00:00.000Z' }),
+    ];
+    const index = seminarSeriesIndex(occurrences, NOW);
+    for (const o of occurrences) {
+      expect(index.get(seriesKey(o))?.occurrenceCount).toBe(2);
+    }
+  });
+
+  it('counts every occurrence, including ones a caller has filtered out of its own list', () => {
+    const all = [
+      occ({ _id: 'past', start: '2026-09-24T18:00:00.000Z', end: '2026-09-24T19:00:00.000Z' }),
+      occ({ _id: 'next', start: '2026-10-08T18:00:00.000Z', end: '2026-10-08T19:00:00.000Z' }),
+      occ({ _id: 'later', start: '2026-10-15T18:00:00.000Z', end: '2026-10-15T19:00:00.000Z' }),
+    ];
+    // The expert dashboard lists only upcoming occurrences, but the summary must
+    // still describe the whole series.
+    const upcomingOnly = all.filter(o => new Date(o.end).getTime() >= NOW.getTime());
+    expect(upcomingOnly).toHaveLength(2);
+    expect(seminarSeriesIndex(all, NOW).get('series-1')?.occurrenceCount).toBe(3);
+  });
+
+  it('gives a stand-alone seminar no entry, so it shows no series summary', () => {
+    const index = seminarSeriesIndex(
+      [occ({ _id: 'solo', seriesId: null })],
+      NOW,
+    );
+    expect(index.size).toBe(0);
+  });
+
+  it('keeps two different series apart', () => {
+    const index = seminarSeriesIndex(
+      [
+        occ({ _id: 'a1', seriesId: 's1', start: '2026-10-08T18:00:00.000Z', end: '2026-10-08T19:00:00.000Z' }),
+        occ({ _id: 'a2', seriesId: 's1', start: '2026-10-15T18:00:00.000Z', end: '2026-10-15T19:00:00.000Z' }),
+        occ({ _id: 'b1', seriesId: 's2', start: '2026-10-09T18:00:00.000Z', end: '2026-10-09T19:00:00.000Z' }),
+        occ({ _id: 'b2', seriesId: 's2', start: '2026-10-16T18:00:00.000Z', end: '2026-10-16T19:00:00.000Z' }),
+        occ({ _id: 'b3', seriesId: 's2', start: '2026-10-23T18:00:00.000Z', end: '2026-10-23T19:00:00.000Z' }),
+      ],
+      NOW,
+    );
+    expect(index.get('s1')?.occurrenceCount).toBe(2);
+    expect(index.get('s2')?.occurrenceCount).toBe(3);
   });
 });
