@@ -2,12 +2,19 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { AlertCircle, CheckCircle, ChevronDown, Plus } from 'lucide-react';
 import { MAJOR_OPTIONS, OTHER_MAJOR, isBaselineMajor } from '../constants/majorOptions';
 import { doGetKeywordsAndServices } from '../api/api';
+import {
+  SELECT_FOCUS_RING,
+  SELECT_MENU_CLASS,
+  SELECT_MENU_LIST_CLASS,
+  SELECT_OPTION_CLASS,
+  SELECT_OPTION_IDLE,
+  SELECT_OPTION_SELECTED,
+  SELECT_TRIGGER_CLASS,
+  SELECT_TRIGGER_ERROR_STATE,
+  SELECT_TRIGGER_STATE,
+} from './ui/profileFieldStyles';
 
 export const MAJOR_MAX_LEN = 50;
-
-const FOCUS_RING = 'focus:ring-2 focus:ring-[#234C6A]/60 focus:border-[#234C6A]';
-const ACCENT_BG = 'hover:bg-[#D9EAFD]/60';
-const ACCENT_SELECTED = 'bg-[#D9EAFD]/70 text-[#234C6A]';
 
 const toTitleCase = (str: string) =>
   str
@@ -24,6 +31,8 @@ type MajorSelectProps = {
   error?: string;
   onBlur?: () => void;
   required?: boolean;
+  /** Trigger id — pair with an external `<label htmlFor>`. */
+  id?: string;
 };
 
 export default function MajorSelect({
@@ -34,6 +43,7 @@ export default function MajorSelect({
   error,
   onBlur,
   required,
+  id,
 }: MajorSelectProps) {
   const [open, setOpen] = useState(false);
   const [showCustomInput, setShowCustomInput] = useState(false);
@@ -123,9 +133,10 @@ export default function MajorSelect({
         </label>
       )}
       <button
+        id={id}
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className={`w-full flex items-center justify-between rounded-xl border px-4 py-3 text-sm text-left ${error ? 'border-red-300 bg-red-50/30' : 'border-slate-200 bg-white'} ${FOCUS_RING} outline-none`}
+        className={`${SELECT_TRIGGER_CLASS} ${error ? SELECT_TRIGGER_ERROR_STATE : SELECT_TRIGGER_STATE} ${SELECT_FOCUS_RING}`}
       >
         <span className={value.length ? 'text-slate-800' : 'text-slate-400'}>
           {value.length ? value.join(', ') : placeholder}
@@ -136,8 +147,8 @@ export default function MajorSelect({
         />
       </button>
       {open && (
-        <div className="absolute z-50 mt-1 w-full max-w-xl rounded-2xl border border-slate-200 bg-white shadow-xl overflow-hidden flex flex-col">
-          <div className="scrollbar-thin max-h-72 overflow-y-auto py-1 pr-1">
+        <div className={SELECT_MENU_CLASS}>
+          <div className={SELECT_MENU_LIST_CLASS}>
             {options.map((m) => {
               const selected = value.some((x) => x.toLowerCase() === m.toLowerCase());
               return (
@@ -145,7 +156,7 @@ export default function MajorSelect({
                   key={m}
                   type="button"
                   onClick={() => toggleMajor(m)}
-                  className={`w-full flex items-center gap-2 px-4 py-2.5 text-sm text-left transition-colors ${selected ? `${ACCENT_SELECTED} font-semibold` : `text-slate-700 ${ACCENT_BG}`}`}
+                  className={`${SELECT_OPTION_CLASS} ${selected ? SELECT_OPTION_SELECTED : SELECT_OPTION_IDLE}`}
                 >
                   {selected && <CheckCircle size={14} style={{ color: '#234C6A' }} />}
                   {m}
