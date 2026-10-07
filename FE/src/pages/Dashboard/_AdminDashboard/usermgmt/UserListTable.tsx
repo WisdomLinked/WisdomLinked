@@ -65,7 +65,7 @@ function UserStatusSelect({
         Active
       </option>
       <option value="review" className="text-brownyellow">
-        Review
+        In review
       </option>
       <option value="blocked" className="text-red">
         Blocked

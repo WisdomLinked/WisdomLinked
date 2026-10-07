@@ -46,7 +46,7 @@ const UserMgmt = () => {
 
     const statusOptions = [
         { value: "", label: "All statuses" },
-        { value: "review", label: "Review" },
+        { value: "review", label: "In review" },
         { value: "active", label: "Active" },
         { value: "blocked", label: "Blocked" },
     ];
