@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { useDispatch } from "react-redux";
 import SelectionWithCheckBox from "../../../../components/SelectionWithCheckBox";
@@ -22,6 +22,7 @@ import Pagination from "../../../../components/Pagination";
 import { SetLoadingStatus } from "../../../../actions/appActions";
 import { actionTypes } from "../../../../actions/types";
 import { setImpersonationSession } from "../../../../components/ImpersonationBanner";
+import { applyUserImage, userImageKey, usersAwaitingImages } from "../../../../utils/adminUserImages";
 
 const UserMgmt = () => {
     const [searchParams] = useSearchParams();
@@ -77,6 +78,9 @@ const UserMgmt = () => {
     const [auditModalShow, set_auditModalShow] = useState<boolean>(false);
     const [isFirstLoad, set_isFirstLoad] = useState<boolean>(true);
 
+    // Identifies the newest filter request, so a slower earlier one cannot overwrite it.
+    const requestSeq = useRef(0);
+
     const isUserListView = dataType.value === "User" || dataType.value === "ReviewQueue";
     const isReviewQueue = dataType.value === "ReviewQueue";
 
@@ -89,6 +93,7 @@ const UserMgmt = () => {
     }, [emailFromUrl]);
 
     const filterUsers = async (pageNum: number) => {
+        const seq = ++requestSeq.current;
         try {
             SetLoadingStatus(true);
             set_currentPage(pageNum);
@@ -104,13 +109,15 @@ const UserMgmt = () => {
                 numPerPage: numPerPage
             });
 
+            if (seq !== requestSeq.current) return;
+
             if (res && res.result && Array.isArray(res.result)) {
-                const updated = await updateUsersWithImages(res.result);
-                set_users(updated);
+                set_users(usersAwaitingImages(res.result));
                 const total = res.totalCount || 0;
                 set_totalCount(total);
                 const totalPages = total % numPerPage ? Math.floor(total / numPerPage) : total / numPerPage - 1;
                 set_totalPage(totalPages < 0 ? 0 : totalPages);
+                void hydrateUserImages(res.result, seq);
             } else {
                 set_users([]);
                 set_totalCount(0);
@@ -118,36 +125,36 @@ const UserMgmt = () => {
             }
         } catch (err) {
             console.error(err);
+            if (seq !== requestSeq.current) return;
             set_users([]);
             set_totalCount(0);
             set_totalPage(0);
         } finally {
             set_isFirstLoad(false);
-            SetLoadingStatus(false);
+            if (seq === requestSeq.current) SetLoadingStatus(false);
         }
     };
 
-    const updateUsersWithImages = async (usersList: any[]) => {
-        try {
-            const updated = await Promise.all(
-                usersList.map(async (u) => {
-                    if (u.image) {
-                        try {
-                            const base64Image = await profileImageFetch(u.image, "small");
-                            return { ...u, image: base64Image };
-                        } catch (error) {
-                            console.error("Error loading image:", error);
-                            return u;
-                        }
-                    }
-                    return u;
-                })
-            );
-            return updated;
-        } catch (error) {
-            console.error(error);
-            return usersList;
-        }
+    const hydrateUserImages = async (usersList: any[], seq: number) => {
+        await Promise.all(
+            usersList.map(async (u) => {
+                if (!u?.image) return;
+                const key = userImageKey(u);
+                if (!key) return;
+
+                let base64Image: string | null = null;
+                try {
+                    base64Image = await profileImageFetch(u.image, "small");
+                } catch (error) {
+                    console.error("Error loading image:", error);
+                    return;
+                }
+                if (!base64Image) return;
+                if (seq !== requestSeq.current) return;
+
+                set_users((prev) => applyUserImage(prev, key, base64Image));
+            })
+        );
     };
 
     const fetchPendingUsers = async () => {
