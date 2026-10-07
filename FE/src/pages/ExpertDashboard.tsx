@@ -36,6 +36,13 @@ import { displayRoomLabel } from '../utils/chatRoomLabel';
 import { chatTargetsByRid, type ChatNavTarget } from '../utils/chatNavTarget';
 import { unreadByChatSection } from '../utils/chatSectionUnread';
 import { seminarEnrollmentLabel } from '../utils/seminarCapacityLabel';
+import {
+  formatSeriesRange,
+  seminarSeriesIndex,
+  sessionCountLabel,
+  type SeminarSeriesInfo,
+} from '../utils/seminarSeries';
+import { seriesKey } from '../utils/seminarSeriesOccurrence';
 import { fetchDmUnreadSnapshot, fetchChatUserProfile } from '../api/chatApi';
 import ProfileModal from './Dashboard/Messenger/Messages/ProfileModal';
 import SeminarDetails from './Dashboard/seminarDetails';
@@ -161,7 +168,11 @@ function mapSeatRequestToModalSession(r: any): UpcomingModalSession {
   };
 }
 
-function mapExpertGroupToModalSession(g: any, waitingCount = 0): UpcomingModalSession {
+function mapExpertGroupToModalSession(
+  g: any,
+  waitingCount = 0,
+  series?: SeminarSeriesInfo,
+): UpcomingModalSession {
   const start = g?.start ? new Date(g.start).getTime() : Date.now();
   const when = g?.start
     ? new Date(g.start).toLocaleString(undefined, {
@@ -218,6 +229,14 @@ function mapExpertGroupToModalSession(g: any, waitingCount = 0): UpcomingModalSe
     title: g.name || 'Session',
     at: start,
     when,
+    recurrence: series
+      ? {
+          cadence: series.cadence,
+          sessionsLabel: sessionCountLabel(series.occurrenceCount),
+          nextWhen: when === '—' ? undefined : when,
+          range: formatSeriesRange(series.firstStartMs, series.lastEndMs),
+        }
+      : undefined,
     durationMinutes: sessionDurationMinutes(g) ?? undefined,
     endsAt: sessionEndMs(g) ?? undefined,
     location: 'Online · WisdomLinked',
@@ -1002,6 +1021,14 @@ export default function ExpertDashboard() {
     return [...pendingSessions, ...lingering];
   }, [pendingSessions, acceptedInline]);
 
+  const seminarSeriesByKey = useMemo(
+    () =>
+      seminarSeriesIndex(
+        ((userDetails as any)?.groupChats || []).filter((g: any) => g?.type === 'seminar'),
+      ),
+    [userDetails],
+  );
+
   const expertModalSessions = useMemo((): UpcomingModalSession[] => {
     if (!expertUpcomingModal) return [];
     const { kind, status } = expertUpcomingModal;
@@ -1034,10 +1061,15 @@ export default function ExpertDashboard() {
       if (sid) waitingBySeminar[sid] = (waitingBySeminar[sid] || 0) + 1;
     }
     return acceptedSeminars.map((g: any) =>
-      mapExpertGroupToModalSession(g, waitingBySeminar[String(g?._id)] || 0),
+      mapExpertGroupToModalSession(
+        g,
+        waitingBySeminar[String(g?._id)] || 0,
+        seminarSeriesByKey.get(seriesKey(g)),
+      ),
     );
   }, [
     expertUpcomingModal,
+    seminarSeriesByKey,
     bookedSessions,
     pendingSessions,
     awaitingPaymentSessions,

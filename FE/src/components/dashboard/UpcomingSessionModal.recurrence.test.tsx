@@ -17,13 +17,16 @@ const session = (over: Partial<UpcomingModalSession> = {}): UpcomingModalSession
 const store = () =>
   configureStore({ reducer: { auth: () => ({ userDetails: { _id: 'me' } }) } });
 
-const show = (sessions: UpcomingModalSession[]) =>
+const show = (
+  sessions: UpcomingModalSession[],
+  role: 'student' | 'expert' = 'student',
+) =>
   render(
     <Provider store={store()}>
       <UpcomingSessionModal
         kind="seminar"
         status="booked"
-        role="student"
+        role={role}
         onClose={vi.fn()}
         sessions={sessions}
       />
@@ -110,6 +113,24 @@ describe('recurring seminar info on a session row', () => {
     show([recurring()]);
 
     expect(screen.getAllByText('Thu, Oct 8, 6:00 PM').length).toBeGreaterThan(0);
+  });
+
+  it('shows it to the hosting expert too, not only the student', () => {
+    show([recurring()], 'expert');
+    fireEvent.mouseEnter(infoButton());
+
+    expect(screen.getByText('Recurring seminar')).toBeInTheDocument();
+    expect(screen.getByText('Repeats weekly \u00b7 12 sessions')).toBeInTheDocument();
+    expect(screen.getByText('Next session: Thu, Oct 8, 6:00 PM')).toBeInTheDocument();
+    expect(screen.getByText('Runs Oct 1 \u2013 Dec 26')).toBeInTheDocument();
+  });
+
+  it('leaves a one-off seminar unmarked for the expert as well', () => {
+    show([session()], 'expert');
+
+    expect(
+      screen.queryByRole('button', { name: 'Recurring seminar schedule' }),
+    ).not.toBeInTheDocument();
   });
 
   it('shows one info button per series when several are listed', () => {
