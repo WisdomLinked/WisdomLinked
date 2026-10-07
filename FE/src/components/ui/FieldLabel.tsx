@@ -4,12 +4,14 @@ type FieldLabelProps = {
   children: ReactNode;
   required?: boolean;
   htmlFor?: string;
+  id?: string;
 };
 
 /** Shared profile-field label — sentence case, matches Expert Profile inputs. */
-export default function FieldLabel({ children, required, htmlFor }: FieldLabelProps) {
+export default function FieldLabel({ children, required, htmlFor, id }: FieldLabelProps) {
   return (
     <label
+      id={id}
       htmlFor={htmlFor}
       className="mb-1.5 block text-xs font-medium text-slate-600"
     >

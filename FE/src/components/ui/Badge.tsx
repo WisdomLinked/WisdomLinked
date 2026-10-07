@@ -19,20 +19,40 @@ const categoryStyles = {
 type BadgeProps = {
   children: ReactNode;
   category?: BadgeCategory;
+  /** Renders a trailing × button; `removeLabel` is its accessible name. */
+  onRemove?: () => void;
+  removeLabel?: string;
 };
 
-export default function Badge({ children, category }: BadgeProps) {
+export default function Badge({ children, category, onRemove, removeLabel }: BadgeProps) {
   const labelText =
     typeof children === 'string' ? children.trim().toLowerCase() : '';
 
   const base =
-    'inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-semibold shadow-sm';
+    'inline-flex max-w-full items-center px-2.5 py-1 rounded-full text-[11px] font-semibold shadow-sm';
 
   const cls =
     tagStyles[labelText] ||
     categoryStyles[category || ''] ||
     categoryStyles.default;
 
-  return <span className={`${base} ${cls}`}>{children}</span>;
+  if (!onRemove) return <span className={`${base} ${cls}`}>{children}</span>;
+
+  return (
+    <span className={`${base} ${cls} gap-1 pr-1`}>
+      <span className="min-w-0 truncate">{children}</span>
+      <button
+        type="button"
+        aria-label={removeLabel}
+        onClick={(e) => {
+          e.stopPropagation();
+          onRemove();
+        }}
+        className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full leading-none opacity-60 transition hover:bg-black/10 hover:opacity-100 focus:outline-none focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-[#234C6A]/60"
+      >
+        <span aria-hidden>×</span>
+      </button>
+    </span>
+  );
 }
 
