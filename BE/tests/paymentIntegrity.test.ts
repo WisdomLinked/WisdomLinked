@@ -6,6 +6,7 @@ import {
   foldChargeRows,
   isActionable,
   summarizeVerdicts,
+  recordCountsByStatus,
 } from "../utils/paymentIntegrity";
 
 test("a booking with no price owed is free, never unpaid", () => {
@@ -128,4 +129,39 @@ test("summarizeVerdicts counts every bucket", () => {
     refunded: 0,
     unpaid: 1,
   });
+});
+
+test("recordCountsByStatus maps each grouped status to its total", () => {
+  assert.deepEqual(
+    recordCountsByStatus([
+      { _id: "completed", count: 44 },
+      { _id: "refunded", count: 3 },
+      { _id: "pending", count: 2 },
+      { _id: "withheld", count: 1 },
+    ]),
+    { completed: 44, refunded: 3, pending: 2, withheld: 1 },
+  );
+});
+
+test("recordCountsByStatus reports zero for a status with no rows", () => {
+  assert.deepEqual(recordCountsByStatus([{ _id: "completed", count: 5 }]), {
+    completed: 5,
+    refunded: 0,
+    pending: 0,
+    withheld: 0,
+  });
+  assert.deepEqual(recordCountsByStatus([]), { completed: 0, refunded: 0, pending: 0, withheld: 0 });
+});
+
+test("recordCountsByStatus ignores statuses without a tile and junk groups", () => {
+  assert.deepEqual(
+    recordCountsByStatus([
+      { _id: "failed", count: 9 },
+      { _id: "released", count: 7 },
+      { _id: null, count: 4 },
+      { _id: "completed", count: "x" },
+      {},
+    ] as any),
+    { completed: 0, refunded: 0, pending: 0, withheld: 0 },
+  );
 });
