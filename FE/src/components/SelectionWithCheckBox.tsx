@@ -115,7 +115,16 @@ const InputOption = ({
       getStyles={getStyles}
       innerProps={props}
     >
-      <input type="checkbox" className="mr-2" defaultChecked={isSelected} />
+      {/* Decorative: the row owns the click (react-select puts onClick on the option),
+          so the box only ever mirrors the real selection and never holds state itself. */}
+      <input
+        type="checkbox"
+        className="mr-2"
+        checked={isSelected}
+        readOnly
+        tabIndex={-1}
+        aria-hidden="true"
+      />
       <span className="text-[14px] text-[#1a2d3a]">{children}</span>
     </components.Option>
   );
