@@ -6,6 +6,8 @@ import {
     foldChargeRows,
     isActionable,
     summarizeVerdicts,
+    recordCountsByStatus,
+    RECORD_COUNT_STATUSES,
     BookingPaymentVerdict,
 } from '../utils/paymentIntegrity';
 const escapeRegExp = (value: unknown) => String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -1345,6 +1347,11 @@ const getPaymentIntegrityReport = async (req, res) => {
             .limit(200)
             .lean();
 
+        const recordGroups = await PaymentHistory.aggregate([
+            { $match: { status: { $in: [...RECORD_COUNT_STATUSES] } } },
+            { $group: { _id: '$status', count: { $sum: 1 } } },
+        ]);
+
         const userIds = new Set<string>();
         for (const row of rows) {
             if (row.customer) userIds.add(String(row.customer));
@@ -1364,6 +1371,7 @@ const getPaymentIntegrityReport = async (req, res) => {
 
         return res.status(200).json({
             summary: summarizeVerdicts(verdicts),
+            recordCounts: recordCountsByStatus(recordGroups),
             bookingsScanned: bookings.length,
             truncated: bookings.length >= INTEGRITY_MAX_BOOKINGS,
             lookbackDays: Math.round(INTEGRITY_LOOKBACK_MS / (24 * 60 * 60 * 1000)),
