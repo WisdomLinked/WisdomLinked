@@ -39,6 +39,18 @@ export const paymentWindowOpen = (chat: any, now: number = Date.now()): boolean 
     return !Number.isFinite(due) || due > now;
 };
 
+export const studentCanCancelRequest = (
+    chat: any,
+    myUserId: string,
+    now: number = Date.now(),
+): boolean => {
+    if (String(chat?.status ?? '').toLowerCase() !== 'pending') return false;
+    if (!pendingRequestIsLive(chat, now)) return false;
+    const createdById = refId(chat?.createdBy);
+    if (createdById !== '' && createdById !== String(myUserId ?? '')) return false;
+    return !awaitsWalletPayment(chat, now);
+};
+
 export type PendingSessionState =
     | 'awaiting_expert'
     | 'accepted_awaiting_payment'

@@ -6,6 +6,7 @@ import {
   pendingRequestIsLive,
   paymentWindowOpen,
   pendingSessionState,
+  studentCanCancelRequest,
 } from './bookingLifecycle';
 
 const NOW = Date.parse('2026-08-14T12:00:00Z');
@@ -147,5 +148,46 @@ describe('pendingSessionState', () => {
   it('stops calling a lapsed wallet window an acceptance', () => {
     const chat = walletChat({ admin: EXPERT, createdBy: STUDENT, paymentDeadline: inHours(-1) });
     expect(pendingSessionState(chat, EXPERT, NOW)).toBe('awaiting_expert');
+  });
+});
+
+describe('studentCanCancelRequest', () => {
+  const ME = 'student-1';
+  const request = (over: Record<string, unknown> = {}) => ({
+    status: 'pending',
+    start: inHours(48),
+    createdBy: ME,
+    admin: 'expert-1',
+    ...over,
+  });
+
+  it('allows withdrawing my own live request', () => {
+    expect(studentCanCancelRequest(request(), ME, NOW)).toBe(true);
+  });
+
+  it('accepts a populated createdBy', () => {
+    expect(studentCanCancelRequest(request({ createdBy: { _id: ME } }), ME, NOW)).toBe(true);
+  });
+
+  it('refuses an expert offer, which is declined rather than cancelled', () => {
+    expect(studentCanCancelRequest(request({ createdBy: 'expert-1' }), ME, NOW)).toBe(false);
+  });
+
+  it('refuses a session that is not pending', () => {
+    expect(studentCanCancelRequest(request({ status: 'active' }), ME, NOW)).toBe(false);
+    expect(studentCanCancelRequest(request({ status: 'cancelled' }), ME, NOW)).toBe(false);
+  });
+
+  it('refuses a request whose start has passed', () => {
+    expect(studentCanCancelRequest(request({ start: inHours(-1) }), ME, NOW)).toBe(false);
+  });
+
+  it('refuses an accepted wallet booking awaiting my payment', () => {
+    const chat = request({ paymentMode: 'wallet', paymentDeadline: inHours(12) });
+    expect(studentCanCancelRequest(chat, ME, NOW)).toBe(false);
+  });
+
+  it('allows a wallet request the expert has not yet accepted', () => {
+    expect(studentCanCancelRequest(request({ paymentMode: 'wallet' }), ME, NOW)).toBe(true);
   });
 });

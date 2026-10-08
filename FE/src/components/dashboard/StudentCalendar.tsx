@@ -26,6 +26,7 @@ export type Meeting = {
   peerUserId?: string;
   peerName?: string;
   peerImage?: string | null;
+  canCancel?: boolean;
   /** Original record, carried through so callers (e.g. expert) can open detail modals. */
   raw?: any;
 };
@@ -36,6 +37,7 @@ export default function StudentCalendar({
   onJoinMeeting,
   onSelectMeeting,
   onViewProfile,
+  onCancelRequest,
   meetings = [],
   loading = false,
   error = null,
@@ -50,6 +52,7 @@ export default function StudentCalendar({
   onSelectMeeting?: (meeting: Meeting) => void;
   /** Opens the shared profile card for the meeting's peer (host / mentor / student). */
   onViewProfile?: (meeting: Meeting) => void;
+  onCancelRequest?: (meeting: Meeting) => void | Promise<void | boolean>;
   meetings?: Meeting[];
   loading?: boolean;
   error?: string | null;
@@ -76,6 +79,32 @@ export default function StudentCalendar({
   // fills that role on the student side, so the calendar shows the details itself
   // — otherwise clicking any meeting as a student does nothing at all.
   const [detailMeeting, setDetailMeeting] = useState<Meeting | null>(null);
+
+  const [cancelConfirmId, setCancelConfirmId] = useState<string | null>(null);
+  const [cancelBusyId, setCancelBusyId] = useState<string | null>(null);
+  const [cancelNotice, setCancelNotice] = useState<string | null>(null);
+  const closeDayModal = () => {
+    setShowDayModal(false);
+    setSelectedDayDate(null);
+    setCancelConfirmId(null);
+    setCancelNotice(null);
+  };
+  const cancelRequest = async (m: Meeting) => {
+    if (!onCancelRequest) return;
+    setCancelBusyId(m.id);
+    try {
+      const ok = await onCancelRequest(m);
+      if (ok === false) return;
+      setCancelConfirmId(null);
+      setCancelNotice(
+        `Your request${m.title ? ` for “${m.title}”` : ''} has been cancelled. ${
+          m.peerName || 'Your mentor'
+        } has been told.`,
+      );
+    } finally {
+      setCancelBusyId(null);
+    }
+  };
   const openMeeting = (m: Meeting) => {
     if (onSelectMeeting) {
       onSelectMeeting(m);
@@ -599,10 +628,7 @@ export default function StudentCalendar({
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4"
           onClick={e => {
-            if (e.target === e.currentTarget) {
-              setShowDayModal(false);
-              setSelectedDayDate(null);
-            }
+            if (e.target === e.currentTarget) closeDayModal();
           }}
         >
           <div
@@ -620,10 +646,7 @@ export default function StudentCalendar({
               </div>
               <button
                 type="button"
-                onClick={() => {
-                  setShowDayModal(false);
-                  setSelectedDayDate(null);
-                }}
+                onClick={closeDayModal}
                 className="p-1 rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-600"
                 aria-label="Close"
               >
@@ -631,6 +654,11 @@ export default function StudentCalendar({
               </button>
             </div>
             <div className="p-6">
+              {cancelNotice ? (
+                <p role="status" className="mb-3 rounded-[4px] bg-emerald-50 px-3 py-2 text-[11px] font-medium text-emerald-800">
+                  {cancelNotice}
+                </p>
+              ) : null}
               {selectedDayMeetings.length === 0 ? (
                 <div className="text-center">
                   <p className="text-xs font-semibold text-slate-900">
@@ -652,8 +680,7 @@ export default function StudentCalendar({
                         key={m.id}
                         onClick={() => {
                           openMeeting(m);
-                          setShowDayModal(false);
-                          setSelectedDayDate(null);
+                          closeDayModal();
                         }}
                         className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 cursor-pointer transition-colors hover:bg-slate-100"
                       >
@@ -727,13 +754,53 @@ export default function StudentCalendar({
                               </>
                             )}
                           </div>
-                          <span
-                            className={`shrink-0 inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold ${colorForMeeting(m).bg} ${
-                              isPastMeeting(m) ? '' : ''
-                            }`}
-                          >
-                            {colorForMeeting(m).label}
-                          </span>
+                          <div className="flex shrink-0 flex-col items-end gap-1">
+                            <span
+                              className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold ${colorForMeeting(m).bg}`}
+                            >
+                              {colorForMeeting(m).label}
+                            </span>
+                            {!isExpert && m.canCancel && onCancelRequest && !isPastMeeting(m) ? (
+                              cancelConfirmId === m.id ? (
+                                <div className="flex items-center gap-1">
+                                  <button
+                                    type="button"
+                                    disabled={cancelBusyId === m.id}
+                                    onClick={e => {
+                                      e.stopPropagation();
+                                      setCancelConfirmId(null);
+                                    }}
+                                    className="inline-flex items-center rounded-full border border-slate-200 bg-white px-2 py-px text-[10px] font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-60"
+                                  >
+                                    Keep
+                                  </button>
+                                  <button
+                                    type="button"
+                                    disabled={cancelBusyId === m.id}
+                                    onClick={e => {
+                                      e.stopPropagation();
+                                      void cancelRequest(m);
+                                    }}
+                                    className="inline-flex items-center rounded-full border border-transparent bg-rose-600 px-2 py-px text-[10px] font-semibold text-white hover:bg-rose-700 disabled:opacity-60"
+                                  >
+                                    {cancelBusyId === m.id ? 'Cancelling…' : 'Confirm cancel'}
+                                  </button>
+                                </div>
+                              ) : (
+                                <button
+                                  type="button"
+                                  aria-label="Cancel this request"
+                                  onClick={e => {
+                                    e.stopPropagation();
+                                    setCancelConfirmId(m.id);
+                                  }}
+                                  className="inline-flex items-center rounded-full border border-rose-200 bg-white px-2 py-px text-[10px] font-semibold text-rose-600 hover:bg-rose-50"
+                                >
+                                  Cancel
+                                </button>
+                              )
+                            ) : null}
+                          </div>
                         </div>
                       </div>
                     ))}
