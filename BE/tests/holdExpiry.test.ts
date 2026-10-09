@@ -4,6 +4,8 @@ import assert from "node:assert/strict";
 import {
   captureBeforeMs,
   decisionDeadlineFrom,
+  studentRequestDecisionDeadline,
+  EXPERT_RESPONSE_WINDOW_MS,
   holdHasLapsed,
   HOLD_SAFETY_MARGIN_MS,
   HOLD_FALLBACK_WINDOW_MS,
@@ -90,4 +92,46 @@ test("lapsed holds are recognised from a Date or a string, and absent ones are n
   assert.equal(holdHasLapsed(null, NOW), false);
   assert.equal(holdHasLapsed(undefined, NOW), false);
   assert.equal(holdHasLapsed("not a date", NOW), false);
+});
+
+test("a student's request gives the expert 24 hours to answer", () => {
+  assert.equal(EXPERT_RESPONSE_WINDOW_MS, DAY);
+  const deadline = studentRequestDecisionDeadline({ sessionStartMs: NOW + 10 * DAY, now: NOW });
+  assert.equal(deadline.getTime(), NOW + DAY);
+});
+
+test("the 24 hours also bounds a card hold that would last longer", () => {
+  const deadline = studentRequestDecisionDeadline({
+    captureBefore: NOW + 7 * DAY,
+    sessionStartMs: NOW + 10 * DAY,
+    now: NOW,
+  });
+  assert.equal(deadline.getTime(), NOW + DAY);
+});
+
+test("a hold that lapses inside the 24 hours still wins", () => {
+  const deadline = studentRequestDecisionDeadline({
+    captureBefore: NOW + 30 * 60 * 60 * 1000,
+    sessionStartMs: NOW + 10 * DAY,
+    now: NOW,
+  });
+  assert.equal(deadline.getTime(), NOW + 30 * 60 * 60 * 1000 - HOLD_SAFETY_MARGIN_MS);
+});
+
+test("a session starting inside the 24 hours ends the request at its start", () => {
+  const start = NOW + 5 * 60 * 60 * 1000;
+  assert.equal(studentRequestDecisionDeadline({ sessionStartMs: start, now: NOW }).getTime(), start);
+  assert.equal(
+    studentRequestDecisionDeadline({ captureBefore: NOW + 7 * DAY, sessionStartMs: start, now: NOW }).getTime(),
+    start,
+  );
+});
+
+test("an undated request still gets the 24 hours", () => {
+  assert.equal(studentRequestDecisionDeadline({ now: NOW }).getTime(), NOW + DAY);
+  assert.equal(studentRequestDecisionDeadline({ sessionStartMs: 0, now: NOW }).getTime(), NOW + DAY);
+});
+
+test("the deadline is never in the past", () => {
+  assert.equal(studentRequestDecisionDeadline({ sessionStartMs: NOW - DAY, now: NOW }).getTime(), NOW);
 });

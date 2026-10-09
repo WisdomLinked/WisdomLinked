@@ -235,6 +235,70 @@ test("an expert cannot accept once the decision deadline has passed", async () =
   }
 });
 
+test("an expert cannot accept a free request once its 24 hours are up", async () => {
+  resetCalls();
+  const chat = studentRequest({ price: 0, decisionDeadline: new Date(Date.now() - 1000) });
+  const restore = withModels({ chat, paid: false });
+  try {
+    const res = await acceptAs(EXPERT_ID, "expert");
+
+    assert.equal(res.statusCode, 409);
+    assert.match(String(res.body), /expired because it wasn't answered within 24 hours/);
+    assert.equal(calls.activate, undefined, "an expired request is not activated");
+  } finally {
+    restore();
+  }
+});
+
+test("an expert cannot accept a wallet request once its 24 hours are up", async () => {
+  resetCalls();
+  const chat = studentRequest({ paymentMode: "wallet", decisionDeadline: new Date(Date.now() - 1000) });
+  const restore = withModels({ chat, paid: false });
+  try {
+    const res = await acceptAs(EXPERT_ID, "expert");
+
+    assert.equal(res.statusCode, 409);
+    assert.match(String(res.body), /expired/);
+    assert.equal(calls.activate, undefined);
+  } finally {
+    restore();
+  }
+});
+
+test("accepting a wallet request hands it to the payment window and drops the 24-hour deadline", async () => {
+  resetCalls();
+  const AppState = require("../models/AppState");
+  const originalAppState = AppState.findOne;
+  AppState.findOne = async () => null;
+  const chat = studentRequest({ paymentMode: "wallet", decisionDeadline: new Date(Date.now() + 60 * 60 * 1000) });
+  const restore = withModels({ chat, paid: false });
+  try {
+    const res = await acceptAs(EXPERT_ID, "expert");
+
+    assert.equal(res.statusCode, 200);
+    const set = calls.activate?.[0]?.[1]?.$set;
+    assert.ok(set?.paymentDeadline, "the student's payment window opens");
+    assert.equal(set?.decisionDeadline, null, "the expert's response deadline no longer applies");
+  } finally {
+    restore();
+    AppState.findOne = originalAppState;
+  }
+});
+
+test("a free request inside its 24 hours can still be accepted", async () => {
+  resetCalls();
+  const chat = studentRequest({ price: 0, decisionDeadline: new Date(Date.now() + 60 * 60 * 1000) });
+  const restore = withModels({ chat, paid: false });
+  try {
+    const res = await acceptAs(EXPERT_ID, "expert");
+
+    assert.equal(res.statusCode, 200);
+    assert.equal(activatedStatus(), "active");
+  } finally {
+    restore();
+  }
+});
+
 test("an expert accepting takes no second payment", async () => {
   resetCalls();
   const restore = withModels({ chat: studentRequest(), paid: true });

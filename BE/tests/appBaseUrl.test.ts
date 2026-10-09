@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { resolveAppBaseUrl, appAssetUrl } from "../utils/appBaseUrl";
+import { resolveAppBaseUrl, appAssetUrl, expertRequestReviewUrl } from "../utils/appBaseUrl";
 
 test("prefers FRONTEND_BASE_URL over FE_URL", () => {
     assert.equal(
@@ -26,4 +26,15 @@ test("uses the deployed origin for asset URLs", () => {
 
 test("keeps a usable base when nothing is configured", () => {
     assert.equal(resolveAppBaseUrl({}), "https://wisdomlinked.com");
+});
+
+test("the review-request link opens the expert dashboard on that request", () => {
+    assert.equal(
+        expertRequestReviewUrl("abc123", { FE_URL: "https://staging.wisdomlinked.com/" }),
+        "https://staging.wisdomlinked.com/user/expertdashboard?review_request=abc123",
+    );
+    assert.equal(
+        new URL(expertRequestReviewUrl("a b&c", {})).searchParams.get("review_request"),
+        "a b&c",
+    );
 });
