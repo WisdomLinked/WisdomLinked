@@ -30,3 +30,9 @@ export const appDashboardUrl = (
         : "user/studentdashboard";
     return `${resolveAppBaseUrl(env)}/${path}`;
 };
+
+export const expertRequestReviewUrl = (
+    requestId: string,
+    env: Record<string, string | undefined> = process.env,
+): string =>
+    `${resolveAppBaseUrl(env)}/user/expertdashboard?review_request=${encodeURIComponent(String(requestId))}`;

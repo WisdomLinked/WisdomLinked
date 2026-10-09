@@ -79,7 +79,7 @@ import {
 import { patchDmUnreadRid, resetChatAction, setDmUnreadByRidBulk } from '../actions/chatActions';
 import { canonicalLabelsFromMixedServiceEntries } from '../constants/serviceOptions';
 import { useEndMeetingOnReturn } from '../hooks/useEndMeetingOnReturn';
-import { pendingRequestIsLive } from '../utils/bookingLifecycle';
+import { pendingRequestIsLive, studentCanCancelRequest } from '../utils/bookingLifecycle';
 import { recurrenceLabel } from '../utils/recurrenceLabel';
 import { DASHBOARD_PAGE_TITLE } from '../components/dashboard/pageTitle';
 
@@ -168,7 +168,7 @@ function deriveCalendarMeetings(u: any): CalendarMeeting[] {
     type: 'seminar' | 'session',
     status: 'pending' | 'confirmed',
     withLabel: string,
-    routing: Partial<Pick<CalendarMeeting, 'groupId' | 'peerUserId' | 'peerName' | 'peerImage' | 'recurrence' | 'seriesId' | 'details' | 'raw'>> = {},
+    routing: Partial<Pick<CalendarMeeting, 'groupId' | 'peerUserId' | 'peerName' | 'peerImage' | 'recurrence' | 'seriesId' | 'details' | 'canCancel' | 'raw'>> = {},
   ) => {
     // start may be an ISO string (Date field) or epoch ms — new Date handles both.
     const d = new Date(start);
@@ -224,6 +224,7 @@ function deriveCalendarMeetings(u: any): CalendarMeeting[] {
           peerName: host,
           peerImage: g?.admin?.image ?? null,
           details: meetingDetailsLine(g),
+          canCancel: studentCanCancelRequest(g, String(u?._id ?? '')),
           raw: g,
         },
       );
@@ -360,7 +361,7 @@ function deriveModalSessions(
         windowOpen &&
         (expertProposed || walletWindowOpen);
       const canDecline = status === 'pending' && !expired && expertProposed;
-      const canCancel = status === 'pending' && !expired && !expertProposed && !payable;
+      const canCancel = status === 'pending' && studentCanCancelRequest(g, myId);
       const metaLines: string[] = [];
       if (expertProposed && g?.paymentDeadline) {
         metaLines.push(
@@ -1669,6 +1670,7 @@ export default function StudentDashboard() {
               error={calendarError}
               onRetry={() => setEventsReloadKey((k) => k + 1)}
               onJoinMeeting={handleJoinMeeting}
+              onCancelRequest={(m) => handleCancelRequest({ id: m.id } as UpcomingModalSession)}
               onViewProfile={(m) =>
                 handleViewPeerProfile({
                   peerUserId: m.peerUserId,
