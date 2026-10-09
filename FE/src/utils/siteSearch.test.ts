@@ -1,7 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
   adminUserMgmtEmailHref,
+  hrefForExpertHit,
   hrefForFindExperts,
+  hrefForSeminarHit,
+  hrefForSessionHit,
+  hrefForStudentHit,
   isEmailQuery,
   isSeminarCoverUrl,
   loggedOutExpertHref,
@@ -56,6 +60,12 @@ describe('student dashboard search params', () => {
     ]);
   });
 
+  it('opens a 1:1 from the session param and does not treat it as an expert', () => {
+    expect(studentSearchActions('?session=appt-9')).toEqual([
+      { type: 'open-session', sessionId: 'appt-9' },
+    ]);
+  });
+
   it('prefills Find experts and StudentSeminars without other params', () => {
     expect(studentSearchActions('?expertsQuery=biology&major=all')).toEqual([
       { type: 'prefill-experts', query: 'biology' },
@@ -74,6 +84,22 @@ describe('admin email link', () => {
     const params = new URLSearchParams(href.slice(href.indexOf('?') + 1));
     expect(href.startsWith('/user/admindashboard/usermgmt?')).toBe(true);
     expect(params.get('email')).toBe('ada@school.edu');
+  });
+});
+
+describe('role click targets', () => {
+  it('lets a student open experts, seminars, and their own sessions', () => {
+    expect(hrefForExpertHit('student', 'exp-42')).toBe('/user/studentdashboard?expert=exp-42');
+    expect(hrefForSeminarHit('student', 'sem-7')).toBe('/user/studentdashboard?seminar=sem-7');
+    expect(hrefForSessionHit('student', 'appt-9')).toBe('/user/studentdashboard?session=appt-9');
+    expect(hrefForStudentHit('student', 'stu-1')).toBeNull();
+  });
+
+  it('lets an expert open a client and a session, not the student catalog', () => {
+    expect(hrefForExpertHit('expert', 'exp-42')).toBeNull();
+    expect(hrefForSeminarHit('expert', 'sem-7')).toBeNull();
+    expect(hrefForSessionHit('expert', 'appt-9')).toBe('/user/expertdashboard?session=appt-9');
+    expect(hrefForStudentHit('expert', 'stu-1')).toBe('/user/expertdashboard?client=stu-1&scope=all');
   });
 });
 

@@ -633,6 +633,11 @@ export default function StudentDashboard() {
       } else if (action.type === 'open-seminar') {
         setOpenSeminarId(action.seminarId);
         setActiveItem('seminars');
+      } else if (action.type === 'open-session') {
+        localStorage.setItem('wl_open_appointment_id', action.sessionId);
+        window.dispatchEvent(new Event('wl-open-chat-nav'));
+        openChatSection('appointment');
+        setActiveItem('chat');
       } else if (action.type === 'prefill-experts') {
         setExpertsQueryPrefill(action.query);
         setActiveItem('experts');
@@ -644,6 +649,7 @@ export default function StudentDashboard() {
     const next = new URLSearchParams(location.search);
     next.delete('expert');
     next.delete('seminar');
+    next.delete('session');
     next.delete('expertsQuery');
     next.delete('seminarsQuery');
     const search = next.toString();
@@ -651,7 +657,7 @@ export default function StudentDashboard() {
       { pathname: location.pathname, search: search ? `?${search}` : '' },
       { replace: true },
     );
-  }, [location.search, location.pathname, navigate]);
+  }, [location.search, location.pathname, navigate, openChatSection]);
   // Derived from the store so the stat cards recompute live as bookings change
   // (booking dispatches updateUserDetails; reloads refetch via doGetMyEvents).
   const sessionStats = useMemo(() => deriveSessionCounts(userDetails), [userDetails]);

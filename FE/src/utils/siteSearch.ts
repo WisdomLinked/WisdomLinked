@@ -88,13 +88,21 @@ export function siteSearchAudienceForRole(role: unknown): Exclude<SiteSearchAudi
   return 'student';
 }
 
-export function studentDashboardPath(params: Record<string, string>): string {
+function dashboardPath(base: string, params: Record<string, string>): string {
   const search = new URLSearchParams();
   for (const [key, value] of Object.entries(params)) {
-    search.set(key, value);
+    if (value) search.set(key, value);
   }
   const qs = search.toString();
-  return qs ? `/user/studentdashboard?${qs}` : '/user/studentdashboard';
+  return qs ? `${base}?${qs}` : base;
+}
+
+export function studentDashboardPath(params: Record<string, string>): string {
+  return dashboardPath('/user/studentdashboard', params);
+}
+
+export function expertDashboardPath(params: Record<string, string>): string {
+  return dashboardPath('/user/expertdashboard', params);
 }
 
 /** Puts the dashboard path inside redirect so its query is not a sibling of redirect. */
@@ -121,12 +129,14 @@ export function adminUserMgmtEmailHref(email: string): string {
 export type StudentSearchAction =
   | { type: 'open-expert'; expertId: string }
   | { type: 'open-seminar'; seminarId: string }
+  | { type: 'open-session'; sessionId: string }
   | { type: 'prefill-experts'; query: string }
   | { type: 'prefill-seminars'; query: string };
 
 export function readStudentDashboardSearch(search: string): {
   expertId: string | null;
   seminarId: string | null;
+  sessionId: string | null;
   expertsQuery: string | null;
   seminarsQuery: string | null;
 } {
@@ -135,6 +145,7 @@ export function readStudentDashboardSearch(search: string): {
   return {
     expertId: params.get('expert'),
     seminarId: params.get('seminar'),
+    sessionId: params.get('session'),
     expertsQuery: params.has('expertsQuery') ? params.get('expertsQuery') ?? '' : null,
     seminarsQuery: params.has('seminarsQuery') ? params.get('seminarsQuery') ?? '' : null,
   };
@@ -150,6 +161,7 @@ export function studentSearchActions(search: string): StudentSearchAction[] {
   const actions: StudentSearchAction[] = [];
   if (intent.expertId) actions.push({ type: 'open-expert', expertId: intent.expertId });
   if (intent.seminarId) actions.push({ type: 'open-seminar', seminarId: intent.seminarId });
+  if (intent.sessionId) actions.push({ type: 'open-session', sessionId: intent.sessionId });
   if (intent.expertsQuery != null) actions.push({ type: 'prefill-experts', query: intent.expertsQuery });
   if (intent.seminarsQuery != null) actions.push({ type: 'prefill-seminars', query: intent.seminarsQuery });
   return actions;
@@ -179,4 +191,18 @@ export function hrefForStudentSeminars(audience: SiteSearchAudience, query: stri
   if (audience !== 'public' && audience !== 'student') return null;
   const path = studentDashboardPath({ seminarsQuery: query });
   return audience === 'public' ? loginRedirect(path) : path;
+}
+
+/** Upcoming 1:1 from "Your sessions". Catalog experts and seminars stay student-only. */
+export function hrefForSessionHit(audience: SiteSearchAudience, sessionId: string): string | null {
+  if (!sessionId) return null;
+  if (audience === 'student') return studentDashboardPath({ session: sessionId });
+  if (audience === 'expert') return expertDashboardPath({ session: sessionId });
+  return null;
+}
+
+/** A student the signed-in expert already works with. */
+export function hrefForStudentHit(audience: SiteSearchAudience, studentId: string): string | null {
+  if (audience !== 'expert' || !studentId) return null;
+  return expertDashboardPath({ client: studentId, scope: 'all' });
 }
