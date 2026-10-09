@@ -10,6 +10,8 @@ import {
   hrefForExpertHit,
   hrefForFindExperts,
   hrefForSeminarHit,
+  hrefForSessionHit,
+  hrefForStudentHit,
   hrefForStudentSeminars,
   isEmailQuery,
   isSeminarCoverUrl,
@@ -338,7 +340,7 @@ export default function SiteSearchBox({
           {cards!.students.length > 0 ? (
             <Group title="Students">
               {cards!.students.map((student) => (
-                <ResultShell key={student.id} href={null}>
+                <ResultShell key={student.id} href={hrefForStudentHit(audience, student.id)}>
                   <ProfileFilenameImage filename={student.image} alt={student.name} />
                   <span className="min-w-0">
                     <span className="block truncate text-[13px] font-semibold text-slate-900">{student.name}</span>
@@ -353,7 +355,7 @@ export default function SiteSearchBox({
           {cards!.yours.length > 0 ? (
             <Group title="Your sessions">
               {cards!.yours.map((session) => (
-                <ResultShell key={session.id} href={null}>
+                <ResultShell key={session.id} href={hrefForSessionHit(audience, session.id)}>
                   <ProfileFilenameImage filename={session.expert?.image} alt={session.expert?.name || 'Expert'} />
                   <span className="min-w-0">
                     <span className="block truncate text-[13px] font-semibold text-slate-900">{session.name}</span>

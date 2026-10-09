@@ -307,6 +307,29 @@ export default function ExpertDashboard() {
   const [reviewNotice, setReviewNotice] = useState<{ title: string; body: string } | null>(null);
   const [highlightRequestId, setHighlightRequestId] = useState<string | null>(null);
   const handledReviewRef = useRef<string | null>(null);
+  const handledSearchRef = useRef<string | null>(null);
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const sessionId = params.get('session');
+    const clientId = params.get('client');
+    if (!sessionId && !clientId) return;
+    const key = `${sessionId || ''}|${clientId || ''}`;
+    if (handledSearchRef.current === key) return;
+    handledSearchRef.current = key;
+    if (clientId) setActiveItem('clients');
+    if (sessionId) {
+      localStorage.setItem('wl_open_appointment_id', sessionId);
+      window.dispatchEvent(new Event('wl-open-chat-nav'));
+      openChatSection('appointment');
+      setActiveItem('chat');
+      params.delete('session');
+      const search = params.toString();
+      navigate(
+        { pathname: location.pathname, search: search ? `?${search}` : '' },
+        { replace: true },
+      );
+    }
+  }, [location.search, location.pathname, navigate, openChatSection]);
   useEffect(() => {
     const requestId = new URLSearchParams(location.search).get(REVIEW_REQUEST_PARAM);
     if (!requestId || handledReviewRef.current === requestId) return;

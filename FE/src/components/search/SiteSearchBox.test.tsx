@@ -257,4 +257,46 @@ describe('SiteSearchBox', () => {
     expect(screen.getByTestId('site-search-answer')).toHaveTextContent('Ada is a professor.');
     expect(screen.getByRole('link', { name: /Ada Lovelace/i })).toBeInTheDocument();
   });
+
+  it('links a student session and leaves an expert catalog hit as text', async () => {
+    searchSite.mockResolvedValue({
+      ...sample,
+      yours: [{ id: 'appt-9', name: 'Office hours', student: { name: 'Sam' }, expert: { name: 'Ada' } }],
+    });
+
+    const { unmount } = render(
+      <MemoryRouter>
+        <SiteSearchBox audience="student" />
+      </MemoryRouter>,
+    );
+    await typeQuery('ada');
+    await flushDebounce();
+    expect(screen.getByRole('link', { name: /Ada Lovelace/i })).toHaveAttribute(
+      'href',
+      '/user/studentdashboard?expert=exp-42',
+    );
+    expect(screen.getByRole('link', { name: /Office hours/i })).toHaveAttribute(
+      'href',
+      '/user/studentdashboard?session=appt-9',
+    );
+    expect(screen.getByText('Sam Student').closest('a')).toBeNull();
+    unmount();
+
+    render(
+      <MemoryRouter>
+        <SiteSearchBox audience="expert" />
+      </MemoryRouter>,
+    );
+    await typeQuery('ada');
+    await flushDebounce();
+    expect(screen.getByText('Ada Lovelace').closest('a')).toBeNull();
+    expect(screen.getByRole('link', { name: /Sam Student/i })).toHaveAttribute(
+      'href',
+      '/user/expertdashboard?client=stu-1&scope=all',
+    );
+    expect(screen.getByRole('link', { name: /Office hours/i })).toHaveAttribute(
+      'href',
+      '/user/expertdashboard?session=appt-9',
+    );
+  });
 });

@@ -1,4 +1,5 @@
 import React, { useMemo } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { SearchX, Users } from 'lucide-react';
 import PageHeader from './PageHeader';
 import FilterPanel from './FilterPanel';
@@ -25,13 +26,19 @@ export default function ClientsPage({
   onInvite: () => void;
 }) {
   const { scope, filters, update, clearFilters } = useClientFilters();
+  const [params] = useSearchParams();
+  const clientId = params.get('client');
 
   const allRows = useMemo(
     () => buildClientRows({ directory, userDetails, unreadByRid, scope }),
     [directory, userDetails, unreadByRid, scope],
   );
   const options = useMemo(() => filterOptions(allRows), [allRows]);
-  const rows = useMemo(() => applyStudentFilters(allRows, filters), [allRows, filters]);
+  const rows = useMemo(() => {
+    const filtered = applyStudentFilters(allRows, filters);
+    if (!clientId) return filtered;
+    return filtered.filter((row) => row.id === clientId);
+  }, [allRows, filters, clientId]);
 
   const filtered = hasActiveFilters(filters);
   const subtitle = filtered
