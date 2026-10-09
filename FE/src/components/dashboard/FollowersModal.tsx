@@ -8,7 +8,7 @@ export type FollowerEntry = {
   image?: string | null;
   currentUniversity?: string;
   degreeSought?: string;
-  country?: string;
+  country?: string | { name?: string } | null;
 };
 
 function initials(name: string): string {
@@ -78,7 +78,8 @@ export default function FollowersModal({
           ) : (
             followers.map((f) => {
               const name = f.username || f.email || 'Student';
-              const meta = [f.degreeSought, f.currentUniversity, f.country]
+              const country = typeof f.country === 'string' ? f.country : f.country?.name;
+              const meta = [f.degreeSought, f.currentUniversity, country]
                 .filter(Boolean)
                 .join(' · ');
               return (

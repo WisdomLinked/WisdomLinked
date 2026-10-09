@@ -1,12 +1,17 @@
 import { describe, expect, it } from 'vitest';
 import {
+  DEFAULT_STUDENT_FILTERS,
+  applyStudentFilters,
   buildClientRows,
   dedupeById,
-  filterAndSort,
+  filterOptions,
   formatLastSession,
   formatNextSession,
+  hasActiveFilters,
+  isNewStudent,
+  parseIntake,
   summaryCounts,
-  type ClientFilters,
+  type StudentFilters,
 } from './clientModel';
 
 const NOW = new Date('2026-10-02T09:00:00').getTime();
@@ -44,15 +49,37 @@ const userDetails = {
 };
 
 const directory = [
-  { ...ana, currentUniversity: 'MIT', degreeSought: 'PhD Robotics', keywords: [{ _id: 'k1', value: 'Engineering' }] },
-  { ...ben, currentUniversity: 'Stanford', keywords: [{ _id: 'k2', value: 'Biology' }] },
+  {
+    ...ana,
+    currentUniversity: 'MIT',
+    degreeSought: 'PhD Robotics',
+    keywords: [{ _id: 'k1', value: 'Engineering' }],
+    country: 'Mexico',
+    intendedIntake: 'Fall 2027',
+    gpa: '3.8',
+    rankingPercentile: 'Top 10%',
+    services: [{ value: 'study_abroad' }, { value: 'research_guidance' }],
+    createdAt: iso(NOW - 30 * DAY),
+  },
+  {
+    ...ben,
+    currentUniversity: 'Stanford',
+    keywords: [{ _id: 'k2', value: 'Biology' }],
+    customKeywords: ['Genetics'],
+    country: { label: 'Korea' },
+    degreeSought: "Master's",
+    intendedIntake: 'Spring 2027',
+    services: [{ value: 'study_abroad' }],
+    createdAt: iso(NOW - 2 * DAY),
+  },
   { ...ana, currentUniversity: 'MIT' },
   { _id: 's9', username: 'Zed Stranger', role: 'customer' },
 ];
 
 const rows = buildClientRows({ directory, userDetails, unreadByRid: { 'rid-ana': 3 }, scope: 'mine', now: NOW });
 const byId = Object.fromEntries(rows.map((r) => [r.id, r]));
-const base: ClientFilters = { query: '', status: 'all', field: 'all', sortBy: 'next' };
+const base: StudentFilters = DEFAULT_STUDENT_FILTERS;
+const ids = (f: Partial<StudentFilters>) => applyStudentFilters(rows, { ...base, ...f }, NOW).map((r) => r.id);
 
 describe('clientModel', () => {
   it('dedupes by id, keeping the first occurrence', () => {
@@ -71,7 +98,35 @@ describe('clientModel', () => {
   });
 
   it('merges directory details into relationship rows', () => {
-    expect(byId.s1).toMatchObject({ school: 'MIT', goal: 'PhD Robotics', fields: ['Engineering'], image: 'img-ana' });
+    expect(byId.s1).toMatchObject({
+      school: 'MIT',
+      goal: 'PhD Robotics',
+      fields: ['Engineering'],
+      image: 'img-ana',
+      country: 'Mexico',
+      targetDegree: 'PhD Robotics',
+      intake: 'Fall 2027',
+      gpa: '3.8',
+      ranking: 'Top 10%',
+      services: ['Study Abroad', 'Research Guidance'],
+      isClient: true,
+    });
+    expect(byId.s2).toMatchObject({ country: 'Korea', fields: ['Biology', 'Genetics'] });
+  });
+
+  it('leaves missing profile fields empty instead of failing', () => {
+    expect(byId.s4).toMatchObject({
+      country: '',
+      school: '',
+      fields: [],
+      targetDegree: '',
+      intake: '',
+      intakeAt: null,
+      gpa: '',
+      ranking: '',
+      services: [],
+      joinedAt: null,
+    });
   });
 
   it('"all students" lists the deduped directory with derived status', () => {
@@ -87,23 +142,52 @@ describe('clientModel', () => {
     expect(summaryCounts(rows, NOW)).toEqual({ thisWeek: 1, pending: 1, new: 1, idle: 1 });
   });
 
-  it('searches name, school and goal', () => {
-    expect(filterAndSort(rows, { ...base, query: 'stanford' }).map((r) => r.id)).toEqual(['s2']);
-    expect(filterAndSort(rows, { ...base, query: 'robotics' }).map((r) => r.id)).toEqual(['s1']);
-    expect(filterAndSort(rows, { ...base, query: 'cai' }).map((r) => r.id)).toEqual(['s3']);
+  it('searches name, university and intended major', () => {
+    expect(ids({ query: 'stanford' })).toEqual(['s2']);
+    expect(ids({ query: 'genetics' })).toEqual(['s2']);
+    expect(ids({ query: 'engineer' })).toEqual(['s1']);
+    expect(ids({ query: 'cai' })).toEqual(['s3']);
   });
 
-  it('filters by status and field', () => {
-    expect(filterAndSort(rows, { ...base, status: 'idle' }).map((r) => r.id)).toEqual(['s3']);
-    expect(filterAndSort(rows, { ...base, field: 'Biology' }).map((r) => r.id)).toEqual(['s2']);
+  it('filters by country, major and degree', () => {
+    expect(ids({ country: 'Korea' })).toEqual(['s2']);
+    expect(ids({ major: 'Engineering' })).toEqual(['s1']);
+    expect(ids({ degree: "Master's" })).toEqual(['s2']);
   });
 
-  it('sorts four ways', () => {
-    const ids = (sortBy: ClientFilters['sortBy']) => filterAndSort(rows, { ...base, sortBy }).map((r) => r.id);
-    expect(ids('next')[0]).toBe('s1');
-    expect(ids('name')).toEqual(['s1', 's2', 's3', 's4']);
-    expect(ids('sessions')).toEqual(['s1', 's3', 's2', 's4']);
-    expect(ids('recent')[0]).toBe('s4');
+  it('requires every selected service', () => {
+    expect(ids({ services: ['Study Abroad'] }).sort()).toEqual(['s1', 's2']);
+    expect(ids({ services: ['Study Abroad', 'Research Guidance'] })).toEqual(['s1']);
+    expect(ids({ services: ['Work Abroad'] })).toEqual([]);
+  });
+
+  it('sorts by join date, nearest intake and name', () => {
+    expect(ids({ sortBy: 'joined' }).slice(0, 2)).toEqual(['s2', 's1']);
+    expect(ids({ sortBy: 'intake' }).slice(0, 2)).toEqual(['s2', 's1']);
+    expect(ids({ sortBy: 'name' })).toEqual(['s1', 's2', 's3', 's4']);
+  });
+
+  it('lists distinct filter options', () => {
+    expect(filterOptions(rows)).toEqual({
+      countries: ['Korea', 'Mexico'],
+      majors: ['Biology', 'Engineering', 'Genetics'],
+      degrees: ["Master's", 'PhD Robotics'],
+    });
+  });
+
+  it('knows when filters are active and who joined this week', () => {
+    expect(hasActiveFilters(base)).toBe(false);
+    expect(hasActiveFilters({ ...base, sortBy: 'name' })).toBe(false);
+    expect(hasActiveFilters({ ...base, services: ['Work Abroad'] })).toBe(true);
+    expect(isNewStudent(byId.s2, NOW)).toBe(true);
+    expect(isNewStudent(byId.s1, NOW)).toBe(false);
+  });
+
+  it('parses intake terms', () => {
+    expect(parseIntake('Fall 2027')).toBe(new Date(2027, 8, 1).getTime());
+    expect(parseIntake('Spring 2028')).toBe(new Date(2028, 0, 1).getTime());
+    expect(parseIntake('September 2027')).toBe(new Date(2027, 8, 1).getTime());
+    expect(parseIntake('next year')).toBeNull();
   });
 
   it('formats session dates', () => {

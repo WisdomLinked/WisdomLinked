@@ -225,7 +225,13 @@ type PhoneFieldProps = {
   country?: string;
   onCountryChange: (country: Country) => void;
   invalid?: boolean;
+  disabled?: boolean;
+  /** Applied to the number input, so a `<label htmlFor>` can target it. */
+  id?: string;
+  name?: string;
+  className?: string;
   'aria-label'?: string;
+  'aria-describedby'?: string;
 };
 
 export default function PhoneField({
@@ -234,7 +240,12 @@ export default function PhoneField({
   country,
   onCountryChange,
   invalid = false,
+  disabled = false,
+  id,
+  name,
+  className = '',
   'aria-label': ariaLabel = 'Phone number',
+  'aria-describedby': describedBy,
 }: PhoneFieldProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const iso = country?.toUpperCase();
@@ -273,14 +284,19 @@ export default function PhoneField({
         internationalIcon={NoFlag}
         countrySelectComponent={PhoneCountrySelect}
         inputComponent={NumberInput}
+        disabled={disabled}
         aria-label={ariaLabel}
         numberInputProps={{
+          id,
+          name,
+          'aria-invalid': invalid || undefined,
+          'aria-describedby': describedBy,
           className:
-            'h-full w-full min-w-0 rounded-r-xl bg-transparent px-3 text-base text-slate-900 outline-none',
+            'h-full w-full min-w-0 rounded-r-xl bg-transparent px-3 text-base text-slate-900 outline-none disabled:cursor-not-allowed',
         }}
-        className={`flex h-11 w-full items-stretch rounded-xl border bg-slate-50 transition focus-within:border-[#234C6A] focus-within:bg-white focus-within:ring-2 focus-within:ring-[#234C6A]/15 ${
+        className={`flex h-11 w-full min-w-0 items-stretch rounded-xl border bg-slate-50 transition focus-within:border-[#234C6A] focus-within:bg-white focus-within:ring-2 focus-within:ring-[#234C6A]/15 ${
           invalid ? 'border-rose-300' : 'border-slate-200 hover:border-slate-300'
-        }`}
+        } ${disabled ? 'opacity-60' : ''} ${className}`}
       />
     </PhoneFieldContext.Provider>
   );

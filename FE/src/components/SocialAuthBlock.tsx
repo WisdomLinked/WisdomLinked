@@ -31,7 +31,11 @@ const WeChatIcon = () => (
   </svg>
 );
 
-export default function SocialAuthBlock({ role, redirect }: { role?: string; redirect?: string } = {}) {
+export default function SocialAuthBlock({
+  role,
+  redirect,
+  placement = 'bottom',
+}: { role?: string; redirect?: string; placement?: 'top' | 'bottom' } = {}) {
   const navigateTo = (url: string) => {
     window.location.assign(url);
   };
@@ -40,13 +44,17 @@ export default function SocialAuthBlock({ role, redirect }: { role?: string; red
     if (url && url !== '#') navigateTo(url);
   };
 
+  const divider = (label: string) => (
+    <div className="relative flex items-center gap-3 my-4">
+      <div className="flex-1 h-px bg-slate-200" />
+      <span className="text-xs font-medium text-slate-400 uppercase tracking-wider">{label}</span>
+      <div className="flex-1 h-px bg-slate-200" />
+    </div>
+  );
+
   return (
-    <div className="mt-6">
-      <div className="relative flex items-center gap-3 my-4">
-        <div className="flex-1 h-px bg-slate-200" />
-        <span className="text-xs font-medium text-slate-400 uppercase tracking-wider">Or continue with</span>
-        <div className="flex-1 h-px bg-slate-200" />
-      </div>
+    <div className={placement === 'top' ? 'mb-2' : 'mt-6'}>
+      {placement === 'bottom' && divider('Or continue with')}
       <div className="flex items-center justify-center gap-3">
         <button
           type="button"
@@ -65,6 +73,7 @@ export default function SocialAuthBlock({ role, redirect }: { role?: string; red
           <WeChatIcon /> <span className="hidden sm:inline">WeChat</span>
         </button>
       </div>
+      {placement === 'top' && divider('Or sign up with email')}
     </div>
   );
 }

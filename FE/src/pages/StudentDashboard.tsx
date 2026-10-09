@@ -14,6 +14,12 @@ import {
   sessionEndMs,
 } from '../utils/sessionDuration';
 import { paymentWindowOpen } from '../utils/bookingLifecycle';
+import {
+  collapseSeminarSeries,
+  formatSeriesRange,
+  sessionCountLabel,
+  type SeminarSeriesInfo,
+} from '../utils/seminarSeries';
 import { displayRoomLabel } from '../utils/chatRoomLabel';
 import { chatTargetsByRid, type ChatNavTarget } from '../utils/chatNavTarget';
 import { unreadByChatSection } from '../utils/chatSectionUnread';
@@ -107,7 +113,9 @@ function deriveSessionCounts(u: any) {
   const pendInd = pendIndChats + pendIndEvents;
   const bookedInd = bookedIndChats + bookedIndEvents;
 
-  const bookedSem = gcs.filter((g: any) => g.type === 'seminar').length;
+  const bookedSem = collapseSeminarSeries(
+    gcs.filter((g: any) => g.type === 'seminar'),
+  ).length;
   return { bookedSem, bookedInd, pendInd };
 }
 
@@ -261,13 +269,22 @@ function deriveModalSessions(
 ): UpcomingModalSession[] {
   if (!u) return [];
 
-  const seminarToModal = (g: any): UpcomingModalSession => {
+  const seminarToModal = (g: any, series?: SeminarSeriesInfo): UpcomingModalSession => {
     const at = new Date(g?.start).getTime();
+    const when = Number.isNaN(at) ? 'TBD' : formatSessionWhen(at);
     return {
       id: String(g?._id ?? `${g?.type}-${at}`),
       title: g?.name || 'Seminar',
       at: Number.isNaN(at) ? 0 : at,
-      when: Number.isNaN(at) ? 'TBD' : formatSessionWhen(at),
+      when,
+      recurrence: series
+        ? {
+            cadence: series.cadence,
+            sessionsLabel: sessionCountLabel(series.occurrenceCount),
+            nextWhen: Number.isNaN(at) ? undefined : when,
+            range: formatSeriesRange(series.firstStartMs, series.lastEndMs),
+          }
+        : undefined,
       durationMinutes: sessionDurationMinutes(g) ?? undefined,
       endsAt: sessionEndMs(g) ?? undefined,
       location: 'Online · WisdomLinked Room',
@@ -298,9 +315,10 @@ function deriveModalSessions(
 
   if (kind === 'seminar') {
     // Seminars are always confirmed (no approval) — only the 'booked' list applies.
-    return (u.groupChats || [])
-      .filter((g: any) => g?.type === 'seminar')
-      .map(seminarToModal);
+
+    return collapseSeminarSeries(
+      (u.groupChats || []).filter((g: any) => g?.type === 'seminar'),
+    ).map(({ doc, series }) => seminarToModal(doc, series));
   }
 
   // 1:1s come from two disjoint systems: student-booked sessions are individual

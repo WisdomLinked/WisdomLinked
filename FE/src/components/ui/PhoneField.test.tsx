@@ -99,6 +99,28 @@ describe('PhoneField', () => {
     expect(screen.getByTestId('country')).toHaveTextContent('GB');
   });
 
+  it('links to an external label through id and returns focus to the trigger on Escape', async () => {
+    const user = userEvent.setup();
+    render(
+      <>
+        <label htmlFor="signup-phone">Mobile</label>
+        <PhoneField id="signup-phone" aria-label="Mobile" value="" onChange={() => {}} onCountryChange={() => {}} />
+      </>,
+    );
+    expect(screen.getByLabelText('Mobile')).toHaveAttribute('id', 'signup-phone');
+    await user.click(trigger());
+    expect(screen.getByLabelText('Search country')).toHaveFocus();
+    await user.keyboard('{Escape}');
+    expect(screen.queryByLabelText('Search country')).not.toBeInTheDocument();
+    expect(trigger()).toHaveFocus();
+  });
+
+  it('disables both the country trigger and the number input', () => {
+    render(<PhoneField disabled value="" onChange={() => {}} onCountryChange={() => {}} />);
+    expect(trigger()).toBeDisabled();
+    expect(input()).toBeDisabled();
+  });
+
   it('keeps a picked phone country through a reset of an empty field', async () => {
     const user = userEvent.setup();
     render(<Harness />);

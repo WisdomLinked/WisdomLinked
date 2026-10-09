@@ -9,9 +9,16 @@ import {
 } from "../../../api/api";
 import ShowFieldError from "../../../components/ShowFieldError";
 import MajorSelect from "../../../components/MajorSelect";
-import SelectionWithCheckBox from "../../../components/SelectionWithCheckBox";
+import MultiSelect from "../../../components/ui/MultiSelect";
 import PhoneField from "../../../components/ui/PhoneField";
-import { initialPhoneCountry, phoneDigits, toE164, toStoredPhone } from "../../../utils/phone";
+import {
+    PHONE_INVALID_MESSAGE,
+    initialPhoneCountry,
+    isPhoneValid,
+    phoneDigits,
+    toE164,
+    toStoredPhone,
+} from "../../../utils/phone";
 import { checkTitleNameInvalid } from "../../../actions/common";
 import { useNavigate } from "react-router-dom";
 import { SetLoadingStatus } from "../../../actions/appActions";
@@ -24,8 +31,6 @@ import { notify } from '../../../utils/notify';
 import { updateMe } from "../../../actions/authActions";
 import { SERVICE_OPTIONS, matchesServiceOption } from "../../../constants/serviceOptions";
 import { DASHBOARD_PAGE_TITLE } from '../../../components/dashboard/pageTitle';
-
-const isPhoneValid = (value: string) => (value || '').replace(/\D/g, '').length >= 8;
 
 /** react-select options for the three canonical services (value === label for clean round-trips). */
 const SERVICE_SELECT_OPTIONS = SERVICE_OPTIONS.map((o) => ({ value: o.label, label: o.label }));
@@ -263,7 +268,10 @@ const ExpertProfile = ({
         !!country &&
         (!stateAvailable || (stateAvailable && !!state)) &&
         (!cityAvailable || (cityAvailable && !!city)) &&
-        isPhoneValid(phoneNumber);
+        isPhoneValid(phoneNumber) &&
+        selectedServices.length > 0;
+
+    const showServicesError = saveAttempted && selectedServices.length === 0;
 
     const updateProfile = async () => {
         const hasFormChanges = hasExpertProfileUnsavedChanges({
@@ -532,20 +540,20 @@ const ExpertProfile = ({
                             subtitle="Your bio, disciplines, and services"
                         />
 
-                        <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
-                            <div>
-                                <FieldLabel required>Short bio</FieldLabel>
+                        <div className="grid grid-cols-1 items-stretch gap-5 md:grid-cols-2">
+                            <div className="flex flex-col">
+                                <FieldLabel required htmlFor="expert-bio">Short bio</FieldLabel>
                                 <textarea
-                                    className={`${inputClass} min-h-[130px] resize-none`}
+                                    id="expert-bio"
+                                    className={`${inputClass} min-h-[110px] flex-1 resize-none`}
                                     placeholder="Describe your expertise and who you help — 2–3 sentences."
                                     value={description}
                                     onChange={(e) => set_description(e.target.value)}
+                                    aria-describedby="expert-bio-help"
                                 />
-                                <div className="mt-1 flex items-center justify-between">
-                                    <span className="text-[11px] text-slate-400">
-                                        Bio can be edited freely.
-                                    </span>
-                                    <span className={`text-[11px] ml-auto ${description.length > 100 ? 'text-rose-400' : 'text-slate-400'}`}>
+                                <div id="expert-bio-help" className="mt-1 flex items-center justify-between gap-2 text-[11px]">
+                                    <span className="text-slate-400">Shown on your public profile</span>
+                                    <span className={description.length > 100 ? 'text-rose-400' : 'text-slate-400'}>
                                         {description.length}/100
                                     </span>
                                 </div>
@@ -553,8 +561,9 @@ const ExpertProfile = ({
 
                             <div className="space-y-4">
                                 <div>
-                                    <FieldLabel required>Majors / disciplines</FieldLabel>
+                                    <FieldLabel required htmlFor="expert-majors">Majors / disciplines</FieldLabel>
                                     <MajorSelect
+                                        id="expert-majors"
                                         label=""
                                         value={selectedKeywords}
                                         onChange={set_selectedKeywords}
@@ -562,14 +571,20 @@ const ExpertProfile = ({
                                     />
                                 </div>
                                 <div>
-                                    <FieldLabel required>Services you offer</FieldLabel>
-                                    <SelectionWithCheckBox
+                                    <FieldLabel required htmlFor="expert-services" id="expert-services-label">Services you offer</FieldLabel>
+                                    <MultiSelect
+                                        id="expert-services"
+                                        labelId="expert-services-label"
                                         options={services}
-                                        selectedOptions={selectedServices}
-                                        set_selectedOptions={set_selectedServices}
+                                        value={selectedServices}
+                                        onChange={set_selectedServices}
                                         placeholder="Select services"
-                                        isMulti={true}
+                                        invalid={showServicesError}
+                                        describedBy={showServicesError ? 'expert-services-error' : undefined}
                                     />
+                                    <div id="expert-services-error">
+                                        <ShowFieldError show={showServicesError} label="Select at least one service" />
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -660,7 +675,7 @@ const ExpertProfile = ({
                                 </div>
                                 <ShowFieldError
                                     show={(phoneTouched || saveAttempted) && !isPhoneValid(phoneNumber)}
-                                    label="Enter a valid phone number"
+                                    label={PHONE_INVALID_MESSAGE}
                                 />
                             </div>
                         </div>

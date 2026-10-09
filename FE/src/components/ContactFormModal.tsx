@@ -1,29 +1,20 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { AlertCircle, CheckCircle, ChevronDown, FileText, Mail, MessageCircle, Phone, Send, User, X } from 'lucide-react';
+import { AlertCircle, CheckCircle, FileText, Mail, MessageCircle, Phone, Send, User, X } from 'lucide-react';
 import { doContactUs } from '../api/api';
-import { COUNTRY_CODES } from '../constants/countryCodes';
 import { notify } from '../utils/notify';
-import CountryFlag from './ui/CountryFlag';
+import { PHONE_INVALID_MESSAGE, isPhoneValid, splitPhone } from '../utils/phone';
+import PhoneField from './ui/PhoneField';
 
 const CONTACT_MESSAGE_MAX_LENGTH = 100;
 
 export default function ContactFormModal({ onClose }: { onClose: () => void }) {
-  const [form, setForm] = useState({ name: '', email: '', countryCode: '+1', phone: '', subject: '', description: '' });
+  const [form, setForm] = useState({ name: '', email: '', phone: '', subject: '', description: '' });
+  const [phoneCountry, setPhoneCountry] = useState('US');
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitted, setSubmitted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [showCountryDrop, setShowCountryDrop] = useState(false);
   const overlayRef = useRef<HTMLDivElement>(null);
-  const dropRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (dropRef.current && !dropRef.current.contains(e.target as Node)) setShowCountryDrop(false);
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, []);
 
   useEffect(() => {
     document.body.style.overflow = 'hidden';
@@ -35,8 +26,7 @@ export default function ContactFormModal({ onClose }: { onClose: () => void }) {
     if (!form.name.trim()) e.name = 'Name is required';
     if (!form.email.trim()) e.email = 'Email is required';
     else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) e.email = 'Enter a valid email';
-    if (!form.phone.trim()) e.phone = 'Phone number is required';
-    else if (!/^\d{6,15}$/.test(form.phone.replace(/\s/g, ''))) e.phone = 'Enter a valid phone number';
+    if (!isPhoneValid(form.phone)) e.phone = PHONE_INVALID_MESSAGE;
     if (!form.subject.trim()) e.subject = 'Subject is required';
     if (!form.description.trim()) e.description = 'Main message is required';
     else if (form.description.trim().length > CONTACT_MESSAGE_MAX_LENGTH) e.description = `Main message must be ${CONTACT_MESSAGE_MAX_LENGTH} characters or less`;
@@ -48,11 +38,12 @@ export default function ContactFormModal({ onClose }: { onClose: () => void }) {
     if (Object.keys(e).length > 0) { setErrors(e); return; }
     setSubmitting(true);
     try {
+      const { countryCode, national } = splitPhone(form.phone);
       await doContactUs({
         name: form.name,
         email: form.email,
-        countryCode: form.countryCode,
-        contactNumber: form.phone,
+        countryCode,
+        contactNumber: national,
         issue: `[${form.subject}] ${form.description}`,
       });
       setSubmitted(true);
@@ -63,7 +54,6 @@ export default function ContactFormModal({ onClose }: { onClose: () => void }) {
     setSubmitting(false);
   };
 
-  const selectedCountry = COUNTRY_CODES.find(c => c.code === form.countryCode) || COUNTRY_CODES[0];
   const inputBase = "w-full rounded-xl border bg-white px-4 py-3 text-sm text-slate-800 placeholder-slate-400 outline-none transition-all duration-200 focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400";
   const inputNormal = `${inputBase} border-slate-200`;
   const inputError = `${inputBase} border-red-300 focus:ring-red-300 focus:border-red-400 bg-red-50/30`;
@@ -76,10 +66,10 @@ export default function ContactFormModal({ onClose }: { onClose: () => void }) {
       onClick={e => { if (e.target === overlayRef.current) onClose(); }}
     >
       <div
-        className="relative w-full max-w-lg rounded-3xl overflow-hidden shadow-2xl"
+        className="relative w-full max-w-lg rounded-3xl shadow-2xl"
         style={{ background: 'linear-gradient(135deg, #ffffff 0%, #f8fafc 100%)', animation: 'modalIn 0.35s cubic-bezier(0.34,1.56,0.64,1) both' }}
       >
-        <div className="h-1.5 w-full" style={{ background: 'linear-gradient(90deg, #234C6A, #456882, #234C6A)', backgroundSize: '200%', animation: 'shimmer 3s linear infinite' }} />
+        <div className="h-1.5 w-full rounded-t-3xl" style={{ background: 'linear-gradient(90deg, #234C6A, #456882, #234C6A)', backgroundSize: '200%', animation: 'shimmer 3s linear infinite' }} />
         <button onClick={onClose} className="absolute top-4 right-4 w-8 h-8 flex items-center justify-center rounded-full bg-slate-100 hover:bg-red-100 text-slate-400 hover:text-red-500 transition-all duration-200 z-10">
           <X size={16} />
         </button>
@@ -116,36 +106,20 @@ export default function ContactFormModal({ onClose }: { onClose: () => void }) {
                   {errors.email && <p className="mt-1 text-xs text-red-500 flex items-center gap-1"><AlertCircle size={11} />{errors.email}</p>}
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-slate-600 mb-1.5">
+                  <label htmlFor="contact-phone" className="block text-xs font-semibold text-slate-600 mb-1.5">
                     <span className="flex items-center gap-1.5"><Phone size={12} /> Contact Number</span>
                   </label>
-                  <div className="flex gap-2">
-                    <div className="relative" ref={dropRef}>
-                      <button type="button" onClick={() => setShowCountryDrop(v => !v)}
-                        className="flex items-center gap-1.5 h-full px-3 py-3 rounded-xl border border-slate-200 bg-white text-sm text-slate-700 hover:border-[#456882] transition-all duration-200 whitespace-nowrap min-w-[90px]">
-                        <CountryFlag code={selectedCountry.iso} size="sm" />
-                        <span className="font-medium">{selectedCountry.code}</span>
-                        <ChevronDown size={12} className={`text-slate-400 transition-transform duration-200 ${showCountryDrop ? 'rotate-180' : ''}`} />
-                      </button>
-                      {showCountryDrop && (
-                        <div className="absolute top-full left-0 mt-1 z-50 bg-white border border-slate-200 rounded-2xl shadow-xl overflow-hidden w-52 scrollbar-thin max-h-72 overflow-y-auto py-1 pr-1">
-                          {COUNTRY_CODES.map(c => (
-                            <button key={c.code + c.country} type="button"
-                              onClick={() => { setForm(f => ({ ...f, countryCode: c.code })); setShowCountryDrop(false); }}
-                              className={`w-full flex items-center gap-3 px-4 py-2.5 text-sm text-left transition-colors hover:bg-[#E8EEF4]/80 ${form.countryCode === c.code ? 'font-semibold' : 'text-slate-700'}`}
-                              style={{ backgroundColor: form.countryCode === c.code ? 'rgba(232,238,244,0.9)' : 'transparent', color: form.countryCode === c.code ? '#234C6A' : undefined }}>
-                              <CountryFlag code={c.iso} size="sm" />
-                              <span className="font-medium w-10">{c.code}</span>
-                              <span className="text-slate-500 text-xs">{c.country}</span>
-                            </button>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                    <input type="tel" placeholder="Phone number" value={form.phone}
-                      onChange={e => { setForm(f => ({ ...f, phone: e.target.value })); setErrors(er => ({ ...er, phone: '' })); }}
-                      className={`flex-1 ${errors.phone ? inputError : inputNormal}`} />
-                  </div>
+                  <PhoneField
+                    id="contact-phone"
+                    name="phone"
+                    aria-label="Contact number"
+                    className="!bg-white"
+                    value={form.phone}
+                    onChange={(phone) => { setForm(f => ({ ...f, phone })); setErrors(er => ({ ...er, phone: '' })); }}
+                    country={phoneCountry}
+                    onCountryChange={setPhoneCountry}
+                    invalid={!!errors.phone}
+                  />
                   {errors.phone && <p className="mt-1 text-xs text-red-500 flex items-center gap-1"><AlertCircle size={11} />{errors.phone}</p>}
                 </div>
                 <div>
