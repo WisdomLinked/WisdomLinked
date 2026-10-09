@@ -1,7 +1,10 @@
+import { canonicalLabelsFromMixedServiceEntries } from '../../../../constants/serviceOptions';
+
 export type ClientStatus = 'upcoming' | 'pending' | 'new' | 'idle';
 export type ClientScope = 'mine' | 'all';
 export type ClientView = 'grid' | 'table';
 export type ClientSort = 'next' | 'recent' | 'name' | 'sessions';
+export type StudentSort = 'joined' | 'intake' | 'name';
 
 export interface ClientRow {
   id: string;
@@ -11,6 +14,18 @@ export interface ClientRow {
   school: string;
   goal: string;
   fields: string[];
+  country: string;
+  targetDegree: string;
+  intake: string;
+  /** Start of the intake term parsed from `intake` ("Fall 2027" -> Sep 1 2027); null when unparseable. */
+  intakeAt: number | null;
+  gpa: string;
+  /** Class ranking percentile, e.g. "Top 10%". */
+  ranking: string;
+  services: string[];
+  joinedAt: number | null;
+  /** True when this expert has a session, proposal or direct chat with the student. */
+  isClient: boolean;
   status: ClientStatus;
   sessionsCount: number;
   lastSessionAt: number | null;
@@ -21,13 +36,6 @@ export interface ClientRow {
   raw: any;
 }
 
-export interface ClientFilters {
-  query: string;
-  status: ClientStatus | 'all';
-  field: string;
-  sortBy: ClientSort;
-}
-
 export const STATUS_LABEL: Record<ClientStatus, string> = {
   upcoming: 'Session booked',
   pending: 'Proposal sent',
@@ -35,7 +43,6 @@ export const STATUS_LABEL: Record<ClientStatus, string> = {
   idle: 'No session booked',
 };
 
-export const ALL_FIELDS = 'all';
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 
 const idOf = (ref: unknown): string => {
@@ -161,14 +168,46 @@ export function statusOf(rel: Pick<Relationship, 'nextSessionAt' | 'pending' | '
   return 'new';
 }
 
+/** Profile fields are free-form and some are Mixed in the schema; coerce any stored shape to a trimmed string. */
+const text = (value: unknown): string => {
+  if (typeof value === 'string') return value.trim();
+  if (value && typeof value === 'object') {
+    const doc = value as { label?: unknown; value?: unknown; name?: unknown };
+    return String(doc.label ?? doc.name ?? doc.value ?? '').trim();
+  }
+  return '';
+};
+
+const SEASON_MONTH: Record<string, number> = { spring: 0, winter: 0, summer: 4, fall: 8, autumn: 8 };
+const MONTHS = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
+
+export function parseIntake(value: string): number | null {
+  const t = value.toLowerCase();
+  const year = t.match(/\b(20\d{2})\b/);
+  if (!year) return null;
+  const season = Object.keys(SEASON_MONTH).find((s) => t.includes(s));
+  const month = t.match(/\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\b/);
+  const monthIdx = season ? SEASON_MONTH[season] : month ? MONTHS.indexOf(month[1]) : 0;
+  return new Date(Number(year[1]), monthIdx, 1).getTime();
+}
+
 function profileFields(user: any) {
-  const fields = (Array.isArray(user?.keywords) ? user.keywords : [])
-    .map((k: any) => (typeof k === 'object' ? String(k?.value || '') : ''))
-    .filter(Boolean);
+  const keywordNames = (Array.isArray(user?.keywords) ? user.keywords : []).map((k: any) =>
+    typeof k === 'object' ? text(k?.value) : '',
+  );
+  const custom = (Array.isArray(user?.customKeywords) ? user.customKeywords : []).map(text);
+  const intake = text(user?.intendedIntake);
   return {
-    school: String(user?.currentUniversity || ''),
-    goal: String(user?.degreeSought || user?.title || ''),
-    fields: Array.from(new Set<string>(fields)),
+    school: text(user?.currentUniversity),
+    goal: text(user?.degreeSought) || text(user?.title),
+    fields: Array.from(new Set<string>([...keywordNames, ...custom].filter(Boolean))),
+    country: text(user?.country),
+    targetDegree: text(user?.degreeSought),
+    intake,
+    intakeAt: intake ? parseIntake(intake) : null,
+    gpa: text(user?.gpa),
+    ranking: text(user?.rankingPercentile),
+    services: canonicalLabelsFromMixedServiceEntries(user?.services),
   };
 }
 
@@ -194,14 +233,13 @@ export function buildClientRows({
   return ids.map((id) => {
     const rel = rels.get(id);
     const user = { ...(rel?.user || {}), ...(directoryById.get(id) || {}) };
-    const { school, goal, fields } = profileFields(user);
     return {
       id,
       name: String(user.username || user.email || 'Student'),
       image: user.image ? String(user.image) : null,
-      school,
-      goal,
-      fields,
+      ...profileFields(user),
+      joinedAt: ts(user.createdAt),
+      isClient: rels.has(id),
       status: statusOf(rel),
       sessionsCount: rel?.sessionsCount ?? 0,
       lastSessionAt: rel?.lastSessionAt ?? null,
@@ -222,8 +260,19 @@ export function summaryCounts(rows: ClientRow[], now = Date.now()) {
   };
 }
 
-export function fieldOptions(rows: ClientRow[]): string[] {
-  return Array.from(new Set(rows.flatMap((r) => r.fields))).sort((a, b) => a.localeCompare(b));
+const distinct = (values: string[]) =>
+  Array.from(new Set(values.filter(Boolean))).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+
+export function filterOptions(rows: ClientRow[]) {
+  return {
+    countries: distinct(rows.map((r) => r.country)),
+    majors: distinct(rows.flatMap((r) => r.fields)),
+    degrees: distinct(rows.map((r) => r.targetDegree)),
+  };
+}
+
+export function isNewStudent(row: Pick<ClientRow, 'joinedAt'>, now = Date.now()): boolean {
+  return row.joinedAt != null && now - row.joinedAt <= WEEK_MS && row.joinedAt <= now;
 }
 
 const byName = (a: ClientRow, b: ClientRow) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
@@ -234,21 +283,54 @@ const nullsLast = (a: number | null, b: number | null, dir: 1 | -1) => {
   return (a - b) * dir;
 };
 
-export function filterAndSort(rows: ClientRow[], { query, status, field, sortBy }: ClientFilters): ClientRow[] {
-  const q = query.trim().toLowerCase();
+export interface StudentFilters {
+  query: string;
+  /** '' means "any". */
+  country: string;
+  major: string;
+  degree: string;
+  /** A student must offer every selected service. */
+  services: string[];
+  sortBy: StudentSort;
+}
+
+export const DEFAULT_STUDENT_FILTERS: StudentFilters = {
+  query: '',
+  country: '',
+  major: '',
+  degree: '',
+  services: [],
+  sortBy: 'joined',
+};
+
+export function hasActiveFilters(f: StudentFilters): boolean {
+  return Boolean(f.query.trim() || f.country || f.major || f.degree || f.services.length);
+}
+
+export function applyStudentFilters(rows: ClientRow[], f: StudentFilters, now = Date.now()): ClientRow[] {
+  const q = f.query.trim().toLowerCase();
   const filtered = rows.filter((r) => {
-    if (status !== 'all' && r.status !== status) return false;
-    if (field !== ALL_FIELDS && !r.fields.includes(field)) return false;
+    if (f.country && r.country !== f.country) return false;
+    if (f.major && !r.fields.includes(f.major)) return false;
+    if (f.degree && r.targetDegree !== f.degree) return false;
+    if (f.services.some((s) => !r.services.includes(s))) return false;
     if (!q) return true;
-    return [r.name, r.school, r.goal].some((v) => v.toLowerCase().includes(q));
+    return [r.name, r.school, ...r.fields].some((v) => v.toLowerCase().includes(q));
   });
-  const compare: Record<ClientSort, (a: ClientRow, b: ClientRow) => number> = {
-    next: (a, b) => nullsLast(a.nextSessionAt, b.nextSessionAt, 1) || byName(a, b),
-    recent: (a, b) => nullsLast(a.lastActivityAt, b.lastActivityAt, -1) || byName(a, b),
+  const termStart = new Date(now);
+  termStart.setDate(1);
+  termStart.setHours(0, 0, 0, 0);
+  // Upcoming intakes first (soonest first), then past ones (most recent first), then unknown.
+  const intakeRank = (r: ClientRow) => (r.intakeAt == null ? 2 : r.intakeAt >= termStart.getTime() ? 0 : 1);
+  const compare: Record<StudentSort, (a: ClientRow, b: ClientRow) => number> = {
+    joined: (a, b) => nullsLast(a.joinedAt, b.joinedAt, -1) || byName(a, b),
+    intake: (a, b) =>
+      intakeRank(a) - intakeRank(b) ||
+      Math.abs((a.intakeAt ?? 0) - now) - Math.abs((b.intakeAt ?? 0) - now) ||
+      byName(a, b),
     name: byName,
-    sessions: (a, b) => b.sessionsCount - a.sessionsCount || byName(a, b),
   };
-  return [...filtered].sort(compare[sortBy]);
+  return [...filtered].sort(compare[f.sortBy]);
 }
 
 const startOfDay = (t: number) => {

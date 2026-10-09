@@ -23,6 +23,8 @@ type SearchableSelectProps<Option> = {
   getOptionValue?: (option: Option) => string;
   formatOptionLabel?: SelectProps<Option, false>['formatOptionLabel'];
   className?: string;
+  /** Extra classes for the visible control box. */
+  controlClassName?: string;
   inputId?: string;
 };
 
@@ -91,6 +93,7 @@ export default function SearchableSelect<Option>({
   getOptionValue,
   formatOptionLabel,
   className = '',
+  controlClassName = '',
   inputId,
 }: SearchableSelectProps<Option>) {
   return (
@@ -121,6 +124,7 @@ export default function SearchableSelect<Option>({
               ? 'border-[#234C6A] bg-white ring-2 ring-[#234C6A]/15'
               : 'hover:border-slate-300',
             isDisabled ? 'cursor-not-allowed opacity-60' : 'cursor-pointer',
+            controlClassName,
           ].join(' '),
         valueContainer: () => 'gap-1 py-0',
         placeholder: () => 'text-slate-400',

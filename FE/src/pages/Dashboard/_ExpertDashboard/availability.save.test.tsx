@@ -279,10 +279,16 @@ describe('AvailabilityPage save button state', () => {
     expect(saveButton()).toBeDisabled();
   });
 
-  it('ignores buffer time, which is never saved', async () => {
+  it('enables once buffer time changes and saves it with the profile', async () => {
     await renderPage();
     fireEvent.click(screen.getByRole('button', { name: '30 min' }));
-    expect(saveButton()).toBeDisabled();
+    expect(saveButton()).toBeEnabled();
+    fireEvent.click(saveButton());
+    await waitFor(() => {
+      expect(doUpdateProfile).toHaveBeenCalledWith({ bufferMinutes: 30 });
+    });
+    expect(doUpdateTimeSlots).not.toHaveBeenCalled();
+    expect(await screen.findByText('Buffer time saved.')).toBeInTheDocument();
   });
 
   it('ignores minimum booking notice, which saves on its own', async () => {

@@ -11,14 +11,12 @@ import {
 const PAGE_FILES: {
     file: string;
     route: (typeof PUBLIC_ROUTES)[number];
-    stripModals?: boolean;
     /** Section components (relative to pages/) whose headings render on this route. */
     sectionFiles?: string[];
 }[] = [
     {
         file: 'TOEConsulting.tsx',
         route: '/',
-        stripModals: true,
         sectionFiles: ['../components/landing/pricing/PricingSection.tsx'],
     },
     { file: 'AboutUS.tsx', route: '/aboutus' },
@@ -31,15 +29,6 @@ const FORBIDDEN = ['Student sign up', 'Expert sign up', 'Welcome back', 'Lorem i
 
 function stripBlockComments(source: string): string {
     return source.replace(/\/\*[\s\S]*?\*\//g, '');
-}
-
-function stripHomeModals(source: string): string {
-    const start = source.indexOf('function StudentSignupForm');
-    const end = source.indexOf('function GlobeCanvas');
-    if (start < 0 || end < 0 || end <= start) {
-        throw new Error('could not locate TOEConsulting modal region');
-    }
-    return source.slice(0, start) + source.slice(end);
 }
 
 function bindImports(source: string): Record<string, unknown> {
@@ -131,7 +120,7 @@ describe('public page index', () => {
         const pagesDir = path.resolve(__dirname, '../pages');
         for (const spec of PAGE_FILES) {
             const raw = readFileSync(path.join(pagesDir, spec.file), 'utf8');
-            const source = stripBlockComments(spec.stripModals ? stripHomeModals(raw) : raw);
+            const source = stripBlockComments(raw);
             const headings = publicHeadings(source, bindImports(raw));
             for (const sectionFile of spec.sectionFiles ?? []) {
                 const sectionRaw = readFileSync(path.join(pagesDir, sectionFile), 'utf8');

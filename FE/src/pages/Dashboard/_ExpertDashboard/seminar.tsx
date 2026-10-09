@@ -277,6 +277,11 @@ import { DASHBOARD_PAGE_TITLE } from '../../../components/dashboard/pageTitle';
     // set after the first create so repeated draft saves update the same record
     // instead of creating duplicates while the host stays on the editor.
     const [savedGroupId, setSavedGroupId] = useState<string | undefined>(selectedSeminar?.groupId);
+    const [publishedInEditor, setPublishedInEditor] = useState(false);
+    const canSaveDraft = !publishedInEditor && (
+      !selectedSeminar?.groupId ||
+      selectedSeminar.status === 'draft' || selectedSeminar.status === 'pending'
+    );
 
     // The expert's existing 1:1 sessions and seminars, used to flag time clashes
     // when scheduling a new seminar. Declined/cancelled/draft items are ignored,
@@ -603,6 +608,7 @@ import { DASHBOARD_PAGE_TITLE } from '../../../components/dashboard/pageTitle';
     // Shared save path for both "Publish" (status: active) and "Save as Draft"
     // (status: draft). Publishing fully validates; a draft only needs a title.
     const persistSeminar = async (status: 'active' | 'draft') => {
+      if (status === 'draft' && !canSaveDraft) return;
       if (status === 'active') {
         if (!validateStep(3)) {
           setCurrentStep(3);
@@ -683,6 +689,7 @@ import { DASHBOARD_PAGE_TITLE } from '../../../components/dashboard/pageTitle';
           : await createGroupChat(payload);
 
         if (res) {
+          if (status === 'active') setPublishedInEditor(true);
           const msg =
             status === 'draft'
               ? 'Draft saved'
@@ -1469,14 +1476,16 @@ import { DASHBOARD_PAGE_TITLE } from '../../../components/dashboard/pageTitle';
   
           <div className="mt-6 border-t border-gray-100 pt-5">
             <div className="flex items-center justify-between">
-            <button
-              type="button"
-              onClick={handleSaveDraft}
-              className="inline-flex items-center rounded-lg bg-gray-50 px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-100 hover:text-gray-800"
-            >
-              Save as Draft
-            </button>
-              <div className="flex items-center gap-3">
+              {canSaveDraft && (
+                <button
+                  type="button"
+                  onClick={handleSaveDraft}
+                  className="inline-flex items-center rounded-lg bg-gray-50 px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-100 hover:text-gray-800"
+                >
+                  Save as Draft
+                </button>
+              )}
+              <div className="ml-auto flex items-center gap-3">
                 {currentStep > 1 && (
                   <button
                     type="button"

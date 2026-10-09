@@ -46,6 +46,29 @@ export function summarizeVerdicts(verdicts: BookingPaymentVerdict[]): IntegrityS
     return summary;
 }
 
+/** PaymentHistory statuses the admin report counts records for — one per clickable tile. */
+export const RECORD_COUNT_STATUSES = ['completed', 'refunded', 'pending', 'withheld'] as const;
+
+export type RecordCountStatus = (typeof RECORD_COUNT_STATUSES)[number];
+
+/**
+ * Turns a `$group by status` result into the per-status record totals. Counts every
+ * PaymentHistory row with that status, so each total equals what the Payment History table
+ * shows when filtered by that status alone.
+ */
+export function recordCountsByStatus(
+    groups: Array<{ _id?: unknown; count?: unknown }>,
+): Record<RecordCountStatus, number> {
+    const counts: Record<RecordCountStatus, number> = { completed: 0, refunded: 0, pending: 0, withheld: 0 };
+    for (const group of groups || []) {
+        const status = String(group?._id ?? '') as RecordCountStatus;
+        const count = Number(group?.count);
+        if (!RECORD_COUNT_STATUSES.includes(status) || !Number.isFinite(count)) continue;
+        counts[status] = count;
+    }
+    return counts;
+}
+
 /**
  * Reduces every charge row for one student+booking to the flags the classifier needs.
  * 'completed' wins over everything: a later partial-refund row must not make a genuinely

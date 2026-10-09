@@ -2,12 +2,24 @@ import { normalizeExpertPrice, weeklyTimeSlotsEqual } from './schedulingSlots';
 import { slotsIndicesEqual } from './availabilitySaveMessages';
 import { appointmentDurationsEqual } from './appointmentDurations';
 
+export const BUFFER_MINUTES = [0, 15, 30] as const;
+export type BufferMinutesOption = (typeof BUFFER_MINUTES)[number];
+
+/** Saved buffer, or null when the expert hasn't picked one. */
+export function normalizeBufferMinutes(raw: unknown): BufferMinutesOption | null {
+  const n = typeof raw === 'string' && raw.trim() !== '' ? Number(raw) : raw;
+  return typeof n === 'number' && (BUFFER_MINUTES as readonly number[]).includes(n)
+    ? (n as BufferMinutesOption)
+    : null;
+}
+
 export interface AvailabilityDraft {
   hourlyRate: string;
   mode: 'common' | 'daily';
   timeSlots: number[];
   weeklyTimeSlots: Record<string, number[]>;
   appointmentDurations: number[];
+  bufferMinutes?: number | null;
 }
 
 export interface AvailabilitySavedState {
@@ -16,6 +28,7 @@ export interface AvailabilitySavedState {
   weeklyTimeSlots?: Record<string, number[]> | null;
   availabilityMode?: unknown;
   appointmentDurations?: unknown;
+  bufferMinutes?: unknown;
 }
 
 export interface AvailabilityChanges {
@@ -24,6 +37,7 @@ export interface AvailabilityChanges {
   modeChanged: boolean;
   weeklyChanged: boolean;
   durationsChanged: boolean;
+  bufferChanged: boolean;
   availabilityChanged: boolean;
   anyChanged: boolean;
 }
@@ -54,6 +68,10 @@ export function computeAvailabilityChanges(
     draft.mode === 'daily' &&
     !weeklyTimeSlotsEqual(draft.weeklyTimeSlots, saved?.weeklyTimeSlots);
 
+  const bufferChanged =
+    draft.bufferMinutes != null &&
+    normalizeBufferMinutes(draft.bufferMinutes) !== normalizeBufferMinutes(saved?.bufferMinutes);
+
   const availabilityChanged = slotsChanged || modeChanged || weeklyChanged;
 
   return {
@@ -62,7 +80,8 @@ export function computeAvailabilityChanges(
     modeChanged,
     weeklyChanged,
     durationsChanged,
+    bufferChanged,
     availabilityChanged,
-    anyChanged: rateChanged || availabilityChanged || durationsChanged,
+    anyChanged: rateChanged || availabilityChanged || durationsChanged || bufferChanged,
   };
 }
