@@ -174,7 +174,7 @@ const {
     escapeHtml: emailEscape,
 } = require('../services/emailTemplate')
 const { sendEmailMeetingRequestToCustomer, sendEmailMeetingRequestToExpert, sendEmailSessionPaidToExpert, sendEmailSessionOfferSentToExpert, sendEmailMeetingAcceptance, sendNotificationEmail } = require('../services/notifications')
-const { assertBookingLeadTime } = require("../utils/bookingLeadTime");
+const { assertBookingLeadTime, expertSchedulingLeadTimeError } = require("../utils/bookingLeadTime");
 const { assertBookingSlotValid, assertDurationAllowed } = require("../utils/bookingValidation");
 import { buildRemovedUserNotice, normalizeModerationReason } from '../utils/videoModerationNotice';
 import { sanitizeDecisionNote, decisionNoteEmailBlock } from '../utils/decisionNote';
@@ -998,6 +998,11 @@ const proposeIndividualAppointment = async (req, res) => {
             return res.status(404).send("Sorry, the student you are trying to invite doesn't exist. Please check the email address");
         }
 
+        const leadTimeError = expertSchedulingLeadTimeError(expertUser, start, '1:1 sessions');
+        if (leadTimeError) {
+            return res.status(400).send(leadTimeError);
+        }
+
         await assertBookingSlotValid(expertUser, start, end, { allowOutsideAvailability: !!overrideAvailability });
 
         const finalPrice = Math.max(0, Math.round(Number(price) * 100) / 100);
@@ -1121,6 +1126,21 @@ const createGroupChat = async (req, res) => {
             throw new Error("Price must be a number of 0 or more");
         }
 
+        const currentUser = await User.findById(userId);
+
+        const schedulesBookableSession =
+            (type === 'seminar' && status === 'active') || type === 'individual';
+        if (schedulesBookableSession && start) {
+            const leadTimeError = expertSchedulingLeadTimeError(
+                currentUser,
+                start,
+                type === 'seminar' ? 'Seminars' : '1:1 sessions',
+            );
+            if (leadTimeError) {
+                return res.status(400).send(leadTimeError);
+            }
+        }
+
         const _services = await resolveServiceIds(services);
         const { officialIds: _keywords, customValues: _customKeywords } = await classifyMajors(keywords);
         const _tags = sanitizeTags(tags);
@@ -1151,8 +1171,6 @@ const createGroupChat = async (req, res) => {
             : [];
         // A draft, or a rule that expands to a single date, is just one seminar.
         const recurring = startDates.length > 1;
-
-        const currentUser = await User.findById(userId);
 
         if (recurring) {
             const created = await createSeriesOccurrences({
@@ -1602,6 +1620,20 @@ const updateGroupChat = async (req, res) => {
         const pastEditRejection = describePastEditRejection(groupChat, updateFields);
         if (pastEditRejection) {
             return res.status(409).send(pastEditRejection);
+        }
+
+        const publishStart = updateFields.start ?? groupChat.start;
+        if (
+            groupChat.type === 'seminar' &&
+            updateFields.status === 'active' &&
+            groupChat.status !== 'active' &&
+            publishStart
+        ) {
+            const host = await User.findById(normalizeId(groupChat.admin));
+            const leadTimeError = expertSchedulingLeadTimeError(host, publishStart, 'Seminars');
+            if (leadTimeError) {
+                return res.status(400).send(leadTimeError);
+            }
         }
 
         // Update group chat with only provided fields
