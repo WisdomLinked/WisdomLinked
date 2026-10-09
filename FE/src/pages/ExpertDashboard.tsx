@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useBackToDashboard } from '../hooks/useBackToDashboard';
 import { useDispatch } from 'react-redux';
 import {
@@ -65,6 +65,14 @@ import ExpertRevenue from './Dashboard/_ExpertDashboard/ExpertRevenue';
 import ContactAdmin from './Dashboard/_ExpertDashboard/ContactAdmin';
 import StudentChat from '../components/dashboard/StudentChat';
 import LogoutConfirmModal from '../components/dashboard/LogoutConfirmModal';
+import RequestReviewNotice from '../components/dashboard/RequestReviewNotice';
+import RecurrenceInfoButton from '../components/dashboard/RecurrenceInfoButton';
+import {
+  REVIEW_REQUEST_NOTICES,
+  REVIEW_REQUEST_PARAM,
+  findReviewRequest,
+  reviewRequestOutcome,
+} from '../utils/requestReviewLink';
 import {
   type ChatSection,
   CHAT_SECTION_DEFAULT,
@@ -294,6 +302,41 @@ export default function ExpertDashboard() {
     setChatSection(sectionForChatTarget(target));
   }, []);
   const goToDashboardTab = useCallback(() => setActiveItem('dashboard'), []);
+
+  const navigate = useNavigate();
+  const [reviewNotice, setReviewNotice] = useState<{ title: string; body: string } | null>(null);
+  const [highlightRequestId, setHighlightRequestId] = useState<string | null>(null);
+  const handledReviewRef = useRef<string | null>(null);
+  useEffect(() => {
+    const requestId = new URLSearchParams(location.search).get(REVIEW_REQUEST_PARAM);
+    if (!requestId || handledReviewRef.current === requestId) return;
+    const sessions = userDetails?.groupChats;
+    if (!Array.isArray(sessions) || sessions.some((g: any) => !g || typeof g !== 'object')) return;
+    handledReviewRef.current = requestId;
+
+    const outcome = reviewRequestOutcome(findReviewRequest(userDetails.groupChats, requestId));
+    setActiveItem('dashboard');
+    if (outcome === 'open') setHighlightRequestId(requestId);
+    else setReviewNotice(REVIEW_REQUEST_NOTICES[outcome]);
+
+    const rest = new URLSearchParams(location.search);
+    rest.delete(REVIEW_REQUEST_PARAM);
+    const query = rest.toString();
+    navigate(`${location.pathname}${query ? `?${query}` : ''}`, { replace: true });
+  }, [location.search, location.pathname, userDetails?.groupChats, navigate]);
+  useEffect(() => {
+    if (!highlightRequestId || activeItem !== 'dashboard') return undefined;
+    const frame = window.requestAnimationFrame(() => {
+      document
+        .getElementById(`pending-request-${highlightRequestId}`)
+        ?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    });
+    const clear = window.setTimeout(() => setHighlightRequestId(null), 6000);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      window.clearTimeout(clear);
+    };
+  }, [highlightRequestId, activeItem]);
   const [scrollToTimeAvailability, setScrollToTimeAvailability] = useState(false);
   const openTimeAvailability = useCallback(() => {
     setActiveItem('availability');
@@ -1318,18 +1361,32 @@ export default function ExpertDashboard() {
                 return (
                   <div
                     key={s._id}
-                    className="rounded-xl border border-amber-100 bg-amber-50 px-3 py-2.5"
+                    id={`pending-request-${rowId}`}
+                    className={`rounded-xl border border-amber-100 bg-amber-50 px-3 py-2.5 ${
+                      highlightRequestId === rowId ? 'ring-2 ring-[#234C6A]' : ''
+                    }`}
                   >
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
-                      <button
-                        type="button"
-                        onClick={() => setInlineDetailSession(mapExpertGroupToModalSession(s))}
-                        title="View appointment details"
-                        className="block max-w-full truncate text-left text-[13px] font-semibold text-slate-900 hover:underline"
-                      >
-                        {s.name}
-                      </button>
+                      <div className="flex min-w-0 items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => setInlineDetailSession(mapExpertGroupToModalSession(s))}
+                          title="View appointment details"
+                          className="block min-w-0 truncate text-left text-[13px] font-semibold text-slate-900 hover:underline"
+                        >
+                          {s.name}
+                        </button>
+                        {!expertProposed ? (
+                          <RecurrenceInfoButton
+                            label="When this request expires"
+                            title="Respond within 24 hours"
+                            lines={[
+                              'This request expires 24 hours after the student sent it. If you do not accept or decline it by then, it is cancelled automatically and the student is not charged.',
+                            ]}
+                          />
+                        ) : null}
+                      </div>
                       <div className="text-[11px] text-slate-600">
                         {new Date(s.start).toLocaleString()}
                         {sessionDurationLabel(s) ? ` · ${sessionDurationLabel(s)}` : ''}
@@ -1682,6 +1739,7 @@ export default function ExpertDashboard() {
           </div>
         ) : null}
       </div>
+      <RequestReviewNotice notice={reviewNotice} onClose={() => setReviewNotice(null)} />
       <LogoutConfirmModal
         open={showBackLogoutConfirm}
         onCancel={() => setShowBackLogoutConfirm(false)}

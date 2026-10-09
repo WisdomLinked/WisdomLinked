@@ -13,9 +13,18 @@ export const awaitsWalletPayment = (chat: any, now: number = Date.now()): boolea
     return Number.isFinite(due) && due > now;
 };
 
+export const responseWindowLapsed = (chat: any, now: number = Date.now()): boolean => {
+    if (String(chat?.status) !== 'pending' || chat?.paymentDeadline) return false;
+    if (!chat?.decisionDeadline) return false;
+    const due = new Date(chat.decisionDeadline).getTime();
+    return Number.isFinite(due) && due <= now;
+};
+
 /** Still the expert's to decide: nothing has been accepted or paid yet. */
 export const awaitsExpertDecision = (chat: any, now: number = Date.now()): boolean =>
-    String(chat?.status) === 'pending' && !awaitsWalletPayment(chat, now);
+    String(chat?.status) === 'pending' &&
+    !awaitsWalletPayment(chat, now) &&
+    !responseWindowLapsed(chat, now);
 
 /**
  * Whether a pending request can still come to anything. Once its session time passes it
@@ -23,6 +32,7 @@ export const awaitsExpertDecision = (chat: any, now: number = Date.now()): boole
  * it as "waiting for mentor approval" describes a decision that will never arrive.
  */
 export const pendingRequestIsLive = (chat: any, now: number = Date.now()): boolean => {
+    if (responseWindowLapsed(chat, now)) return false;
     const at = new Date(chat?.start).getTime();
     // An undated request has no moment to have missed, so it stays visible.
     if (!Number.isFinite(at) || at <= 0) return true;

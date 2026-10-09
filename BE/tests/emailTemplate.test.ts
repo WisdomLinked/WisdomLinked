@@ -291,3 +291,50 @@ test("no note means no empty note block", () => {
   assert.equal(template.studentNote("   "), "");
   assert.equal(template.studentNote(undefined), "");
 });
+
+test("a new request tells the expert it expires in 24 hours and links to that request", async () => {
+  reset();
+  await notifications.sendEmailMeetingRequestToExpert(
+    "e@x.com", "Dr Wang", "Strategy call", IN_2_DAYS, 60, 120, true, "UTC", "hold",
+    { studentName: "Mei", decisionDeadline: IN_1_DAY, requestId: "6abc0d313b358bdabb9e54d3" },
+  );
+
+  const html = last().html;
+  assert.match(text(html), /This request expires 24 hours after it was sent/);
+  assert.match(text(html), /cancelled automatically and the student is not charged/);
+  assert.match(
+    html,
+    /href="[^"]*\/user\/expertdashboard\?review_request=6abc0d313b358bdabb9e54d3"/,
+    "the button names the request so the dashboard can tell when it has expired",
+  );
+});
+
+test("the 24-hour line and the request link appear for free and wallet requests too", async () => {
+  for (const state of [undefined, "wallet"]) {
+    reset();
+    await notifications.sendEmailMeetingRequestToExpert(
+      "e@x.com", "Dr Wang", "Strategy call", IN_2_DAYS, 60, state ? 120 : 0, true, "UTC", state,
+      { studentName: "Mei", decisionDeadline: IN_1_DAY, requestId: "req1" },
+    );
+    assert.match(text(last().html), /expires 24 hours after it was sent/, String(state));
+    assert.match(last().html, /review_request=req1/, String(state));
+  }
+});
+
+test("a session already paid for, or a legacy request with no id, keeps the plain link and no expiry line", async () => {
+  reset();
+  await notifications.sendEmailMeetingRequestToExpert(
+    "e@x.com", "Dr Wang", "Strategy call", IN_2_DAYS, 60, 120, true, "UTC", "paid",
+    { studentName: "Mei", requestId: "req1" },
+  );
+  assert.doesNotMatch(text(last().html), /expires 24 hours/);
+  assert.doesNotMatch(last().html, /review_request/);
+
+  reset();
+  await notifications.sendEmailMeetingRequestToExpert(
+    "e@x.com", "Dr Wang", "Strategy call", IN_2_DAYS, 60, 120, true, "UTC", undefined,
+    { studentName: "Mei" },
+  );
+  assert.doesNotMatch(text(last().html), /expires 24 hours/);
+  assert.doesNotMatch(last().html, /review_request/);
+});

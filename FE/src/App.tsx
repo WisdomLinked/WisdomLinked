@@ -2,6 +2,7 @@ import React, { useEffect, useState, Suspense } from 'react';
 import { useDispatch } from "react-redux";
 import { Routes, Route, Navigate, useLocation, useNavigate } from "react-router-dom";
 import AlertNotification from "./components/AlertNotification"
+import { signInPathFor } from "./utils/requestReviewLink"
 import { useAppSelector } from './store';
 import Loading from './components/Loading';
 import { CurrentUser, actionTypes } from './actions/types';
@@ -145,6 +146,7 @@ const AuthenticatedRoutes = () => {
 
 export const PrivateRoute = ({ children }: any) => {
   const dispatch = useDispatch()
+  const location = useLocation()
   const { auth: { userDetails } } = useAppSelector((state) => state);
   // PRIVATE ROUTE --------------
   const storedUser = localStorage.getItem("currentUser");
@@ -183,7 +185,7 @@ export const PrivateRoute = ({ children }: any) => {
 
   return (
     !currentUser?.email ?
-      <Navigate to={'/' + 'login'} replace /> :
+      <Navigate to={signInPathFor(location.pathname, location.search)} replace /> :
       userDetails?.email ?
         children :
         null

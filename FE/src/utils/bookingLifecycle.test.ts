@@ -7,6 +7,7 @@ import {
   paymentWindowOpen,
   pendingSessionState,
   studentCanCancelRequest,
+  responseWindowLapsed,
 } from './bookingLifecycle';
 
 const NOW = Date.parse('2026-08-14T12:00:00Z');
@@ -189,5 +190,39 @@ describe('studentCanCancelRequest', () => {
 
   it('allows a wallet request the expert has not yet accepted', () => {
     expect(studentCanCancelRequest(request({ paymentMode: 'wallet' }), ME, NOW)).toBe(true);
+  });
+});
+
+describe('responseWindowLapsed', () => {
+  const request = (over: Record<string, unknown> = {}) => ({
+    status: 'pending', start: inHours(72), decisionDeadline: inHours(-1), ...over,
+  });
+
+  it('is true once a pending request passes its 24-hour deadline', () => {
+    expect(responseWindowLapsed(request(), NOW)).toBe(true);
+  });
+
+  it('is false inside the window, or with no deadline', () => {
+    expect(responseWindowLapsed(request({ decisionDeadline: inHours(1) }), NOW)).toBe(false);
+    expect(responseWindowLapsed(request({ decisionDeadline: null }), NOW)).toBe(false);
+  });
+
+  it('is false once a wallet booking was accepted and awaits payment', () => {
+    expect(responseWindowLapsed(request({ paymentMode: 'wallet', paymentDeadline: inHours(5) }), NOW)).toBe(false);
+  });
+
+  it('only applies to pending requests', () => {
+    expect(responseWindowLapsed(request({ status: 'active' }), NOW)).toBe(false);
+  });
+
+  it('removes a lapsed request from the expert decision list and the student pending list', () => {
+    expect(awaitsExpertDecision(request(), NOW)).toBe(false);
+    expect(pendingRequestIsLive(request(), NOW)).toBe(false);
+    expect(awaitsExpertDecision(request({ decisionDeadline: inHours(2) }), NOW)).toBe(true);
+    expect(pendingRequestIsLive(request({ decisionDeadline: inHours(2) }), NOW)).toBe(true);
+  });
+
+  it('stops a lapsed request being cancellable by the student', () => {
+    expect(studentCanCancelRequest(request({ createdBy: 'me' }), 'me', NOW)).toBe(false);
   });
 });

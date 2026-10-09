@@ -4,7 +4,7 @@ const sgClient = require("@sendgrid/client");
 sgMail.setApiKey(process.env.SENDGRID_API_KEY);
 sgClient.setApiKey(process.env.SENDGRID_API_KEY);
 
-const { resolveAppBaseUrl, appAssetUrl, appDashboardUrl } = require("../utils/appBaseUrl");
+const { resolveAppBaseUrl, appAssetUrl, appDashboardUrl, expertRequestReviewUrl } = require("../utils/appBaseUrl");
 const {
     BRAND,
     renderEmail,
@@ -146,6 +146,7 @@ sendEmailMeetingRequestToExpert = (targetEmail, expertName, name, start, duratio
     const amount = emailMoney(price);
     const deadline = decisionDeadlineText(options.decisionDeadline, timeZone);
     const studentName = options.studentName || 'A student';
+    const expiringRequest = paymentState !== 'paid' && !!options.requestId;
     subject = deadline
         ? `Action required: respond to a session request by ${deadline}`
         : (newEvent ? `Action required: new session request — ${name}` : `Session change request — ${name}`);
@@ -193,7 +194,12 @@ sendEmailMeetingRequestToExpert = (targetEmail, expertName, name, start, duratio
                 ? ''
                 : emailParagraph(`Please accept or decline this request from your dashboard${deadline ? ` by <strong>${emailEscape(deadline)}</strong>` : ''}.`),
             paymentState === 'paid' ? '' : emailBullets(outcomes),
-            emailButton(paymentState === 'paid' ? 'View the session' : 'Review the request'),
+            expiringRequest
+                ? emailParagraph('This request expires 24 hours after it was sent. If you do not accept or decline it by then, it is cancelled automatically and the student is not charged.')
+                : '',
+            paymentState === 'paid'
+                ? emailButton('View the session')
+                : emailButton('Review the request', expiringRequest ? expertRequestReviewUrl(options.requestId) : undefined),
         ],
     });
 
