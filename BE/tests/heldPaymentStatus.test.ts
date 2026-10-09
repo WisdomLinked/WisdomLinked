@@ -412,15 +412,70 @@ test("a lapsed 1:1 hold that will not settle is flagged for a human", async () =
   }
 });
 
-test("a pending 1:1 with no hold is left alone by the sweep", async () => {
+test("a paid pending 1:1 with no hold is left alone by the sweep", async () => {
   resetCalls();
-  const restore = withModels({ sessions: [heldSessionDoc()], parked: null });
+  const restore = withModels({ sessions: [heldSessionDoc({ price: 100 })], parked: null });
   try {
     const expired = await groupController.sweepExpiredSessionHolds();
 
-    assert.equal(expired, 0, "a free session is not cancelled for lack of money");
+    assert.equal(expired, 0, "money that is not on hold is not the sweep's to settle");
     assert.equal(calls.groupClaim, undefined, "its status is never claimed");
     assert.equal(calls.cancelIntent, undefined);
+  } finally {
+    restore();
+  }
+});
+
+test("a free request nobody answered expires once its 24 hours are up", async () => {
+  resetCalls();
+  const restore = withModels({ sessions: [heldSessionDoc({ price: 0 })], parked: null });
+  try {
+    const expired = await groupController.sweepExpiredSessionHolds();
+
+    assert.equal(expired, 1);
+    assert.equal(calls.groupClaim?.[0]?.[1]?.$set?.status, "cancelled");
+    assert.equal(calls.cancelIntent, undefined, "there is no money to release");
+    const sent = (calls.email || []).find((c: any[]) => /expired/i.test(String(c[1])));
+    assert.ok(sent, "the student is told the request expired");
+    assert.equal(sent[0], "student@test.com");
+  } finally {
+    restore();
+  }
+});
+
+test("an unanswered wallet request expires once its 24 hours are up", async () => {
+  resetCalls();
+  const restore = withModels({
+    sessions: [heldSessionDoc({ price: 100, paymentMode: "wallet" })],
+    parked: null,
+  });
+  try {
+    const expired = await groupController.sweepExpiredSessionHolds();
+
+    assert.equal(expired, 1);
+    assert.equal(calls.groupClaim?.[0]?.[1]?.$set?.status, "cancelled");
+  } finally {
+    restore();
+  }
+});
+
+test("an accepted wallet booking waiting on the student's payment is not expired", async () => {
+  resetCalls();
+  const restore = withModels({
+    sessions: [heldSessionDoc({
+      price: 100,
+      paymentMode: "wallet",
+      paymentDeadline: new Date(Date.now() + 6 * 60 * 60 * 1000),
+      start: new Date(Date.now() + 48 * 60 * 60 * 1000),
+    })],
+    parked: null,
+  });
+  try {
+    const expired = await groupController.sweepExpiredSessionHolds();
+
+    assert.equal(expired, 0);
+    assert.equal(calls.groupClaim, undefined, "the payment sweep owns it now");
+    assert.equal(calls.groupUpdateOne?.[0]?.[1]?.$set?.decisionDeadline, null, "the stale response deadline is cleared");
   } finally {
     restore();
   }

@@ -33,6 +33,26 @@ export const decisionDeadlineFrom = ({
     return new Date(Math.max(deadline, now));
 };
 
+export const EXPERT_RESPONSE_WINDOW_MS = 24 * 60 * 60 * 1000;
+
+export const studentRequestDecisionDeadline = ({
+    captureBefore = 0,
+    sessionStartMs,
+    now = Date.now(),
+}: {
+    captureBefore?: number;
+    sessionStartMs?: number;
+    now?: number;
+}): Date => {
+    let deadline = now + EXPERT_RESPONSE_WINDOW_MS;
+    if (captureBefore > 0) {
+        deadline = Math.min(deadline, decisionDeadlineFrom({ captureBefore, sessionStartMs, now }).getTime());
+    } else if (typeof sessionStartMs === 'number' && sessionStartMs > 0) {
+        deadline = Math.min(deadline, sessionStartMs);
+    }
+    return new Date(Math.max(deadline, now));
+};
+
 export const holdHasLapsed = (deadline: any, now = Date.now()): boolean => {
     if (!deadline) return false;
     const ms = deadline instanceof Date ? deadline.getTime() : new Date(deadline).getTime();

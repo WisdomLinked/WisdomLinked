@@ -174,11 +174,11 @@ const {
     escapeHtml: emailEscape,
 } = require('../services/emailTemplate')
 const { sendEmailMeetingRequestToCustomer, sendEmailMeetingRequestToExpert, sendEmailSessionPaidToExpert, sendEmailSessionOfferSentToExpert, sendEmailMeetingAcceptance, sendNotificationEmail } = require('../services/notifications')
-const { assertBookingLeadTime } = require("../utils/bookingLeadTime");
+const { assertBookingLeadTime, expertSchedulingLeadTimeError } = require("../utils/bookingLeadTime");
 const { assertBookingSlotValid, assertDurationAllowed } = require("../utils/bookingValidation");
 import { buildRemovedUserNotice, normalizeModerationReason } from '../utils/videoModerationNotice';
 import { sanitizeDecisionNote, decisionNoteEmailBlock } from '../utils/decisionNote';
-import { captureBeforeMs, decisionDeadlineFrom, holdHasLapsed } from '../utils/holdExpiry';
+import { captureBeforeMs, holdHasLapsed, studentRequestDecisionDeadline } from '../utils/holdExpiry';
 import { describePastEditRejection } from '../utils/pastEventEdit';
 import {
     buildRecurrenceStartDates,
@@ -773,7 +773,13 @@ const createGroupChatByUser = async (req, res) => {
                 status: 'pending',
                 createdBy: userId,
                 paymentMode,
-                ...(walletRequest ? { decisionDeadline: start ? new Date(start) : null } : {}),
+                ...(walletRequest || !(expectedCents > 0)
+                    ? {
+                        decisionDeadline: studentRequestDecisionDeadline({
+                            sessionStartMs: start ? new Date(start).getTime() : 0,
+                        }),
+                    }
+                    : {}),
             });
 
             currentUser.groupChats.push(chat._id);
@@ -794,7 +800,7 @@ const createGroupChatByUser = async (req, res) => {
 
         if (walletRequest) {
             Promise.resolve(
-                sendEmailMeetingRequestToExpert(expertUser.email, expertUser.username, name, chat.start, duration, expectedCents / 100, true, expertUser.timeZone, 'wallet', { studentName: currentUser.username, decisionDeadline: chat.decisionDeadline, studentNote }),
+                sendEmailMeetingRequestToExpert(expertUser.email, expertUser.username, name, chat.start, duration, expectedCents / 100, true, expertUser.timeZone, 'wallet', { studentName: currentUser.username, decisionDeadline: chat.decisionDeadline, studentNote, requestId: String(chat._id) }),
             ).catch((emailErr) => console.log('[createGroupChatByUser] expert notification failed', emailErr));
 
             if (currentUser?.email) {
@@ -859,7 +865,7 @@ const createGroupChatByUser = async (req, res) => {
             chat.decisionDeadline = parked.decisionDeadline;
 
             Promise.resolve(
-                sendEmailMeetingRequestToExpert(expertUser.email, expertUser.username, name, chat.start, duration, expectedCents / 100, true, expertUser.timeZone, 'hold', { studentName: currentUser.username, decisionDeadline: parked.decisionDeadline, studentNote }),
+                sendEmailMeetingRequestToExpert(expertUser.email, expertUser.username, name, chat.start, duration, expectedCents / 100, true, expertUser.timeZone, 'hold', { studentName: currentUser.username, decisionDeadline: parked.decisionDeadline, studentNote, requestId: String(chat._id) }),
             ).catch((emailErr) => console.log('[createGroupChatByUser] expert notification failed', emailErr));
 
             if (currentUser?.email) {
@@ -963,7 +969,7 @@ const createGroupChatByUser = async (req, res) => {
         }
 
         Promise.resolve(
-            sendEmailMeetingRequestToExpert(expertUser.email, expertUser.username, name, chat.start, duration, expectedCents / 100, true, expertUser.timeZone, charge ? 'paid' : undefined, { studentName: currentUser.username, decisionDeadline: chat.decisionDeadline, studentNote }),
+            sendEmailMeetingRequestToExpert(expertUser.email, expertUser.username, name, chat.start, duration, expectedCents / 100, true, expertUser.timeZone, charge ? 'paid' : undefined, { studentName: currentUser.username, decisionDeadline: chat.decisionDeadline, studentNote, requestId: String(chat._id) }),
         ).catch((emailErr) => {
             console.log('[createGroupChatByUser] expert notification email failed', emailErr);
         });
@@ -996,6 +1002,11 @@ const proposeIndividualAppointment = async (req, res) => {
         const customerUser = await User.findOne({ email: String(customer) });
         if (!customerUser) {
             return res.status(404).send("Sorry, the student you are trying to invite doesn't exist. Please check the email address");
+        }
+
+        const leadTimeError = expertSchedulingLeadTimeError(expertUser, start, '1:1 sessions');
+        if (leadTimeError) {
+            return res.status(400).send(leadTimeError);
         }
 
         await assertBookingSlotValid(expertUser, start, end, { allowOutsideAvailability: !!overrideAvailability });
@@ -1121,6 +1132,21 @@ const createGroupChat = async (req, res) => {
             throw new Error("Price must be a number of 0 or more");
         }
 
+        const currentUser = await User.findById(userId);
+
+        const schedulesBookableSession =
+            (type === 'seminar' && status === 'active') || type === 'individual';
+        if (schedulesBookableSession && start) {
+            const leadTimeError = expertSchedulingLeadTimeError(
+                currentUser,
+                start,
+                type === 'seminar' ? 'Seminars' : '1:1 sessions',
+            );
+            if (leadTimeError) {
+                return res.status(400).send(leadTimeError);
+            }
+        }
+
         const _services = await resolveServiceIds(services);
         const { officialIds: _keywords, customValues: _customKeywords } = await classifyMajors(keywords);
         const _tags = sanitizeTags(tags);
@@ -1151,8 +1177,6 @@ const createGroupChat = async (req, res) => {
             : [];
         // A draft, or a rule that expands to a single date, is just one seminar.
         const recurring = startDates.length > 1;
-
-        const currentUser = await User.findById(userId);
 
         if (recurring) {
             const created = await createSeriesOccurrences({
@@ -1602,6 +1626,20 @@ const updateGroupChat = async (req, res) => {
         const pastEditRejection = describePastEditRejection(groupChat, updateFields);
         if (pastEditRejection) {
             return res.status(409).send(pastEditRejection);
+        }
+
+        const publishStart = updateFields.start ?? groupChat.start;
+        if (
+            groupChat.type === 'seminar' &&
+            updateFields.status === 'active' &&
+            groupChat.status !== 'active' &&
+            publishStart
+        ) {
+            const host = await User.findById(normalizeId(groupChat.admin));
+            const leadTimeError = expertSchedulingLeadTimeError(host, publishStart, 'Seminars');
+            if (leadTimeError) {
+                return res.status(400).send(leadTimeError);
+            }
         }
 
         // Update group chat with only provided fields
@@ -2730,7 +2768,7 @@ const parkBookingHold = async ({ payment_intent, charge, customer, expert, group
     const serverMode = charge.paidBy;
     const authProbe = await checkPaymentIntentAuthorized(payment_intent, serverMode);
     const captureBefore = captureBeforeMs(authProbe);
-    const decisionDeadline = decisionDeadlineFrom({
+    const decisionDeadline = studentRequestDecisionDeadline({
         captureBefore,
         sessionStartMs: groupChat?.start ? new Date(groupChat.start).getTime() : 0,
     });
@@ -4114,6 +4152,8 @@ const sweepExpiredSeatRequests = async () => {
 
 const EXPIRY_NOTICE_WINDOW_MS = 48 * 60 * 60 * 1000;
 
+const REQUEST_EXPIRED_MESSAGE = "This request has expired because it wasn't answered within 24 hours. The student was not charged and can book again.";
+
 const sweepExpiredSessionHolds = async () => {
     try {
         const nowDate = new Date();
@@ -4124,7 +4164,7 @@ const sweepExpiredSessionHolds = async () => {
                 { decisionDeadline: { $ne: null, $lte: nowDate } },
                 { start: { $ne: null, $lt: nowDate } },
             ],
-        }).select('name admin createdBy participants decisionDeadline paymentMode start');
+        }).select('name admin createdBy participants decisionDeadline paymentMode paymentDeadline price start');
 
         let expired = 0;
         for (const chat of due) {
@@ -4132,7 +4172,16 @@ const sweepExpiredSessionHolds = async () => {
             if (!parked) {
                 const startMs = chat.start ? new Date(chat.start).getTime() : 0;
                 const sessionPassed = startMs > 0 && startMs <= Date.now();
-                if (isWallet(chat.paymentMode) || sessionPassed) {
+                const awaitingStudentPayment = isWallet(chat.paymentMode) && !!chat.paymentDeadline;
+                if (awaitingStudentPayment && !sessionPassed) {
+                    await GroupChat.updateOne(
+                        { _id: chat._id, status: 'pending' },
+                        { $set: { decisionDeadline: null } },
+                    ).catch(() => null);
+                    continue;
+                }
+                const freeRequest = !(dollarsToCents(chat.price) > 0);
+                if (isWallet(chat.paymentMode) || freeRequest || sessionPassed) {
                     const lapsed = await GroupChat.findOneAndUpdate(
                         { _id: chat._id, status: 'pending' },
                         { $set: { status: 'cancelled', decisionDeadline: null } },
@@ -4936,6 +4985,10 @@ const acceptIndividualAppointment = async (req, res) => {
                 held = true;
             }
 
+            if (!parkedRow && !groupChat.paymentDeadline && holdHasLapsed(groupChat.decisionDeadline)) {
+                return res.status(409).send(REQUEST_EXPIRED_MESSAGE);
+            }
+
             // A wallet booking holds no funds, so accepting it does not confirm the
             // session — it opens the student's window to pay, and the session stays
             // pending until they do.
@@ -4953,6 +5006,7 @@ const acceptIndividualAppointment = async (req, res) => {
                     {
                         $set: {
                             paymentDeadline: deadline,
+                            decisionDeadline: null,
                             ...(decisionNote
                                 ? { decisionNote, decisionNoteAt: new Date(), decisionNoteReadAt: null }
                                 : {}),
