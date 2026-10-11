@@ -17,14 +17,16 @@ vi.mock('../../../actions/authActions', () => ({
   updateMe: () => (dispatch: any) => dispatch({ type: 'auth/set', payload: savedUser }),
 }));
 
+/** A freshly registered expert: rate and durations hold model defaults the expert hasn't chosen. */
 const NEW_EXPERT = {
   _id: 'e1',
   role: 'expert',
-  price: [],
+  price: [10],
   appointmentDurations: [30, 60, 90],
   bookingNoticeHours: 24,
   timeSlots: [],
   availabilityMode: 'common',
+  pendingSetupSteps: ['rate', 'durations'],
 };
 
 function renderCard(user: Record<string, unknown>, onOpenAvailability = vi.fn()) {
@@ -77,6 +79,21 @@ describe('setup step config', () => {
     expect(slots.isComplete({ timeSlots: [] })).toBe(false);
   });
 
+  it('treats a default rate and durations as incomplete until the expert saves them', () => {
+    const [rate, durations] = SETUP_STEPS;
+    const fresh = { price: [10], appointmentDurations: [30, 60, 90], pendingSetupSteps: ['rate', 'durations'] };
+    expect(rate.isComplete(fresh)).toBe(false);
+    expect(durations.isComplete(fresh)).toBe(false);
+    expect(rate.isComplete({ ...fresh, pendingSetupSteps: ['durations'] })).toBe(true);
+    expect(durations.isComplete({ ...fresh, pendingSetupSteps: [] })).toBe(true);
+  });
+
+  it('keeps existing accounts without the pending marker as they were', () => {
+    const [rate, durations] = SETUP_STEPS;
+    expect(rate.isComplete({ price: [10] })).toBe(true);
+    expect(durations.isComplete({ appointmentDurations: [30, 60, 90] })).toBe(true);
+  });
+
   it('reads weekday-specific slots in daily mode', () => {
     const slots = SETUP_STEPS[3];
     const a = { availabilityMode: 'daily' as const, weeklyTimeSlots: { Mon: [18, 19, 20, 21], Tue: [18, 19] } };
@@ -94,6 +111,7 @@ describe('ExpertSetupCard', () => {
     const { container } = renderCard({
       ...NEW_EXPERT,
       price: [50],
+      pendingSetupSteps: [],
       bufferMinutes: 15,
       timeSlots: [18, 19],
     });
@@ -105,18 +123,39 @@ describe('ExpertSetupCard', () => {
     expect(container).toBeEmptyDOMElement();
   });
 
-  it('shows progress from saved data and highlights the first incomplete step', () => {
+  it('starts a new expert at zero and highlights the first step', () => {
     renderCard(NEW_EXPERT);
     expect(screen.getByText('Set up your availability')).toBeInTheDocument();
-    expect(progress()).toHaveAttribute('aria-valuenow', '1');
+    expect(progress()).toHaveAttribute('aria-valuenow', '0');
     expect(progress()).toHaveAttribute('aria-valuemax', '4');
-    expect(screen.getByText('1 of 4 complete')).toBeInTheDocument();
-    expect(screen.getByText('25%')).toBeInTheDocument();
+    expect(screen.getByText('0 of 4 complete')).toBeInTheDocument();
+    expect(screen.getByText('0%')).toBeInTheDocument();
 
     expect(row('Hourly rate').className).toMatch(/bg-\[#e8f0f8\]/);
-    expect(within(row('Session lengths')).getByText('30 min, 60 min, 90 min')).toBeInTheDocument();
-    expect(within(row('Session lengths')).getByRole('button', { name: /^Edit/ })).toBeInTheDocument();
+    expect(within(row('Hourly rate')).queryByText('$10 per hour')).not.toBeInTheDocument();
+    expect(within(row('Session lengths')).queryByText('30 min, 60 min, 90 min')).not.toBeInTheDocument();
+    expect(within(row('Session lengths')).getByRole('button', { name: 'Set up: Session lengths' })).toBeInTheDocument();
     expect(within(row('Weekly time slots')).getByRole('button', { name: /Go to Availability/ })).toBeInTheDocument();
+  });
+
+  it('counts saved steps on existing accounts without the pending marker', () => {
+    const { pendingSetupSteps: _omit, ...legacy } = NEW_EXPERT;
+    renderCard(legacy);
+    expect(screen.getByText('2 of 4 complete')).toBeInTheDocument();
+    expect(within(row('Session lengths')).getByText('30 min, 60 min, 90 min')).toBeInTheDocument();
+  });
+
+  it('opens incomplete steps with nothing pre-selected', async () => {
+    const user = userEvent.setup();
+    renderCard(NEW_EXPERT);
+    await user.click(screen.getByRole('button', { name: 'Set up: Hourly rate' }));
+    expect(screen.getByLabelText('Custom rate')).toHaveValue(null);
+    await user.click(screen.getByRole('button', { name: 'Set up: Session lengths' }));
+    for (const d of ['30 min', '60 min', '90 min']) {
+      expect(screen.getByRole('button', { name: d })).toHaveAttribute('aria-pressed', 'false');
+    }
+    await user.click(screen.getByRole('button', { name: 'Set up: Booking rules' }));
+    expect(screen.getByRole('button', { name: '24 hours' })).toHaveAttribute('aria-pressed', 'false');
   });
 
   it('collapses and expands the step list', async () => {
@@ -146,7 +185,7 @@ describe('ExpertSetupCard', () => {
 
     await user.click(screen.getByRole('button', { name: /\$100 \/hr/ }));
     expect(screen.getByRole('button', { name: /\$100 \/hr/ })).toHaveAttribute('aria-pressed', 'true');
-    savedUser = { ...NEW_EXPERT, price: [100] };
+    savedUser = { ...NEW_EXPERT, price: [100], pendingSetupSteps: ['durations'] };
     await user.click(save);
 
     expect(api.doUpdateProfile).toHaveBeenCalledWith(
@@ -154,7 +193,7 @@ describe('ExpertSetupCard', () => {
     );
     await waitFor(() => expect(screen.queryByRole('button', { name: 'Save rate' })).not.toBeInTheDocument());
     expect(within(row('Hourly rate')).getByText('$100 per hour')).toBeInTheDocument();
-    expect(progress()).toHaveAttribute('aria-valuenow', '2');
+    expect(progress()).toHaveAttribute('aria-valuenow', '1');
   });
 
   it('keeps the row open when a save fails', async () => {
@@ -165,7 +204,7 @@ describe('ExpertSetupCard', () => {
     await user.click(screen.getByRole('button', { name: /\$50 \/hr/ }));
     await user.click(screen.getByRole('button', { name: 'Save rate' }));
     await waitFor(() => expect(screen.getByRole('button', { name: 'Save rate' })).toBeEnabled());
-    expect(progress()).toHaveAttribute('aria-valuenow', '1');
+    expect(progress()).toHaveAttribute('aria-valuenow', '0');
   });
 
   it('opens only one inline row at a time', async () => {
@@ -177,14 +216,21 @@ describe('ExpertSetupCard', () => {
     expect(screen.getByRole('button', { name: 'Save rules' })).toBeInTheDocument();
   });
 
-  it('requires a session length before saving', async () => {
+  it('requires a session length before saving, then confirms the chosen lengths', async () => {
     const user = userEvent.setup();
+    api.doUpdateProfile.mockResolvedValue(true);
     renderCard(NEW_EXPERT);
-    await user.click(screen.getByRole('button', { name: /^Edit: Session lengths/ }));
-    for (const d of ['30 min', '60 min', '90 min']) {
-      await user.click(screen.getByRole('button', { name: d }));
-    }
-    expect(screen.getByRole('button', { name: 'Save lengths' })).toBeDisabled();
+    await user.click(screen.getByRole('button', { name: 'Set up: Session lengths' }));
+    const save = screen.getByRole('button', { name: 'Save lengths' });
+    expect(save).toBeDisabled();
+
+    await user.click(screen.getByRole('button', { name: '60 min' }));
+    savedUser = { ...NEW_EXPERT, appointmentDurations: [60], pendingSetupSteps: ['rate'] };
+    await user.click(save);
+
+    expect(api.doUpdateProfile).toHaveBeenCalledWith({ appointmentDurations: [60] });
+    expect(await within(row('Session lengths')).findByText('60 min')).toBeInTheDocument();
+    expect(progress()).toHaveAttribute('aria-valuenow', '1');
   });
 
   it('saves booking rules through the profile and notice endpoints', async () => {

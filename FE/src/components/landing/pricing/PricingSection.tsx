@@ -1,7 +1,7 @@
 import type { Ref } from 'react';
 import { ArrowRight, Check } from 'lucide-react';
 import { homePage } from '../../../content/publicPages';
-import Container, { CARD_INSET_X } from '../Container';
+import Container, { CARD_INSET_X, NAVY_BAND_CLASS } from '../Container';
 import JourneySteps from './JourneySteps';
 import PricingCard, { CARD_BODY_TEXT } from './PricingCard';
 import RateOption from './RateOption';
@@ -70,7 +70,7 @@ export default function PricingSection({ sectionRef, onBrowseExperts }: Props) {
             </div>
           </PricingCard>
 
-          <article className="rounded-2xl bg-[#234C6A] p-6 text-white transition-shadow duration-200 hover:shadow-[0_12px_32px_rgba(35,76,106,0.10)] md:col-span-2 md:p-10">
+          <article className={`${NAVY_BAND_CLASS} p-6 md:col-span-2 md:p-10`}>
             <header className="mb-8 text-center md:mb-10">
               <p className="section-label tracking-widest text-white/70">{JOURNEY_CARD.eyebrow}</p>
               <h3 className="mt-2 font-display text-xl font-bold md:text-2xl">{JOURNEY_CARD.title}</h3>
