@@ -112,4 +112,86 @@ describe('apiErrorHandling', () => {
         });
         expect(logoutUser).not.toHaveBeenCalled();
     });
+
+    describe('blocked account (USER_BLOCKED)', () => {
+        const blockedError = {
+            response: {
+                status: 401,
+                data: {
+                    status: 'FAIL',
+                    error: 'Your profile is blocked. Contact admin for more details.',
+                    code: 'USER_BLOCKED',
+                },
+            },
+        };
+
+        it('handleApiFailure keeps the session, shows no toast, and marks the user blocked', async () => {
+            localStorage.setItem('currentUser', JSON.stringify({ email: 'a@test.com', status: 'review' }));
+            getState.mockReturnValue({ auth: { userDetails: { email: 'a@test.com', status: 'review' } } } as any);
+            const { handleApiFailure } = await import('./apiErrorHandling');
+
+            expect(handleApiFailure(blockedError)).toBe(false);
+
+            expect(logoutUser).not.toHaveBeenCalled();
+            expect(notify.error).not.toHaveBeenCalled();
+            expect(dispatch).toHaveBeenCalledWith({ type: 'updateUserDetails', payload: { status: 'blocked' } });
+        });
+
+        it('applies to an active user too, who would otherwise be logged out', async () => {
+            localStorage.setItem('currentUser', JSON.stringify({ email: 'a@test.com', status: 'active' }));
+            getState.mockReturnValue({ auth: { userDetails: { email: 'a@test.com', status: 'active' } } } as any);
+            const { handleApiFailure } = await import('./apiErrorHandling');
+
+            handleApiFailure(blockedError);
+
+            expect(logoutUser).not.toHaveBeenCalled();
+            expect(dispatch).toHaveBeenCalledWith({ type: 'updateUserDetails', payload: { status: 'blocked' } });
+        });
+
+        it('does not re-dispatch once the user is already marked blocked', async () => {
+            getState.mockReturnValue({ auth: { userDetails: { email: 'a@test.com', status: 'blocked' } } } as any);
+            const { handleApiFailure } = await import('./apiErrorHandling');
+
+            handleApiFailure(blockedError);
+
+            expect(dispatch).not.toHaveBeenCalled();
+        });
+
+        it('updates the stored user when the store is not hydrated yet, keeping its other fields', async () => {
+            localStorage.setItem('currentUser', JSON.stringify({ email: 'a@test.com', status: 'review', username: 'purna' }));
+            const { handleApiFailure } = await import('./apiErrorHandling');
+
+            handleApiFailure(blockedError);
+
+            expect(dispatch).not.toHaveBeenCalled();
+            expect(JSON.parse(localStorage.getItem('currentUser') || '{}')).toEqual({
+                email: 'a@test.com',
+                status: 'blocked',
+                username: 'purna',
+            });
+        });
+
+        it('handleAuthApiFailure returns the blocked message with its code', async () => {
+            localStorage.setItem('currentUser', JSON.stringify({ email: 'a@test.com', status: 'active' }));
+            getState.mockReturnValue({ auth: { userDetails: { email: 'a@test.com', status: 'active' } } } as any);
+            const { handleAuthApiFailure } = await import('./apiErrorHandling');
+
+            expect(handleAuthApiFailure(blockedError)).toEqual({
+                status: 'FAIL',
+                error: 'Your profile is blocked. Contact admin for more details.',
+                code: 'USER_BLOCKED',
+            });
+            expect(logoutUser).not.toHaveBeenCalled();
+            expect(dispatch).toHaveBeenCalledWith({ type: 'updateUserDetails', payload: { status: 'blocked' } });
+        });
+
+        it('still logs out on a plain 401 for an active user', async () => {
+            localStorage.setItem('currentUser', JSON.stringify({ email: 'a@test.com', status: 'active' }));
+            const { handleApiFailure } = await import('./apiErrorHandling');
+
+            handleApiFailure({ response: { status: 401, data: 'Something went wrong. Please try again.' } });
+
+            expect(logoutUser).toHaveBeenCalled();
+        });
+    });
 });

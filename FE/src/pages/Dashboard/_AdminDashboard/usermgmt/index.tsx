@@ -245,14 +245,6 @@ const UserMgmt = () => {
         }
     };
 
-    const handleApproveUser = async (u: any) => {
-        await updateProfile({ email: u.email, status: "active" });
-    };
-
-    const handleBlockUser = async (u: any) => {
-        await updateProfile({ email: u.email, status: "blocked" });
-    };
-
     const handleImpersonate = async (u: any) => {
         if (!u?.email || u.role === "admin") return;
         try {
@@ -449,7 +441,6 @@ const UserMgmt = () => {
                         {isUserListView && (
                             <UserListTable
                                 users={users}
-                                isReviewQueue={isReviewQueue}
                                 emptyMessage={
                                     isReviewQueue
                                         ? "No accounts currently awaiting review."
@@ -458,8 +449,6 @@ const UserMgmt = () => {
                                 onStatusChange={(u, status) =>
                                     updateProfile({ email: u.email, status })
                                 }
-                                onApprove={handleApproveUser}
-                                onBlock={handleBlockUser}
                                 onManage={openManageModal}
                                 onImpersonate={handleImpersonate}
                                 onAudit={openAuditModal}

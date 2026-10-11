@@ -4,6 +4,8 @@ export const AUTH_INVALID_CREDENTIALS = 'Invalid credentials. Please try again.'
 
 export const AUTH_USER_BLOCKED = 'Your account is blocked. Contact support for help.';
 
+export const AUTH_ACCOUNT_BLOCKED = 'Your profile is blocked. Contact admin for more details.';
+
 export const AUTH_EMAIL_MISSING = 'Email is required.';
 
 export const AUTH_EMAIL_NOT_FOUND = 'No account found with that email.';
