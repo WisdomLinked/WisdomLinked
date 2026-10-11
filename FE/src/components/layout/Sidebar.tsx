@@ -25,7 +25,7 @@ const defaultNavItems = [
   { id: 'dashboard', label: 'Dashboard', icon: BookOpen },
   { id: 'chat', label: 'Chat', icon: MessageSquare },
   { id: 'experts', label: 'Find Experts', icon: Users },
-  { id: 'seminars', label: 'Seminars', icon: BookOpen },
+  { id: 'seminars', label: 'Find Seminars', icon: BookOpen },
   { id: 'calendar', label: 'Calendar', icon: Calendar },
   { id: 'join-meeting', label: 'Join Meeting', icon: VideoCallNavIcon },
   { id: 'history', label: 'Payment History', icon: CreditCard },

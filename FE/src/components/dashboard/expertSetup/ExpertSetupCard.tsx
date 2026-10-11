@@ -75,22 +75,23 @@ export default function ExpertSetupCard({ onOpenAvailability }: { onOpenAvailabi
       return true;
     });
 
-  const renderControl = (id: SetupStepId) => {
+  // Incomplete steps start empty so the expert picks a value instead of accepting a default.
+  const renderControl = (id: SetupStepId, done: boolean) => {
     switch (id) {
       case 'rate':
-        return <RateStepControl initialRate={savedRate(availability)} onSave={saveRate} />;
+        return <RateStepControl initialRate={done ? savedRate(availability) : undefined} onSave={saveRate} />;
       case 'durations':
         return (
           <DurationStepControl
-            initialDurations={savedDurations(availability)}
+            initialDurations={done ? savedDurations(availability) : []}
             onSave={saveDurations}
           />
         );
       case 'bookingRules':
         return (
           <BookingRulesStepControl
-            initialBuffer={savedBuffer(availability)}
-            initialNotice={savedNotice(availability)}
+            initialBuffer={done ? savedBuffer(availability) : null}
+            initialNotice={done ? savedNotice(availability) : null}
             onSave={saveRules}
           />
         );
@@ -153,7 +154,7 @@ export default function ExpertSetupCard({ onOpenAvailability }: { onOpenAvailabi
                   setExpandedStep((open) => (open === step.id ? null : step.id));
                 }}
               >
-                {renderControl(step.id)}
+                {renderControl(step.id, done)}
               </SetupStepRow>
             );
           })}
