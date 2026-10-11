@@ -180,6 +180,7 @@ import { buildRemovedUserNotice, normalizeModerationReason } from '../utils/vide
 import { sanitizeDecisionNote, decisionNoteEmailBlock } from '../utils/decisionNote';
 import { captureBeforeMs, holdHasLapsed, studentRequestDecisionDeadline } from '../utils/holdExpiry';
 import { describePastEditRejection } from '../utils/pastEventEdit';
+import { isExpertSetupComplete, EXPERT_SETUP_INCOMPLETE_FOR_EXPERT, EXPERT_SETUP_INCOMPLETE_FOR_STUDENT } from '../utils/expertSetup';
 import {
     buildRecurrenceStartDates,
     normalizeRecurrence,
@@ -690,6 +691,11 @@ const createGroupChatByUser = async (req, res) => {
             throw new Error("Expert not found");
         }
 
+        if (!isExpertSetupComplete(expertUser)) {
+            await releaseOrphanBookingIntent(payment_intent, userId, "Expert profile setup is incomplete");
+            return res.status(409).send(EXPERT_SETUP_INCOMPLETE_FOR_STUDENT);
+        }
+
         const currentUser = await User.findById(userId);
         const expectedCents = computeBookingPriceCents(Number(duration), extractHourlyRate(expertUser.price));
         const paymentMode = normalizePaymentMode(req.body.paymentMode);
@@ -999,6 +1005,10 @@ const proposeIndividualAppointment = async (req, res) => {
             throw new Error("Expert not found");
         }
 
+        if (!isExpertSetupComplete(expertUser)) {
+            return res.status(409).send(EXPERT_SETUP_INCOMPLETE_FOR_EXPERT);
+        }
+
         const customerUser = await User.findOne({ email: String(customer) });
         if (!customerUser) {
             return res.status(404).send("Sorry, the student you are trying to invite doesn't exist. Please check the email address");
@@ -1133,6 +1143,10 @@ const createGroupChat = async (req, res) => {
         }
 
         const currentUser = await User.findById(userId);
+
+        if (!isExpertSetupComplete(currentUser)) {
+            return res.status(409).send(EXPERT_SETUP_INCOMPLETE_FOR_EXPERT);
+        }
 
         const schedulesBookableSession =
             (type === 'seminar' && status === 'active') || type === 'individual';
@@ -4959,6 +4973,10 @@ const acceptIndividualAppointment = async (req, res) => {
         if (startMs && startMs <= Date.now()) {
             await releaseOrphanBookingIntent(payment_intent, userId, "Session start time has passed");
             return res.status(400).send("This session's start time has already passed, so it can no longer be confirmed. You have not been charged.");
+        }
+
+        if (role === 'expert' && !isExpertSetupComplete(req.user)) {
+            return res.status(409).send(EXPERT_SETUP_INCOMPLETE_FOR_EXPERT);
         }
 
         let charge: any = null;

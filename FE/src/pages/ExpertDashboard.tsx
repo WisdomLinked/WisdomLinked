@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useBackToDashboard } from '../hooks/useBackToDashboard';
-import { useDispatch } from 'react-redux';
+import { useDispatch, useStore } from 'react-redux';
 import {
   MessageSquare,
   Users,
@@ -85,6 +85,10 @@ import DecisionNoteField from '../components/dashboard/DecisionNoteField';
 import StatCard from '../components/ui/StatCard';
 import AccountReviewBanner from '../components/dashboard/AccountReviewBanner';
 import ExpertSetupCard from '../components/dashboard/expertSetup/ExpertSetupCard';
+import {
+  EXPERT_SETUP_INCOMPLETE_FOR_EXPERT,
+  isExpertSetupComplete,
+} from '../components/dashboard/expertSetup/setupSteps';
 import { awaitsExpertDecision, awaitsWalletPayment, pendingSessionState } from '../utils/bookingLifecycle';
 import Chatbot from '../components/chatbot';
 import UpcomingSessionModal, {
@@ -927,10 +931,18 @@ export default function ExpertDashboard() {
     [dispatch],
   );
 
+  const expertSetupComplete = isExpertSetupComplete(userDetails);
+  const [setupBlockedRowId, setSetupBlockedRowId] = useState<string | null>(null);
+  const store = useStore();
+
   // Dashboard "1:1 Sessions" list: accept, then replace the row with a
   // transient confirmation that clears after 7 seconds.
   const acceptInlineSession = useCallback(
     async (s: any, note = '') => {
+      if (!isExpertSetupComplete((store.getState() as any).auth?.userDetails)) {
+        setSetupBlockedRowId(String(s._id));
+        return;
+      }
       const ok = await handleAcceptSession(s, note);
       if (!ok) return;
       const studentName =
@@ -960,7 +972,7 @@ export default function ExpertDashboard() {
       }, 7000);
       inlineNoticeTimers.current.push(timer);
     },
-    [handleAcceptSession],
+    [handleAcceptSession, store],
   );
 
   const [withdrawingId, setWithdrawingId] = useState<string | null>(null);
@@ -1526,6 +1538,11 @@ export default function ExpertDashboard() {
                       </div>
                     )}
                   </div>
+                  {!expertSetupComplete && setupBlockedRowId === rowId ? (
+                    <p role="alert" className="mt-2 text-[11px] font-semibold text-rose-600">
+                      {EXPERT_SETUP_INCOMPLETE_FOR_EXPERT}
+                    </p>
+                  ) : null}
                   {showNote ? (
                     <div className="mt-2.5 border-t border-amber-200/70 pt-2">
                       <DecisionNoteField
@@ -1698,6 +1715,7 @@ export default function ExpertDashboard() {
                 ? (s, note) => handleAcceptSession({ _id: s.id, name: s.title, with: s.with }, note)
                 : undefined
             }
+            acceptBlockedMessage={expertSetupComplete ? undefined : EXPERT_SETUP_INCOMPLETE_FOR_EXPERT}
             onWithdrawSession={
               expertUpcomingModal.kind === 'oneToOne' && expertUpcomingModal.status === 'pending'
                 ? (s, note) => handleWithdrawSession({ _id: s.id, name: s.title, with: s.with }, note)

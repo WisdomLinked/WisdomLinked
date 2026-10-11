@@ -21,6 +21,7 @@ import { proposedTimeNeedsOverride, hasBookingConflict, presetAvailabilityRanges
 import { normalizeExpertPrice } from "../../../../utils/schedulingSlots";
 import { updateMe } from "../../../../actions/authActions";
 import { notify } from '../../../../utils/notify';
+import { EXPERT_SETUP_INCOMPLETE_FOR_EXPERT, isExpertSetupComplete } from '../../../../components/dashboard/expertSetup/setupSteps';
 import ClientsPage from '../clients/ClientsPage';
 import InviteClientDialog from '../clients/InviteClientDialog';
 import { collectRelationships, dedupeById, type ClientRow } from '../clients/clientModel';
@@ -47,6 +48,7 @@ const Customers = ({
     const [proposePriceEdited, setProposePriceEdited] = useState(false)
     const [proposeCustomerEmail, setProposeCustomerEmail] = useState<string | null>(null)
     const [outsideConfirm, setOutsideConfirm] = useState(false)
+    const [proposeSetupBlocked, setProposeSetupBlocked] = useState(false)
     const [profileFor, setProfileFor] = useState<any>(null)
     const [profilePreview, setProfilePreview] = useState<string | null>(null)
     const [inviteOpen, setInviteOpen] = useState(false)
@@ -180,12 +182,17 @@ const Customers = ({
         setProposePriceEdited(false);
         setProposeCustomerEmail(null);
         setOutsideConfirm(false);
+        setProposeSetupBlocked(false);
         void fetchChatUserProfile(String(customer._id)).then((r: any) => {
             if (r?.success && r?.result?.email) setProposeCustomerEmail(String(r.result.email));
         });
     };
 
     const submitPropose = async (override = false) => {
+        if ((userDetails as any)?.role === "expert" && !isExpertSetupComplete(userDetails)) {
+            setProposeSetupBlocked(true);
+            return;
+        }
         if (!proposeTitle.trim()) {
             notify.warning("Add a title for the session.");
             return;
@@ -390,6 +397,12 @@ const Customers = ({
                                         </p>
                                     </div>
                                 </div>
+
+                                {proposeSetupBlocked ? (
+                                    <p role="alert" className="mt-5 text-xs font-semibold text-rose-600">
+                                        {EXPERT_SETUP_INCOMPLETE_FOR_EXPERT}
+                                    </p>
+                                ) : null}
 
                                 {outsideConfirm ? (
                                     <div className="mt-5 rounded-lg border border-amber-300 bg-amber-50 p-3">
