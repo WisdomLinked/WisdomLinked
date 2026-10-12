@@ -8,6 +8,7 @@ import ExpertSeminarHub from './ExpertSeminarHub';
 vi.mock('./seminar', () => ({ default: () => <div data-testid="seminar-form" /> }));
 vi.mock('../../../api/api', () => ({
   deleteGroup: vi.fn(),
+  getMySeatRequests: vi.fn(async () => ({ result: [] })),
   profileImageFetch: vi.fn(async () => null),
   getSeminarSeatRequests: vi.fn(async () => ({ requests: [] })),
   approveSeminarSeatRequest: vi.fn(),

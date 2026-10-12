@@ -3712,6 +3712,28 @@ const settleSeatRequestPayment = async (request: any, outcome: string, note: str
     await PaymentHistory.findByIdAndUpdate(request.paymentHistory, update).catch(() => null);
 };
 
+const getGroupMemberCandidates = async (req, res) => {
+    try {
+        const group = await GroupChat.findById(String(req.params.groupChatId));
+        if (!group || !['seminar', 'community'].includes(group.type)) {
+            return res.status(404).send('Seminar or community not found.');
+        }
+        const canInvite = group.type === 'community'
+            ? isCommunityModerator(group, String(req.user.userId))
+            : normalizeId(group.admin) === String(req.user.userId);
+        if (!canInvite) return res.status(403).send('Forbidden');
+
+        const result = await User.find({
+            role: { $in: ['customer', 'expert'] },
+            status: { $ne: 'blocked' },
+            _id: { $nin: groupMemberIds(group) },
+        }).select('_id username email image role').sort({ username: 1, _id: 1 }).lean();
+        return res.status(200).json({ result });
+    } catch (err) {
+        return res.status(500).send(safeHttp500Message(err));
+    }
+};
+
 const inviteToSeminar = async (req, res) => {
     try {
         const { userId } = req.user;
@@ -3780,10 +3802,10 @@ const inviteToSeminar = async (req, res) => {
 
         for (const id of invitees) {
             const student = await User.findById(id);
-            const name = student?.username || 'Student';
+            const name = student?.username || 'Member';
 
-            if (!student || String(student.role || '').toLowerCase() !== 'customer') {
-                results.push({ userId: id, name, outcome: 'not_a_student' });
+            if (!student || !['customer', 'expert'].includes(String(student.role || '').toLowerCase()) || student.status === 'blocked') {
+                results.push({ userId: id, name, outcome: 'not_eligible' });
                 continue;
             }
             if (groupMemberIds(groupChat).includes(id)) {
@@ -6072,6 +6094,7 @@ module.exports = {
     approveSeminarSeatRequest,
     rejectSeminarSeatRequest,
     inviteToSeminar,
+    getGroupMemberCandidates,
     paySeminarSeatRequest,
     getSeminarSeatRequests,
     getMySeatRequests,

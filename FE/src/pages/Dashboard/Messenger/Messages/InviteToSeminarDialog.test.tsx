@@ -1,12 +1,12 @@
 import React from "react";
-import { render, screen, waitFor, fireEvent } from "@testing-library/react";
+import { act, render, screen, waitFor, fireEvent } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import InviteToSeminarDialog, { summarizeOutcomes } from "./InviteToSeminarDialog";
 import * as api from "../../../../api/api";
 import { notify } from "../../../../utils/notify";
 
 vi.mock("../../../../api/api", () => ({
-  doFilterCustomers: vi.fn(async () => ({ result: [] })),
+  getGroupMemberCandidates: vi.fn(async () => ({ result: [] })),
   inviteToSeminar: vi.fn(async () => ({ success: true, free: false, results: [] })),
   profileImageFetch: vi.fn(async () => null),
 }));
@@ -51,10 +51,24 @@ describe("summarizeOutcomes", () => {
 describe("InviteToSeminarDialog", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(api.doFilterCustomers).mockResolvedValue({ result: students } as any);
+    vi.mocked(api.getGroupMemberCandidates).mockResolvedValue({ result: students } as any);
     vi.mocked(api.profileImageFetch).mockImplementation(async (ref: string) =>
       ref === "mei-photo.jpg" ? "https://cdn.example/mei.jpg" : null,
     );
+  });
+
+  it('finds an expert by email and includes them in a mixed paid invitation', async () => {
+    vi.mocked(api.getGroupMemberCandidates).mockResolvedValue({ result: [
+      ...students, { _id: 'expert-2', username: 'Dr Rivera', email: 'rivera@example.com', role: 'expert' },
+    ] } as any);
+    render(<InviteToSeminarDialog open onClose={() => {}} groupDetails={seminar()} />);
+    await screen.findByText('Dr Rivera');
+    expect(api.getGroupMemberCandidates).toHaveBeenCalledWith('sem-1');
+    fireEvent.click(screen.getByRole('checkbox', { name: /Mei Chen/ }));
+    fireEvent.change(screen.getByLabelText(/Search students or experts/), { target: { value: 'RIVERA@EXAMPLE.COM' } });
+    fireEvent.click(screen.getByRole('checkbox', { name: /Dr Rivera/ }));
+    fireEvent.click(screen.getByRole('button', { name: /^Invite/ }));
+    await waitFor(() => expect(api.inviteToSeminar).toHaveBeenCalledWith({ groupChatId: 'sem-1', followerIds: ['s1', 'expert-2'], emails: [] }));
   });
 
   it("lists students who are not already in the seminar", async () => {
@@ -79,7 +93,7 @@ describe("InviteToSeminarDialog", () => {
     render(<InviteToSeminarDialog open onClose={() => {}} groupDetails={seminar()} />);
     await waitFor(() => expect(screen.getByText("Mei Chen")).toBeInTheDocument());
 
-    fireEvent.change(screen.getByLabelText(/Search students by name/i), {
+    fireEvent.change(screen.getByLabelText(/Search students or experts by name or email/i), {
       target: { value: "Mei" },
     });
 
@@ -106,7 +120,7 @@ describe("InviteToSeminarDialog", () => {
     render(<InviteToSeminarDialog open onClose={() => {}} groupDetails={seminar()} />);
     await waitFor(() => expect(screen.getByText("Mei Chen")).toBeInTheDocument());
 
-    fireEvent.change(screen.getByLabelText(/Search students by name/i), {
+    fireEvent.change(screen.getByLabelText(/Search students or experts by name or email/i), {
       target: { value: "Mei" },
     });
 
@@ -190,12 +204,12 @@ describe("InviteToSeminarDialog", () => {
   });
 
   it("says so when there is nobody left to invite", async () => {
-    vi.mocked(api.doFilterCustomers).mockResolvedValue({ result: [] } as any);
+    vi.mocked(api.getGroupMemberCandidates).mockResolvedValue({ result: [] } as any);
 
     render(<InviteToSeminarDialog open onClose={() => {}} groupDetails={seminar()} />);
 
     await waitFor(() =>
-      expect(screen.getByText(/No students left to pick/i)).toBeInTheDocument(),
+      expect(screen.getByText(/No students or experts left to pick/i)).toBeInTheDocument(),
     );
   });
 
@@ -277,5 +291,54 @@ describe("InviteToSeminarDialog", () => {
     fireEvent.click(screen.getByRole("button", { name: /^Add$/ }));
 
     expect(screen.getAllByText("dup@x.com")).toHaveLength(1);
+  });
+});
+
+describe('free seminar confirmation failures and refresh', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(api.getGroupMemberCandidates).mockResolvedValue({ result: students } as any);
+    vi.mocked(api.profileImageFetch).mockResolvedValue(null as any);
+  });
+  async function confirm(onMembersAdded = vi.fn()) {
+    render(<InviteToSeminarDialog open onClose={() => {}} onMembersAdded={onMembersAdded} groupDetails={seminar({ price: 0 })} />);
+    await screen.findByText('Mei Chen');
+    fireEvent.click(screen.getAllByRole('checkbox')[0]);
+    fireEvent.click(screen.getByRole('button', { name: 'Add 1' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Add them' }));
+    return onMembersAdded;
+  }
+  it('shows the server rejection inline and keeps the confirmation available', async () => {
+    vi.mocked(api.inviteToSeminar).mockResolvedValue({ success: false, error: 'This seminar has ended, so people can no longer be added.' });
+    const refresh = await confirm();
+    expect(await screen.findByRole('alert')).toHaveTextContent('This seminar has ended');
+    expect(screen.getByRole('button', { name: 'Add them' })).toBeEnabled();
+    expect(screen.getByText(/This adds/)).toHaveTextContent('1 person');
+    expect(refresh).not.toHaveBeenCalled();
+  });
+  it.each([false, undefined])('shows a visible error for an empty/legacy failure (%s)', async result => {
+    vi.mocked(api.inviteToSeminar).mockResolvedValue(result as any);
+    await confirm();
+    expect(await screen.findByRole('alert')).toHaveTextContent('Could not add or invite');
+  });
+  it('catches network failures and allows a retry', async () => {
+    vi.mocked(api.inviteToSeminar).mockRejectedValue(new Error('Network Error'));
+    await confirm();
+    expect(await screen.findByRole('alert')).toHaveTextContent('Check your connection');
+    expect(screen.getByRole('button', { name: 'Add them' })).toBeEnabled();
+  });
+  it('blocks repeated clicks while pending and refreshes membership when results close', async () => {
+    let finish!: (value: any) => void;
+    vi.mocked(api.inviteToSeminar).mockImplementation(() => new Promise(resolve => { finish = resolve; }));
+    const refresh = await confirm();
+    expect(screen.getByRole('button', { name: 'Adding…' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Back' })).toBeDisabled();
+    fireEvent.click(screen.getByRole('button', { name: 'Adding…' }));
+    expect(api.inviteToSeminar).toHaveBeenCalledTimes(1);
+    await act(async () => finish({ success: true, free: true, results: [{ name: 'Mei Chen', outcome: 'enrolled' }] }));
+    expect(await screen.findByText('1 added')).toBeInTheDocument();
+    expect(refresh).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Done' }));
+    expect(refresh).toHaveBeenCalledOnce();
   });
 });

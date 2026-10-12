@@ -2,8 +2,18 @@ import { Dispatch } from "redux";
 import { createGroupChat, leaveGroup, deleteGroup } from "../api/api";
 import { AddMembersToGroupArgs, DeleteGroupArgs, LeaveGroupArgs } from "../api/types";
 import { notify } from '../utils/notify';
-import { resetChatAction } from "./chatActions";
+import { resetChatAction, setChosenGroupChatDetails } from "./chatActions";
 import { updateMe } from "./authActions";
+import type { RootState } from '../store';
+
+export const refreshSeminarMembers = (groupId: string) => async (dispatch: Dispatch, getState: () => RootState) => {
+    await (dispatch as any)(updateMe());
+    const state = getState();
+    const selected = state.chat.chosenGroupChatDetails;
+    if (String(selected?.groupId ?? selected?._id ?? '') !== groupId) return;
+    const updated = state.auth.userDetails?.groupChats?.find((g: any) => String(g?._id) === groupId);
+    if (updated) dispatch(setChosenGroupChatDetails({ ...selected, ...updated, groupId, groupName: updated.name } as any));
+};
 // import { actionTypes, CurrentUser } from "./types";
 
 export const createGroupChatAction = (
