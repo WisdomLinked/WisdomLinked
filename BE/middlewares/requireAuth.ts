@@ -57,6 +57,10 @@ const getFullUserData = async (email) => {
                         path: 'createdBy',
                         select: 'email username image role status degreeSought intendedIntake currentUniversity gpa country specialNote customKeywords'
                     },
+                    {
+                        path: 'chatAdmins',
+                        select: 'email username image role status'
+                    },
                     "keywords",
                     "services",
                 ]
@@ -74,6 +78,10 @@ const getFullUserData = async (email) => {
                     },
                     {
                         path: 'coModerators',
+                        select: 'email username image role status'
+                    },
+                    {
+                        path: 'chatAdmins',
                         select: 'email username image role status'
                     },
                 ]
