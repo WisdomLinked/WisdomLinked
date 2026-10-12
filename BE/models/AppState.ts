@@ -17,6 +17,7 @@ const appStateSchema = new mongoose.Schema(
          * cannot re-suppress a reminder that is legitimately due.
          */
         reminderSweepActivatedAt: { type: Date, default: null },
+        unreadEmailSweepActivatedAt: { type: Date, default: null },
         announcement: {
             id: { type: String, default: '' },
             message: { type: String, default: '' },

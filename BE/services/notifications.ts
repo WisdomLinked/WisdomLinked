@@ -112,6 +112,27 @@ sendSessionReminderEmail = async ({
     return sendNotificationEmail(targetEmail, subject, html);
 }
 
+const sendUnreadMessagesEmail = async ({ targetEmail, userName, unreadCount, role }: any) => {
+    const count = Math.max(1, Math.floor(Number(unreadCount) || 0));
+    const noun = count === 1 ? 'unread message' : 'unread messages';
+    const subject = `You have ${count} ${noun} on WisdomLinked`;
+    const html = renderEmail({
+        heading: `You have ${count} ${noun}`,
+        previewText: 'Messages are waiting for you in your WisdomLinked chats.',
+        blocks: [
+            emailParagraph(
+                `Dear ${emailEscape(userName)}, you have <strong>${count}</strong> ${noun} waiting in your WisdomLinked chats.`,
+            ),
+            emailButton('Open your chats', appDashboardUrl(role)),
+            emailParagraph(
+                'You are receiving this because email notifications are switched on. You can turn them off in Settings.',
+                { muted: true },
+            ),
+        ],
+    });
+    return sendNotificationEmail(targetEmail, subject, html);
+}
+
 sendEmailMeetingAcceptance = async (targetEmail, userName, title,start, duration, timeZone, noteHtml = '', options: any = {}) => {
     subject = `Your session request was accepted — ${title}`;
     html = renderEmail({
@@ -395,6 +416,7 @@ module.exports = {
     sendEmailSessionOfferSentToExpert,
     sendEmailMeetingRequestToCustomer,
     sendSessionReminderEmail,
+    sendUnreadMessagesEmail,
     sendEmailMeetingAcceptance,
     sendEmailNewUserAccountApproval,
     sendEmailUserAccountApproved,

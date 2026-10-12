@@ -48,6 +48,7 @@ const User = require('../models/User');
 const MeetingThread = require('../models/MeetingThread');
 const RoomRead = require('../models/RoomRead');
 const { sendExpertResumeFormatReminderEmail } = require('../services/notifications');
+const { recordChatSeen } = require('../services/unreadMessageEmailSweep');
 
 /** RC REST may return `ts` as ISO string or `{ $date: n }` — normalize for the React app. */
 const normalizeRcMessageTs = (ts: any): string => {
@@ -360,6 +361,7 @@ export const sendMessage = async (req: any, res: Response) => {
         if (!conversation.participants.some((p: any) => p.toString() === userId)) {
             return res.status(403).json({ error: 'You are not a participant of this conversation' });
         }
+        void recordChatSeen(userId);
 
         const me = await User.findById(userId);
         const otherUserId = conversation.participants.find((p: any) => p.toString() !== userId);
@@ -449,6 +451,7 @@ export const getDirectHistory = async (req: any, res: Response) => {
         if (!conversation.participants.some((p: any) => p.toString() === userId)) {
             return res.status(403).json({ error: 'You are not a participant' });
         }
+        void recordChatSeen(userId);
 
         const me = await User.findById(userId);
         const otherUserId = conversation.participants.find((p: any) => p.toString() !== userId);
@@ -691,6 +694,7 @@ export const sendGroupMessage = async (req: any, res: Response) => {
         if (!canUseGroupChat(groupChat, req.user)) {
             return res.status(403).json({ error: 'You are not a participant of this group' });
         }
+        void recordChatSeen(userId);
 
         const me = await User.findById(userId);
         let sentId = `temp-${Date.now()}`;
@@ -757,6 +761,7 @@ export const getGroupHistory = async (req: any, res: Response) => {
         if (!canUseGroupChat(groupChat, req.user)) {
             return res.status(403).json({ error: 'You are not a participant' });
         }
+        void recordChatSeen(userId);
 
         const me = await User.findById(userId);
         if (me && me.email) {
@@ -1076,6 +1081,7 @@ export const markChatRead = async (req: any, res: Response) => {
         if (!roomId) return res.status(400).json({ error: 'roomId is required' });
         const canAccessRoom = await userCanAccessRocketRoom(String(userId), String(roomId), {}, req.user?.role);
         if (!canAccessRoom) return res.status(403).json({ error: 'You do not have access to this chat room' });
+        void recordChatSeen(userId);
         const me = await User.findById(userId);
         if (!me?.email) return res.status(400).json({ error: 'User not found' });
         await RoomRead.updateOne(
