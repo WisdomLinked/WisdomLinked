@@ -33,6 +33,8 @@ export const homePage = {
         titleAccent: 'made it.',
         snippet:
             'Talk directly with professors at world-class universities and industry experts. Get personalized guidance on grad admissions, research, scholarships, and career advancement.',
+        globeDisclaimer:
+            'Names and institutions shown are illustrative. Experts from these universities may or may not be available at the time you book.',
     },
     connect: {
         titleLead: 'Connect to Knowledge',
