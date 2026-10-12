@@ -1,5 +1,3 @@
-import { isTheEventGoingOn } from '../actions/common';
-
 /** Stable key for a seminar series: shared seriesId, else the doc _id. */
 export function seriesKey(g: { seriesId?: unknown; _id?: unknown } | null | undefined): string {
   if (!g) return '';
@@ -32,11 +30,13 @@ export function pickLiveOrNextOccurrence(
   if (!siblings.length) return null;
 
   const sorted = [...siblings].sort((a, b) => startMs(a) - startMs(b));
-
-  const live = sorted.find((g) => isTheEventGoingOn(g.start, g.end));
-  if (live) return live;
-
   const nowMs = now.getTime();
+  const live = sorted.find((g) => {
+    const start = startMs(g);
+    const end = g?.end ? new Date(g.end as string | Date).getTime() : NaN;
+    return start > 0 && Number.isFinite(end) && start <= nowMs && nowMs < end;
+  });
+  if (live) return live;
   const next = sorted.find((g) => startMs(g) >= nowMs);
   return next || sorted[0] || null;
 }
