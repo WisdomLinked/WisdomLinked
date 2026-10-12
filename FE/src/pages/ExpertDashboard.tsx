@@ -45,7 +45,7 @@ import {
 import { seriesKey } from '../utils/seminarSeriesOccurrence';
 import { fetchDmUnreadSnapshot, fetchChatUserProfile } from '../api/chatApi';
 import ProfileModal from './Dashboard/Messenger/Messages/ProfileModal';
-import SeminarDetails from './Dashboard/seminarDetails';
+import SessionDetailsDialog from '../components/dashboard/SessionDetailsDialog';
 import { buildFallbackChatProfile, mergeChatProfile } from '../utils/chatProfileModal';
 import { useAppSelector } from '../store';
 import { logoutUser, updateMe } from '../actions/authActions';
@@ -1576,10 +1576,15 @@ export default function ExpertDashboard() {
                   key={s._id}
                   className="flex items-start justify-between rounded-xl border border-slate-100 bg-slate-50/60 px-3 py-2.5"
                 >
-                  <div>
-                    <div className="text-[13px] font-semibold text-slate-900">
+                  <div className="min-w-0">
+                    <button
+                      type="button"
+                      onClick={() => setInlineDetailSession(mapExpertGroupToModalSession(s))}
+                      title="View session details"
+                      className="block max-w-full truncate text-left text-[13px] font-semibold text-slate-900 hover:underline"
+                    >
                       {s.name}
-                    </div>
+                    </button>
                     <div className="text-[11px] text-slate-500">
                       {new Date(s.start).toLocaleString()}
                       {sessionDurationLabel(s) ? ` · ${sessionDurationLabel(s)}` : ''}
@@ -1614,10 +1619,15 @@ export default function ExpertDashboard() {
                   key={g._id}
                   className="flex items-start justify-between rounded-xl border border-slate-100 bg-slate-50/60 px-3 py-2.5"
                 >
-                  <div>
-                    <div className="text-[13px] font-semibold text-slate-900">
+                  <div className="min-w-0">
+                    <button
+                      type="button"
+                      onClick={() => setInlineDetailSession(mapExpertGroupToModalSession(g))}
+                      title="View seminar details"
+                      className="block max-w-full truncate text-left text-[13px] font-semibold text-slate-900 hover:underline"
+                    >
                       {g.name}
-                    </div>
+                    </button>
                     <div className="text-[11px] text-slate-500">
                       {new Date(g.start).toLocaleString()}
                     </div>
@@ -1745,39 +1755,12 @@ export default function ExpertDashboard() {
           />
         ) : null}
         {inlineDetailSession?.detail ? (
-          <div
-            className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/50 p-4"
-            onClick={e => {
-              if (e.target === e.currentTarget) setInlineDetailSession(null);
-            }}
-          >
-            <div
-              className="w-full max-w-[460px] max-h-[88vh] overflow-y-auto rounded-2xl border border-slate-200 bg-white shadow-xl"
-              onClick={e => e.stopPropagation()}
-            >
-              <div className="flex items-start justify-between gap-3 border-b border-slate-200 px-5 py-4">
-                <div className="min-w-0">
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
-                    {inlineDetailSession.briefLabel || 'Session details'}
-                  </p>
-                  <h3 className="mt-1 text-base font-semibold text-slate-900 truncate">
-                    {inlineDetailSession.title}
-                  </h3>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setInlineDetailSession(null)}
-                  className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
-                  aria-label="Close"
-                >
-                  ✕
-                </button>
-              </div>
-              <div className="px-5 py-4">
-                <SeminarDetails {...inlineDetailSession.detail} theme="light" adminLabel="Expert" />
-              </div>
-            </div>
-          </div>
+          <SessionDetailsDialog
+            title={inlineDetailSession.title}
+            briefLabel={inlineDetailSession.briefLabel}
+            detail={inlineDetailSession.detail}
+            onClose={() => setInlineDetailSession(null)}
+          />
         ) : null}
       </div>
       <RequestReviewNotice notice={reviewNotice} onClose={() => setReviewNotice(null)} />
