@@ -1,12 +1,13 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import Dialog from '@mui/material/Dialog';
 import { Search, UserPlus, Loader2, Plus, X } from 'lucide-react';
-import { doFilterCustomers, inviteToSeminar, profileImageFetch } from '../../../../api/api';
+import { getGroupMemberCandidates, inviteToSeminar, profileImageFetch } from '../../../../api/api';
 import { notify } from '../../../../utils/notify';
 import { resolveProfileImageSrc } from '../../../../utils/profileImage';
 import Avatar from '../../../../components/Avatar';
+import { resolveUserFacingError } from '../../../../utils/resolveUserFacingError';
 
-type Student = { id: string; username: string; email: string; image?: string };
+type Invitee = { id: string; username: string; email: string; image?: string };
 
 export type InviteOutcome =
     | 'invited'
@@ -14,6 +15,7 @@ export type InviteOutcome =
     | 'already_enrolled'
     | 'already_invited'
     | 'not_a_student'
+    | 'not_eligible'
     | 'no_account'
     | 'bad_email'
     | 'failed';
@@ -21,6 +23,7 @@ export type InviteOutcome =
 interface Props {
     open: boolean;
     onClose: () => void;
+    onMembersAdded?: () => void;
     groupDetails: any;
     theme?: 'dark' | 'light';
 }
@@ -30,7 +33,8 @@ const OUTCOME_LABEL: Record<InviteOutcome, string> = {
     enrolled: 'added',
     already_enrolled: 'already in this seminar',
     already_invited: 'already invited',
-    not_a_student: 'not a student account',
+    not_a_student: 'not an eligible student or expert account',
+    not_eligible: 'not an eligible student or expert account',
     no_account: 'has no WisdomLinked account — ask them to sign up first',
     bad_email: 'is not a valid email address',
     failed: 'could not be invited',
@@ -45,13 +49,14 @@ export const summarizeOutcomes = (results: Array<{ outcome: InviteOutcome }>): s
         .join(' · ');
 };
 
-export default function InviteToSeminarDialog({ open, onClose, groupDetails, theme = 'light' }: Props) {
-    const [students, setStudents] = useState<Student[]>([]);
+export default function InviteToSeminarDialog({ open, onClose, onMembersAdded, groupDetails, theme = 'light' }: Props) {
+    const [invitees, setInvitees] = useState<Invitee[]>([]);
     const [selected, setSelected] = useState<Set<string>>(new Set());
     const [search, setSearch] = useState('');
     const [loading, setLoading] = useState(false);
     const [submitting, setSubmitting] = useState(false);
     const [confirmingFree, setConfirmingFree] = useState(false);
+    const [error, setError] = useState('');
     const [emailDraft, setEmailDraft] = useState('');
     const [emails, setEmails] = useState<string[]>([]);
     const [results, setResults] = useState<Array<{ name: string; outcome: InviteOutcome }> | null>(null);
@@ -74,32 +79,28 @@ export default function InviteToSeminarDialog({ open, onClose, groupDetails, the
     }, [groupDetails]);
 
     useEffect(() => {
-        if (!open) return;
+        if (!open || !seminarId) return;
         let cancelled = false;
         setSelected(new Set());
         setSearch('');
         setResults(null);
+        setError('');
         setConfirmingFree(false);
         setEmailDraft('');
         setEmails([]);
         setLoading(true);
         (async () => {
             try {
-                const res: any = await doFilterCustomers({
-                    username: '',
-                    keywords: [],
-                    services: [],
-                    sortBy: 'Name in ASC',
-                });
+                const res: any = await getGroupMemberCandidates(String(seminarId));
                 if (cancelled) return;
-                const rows: Student[] = (Array.isArray(res?.result) ? res.result : [])
+                const rows: Invitee[] = (Array.isArray(res?.result) ? res.result : [])
                     .map((c: any) => ({
                         id: String(c?._id ?? c?.id ?? ''),
-                        username: c?.username || c?.email || 'Student',
+                        username: c?.username || c?.email || 'Member',
                         email: c?.email || '',
                         image: c?.image,
                     }))
-                    .filter((s: Student) => s.id && !enrolledIds.has(s.id));
+                    .filter((s: Invitee) => s.id && !enrolledIds.has(s.id));
                 const withPhotos = await Promise.all(
                     rows.map(async (s) => {
                         const resolved = await resolveProfileImageSrc(
@@ -111,9 +112,9 @@ export default function InviteToSeminarDialog({ open, onClose, groupDetails, the
                     }),
                 );
                 if (cancelled) return;
-                setStudents(withPhotos);
+                setInvitees(withPhotos);
             } catch {
-                if (!cancelled) setStudents([]);
+                if (!cancelled) setInvitees([]);
             } finally {
                 if (!cancelled) setLoading(false);
             }
@@ -121,15 +122,15 @@ export default function InviteToSeminarDialog({ open, onClose, groupDetails, the
         return () => {
             cancelled = true;
         };
-    }, [open, enrolledIds]);
+    }, [open, seminarId, enrolledIds]);
 
     const visible = useMemo(() => {
         const q = search.trim().toLowerCase();
-        if (!q) return students;
-        return students.filter(
+        if (!q) return invitees;
+        return invitees.filter(
             (s) => s.username.toLowerCase().includes(q) || s.email.toLowerCase().includes(q),
         );
-    }, [students, search]);
+    }, [invitees, search]);
 
     const showDropdown = search.trim().length > 0;
 
@@ -160,27 +161,30 @@ export default function InviteToSeminarDialog({ open, onClose, groupDetails, the
     const totalPicked = selected.size + emails.length;
 
     const send = async () => {
+        if (submitting) return;
         setSubmitting(true);
-        setConfirmingFree(false);
+        setError('');
         try {
             const res: any = await inviteToSeminar({
                 groupChatId: String(seminarId),
                 followerIds: Array.from(selected),
                 emails,
             });
-            if (res === false) return;
             if (!res?.success || !Array.isArray(res?.results)) {
-                notify.error(typeof res === 'string' ? res : 'Could not send the invitations.');
+                setError(res?.error || (typeof res === 'string' ? res : 'Could not add or invite the selected people. Please try again.'));
                 return;
             }
+            setConfirmingFree(false);
             setResults(res.results);
             const done = res.results.filter((r: any) => r.outcome === 'invited' || r.outcome === 'enrolled').length;
             if (done) {
                 notify.success(res.free ? `${done} added to this seminar.` : `${done} invited.`);
             }
-            setStudents((prev) => prev.filter((s) => !selected.has(s.id)));
+            setInvitees((prev) => prev.filter((s) => !selected.has(s.id)));
             setSelected(new Set());
             setEmails([]);
+        } catch (err) {
+            setError(resolveUserFacingError(err));
         } finally {
             setSubmitting(false);
         }
@@ -188,7 +192,7 @@ export default function InviteToSeminarDialog({ open, onClose, groupDetails, the
 
     const submit = () => {
         if (!seminarId || totalPicked === 0) {
-            notify.error('Pick a student or enter an email address.');
+            notify.error('Pick a student or expert, or enter an email address.');
             return;
         }
         if (isFree) {
@@ -198,13 +202,19 @@ export default function InviteToSeminarDialog({ open, onClose, groupDetails, the
         void send();
     };
 
+    const close = () => {
+        if (submitting) return;
+        onClose();
+        if (results?.some(r => r.outcome === 'enrolled' || r.outcome === 'already_enrolled')) onMembersAdded?.();
+    };
+
     const isLight = theme === 'light';
     const panel = isLight ? 'bg-white text-slate-900' : 'bg-[#141414] text-white';
     const rowHover = isLight ? 'hover:bg-slate-50' : 'hover:bg-white/10';
     const dropdownBg = isLight ? 'bg-white border-slate-200' : 'bg-[#1c1c1c] border-white/10';
 
     return (
-        <Dialog open={open} onClose={onClose} maxWidth="xs" fullWidth>
+        <Dialog open={open} onClose={close} maxWidth="xs" fullWidth>
             <div className={`${panel} p-5`}>
                 <div className="flex items-center gap-2">
                     <UserPlus className="h-4 w-4 text-[#234C6A]" aria-hidden />
@@ -218,6 +228,7 @@ export default function InviteToSeminarDialog({ open, onClose, groupDetails, the
                         : 'They get an invitation to accept and pay. Nothing is charged until they do.'}
                 </p>
 
+                {error && <p role="alert" className="mt-3 text-sm text-rose-600">{error}</p>}
                 {results ? (
                     <div className="mt-4">
                         <p className="text-sm font-medium">{summarizeOutcomes(results)}</p>
@@ -230,7 +241,7 @@ export default function InviteToSeminarDialog({ open, onClose, groupDetails, the
                         </ul>
                         <button
                             type="button"
-                            onClick={onClose}
+                            onClick={close}
                             className="mt-4 w-full rounded-lg bg-[#234C6A] px-4 py-2 text-sm font-semibold text-white"
                         >
                             Done
@@ -246,6 +257,7 @@ export default function InviteToSeminarDialog({ open, onClose, groupDetails, the
                             <button
                                 type="button"
                                 onClick={() => setConfirmingFree(false)}
+                                disabled={submitting}
                                 className="flex-1 rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold"
                             >
                                 Back
@@ -253,9 +265,10 @@ export default function InviteToSeminarDialog({ open, onClose, groupDetails, the
                             <button
                                 type="button"
                                 onClick={() => void send()}
-                                className="flex-1 rounded-lg bg-[#234C6A] px-4 py-2 text-sm font-semibold text-white"
+                                disabled={submitting}
+                                className="flex-1 rounded-lg bg-[#234C6A] px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
                             >
-                                Add them
+                                {submitting ? 'Adding…' : 'Add them'}
                             </button>
                         </div>
                     </div>
@@ -307,8 +320,8 @@ export default function InviteToSeminarDialog({ open, onClose, groupDetails, the
                         ) : null}
                         <p className="mt-2 text-[11px] text-slate-400">
                             {isFree
-                                ? 'They need a WisdomLinked student account to be added.'
-                                : 'They need a WisdomLinked student account — invitations are paid for and joined from their dashboard, so there is nowhere to send one otherwise.'}
+                                ? 'They need a WisdomLinked student or expert account to be added.'
+                                : 'They need a WisdomLinked student or expert account — invitations are paid for and joined from their dashboard, so there is nowhere to send one otherwise.'}
                         </p>
 
                         <div className="relative mt-3">
@@ -317,8 +330,8 @@ export default function InviteToSeminarDialog({ open, onClose, groupDetails, the
                                 <input
                                     value={search}
                                     onChange={(e) => setSearch(e.target.value)}
-                                    placeholder="Search students by name"
-                                    aria-label="Search students by name"
+                                    placeholder="Search students or experts by name or email"
+                                    aria-label="Search students or experts by name or email"
                                     className="flex-1 bg-transparent text-xs outline-none"
                                 />
                             </div>
@@ -326,13 +339,13 @@ export default function InviteToSeminarDialog({ open, onClose, groupDetails, the
                                 <div
                                     className={`absolute z-10 mt-1 max-h-48 w-full overflow-y-auto rounded-lg border shadow-md ${dropdownBg}`}
                                     role="listbox"
-                                    aria-label="Matching students"
+                                    aria-label="Matching students and experts"
                                 >
                                     {loading ? (
                                         <p className="px-3 py-2 text-xs text-slate-400">Searching…</p>
                                     ) : visible.length === 0 ? (
                                         <p className="px-3 py-2 text-xs text-slate-400">
-                                            No students match — try email above.
+                                            No students or experts match — try email above.
                                         </p>
                                     ) : (
                                         visible.slice(0, 40).map((s) => (
@@ -364,16 +377,16 @@ export default function InviteToSeminarDialog({ open, onClose, groupDetails, the
                         </div>
 
                         <p className="mt-4 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-400">
-                            Or pick a student
+                            Or pick a student or expert
                         </p>
                         {loading ? (
                             <p className="py-8 text-center text-xs text-slate-400">
                                 <Loader2 className="mx-auto mb-1 h-4 w-4 animate-spin" aria-hidden />
-                                Loading students…
+                                Loading people…
                             </p>
-                        ) : students.length === 0 ? (
+                        ) : invitees.length === 0 ? (
                             <p className="py-8 text-center text-xs text-slate-400">
-                                No students left to pick — use email above instead.
+                                No students or experts left to pick — use email above instead.
                             </p>
                         ) : (
                             <>
@@ -410,7 +423,8 @@ export default function InviteToSeminarDialog({ open, onClose, groupDetails, the
                         <div className="mt-4 flex gap-2">
                             <button
                                 type="button"
-                                onClick={onClose}
+                                onClick={close}
+                                disabled={submitting}
                                 className="flex-1 rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold"
                             >
                                 Cancel
