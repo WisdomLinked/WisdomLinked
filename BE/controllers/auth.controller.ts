@@ -1056,10 +1056,14 @@ const updateProfile = async (req: any, res: Response) => {
             ...(updates.price !== undefined ? ['rate'] : []),
             ...(updates.appointmentDurations !== undefined ? ['durations'] : []),
         ];
+        const safeUpdates = withoutOperatorKeys(updates);
+        if (typeof updates['notificationPreferences.email'] === 'boolean') {
+            safeUpdates['notificationPreferences.email'] = updates['notificationPreferences.email'];
+        }
         await User.findOneAndUpdate(
             { email: String(email) },
             {
-                $set: withoutOperatorKeys(updates),
+                $set: safeUpdates,
                 ...(savedSetupSteps.length && { $pull: { pendingSetupSteps: { $in: savedSetupSteps } } }),
             },
             { new: true },

@@ -182,6 +182,10 @@ mongoose
         sweepSessionReminders();
         setInterval(sweepSessionReminders, 3 * 60 * 1000);
 
+        const { sweepUnreadMessageEmails } = require('./services/unreadMessageEmailSweep');
+        sweepUnreadMessageEmails();
+        setInterval(sweepUnreadMessageEmails, 15 * 60 * 1000);
+
         const httpServer = require('http').Server(app);
         httpServer.listen(PORT, function () {
             console.log(`App listening on port ${PORT}.`);
