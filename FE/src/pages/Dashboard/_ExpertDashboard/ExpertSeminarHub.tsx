@@ -28,6 +28,7 @@ import Avatar from '../../../components/Avatar';
 import DecisionNoteField from '../../../components/dashboard/DecisionNoteField';
 import GroupParticipantsDialog from '../Messenger/Messages/GroupParticipantsDialog';
 import ExpertSeminar from './seminar';
+import SeminarInvitations from '../../../components/dashboard/SeminarInvitations';
 import { recurrenceLabel } from '../../../utils/recurrenceLabel';
 import { DASHBOARD_PAGE_TITLE } from '../../../components/dashboard/pageTitle';
 import { EXPERT_SETUP_INCOMPLETE_FOR_EXPERT, isExpertSetupComplete } from '../../../components/dashboard/expertSetup/setupSteps';
@@ -1084,6 +1085,7 @@ export default function ExpertSeminarHub() {
       </header>
 
       <div className="max-w-6xl mx-auto space-y-10">
+        <SeminarInvitations key={String(userDetails?._id || '')} userId={userDetails?._id} />
         {myDrafts.length > 0 ? (
           <section>
             <h2 className="text-lg font-semibold text-slate-900 mb-1">

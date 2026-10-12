@@ -17,7 +17,7 @@ import DialogTitle from "@mui/material/DialogTitle";
 import DialogContent from "@mui/material/DialogContent";
 import DialogActions from "@mui/material/DialogActions";
 import Button from "@mui/material/Button";
-import { deleteGroupAction, leaveGroupAction } from "../../../../actions/groupChatActions";
+import { deleteGroupAction, leaveGroupAction, refreshSeminarMembers } from "../../../../actions/groupChatActions";
 import GroupsIcon from "@mui/icons-material/Groups";
 import ClearIcon from '@mui/icons-material/Clear';
 import PeopleAltIcon from '@mui/icons-material/PeopleAlt';
@@ -1371,6 +1371,10 @@ const MessagesHeader = ({ events, openCalendarModal, openSeminarModal, openEditS
             <InviteToSeminarDialog
                 open={inviteToSeminarOpen}
                 onClose={() => setInviteToSeminarOpen(false)}
+                onMembersAdded={() => {
+                    const gid = String(chosenGroupChatDetails?.groupId || chosenGroupChatDetails?._id || '');
+                    if (gid) dispatch(refreshSeminarMembers(gid) as any);
+                }}
                 groupDetails={chosenGroupChatDetails}
                 theme={theme === "light" ? "light" : "dark"}
             />
