@@ -931,7 +931,7 @@ export default function TOEConsulting() {
                   <span className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-60" style={{ backgroundColor: '#234C6A' }}></span>
                   <span className="relative inline-flex rounded-full h-2.5 w-2.5" style={{ backgroundColor: '#234C6A' }}></span>
                 </span>
-                <span className="text-[11px] font-bold tracking-[0.13em] uppercase" style={{ color: '#234C6A' }}>500+ Active Experts · 100+ Countries</span>
+                <span className="text-[11px] font-bold tracking-[0.13em] uppercase" style={{ color: '#234C6A' }}>A growing network of experts</span>
               </div>
 
               <h1 className="font-display font-bold leading-[1.12] mb-6 animate-fade-up text-slate-900" style={{ animationDelay: '0.15s', fontSize: 'clamp(2.15rem, 4.2vw, 3.35rem)' }}>
@@ -980,6 +980,7 @@ export default function TOEConsulting() {
             </div>
 
             {/* ── RIGHT: Visual panel ── */}
+            <div>
             <div className={`relative flex items-center justify-center transition-all duration-1200 delay-150 min-h-[min(70vh,520px)] sm:min-h-[600px] lg:min-h-[820px] ${isVisible ? 'opacity-100 scale-100' : 'opacity-0 scale-95'}`}>
 
               <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
@@ -1028,6 +1029,10 @@ export default function TOEConsulting() {
                   </div>
                 );
               })}
+            </div>
+            <p className={`mx-auto mt-3 max-w-md px-2 text-center text-[11px] leading-relaxed text-slate-400 transition-opacity duration-1000 delay-150 ${isVisible ? 'opacity-100' : 'opacity-0'}`}>
+              {homePage.hero.globeDisclaimer}
+            </p>
             </div>
           </div>
         </section>
