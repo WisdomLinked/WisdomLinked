@@ -842,7 +842,11 @@ export const createStripePaymentIntent = async (data: any) => {
         const res = await api.post("auth/createStripePaymentIntent", data);
         return res.data;
     } catch (err: any) {
-        return handleAuthApiFailure(err);
+        const failure = handleAuthApiFailure(err);
+        if (failure && err?.response?.data?.code === 'UNDER_REVIEW') {
+            return { ...failure, code: 'UNDER_REVIEW' };
+        }
+        return failure;
     }
 }
 

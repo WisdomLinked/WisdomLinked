@@ -7,7 +7,7 @@ import { isCsrfError } from './csrf';
 
 export type ApiFailure = false;
 
-export type AuthApiFailBody = { status: 'FAIL'; error: string };
+export type AuthApiFailBody = { status: 'FAIL'; error: string; code?: 'USER_BLOCKED' };
 
 export type HandleApiFailureOptions = {
     /** When false, caller shows inline FormAlert (auth flows). Default true. */
@@ -59,9 +59,36 @@ function isUnderReviewBlock(responseData: unknown): boolean {
     return isUnderReviewSession();
 }
 
+function isUserBlockedResponse(responseData: unknown): boolean {
+    return (
+        !!responseData &&
+        typeof responseData === 'object' &&
+        (responseData as { code?: unknown }).code === 'USER_BLOCKED'
+    );
+}
+
+function markSessionBlocked(): void {
+    const current = (store.getState() as { auth?: { userDetails?: { email?: string; status?: string } } })
+        ?.auth?.userDetails;
+    if (current?.email) {
+        if (current.status !== 'blocked') {
+            store.dispatch({ type: 'updateUserDetails', payload: { status: 'blocked' } });
+        }
+        return;
+    }
+    const stored = readStoredUser();
+    if (stored?.email && stored.status !== 'blocked') {
+        try {
+            localStorage.setItem('currentUser', JSON.stringify({ ...stored, status: 'blocked' }));
+        } catch {
+        }
+    }
+}
+
 function shouldForceLogout(responseCode: number | undefined, responseData: unknown): boolean {
     if (responseCode !== 401 && responseCode !== 403) return false;
     if (isCsrfError(responseData, responseCode)) return false;
+    if (isUserBlockedResponse(responseData)) return false;
     if (isUnderReviewBlock(responseData)) return false;
     return hasStoredSession();
 }
@@ -79,6 +106,12 @@ export function handleApiFailure(
 
     if (logoutOnAuth && shouldForceLogout(responseCode, responseData)) {
         store.dispatch(logoutUser());
+        SetLoadingStatus(false);
+        return false;
+    }
+
+    if (isUserBlockedResponse(responseData)) {
+        markSessionBlocked();
         SetLoadingStatus(false);
         return false;
     }
@@ -112,5 +145,9 @@ export function handleAuthApiFailure(
     }
 
     SetLoadingStatus(false);
+    if (isUserBlockedResponse(responseData)) {
+        markSessionBlocked();
+        return { status: 'FAIL', error: resolveUserFacingError(error), code: 'USER_BLOCKED' };
+    }
     return { status: 'FAIL', error: resolveUserFacingError(error) };
 }

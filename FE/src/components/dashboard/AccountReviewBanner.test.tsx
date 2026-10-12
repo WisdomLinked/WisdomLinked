@@ -29,6 +29,14 @@ describe('AccountReviewBanner', () => {
     expect(screen.getByRole('status')).toHaveTextContent(copy);
   });
 
+  it('says the profile is blocked, not under review, when the account is blocked', () => {
+    renderBanner('blocked');
+    expect(screen.getByRole('status')).toHaveTextContent(
+      /^Your profile is blocked\. Contact admin for more details\.$/,
+    );
+    expect(screen.queryByText(copy)).not.toBeInTheDocument();
+  });
+
   it('is absent from the DOM when the account is approved', () => {
     renderBanner('active');
     expect(screen.queryByRole('status')).not.toBeInTheDocument();
