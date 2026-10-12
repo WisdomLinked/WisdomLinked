@@ -14,6 +14,7 @@ const {
     approveSeminarSeatRequest,
     rejectSeminarSeatRequest,
     inviteToSeminar,
+    getGroupMemberCandidates,
     paySeminarSeatRequest,
     getSeminarSeatRequests,
     getMySeatRequests,
@@ -41,6 +42,7 @@ const { apiLimiter } = require("../middlewares/rateLimit");
 router.use(apiLimiter);
 
 // IMPORTANT: Specific routes must come before parameterized routes
+router.get('/member-candidates/:groupChatId', requireAuth(false), getGroupMemberCandidates);
 router.get(
     "/get-all-community-chats",
     requireAuth(false),
@@ -163,7 +165,7 @@ router.post(
     rejectSeminarSeatRequest
 );
 
-// host invites students — followers or by email — to one of their seminars
+// Host invites students or experts, selected from the picker or by email.
 router.post(
     "/invite-to-seminar",
     expertAuth(true),

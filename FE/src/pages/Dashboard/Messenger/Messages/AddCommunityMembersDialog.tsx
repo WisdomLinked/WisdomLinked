@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import Dialog from '@mui/material/Dialog';
 import { Search, Users } from 'lucide-react';
 import { useDispatch, useSelector } from 'react-redux';
-import { addParticipantsToCommunityChat, doFilterCustomers, getMyFollowers } from '../../../../api/api';
+import { addParticipantsToCommunityChat, getGroupMemberCandidates, getMyFollowers } from '../../../../api/api';
 import { fetchGroupHistory } from '../../../../api/chatApi';
 import { notify } from '../../../../utils/notify';
 import { replaceChatMessages, setChatChannelInfo, setChosenGroupChatDetails } from '../../../../actions/chatActions';
@@ -42,7 +42,9 @@ export default function AddCommunityMembersDialog({ open, onClose, groupDetails,
             if (id) ids.add(id);
         });
         const adm = groupDetails?.admin;
-        if (adm && typeof adm === 'object' && adm._id) ids.add(String(adm._id));
+        const adminId = String(adm?._id ?? adm ?? '');
+        if (adminId) ids.add(adminId);
+        (groupDetails?.coModerators || []).forEach((p: any) => ids.add(String(p?._id ?? p)));
         return ids;
     }, [groupDetails]);
 
@@ -58,12 +60,7 @@ export default function AddCommunityMembersDialog({ open, onClose, groupDetails,
         setFollowerNote(null);
         (async () => {
             try {
-                const response: any = await doFilterCustomers({
-                    username: '',
-                    keywords: [],
-                    services: [],
-                    sortBy: 'Name in ASC',
-                });
+                const response: any = await getGroupMemberCandidates(String(gid));
                 if (cancelled) return;
                 const all: Row[] = Array.isArray(response?.result)
                     ? response.result.map((c: any) => ({

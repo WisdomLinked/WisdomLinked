@@ -1322,12 +1322,22 @@ export const getCustomerById = async (id: any) => {
     }
 };
 
+export const getGroupMemberCandidates = async (groupChatId: string) => {
+    try {
+        const res = await api.get(`group-chat/member-candidates/${encodeURIComponent(groupChatId)}`);
+        return res.data;
+    } catch (err: any) {
+        return checkForAuthorization(err);
+    }
+};
+
 export const inviteToSeminar = async (data: { groupChatId: string; followerIds: string[]; emails?: string[] }) => {
     try {
         const res = await api.post("group-chat/invite-to-seminar", data);
         return res.data;
     } catch (err: any) {
-        return checkForAuthorization(err);
+        handleApiFailure(err, { notify: false, logoutOnAuth: err?.response?.status === 401 });
+        return { success: false, error: resolveUserFacingError(err) };
     }
 };
 

@@ -291,7 +291,9 @@ export default function ExpertDashboard() {
 
   // Persist the active view so a refresh keeps the user on the same tab.
   const [activeItem, setActiveItem] = useState(
-    () => window.localStorage.getItem('expertDashboardView') || 'dashboard',
+    () => new URLSearchParams(window.location.search).get('seminar_invitation') === '1'
+      ? 'seminars'
+      : window.localStorage.getItem('expertDashboardView') || 'dashboard',
   );
   useEffect(() => {
     window.localStorage.setItem('expertDashboardView', activeItem);

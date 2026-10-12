@@ -229,7 +229,7 @@ test("an address that resolves to someone already picked is not invited twice", 
   }
 });
 
-test("an experts's own account is not invitable as a student", async () => {
+test("another expert can be invited just like a student", async () => {
   await withStubs(seminar(), async () => {
     const res = await invite({ groupChatId: "seminar-1", followerIds: ["student-1"] });
     assert.equal(res.body.results[0].outcome, "invited");
@@ -237,7 +237,7 @@ test("an experts's own account is not invitable as a student", async () => {
 
   await withStubs(seminar(), async () => {
     const res = await invite({ groupChatId: "seminar-1", followerIds: ["student-1"] });
-    assert.equal(res.body.results[0].outcome, "not_a_student");
+    assert.equal(res.body.results[0].outcome, "invited");
   }, { students: { "student-1": student("student-1", { role: "expert" }) } });
 });
 
@@ -314,3 +314,41 @@ test("the same follower picked twice is invited once", async () => {
     assert.equal(res.body.results.length, 1);
   });
 });
+
+test('a free seminar adds an expert resolved by email without changing their role', async () => {
+  const invitedExpert = student('expert-2', { role: 'expert' });
+  const originalFindOne = User.findOne;
+  try {
+    User.findOne = () => ({ select: async () => ({ _id: 'expert-2' }) });
+    await withStubs(seminar({ price: 0 }), async () => {
+      const res = await invite({ groupChatId: 'seminar-1', emails: ['EXPERT@EXAMPLE.COM'] });
+      assert.equal(res.statusCode, 200);
+      assert.equal(res.body.results[0].outcome, 'enrolled');
+      assert.equal(invitedExpert.role, 'expert');
+    }, { students: { 'expert-2': invitedExpert } });
+  } finally { User.findOne = originalFindOne; }
+});
+
+test('a mixed student and expert selection uses the same paid invitation rules', async () => {
+  await withStubs(seminar(), async () => {
+    const res = await invite({ groupChatId: 'seminar-1', followerIds: ['student-1', 'expert-2'] });
+    assert.deepEqual(res.body.results.map((r: any) => r.outcome), ['invited', 'invited']);
+    assert.equal(res.body.free, false);
+  }, { students: { 'expert-2': student('expert-2', { role: 'expert' }) } });
+});
+
+test('the host cannot invite themselves', async () => {
+  await withStubs(seminar(), async () => {
+    const res = await invite({ groupChatId: 'seminar-1', followerIds: ['host-1'] });
+    assert.equal(res.body.results[0].outcome, 'already_enrolled');
+  });
+});
+
+for (const over of [{ role: 'admin' }, { role: 'expert', status: 'blocked' }, { role: 'customer', status: 'blocked' }]) {
+  test(`ineligible accounts cannot be invited: ${JSON.stringify(over)}`, async () => {
+    await withStubs(seminar(), async () => {
+      const res = await invite({ groupChatId: 'seminar-1', followerIds: ['target'] });
+      assert.equal(res.body.results[0].outcome, 'not_eligible');
+    }, { students: { target: student('target', over) } });
+  });
+}
