@@ -12,7 +12,7 @@ import {
   Trash2,
   MessageSquare,
 } from 'lucide-react';
-import { useDispatch } from 'react-redux';
+import { useDispatch, useStore } from 'react-redux';
 
 import { useAppSelector } from '../../../store';
 import { updateMe } from '../../../actions/authActions';
@@ -30,6 +30,7 @@ import GroupParticipantsDialog from '../Messenger/Messages/GroupParticipantsDial
 import ExpertSeminar from './seminar';
 import { recurrenceLabel } from '../../../utils/recurrenceLabel';
 import { DASHBOARD_PAGE_TITLE } from '../../../components/dashboard/pageTitle';
+import { EXPERT_SETUP_INCOMPLETE_FOR_EXPERT, isExpertSetupComplete } from '../../../components/dashboard/expertSetup/setupSteps';
 
 type HubScreen = 'list' | 'create' | 'edit' | 'detail';
 
@@ -912,6 +913,13 @@ export default function ExpertSeminarHub() {
   const me = userDetails?._id;
 
   const [screen, setScreen] = useState<HubScreen>('list');
+  const store = useStore();
+  const [createBlocked, setCreateBlocked] = useState(false);
+  const openCreate = () => {
+    const ready = isExpertSetupComplete((store.getState() as any).auth?.userDetails);
+    setCreateBlocked(!ready);
+    if (ready) setScreen('create');
+  };
   const [detailSeminar, setDetailSeminar] = useState<any | null>(null);
   const [editPayload, setEditPayload] = useState<ReturnType<typeof mapGroupChatToExpertSeminar> | null>(
     null,
@@ -1058,14 +1066,21 @@ export default function ExpertSeminarHub() {
             Discover sessions hosted by other experts, then manage your own seminars below.
           </p>
         </div>
-        <button
-          type="button"
-          onClick={() => setScreen('create')}
-          className="inline-flex items-center justify-center gap-2 shrink-0 rounded-xl bg-[#234C6A] px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:brightness-110"
-        >
-          <Plus className="h-4 w-4" aria-hidden />
-          Create seminar
-        </button>
+        <div className="flex shrink-0 flex-col items-start gap-2 sm:items-end">
+          <button
+            type="button"
+            onClick={openCreate}
+            className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#234C6A] px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:brightness-110"
+          >
+            <Plus className="h-4 w-4" aria-hidden />
+            Create seminar
+          </button>
+          {createBlocked ? (
+            <p role="alert" className="text-sm font-semibold text-rose-600 sm:text-right">
+              {EXPERT_SETUP_INCOMPLETE_FOR_EXPERT}
+            </p>
+          ) : null}
+        </div>
       </header>
 
       <div className="max-w-6xl mx-auto space-y-10">

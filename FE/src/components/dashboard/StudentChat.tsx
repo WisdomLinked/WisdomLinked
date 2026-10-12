@@ -6,7 +6,7 @@ import DialogTitle from '@mui/material/DialogTitle';
 import DialogContent from '@mui/material/DialogContent';
 import DialogActions from '@mui/material/DialogActions';
 import Button from '@mui/material/Button';
-import { MessageCircle, Plus, X, CheckCircle2, MoreVertical, UserPlus, ArrowLeft, Users } from 'lucide-react';
+import { MessageCircle, Plus, X, CheckCircle2, MoreVertical, UserPlus, ArrowLeft, Users, LogOut, ShieldCheck } from 'lucide-react';
 import Messenger from '../../pages/Dashboard/Messenger/Messenger';
 import { useAppSelector } from '../../store';
 import { onSubscriptionChanged, onNewMessage, normalizeRcStreamRoomMessage, subscribeToRoom } from '../../services/rcRealtime';
@@ -31,6 +31,10 @@ import {
   joinPrivateChat,
   addParticipantsToCommunityChat,
   ensureSeminarChannel,
+  searchAdminChatRooms,
+  getAdminChatRooms,
+  joinAdminChatRoom,
+  leaveAdminChatRoom,
 } from '../../api/api';
 import { clearDmThread, hideDmFromList, fetchDmUnreadSnapshot, fetchOnlineUsers } from '../../api/chatApi';
 import { setOnlineUsers } from '../../actions/friendActions';
@@ -71,6 +75,16 @@ import { buildOnlineUserIdSet, hasOnlineUserId } from '../../utils/onlinePresenc
 import { getAvatarPalette, getInitials } from '../../utils/avatarColor';
 import { CommunityRoomAvatar } from './ChatSidebar';
 import { canAdminInitiateDmWithRole } from '../../utils/adminChatRules';
+import {
+  adminRoomKindForSection,
+  adminSearchExtras,
+  adminSearchSubtitle,
+  appointmentPeopleLabel,
+  mergeAdminRooms,
+  ADMIN_ROOMS_CHANGED_EVENT,
+  type AdminRoomKind,
+  type AdminSearchRoom,
+} from '../../utils/adminChatRooms';
 
 type CommunityRow = {
   raw: any;
@@ -149,6 +163,29 @@ const StudentChat: React.FC<{ section?: ChatSection }> = ({ section = CHAT_SECTI
 
   const currentUserId = userDetails?._id ?? userDetails?.id ?? userDetails?.userId ?? null;
 
+  const [adminRooms, setAdminRooms] = useState<any[]>([]);
+  const [adminSearch, setAdminSearch] = useState<{ kind: AdminRoomKind; q: string; rooms: AdminSearchRoom[] } | null>(null);
+  const [adminJoinTarget, setAdminJoinTarget] = useState<{ kind: AdminRoomKind; room: AdminSearchRoom } | null>(null);
+  const [adminJoining, setAdminJoining] = useState(false);
+  const [adminLeaveRoom, setAdminLeaveRoom] = useState<
+    { _id: string; name: string; kind: AdminRoomKind; seriesId?: string } | null
+  >(null);
+
+  const loadAdminRooms = React.useCallback(async () => {
+    if (!isAdmin) return;
+    const res: any = await getAdminChatRooms();
+    if (res?.status === 'SUCCESS' && Array.isArray(res.rooms)) setAdminRooms(res.rooms);
+  }, [isAdmin]);
+
+  useEffect(() => {
+    void loadAdminRooms();
+  }, [loadAdminRooms]);
+
+  const listGroupChats = useMemo(
+    () => (isAdmin ? mergeAdminRooms(userDetails?.groupChats, adminRooms) : userDetails?.groupChats || []),
+    [isAdmin, userDetails?.groupChats, adminRooms],
+  );
+
   const [createOpen, setCreateOpen] = useState(false);
   const [privateDmMenuOpenId, setPrivateDmMenuOpenId] = useState<string | null>(null);
   const [communityMenuOpenId, setCommunityMenuOpenId] = useState<string | null>(null);
@@ -223,7 +260,7 @@ const StudentChat: React.FC<{ section?: ChatSection }> = ({ section = CHAT_SECTI
 
   /** Seminar group chats the user belongs to (host expert or a joined student). */
   const seminarRows = useMemo(() => {
-    const list: any[] = userDetails?.groupChats || [];
+    const list: any[] = listGroupChats;
     const seminars = list.filter(
       (g: any) => g?.type === 'seminar' && (g?.status === 'active' || !g?.status),
     );
@@ -246,12 +283,15 @@ const StudentChat: React.FC<{ section?: ChatSection }> = ({ section = CHAT_SECTI
       });
     }
     return rows;
-  }, [userDetails?.groupChats]);
+  }, [listGroupChats]);
 
-  const appointmentRows = useMemo(
-    () => appointmentChatRows(userDetails?.groupChats, currentUserId),
-    [userDetails?.groupChats, currentUserId],
-  );
+  const appointmentRows = useMemo(() => {
+    const rows = appointmentChatRows(listGroupChats, currentUserId);
+    // An admin sits in neither seat, so name both people instead of "the other one".
+    return isAdmin
+      ? rows.map(row => ({ ...row, withName: appointmentPeopleLabel(row.raw) || row.withName }))
+      : rows;
+  }, [listGroupChats, currentUserId, isAdmin]);
 
   const appointmentPeople = useMemo(
     () => appointmentRows.map(row => ({ image: row.withImage })),
@@ -289,6 +329,16 @@ const StudentChat: React.FC<{ section?: ChatSection }> = ({ section = CHAT_SECTI
   useEffect(() => {
     loadCommunityChats();
   }, [loadCommunityChats]);
+
+  useEffect(() => {
+    if (!isAdmin) return;
+    const refresh = () => {
+      void loadAdminRooms();
+      void loadCommunityChats();
+    };
+    window.addEventListener(ADMIN_ROOMS_CHANGED_EVENT, refresh);
+    return () => window.removeEventListener(ADMIN_ROOMS_CHANGED_EVENT, refresh);
+  }, [isAdmin, loadAdminRooms, loadCommunityChats]);
 
   // Hydrate DM unread/highlight state as soon as chat section opens (covers messages received while user was on another page).
   useEffect(() => {
@@ -1280,6 +1330,10 @@ const StudentChat: React.FC<{ section?: ChatSection }> = ({ section = CHAT_SECTI
     const row = communityMenuRow;
     closeCommunityMenu();
     if (!row?._id) return;
+    if (isAdmin && row.raw?.joinedAsChatAdmin) {
+      setAdminLeaveRoom({ _id: String(row._id), name: row.name, kind: 'community' });
+      return;
+    }
     setLeaveCommunityRow(row);
     setLeaveCommunityConfirmOpen(true);
   };
@@ -1436,6 +1490,214 @@ const StudentChat: React.FC<{ section?: ChatSection }> = ({ section = CHAT_SECTI
     return hasOnlineUserId(onlineIdSet, userId);
   };
   const showMobileMessenger = shouldShowMobileMessenger(chosenChatDetails, chosenGroupChatDetails);
+  const showMobileRightPane = showMobileMessenger || Boolean(adminJoinTarget);
+
+  const adminSectionKind = isAdmin ? adminRoomKindForSection(section) : null;
+  const adminQuery =
+    adminSectionKind === 'appointment'
+      ? appointmentQuery
+      : adminSectionKind === 'seminar'
+        ? seminarQuery
+        : adminSectionKind === 'community'
+          ? communityQuery
+          : '';
+
+  useEffect(() => {
+    const q = adminQuery.trim();
+    if (!adminSectionKind || !q) {
+      setAdminSearch(null);
+      return;
+    }
+    let cancelled = false;
+    const timer = window.setTimeout(async () => {
+      const res: any = await searchAdminChatRooms(adminSectionKind, q);
+      if (cancelled) return;
+      setAdminSearch({
+        kind: adminSectionKind,
+        q,
+        rooms: res?.status === 'SUCCESS' && Array.isArray(res.rooms) ? res.rooms : [],
+      });
+    }, 300);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [adminSectionKind, adminQuery]);
+
+  const adminExtras = useMemo(() => {
+    if (!adminSectionKind || !adminSearch || adminSearch.kind !== adminSectionKind) return [];
+    if (adminSearch.q !== adminQuery.trim()) return [];
+    const listed =
+      adminSectionKind === 'seminar'
+        ? seminarRows
+        : adminSectionKind === 'appointment'
+          ? appointmentRows
+          : communityChats;
+    return adminSearchExtras(adminSearch.rooms, listed);
+  }, [adminSectionKind, adminSearch, adminQuery, seminarRows, appointmentRows, communityChats]);
+
+  // Picking a chat or switching section drops a search hit that was never joined.
+  useEffect(() => {
+    if (chosenChatDetails || chosenGroupChatDetails) setAdminJoinTarget(null);
+  }, [chosenChatDetails, chosenGroupChatDetails]);
+  useEffect(() => {
+    setAdminJoinTarget(null);
+  }, [section]);
+
+  const openAdminSearchHit = (kind: AdminRoomKind, room: AdminSearchRoom) => {
+    dispatch(resetChatAction());
+    setAdminJoinTarget({ kind, room });
+  };
+
+  const markAdminSearchJoined = (roomId: string, seriesId: string | undefined, joined: boolean) => {
+    setAdminSearch(prev =>
+      prev
+        ? {
+            ...prev,
+            rooms: prev.rooms.map(r =>
+              String(r._id) === roomId || (seriesId && String(r.seriesId || '') === seriesId)
+                ? { ...r, joined }
+                : r,
+            ),
+          }
+        : prev,
+    );
+  };
+
+  const onAdminJoin = async () => {
+    if (!adminJoinTarget || adminJoining) return;
+    const { kind } = adminJoinTarget;
+    setAdminJoining(true);
+    try {
+      const res: any = await joinAdminChatRoom(String(adminJoinTarget.room._id));
+      if (res?.status !== 'SUCCESS' || !res.room) {
+        notify.error(res?.error || 'Could not join this chat');
+        return;
+      }
+      const room = res.room;
+      const roomId = String(room._id);
+      const seriesId = room.seriesId ? String(room.seriesId) : undefined;
+      markAdminSearchJoined(roomId, seriesId, true);
+      setAdminJoinTarget(null);
+      if (kind === 'community') {
+        await loadCommunityChats();
+        await openCommunity({
+          raw: room,
+          _id: roomId,
+          name: room.name || 'Community chat',
+          missedChats: 0,
+          lastLine: room.titleLine || '',
+          description: room.description || '',
+        });
+      } else {
+        setAdminRooms(prev => [
+          ...prev.filter(
+            r => String(r?._id) !== roomId && !(seriesId && String(r?.seriesId || '') === seriesId),
+          ),
+          room,
+        ]);
+        if (kind === 'seminar') {
+          await openSeminar({
+            _id: roomId,
+            name: room.name || 'Seminar',
+            rcChannelId: room.rcChannelId ? String(room.rcChannelId) : undefined,
+            raw: room,
+          });
+        } else {
+          const row = appointmentChatRows([room], currentUserId)[0];
+          if (row) openAppointment(row);
+        }
+      }
+      dispatch(showSuccessAlert('You joined this chat as admin'));
+    } catch {
+      notify.error('Could not join this chat');
+    } finally {
+      setAdminJoining(false);
+    }
+  };
+
+  const confirmAdminLeave = async () => {
+    const room = adminLeaveRoom;
+    setAdminLeaveRoom(null);
+    if (!room) return;
+    const res: any = await leaveAdminChatRoom(room._id);
+    if (res?.status !== 'SUCCESS') {
+      notify.error(res?.error || 'Could not leave this chat');
+      return;
+    }
+    const open = chosenGroupChatDetails as any;
+    const openId = String(open?.groupId ?? open?._id ?? '');
+    const openSeries = String(open?.seriesId ?? '');
+    if (openId === room._id || (room.seriesId && openSeries === room.seriesId)) {
+      dispatch(resetChatAction());
+    }
+    markAdminSearchJoined(room._id, room.seriesId, false);
+    await loadAdminRooms();
+    if (room.kind === 'community') await loadCommunityChats();
+    dispatch(showSuccessAlert('You left this chat'));
+  };
+
+  const adminListEmptyText = (kind: AdminRoomKind, query: string, fallback: string): string => {
+    if (adminSectionKind !== kind) return fallback;
+    if (!query.trim()) {
+      if (kind === 'appointment') return 'Search by appointment name to find any 1:1 chat on WisdomLinked.';
+      if (kind === 'seminar') return 'Search by name to find any seminar chat on WisdomLinked.';
+      return 'Search by name to find any community on WisdomLinked.';
+    }
+    return adminExtras.length ? 'None of your chats match. Other chats on WisdomLinked are listed below.' : fallback;
+  };
+
+  const renderAdminSearchExtras = (kind: AdminRoomKind) => {
+    if (adminSectionKind !== kind || !adminExtras.length) return null;
+    return (
+      <div role="group" aria-label="Other chats on WisdomLinked" className="mt-2 border-t border-slate-200 pt-2">
+        <p className="px-2 pb-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">
+          Other chats on WisdomLinked
+        </p>
+        {adminExtras.map(room => {
+          const active = String(adminJoinTarget?.room._id ?? '') === String(room._id);
+          return (
+            <button
+              key={room._id}
+              type="button"
+              onClick={() => openAdminSearchHit(kind, room)}
+              className={`mb-1 flex w-full items-start gap-2 rounded-xl px-3 py-2 text-left text-xs transition-colors ${
+                active ? 'bg-[#E8EEF4] text-slate-900' : 'hover:bg-slate-100 text-slate-700'
+              }`}
+            >
+              <div className="mt-0.5 shrink-0">
+                <CommunityRoomAvatar />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="truncate font-semibold text-[11px]">{room.name}</p>
+                <p className="mt-0.5 truncate text-[10px] text-slate-500">{adminSearchSubtitle(kind, room)}</p>
+              </div>
+            </button>
+          );
+        })}
+      </div>
+    );
+  };
+
+  const adminLeaveButton = (row: { _id: string; name: string; raw?: any }, kind: AdminRoomKind) =>
+    isAdmin && row.raw?.joinedAsChatAdmin ? (
+      <IconButton
+        size="small"
+        aria-label={`Leave ${row.name}`}
+        title="Leave this chat"
+        onClick={() =>
+          setAdminLeaveRoom({
+            _id: String(row._id),
+            name: row.name,
+            kind,
+            seriesId: row.raw?.seriesId ? String(row.raw.seriesId) : undefined,
+          })
+        }
+        sx={{ position: 'absolute', right: 4, top: 'calc(50% - 2px)', transform: 'translateY(-50%)', color: '#64748b' }}
+      >
+        <LogOut className="h-4 w-4" strokeWidth={2} />
+      </IconButton>
+    ) : null;
 
   const pendingJoinCommunity = useMemo(() => {
     const openId = String(
@@ -1451,7 +1713,9 @@ const StudentChat: React.FC<{ section?: ChatSection }> = ({ section = CHAT_SECTI
     if (!pendingJoinCommunity || joiningCommunity) return;
     setJoiningCommunity(true);
     try {
-      const res: any = await joinCommunityChat(pendingJoinCommunity._id);
+      const res: any = isAdmin
+        ? await joinAdminChatRoom(String(pendingJoinCommunity._id))
+        : await joinCommunityChat(pendingJoinCommunity._id);
       if (res?.status === 'SUCCESS') {
         dispatch(showSuccessAlert('You have joined the community'));
         dispatch(updateMe() as any);
@@ -1469,7 +1733,7 @@ const StudentChat: React.FC<{ section?: ChatSection }> = ({ section = CHAT_SECTI
   return (
     <div className="flex h-full min-h-0 overflow-hidden bg-wl-page text-slate-900">
       {isChatSectionUnset(section) ? null : (
-      <aside className={`${showMobileMessenger ? 'hidden md:flex' : 'flex'} w-full md:w-80 lg:w-96 min-h-0 flex-col border-r border-slate-200 bg-white`}>
+      <aside className={`${showMobileRightPane ? 'hidden md:flex' : 'flex'} w-full md:w-80 lg:w-96 min-h-0 flex-col border-r border-slate-200 bg-white`}>
         <div className="px-4 pt-4 pb-3 border-b border-slate-200">
           <div className="flex items-center justify-between gap-2">
             <p className="text-xs font-bold uppercase tracking-[0.12em] text-slate-600">
@@ -1514,9 +1778,11 @@ const StudentChat: React.FC<{ section?: ChatSection }> = ({ section = CHAT_SECTI
             <div className="wl-chat-scroll min-h-0 flex-1 overflow-y-auto pr-1">
             {filteredCommunity.length === 0 ? (
               <p className="px-2 py-3 text-[11px] text-slate-500">
-                {communityQuery.trim()
-                  ? 'No community chats match your search.'
-                  : 'No community chats.'}
+                {adminListEmptyText(
+                  'community',
+                  communityQuery,
+                  communityQuery.trim() ? 'No community chats match your search.' : 'No community chats.',
+                )}
               </p>
             ) : (
               filteredCommunity.map(chat => {
@@ -1610,6 +1876,7 @@ const StudentChat: React.FC<{ section?: ChatSection }> = ({ section = CHAT_SECTI
                 );
               })
             )}
+            {renderAdminSearchExtras('community')}
             </div>
           </div>
           ) : null}
@@ -1869,9 +2136,13 @@ const StudentChat: React.FC<{ section?: ChatSection }> = ({ section = CHAT_SECTI
             <div className="wl-chat-scroll min-h-0 flex-1 overflow-y-auto pr-1">
             {filteredAppointments.length === 0 ? (
               <p className="px-2 py-3 text-[11px] text-slate-500">
-                {appointmentQuery.trim()
-                  ? 'No 1:1 appointments match your search.'
-                  : 'No 1:1 appointment chats yet. A chat opens here once an appointment is confirmed.'}
+                {adminListEmptyText(
+                  'appointment',
+                  appointmentQuery,
+                  appointmentQuery.trim()
+                    ? 'No 1:1 appointments match your search.'
+                    : 'No 1:1 appointment chats yet. A chat opens here once an appointment is confirmed.',
+                )}
               </p>
             ) : (
               filteredAppointments.map(row => {
@@ -1895,12 +2166,13 @@ const StudentChat: React.FC<{ section?: ChatSection }> = ({ section = CHAT_SECTI
                 const rawPortrait =
                   typeof row.withImage === 'string' ? row.withImage.trim() : '';
                 const portrait = rawPortrait ? appointmentImages.get(rawPortrait) ?? null : null;
+                const adminLeave = adminLeaveButton(row, 'appointment');
                 return (
+                  <div key={row._id} className="relative">
                   <button
-                    key={row._id}
                     type="button"
                     onClick={() => openAppointment(row)}
-                    className={`mb-1 flex w-full items-start gap-2 rounded-xl px-3 py-2 text-left text-xs transition-colors ${rowTone}`}
+                    className={`mb-1 flex w-full items-start gap-2 rounded-xl px-3 py-2 text-left text-xs transition-colors ${rowTone}${adminLeave ? ' pr-10' : ''}`}
                   >
                     <div className="mt-0.5 shrink-0">
                       {portrait ? (
@@ -1937,9 +2209,12 @@ const StudentChat: React.FC<{ section?: ChatSection }> = ({ section = CHAT_SECTI
                       </p>
                     </div>
                   </button>
+                  {adminLeave}
+                  </div>
                 );
               })
             )}
+            {renderAdminSearchExtras('appointment')}
             </div>
           </div>
           ) : null}
@@ -1960,9 +2235,11 @@ const StudentChat: React.FC<{ section?: ChatSection }> = ({ section = CHAT_SECTI
             <div className="wl-chat-scroll min-h-0 flex-1 overflow-y-auto pr-1">
             {filteredSeminars.length === 0 ? (
               <p className="px-2 py-3 text-[11px] text-slate-500">
-                {seminarQuery.trim()
-                  ? 'No seminar chats match your search.'
-                  : 'No seminar chats yet.'}
+                {adminListEmptyText(
+                  'seminar',
+                  seminarQuery,
+                  seminarQuery.trim() ? 'No seminar chats match your search.' : 'No seminar chats yet.',
+                )}
               </p>
             ) : (
               filteredSeminars.map(row => {
@@ -1981,12 +2258,13 @@ const StudentChat: React.FC<{ section?: ChatSection }> = ({ section = CHAT_SECTI
                   : hasUnread
                     ? 'bg-amber-50/80 text-slate-900 ring-1 ring-amber-200/80 hover:bg-amber-50'
                     : 'hover:bg-slate-100 text-slate-700';
+                const adminLeave = adminLeaveButton(row, 'seminar');
                 return (
+                  <div key={row._id} className="relative">
                   <button
-                    key={row._id}
                     type="button"
                     onClick={() => void openSeminar(row)}
-                    className={`mb-1 flex w-full items-start gap-2 rounded-xl px-3 py-2 text-left text-xs transition-colors ${rowTone}`}
+                    className={`mb-1 flex w-full items-start gap-2 rounded-xl px-3 py-2 text-left text-xs transition-colors ${rowTone}${adminLeave ? ' pr-10' : ''}`}
                   >
                     <div className="mt-0.5 shrink-0">
                       <CommunityRoomAvatar />
@@ -2011,9 +2289,12 @@ const StudentChat: React.FC<{ section?: ChatSection }> = ({ section = CHAT_SECTI
                       </p>
                     </div>
                   </button>
+                  {adminLeave}
+                  </div>
                 );
               })
             )}
+            {renderAdminSearchExtras('seminar')}
             </div>
           </div>
           ) : null}
@@ -2021,19 +2302,49 @@ const StudentChat: React.FC<{ section?: ChatSection }> = ({ section = CHAT_SECTI
       </aside>
       )}
 
-      <section className={`${isChatSectionUnset(section) || showMobileMessenger ? 'flex' : 'hidden md:flex'} flex-1 flex-col min-h-0 min-w-0 bg-wl-page`}>
+      <section className={`${isChatSectionUnset(section) || showMobileRightPane ? 'flex' : 'hidden md:flex'} flex-1 flex-col min-h-0 min-w-0 bg-wl-page`}>
         <div className={`${isChatSectionUnset(section) ? 'hidden' : ''} md:hidden border-b border-slate-200 bg-white px-3 py-2`}>
           <button
             type="button"
             className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-[12px] font-semibold text-[#234C6A] hover:bg-slate-100"
-            onClick={() => dispatch(resetChatAction())}
+            onClick={() => {
+              setAdminJoinTarget(null);
+              dispatch(resetChatAction());
+            }}
             aria-label="Back to chats"
           >
             <ArrowLeft className="h-4 w-4" />
             Chats
           </button>
         </div>
-        {pendingJoinCommunity ? (
+        {adminJoinTarget ? (
+          <div className="flex flex-1 flex-col min-h-0">
+            <div className="flex items-center gap-2 border-b border-slate-200 bg-white px-4 py-3">
+              <ShieldCheck className="h-5 w-5 text-[#234C6A]" aria-hidden />
+              <p className="truncate text-[15px] font-semibold text-slate-900">{adminJoinTarget.room.name}</p>
+            </div>
+            <div className="flex flex-1 flex-col overflow-y-auto p-6">
+              <div className="m-auto flex max-w-md flex-col items-center gap-4 text-center">
+                <p className="text-[12px] text-slate-500">
+                  {adminSearchSubtitle(adminJoinTarget.kind, adminJoinTarget.room)}
+                </p>
+                <p className="text-[14px] text-slate-600">
+                  You are not in this chat yet. Join as admin to read the conversation and send messages.
+                  Its members are not changed, and your messages show an Admin tag.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => void onAdminJoin()}
+                  disabled={adminJoining}
+                  aria-label="Join chat as admin"
+                  className="inline-flex items-center gap-2 rounded-xl bg-[#234C6A] px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-[#1b3c53] disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {adminJoining ? 'Joining…' : 'Join chat'}
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : pendingJoinCommunity ? (
           <div className="flex flex-1 flex-col min-h-0">
             <div className="flex items-center gap-2 border-b border-slate-200 bg-white px-4 py-3">
               <Users className="h-5 w-5 text-[#234C6A]" aria-hidden />
@@ -2105,6 +2416,22 @@ const StudentChat: React.FC<{ section?: ChatSection }> = ({ section = CHAT_SECTI
           </Button>
           <Button variant="contained" color="error" onClick={confirmLeaveCommunity}>
             Leave community
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog open={Boolean(adminLeaveRoom)} onClose={() => setAdminLeaveRoom(null)} maxWidth="xs" fullWidth>
+        <DialogTitle>Leave this chat?</DialogTitle>
+        <DialogContent>
+          <p className="text-sm text-slate-600">
+            You will stop seeing <strong>{adminLeaveRoom?.name ?? 'this chat'}</strong> in your list. Its members are
+            not affected, and you can find and join it again from search.
+          </p>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2, gap: 1 }}>
+          <Button onClick={() => setAdminLeaveRoom(null)}>Cancel</Button>
+          <Button variant="contained" color="error" onClick={() => void confirmAdminLeave()}>
+            Leave chat
           </Button>
         </DialogActions>
       </Dialog>

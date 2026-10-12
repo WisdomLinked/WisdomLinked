@@ -7,8 +7,8 @@ import SiteSearchBox from '../search/SiteSearchBox';
 const sectionLinks = [
   { label: 'About Us', to: '/' },
   { label: 'Services', to: '/' },
-  { label: 'Guidelines', to: '/' },
   { label: 'Pricing', to: '/' },
+  { label: 'Guidelines', to: '/' },
   { label: 'Resources', to: '/resources' },
   { label: 'Contact Us', to: '/' },
 ] as const;

@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { ChevronRight } from 'lucide-react';
 import Avatar from '../../../../components/Avatar';
 import UserActionsMenu from './UserActionsMenu';
+import { userStatusOption, type UserStatus } from './userStatus';
 
 export type AdminUserRow = {
   _id?: string;
@@ -40,38 +41,9 @@ function UserIdentity({ user }: { user: AdminUserRow }) {
   );
 }
 
-function UserStatusSelect({
-  user,
-  onChange,
-}: {
-  user: AdminUserRow;
-  onChange: (status: string) => void;
-}) {
-  return (
-    <select
-      aria-label={`Status for ${user.username || user.email || 'user'}`}
-      className={`w-full max-w-[9rem] rounded-lg border border-wl-line bg-wl-card px-2 py-1 text-[13px] text-wl-ink outline-none focus:ring-2 focus:ring-wl-brand/20 ${
-        user.status === 'active'
-          ? 'font-medium text-wl-brand'
-          : user.status === 'blocked'
-            ? 'text-red'
-            : 'text-brownyellow'
-      }`}
-      value={user.status || 'review'}
-      onClick={e => e.stopPropagation()}
-      onChange={e => onChange(e.target.value)}
-    >
-      <option value="active" className="text-wl-brand">
-        Active
-      </option>
-      <option value="review" className="text-brownyellow">
-        In review
-      </option>
-      <option value="blocked" className="text-red">
-        Blocked
-      </option>
-    </select>
-  );
+function UserStatusText({ user }: { user: AdminUserRow }) {
+  const option = userStatusOption(user.status);
+  return <span className={`text-[13px] ${option.className}`}>{option.label}</span>;
 }
 
 function UserDetailGrid({ user }: { user: AdminUserRow }) {
@@ -116,21 +88,15 @@ function UserDetailGrid({ user }: { user: AdminUserRow }) {
 
 export default function UserListTable({
   users,
-  isReviewQueue,
   emptyMessage,
   onStatusChange,
-  onApprove,
-  onBlock,
   onManage,
   onImpersonate,
   onAudit,
 }: {
   users: AdminUserRow[];
-  isReviewQueue: boolean;
   emptyMessage: string;
-  onStatusChange: (user: AdminUserRow, status: string) => void;
-  onApprove: (user: AdminUserRow) => void;
-  onBlock: (user: AdminUserRow) => void;
+  onStatusChange: (user: AdminUserRow, status: UserStatus) => void;
   onManage: (user: AdminUserRow) => void;
   onImpersonate: (user: AdminUserRow) => void;
   onAudit: (user: AdminUserRow) => void;
@@ -178,16 +144,14 @@ export default function UserListTable({
                 </div>
                 <UserActionsMenu
                   user={u}
-                  isReviewQueue={isReviewQueue}
-                  onApprove={() => onApprove(u)}
-                  onBlock={() => onBlock(u)}
+                  onStatusChange={status => onStatusChange(u, status)}
                   onManage={() => onManage(u)}
                   onImpersonate={() => onImpersonate(u)}
                   onAudit={() => onAudit(u)}
                 />
               </div>
               <div className="mt-3 pl-11">
-                <UserStatusSelect user={u} onChange={status => onStatusChange(u, status)} />
+                <UserStatusText user={u} />
               </div>
               {expanded ? (
                 <div id={detailsId} className="mt-3 border-t border-wl-line pt-3">
@@ -254,14 +218,12 @@ export default function UserListTable({
                   </td>
                   <td className={`px-3 py-2 text-sm uppercase ${roleClass(u.role)}`}>{dash(u.role)}</td>
                   <td className="px-3 py-2">
-                    <UserStatusSelect user={u} onChange={status => onStatusChange(u, status)} />
+                    <UserStatusText user={u} />
                   </td>
                   <td className="px-2 py-2 text-right">
                     <UserActionsMenu
                       user={u}
-                      isReviewQueue={isReviewQueue}
-                      onApprove={() => onApprove(u)}
-                      onBlock={() => onBlock(u)}
+                      onStatusChange={status => onStatusChange(u, status)}
                       onManage={() => onManage(u)}
                       onImpersonate={() => onImpersonate(u)}
                       onAudit={() => onAudit(u)}

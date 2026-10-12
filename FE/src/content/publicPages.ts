@@ -33,6 +33,8 @@ export const homePage = {
         titleAccent: 'made it.',
         snippet:
             'Talk directly with professors at world-class universities and industry experts. Get personalized guidance on grad admissions, research, scholarships, and career advancement.',
+        globeDisclaimer:
+            'Names and institutions shown are illustrative. Experts from these universities may or may not be available at the time you book.',
     },
     connect: {
         titleLead: 'Connect to Knowledge',
@@ -101,8 +103,7 @@ export const contactPage = {
     snippet: 'Become a member 🤟🏻',
 };
 
-const homeStatsSnippet =
-    '500+ Expert Consultants. 10K+ Consultations Done. 4.9/5 Average Rating. 100+ Countries Served. Trusted by 10,000+ clients worldwide.';
+const homeStatsSnippet = 'Trusted by 500+ clients worldwide.';
 
 const homeConnectSnippet = joinText(
     'The business draws on the talents of elite professionals — mostly top-notch professors, scientists, researchers and other successful professionals. These elite professionals all have their graduate degrees, mostly Ph.D., with decades of successful experiences.',

@@ -57,6 +57,7 @@ const {
     syncRocketGroupChannelMembers,
 } = require("../services/rocketchat.service");
 import { safeErrorMessage, safeHttp500Message } from '../utils/httpUserFacingCopy';
+import { isChatAdminOf } from '../utils/adminChatAccess';
 import { computeBookingPriceCents, extractHourlyRate, dollarsToCents, assertPaymentMatchesExpected, assertIntentMatchesBooking, voluntaryCancellationRefundCents, capturedAmountCents, balanceTransactionId } from '../utils/bookingPrice';
 import { resolvePendingPayment, resolveOrphanedIntent } from '../utils/pendingPayment';
 import {
@@ -180,6 +181,7 @@ import { buildRemovedUserNotice, normalizeModerationReason } from '../utils/vide
 import { sanitizeDecisionNote, decisionNoteEmailBlock } from '../utils/decisionNote';
 import { captureBeforeMs, holdHasLapsed, studentRequestDecisionDeadline } from '../utils/holdExpiry';
 import { describePastEditRejection } from '../utils/pastEventEdit';
+import { isExpertSetupComplete, EXPERT_SETUP_INCOMPLETE_FOR_EXPERT, EXPERT_SETUP_INCOMPLETE_FOR_STUDENT } from '../utils/expertSetup';
 import {
     buildRecurrenceStartDates,
     normalizeRecurrence,
@@ -500,7 +502,8 @@ const getAllCommunityChats = async (req, res) => {
             status: 'active',
             $or: [
                 { isOpenToAll: true },
-                { participants: userObjectId }
+                { participants: userObjectId },
+                { chatAdmins: userObjectId }
             ]
         })
             // `image` belongs on everyone the participants dialog renders, not just
@@ -508,6 +511,7 @@ const getAllCommunityChats = async (req, res) => {
             .populate('admin', '_id email username role image')
             .populate('participants', '_id email username image')
             .populate('coModerators', '_id email username role image')
+            .populate('chatAdmins', '_id email username role image status')
             .populate('createdBy', '_id email username image')
             .lean();
 
@@ -536,9 +540,11 @@ const getAllCommunityChats = async (req, res) => {
                 return null;
             }).filter(Boolean);
 
+            const joinedAsChatAdmin = (chat.chatAdmins || []).some((a: any) => String(a?._id ?? a) === String(userId));
             return {
                 ...chat,
-                isJoined: hasJoinedCommunity(chat, userId, userChatIds),
+                isJoined: joinedAsChatAdmin || hasJoinedCommunity(chat, userId, userChatIds),
+                joinedAsChatAdmin,
                 participantCount: participantIds.length
             };
         });
@@ -688,6 +694,11 @@ const createGroupChatByUser = async (req, res) => {
         if (!expertUser) {
             await releaseOrphanBookingIntent(payment_intent, userId, "Expert not found");
             throw new Error("Expert not found");
+        }
+
+        if (!isExpertSetupComplete(expertUser)) {
+            await releaseOrphanBookingIntent(payment_intent, userId, "Expert profile setup is incomplete");
+            return res.status(409).send(EXPERT_SETUP_INCOMPLETE_FOR_STUDENT);
         }
 
         const currentUser = await User.findById(userId);
@@ -999,6 +1010,10 @@ const proposeIndividualAppointment = async (req, res) => {
             throw new Error("Expert not found");
         }
 
+        if (!isExpertSetupComplete(expertUser)) {
+            return res.status(409).send(EXPERT_SETUP_INCOMPLETE_FOR_EXPERT);
+        }
+
         const customerUser = await User.findOne({ email: String(customer) });
         if (!customerUser) {
             return res.status(404).send("Sorry, the student you are trying to invite doesn't exist. Please check the email address");
@@ -1134,6 +1149,10 @@ const createGroupChat = async (req, res) => {
 
         const currentUser = await User.findById(userId);
 
+        if (!isExpertSetupComplete(currentUser)) {
+            return res.status(409).send(EXPERT_SETUP_INCOMPLETE_FOR_EXPERT);
+        }
+
         const schedulesBookableSession =
             (type === 'seminar' && status === 'active') || type === 'individual';
         if (schedulesBookableSession && start) {
@@ -1260,7 +1279,10 @@ const getGroupChat = async (req, res) => {
         if (!groupChat) {
             return res.status(404).send("Sorry, Invalid meeting ID");
         }
-        if (!userCanAccessGroupChat(groupChat, String(userId), { allowOpenCommunity: true })) {
+        if (
+            !userCanAccessGroupChat(groupChat, String(userId), { allowOpenCommunity: true })
+            && !isChatAdminOf(groupChat, req.user)
+        ) {
             return res.status(403).send("Forbidden");
         }
 
@@ -1292,17 +1314,22 @@ const resolveGroupMemberByRcSlug = async (req: any, res: any) => {
         const groupChat = await GroupChat.findById(String(groupChatId))
             .populate("participants", "email username rocketChatUsername image role status")
             .populate("admin", "email username rocketChatUsername image role status")
-            .populate("coModerators", "email username rocketChatUsername image role status");
+            .populate("coModerators", "email username rocketChatUsername image role status")
+            .populate("chatAdmins", "email username rocketChatUsername image role status");
         if (!groupChat) {
             return res.status(404).json({ error: "Group chat not found" });
         }
 
-        if (!userCanAccessGroupChat(groupChat, String(userId))) {
+        if (!userCanAccessGroupChat(groupChat, String(userId)) && !isChatAdminOf(groupChat, req.user)) {
             return res.status(403).json({ error: "Not a participant" });
         }
 
         const lower = slug.toLowerCase();
-        const pool: any[] = [...((groupChat.participants as any[]) || []), ...((groupChat.coModerators as any[]) || [])];
+        const pool: any[] = [
+            ...((groupChat.participants as any[]) || []),
+            ...((groupChat.coModerators as any[]) || []),
+            ...(((groupChat as any).chatAdmins as any[]) || []),
+        ];
         const adm = groupChat.admin as any;
         if (adm && adm._id && !pool.some((p: any) => String(p?._id) === String(adm._id))) {
             pool.push(adm);
@@ -4961,6 +4988,10 @@ const acceptIndividualAppointment = async (req, res) => {
             return res.status(400).send("This session's start time has already passed, so it can no longer be confirmed. You have not been charged.");
         }
 
+        if (role === 'expert' && !isExpertSetupComplete(req.user)) {
+            return res.status(409).send(EXPERT_SETUP_INCOMPLETE_FOR_EXPERT);
+        }
+
         let charge: any = null;
         let held = false;
         let settling = false;
@@ -6012,7 +6043,7 @@ const ensureSeminarChannel = async (req, res) => {
         if (!groupChat || groupChat.type !== 'seminar') {
             return res.status(404).json({ status: 'FAIL', error: 'Seminar not found' });
         }
-        if (!userCanAccessGroupChat(groupChat, String(userId))) {
+        if (!userCanAccessGroupChat(groupChat, String(userId)) && !isChatAdminOf(groupChat, req.user)) {
             return res.status(403).json({ status: 'FAIL', error: 'Forbidden' });
         }
 

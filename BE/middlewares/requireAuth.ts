@@ -3,6 +3,7 @@ const jwt = require("jsonwebtoken");
 const UserModel = require('../models/User')
 const { authCookieOptions } = require('../config/authCookie')
 import { safeErrorMessage } from '../utils/httpUserFacingCopy';
+import { AUTH_ACCOUNT_BLOCKED } from '../utils/authUserFacingCopy';
 
 const config = process.env;
 
@@ -56,6 +57,10 @@ const getFullUserData = async (email) => {
                         path: 'createdBy',
                         select: 'email username image role status degreeSought intendedIntake currentUniversity gpa country specialNote customKeywords'
                     },
+                    {
+                        path: 'chatAdmins',
+                        select: 'email username image role status'
+                    },
                     "keywords",
                     "services",
                 ]
@@ -73,6 +78,10 @@ const getFullUserData = async (email) => {
                     },
                     {
                         path: 'coModerators',
+                        select: 'email username image role status'
+                    },
+                    {
+                        path: 'chatAdmins',
                         select: 'email username image role status'
                     },
                 ]
@@ -98,6 +107,12 @@ const getFullUserData = async (email) => {
         ]);
 }
 
+const sendBlocked = (res) => res.status(401).json({
+    status: 'FAIL',
+    error: AUTH_ACCOUNT_BLOCKED,
+    code: 'USER_BLOCKED',
+});
+
 const requireAuth = (restrictUnderReview = false) => async (req, res, next) => {
     try {
         const accessToken = readAccessToken(req)
@@ -120,7 +135,7 @@ const requireAuth = (restrictUnderReview = false) => async (req, res, next) => {
             throw new Error("Invalid cookie");
 
         if (user.status === 'blocked') {
-            throw new Error("User is blocked");
+            return sendBlocked(res);
         }
 
         if (restrictUnderReview && user.status === 'review') {
@@ -182,7 +197,7 @@ const customerAuth = (restrictUnderReview = false) => async (req, res, next) => 
             throw new Error("Invalid cookie");
 
         if (user.status === 'blocked') {
-            throw new Error("User is blocked");
+            return sendBlocked(res);
         }
 
         if (restrictUnderReview && user.status === 'review') {
@@ -243,7 +258,7 @@ const expertAuth = (restrictUnderReview = false) => async (req, res, next) => {
             throw new Error("Invalid cookie");
 
         if (user.status === 'blocked') {
-            throw new Error("User is blocked");
+            return sendBlocked(res);
         }
 
         if (restrictUnderReview && user.status === 'review') {

@@ -12,6 +12,8 @@ import { wlDisplayName } from '../../../../utils/displayName';
 import { groupMessages } from './groupMessages';
 import type { ChatMessage, MessageGroup } from './chatThreadTypes';
 import type { ReplyDraft } from '../ChatDetails';
+import AdminAuthorTag from './AdminAuthorTag';
+import { isAdminAuthor } from '../../../../utils/adminChatRooms';
 
 type DisplayMessage = MessageModel & { type?: string };
 
@@ -548,11 +550,12 @@ const ChatThreadView: React.FC<ChatThreadViewProps> = ({
                         <div className="flex min-w-0 max-w-[min(100%,36rem)] flex-col items-start gap-0.5">
                             {showGroupNames ? (
                                 <div
-                                    className={`mb-0.5 pl-0.5 text-[11px] font-semibold ${
+                                    className={`mb-0.5 flex items-center gap-1.5 pl-0.5 text-[11px] font-semibold ${
                                         theme === 'light' ? 'text-slate-600' : 'text-slate-300'
                                     }`}
                                 >
-                                    {displayName}
+                                    <span>{displayName}</span>
+                                    {isAdminAuthor(firstSrc.author) ? <AdminAuthorTag /> : null}
                                 </div>
                             ) : null}
                             {group.messages.map((cm, i) => {

@@ -35,6 +35,7 @@ import {
   seatRequestWindowMessage,
 } from '../../utils/seatRequestWindow';
 import { normalizeExpertPrice } from '../../utils/schedulingSlots';
+import { EXPERT_SETUP_INCOMPLETE_FOR_STUDENT, isExpertSetupComplete } from './expertSetup/setupSteps';
 import { computeBookingPriceDollars } from '../../utils/bookingPrice';
 import {
   defaultAppointmentDuration,
@@ -138,6 +139,7 @@ export default function ExpertProfile({
   // A wallet booking is only a request until the expert accepts and it is paid for.
   const [bookingAwaitsWalletPayment, setBookingAwaitsWalletPayment] = useState(false);
   const [bookingError, setBookingError] = useState<string | null>(null);
+  const [expertSetupBlocked, setExpertSetupBlocked] = useState(false);
 
   const BOOKING_TITLE_MIN = 10;
   const BOOKING_TITLE_MAX = 60;
@@ -210,6 +212,7 @@ export default function ExpertProfile({
       setPickedDuration(mins);
       setSessionDurationMinutes(mins);
       setBookingError(null);
+      setExpertSetupBlocked(false);
       // Keep the flow inside one continuous popup: confirming a time in the
       // picker advances straight to the review popup (which then continues to
       // payment), with no intermediate sidebar step.
@@ -220,6 +223,7 @@ export default function ExpertProfile({
 
   const handleFilterSlotConfirmed = useCallback(() => {
     setBookingError(null);
+    setExpertSetupBlocked(false);
     setBookingStep('review');
   }, []);
 
@@ -228,6 +232,7 @@ export default function ExpertProfile({
     setPickedEnd(null);
     setPickedDuration(0);
     setBookingError(null);
+    setExpertSetupBlocked(false);
   }, []);
 
   const oneToOneSessionPrice = useMemo(() => {
@@ -1267,10 +1272,27 @@ export default function ExpertProfile({
               ) : null}
             </div>
 
+            {expertSetupBlocked ? (
+              <p role="alert" className="text-[12px] font-semibold text-rose-600">
+                {EXPERT_SETUP_INCOMPLETE_FOR_STUDENT}
+              </p>
+            ) : null}
             <button
               type="button"
               disabled={!!bookingFormError}
-              onClick={() => setBookingStep('pay')}
+              onClick={async () => {
+                if (!isExpertSetupComplete(expertDetails)) {
+                  // The expert may have finished setup since this page loaded.
+                  const fresh: any = await getExpertById(mentor.id);
+                  if (!isExpertSetupComplete(fresh?.result)) {
+                    setExpertSetupBlocked(true);
+                    return;
+                  }
+                  setExpertDetails(fresh.result);
+                  setExpertSetupBlocked(false);
+                }
+                setBookingStep('pay');
+              }}
               className="inline-flex w-full items-center justify-center rounded-[4px] bg-[#1A3A4A] px-4 py-3 text-[13px] font-semibold text-white hover:bg-[#122635] disabled:opacity-50"
             >
               Continue to payment

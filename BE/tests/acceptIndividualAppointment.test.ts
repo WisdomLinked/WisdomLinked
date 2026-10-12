@@ -156,8 +156,10 @@ const resetCalls = () => {
   for (const key of Object.keys(calls)) delete calls[key];
 };
 
+const EXPERT_SETUP = { price: [100], bufferMinutes: 0, bookingNoticeHours: 24, timeSlots: [18] };
+
 const acceptAs = async (userId: string, role: string, body: any = {}) => {
-  const req: any = { user: { userId, role }, body: { groupChatId: CHAT_ID, ...body } };
+  const req: any = { user: { userId, role, ...EXPERT_SETUP }, body: { groupChatId: CHAT_ID, ...body } };
   const res = createRes();
   await groupController.acceptIndividualAppointment(req, res);
   return res;
@@ -317,6 +319,40 @@ test("an expert can accept a free request, where there is nothing to collect", a
   const restore = withModels({ chat: studentRequest({ price: 0 }), paid: false });
   try {
     const res = await acceptAs(EXPERT_ID, "expert");
+
+    assert.equal(res.statusCode, 200);
+    assert.equal(activatedStatus(), "active");
+  } finally {
+    restore();
+  }
+});
+
+test("an expert who has not finished profile setup cannot accept, and nothing is confirmed", async () => {
+  resetCalls();
+  const restore = withModels({ chat: studentRequest({ price: 0 }), paid: false });
+  try {
+    const req: any = {
+      user: { userId: EXPERT_ID, role: "expert", ...EXPERT_SETUP, timeSlots: [] },
+      body: { groupChatId: CHAT_ID },
+    };
+    const res = createRes();
+    await groupController.acceptIndividualAppointment(req, res);
+
+    assert.equal(res.statusCode, 409);
+    assert.match(String(res.body), /You need to complete your profile setup first/);
+    assert.equal(activatedStatus(), undefined, "the session must stay pending");
+  } finally {
+    restore();
+  }
+});
+
+test("a student paying for an expert's offer is not checked against the expert's setup", async () => {
+  resetCalls();
+  const restore = withModels({ chat: studentRequest({ price: 0, createdBy: EXPERT_ID }), paid: false });
+  try {
+    const req: any = { user: { userId: STUDENT_ID, role: "customer" }, body: { groupChatId: CHAT_ID } };
+    const res = createRes();
+    await groupController.acceptIndividualAppointment(req, res);
 
     assert.equal(res.statusCode, 200);
     assert.equal(activatedStatus(), "active");

@@ -2,3 +2,12 @@
 export function isAccountUnderReview(status?: string | null): boolean {
   return status === 'review';
 }
+
+export function isAccountBlocked(status?: string | null): boolean {
+  return status === 'blocked';
+}
+
+export const ACCOUNT_UNDER_REVIEW_MESSAGE =
+  "Your profile is under review. You'll have full access to sessions, seminars, and other features once it's approved.";
+
+export const ACCOUNT_BLOCKED_MESSAGE = 'Your profile is blocked. Contact admin for more details.';

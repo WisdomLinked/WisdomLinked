@@ -42,6 +42,7 @@ import FindExpertsPage from './FindExperts';
 import Chatbot from '../components/chatbot';
 import ContactAdmin from './Dashboard/_ExpertDashboard/ContactAdmin';
 import UpcomingCountdownCard, { type UpcomingSession } from '../components/dashboard/UpcomingCountdownCard';
+import SessionDetailsDialog from '../components/dashboard/SessionDetailsDialog';
 import UpcomingSessionModal, { type UpcomingModalSession } from '../components/dashboard/UpcomingSessionModal';
 import ExpertProfile from '../components/dashboard/ExpertProfile';
 import StudentBookingCheckout, { completeStudentBookingFromStorage } from '../components/dashboard/StudentBookingCheckout';
@@ -258,6 +259,29 @@ function deriveCalendarMeetings(u: any): CalendarMeeting[] {
   return out;
 }
 
+/** Details shown when a session title is clicked, built the same way everywhere on this dashboard. */
+function groupChatDetail(g: any, fallbackTitle: string): NonNullable<UpcomingModalSession['detail']> {
+  return {
+    title: g?.name || fallbackTitle,
+    description: g?.description,
+    start: g?.start,
+    end: g?.end,
+    duration: g?.duration,
+    price: typeof g?.price === 'number' ? g.price : undefined,
+    admin: g?.admin,
+    participants: g?.participants || [],
+    keywords: g?.keywords,
+    services: g?.services,
+    purposeOther: g?.purposeOther,
+    type: g?.type,
+    isRecurring: g?.isRecurring,
+    recurrenceFrequency: g?.recurrenceFrequency,
+    recurrenceUnit: g?.recurrenceUnit,
+    recurrenceInterval: g?.recurrenceInterval,
+    recurrenceWeekdays: g?.recurrenceWeekdays,
+  };
+}
+
 /**
  * Build the session list for the UpcomingSessionModal opened from a StatsGrid
  * card. Mirrors deriveSessionCounts so the rows match the card's number:
@@ -291,25 +315,7 @@ function deriveModalSessions(
       location: 'Online · WisdomLinked Room',
       with: g?.admin?.username || g?.admin?.email || 'WisdomLinked',
       peerUserId: String(g?.admin?._id ?? g?.admin ?? ''),
-      detail: {
-        title: g?.name || 'Seminar',
-        description: g?.description,
-        start: g?.start,
-        end: g?.end,
-        duration: g?.duration,
-        price: typeof g?.price === 'number' ? g.price : undefined,
-        admin: g?.admin,
-        participants: g?.participants || [],
-        keywords: g?.keywords,
-        services: g?.services,
-        purposeOther: g?.purposeOther,
-        type: g?.type,
-        isRecurring: g?.isRecurring,
-        recurrenceFrequency: g?.recurrenceFrequency,
-        recurrenceUnit: g?.recurrenceUnit,
-        recurrenceInterval: g?.recurrenceInterval,
-        recurrenceWeekdays: g?.recurrenceWeekdays,
-      },
+      detail: groupChatDetail(g, 'Seminar'),
       briefLabel: 'Seminar details',
     };
   };
@@ -388,25 +394,7 @@ function deriveModalSessions(
         metaLines: metaLines.length ? metaLines : undefined,
         price,
         paymentMode: g?.paymentMode,
-        detail: {
-          title: g?.name || '1:1 session',
-          description: g?.description,
-          start: g?.start,
-          end: g?.end,
-          duration: g?.duration,
-          price,
-          admin: g?.admin,
-          participants: g?.participants || [],
-          keywords: g?.keywords,
-          services: g?.services,
-          purposeOther: g?.purposeOther,
-          type: g?.type,
-          isRecurring: g?.isRecurring,
-          recurrenceFrequency: g?.recurrenceFrequency,
-          recurrenceUnit: g?.recurrenceUnit,
-          recurrenceInterval: g?.recurrenceInterval,
-          recurrenceWeekdays: g?.recurrenceWeekdays,
-        },
+        detail: groupChatDetail(g, '1:1 session'),
         briefLabel: 'Session details',
       };
     });
@@ -472,6 +460,8 @@ function deriveUpcomingSessions(u: any): {
         startAt,
         durationMinutes: sessionDurationMinutes(g) ?? undefined,
         id: String(g?._id ?? ''),
+        detail: groupChatDetail(g, 'Seminar'),
+        briefLabel: 'Seminar details',
       };
     } else if (isSession) {
       considerOneToOne({
@@ -481,6 +471,8 @@ function deriveUpcomingSessions(u: any): {
         durationMinutes: sessionDurationMinutes(g) ?? undefined,
         peerUserId: String(g?.admin?._id ?? g?.admin ?? ''),
         pending: status === 'pending',
+        detail: groupChatDetail(g, '1:1 session'),
+        briefLabel: 'Session details',
       });
     }
   }
@@ -799,6 +791,7 @@ export default function StudentDashboard() {
     },
     [userDetails?.email, followedMentorIds],
   );
+  const [countdownDetail, setCountdownDetail] = useState<UpcomingSession | null>(null);
   const [upcomingModal, setUpcomingModal] = useState<{
     kind: 'seminar' | 'oneToOne';
     status: 'booked' | 'pending';
@@ -1716,6 +1709,7 @@ export default function StudentDashboard() {
                   <UpcomingCountdownCard
                     nextSeminar={nextSeminar}
                     nextOneToOne={nextOneToOne}
+                    onOpenDetails={setCountdownDetail}
                     onJoinSeminar={() => openSeminarChat(nextSeminar?.id)}
                     onJoinOneToOne={() => {
                       if (nextOneToOne?.id) openAppointmentChat(
@@ -1745,6 +1739,15 @@ export default function StudentDashboard() {
           )}
           {activeItem !== 'chat' && activeItem !== 'profile' ? <Chatbot /> : null}
         </main>
+        {countdownDetail?.detail ? (
+          <SessionDetailsDialog
+            title={countdownDetail.title}
+            briefLabel={countdownDetail.briefLabel}
+            detail={countdownDetail.detail}
+            hideParticipants
+            onClose={() => setCountdownDetail(null)}
+          />
+        ) : null}
         {paySuccessToast && (
           <div className="fixed right-4 top-4 z-[70] flex items-center gap-2 rounded-xl border border-emerald-200 bg-white px-4 py-3 shadow-lg">
             <span className="flex h-6 w-6 items-center justify-center rounded-full bg-emerald-100 text-emerald-700">✓</span>

@@ -38,6 +38,9 @@ export const savedNotice = (a: ExpertAvailability): BookingNoticeHours | null =>
   return (NOTICE_OPTIONS as readonly number[]).includes(n) ? (n as BookingNoticeHours) : null;
 };
 
+const isPending = (a: ExpertAvailability, step: SetupStepId) =>
+  Array.isArray(a.pendingSetupSteps) && a.pendingSetupSteps.includes(step);
+
 export const bufferLabel = (minutes: BufferMinutes) => (minutes === 0 ? 'None' : `${minutes} min`);
 
 /** Saved weekly hours, read the same way the Availability page reads them for its mode. */
@@ -61,7 +64,7 @@ export const SETUP_STEPS: SetupStep[] = [
     title: 'Hourly rate',
     description: 'Set what students pay per hour for a 1:1 session.',
     mode: 'inline',
-    isComplete: (a) => isValidRate(savedRate(a)),
+    isComplete: (a) => !isPending(a, 'rate') && isValidRate(savedRate(a)),
     getSummary: (a) => `$${savedRate(a)} per hour`,
   },
   {
@@ -69,7 +72,7 @@ export const SETUP_STEPS: SetupStep[] = [
     title: 'Session lengths',
     description: 'Choose the session lengths students can book.',
     mode: 'inline',
-    isComplete: (a) => savedDurations(a).length > 0,
+    isComplete: (a) => !isPending(a, 'durations') && savedDurations(a).length > 0,
     getSummary: (a) => savedDurations(a).map((d) => `${d} min`).join(', '),
   },
   {
@@ -98,3 +101,11 @@ export const SETUP_STEPS: SetupStep[] = [
     },
   },
 ];
+
+export const isExpertSetupComplete = (a: ExpertAvailability | null | undefined): boolean =>
+  !!a && SETUP_STEPS.every((step) => step.isComplete(a));
+
+export const EXPERT_SETUP_INCOMPLETE_FOR_STUDENT =
+  "This expert hasn't completed their profile setup yet, so they can't take bookings right now.";
+export const EXPERT_SETUP_INCOMPLETE_FOR_EXPERT =
+  'You need to complete your profile setup first.';

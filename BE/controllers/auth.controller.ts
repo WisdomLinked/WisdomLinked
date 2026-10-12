@@ -1052,7 +1052,22 @@ const updateProfile = async (req: any, res: Response) => {
         }
 
         // [User Model] -- add more updating fields based on the user model
-        await User.findOneAndUpdate({ email: String(email) }, { $set: withoutOperatorKeys(updates) }, { new: true })
+        const savedSetupSteps = [
+            ...(updates.price !== undefined ? ['rate'] : []),
+            ...(updates.appointmentDurations !== undefined ? ['durations'] : []),
+        ];
+        const safeUpdates = withoutOperatorKeys(updates);
+        if (typeof updates['notificationPreferences.email'] === 'boolean') {
+            safeUpdates['notificationPreferences.email'] = updates['notificationPreferences.email'];
+        }
+        await User.findOneAndUpdate(
+            { email: String(email) },
+            {
+                $set: safeUpdates,
+                ...(savedSetupSteps.length && { $pull: { pendingSetupSteps: { $in: savedSetupSteps } } }),
+            },
+            { new: true },
+        )
 
         const resultEmail = boundEmail || email;
         if (freshToken) {

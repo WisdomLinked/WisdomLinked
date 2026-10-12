@@ -43,6 +43,10 @@ const userSchema = new mongoose.Schema(
             sessionReminders: { type: Boolean, default: true },
             marketing: { type: Boolean, default: false },
         },
+        chatLastSeenAt: { type: Date, default: null, select: false },
+        unreadEmailSentAt: { type: Date, default: null, select: false },
+        unreadEmailCheckedAt: { type: Date, default: null, select: false },
+        unreadEmailCountdownFrom: { type: Date, default: null, select: false },
         isActive: { type: Boolean, default: true },
         isAdHocCustomer: { type: Boolean, default: false },
         token: { type: String, select: false },
@@ -84,6 +88,9 @@ const userSchema = new mongoose.Schema(
         /** Session lengths (minutes) this expert offers for 1:1 bookings: 30, 60, and/or 90. */
         appointmentDurations: { type: [Number], default: [30, 60, 90] },
         price: [{ type: Number, default: 5 }],
+        /** Setup steps ('rate', 'durations') a new expert hasn't saved yet; their stored values are only defaults.
+         *  Unset on accounts created before this field existed, which keeps their setup as-is. */
+        pendingSetupSteps: { type: [String], default: undefined },
         rating: { type: Number, default: 0 },
         specialNote: { type: String },
 
@@ -98,6 +105,12 @@ const userSchema = new mongoose.Schema(
     },
     { timestamps: true }
 );
+
+userSchema.pre('save', function (this: any) {
+    if (this.isNew && this.role === 'expert' && !this.pendingSetupSteps?.length) {
+        this.pendingSetupSteps = ['rate', 'durations'];
+    }
+});
 
 //*********GENERATE AUTH TOKEN WHEN USER IS CREATED**************** */
 userSchema.methods.generateAuthToken = async function () {

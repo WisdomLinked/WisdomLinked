@@ -95,6 +95,12 @@ const groupChatSchema = new mongoose.Schema(
                 ref: "User",
             },
         ],
+        chatAdmins: [
+            {
+                type: mongoose.Schema.Types.ObjectId,
+                ref: "User",
+            },
+        ],
         isOpenToAll: {
             type: Boolean,
             default: false,

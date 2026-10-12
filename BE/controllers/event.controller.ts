@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { HTTP_GENERIC_ERROR, safeHttp500Message } from '../utils/httpUserFacingCopy';
 import { computeBookingPriceCents, extractHourlyRate, assertPaymentMatchesExpected, assertIntentMatchesBooking } from '../utils/bookingPrice';
+import { isExpertSetupComplete, EXPERT_SETUP_INCOMPLETE_FOR_EXPERT } from '../utils/expertSetup';
 const AppState = require("../models/AppState");
 const Event = require("../models/Event");
 const User = require("../models/User");
@@ -429,6 +430,10 @@ const acceptEvent = async (req, res) => {
 
         if (new Date(event.end).getTime() <= new Date().getTime()) {
             throw new Error("Unable to accept past or ongoing event")
+        }
+
+        if (!isExpertSetupComplete(req.user)) {
+            return res.status(409).send(EXPERT_SETUP_INCOMPLETE_FOR_EXPERT);
         }
 
         const updatedEvent = await Event.findByIdAndUpdate(eventId, { status: 'accepted', confirmedAt: new Date() }, { new: true })

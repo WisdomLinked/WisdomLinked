@@ -381,6 +381,11 @@ const Messages = ({ theme = "dark", onReplyMessage }: { theme?: string; onReplyM
             if (admA && typeof admA === 'object' && admA._id && !plistForAuthor.some((x: any) => String(x?._id) === String(admA._id))) {
                 plistForAuthor.push(admA);
             }
+            for (const ca of ((gDetails as any)?.chatAdmins || []) as any[]) {
+                if (ca && typeof ca === 'object' && ca._id && !plistForAuthor.some((x: any) => String(x?._id) === String(ca._id))) {
+                    plistForAuthor.push(ca);
+                }
+            }
             if (serverResolved?._id) {
                 if (!plistForAuthor.some((x: any) => String(x?._id) === String(serverResolved._id))) {
                     plistForAuthor.push(serverResolved);

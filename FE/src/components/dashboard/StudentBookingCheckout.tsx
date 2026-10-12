@@ -10,6 +10,7 @@ import { createStripePaymentIntent, getStripeMode } from '../../api/api';
 import { persistPendingDetails } from '../../utils/safeLocalStorage';
 import FormAlert from '../FormAlert';
 import { SetLoadingStatus } from '../../actions/appActions';
+import { ACCOUNT_BLOCKED_MESSAGE, ACCOUNT_UNDER_REVIEW_MESSAGE } from '../../utils/accountStatus';
 
 
 /** A 1:1 session booking (createGroupChatByUser path). */
@@ -182,9 +183,13 @@ const CheckoutForm = ({
       if (!clientSecret) {
         const reason = (response && (response.error || response.message)) || '';
         setErrorMessage(
-          reason
-            ? `${reason} You have not been charged.`
-            : 'Could not start payment. Please try again in a moment.',
+          response?.code === 'UNDER_REVIEW'
+            ? ACCOUNT_UNDER_REVIEW_MESSAGE
+            : response?.code === 'USER_BLOCKED'
+              ? ACCOUNT_BLOCKED_MESSAGE
+              : reason
+                ? `${reason} You have not been charged.`
+                : 'Could not start payment. Please try again in a moment.',
         );
         SetLoadingStatus(false);
         endProgress(false);
@@ -262,7 +267,16 @@ const CheckoutForm = ({
           </div>
         ) : null}
         <PaymentElement onChange={(e: any) => setSelectedMethod(e?.value?.type ?? '')} />
-        <FormAlert variant="error" message={errorMessage} onDismiss={() => setErrorMessage('')} />
+        <FormAlert
+          variant="error"
+          message={errorMessage}
+          onDismiss={() => setErrorMessage('')}
+          className={
+            errorMessage === ACCOUNT_UNDER_REVIEW_MESSAGE || errorMessage === ACCOUNT_BLOCKED_MESSAGE
+              ? 'text-red'
+              : ''
+          }
+        />
       </div>
       <div className="shrink-0 pt-3">
         <button

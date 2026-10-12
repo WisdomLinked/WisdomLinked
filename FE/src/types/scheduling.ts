@@ -18,6 +18,8 @@ export interface ExpertSchedulingFields {
   bufferMinutes?: BufferMinutes | number | null;
   appointmentDurations?: number[];
   price?: number | number[];
+  /** Setup steps a new expert hasn't saved yet; their stored values are only defaults. */
+  pendingSetupSteps?: string[];
   timeZone?: string;
 }
 

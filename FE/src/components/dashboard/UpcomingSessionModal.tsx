@@ -157,6 +157,7 @@ export default function UpcomingSessionModal({
   onAcceptSeatRequest,
   onDeclineSeatRequest,
   onAcceptSession,
+  acceptBlockedMessage,
   onDeclineSession,
   onWithdrawSession,
   onDeclineProposal,
@@ -185,6 +186,7 @@ export default function UpcomingSessionModal({
   /** Expert accepts a pending student-initiated 1:1 request. Resolving `true`
    * shows a transient in-card confirmation before the row clears. */
   onAcceptSession?: (session: UpcomingModalSession, note: string) => void | Promise<void | boolean>;
+  acceptBlockedMessage?: string;
   /** Expert declines a pending student-initiated 1:1, refunding the student. */
   onDeclineSession?: (session: UpcomingModalSession, note: string) => void | Promise<void | boolean>;
   /** Expert withdraws their own unpaid 1:1 offer. Resolving `false` leaves the row. */
@@ -250,8 +252,14 @@ export default function UpcomingSessionModal({
     noticeTimers.current.push(timer);
   };
 
+  const [acceptBlockedId, setAcceptBlockedId] = useState<string | null>(null);
+
   const acceptSession = async (session: UpcomingModalSession) => {
     if (!onAcceptSession) return;
+    if (acceptBlockedMessage) {
+      setAcceptBlockedId(session.id);
+      return;
+    }
     setAcceptBusyId(session.id);
     try {
       const ok = await onAcceptSession(session, noteFor(session.id).trim());
@@ -794,6 +802,11 @@ export default function UpcomingSessionModal({
                     withdrawBusyId === session.id;
                   return (
                     <div className="mt-3 border-t border-slate-100 pt-2.5">
+                      {acceptBlockedMessage && acceptBlockedId === session.id ? (
+                        <p role="alert" className="mb-2 text-[11px] font-semibold text-rose-600">
+                          {acceptBlockedMessage}
+                        </p>
+                      ) : null}
                       <DecisionNoteField
                         id={`decision-note-${session.id}`}
                         value={noteFor(session.id)}

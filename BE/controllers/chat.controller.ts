@@ -21,6 +21,7 @@ import { wlDisplayName } from '../utils/wlDisplayName';
 import { prepareMessageForRocketChat } from '../utils/chatReplyPlainText';
 import { safeErrorMessage } from '../utils/httpUserFacingCopy';
 import { searchableRolesFor } from '../utils/chatSearchRoles';
+import { canUseGroupChat, isChatAdminOf } from '../utils/adminChatAccess';
 import {
     distinctMemberIds,
     isGroupSeenTrackable,
@@ -47,6 +48,7 @@ const User = require('../models/User');
 const MeetingThread = require('../models/MeetingThread');
 const RoomRead = require('../models/RoomRead');
 const { sendExpertResumeFormatReminderEmail } = require('../services/notifications');
+const { recordChatSeen } = require('../services/unreadMessageEmailSweep');
 
 /** RC REST may return `ts` as ISO string or `{ $date: n }` — normalize for the React app. */
 const normalizeRcMessageTs = (ts: any): string => {
@@ -359,6 +361,7 @@ export const sendMessage = async (req: any, res: Response) => {
         if (!conversation.participants.some((p: any) => p.toString() === userId)) {
             return res.status(403).json({ error: 'You are not a participant of this conversation' });
         }
+        void recordChatSeen(userId);
 
         const me = await User.findById(userId);
         const otherUserId = conversation.participants.find((p: any) => p.toString() !== userId);
@@ -448,6 +451,7 @@ export const getDirectHistory = async (req: any, res: Response) => {
         if (!conversation.participants.some((p: any) => p.toString() === userId)) {
             return res.status(403).json({ error: 'You are not a participant' });
         }
+        void recordChatSeen(userId);
 
         const me = await User.findById(userId);
         const otherUserId = conversation.participants.find((p: any) => p.toString() !== userId);
@@ -683,12 +687,14 @@ export const sendGroupMessage = async (req: any, res: Response) => {
 
         const groupChat = await GroupChat.findById(groupChatId)
             .populate('participants', 'email')
-            .populate('admin', 'email');
+            .populate('admin', 'email')
+            .populate('chatAdmins', 'email');
         if (!groupChat) return res.status(404).json({ error: 'Group chat not found' });
 
-        if (!groupChat.participants.some((p: any) => String(p?._id ?? p) === String(userId))) {
+        if (!canUseGroupChat(groupChat, req.user)) {
             return res.status(403).json({ error: 'You are not a participant of this group' });
         }
+        void recordChatSeen(userId);
 
         const me = await User.findById(userId);
         let sentId = `temp-${Date.now()}`;
@@ -699,6 +705,9 @@ export const sendGroupMessage = async (req: any, res: Response) => {
             }
             const adm = groupChat.admin as any;
             if (adm?.email) emails.push(String(adm.email).toLowerCase());
+            for (const a of ((groupChat as any).chatAdmins || []) as any[]) {
+                if (a?.email) emails.push(String(a.email).toLowerCase());
+            }
             const channelKeyId = (groupChat as any).seriesId ? String((groupChat as any).seriesId) : String(groupChatId);
             const rcChannelId = await syncRocketGroupChannelMembers(channelKeyId, emails);
             if (rcChannelId) {
@@ -745,12 +754,14 @@ export const getGroupHistory = async (req: any, res: Response) => {
 
         const groupChat = await GroupChat.findById(groupChatId)
             .populate('participants', 'email username rocketChatUsername image role status')
-            .populate('admin', 'email username rocketChatUsername image role status');
+            .populate('admin', 'email username rocketChatUsername image role status')
+            .populate('chatAdmins', 'email username rocketChatUsername image role status');
         if (!groupChat) return res.status(404).json({ error: 'Group chat not found' });
 
-        if (!groupChat.participants.some((p: any) => String(p?._id ?? p) === String(userId))) {
+        if (!canUseGroupChat(groupChat, req.user)) {
             return res.status(403).json({ error: 'You are not a participant' });
         }
+        void recordChatSeen(userId);
 
         const me = await User.findById(userId);
         if (me && me.email) {
@@ -760,6 +771,10 @@ export const getGroupHistory = async (req: any, res: Response) => {
             }
             const adm = groupChat.admin as any;
             if (adm?.email) emails.push(String(adm.email).toLowerCase());
+            const chatAdminDocs = ((groupChat as any).chatAdmins || []) as any[];
+            for (const a of chatAdminDocs) {
+                if (a?.email) emails.push(String(a.email).toLowerCase());
+            }
             const channelKeyId = (groupChat as any).seriesId ? String((groupChat as any).seriesId) : String(groupChatId);
             const rcChannelId = await syncRocketGroupChannelMembers(channelKeyId, emails);
             if (rcChannelId) {
@@ -793,6 +808,11 @@ export const getGroupHistory = async (req: any, res: Response) => {
                     !parts.some((p: any) => String(p?._id ?? p) === String(adminDoc._id))
                 ) {
                     parts.push(adminDoc);
+                }
+                for (const a of chatAdminDocs) {
+                    if (a?._id && !parts.some((p: any) => String(p?._id ?? p) === String(a._id))) {
+                        parts.push(a);
+                    }
                 }
                 const messages = await mapRCMessagesToWL(visible, undefined, parts);
 
@@ -854,10 +874,11 @@ export const getReadReceiptsBatch = async (req: any, res: Response) => {
             }
         } else if (rid) {
             const groupChat = await GroupChat.findOne({ rcChannelId: rid })
-                .select('admin participants coModerators')
+                .select('admin participants coModerators chatAdmins')
                 .lean();
             const memberIds = groupChat ? groupUserIds(groupChat) : [];
-            if (memberIds.includes(String(userId))) {
+            const viewerIsMember = memberIds.includes(String(userId));
+            if (viewerIsMember || isChatAdminOf(groupChat, req.user)) {
                 const otherIds = memberIds.filter((id: string) => id !== String(userId));
                 if (isGroupSeenTrackable(otherIds.length)) seenMemberIds = otherIds;
             }
@@ -889,7 +910,9 @@ const userCanAccessRocketRoom = async (
     userId: string,
     roomId: string,
     context: { conversationId?: string; groupChatId?: string } = {},
+    role?: string,
 ): Promise<boolean> => {
+    const viewer = { userId, role };
     const uid = String(userId || '').trim();
     const rid = String(roomId || '').trim();
     if (!uid || !rid) return false;
@@ -905,20 +928,20 @@ const userCanAccessRocketRoom = async (
     }
 
     if (context.groupChatId) {
-        const groupChat = await GroupChat.findById(String(context.groupChatId)).select('admin participants coModerators rcChannelId').lean();
+        const groupChat = await GroupChat.findById(String(context.groupChatId)).select('admin participants coModerators chatAdmins rcChannelId').lean();
         return Boolean(
             groupChat
             && String(groupChat.rcChannelId || '') === rid
-            && groupUserIds(groupChat).includes(uid),
+            && (groupUserIds(groupChat).includes(uid) || isChatAdminOf(groupChat, viewer)),
         );
     }
 
     const [conv, groupChat] = await Promise.all([
         Conversation.findOne({ rcChannelId: rid, participants: uid }).select('_id').lean(),
-        GroupChat.findOne({ rcChannelId: rid }).select('admin participants coModerators').lean(),
+        GroupChat.findOne({ rcChannelId: rid }).select('admin participants coModerators chatAdmins').lean(),
     ]);
     if (conv) return true;
-    return Boolean(groupChat && groupUserIds(groupChat).includes(uid));
+    return Boolean(groupChat && (groupUserIds(groupChat).includes(uid) || isChatAdminOf(groupChat, viewer)));
 };
 
 /**
@@ -957,7 +980,7 @@ export const deleteChatMessage = async (req: any, res: Response) => {
             if (groupChatId) {
                 const gc = await GroupChat.findById(groupChatId);
                 if (!gc) return res.status(404).json({ error: 'Group chat not found' });
-                if (!groupUserIds(gc).includes(String(userId))) {
+                if (!groupUserIds(gc).includes(String(userId)) && !isChatAdminOf(gc, req.user)) {
                     return res.status(403).json({ error: 'Not a participant' });
                 }
                 await GroupChat.updateOne(
@@ -981,7 +1004,7 @@ export const deleteChatMessage = async (req: any, res: Response) => {
         const canAccessRoom = await userCanAccessRocketRoom(String(userId), String(roomId), {
             conversationId,
             groupChatId,
-        });
+        }, req.user?.role);
         if (!canAccessRoom) return res.status(403).json({ error: 'You do not have access to this chat room' });
         const me = await User.findById(userId);
         if (!me?.email) return res.status(400).json({ error: 'User not found' });
@@ -1056,8 +1079,9 @@ export const markChatRead = async (req: any, res: Response) => {
         const { userId } = req.user;
         const { roomId } = req.body;
         if (!roomId) return res.status(400).json({ error: 'roomId is required' });
-        const canAccessRoom = await userCanAccessRocketRoom(String(userId), String(roomId));
+        const canAccessRoom = await userCanAccessRocketRoom(String(userId), String(roomId), {}, req.user?.role);
         if (!canAccessRoom) return res.status(403).json({ error: 'You do not have access to this chat room' });
+        void recordChatSeen(userId);
         const me = await User.findById(userId);
         if (!me?.email) return res.status(400).json({ error: 'User not found' });
         await RoomRead.updateOne(
