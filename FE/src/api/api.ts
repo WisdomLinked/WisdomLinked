@@ -355,6 +355,44 @@ export const createGroupChat = async (details: any) => {
 };
 
 /** Lazily ensure a seminar's group chat channel exists; returns { rcChannelId }. */
+export type AdminRoomKind = 'appointment' | 'seminar' | 'community';
+
+export const searchAdminChatRooms = async (type: AdminRoomKind, q: string) => {
+    try {
+        const res = await api.get("chat/admin/rooms/search", { params: { type, q } });
+        return res.data;
+    } catch (err: any) {
+        return handleAuthApiFailure(err);
+    }
+};
+
+export const getAdminChatRooms = async () => {
+    try {
+        const res = await api.get("chat/admin/rooms");
+        return res.data;
+    } catch (err: any) {
+        return handleAuthApiFailure(err);
+    }
+};
+
+export const joinAdminChatRoom = async (groupChatId: string) => {
+    try {
+        const res = await api.post("chat/admin/rooms/join", { groupChatId });
+        return res.data;
+    } catch (err: any) {
+        return handleAuthApiFailure(err);
+    }
+};
+
+export const leaveAdminChatRoom = async (groupChatId: string) => {
+    try {
+        const res = await api.post("chat/admin/rooms/leave", { groupChatId });
+        return res.data;
+    } catch (err: any) {
+        return handleAuthApiFailure(err);
+    }
+};
+
 export const ensureSeminarChannel = async (groupChatId: string) => {
     try {
         const res = await api.post("group-chat/ensure-seminar-channel", { groupChatId });

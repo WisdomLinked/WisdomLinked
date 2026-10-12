@@ -27,7 +27,8 @@ import CloseIcon from '@mui/icons-material/Close';
 import EditIcon from '@mui/icons-material/Edit';
 import { fetchDirectCallHistory, startMeeting } from "../../../../api/chatApi";
 import { fetchChatUserProfile } from "../../../../api/chatApi";
-import {doLeftSeminar, doUpdateProfile, proposeIndividualAppointment} from "../../../../api/api";
+import {doLeftSeminar, doUpdateProfile, proposeIndividualAppointment, leaveAdminChatRoom} from "../../../../api/api";
+import { ADMIN_ROOMS_CHANGED_EVENT, isChatAdminViewer } from "../../../../utils/adminChatRooms";
 import { proposedTimeNeedsOverride, hasBookingConflict, presetAvailabilityRanges } from "../../../../utils/proposeAvailability";
 import { normalizeExpertPrice } from "../../../../utils/schedulingSlots";
 import {SetLoadingStatus, SetTotalTimeSpent} from "../../../../actions/appActions";
@@ -187,6 +188,19 @@ const MessagesHeader = ({ events, openCalendarModal, openSeminarModal, openEditS
     const handleLeaveGroup = async () => {
         set_buttonsModalShow(false);
         if (!chosenGroupChatDetails?.groupId) return;
+        // A joined admin is not a member, so the member leave paths would refuse them.
+        if (isChatAdminViewer(chosenGroupChatDetails, userDetails)) {
+            if (!window.confirm("Leave this chat? Its members are not affected, and you can join it again from search.")) return;
+            const res: any = await leaveAdminChatRoom(String(chosenGroupChatDetails.groupId));
+            if (res?.status === 'SUCCESS') {
+                dispatch(resetChatAction());
+                window.dispatchEvent(new Event(ADMIN_ROOMS_CHANGED_EVENT));
+                notify.success('You left this chat');
+            } else {
+                notify.error(res?.error || 'Could not leave this chat');
+            }
+            return;
+        }
         if (chosenGroupChatDetails.type === 'community') {
             setHeaderLeaveCommunityOpen(true);
             return;

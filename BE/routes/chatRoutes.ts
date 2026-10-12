@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { requireAuth } = require('../middlewares/requireAuth');
+const { requireAuth, adminAuth } = require('../middlewares/requireAuth');
 const { apiLimiter } = require('../middlewares/rateLimit');
 router.use(apiLimiter);
 
@@ -23,6 +23,12 @@ import {
     getChatUserProfile,
     notifyExpertResumeFormat,
 } from '../controllers/chat.controller';
+import {
+    searchAdminChatRooms,
+    listAdminChatRooms,
+    joinAdminChatRoom,
+    leaveAdminChatRoom,
+} from '../controllers/adminChat.controller';
 
 // DM routes
 router.post('/dm', requireAuth(false), getOrCreateDM);
@@ -46,5 +52,10 @@ router.post('/delete-message', requireAuth(false), deleteChatMessage);
 router.post('/dm/hide', requireAuth(false), hideDmFromList);
 router.post('/dm/clear-thread', requireAuth(false), clearDmThread);
 router.get('/online-users', requireAuth(false), getOnlineUsers);
+
+router.get('/admin/rooms', adminAuth, listAdminChatRooms);
+router.get('/admin/rooms/search', adminAuth, searchAdminChatRooms);
+router.post('/admin/rooms/join', adminAuth, joinAdminChatRoom);
+router.post('/admin/rooms/leave', adminAuth, leaveAdminChatRoom);
 
 module.exports = router;
