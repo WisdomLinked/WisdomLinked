@@ -190,6 +190,10 @@ describe('ExpertProfile booking', () => {
 
         price: 60,
 
+        bufferMinutes: 0,
+
+        bookingNoticeHours: 24,
+
         timeZone: 'UTC',
 
         events: [],
@@ -311,6 +315,52 @@ describe('ExpertProfile booking', () => {
   });
 
 
+
+  it('stops at review and says why when the expert has not finished profile setup', async () => {
+    vi.mocked(getExpertById).mockResolvedValue({
+      result: { _id: 'expert-1', timeSlots: [18, 19, 20], price: 60, bookingNoticeHours: 24, timeZone: 'UTC' },
+    } as any);
+    render(
+      <Provider store={store}>
+        <ExpertProfile mentor={mentor} onBack={vi.fn()} />
+      </Provider>,
+    );
+
+    await screen.findByTestId('slot-picker');
+    fireEvent.click(screen.getByTestId('pick-slot'));
+    await screen.findByText('Review your booking');
+    fillBookingTitle();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    fireEvent.click(await screen.findByRole('button', { name: /continue to payment/i }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      "This expert hasn't completed their profile setup yet",
+    );
+    expect(screen.getByRole('alert')).toHaveClass('text-rose-600');
+    expect(screen.queryByTestId('student-checkout')).not.toBeInTheDocument();
+    expect(screen.getByText('Review your booking')).toBeInTheDocument();
+  });
+
+  it('re-checks the expert on Continue, so finishing setup meanwhile lets the student through', async () => {
+    const incomplete = { _id: 'expert-1', timeSlots: [18, 19, 20], price: 60, bookingNoticeHours: 24, timeZone: 'UTC' };
+    vi.mocked(getExpertById).mockResolvedValue({ result: incomplete } as any);
+    render(
+      <Provider store={store}>
+        <ExpertProfile mentor={mentor} onBack={vi.fn()} />
+      </Provider>,
+    );
+
+    await screen.findByTestId('slot-picker');
+    fireEvent.click(screen.getByTestId('pick-slot'));
+    await screen.findByText('Review your booking');
+    fillBookingTitle();
+
+    vi.mocked(getExpertById).mockResolvedValue({ result: { ...incomplete, bufferMinutes: 15 } } as any);
+    fireEvent.click(await screen.findByRole('button', { name: /continue to payment/i }));
+
+    expect(await screen.findByTestId('student-checkout')).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
 
   it('advances to success after checkout without leaving student flow', async () => {
 

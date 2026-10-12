@@ -116,6 +116,9 @@ export default function ExpertSetupCard({ onOpenAvailability }: { onOpenAvailabi
           <p className="mt-1 text-sm text-gray-500">
             Students can&apos;t book you until these steps are done. It takes about 5 minutes.
           </p>
+          <p className="mt-1 text-sm font-medium text-rose-600">
+            Until your profile setup is complete, you won&apos;t be able to schedule 1:1 appointments or seminars.
+          </p>
         </div>
         <button
           type="button"

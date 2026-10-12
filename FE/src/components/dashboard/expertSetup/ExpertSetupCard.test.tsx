@@ -123,6 +123,15 @@ describe('ExpertSetupCard', () => {
     expect(container).toBeEmptyDOMElement();
   });
 
+  it('warns in red that 1:1 appointments and seminars are blocked until setup is done', () => {
+    renderCard({ ...NEW_EXPERT, price: [50], pendingSetupSteps: [], timeSlots: [18, 19] });
+    const warning = screen.getByText(
+      "Until your profile setup is complete, you won't be able to schedule 1:1 appointments or seminars.",
+    );
+    expect(warning).toHaveClass('text-rose-600');
+    expect(warning.className).not.toMatch(/text-red-\d/);
+  });
+
   it('starts a new expert at zero and highlights the first step', () => {
     renderCard(NEW_EXPERT);
     expect(screen.getByText('Set up your availability')).toBeInTheDocument();

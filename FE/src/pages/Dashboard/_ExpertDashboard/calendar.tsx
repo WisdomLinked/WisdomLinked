@@ -24,6 +24,7 @@ import { usePeerProfileModal } from "../../../hooks/usePeerProfileModal";
 import { eventIsUpcoming } from "../../../utils/eventTiming";
 import { sessionDurationLabel } from "../../../utils/sessionDuration";
 import { recurrenceLabel } from "../../../utils/recurrenceLabel";
+import { EXPERT_SETUP_INCOMPLETE_FOR_EXPERT, isExpertSetupComplete } from "../../../components/dashboard/expertSetup/setupSteps";
 
 const pad2 = (n: number) => String(n).padStart(2, "0");
 
@@ -55,6 +56,7 @@ const ExpertCalendar: React.FC = () => {
   const [eventModalShow, setEventModalShow] = useState<boolean>(false);
   const [seminarModalShow, setSeminarModalShow] = useState<boolean>(false);
   const [cancelError, setCancelError] = useState<string | null>(null);
+  const [acceptSetupBlocked, setAcceptSetupBlocked] = useState(false);
 
   // Map the expert's events/group chats to the shared calendar's Meeting shape,
   // carrying the original record on `raw` so clicks can reopen the detail modals.
@@ -118,6 +120,7 @@ const ExpertCalendar: React.FC = () => {
     if (!event) return;
     setSelectedEvent(event);
     setCancelError(null);
+    setAcceptSetupBlocked(false);
     if (event.type === "event") {
       setEventModalShow(true);
     } else {
@@ -144,6 +147,10 @@ const ExpertCalendar: React.FC = () => {
 
   const acceptEvent = async () => {
     if (!selectedEvent) return;
+    if (!isExpertSetupComplete(userDetails)) {
+      setAcceptSetupBlocked(true);
+      return;
+    }
     SetLoadingStatus(true);
     const response = await doAcceptEvent(selectedEvent._id);
     SetLoadingStatus(false);
@@ -359,6 +366,12 @@ const ExpertCalendar: React.FC = () => {
                   </button>
                 </div>
               ) : selectedEvent?.status === "pending" ? (
+              <>
+                {acceptSetupBlocked ? (
+                  <p role="alert" className="mt-6 text-[12px] font-semibold text-rose-600">
+                    {EXPERT_SETUP_INCOMPLETE_FOR_EXPERT}
+                  </p>
+                ) : null}
                 <div className="w-full h-10 flex justify-between mt-6">
                   <button
                     className="w-[calc(50%-8px)] rounded-xl border border-slate-200 bg-white hover:bg-slate-50 flex items-center justify-center"
@@ -374,6 +387,7 @@ const ExpertCalendar: React.FC = () => {
                     Accept
                   </button>
                 </div>
+              </>
               ) : selectedEvent?.status === "accepted" ? (
                 <div className="w-full h-10 flex justify-center space-x-6 mt-6">
                   <button

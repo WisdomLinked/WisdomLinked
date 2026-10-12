@@ -101,3 +101,11 @@ export const SETUP_STEPS: SetupStep[] = [
     },
   },
 ];
+
+export const isExpertSetupComplete = (a: ExpertAvailability | null | undefined): boolean =>
+  !!a && SETUP_STEPS.every((step) => step.isComplete(a));
+
+export const EXPERT_SETUP_INCOMPLETE_FOR_STUDENT =
+  "This expert hasn't completed their profile setup yet, so they can't take bookings right now.";
+export const EXPERT_SETUP_INCOMPLETE_FOR_EXPERT =
+  'You need to complete your profile setup first.';
